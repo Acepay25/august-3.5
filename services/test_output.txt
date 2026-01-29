@@ -1,0 +1,10 @@
+--- Bayesian Calibration Test ---
+Granular Provider Stats: {"wins":60,"losses":110,"total":170}
+
+Test 1: Check High Confidence Correction (History: Provider Prior ~64%)
+Raw: 95%, Calibrated: 45%
+✅ PASS: Confidence reduced towards prior.
+
+Test 2: Check Low Confidence Pull (Raw 20%, Prior ~64%)
+Raw: 20%, Calibrated: 33%
+✅ PASS: Confidence pulled towards prior (upwards).

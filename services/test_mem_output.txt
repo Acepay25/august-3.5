@@ -1,0 +1,9 @@
+--- Memory Consolidation Test ---
+Initial Count: 6
+Running consolidation...
+Final Count: 4
+✅ PASS: Pruned ancient unused insight (ID 1)
+✅ PASS: Kept ancient popular insight (ID 2)
+✅ PASS: Kept new unused insight (ID 3)
+✅ PASS: Aggregated duplicate (ID 5) into valid master (ID 4)
+✅ PASS: Usage count aggregated correctly (10 + 2 = 12)

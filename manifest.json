@@ -1,0 +1,17 @@
+{
+  "name": "August 3.5",
+  "short_name": "August",
+  "description": "An AI-powered assistant for futures trading analysis.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/vite.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

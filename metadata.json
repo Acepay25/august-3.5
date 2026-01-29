@@ -1,0 +1,5 @@
+{
+  "name": "August 3.5",
+  "description": "An AI-powered assistant for futures trading analysis. It uses screenshot analysis, web research, and simulated learning from trade outcomes to provide strategic insights across multiple timeframes.",
+  "requestFramePermissions": []
+}
