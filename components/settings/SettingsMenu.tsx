@@ -8,9 +8,10 @@
  * - Custom Instructions editor
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { AIProvider, AccuracySubMode, CustomInstructionsMap, CustomInstruction, AnalystLensConfig, ProviderConfig, ApiFormat } from '../../types';
-import { MemoryProvider, MEMORY_PROVIDER_OPTIONS, MEMORY_MODELS } from '../../services/learning/MemoryService';
+import { MemoryProvider, MEMORY_PROVIDER_OPTIONS, MEMORY_MODELS, getDefaultModelForProvider } from '../../services/learning/MemoryService';
+import { ChevronDownIcon, TrashIcon } from '../shared/Icons';
 import { AnalystLensSettings } from './AnalystLensSettings';
 import ProviderManager from './ProviderManager';
 
@@ -119,6 +120,86 @@ const ModelItem: React.FC<{
 // View types
 type ViewType = 'main' | 'models' | 'lenses' | 'instructions' | 'providers';
 
+// Instruction tabs (Standard / Strict Mode / Pure AI)
+type InstructionTab = 'general' | 'accuracyOriginal' | 'accuracyPure';
+
+// Expandable instruction card with inline editing, delete and activate toggle
+const InstructionCard: React.FC<{
+    instruction: CustomInstruction;
+    onUpdate: (id: string, updates: Partial<CustomInstruction>) => void;
+    onDelete: (id: string) => void;
+}> = ({ instruction, onUpdate, onDelete }) => {
+    const [isExpanded, setIsExpanded] = useState(false);
+
+    return (
+        <div className={`rounded-2xl border transition-all duration-300 ${instruction.isActive ? 'bg-zinc-900/80 border-cyan-500/30 shadow-[0_0_15px_-5px_rgba(6,182,212,0.1)]' : 'bg-zinc-900/30 border-white/5 opacity-80 hover:opacity-100'}`}>
+            <div className="p-3 flex items-center justify-between gap-3">
+                <div className="flex-1 flex items-center gap-3 min-w-0">
+                    <button
+                        onClick={() => setIsExpanded(!isExpanded)}
+                        className="p-1 rounded hover:bg-white/5 transition-colors text-zinc-500 hover:text-zinc-300"
+                    >
+                        <ChevronDownIcon className={`w-4 h-4 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    <div className="flex-1 min-w-0">
+                        {isExpanded ? (
+                            <input
+                                type="text"
+                                value={instruction.title}
+                                onChange={(e) => onUpdate(instruction.id, { title: e.target.value })}
+                                className="w-full bg-zinc-950 border border-white/10 rounded px-2 py-1 text-xs text-white font-bold focus:border-cyan-500/50 outline-none"
+                                placeholder="Instruction Title"
+                            />
+                        ) : (
+                            <div className="flex items-center gap-2">
+                                <span className={`text-xs font-bold truncate ${instruction.isActive ? 'text-cyan-100' : 'text-zinc-400'}`}>{instruction.title || 'Untitled'}</span>
+                                {instruction.isActive && <span className="text-[9px] bg-cyan-500/20 text-cyan-400 px-1.5 py-0.5 rounded border border-cyan-500/20 uppercase tracking-wider font-bold">Active</span>}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                    <label className="relative inline-flex items-center cursor-pointer" title={instruction.isActive ? "Deactivate" : "Activate"}>
+                        <input
+                            type="checkbox"
+                            className="sr-only peer"
+                            checked={instruction.isActive}
+                            onChange={(e) => onUpdate(instruction.id, { isActive: e.target.checked })}
+                        />
+                        <div className="w-8 h-4 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-zinc-400 after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-cyan-600"></div>
+                    </label>
+
+                    <button
+                        onClick={() => { if (confirm('Delete this instruction?')) onDelete(instruction.id); }}
+                        className="p-1.5 text-zinc-600 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                        title="Delete"
+                    >
+                        <TrashIcon className="w-4 h-4" />
+                    </button>
+                </div>
+            </div>
+
+            {isExpanded && (
+                <div className="px-3 pb-3 animate-fade-in border-t border-white/5 pt-3">
+                    <textarea
+                        value={instruction.content}
+                        onChange={(e) => onUpdate(instruction.id, { content: e.target.value })}
+                        placeholder="Enter instruction content..."
+                        className="w-full h-32 bg-zinc-950 border border-white/10 rounded-lg p-3 text-xs text-zinc-300 focus:outline-none focus:border-cyan-500/30 resize-none leading-relaxed custom-scrollbar font-mono"
+                    />
+                    <div className="flex justify-end mt-2">
+                        <span className="text-[10px] text-zinc-500">
+                            {instruction.content.trim().split(/\s+/).filter(Boolean).length} words
+                        </span>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
 // Props interface
 interface SettingsMenuProps {
     isVisible: boolean;
@@ -211,8 +292,6 @@ interface SettingsMenuProps {
     moderatorModel?: string;
     onSetModeratorProvider?: (provider: AIProvider) => void;
     onSetModeratorModel?: (modelId: string) => void;
-    // Fallback to full settings
-    onOpenFullSettings: () => void;
     // Provider configuration
     providerConfigs?: ProviderConfig[];
     onUpdateProvider?: (id: string, updates: Partial<Omit<ProviderConfig, 'id' | 'isBuiltIn'>>) => Promise<void>;
@@ -306,7 +385,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
         setMemoryProvider,
         memoryModel,
         setMemoryModel,
-        onOpenFullSettings,
         providerConfigs,
         onUpdateProvider,
         onAddCustomProvider,
@@ -315,7 +393,50 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
     } = props;
 
     const [currentView, setCurrentView] = useState<ViewType>('main');
-    const [editingInstruction, setEditingInstruction] = useState<string | null>(null);
+    const [activeInstructionTab, setActiveInstructionTab] = useState<InstructionTab>('general');
+
+    const currentInstructions = useMemo(() => customInstructions[activeInstructionTab] || [], [customInstructions, activeInstructionTab]);
+
+    const totalWordCount = useMemo(() => {
+        return currentInstructions.reduce((sum, inst) => sum + (inst.content ? inst.content.trim().split(/\s+/).filter(Boolean).length : 0), 0);
+    }, [currentInstructions]);
+
+    const MAX_WORD_COUNT = 3000;
+    const MAX_ITEMS = 5;
+
+    const handleAddInstruction = () => {
+        if (currentInstructions.length >= MAX_ITEMS) {
+            alert(`Maximum of ${MAX_ITEMS} instructions allowed per mode.`);
+            return;
+        }
+
+        const newInstruction: CustomInstruction = {
+            id: `inst-${Date.now()}`,
+            title: `New Instruction ${currentInstructions.length + 1}`,
+            content: '',
+            isActive: true
+        };
+
+        setCustomInstructions({
+            ...customInstructions,
+            [activeInstructionTab]: [...currentInstructions, newInstruction]
+        });
+    };
+
+    const handleUpdateInstruction = (id: string, updates: Partial<CustomInstruction>) => {
+        const updatedList = currentInstructions.map(inst => inst.id === id ? { ...inst, ...updates } : inst);
+        setCustomInstructions({
+            ...customInstructions,
+            [activeInstructionTab]: updatedList
+        });
+    };
+
+    const handleDeleteInstruction = (id: string) => {
+        setCustomInstructions({
+            ...customInstructions,
+            [activeInstructionTab]: currentInstructions.filter(inst => inst.id !== id)
+        });
+    };
 
     if (!isVisible) return null;
 
@@ -398,6 +519,10 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                             rightElement={<ToggleSwitch checked={isHybridIntelligenceEnabled} onChange={setIsHybridIntelligenceEnabled} />}
                             active={isHybridIntelligenceEnabled}
                         />
+                        <p className="text-[10px] text-zinc-600 leading-relaxed bg-black/20 px-3 py-2 rounded-xl border border-white/5">
+                            <strong className={`uppercase block mb-0.5 ${isHybridIntelligenceEnabled ? 'text-emerald-500' : 'text-zinc-500'}`}>When Enabled:</strong>
+                            Fetches real-time OHLCV from Binance, calculates RSI/MACD/EMAs/ATR via code, and injects verified data into AI prompts.
+                        </p>
 
                         <SettingItem
                             icon={<span className="text-xl">🧠</span>}
@@ -406,6 +531,10 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                             rightElement={<ToggleSwitch checked={isGlobalMemoryEnabled} onChange={setIsGlobalMemoryEnabled} />}
                             active={isGlobalMemoryEnabled}
                         />
+                        <p className="text-[10px] text-zinc-600 leading-relaxed bg-black/20 px-3 py-2 rounded-xl border border-white/5">
+                            <strong className="text-zinc-500 uppercase block mb-0.5">Layer 1 &amp; 2 (Always On):</strong> Isolated memory per chat thread.<br />
+                            <strong className={`uppercase block mb-0.5 mt-1.5 ${isGlobalMemoryEnabled ? 'text-cyan-500' : 'text-zinc-500'}`}>Layer 3 (Global):</strong> Synthesized learning from all trades.
+                        </p>
                     </div>
                 </section>
 
@@ -762,7 +891,11 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                     <div className="space-y-2">
                         <select
                             value={memoryProvider || ''}
-                            onChange={(e) => setMemoryProvider?.(e.target.value as MemoryProvider)}
+                            onChange={(e) => {
+                                const newProvider = e.target.value as MemoryProvider;
+                                setMemoryProvider?.(newProvider);
+                                setMemoryModel?.(getDefaultModelForProvider(newProvider));
+                            }}
                             className="w-full bg-zinc-800 border border-white/10 rounded-xl text-sm p-3 text-zinc-300 focus:ring-2 focus:ring-purple-500/50 focus:outline-none"
                         >
                             {MEMORY_PROVIDER_OPTIONS.map(opt => (
@@ -783,14 +916,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                         )}
                     </div>
                 </div>
-
-                {/* More advanced options link */}
-                <button
-                    onClick={onOpenFullSettings}
-                    className="w-full p-4 rounded-2xl bg-gradient-to-r from-cyan-500/10 to-purple-500/10 border border-white/10 text-zinc-300 hover:text-white hover:border-white/20 transition-all text-sm font-semibold"
-                >
-                    🔧 More Advanced Options →
-                </button>
             </div>
         </>
     );
@@ -828,49 +953,76 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
         <>
             {renderHeader('Custom Instructions', true)}
             <div className="flex-1 overflow-y-auto px-5 pb-6 space-y-4 custom-scrollbar">
-                <p className="text-xs text-zinc-500 mb-4">
-                    Add custom instructions to personalize AI behavior for different analysis modes.
+                <p className="text-xs text-zinc-500 leading-relaxed">
+                    Define multiple custom instruction sets for how the AI should reason, behave, or filter trades.
+                    <strong className="text-zinc-400"> Select the mode below to manage its instructions.</strong>
                 </p>
 
-                {Object.entries(customInstructions).length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-12 text-center">
-                        <span className="text-4xl mb-4">📝</span>
-                        <p className="text-sm text-zinc-500">No custom instructions yet</p>
-                        <p className="text-xs text-zinc-600 mt-1">Add instructions in full settings</p>
-                        <button
-                            onClick={onOpenFullSettings}
-                            className="mt-4 px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold transition-colors"
-                        >
-                            Open Full Settings
-                        </button>
+                {/* Tabs for Mode Selection */}
+                <div className="flex space-x-1 bg-zinc-900 p-1 rounded-xl border border-white/5">
+                    <button
+                        onClick={() => setActiveInstructionTab('general')}
+                        className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all ${activeInstructionTab === 'general' ? 'bg-zinc-700 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
+                    >
+                        Standard
+                    </button>
+                    <button
+                        onClick={() => setActiveInstructionTab('accuracyOriginal')}
+                        className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all ${activeInstructionTab === 'accuracyOriginal' ? 'bg-cyan-900/40 text-cyan-200 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
+                    >
+                        Strict Mode
+                    </button>
+                    <button
+                        onClick={() => setActiveInstructionTab('accuracyPure')}
+                        className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all ${activeInstructionTab === 'accuracyPure' ? 'bg-cyan-900/40 text-cyan-200 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
+                    >
+                        Pure AI
+                    </button>
+                </div>
+
+                {/* Word Count Progress */}
+                <div className="bg-black/20 rounded-xl p-3 border border-white/5">
+                    <div className="flex justify-between items-center text-[10px] font-mono mb-1.5">
+                        <span className="text-zinc-500 uppercase font-bold tracking-wider">Token Usage</span>
+                        <span className={`${totalWordCount > MAX_WORD_COUNT ? 'text-red-400 font-bold' : 'text-zinc-400'}`}>
+                            {totalWordCount} / {MAX_WORD_COUNT} words
+                        </span>
                     </div>
-                ) : (
-                    <>
-                        {Object.entries(customInstructions).map(([key, instructionArray]) => {
-                            // customInstructions is a map of arrays (general, accuracyOriginal, accuracyPure)
-                            const instructions = instructionArray as CustomInstruction[];
-                            if (!Array.isArray(instructions) || instructions.length === 0) return null;
-                            return instructions.map((inst) => (
-                                <div key={inst.id} className="p-4 rounded-2xl bg-zinc-900/50 border border-white/5">
-                                    <div className="flex items-center justify-between mb-2">
-                                        <span className="text-sm font-bold text-zinc-200">{inst.title}</span>
-                                        <span className={`text-xs px-2 py-1 rounded-full ${inst.isActive ? 'bg-cyan-500/20 text-cyan-400' : 'bg-zinc-800 text-zinc-500'
-                                            }`}>
-                                            {inst.isActive ? 'Active' : 'Inactive'}
-                                        </span>
-                                    </div>
-                                    <p className="text-xs text-zinc-500 line-clamp-2">{inst.content}</p>
-                                </div>
-                            ));
-                        })}
-                        <button
-                            onClick={onOpenFullSettings}
-                            className="w-full p-4 rounded-2xl bg-zinc-900/50 border border-white/5 text-zinc-400 hover:text-white hover:bg-white/5 transition-all text-sm"
-                        >
-                            Edit instructions →
-                        </button>
-                    </>
-                )}
+                    <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                        <div
+                            className={`h-full rounded-full transition-all duration-500 ${totalWordCount > MAX_WORD_COUNT ? 'bg-red-500' : 'bg-cyan-600'}`}
+                            style={{ width: `${Math.min(100, (totalWordCount / MAX_WORD_COUNT) * 100)}%` }}
+                        ></div>
+                    </div>
+                </div>
+
+                {/* Instruction List */}
+                <div className="space-y-3">
+                    {currentInstructions.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-10 text-center border border-dashed border-white/10 rounded-2xl">
+                            <span className="text-3xl mb-3">📝</span>
+                            <p className="text-xs text-zinc-600 italic">No custom instructions for this mode yet.</p>
+                        </div>
+                    ) : (
+                        currentInstructions.map(inst => (
+                            <InstructionCard
+                                key={inst.id}
+                                instruction={inst}
+                                onUpdate={handleUpdateInstruction}
+                                onDelete={handleDeleteInstruction}
+                            />
+                        ))
+                    )}
+                </div>
+
+                {/* Add Button */}
+                <button
+                    onClick={handleAddInstruction}
+                    disabled={currentInstructions.length >= MAX_ITEMS}
+                    className="w-full py-3 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 text-xs font-bold uppercase tracking-wider text-zinc-400 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                    + Add New Instruction ({currentInstructions.length}/{MAX_ITEMS})
+                </button>
             </div>
         </>
     );

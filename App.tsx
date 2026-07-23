@@ -22,7 +22,6 @@ import StrategySearch from './components/shared/StrategySearch';
 import ConversationHistory from './components/chat/ConversationHistory';
 import UserProfileManager from './components/settings/UserProfileManager';
 import SavedAnalyses from './components/journal/SavedAnalyses';
-import Settings from './components/settings/Settings';
 import SettingsMenu from './components/settings/SettingsMenu';
 import { useProviderConfigs } from './hooks/useProviderConfigs';
 import LiveAnalysisView from './components/analysis/LiveAnalysisView';
@@ -87,7 +86,6 @@ const App: React.FC = () => {
         isHistoryVisible, setIsHistoryVisible,
         isStrategySearchVisible, setIsStrategySearchVisible,
         isSavedAnalysesVisible, setIsSavedAnalysesVisible,
-        isSettingsVisible, setIsSettingsVisible,
         isSettingsMenuVisible, setIsSettingsMenuVisible,
         isLiveMarketVisible, setIsLiveMarketVisible,
         isAdvancedAnalyticsOpen, setIsAdvancedAnalyticsOpen,
@@ -579,7 +577,7 @@ const App: React.FC = () => {
     } = useUserProfiles({
         resetAppState,
         setIsUserModalOpen,
-        setIsSettingsVisible,
+        setIsSettingsVisible: setIsSettingsMenuVisible,
         toast,
     });
 
@@ -1505,14 +1503,12 @@ const App: React.FC = () => {
                 moderatorModel={moderatorModel}
                 onSetModeratorProvider={handleSetModeratorProvider}
                 onSetModeratorModel={handleSetModeratorModel}
-                onOpenFullSettings={() => { setIsSettingsMenuVisible(false); setIsSettingsVisible(true); }}
                 providerConfigs={providerConfigs}
                 onUpdateProvider={handleUpdateProvider}
                 onAddCustomProvider={handleAddCustomProvider}
                 onRemoveProvider={handleRemoveProvider}
                 onToggleProviderConfig={handleToggleProviderConfig}
             />
-            <Settings isVisible={isSettingsVisible} isLoading={isLoading} onClose={() => setIsSettingsVisible(false)} onExportData={handleExportData} onSwitchUser={handleSwitchUser} onOpenSavedAnalyses={() => { setIsSavedAnalysesVisible(true); setIsSettingsVisible(false); }} onOpenStrategySearch={() => { setIsStrategySearchVisible(true); setIsSettingsVisible(false); }} geminiModels={GEMINI_MODELS} deepseekModels={DEEPSEEK_MODELS} zhipuModels={ZHIPU_MODELS} groqModels={GROQ_MODELS} groqNewModels={GROQ_NEW_MODELS} groqAlt2Models={GROQ_ALT2_MODELS} openrouterModels={OPENROUTER_MODELS} openaiModels={OPENAI_MODELS} ocrModels={OCR_MODELS} selectedGeminiModel={selectedGeminiModel} selectedDeepSeekModel={selectedDeepSeekModel} selectedZhipuModel={selectedZhipuModel} selectedGroqModel={selectedGroqModel} selectedGroqNewModel={selectedGroqNewModel} selectedGroqAlt2Model={selectedGroqAlt2Model} selectedOpenrouterModel={selectedOpenrouterModel} selectedOpenaiModel={selectedOpenaiModel} selectedOcrModel={selectedOcrModel} onSetGeminiModel={handleSetSelectedGeminiModel} onSetDeepseekModel={handleSetSelectedDeepSeekModel} onSetZhipuModel={handleSetSelectedZhipuModel} onSetGroqModel={handleSetSelectedGroqModel} onSetGroqNewModel={handleSetSelectedGroqNewModel} onSetGroqAlt2Model={handleSetSelectedGroqAlt2Model} onSetOpenrouterModel={handleSetSelectedOpenrouterModel} onSetOpenaiModel={handleSetSelectedOpenaiModel} onSetOcrModel={handleSetSelectedOcrModel} isGeminiEnabled={isGeminiEnabled} isDeepSeekEnabled={isDeepSeekEnabled} isZhipuEnabled={isZhipuEnabled} isGroqEnabled={isGroqEnabled} isGroqNewEnabled={isGroqNewEnabled} isGroqAlt2Enabled={isGroqAlt2Enabled} isOpenrouterEnabled={isOpenrouterEnabled} isOpenaiEnabled={isOpenaiEnabled} onToggleProvider={handleToggleProvider} quotaExceededModels={quotaExceededModels} ocrModelIdToName={ocrModelIdToName} moderatorProvider={moderatorProvider} moderatorModel={moderatorModel} onSetModeratorProvider={handleSetModeratorProvider} onSetModeratorModel={handleSetModeratorModel} isGlobalMemoryEnabled={isGlobalMemoryEnabled} setIsGlobalMemoryEnabled={setIsGlobalMemoryEnabled} isAccuracyModeEnabled={isAccuracyModeEnabled} onToggleAccuracyMode={handleToggleAccuracyMode} accuracySubMode={accuracySubMode} setAccuracySubMode={setAccuracySubMode} customInstructions={customInstructions} setCustomInstructions={setCustomInstructions} isPlaybookEnabledInPureAI={isPlaybookEnabledInPureAI} setIsPlaybookEnabledInPureAI={setIsPlaybookEnabledInPureAI} isFamiliesEnabledInPureAI={isFamiliesEnabledInPureAI} setIsFamiliesEnabledInPureAI={setIsFamiliesEnabledInPureAI} isMemoryEnabledInPureAI={isMemoryEnabledInPureAI} setIsMemoryEnabledInPureAI={setIsMemoryEnabledInPureAI} isHybridIntelligenceEnabled={isHybridIntelligenceEnabled} setIsHybridIntelligenceEnabled={setIsHybridIntelligenceEnabled} memoryProvider={memoryProvider} setMemoryProvider={setMemoryProvider} memoryModel={memoryModel} setMemoryModel={setMemoryModel} lensConfig={lensConfig} onSetLensConfig={handleSetLensConfig} grokModels={GROK_MODELS} selectedGrokNativeModel={selectedGrokNativeModel} onSetGrokNativeModel={handleSetSelectedGrokNativeModel} isGrokNativeEnabled={isGrokNativeEnabled} />
             <VisionDataViewer isVisible={isVisionDataVisible} onClose={() => setIsVisionDataVisible(false)} visionData={currentVisionData} />
 
 

@@ -11,7 +11,6 @@ export function useUIState() {
     const [isHistoryVisible, setIsHistoryVisible] = useState(false);
     const [isStrategySearchVisible, setIsStrategySearchVisible] = useState(false);
     const [isSavedAnalysesVisible, setIsSavedAnalysesVisible] = useState(false);
-    const [isSettingsVisible, setIsSettingsVisible] = useState(false);
     const [isSettingsMenuVisible, setIsSettingsMenuVisible] = useState(false);
     const [isLiveMarketVisible, setIsLiveMarketVisible] = useState(false);
     const [isAdvancedAnalyticsOpen, setIsAdvancedAnalyticsOpen] = useState(false);
@@ -53,8 +52,6 @@ export function useUIState() {
         setIsStrategySearchVisible,
         isSavedAnalysesVisible,
         setIsSavedAnalysesVisible,
-        isSettingsVisible,
-        setIsSettingsVisible,
         isSettingsMenuVisible,
         setIsSettingsMenuVisible,
         isLiveMarketVisible,
