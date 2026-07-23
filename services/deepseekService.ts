@@ -12,7 +12,6 @@ import { parseLiveMarketData } from '../utils/liveMarketParser';
 import { Capacitor } from '@capacitor/core';
 
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
-if (!DEEPSEEK_API_KEY) throw new Error("DEEPSEEK_API_KEY is not set in environment");
 const DEEPSEEK_BASE_URL = 'https://api.deepseek.com';
 
 // Check if running in Capacitor (native APK)
@@ -85,6 +84,7 @@ const nativeDeepSeekCall = async (
 
 // Create OpenAI-compatible client for browser (with CORS limitations)
 const getClient = (): OpenAI => {
+    if (!DEEPSEEK_API_KEY) throw new Error("DEEPSEEK_API_KEY is not set in environment");
     return new OpenAI({
         baseURL: DEEPSEEK_BASE_URL,
         apiKey: DEEPSEEK_API_KEY,
@@ -900,6 +900,13 @@ Generate the updated Global Memory JSON object.
         return JSON.parse(responseText);
     } catch {
         console.error("DeepSeek updateGlobalMemory JSON parse failed:", responseText);
-        return currentMemory || {} as GlobalMemory;
+        return currentMemory || {
+            totalTradesAnalyzed: 0,
+            familyPerformance: {},
+            aiPatternMemory: [],
+            userPreferences: { leverageDefault: 10, favoriteAssets: [], preferredSetup: '' },
+            globalCorrections: [],
+            lastUpdated: new Date().toISOString()
+        };
     }
 };

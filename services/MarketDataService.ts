@@ -7,9 +7,10 @@
 const BINANCE_API_BASE = 'https://api.binance.com';
 const BINANCE_FUTURES_API = 'https://fapi.binance.com';
 
-// Simple in-memory cache
+// Simple in-memory cache with eviction
 const cache: Map<string, { data: any; timestamp: number }> = new Map();
 const CACHE_TTL = 30000; // 30 seconds
+const MAX_CACHE_SIZE = 100; // Maximum number of cached entries
 
 export interface Kline {
     time: number;
@@ -149,6 +150,23 @@ const getCached = <T>(key: string): T | null => {
 };
 
 const setCache = (key: string, data: any): void => {
+    // Evict expired entries first
+    if (cache.size >= MAX_CACHE_SIZE) {
+        const now = Date.now();
+        for (const [k, v] of cache) {
+            if (now - v.timestamp >= CACHE_TTL) {
+                cache.delete(k);
+            }
+        }
+    }
+    // If still over limit, evict oldest entries
+    if (cache.size >= MAX_CACHE_SIZE) {
+        const entries = [...cache.entries()].sort((a, b) => a[1].timestamp - b[1].timestamp);
+        const toRemove = entries.slice(0, Math.ceil(MAX_CACHE_SIZE * 0.25)); // Remove oldest 25%
+        for (const [k] of toRemove) {
+            cache.delete(k);
+        }
+    }
     cache.set(key, { data, timestamp: Date.now() });
 };
 
@@ -175,6 +193,7 @@ const BINANCE_FUTURES_ENDPOINTS = [
  */
 const robustBinanceFetch = async (apiPath: string, timeoutMs: number = 10000): Promise<Response> => {
     let lastError: Error | null = null;
+    let lastStatus: number | null = null;
 
     for (const baseUrl of BINANCE_ENDPOINTS) {
         try {
@@ -190,12 +209,19 @@ const robustBinanceFetch = async (apiPath: string, timeoutMs: number = 10000): P
 
             if (response.ok) {
                 return response;
+            } else {
+                lastStatus = response.status;
+                console.warn(`[MarketDataService] ${baseUrl} returned ${response.status}, trying next...`);
             }
         } catch (error) {
             lastError = error as Error;
             console.warn(`[MarketDataService] Failed with ${baseUrl}, trying next...`);
             // Continue to next endpoint
         }
+    }
+
+    if (lastStatus) {
+        throw new Error(`Binance API error: ${lastStatus}`);
     }
 
     throw lastError || new Error('All Binance API endpoints failed');

@@ -1,5 +1,4 @@
 
-// ... existing imports ...
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { VirtuosoHandle } from 'react-virtuoso';
 import { Message, MessageRole, TradeOutcome, LoggedTrade, ImageMetadata, AIProvider, DebateTurn, Conversation, UserProfile, SavedAnalysis, LiveThoughts, TradeAnalysis, TradeSummary, GlobalMemory, AccuracySubMode, CustomInstructionsMap, CustomInstruction, AnalystLensConfig, LearningRule } from './types';
@@ -34,6 +33,7 @@ import * as ensembleAccuracyService from './services/accuracy/ensembleAccuracySe
 
 // Modular Imports
 import { ChatContextProps } from './components/MessageItem';
+import { useToastActions } from './components/Toast';
 import { Header } from './components/Header';
 import { ChatArea } from './components/ChatArea';
 import { Journal } from './components/Journal';
@@ -110,7 +110,7 @@ import { VersionHistoryDashboard } from './components/VersionHistoryDashboard';
 const MAX_TRADE_SUMMARIES = 100;
 
 const App: React.FC = () => {
-    // ... (All existing state definitions remain unchanged) ...
+    const toast = useToastActions();
     // User Profile State
     const [activeUsername, setActiveUsername] = useState<string | null>(null);
     const [existingUsernames, setExistingUsernames] = useState<string[]>([]);
@@ -230,12 +230,6 @@ const App: React.FC = () => {
     const [useAlgorithmicSummary, setUseAlgorithmicSummary] = useState<boolean>(true); // Default to Algo (saves tokens)
     const [useAlgorithmicInsights, setUseAlgorithmicInsights] = useState<boolean>(true); // NEW: Toggle for individual insights (Algo vs AI)
 
-    // Model Selection for ChatInput (user-facing quick selectors)
-    const [inputEnsembleModel, setInputEnsembleModel] = useState<string>('gemini-2.0-flash');
-    const [inputModeratorModel, setInputModeratorModel] = useState<string>('gemini-2.5-pro');
-    const [inputSummaryModel, setInputSummaryModel] = useState<string>('gemini-2.0-flash');
-
-
     const [input, setInput] = useState('');
     const [images, setImages] = useState<ImageMetadata[]>([]);
     const [loadingMessage, setLoadingMessage] = useState<string | null>(null);
@@ -285,7 +279,6 @@ const App: React.FC = () => {
     const [newlyAddedInsightIds, setNewlyAddedInsightIds] = useState<Set<string>>(new Set()); // For animation tracking
     const [typingMessageState, setTypingMessageState] = useState<{ id: string; fullText: string; field: 'postMortem' } | null>(null);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-    const [logTradeState, setLogTradeState] = useState<{ message: Message; outcome: TradeOutcome.WIN | TradeOutcome.LOSS } | null>(null);
     const [postMortemCandidate, setPostMortemCandidate] = useState<PostMortemCandidate | null>(null);
     // State for the data capture choice modal (shown after trade is logged)
     const [dataCaptureCandidate, setDataCaptureCandidate] = useState<PostMortemCandidate | null>(null);
@@ -699,7 +692,7 @@ const App: React.FC = () => {
                     (integrityCheck.hasBackups && integrityCheck.latestBackup
                         ? `A backup with ${integrityCheck.latestBackup.tradeCount} trades is available from ${new Date(integrityCheck.latestBackup.timestamp).toLocaleString()}.\n\nGo to Settings → Export Data to restore from backup.`
                         : 'Consider exporting your data regularly to prevent future data loss.');
-                setTimeout(() => alert(message), 500);
+                toast.info(message);
             }
         } else {
             resetAppState();
@@ -927,7 +920,7 @@ const App: React.FC = () => {
         if (loadingMessage || isSummarizing || (!effectiveInput.trim() && imagesToUse.length === 0) || isRateLimited || enabledProviders.length === 0) return;
 
         if (!isAccuracyModeEnabled && enabledProviders.length > 3) {
-            alert("A maximum of 3 AI providers can be enabled for an ensemble debate in Standard Mode. Please disable at least one.");
+            toast.warning("Provider Limit", "A maximum of 3 AI providers can be enabled for an ensemble debate in Standard Mode. Please disable at least one.");
             return;
         }
 
@@ -960,9 +953,13 @@ const App: React.FC = () => {
             setIsHybridLoading(true);
             setCurrentHybridData(null);
         }
+        // Local copy of the freshest hybrid data - the closure-captured `currentHybridData`
+        // stays stale after setCurrentHybridData, so all downstream code must use this variable.
+        let freshHybridData: HybridDataPacket | null = currentHybridData;
         // If preset hybrid data was passed, use it immediately
         if (options?.presetHybridData) {
             setCurrentHybridData(options.presetHybridData);
+            freshHybridData = options.presetHybridData;
             setIsHybridLoading(false);
         }
 
@@ -1006,6 +1003,7 @@ const App: React.FC = () => {
                         // Use enhanced injection which includes calibration data
                         hybridDataInjection = hybridResult.enhancedInjection || hybridResult.promptInjection;
                         setCurrentHybridData(hybridResult.data); // Store for UI display
+                        freshHybridData = hybridResult.data; // Use local var downstream (state is stale in this closure)
 
                         // Store correlation risk if available - helpful for UI later
                         if (hybridResult.correlationRisk) {
@@ -1033,11 +1031,18 @@ const App: React.FC = () => {
             let learningInjection = '';
             let moderatorLearningContext = ''; // NEW: Separate context for moderator
 
+            // Coin detection for learning context: match only uppercase tickers (no /i flag,
+            // which would match any word) and exclude common command words, mirroring the
+            // GateKeeper commonWords exclusion list further below.
+            const learningCommonWords = ['ANALYZE', 'CHECK', 'LOOK', 'REVIEW', 'SHOW', 'TELL', 'GIVE', 'WHAT', 'HOW', 'WHEN', 'WHERE', 'SHOULD', 'COULD', 'WOULD', 'PLEASE', 'HELP', 'FIND', 'GET', 'SET', 'RUN', 'TEST', 'TRADE', 'LONG', 'SHORT', 'BUY', 'SELL', 'SETUP', 'ENTRY', 'EXIT', 'STOP', 'TAKE', 'PROFIT', 'LOSS', 'CHART', 'PRICE', 'MARKET', 'UPDATE', 'THIS', 'THAT', 'WITH', 'FROM', 'INTO', 'ABOUT', 'LIKE', 'JUST', 'SOME', 'MORE', 'VERY', 'ALSO', 'EVEN', 'ONLY', 'SUCH', 'HERE', 'THERE', 'WELL', 'THAN', 'THEM', 'THEN', 'BEEN', 'HAVE', 'WILL', 'DOES', 'DONE', 'MAKE', 'MADE', 'WANT', 'NEED', 'MUST', 'TIME', 'DATA', 'INFO'];
+            const detectedCoinRaw = effectiveInput.match(/\b([A-Z]{2,10})(?:USDT?)?/)?.[1]?.toUpperCase();
+            const detectedLearningCoin = detectedCoinRaw && !learningCommonWords.includes(detectedCoinRaw) ? detectedCoinRaw : undefined;
+
             // Use UnifiedLearningBuilder to consolidate all learning services
             const unifiedLearning = buildUnifiedLearningContext(
                 loggedTrades,
                 {
-                    coin: effectiveInput.match(/\b([A-Z]{2,10})(?:USDT?)?/i)?.[1]?.toUpperCase(),
+                    coin: detectedLearningCoin,
                     pattern: undefined,
                     direction: effectiveInput.toLowerCase().includes('long') ? 'Long' :
                         effectiveInput.toLowerCase().includes('short') ? 'Short' : 'Neutral'
@@ -1054,7 +1059,7 @@ const App: React.FC = () => {
                 try {
                     learningInjection = generatePersonalizedInjection(
                         loggedTrades,
-                        effectiveInput.match(/\b([A-Z]{2,10})(?:USDT?)?/i)?.[1]?.toUpperCase(),
+                        detectedLearningCoin,
                         effectiveInput.toLowerCase().includes('long') ? 'Long' :
                             effectiveInput.toLowerCase().includes('short') ? 'Short' : 'Neutral'
                     );
@@ -1194,7 +1199,7 @@ const App: React.FC = () => {
                     try {
                         const validationResult = runValidationGate({
                             analysis: finalAnalysis,
-                            hybridData: currentHybridData, // May be null in non-hybrid mode
+                            hybridData: freshHybridData, // May be null in non-hybrid mode
                             calibration: GlobalLearningService.getCalibration(), // Use global persistent calibration
                             tradeHistory: loggedTrades
                         });
@@ -1261,9 +1266,9 @@ const App: React.FC = () => {
                         // ========== MONTE CARLO SIMULATION ==========
                         // Run simulation if we have hybrid data and a trade setup
                         console.log('[MonteCarlo] Conditions check:', {
-                            hasHybridData: !!currentHybridData,
-                            hybridDataSymbol: currentHybridData?.symbol || 'none',
-                            hybridData1hATR: currentHybridData?.indicators?.['1h']?.atr || 'none',
+                            hasHybridData: !!freshHybridData,
+                            hybridDataSymbol: freshHybridData?.symbol || 'none',
+                            hybridData1hATR: freshHybridData?.indicators?.['1h']?.atr || 'none',
                             hasEntryPoints: !!finalAnalysis.entryPoints?.length,
                             entryPointsLength: finalAnalysis.entryPoints?.length || 0,
                             hasStopLoss: !!finalAnalysis.stopLoss,
@@ -1280,7 +1285,7 @@ const App: React.FC = () => {
                                     entryPoints: finalAnalysis.entryPoints,
                                     stopLoss: finalAnalysis.stopLoss,
                                     takeProfit: finalAnalysis.takeProfit
-                                }, currentHybridData || {
+                                }, freshHybridData || {
                                     // Fallback minimal hybrid data when Hybrid Intelligence is off
                                     indicators: {},
                                     regime: { detected: 'unknown', trendDirection: 'neutral' }
@@ -1327,7 +1332,7 @@ const App: React.FC = () => {
                                 const btResult = backtestSimilarSetups(
                                     finalAnalysis,
                                     loggedTrades,
-                                    currentHybridData?.regime?.regime
+                                    freshHybridData?.regime?.regime
                                 );
 
                                 if (btResult && btResult.totalMatches > 0) {
@@ -1375,7 +1380,7 @@ const App: React.FC = () => {
                             enhancedFinalTradeSummary, // Pattern Memory (Synthesis)
                             recentInsightsString,      // Recent Insights (Individual)
                             provider.model,
-                            isAccuracyModeEnabled ? activeFrameworks : activeFrameworks,
+                            activeFrameworks,
                             isDeepAnalysis,
                             memoryToInject,
                             currentThreadSummary,
@@ -1402,9 +1407,19 @@ const App: React.FC = () => {
                             })
                     );
 
-                    const results = await Promise.all(analysisPromises);
+                    const settledResults = await Promise.allSettled(analysisPromises);
                     if (abortRef.current) return;
                     setLoadingMessage(null);
+
+                    // Log analysts that failed, then keep only fulfilled results for downstream processing
+                    settledResults.forEach((settled, index) => {
+                        if (settled.status === 'rejected') {
+                            console.warn(`[Ensemble] Analyst "${enabledProviders[index]?.name || `#${index}`}" failed:`, settled.reason);
+                        }
+                    });
+                    const results = settledResults
+                        .filter((s): s is PromiseFulfilledResult<any> => s.status === 'fulfilled')
+                        .map(s => s.value);
 
                     const thoughtMap: Record<string, string> = {};
                     results.forEach((res, index) => {
@@ -1421,7 +1436,7 @@ const App: React.FC = () => {
                     // ========== PER-AI MONTE CARLO ==========
                     // Run Monte Carlo on each AI's proposed setup BEFORE moderation
                     const perAIMC: LabeledMonteCarloResult[] = [];
-                    const hybridDataForMC = currentHybridData || {
+                    const hybridDataForMC = freshHybridData || {
                         indicators: {},
                         regime: { detected: 'unknown', trendDirection: 'neutral' }
                     } as any;
@@ -1685,12 +1700,12 @@ const App: React.FC = () => {
                             groqThoughtProcess: thoughtMap['groq'],
                             groqNewThoughtProcess: thoughtMap['groqNew'],
                             // Multi-Timeframe Confluence from Hybrid Intelligence
-                            confluenceData: currentHybridData?.confluence ? {
-                                score: currentHybridData.confluence.score,
-                                direction: currentHybridData.confluence.direction,
-                                strength: currentHybridData.confluence.strength,
-                                alignedSignals: currentHybridData.confluence.alignment,
-                                conflictingSignals: currentHybridData.confluence.conflicts,
+                            confluenceData: freshHybridData?.confluence ? {
+                                score: freshHybridData.confluence.score,
+                                direction: freshHybridData.confluence.direction,
+                                strength: freshHybridData.confluence.strength,
+                                alignedSignals: freshHybridData.confluence.alignment,
+                                conflictingSignals: freshHybridData.confluence.conflicts,
                                 timeframeCount: 4 // 5m, 15m, 1h, 4h
                             } : undefined,
                             isLensMode: lensConfig?.enabled ?? false,
@@ -1699,8 +1714,8 @@ const App: React.FC = () => {
                         };
 
                         // Inject market snapshot if available (for Algo Mode & Regeneration)
-                        if (currentHybridData && updatedMessage.analysis) {
-                            updatedMessage.analysis.marketSnapshot = currentHybridData;
+                        if (freshHybridData && updatedMessage.analysis) {
+                            updatedMessage.analysis.marketSnapshot = freshHybridData;
                         }
 
                         const newMessages = [...prev];
@@ -1717,8 +1732,9 @@ const App: React.FC = () => {
                         summaries,
                         currentMessages,
                         finalTradeSummary,
+                        recentInsightsString,      // Recent Insights (Individual) - must match multi-provider arg order
                         provider.model,
-                        isAccuracyModeEnabled ? activeFrameworks : activeFrameworks,
+                        activeFrameworks,
                         isDeepAnalysis,
                         memoryToInject,
                         currentThreadSummary,
@@ -1748,18 +1764,18 @@ const App: React.FC = () => {
                         tradingStyle: lensConfig.tradingStyle === 'auto' ? 'swing' : lensConfig.tradingStyle,
                         accuracySubMode: isAccuracyModeEnabled ? accuracySubMode : undefined,
                         // Multi-Timeframe Confluence from Hybrid Intelligence
-                        confluenceData: currentHybridData?.confluence ? {
-                            score: currentHybridData.confluence.score,
-                            direction: currentHybridData.confluence.direction,
-                            strength: currentHybridData.confluence.strength,
-                            alignedSignals: currentHybridData.confluence.alignment,
-                            conflictingSignals: currentHybridData.confluence.conflicts,
+                        confluenceData: freshHybridData?.confluence ? {
+                            score: freshHybridData.confluence.score,
+                            direction: freshHybridData.confluence.direction,
+                            strength: freshHybridData.confluence.strength,
+                            alignedSignals: freshHybridData.confluence.alignment,
+                            conflictingSignals: freshHybridData.confluence.conflicts,
                             timeframeCount: 4 // 5m, 15m, 1h, 4h
                         } : undefined,
                     };
                     // Inject snapshot if available
-                    if (currentHybridData) {
-                        soloAiMessage.analysis!.marketSnapshot = currentHybridData;
+                    if (freshHybridData) {
+                        soloAiMessage.analysis!.marketSnapshot = freshHybridData;
                     }
                     updateMessages(prev => [...prev, soloAiMessage]);
                 }
@@ -1781,7 +1797,7 @@ const App: React.FC = () => {
             if (isQuotaError(error)) {
                 let flaggedModel = '';
                 enabledProviders.forEach(p => {
-                    if (error.message.toLowerCase().includes(p.name.toLowerCase()) || p.model === selectedOcrModel) {
+                    if (error.message.toLowerCase().includes(p.name.toLowerCase()) || error.model === p.model) {
                         setQuotaExceededModels(prev => new Set(prev).add(modelIdToName[p.model] || p.model));
                         flaggedModel = modelIdToName[p.model];
                     }
@@ -1851,6 +1867,20 @@ const App: React.FC = () => {
                 if (isOpenrouterEnabled) enabledProviders.push({ name: 'OpenRouter', service: openrouterService, model: selectedOpenrouterModel, thoughtsKey: 'openrouter' as const });
                 if (isOpenaiEnabled) enabledProviders.push({ name: 'OpenAI', service: openaiService, model: selectedOpenaiModel, thoughtsKey: 'openai' as const });
 
+            }
+
+            // Guard: Accuracy Mode has no fallback provider (Standard Mode falls back to Gemini
+            // further below). If nothing is enabled, bail out with an error instead of running
+            // an empty ensemble.
+            if (isAccuracyModeEnabled && enabledProviders.length === 0) {
+                updateMessages(prev => [
+                    ...prev.filter(m => m.id !== postMortemMessageId),
+                    { id: `err-${Date.now()}`, role: MessageRole.SYSTEM, createdAt: new Date().toISOString(), text: "Post-Mortem analysis requires at least one enabled AI provider. Please enable a provider and try again." }
+                ]);
+                setIsPostMortemInProgress(false);
+                setIsLivePostMortemVisible(false);
+                setLoadingMessage(null);
+                return;
             }
 
             let finalPostMortemReport = "";
@@ -1933,9 +1963,7 @@ Please investigate this discrepancy in your analysis.
                 }
             }
 
-            // --- ROLE-BASED POST-MORTEM BRANCH ---
-            if (true) {
-                // --- STANDARD POST-MORTEM FLOW ---
+            // --- STANDARD POST-MORTEM FLOW ---
 
                 // Force Gemini if no providers selected (Standard Mode fallback)
                 if (enabledProviders.length === 0 && !isAccuracyModeEnabled) {
@@ -1951,10 +1979,6 @@ Please investigate this discrepancy in your analysis.
                     p.service.conductPostMortem(
                         candidate.message, candidate.outcome, history, finalTradeSummary, p.model, candidate.feedback, enhancedSummaries
                     ).then((res: string) => {
-                        if (false) {
-
-                            setLivePostMortemThoughts(prev => ({ ...prev, [p.thoughtsKey]: res }));
-                        }
                         return { provider: p.name, result: res };
                     })
                 );
@@ -2104,7 +2128,6 @@ Please investigate this discrepancy in your analysis.
                 } catch (weaknessError) {
                     console.error('[AI Learning] Failed to update weaknesses:', weaknessError);
                 }
-            }
 
         } catch (e: any) {
             console.error("Post Mortem Failed", e);
@@ -2159,14 +2182,14 @@ Please investigate this discrepancy in your analysis.
             const data = JSON.parse(fileContent);
             if (isValidUserProfile(data)) {
                 await dbService.overwriteUserProfile(data);
-                alert("Profile imported successfully. Please select the user to log in.");
+                toast.success("Profile Imported", "Please select the user to log in.");
                 const users = await dbService.getAllUsernames();
                 setExistingUsernames(users);
             } else {
-                alert("Invalid profile data format.");
+                toast.error("Import Failed", "Invalid profile data format.");
             }
         } catch (e) {
-            alert("Failed to parse import file.");
+            toast.error("Import Failed", "Failed to parse import file.");
         }
     };
 
@@ -2203,98 +2226,9 @@ Please investigate this discrepancy in your analysis.
             const result = await exportDataAsFile(fullBackup, filename);
 
             if (!result.success) {
-                alert(`Export failed: ${result.error}`);
+                toast.error("Export Failed", result.error);
             }
         }
-    };
-
-    const handleConfirmLogTrade = async (feedback: { pnlAmount: number; correctedStopLoss?: string; correctedTakeProfit?: string; }) => {
-        if (!logTradeState) return;
-
-        const { message, outcome } = logTradeState;
-        setLoggingTradeId(message.id);
-        setLogTradeState(null);
-
-        const loggedTrade: LoggedTrade = {
-            id: message.id,
-            analysis: message.analysis!,
-            outcome: outcome,
-            timestamp: new Date().toISOString(),
-            leverage: activeConversation?.leverage || 100,
-            investmentAmount: undefined,
-            pnlAmount: feedback.pnlAmount,
-            correctedStopLoss: feedback.correctedStopLoss,
-            correctedTakeProfit: feedback.correctedTakeProfit,
-            geminiModelUsed: message.geminiModelUsed,
-            deepseekModelUsed: message.deepseekModelUsed,
-            zhipuModelUsed: message.zhipuModelUsed,
-            groqModelUsed: message.groqModelUsed,
-            groqNewModelUsed: message.groqNewModelUsed,
-            groqAlt2ModelUsed: message.groqAlt2ModelUsed,
-            openrouterModelUsed: message.openrouterModelUsed,
-
-            geminiThoughtProcess: message.geminiThoughtProcess,
-            deepseekThoughtProcess: message.deepseekThoughtProcess,
-            zhipuThoughtProcess: message.zhipuThoughtProcess,
-            groqThoughtProcess: message.groqThoughtProcess,
-            groqNewThoughtProcess: message.groqNewThoughtProcess,
-            groqAlt2ThoughtProcess: message.groqAlt2ThoughtProcess,
-            openrouterThoughtProcess: message.openrouterThoughtProcess,
-
-            ocrModelUsed: message.ocrModelUsed,
-            moderatorProvider: moderatorProvider,
-            moderatorModel: moderatorModel,
-            isAccuracyMode: message.isAccuracyMode,
-            accuracySubMode: message.accuracySubMode
-        };
-
-        setLoggedTrades(prev => [loggedTrade, ...prev]);
-        updateMessages(prev => prev.map(m => m.id === message.id ? { ...m, outcome } : m));
-
-        // Update confidence calibration stats (enhanced with granular tracking)
-        if (message.analysis?.confidence) {
-            const confidence = message.analysis.confidence as ConfidenceLevel;
-
-            // Extract granular context from the analysis for multi-dimensional tracking
-            const coin = message.analysis.coinName ||
-                (message.text?.match(/\b([A-Z]{2,10}USDT?)\b/)?.[1]) || undefined;
-            const pattern = message.analysis.marketConditions?.pattern || undefined;
-
-            // Use granular calibration if we have context, otherwise fall back to simple
-            if (coin || pattern) {
-                await GlobalLearningService.updateCalibration({
-                    timestamp: new Date().toISOString(),
-                    confidence,
-                    outcome: outcome === TradeOutcome.WIN ? 'WIN' : 'LOSS',
-                    coin: coin?.toUpperCase(),
-                    pattern: typeof pattern === 'string' ? pattern : undefined,
-                    timeframe: '4h', // Default analysis timeframe
-                    // Detect regime from pattern family or description
-                    regime: message.analysis?.marketConditions?.pattern?.toLowerCase().includes('trend') ? 'trending' :
-                        message.analysis?.marketConditions?.pattern?.toLowerCase().includes('range') ? 'ranging' :
-                            undefined
-                });
-            } else {
-                // Fallback to simple calibration
-                const currentCal = GlobalLearningService.getCalibration();
-                const newCal = updateCalibration(currentCal, confidence, outcome);
-                // We need to manually save this case if not using the granular update helper that auto-saves
-                // But GlobalLearningService.updateCalibration handles granular entry which updates the whole object
-                // So let's construct a minimal granular entry for compatibility or add a dedicated method
-                // For now, simpler to just use the granular entry with minimal fields
-                await GlobalLearningService.updateCalibration({
-                    timestamp: new Date().toISOString(),
-                    confidence,
-                    outcome: outcome === TradeOutcome.WIN ? 'WIN' : 'LOSS'
-                });
-            }
-            // Sync React state for UI
-            setConfidenceCalibration(GlobalLearningService.getCalibration());
-        }
-
-        // Instead of directly triggering post-mortem, show the data capture choice modal
-        setDataCaptureCandidate({ message, outcome, feedback });
-        setLoggingTradeId(null);
     };
 
     // Auto-learn from trade outcome (Phase 1 AI Learning)
@@ -2471,8 +2405,6 @@ Please investigate this discrepancy in your analysis.
     };
 
     // Temporary variable to store feedback during auto-capture
-    const [pendingFeedback, setPendingFeedback] = useState<{ pnlAmount: number; correctedStopLoss?: string; correctedTakeProfit?: string; } | null>(null);
-
     const handleDataCaptureAuto = async (feedback: { pnlAmount: number; correctedStopLoss?: string; correctedTakeProfit?: string; selectedEntryIndices?: number[]; }) => {
         // User chose auto-capture - fetch current market data
         if (!dataCaptureCandidate || !dataCaptureCandidate.message.analysis) {
@@ -2524,13 +2456,13 @@ Please investigate this discrepancy in your analysis.
                 );
             } else {
                 console.error('[AutoCapture] Failed:', result.error);
-                alert(`Auto-capture failed: ${result.error || 'Unknown error'}. Please try uploading a screenshot instead.`);
+                toast.error("Auto-Capture Failed", `${result.error || 'Unknown error'}. Please try uploading a screenshot instead.`);
                 // Fallback to upload modal
                 setPostMortemCandidate(dataCaptureCandidate);
             }
         } catch (error) {
             console.error('[AutoCapture] Error:', error);
-            alert('Auto-capture failed. Please try uploading a screenshot instead.');
+            toast.error("Auto-Capture Failed", "Please try uploading a screenshot instead.");
             setPostMortemCandidate(dataCaptureCandidate);
         } finally {
             setIsAutoCapturing(false);
@@ -2694,7 +2626,7 @@ Please investigate this discrepancy in your analysis.
                 );
             } else {
                 console.error('[EntryNotHitCapture] Failed:', result.error);
-                alert(`Auto-capture failed: ${result.error || 'Unknown error'}. Please try uploading a screenshot instead.`);
+                toast.error("Auto-Capture Failed", `${result.error || 'Unknown error'}. Please try uploading a screenshot instead.`);
                 // Fallback to upload modal
                 setPostMortemCandidate({
                     message: entryNotHitCandidate.message,
@@ -2704,7 +2636,7 @@ Please investigate this discrepancy in your analysis.
             }
         } catch (error) {
             console.error('[EntryNotHitCapture] Error:', error);
-            alert('Auto-capture failed. Please try uploading a screenshot instead.');
+            toast.error("Auto-Capture Failed", "Please try uploading a screenshot instead.");
             setPostMortemCandidate({
                 message: entryNotHitCandidate.message,
                 outcome: TradeOutcome.ENTRY_NOT_HIT,
@@ -2863,11 +2795,11 @@ ${result.comparisonBlock}
                 });
             } else {
                 console.error('[UpdateAutoCapture] Failed:', result.error);
-                alert(`Auto-capture failed: ${result.error || 'Unknown error'}. Please try uploading a screenshot instead.`);
+                toast.error("Auto-Capture Failed", `${result.error || 'Unknown error'}. Please try uploading a screenshot instead.`);
             }
         } catch (error) {
             console.error('[UpdateAutoCapture] Error:', error);
-            alert('Auto-capture failed. Please try uploading a screenshot instead.');
+            toast.error("Auto-Capture Failed", "Please try uploading a screenshot instead.");
         } finally {
             setIsUpdateAutoCapturing(false);
             setIsHybridLoading(false); // Stop loading animation
@@ -3376,12 +3308,22 @@ ${result.comparisonBlock}
     };
 
     const handleSaveAnalysis = (messageId: string) => {
-        const msg = messages.find(m => m.id === messageId);
+        const msgIndex = messages.findIndex(m => m.id === messageId);
+        const msg = msgIndex >= 0 ? messages[msgIndex] : undefined;
         if (msg && msg.analysis) {
+            // Find the nearest preceding user message. Reconstructing the user ID from the
+            // AI message ID never matches because both use independent Date.now() timestamps.
+            let userPrompt = "Unknown Request";
+            for (let i = msgIndex - 1; i >= 0; i--) {
+                if (messages[i].role === MessageRole.USER) {
+                    userPrompt = messages[i].text || "Unknown Request";
+                    break;
+                }
+            }
             const saved: SavedAnalysis = {
                 id: msg.id,
                 analysis: msg.analysis,
-                userPrompt: messages.find(m => m.id === `user-${msg.id.split('-')[1]}`)?.text || "Unknown Request",
+                userPrompt,
                 timestamp: new Date().toISOString(),
                 geminiModelUsed: msg.geminiModelUsed,
                 deepseekModelUsed: msg.deepseekModelUsed,
@@ -3524,12 +3466,12 @@ ${result.comparisonBlock}
                 isVisible={isLiveAnalysisVisible}
                 onClose={() => setIsLiveAnalysisVisible(false)}
                 thoughts={liveThoughts}
-                geminiModelName={isAccuracyModeEnabled ? (isGeminiEnabled ? modelIdToName[selectedGeminiModel] : undefined) : (isGeminiEnabled ? modelIdToName[selectedGeminiModel] : undefined)}
-                deepseekModelName={isAccuracyModeEnabled ? (isDeepSeekEnabled ? modelIdToName[selectedDeepSeekModel] : undefined) : (isDeepSeekEnabled ? modelIdToName[selectedDeepSeekModel] : undefined)}
+                geminiModelName={isGeminiEnabled ? modelIdToName[selectedGeminiModel] : undefined}
+                deepseekModelName={isDeepSeekEnabled ? modelIdToName[selectedDeepSeekModel] : undefined}
                 zhipuModelName={isAccuracyModeEnabled ? undefined : (isZhipuEnabled ? modelIdToName[selectedZhipuModel] : undefined)}
-                groqModelName={isAccuracyModeEnabled ? (isGroqEnabled ? modelIdToName[selectedGroqModel] : undefined) : (isGroqEnabled ? modelIdToName[selectedGroqModel] : undefined)}
-                groqNewModelName={isAccuracyModeEnabled ? (isGroqNewEnabled ? modelIdToName[selectedGroqNewModel] : undefined) : (isGroqNewEnabled ? modelIdToName[selectedGroqNewModel] : undefined)}
-                groqAlt2ModelName={isAccuracyModeEnabled ? (isGroqAlt2Enabled ? modelIdToName[selectedGroqAlt2Model] : undefined) : (isGroqAlt2Enabled ? modelIdToName[selectedGroqAlt2Model] : undefined)}
+                groqModelName={isGroqEnabled ? modelIdToName[selectedGroqModel] : undefined}
+                groqNewModelName={isGroqNewEnabled ? modelIdToName[selectedGroqNewModel] : undefined}
+                groqAlt2ModelName={isGroqAlt2Enabled ? modelIdToName[selectedGroqAlt2Model] : undefined}
                 openrouterModelName={isOpenrouterEnabled ? modelIdToName[selectedOpenrouterModel] || selectedOpenrouterModel : undefined}
 
                 onAllTypingComplete={handleAllAnalysisTypingComplete}
@@ -3540,12 +3482,12 @@ ${result.comparisonBlock}
                 isVisible={isLivePostMortemVisible}
                 onClose={() => setIsLivePostMortemVisible(false)}
                 thoughts={livePostMortemThoughts}
-                geminiModelName={isAccuracyModeEnabled ? (isGeminiEnabled ? modelIdToName[selectedGeminiModel] : undefined) : (isGeminiEnabled ? modelIdToName[selectedGeminiModel] : undefined)}
-                deepseekModelName={isAccuracyModeEnabled ? (isDeepSeekEnabled ? modelIdToName[selectedDeepSeekModel] : undefined) : (isDeepSeekEnabled ? modelIdToName[selectedDeepSeekModel] : undefined)}
+                geminiModelName={isGeminiEnabled ? modelIdToName[selectedGeminiModel] : undefined}
+                deepseekModelName={isDeepSeekEnabled ? modelIdToName[selectedDeepSeekModel] : undefined}
                 zhipuModelName={isAccuracyModeEnabled ? undefined : (isZhipuEnabled ? modelIdToName[selectedZhipuModel] : undefined)}
-                groqModelName={isAccuracyModeEnabled ? (isGroqEnabled ? modelIdToName[selectedGroqModel] : undefined) : (isGroqEnabled ? modelIdToName[selectedGroqModel] : undefined)}
-                groqNewModelName={isAccuracyModeEnabled ? (isGroqNewEnabled ? modelIdToName[selectedGroqNewModel] : undefined) : (isGroqNewEnabled ? modelIdToName[selectedGroqNewModel] : undefined)}
-                groqAlt2ModelName={isAccuracyModeEnabled ? (isGroqAlt2Enabled ? modelIdToName[selectedGroqAlt2Model] : undefined) : (isGroqAlt2Enabled ? modelIdToName[selectedGroqAlt2Model] : undefined)}
+                groqModelName={isGroqEnabled ? modelIdToName[selectedGroqModel] : undefined}
+                groqNewModelName={isGroqNewEnabled ? modelIdToName[selectedGroqNewModel] : undefined}
+                groqAlt2ModelName={isGroqAlt2Enabled ? modelIdToName[selectedGroqAlt2Model] : undefined}
                 openrouterModelName={isOpenrouterEnabled ? modelIdToName[selectedOpenrouterModel] || selectedOpenrouterModel : undefined}
 
                 onAllTypingComplete={handleAllPostMortemTypingComplete}

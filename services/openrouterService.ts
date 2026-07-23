@@ -17,9 +17,9 @@ const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 
 // Hardcoded API key as per user request
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
-if (!OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY is not set in environment");
 
 const getClient = (): OpenAI => {
+    if (!OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY is not set in environment");
     return new OpenAI({
         baseURL: OPENROUTER_BASE_URL,
         apiKey: OPENROUTER_API_KEY,

@@ -180,7 +180,7 @@ const TABS: TabConfig[] = [
     { id: 'models', label: 'Models', shortLabel: 'AI', icon: <span className="text-lg">🤖</span>, color: 'text-zinc-500', activeColor: 'text-violet-400' },
 ];
 
-export const Journal: React.FC<JournalProps> = ({
+const JournalInner: React.FC<JournalProps> = ({
     isVisible, onClose, initialTab,
     // Trade Log Pass-through
     trades, onDeleteTrades, onClearAllTrades, modelIdToName, ocrModelIdToName, onUpdateInsights, isSummarizing, currentInsightIds, onUpdateTradeLeverage,
@@ -329,3 +329,5 @@ export const Journal: React.FC<JournalProps> = ({
         </>
     );
 };
+
+export const Journal = React.memo(JournalInner);

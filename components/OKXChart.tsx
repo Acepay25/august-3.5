@@ -258,6 +258,7 @@ const OKXChart: React.FC<OKXChartProps> = ({ symbol, interval, isVisible }) => {
     const resistanceLineRef = useRef<ISeriesApi<'Line'> | null>(null);
     const supportLineRef = useRef<ISeriesApi<'Line'> | null>(null);
     const aiTrendlinesRef = useRef<ISeriesApi<'Line'>[]>([]);
+    const isMountedRef = useRef(true);
     const [isLoading, setIsLoading] = useState(true);
     const [isAIAnalyzing, setIsAIAnalyzing] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -349,6 +350,7 @@ const OKXChart: React.FC<OKXChartProps> = ({ symbol, interval, isVisible }) => {
         }, 100);
 
         return () => {
+            isMountedRef.current = false;
             clearTimeout(initTimeout);
             if (chartRef.current) {
                 const observer = (chartRef.current as any)._resizeObserver;
@@ -368,6 +370,7 @@ const OKXChart: React.FC<OKXChartProps> = ({ symbol, interval, isVisible }) => {
         let retryTimeout: number | null = null;
 
         const loadData = async () => {
+            if (!isMountedRef.current) return;
             // Wait for chart to be ready
             if (!candleSeriesRef.current) {
                 // Retry after a short delay if chart isn't ready yet
@@ -619,4 +622,4 @@ const OKXChart: React.FC<OKXChartProps> = ({ symbol, interval, isVisible }) => {
     );
 };
 
-export default OKXChart;
+export default React.memo(OKXChart);

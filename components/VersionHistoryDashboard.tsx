@@ -61,24 +61,28 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
     }, []);
 
     const loadData = async () => {
-        // 1. Intelligence Data
-        const geminiSignals = await ReinforcementSignalService.getSignals(AIProvider.GEMINI, 20);
-        setSignals(geminiSignals || []);
+        try {
+            // 1. Intelligence Data
+            const geminiSignals = await ReinforcementSignalService.getSignals(AIProvider.GEMINI, 20);
+            setSignals(geminiSignals || []);
 
-        setCalibration(storageService.loadSetting<ConfidenceCalibration>('confidence_calibration', initializeCalibration()));
+            setCalibration(storageService.loadSetting<ConfidenceCalibration>('confidence_calibration', initializeCalibration()));
 
-        const r = storageService.loadLearningRules().rules || [];
-        setRules(r);
+            const r = storageService.loadLearningRules().rules || [];
+            setRules(r);
 
-        const iStats = getAttributedInsightsSummary();
-        setInsights(iStats.topInsights || []);
+            const iStats = getAttributedInsightsSummary();
+            setInsights(iStats.topInsights || []);
 
-        // 2. System Data
-        setQueueSize(jobQueue.getQueueLength());
+            // 2. System Data
+            setQueueSize(jobQueue.getQueueLength());
 
-        // Simulate Storage Count (just for demo, usually async)
-        const logs = await storageService.getTradeLogs();
-        setStorageCount(logs.length + r.length + (iStats.totalInsights || 0));
+            // Simulate Storage Count (just for demo, usually async)
+            const logs = await storageService.getTradeLogs();
+            setStorageCount(logs.length + r.length + (iStats.totalInsights || 0));
+        } catch (error) {
+            console.error('[VersionHistoryDashboard] Failed to load data:', error);
+        }
     };
 
     // -- Modern Card Component --

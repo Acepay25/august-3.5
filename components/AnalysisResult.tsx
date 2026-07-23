@@ -109,6 +109,11 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
         entryPoints.map((_, idx) => idx) // Default: all entries selected
     );
 
+    // Re-sync selected entries when entryPoints changes
+    useEffect(() => {
+        setSelectedBacktestEntries(entryPoints.map((_, idx) => idx));
+    }, [entryPoints]);
+
     // Share and Alert state
     const [isSharing, setIsSharing] = useState(false);
     const [shareSuccess, setShareSuccess] = useState<string | null>(null);

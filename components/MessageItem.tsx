@@ -2,10 +2,14 @@
 import React from 'react';
 import { Message, MessageRole, TradeOutcome, SavedAnalysis, Conversation, DebateTurn, ConfidenceCalibration, AnalystLensConfig } from '../types';
 import { BotIcon, ChevronDownIcon, LinkIcon, CopyIcon, CheckIcon, UserIcon } from './Icons';
-import { TypingRenderer } from './TypingRenderer';
 import LiveMarketDataView from './LiveMarketDataView';
 import DebateView from './DebateView';
 import AnalysisResult from './AnalysisResult';
+
+// Helper to validate URLs (XSS prevention)
+const isSafeUrl = (url: string): boolean => {
+    return url.startsWith('http://') || url.startsWith('https://');
+};
 
 export interface ChatContextProps {
     typingMessageState: { id: string; fullText: string; field: 'postMortem' } | null;
@@ -63,13 +67,12 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
         savedAnalyses, loggingTradeId,
         activeFrameworks, activeConversation, copiedMessageId, modelIdToName, ocrModelIdToName,
         handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy,
-        handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, handleInitiateSimulator,
+        handleSaveAnalysis, handleCopy, handleInitiateUpdateTrade, handleInitiateSimulator,
         isSelectionMode, selectedMessageIds, onToggleMessageSelection,
         confidenceCalibration, onRetryPostMortem, lensConfig, leverage, onViewImage,
         onSelectMessageForProbability
     } = context;
 
-    const isTypingPostMortem = typingMessageState?.id === message.id && typingMessageState.field === 'postMortem';
     const isHighlighted = highlightedAnalysisId === message.id;
     const isUserMessage = message.role === MessageRole.USER;
     const isCollapsed = isUserMessage && collapsedUserMessages[message.id];
@@ -300,7 +303,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                                         const insightKey = `${message.id}-insight-${insight.provider}`;
                                                         const isExpanded = expandedIndividualThoughts[insightKey] === true; // Default to collapsed
                                                         return (
-                                                            <div key={idx} className={`${insight.bgClass} rounded-xl border ${insight.borderClass} overflow-hidden`}>
+                                                            <div key={insightKey} className={`${insight.bgClass} rounded-xl border ${insight.borderClass} overflow-hidden`}>
                                                                 <button
                                                                     onClick={(e) => {
                                                                         e.stopPropagation();
@@ -345,7 +348,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 </div>
                             )}
 
-                            {Array.isArray(message.sources) && message.sources.length > 0 && <div className="mt-4 sm:mt-6 pt-4 border-t border-white/10"><h4 className="text-xs uppercase font-bold text-zinc-500 mb-2 sm:mb-3 tracking-widest">Reference Sources</h4><ul className="text-xs sm:text-sm space-y-2 sm:space-y-3">{message.sources.map((source, index) => (<li key={`${message.id}-src-${index}`}><a href={source.web.uri} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:text-cyan-300 hover:underline break-all flex items-center gap-2"><LinkIcon /> {source.web.title}</a></li>))}</ul></div>}
+                            {Array.isArray(message.sources) && message.sources.length > 0 && <div className="mt-4 sm:mt-6 pt-4 border-t border-white/10"><h4 className="text-xs uppercase font-bold text-zinc-500 mb-2 sm:mb-3 tracking-widest">Reference Sources</h4><ul className="text-xs sm:text-sm space-y-2 sm:space-y-3">{message.sources.map((source, index) => (<li key={`${message.id}-src-${index}`}>{isSafeUrl(source.web.uri) ? (<a href={source.web.uri} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:text-cyan-300 hover:underline break-all flex items-center gap-2"><LinkIcon /> {source.web.title}</a>) : (<span className="text-cyan-400 break-all flex items-center gap-2"><LinkIcon /> {source.web.title}</span>)}</li>))}</ul></div>}
 
                             {message.role === MessageRole.AI && !message.isDebating && !isSelectionMode && (
                                 <div className="mt-4 sm:mt-6 pt-3 sm:pt-5 border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-[10px] sm:text-sm text-zinc-500">

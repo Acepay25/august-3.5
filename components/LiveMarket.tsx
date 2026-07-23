@@ -261,6 +261,8 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze }
     const [isInsightsPanelExpanded, setIsInsightsPanelExpanded] = useState(true);
 
     const widgetRef = useRef<HTMLDivElement>(null);
+    const tradingViewWidgetRef = useRef<any>(null);
+    const notificationTimeoutRef = useRef<number | null>(null);
 
     const priceDisplayRef = useRef<HTMLSpanElement>(null);
     const lastPriceRef = useRef<number | null>(null);
@@ -273,20 +275,48 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze }
 
     useEffect(() => {
         isMountedRef.current = true;
-        return () => { isMountedRef.current = false; };
+        return () => {
+            isMountedRef.current = false;
+            // Clear notification timeout on unmount
+            if (notificationTimeoutRef.current) {
+                window.clearTimeout(notificationTimeoutRef.current);
+                notificationTimeoutRef.current = null;
+            }
+        };
     }, []);
 
     useEffect(() => {
         if (isVisible && !window.TradingView) {
-            const script = document.createElement('script');
-            script.src = 'https://s3.tradingview.com/tv.js';
-            script.async = true;
-            script.onload = initWidget;
-            document.head.appendChild(script);
+            // Check if script already exists to prevent duplicate injection
+            const existingScript = document.querySelector('script[src*="tradingview"]');
+            if (!existingScript) {
+                const script = document.createElement('script');
+                script.src = 'https://s3.tradingview.com/tv.js';
+                script.async = true;
+                script.onload = initWidget;
+                document.head.appendChild(script);
+            }
         } else if (isVisible && window.TradingView) {
             initWidget();
         }
-    }, [isVisible, symbol, interval, exchange]);
+
+        return () => {
+            // Cleanup widget on unmount or when dependencies change
+            if (tradingViewWidgetRef.current) {
+                try {
+                    if (typeof tradingViewWidgetRef.current.remove === 'function') {
+                        tradingViewWidgetRef.current.remove();
+                    }
+                } catch (e) {
+                    // Widget remove not supported, clear container instead
+                }
+                tradingViewWidgetRef.current = null;
+            }
+            if (widgetRef.current) {
+                widgetRef.current.innerHTML = '';
+            }
+        };
+    }, [isVisible, symbol, interval, exchange, initWidget]);
 
     const initWidget = () => {
         if (window.TradingView && widgetRef.current) {
@@ -295,7 +325,7 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze }
             const chartSymbol = exchange === 'OKX'
                 ? `OKX:${symbol}.P`
                 : `BINANCE:${symbol}`;
-            new window.TradingView.widget({
+            tradingViewWidgetRef.current = new window.TradingView.widget({
                 autosize: true,
                 symbol: chartSymbol,
                 interval: mapIntervalToTradingView(interval),
@@ -583,7 +613,14 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze }
 
     const showNotification = (msg: string) => {
         setNotification(msg);
-        window.setTimeout(() => setNotification(null), 5000);
+        // Clear previous timeout if exists
+        if (notificationTimeoutRef.current) {
+            window.clearTimeout(notificationTimeoutRef.current);
+        }
+        notificationTimeoutRef.current = window.setTimeout(() => {
+            setNotification(null);
+            notificationTimeoutRef.current = null;
+        }, 5000);
     };
 
     const handleExtractAndAnalyze = async () => {
@@ -1054,4 +1091,4 @@ ${JSON.stringify(marketData, null, 2)}
     );
 };
 
-export default LiveMarket;
+export default React.memo(LiveMarket);

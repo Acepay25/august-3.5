@@ -67,7 +67,7 @@ const AI_PROVIDERS = [
     { id: 'grokNative', name: 'Grok (xAI)', description: 'Grok AI', icon: '◐', color: 'sky' },
 ];
 
-export const ChatInput: React.FC<ChatInputProps> = ({
+const ChatInputInner: React.FC<ChatInputProps> = ({
     images,
     removeImage,
     leverageRef,
@@ -476,3 +476,5 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         </div>
     );
 };
+
+export const ChatInput = React.memo(ChatInputInner);

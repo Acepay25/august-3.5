@@ -17,6 +17,7 @@ import {
   sqliteGetAllUsernames,
   sqliteGetUserProfile,
   sqliteSaveUserProfile,
+  sqliteDeleteUser,
   migrateFromIndexedDB
 } from './SqliteService';
 import {
@@ -32,6 +33,18 @@ const DB_VERSION = 1;
 
 let dbPromise: Promise<IDBPDatabase> | null = null;
 let sqliteReady = false;
+let dbReadyPromise: Promise<void> | null = null;
+
+/**
+ * Await database initialization and return whether SQLite is available.
+ * Safe to call before or after initDatabase().
+ */
+const ensureDbReady = async (): Promise<boolean> => {
+  if (dbReadyPromise) {
+    await dbReadyPromise;
+  }
+  return sqliteReady;
+};
 
 /**
  * Initialize IndexedDB (web fallback)
@@ -54,35 +67,40 @@ const initIndexedDB = () => {
  * On web: Uses IndexedDB
  */
 export const initDatabase = async (): Promise<void> => {
-  if (isNativePlatform()) {
-    console.log('[dbService] Native platform detected, initializing SQLite...');
-    sqliteReady = await initSqlite();
+  if (!dbReadyPromise) {
+    dbReadyPromise = (async () => {
+      if (isNativePlatform()) {
+        console.log('[dbService] Native platform detected, initializing SQLite...');
+        sqliteReady = await initSqlite();
 
-    if (sqliteReady) {
-      // Check if we need to migrate
-      const alreadyMigrated = await isSqliteMigrated();
+        if (sqliteReady) {
+          // Check if we need to migrate
+          const alreadyMigrated = await isSqliteMigrated();
 
-      if (!alreadyMigrated) {
-        console.log('[dbService] Running one-time migration...');
+          if (!alreadyMigrated) {
+            console.log('[dbService] Running one-time migration...');
 
-        // Migrate localStorage to Preferences
-        await migrateLocalStorageToPreferences();
+            // Migrate localStorage to Preferences
+            await migrateLocalStorageToPreferences();
 
-        // Migrate IndexedDB to SQLite
-        await migrateFromIndexedDB(
-          idbGetUserProfile,
-          idbGetAllUsernames
-        );
+            // Migrate IndexedDB to SQLite
+            await migrateFromIndexedDB(
+              idbGetUserProfile,
+              idbGetAllUsernames
+            );
 
-        // Mark as migrated
-        await setSqliteMigrated();
-        console.log('[dbService] Migration complete!');
+            // Mark as migrated
+            await setSqliteMigrated();
+            console.log('[dbService] Migration complete!');
+          }
+        }
+      } else {
+        console.log('[dbService] Web platform, using IndexedDB');
+        await initIndexedDB();
       }
-    }
-  } else {
-    console.log('[dbService] Web platform, using IndexedDB');
-    await initIndexedDB();
+    })();
   }
+  return dbReadyPromise;
 };
 
 // ============================================================================
@@ -145,7 +163,7 @@ const idbDeleteUserProfile = async (username: string): Promise<void> => {
  * Get all usernames
  */
 export const getAllUsernames = async (): Promise<string[]> => {
-  if (sqliteReady) {
+  if (await ensureDbReady()) {
     return sqliteGetAllUsernames();
   }
   return idbGetAllUsernames();
@@ -155,7 +173,7 @@ export const getAllUsernames = async (): Promise<string[]> => {
  * Get user profile
  */
 export const getUserProfile = async (username: string): Promise<UserProfile | undefined> => {
-  if (sqliteReady) {
+  if (await ensureDbReady()) {
     const profile = await sqliteGetUserProfile(username);
     return profile || undefined;
   }
@@ -166,7 +184,7 @@ export const getUserProfile = async (username: string): Promise<UserProfile | un
  * Save user profile (partial update)
  */
 export const saveUserProfile = async (username: string, data: Partial<Omit<UserProfile, 'username'>>): Promise<void> => {
-  if (sqliteReady) {
+  if (await ensureDbReady()) {
     // For SQLite, we need to get existing and merge
     const existing = await sqliteGetUserProfile(username);
     const updatedProfile: UserProfile = {
@@ -194,7 +212,7 @@ export const saveUserProfile = async (username: string, data: Partial<Omit<UserP
  * Overwrite entire user profile
  */
 export const overwriteUserProfile = async (profile: UserProfile): Promise<void> => {
-  if (sqliteReady) {
+  if (await ensureDbReady()) {
     await sqliteSaveUserProfile(profile);
     return;
   }
@@ -205,10 +223,8 @@ export const overwriteUserProfile = async (profile: UserProfile): Promise<void> 
  * Delete user profile
  */
 export const deleteUserProfile = async (username: string): Promise<void> => {
-  if (sqliteReady) {
-    // For SQLite, we need to delete from all tables
-    // TODO: Add sqliteDeleteUser function
-    console.warn('[dbService] SQLite user deletion not fully implemented yet');
+  if (await ensureDbReady()) {
+    await sqliteDeleteUser(username);
     return;
   }
   return idbDeleteUserProfile(username);
@@ -228,9 +244,10 @@ export const getStorageInfo = async (): Promise<{
   userCount: number;
 }> => {
   const usernames = await getAllUsernames();
+  const usingSqlite = await ensureDbReady();
   return {
     platform: Capacitor.getPlatform(),
-    storageType: sqliteReady ? 'sqlite' : 'indexeddb',
+    storageType: usingSqlite ? 'sqlite' : 'indexeddb',
     userCount: usernames.length
   };
 };

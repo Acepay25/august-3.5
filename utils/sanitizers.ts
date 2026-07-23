@@ -23,15 +23,20 @@ export const sanitizeAIResponse = (text: string): string => {
   // This removes * if it is NOT preceded by a digit OR NOT followed by a digit.
   cleaned = cleaned.replace(/(?<!\d)\*|\*(?!\d)/g, '');
 
-  // Aggressive XSS prevention: Strip HTML tags
+  // Aggressive XSS prevention: Strip HTML tags (loop until stable to defeat nested-tag bypasses)
   // This prevents <script>, <iframe>, <object>, etc. from being rendered if the UI ever uses dangerous HTML setting.
   // Even though React escapes by default, this adds a layer of safety for copy-paste or other sinks.
-  cleaned = cleaned.replace(/<[^>]*>?/gm, '');
+  let prev = '';
+  while (prev !== cleaned) {
+    prev = cleaned;
+    cleaned = cleaned.replace(/<[^>]*>/gm, '');
+  }
 
   return cleaned;
 };
 
 export const sanitizeJSONString = (str: string): string => {
   if (typeof str !== 'string') return '';
-  return str.replace(/[^\x20-\x7E₮]/g, '');
+  // Remove control characters (except newline, tab, carriage return) but preserve Unicode
+  return str.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
 };

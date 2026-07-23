@@ -13,7 +13,7 @@ import { parseLiveMarketData } from '../utils/liveMarketParser';
 const GROQ_BASE_URL = 'https://api.groq.com/openai/v1/';
 
 const getClient = (): OpenAI => {
-    // Groq Alt API key hardcoded as per user's explicit request.
+    // Groq New API key from environment (inlined at build time via vite.config.ts)
     const GROQ_API_KEY = process.env.GROQ_NEW_API_KEY;
     if (!GROQ_API_KEY) throw new Error("GROQ_NEW_API_KEY is not set in environment");
 

@@ -769,4 +769,4 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
     );
 };
 
-export default HybridDataPanel;
+export default React.memo(HybridDataPanel);

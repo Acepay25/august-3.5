@@ -531,6 +531,18 @@ export const sqliteDeleteTrade = async (tradeId: string): Promise<void> => {
 };
 
 /**
+ * Delete a user and all associated data across all tables
+ */
+export const sqliteDeleteUser = async (username: string): Promise<void> => {
+    if (!db) return;
+    await db.run('DELETE FROM trades WHERE username = ?', [username]);
+    await db.run('DELETE FROM conversations WHERE username = ?', [username]);
+    await db.run('DELETE FROM trade_summaries WHERE username = ?', [username]);
+    await db.run('DELETE FROM saved_analyses WHERE username = ?', [username]);
+    await db.run('DELETE FROM users WHERE username = ?', [username]);
+};
+
+/**
  * Get trade count for a user
  */
 export const sqliteGetTradeCount = async (username: string): Promise<number> => {

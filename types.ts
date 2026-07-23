@@ -126,7 +126,7 @@ export interface Message {
   // Mode Tracking
   isAccuracyMode?: boolean;
   isLensMode?: boolean; // Was this analysis created with Analyst Lenses enabled?
-  tradingStyle?: 'swing' | 'scalp' | 'position'; // Trading style used for this analysis
+  tradingStyle?: Exclude<TradingStyle, 'auto'>; // Trading style used for this analysis
   accuracySubMode?: AccuracySubMode;
   isPostMortem?: boolean; // Flag to identify if this message is a Post-Mortem Analysis bubble
   // Data for retrying a failed post-mortem analysis
@@ -315,9 +315,9 @@ export interface TradeAnalysis {
   levelProbabilities?: LevelProbabilities;
   /**
    * Snapshot of market data at the time of analysis.
-   * Type is HybridDataPacket (from HybridIntelligenceService), but using 'any' to avoid strict circular dependency.
+   * Type is HybridDataPacket (from HybridIntelligenceService), but using 'unknown' to avoid strict circular dependency.
    */
-  marketSnapshot?: any;
+  marketSnapshot?: unknown;
 }
 
 /**
@@ -376,7 +376,7 @@ export interface LoggedTrade {
   correctedTakeProfit?: string;
   investmentAmount?: number;
   pnlAmount?: number;
-  marketSnapshot?: any; // Stored market context for algorithmic recalculation
+  marketSnapshot?: unknown; // Stored market context for algorithmic recalculation
   // Ensemble fields
   geminiModelUsed?: string;
   deepseekModelUsed?: string;
@@ -575,7 +575,7 @@ export interface GranularCalibrationEntry extends CalibrationEntry {
   coin?: string;                    // e.g., "BTCUSDT"
   pattern?: string;                 // e.g., "Family C", "Bull Flag"
   timeframe?: string;               // e.g., "1h", "4h"
-  regime?: 'trending' | 'ranging' | 'volatile';
+  regime?: 'trending' | 'ranging' | 'volatile' | 'compression';
   provider?: AIProvider;            // Which AI made this prediction
   session?: TradingSession;         // Trading session when trade was taken
 }
@@ -693,7 +693,7 @@ export interface UserProfile {
   // AI Learning Features
   tradingWeaknesses?: TradingWeaknesses;       // Mistake pattern analysis
   insightKnowledgeBase?: InsightKnowledgeBase; // Post-mortem insights
-  learningRules?: { rules: any[]; lastUpdated: string }; // IF/THEN rules from post-mortems
+  learningRules?: { rules: LearningRule[]; lastUpdated: string }; // IF/THEN rules from post-mortems
 }
 
 export interface LiveThoughts {

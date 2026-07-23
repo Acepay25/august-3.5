@@ -25,8 +25,24 @@ dist-ssr
 
 # Environment variables (API keys)
 .env*
+!.env.example
 dist
 dist_electron
 android/app/src/main/assets
 android/app/build
 ios/App/App/build
+
+# Build logs & debug artifacts (may contain secrets)
+build-log.txt
+push_error.txt
+push_log.txt
+scan_results.txt
+tsc_errors.txt
+
+# APK / binary artifacts
+*.apk
+*.aab
+
+# Test output artifacts
+services/test_mem_output.txt
+services/test_output.txt

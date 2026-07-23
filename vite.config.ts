@@ -26,6 +26,11 @@ export default defineConfig(({ mode }) => {
       'process.env.DEEPSEEK_API_KEY': JSON.stringify(env.DEEPSEEK_API_KEY),
       'process.env.ZHIPU_API_KEY': JSON.stringify(env.ZHIPU_API_KEY),
       'process.env.GROQ_API_KEY': JSON.stringify(env.GROQ_API_KEY),
+      'process.env.GROQ_NEW_API_KEY': JSON.stringify(env.GROQ_NEW_API_KEY),
+      'process.env.GROQ_ALT2_API_KEY': JSON.stringify(env.GROQ_ALT2_API_KEY),
+      'process.env.OPENAI_API_KEY': JSON.stringify(env.OPENAI_API_KEY),
+      'process.env.OPENROUTER_API_KEY': JSON.stringify(env.OPENROUTER_API_KEY),
+      'process.env.GROK_API_KEY': JSON.stringify(env.GROK_API_KEY),
     },
     resolve: {
       alias: {

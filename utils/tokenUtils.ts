@@ -89,10 +89,9 @@ export const truncateToTokenLimit = (messages: any[], tokenLimit: number): any[]
             optimizedMiddle.unshift(msg); // Prepend to maintain correct order
             currentUsed += count;
         } else {
-            // Stop adding once we hit the limit
-            // This effectively drops the oldest messages
+            // Skip this message but continue checking older (potentially smaller) messages
             console.log(`[TokenUtils] Dropping message index ${startIndex + i} (Size: ${count} tokens) to fit limit.`);
-            break;
+            continue;
         }
     }
 

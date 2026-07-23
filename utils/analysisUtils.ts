@@ -244,9 +244,15 @@ export const sanitizeTradeAnalysis = (raw: any): TradeAnalysis => {
         }
     }
 
-    // PRESERVE GATE RESULT - pass through without modification
+    // PRESERVE GATE RESULT - sanitize string arrays from AI output
     if (raw.gateResult && typeof raw.gateResult === 'object') {
-        safeAnalysis.gateResult = raw.gateResult;
+        const gr = raw.gateResult;
+        safeAnalysis.gateResult = {
+            ...gr,
+            warnings: Array.isArray(gr.warnings) ? gr.warnings.map((w: unknown) => ensureString(w)) : [],
+            insights: Array.isArray(gr.insights) ? gr.insights.map((i: unknown) => ensureString(i)) : [],
+            reasoning: Array.isArray(gr.reasoning) ? gr.reasoning.map((r: unknown) => ensureString(r)) : [],
+        };
     }
 
     // PRESERVE LEVEL PROBABILITIES (SL/TP hit estimation)

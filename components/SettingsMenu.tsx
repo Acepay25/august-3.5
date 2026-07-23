@@ -876,4 +876,4 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
     );
 };
 
-export default SettingsMenu;
+export default React.memo(SettingsMenu);

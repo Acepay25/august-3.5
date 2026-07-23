@@ -258,7 +258,6 @@ const Settings: React.FC<SettingsProps> = ({
     const [isMemoryConfigVisible, setIsMemoryConfigVisible] = useState(true);
     const [isCustomBehaviorVisible, setIsCustomBehaviorVisible] = useState(true);
     const [activeInstructionTab, setActiveInstructionTab] = useState<InstructionTab>('general');
-    const [saveNotification, setSaveNotification] = useState<string | null>(null);
 
     const currentInstructions = useMemo(() => customInstructions[activeInstructionTab] || [], [customInstructions, activeInstructionTab]);
 
@@ -591,12 +590,6 @@ const Settings: React.FC<SettingsProps> = ({
                                     <EditIcon className="w-3 h-3" /> Add New Instruction ({currentInstructions.length}/{MAX_ITEMS})
                                 </button>
 
-                                {saveNotification && (
-                                    <div className="flex items-center gap-2 p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-lg animate-fade-in text-xs font-medium mt-2">
-                                        <CheckIcon className="w-4 h-4" />
-                                        {saveNotification}
-                                    </div>
-                                )}
                             </div>
                         </div>
                     </section>
@@ -852,6 +845,6 @@ const Settings: React.FC<SettingsProps> = ({
     );
 };
 
-export default Settings;
+export default React.memo(Settings);
 
 

@@ -151,6 +151,11 @@ const DebateView: React.FC<DebateViewProps> = ({ debateTurns, geminiModelName, d
 
     // Effect to auto-expand new rounds only when the count increases
     useEffect(() => {
+        // Reset ref if rounds decreased (e.g., conversation reset)
+        if (rounds.length < lastRoundCountRef.current) {
+            lastRoundCountRef.current = 0;
+        }
+
         if (rounds.length > lastRoundCountRef.current) {
             // A new round has been added
             setExpandedRounds(prev => ({ ...prev, [rounds.length - 1]: true }));

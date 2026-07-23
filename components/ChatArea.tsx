@@ -10,6 +10,10 @@ import { ImageMetadata } from '../types';
 import HybridDataPanel from './HybridDataPanel';
 import ImageViewerModal from './ImageViewerModal';
 
+// Hoisted list components to prevent re-creation on each render
+const ListHeader = () => <div className="h-16"></div>;
+const ListFooter = () => <div className="h-32"></div>;
+
 interface ChatAreaProps {
     messages: Message[];
     chatContext: ChatContextProps;
@@ -97,7 +101,7 @@ interface ChatAreaProps {
     onSelectMessageForProbability?: (id: string) => void;
 }
 
-export const ChatArea: React.FC<ChatAreaProps> = ({
+const ChatAreaInner: React.FC<ChatAreaProps> = ({
     messages,
     chatContext,
     virtuosoRef,
@@ -299,8 +303,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 style={{ height: '100%', width: '100%' }}
                 increaseViewportBy={200}
                 components={{
-                    Header: () => <div className="h-16"></div>, // Extra space for top toolbars
-                    Footer: () => <div className="h-32"></div> // Space for bottom input area
+                    Header: ListHeader,
+                    Footer: ListFooter
                 }}
             />
 
@@ -435,3 +439,5 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         </div>
     );
 };
+
+export const ChatArea = React.memo(ChatAreaInner);

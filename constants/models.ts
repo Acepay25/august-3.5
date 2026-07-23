@@ -141,7 +141,10 @@ export const OCR_MODELS = [
 ];
 
 export const modelIdToName: Record<string, string> = ALL_SUPPORTED_MODELS.reduce((acc, model) => {
-   acc[model.id] = model.name;
+   // First-wins: avoid duplicate model IDs across Groq variants overwriting the primary name
+   if (!acc[model.id]) {
+      acc[model.id] = model.name;
+   }
    return acc;
 }, {} as Record<string, string>);
 

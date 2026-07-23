@@ -8,9 +8,10 @@ function createWindow() {
         width: 1200,
         height: 800,
         webPreferences: {
-            nodeIntegration: true,
-            contextIsolation: false, // For simple ipc/node usage if needed
-            webSecurity: false // Often helpful for local file loading in some setups, strictly safely should be true but this is a local tool
+            nodeIntegration: false,
+            contextIsolation: true,
+            webSecurity: true,
+            preload: path.join(__dirname, 'preload.cjs')
         },
         icon: path.join(__dirname, '../public/favicon.ico') // Attempt to load icon
     });
@@ -20,7 +21,7 @@ function createWindow() {
 
     if (isDev) {
         // Determine the URL from environment or default to Vite's 5173
-        const port = process.env.PORT || 5173;
+        const port = process.env.PORT || 3000;
         win.loadURL(`http://localhost:${port}`);
         win.webContents.openDevTools();
     } else {

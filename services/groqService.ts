@@ -1105,6 +1105,13 @@ Generate the updated Global Memory JSON object.
         return JSON.parse(responseText);
     } catch {
         console.error("Groq updateGlobalMemory JSON parse failed:", responseText);
-        return currentMemory || {} as GlobalMemory;
+        return currentMemory || {
+            totalTradesAnalyzed: 0,
+            familyPerformance: {},
+            aiPatternMemory: [],
+            userPreferences: { leverageDefault: 10, favoriteAssets: [], preferredSetup: '' },
+            globalCorrections: [],
+            lastUpdated: new Date().toISOString()
+        };
     }
 };

@@ -2158,7 +2158,7 @@ ${truncateTextToTokens(JSON.stringify(sanitizeAnalystOutput(analyst1Result.analy
 ${truncateTextToTokens(JSON.stringify(sanitizeAnalystOutput(analyst2Result.analysis)), 1500)}
 
 **${analyst3Name.toUpperCase()} INITIAL THOUGHTS:**  
-${truncateTextToTokens(JSON.stringify(analyst3Result.analysis), 1500)}
+${truncateTextToTokens(JSON.stringify(sanitizeAnalystOutput(analyst3Result.analysis)), 1500)}
 
 Start with <DEBATE_START> now.
 `;

@@ -36,6 +36,6 @@ export const createNewConversation = (): Conversation => {
     isGrokNativeEnabled: false, // Default to false
     moderatorProvider: AIProvider.GEMINI,
     moderatorModel: 'gemini-2.5-pro',
-    leverage: 100,
+    leverage: 10,
   };
 };

@@ -12,7 +12,7 @@ import { parseLiveMarketData } from '../utils/liveMarketParser';
 const OPENAI_BASE_URL = 'https://api.openai.com/v1';
 
 const getClient = (): OpenAI => {
-    // OpenAI API key - hardcoded for convenience
+    // OpenAI API key from environment (inlined at build time via vite.config.ts)
     const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
     if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is not set in environment");
 
