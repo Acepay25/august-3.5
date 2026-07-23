@@ -83,6 +83,7 @@ import { validateTradeOutcome, TradeOutcomeValidation } from './services/backtes
 import { SLOptimization } from './services/backtesting/StopLossOptimizerService';
 import { ConfidenceCalibration, InsightKnowledgeBase } from './types';
 import useNetworkStatus from './hooks/useNetworkStatus';
+import { useUIState } from './hooks/useUIState';
 import { offlineQueue, QueuedRequest } from './services/infrastructure/OfflineQueueService';
 // AI Learning Services - Adaptive Learning, Mistake Patterns, Insight Extraction
 import { generateLearningFromPrompt, isLearningEnabled } from './services/learning/LearningPromptService';
@@ -112,12 +113,48 @@ const MAX_TRADE_SUMMARIES = 100;
 
 const App: React.FC = () => {
     const toast = useToastActions();
+
+    // UI visibility and progress state (extracted to hooks/useUIState.ts)
+    const {
+        isUserModalOpen, setIsUserModalOpen,
+        isHistoryVisible, setIsHistoryVisible,
+        isStrategySearchVisible, setIsStrategySearchVisible,
+        isSavedAnalysesVisible, setIsSavedAnalysesVisible,
+        isSettingsVisible, setIsSettingsVisible,
+        isSettingsMenuVisible, setIsSettingsMenuVisible,
+        isLiveMarketVisible, setIsLiveMarketVisible,
+        isAdvancedAnalyticsOpen, setIsAdvancedAnalyticsOpen,
+        isVersionHistoryVisible, setIsVersionHistoryVisible,
+        isLiveAnalysisVisible, setIsLiveAnalysisVisible,
+        isLivePostMortemVisible, setIsLivePostMortemVisible,
+        isMobileMenuOpen, setIsMobileMenuOpen,
+        showMismatchModal, setShowMismatchModal,
+        isFullscreen, setIsFullscreen,
+        isLeverageDropdownOpen, setIsLeverageDropdownOpen,
+        isVisionDataVisible, setIsVisionDataVisible,
+        showUpdateNotification, setShowUpdateNotification,
+        showAccuracyModal, setShowAccuracyModal,
+        showScrollDown, setShowScrollDown,
+        showScrollUp, setShowScrollUp,
+        isLoading, setIsLoading,
+        isHybridLoading, setIsHybridLoading,
+        isCalculatingAIProbabilities, setIsCalculatingAIProbabilities,
+        isAnalysisTypingComplete, setIsAnalysisTypingComplete,
+        isPostMortemTypingComplete, setIsPostMortemTypingComplete,
+        isAnalysisInProgress, setIsAnalysisInProgress,
+        isPostMortemInProgress, setIsPostMortemInProgress,
+        isSummaryInProgress, setIsSummaryInProgress,
+        isInsightGenerating, setIsInsightGenerating,
+        isAutoCapturing, setIsAutoCapturing,
+        isUpdateAutoCapturing, setIsUpdateAutoCapturing,
+        isEntryNotHitCapturing, setIsEntryNotHitCapturing,
+        isRateLimited, setIsRateLimited,
+    } = useUIState();
+
     // User Profile State
     const [activeUsername, setActiveUsername] = useState<string | null>(null);
     const [existingUsernames, setExistingUsernames] = useState<string[]>([]);
-    const [isUserModalOpen, setIsUserModalOpen] = useState(false);
     const [saveStatus, setSaveStatus] = useState<'SAVED' | 'SAVING' | 'ERROR'>('SAVED');
-    const [isLoading, setIsLoading] = useState(false);
 
 
     // Master state for all conversation data.
@@ -176,7 +213,6 @@ const App: React.FC = () => {
     // Accuracy Mode State
     const [isAccuracyModeEnabled, setIsAccuracyModeEnabled] = useState<boolean>(false);
     const [accuracySubMode, setAccuracySubMode] = useState<AccuracySubMode>('original');
-    const [showAccuracyModal, setShowAccuracyModal] = useState<boolean>(false);
 
     // Custom AI Behavior
     const [customInstructions, setCustomInstructions] = useState<CustomInstructionsMap>({
@@ -194,7 +230,6 @@ const App: React.FC = () => {
 
 
     const [currentHybridData, setCurrentHybridData] = useState<HybridDataPacket | null>(null);
-    const [isHybridLoading, setIsHybridLoading] = useState<boolean>(false);
     const [hybridConnectionStatus, setHybridConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
     const [latestMonteCarloResult, setLatestMonteCarloResult] = useState<MonteCarloResult | null>(null);
     const [latestBacktestResult, setLatestBacktestResult] = useState<LiveBacktestResult | null>(null);
@@ -239,19 +274,9 @@ const App: React.FC = () => {
 
     const [journalState, setJournalState] = useState<{ isOpen: boolean, tab: 'log' | 'performance' | 'analytics' | 'learning' | 'memory' }>({ isOpen: false, tab: 'log' });
 
-    const [isHistoryVisible, setIsHistoryVisible] = useState(false);
-    const [isStrategySearchVisible, setIsStrategySearchVisible] = useState(false);
-    const [isSavedAnalysesVisible, setIsSavedAnalysesVisible] = useState(false);
-    const [isSettingsVisible, setIsSettingsVisible] = useState(false);
-    const [isSettingsMenuVisible, setIsSettingsMenuVisible] = useState(false);
-    const [isLiveMarketVisible, setIsLiveMarketVisible] = useState(false);
-    const [isAdvancedAnalyticsOpen, setIsAdvancedAnalyticsOpen] = useState(false);
     const [selectedProbabilityMessageId, setSelectedProbabilityMessageId] = useState<string | null>(null); // Trade selection for AI Probability panel
-    const [isCalculatingAIProbabilities, setIsCalculatingAIProbabilities] = useState<boolean>(false);
     const [strategyToView, setStrategyToView] = useState<string | null>(null);
-    const [isVersionHistoryVisible, setIsVersionHistoryVisible] = useState(false);
     const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
-    const [isRateLimited, setIsRateLimited] = useState(false);
     const [isDeepAnalysis, setIsDeepAnalysis] = useState<boolean>(false);
     const [quotaExceededModels, setQuotaExceededModels] = useState<Set<string>>(new Set());
     const [skipCandidate, setSkipCandidate] = useState<Message | null>(null);
@@ -259,47 +284,28 @@ const App: React.FC = () => {
     const [simulatorCandidate, setSimulatorCandidate] = useState<Message | null>(null); // Scenario Simulator modal
     const [skipReason, setSkipReason] = useState<TradeOutcome.ENTRY_NOT_HIT | TradeOutcome.SKIPPED | null>(null);
     const [correctedEntry, setCorrectedEntry] = useState<string>('');
-    const [showScrollDown, setShowScrollDown] = useState(false);
-    const [showScrollUp, setShowScrollUp] = useState(false);
     const [highlightedAnalysisId, setHighlightedAnalysisId] = useState<string | null>(null);
     const [expandedIndividualThoughts, setExpandedIndividualThoughts] = useState<Record<string, boolean>>({});
     const [expandedDebateTranscripts, setExpandedDebateTranscripts] = useState<Record<string, boolean>>({});
     const [expandedPostMortemImages, setExpandedPostMortemImages] = useState<Record<string, boolean>>({});
     const [expandedPostMortems, setExpandedPostMortems] = useState<Record<string, boolean>>({});
     const [collapsedUserMessages, setCollapsedUserMessages] = useState<Record<string, boolean>>({});
-    const [isLiveAnalysisVisible, setIsLiveAnalysisVisible] = useState(false);
     const [liveThoughts, setLiveThoughts] = useState<LiveThoughts>({ gemini: null, deepseek: null, zhipu: null, groq: null, groqNew: null, groqAlt2: null, openrouter: null, openai: null, grokNative: null });
     const [livePostMortemThoughts, setLivePostMortemThoughts] = useState<LiveThoughts>({ gemini: null, deepseek: null, zhipu: null, groq: null, groqNew: null, groqAlt2: null, openrouter: null, openai: null, grokNative: null });
-    const [isLivePostMortemVisible, setIsLivePostMortemVisible] = useState(false);
-    const [isAnalysisTypingComplete, setIsAnalysisTypingComplete] = useState(false);
-    const [isPostMortemTypingComplete, setIsPostMortemTypingComplete] = useState(false);
-    const [isAnalysisInProgress, setIsAnalysisInProgress] = useState(false);
     const [currentGateResult, setCurrentGateResult] = useState<GateOutput | null>(null); // Gate Scan result
-    const [isPostMortemInProgress, setIsPostMortemInProgress] = useState(false);
-    const [isSummaryInProgress, setIsSummaryInProgress] = useState(false);
-    const [isInsightGenerating, setIsInsightGenerating] = useState<boolean>(false); // For auto-insight generation on trade log
     const [newlyAddedInsightIds, setNewlyAddedInsightIds] = useState<Set<string>>(new Set()); // For animation tracking
     const [typingMessageState, setTypingMessageState] = useState<{ id: string; fullText: string; field: 'postMortem' } | null>(null);
-    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [postMortemCandidate, setPostMortemCandidate] = useState<PostMortemCandidate | null>(null);
     // State for the data capture choice modal (shown after trade is logged)
     const [dataCaptureCandidate, setDataCaptureCandidate] = useState<PostMortemCandidate | null>(null);
-    const [isAutoCapturing, setIsAutoCapturing] = useState<boolean>(false);
-    const [isUpdateAutoCapturing, setIsUpdateAutoCapturing] = useState<boolean>(false);
     // Entry Not Hit capture state
     const [entryNotHitCandidate, setEntryNotHitCandidate] = useState<{ message: Message; correctedEntry?: string } | null>(null);
-    const [isEntryNotHitCapturing, setIsEntryNotHitCapturing] = useState<boolean>(false);
 
     // Mismatch Resolution State
-    const [showMismatchModal, setShowMismatchModal] = useState(false);
     const [mismatchData, setMismatchData] = useState<{ candidate: PostMortemCandidate; validation: TradeOutcomeValidation } | null>(null);
 
-    const [isFullscreen, setIsFullscreen] = useState(false);
     const [leverageInput, setLeverageInput] = useState<string>('100');
-    const [isLeverageDropdownOpen, setIsLeverageDropdownOpen] = useState(false);
     const [currentVisionData, setCurrentVisionData] = useState<string[]>([]);
-    const [isVisionDataVisible, setIsVisionDataVisible] = useState(false);
-    const [showUpdateNotification, setShowUpdateNotification] = useState(false);
     const appRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const virtuosoRef = useRef<VirtuosoHandle>(null);
