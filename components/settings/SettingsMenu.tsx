@@ -118,7 +118,7 @@ const ModelItem: React.FC<{
 );
 
 // View types
-type ViewType = 'main' | 'models' | 'lenses' | 'instructions' | 'providers';
+type ViewType = 'main' | 'models' | 'lenses' | 'instructions';
 
 // Instruction tabs (Standard / Strict Mode / Pure AI)
 type InstructionTab = 'general' | 'accuracyOriginal' | 'accuracyPure';
@@ -596,12 +596,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                             onClick={() => setCurrentView('models')}
                         />
                         <SettingItem
-                            icon={<span className="text-xl">🔑</span>}
-                            title="API Providers"
-                            description="API keys, base URLs & custom providers"
-                            onClick={() => setCurrentView('providers')}
-                        />
-                        <SettingItem
                             icon={<span className="text-xl">🎭</span>}
                             title="Analyst Lenses"
                             description="Role-based analysis personas"
@@ -916,6 +910,26 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                         )}
                     </div>
                 </div>
+
+                {/* API Configuration */}
+                <div className="pt-2">
+                    <div className="flex items-center gap-2 mb-3">
+                        <span className="text-lg">🔑</span>
+                        <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">API Configuration</h3>
+                    </div>
+                    <p className="text-[10px] text-zinc-600 mb-3">Configure API keys, base URLs, and add custom providers.</p>
+                    {providerConfigs && onUpdateProvider && onAddCustomProvider && onRemoveProvider && onToggleProviderConfig ? (
+                        <ProviderManager
+                            configs={providerConfigs}
+                            onUpdateProvider={onUpdateProvider}
+                            onAddCustomProvider={onAddCustomProvider}
+                            onRemoveProvider={onRemoveProvider}
+                            onToggleProvider={onToggleProviderConfig}
+                        />
+                    ) : (
+                        <p className="text-xs text-zinc-500">Provider configuration not available.</p>
+                    )}
+                </div>
             </div>
         </>
     );
@@ -1027,25 +1041,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
         </>
     );
 
-    const renderProvidersView = () => (
-        <>
-            {renderHeader('API Providers', true)}
-            <div className="flex-1 overflow-y-auto px-5 py-4 scrollbar-hide">
-                {providerConfigs && onUpdateProvider && onAddCustomProvider && onRemoveProvider && onToggleProviderConfig ? (
-                    <ProviderManager
-                        configs={providerConfigs}
-                        onUpdateProvider={onUpdateProvider}
-                        onAddCustomProvider={onAddCustomProvider}
-                        onRemoveProvider={onRemoveProvider}
-                        onToggleProvider={onToggleProviderConfig}
-                    />
-                ) : (
-                    <p className="text-sm text-zinc-500">Provider configuration not available.</p>
-                )}
-            </div>
-        </>
-    );
-
     return (
         <>
             {/* Backdrop */}
@@ -1060,7 +1055,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                 {currentView === 'models' && renderModelsView()}
                 {currentView === 'lenses' && renderLensesView()}
                 {currentView === 'instructions' && renderInstructionsView()}
-                {currentView === 'providers' && renderProvidersView()}
             </aside>
         </>
     );
