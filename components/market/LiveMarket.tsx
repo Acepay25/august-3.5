@@ -285,43 +285,19 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze }
         };
     }, []);
 
-    useEffect(() => {
-        if (isVisible && !window.TradingView) {
-            // Check if script already exists to prevent duplicate injection
-            const existingScript = document.querySelector('script[src*="tradingview"]');
-            if (!existingScript) {
-                const script = document.createElement('script');
-                script.src = 'https://s3.tradingview.com/tv.js';
-                script.async = true;
-                script.onload = initWidget;
-                document.head.appendChild(script);
-            }
-        } else if (isVisible && window.TradingView) {
-            initWidget();
+    const mapIntervalToTradingView = (appInterval: string): string => {
+        switch (appInterval) {
+            case '5m': return '5';
+            case '15m': return '15';
+            case '1h': return '60';
+            case '4h': return '240';
+            default: return '15';
         }
-
-        return () => {
-            // Cleanup widget on unmount or when dependencies change
-            if (tradingViewWidgetRef.current) {
-                try {
-                    if (typeof tradingViewWidgetRef.current.remove === 'function') {
-                        tradingViewWidgetRef.current.remove();
-                    }
-                } catch (e) {
-                    // Widget remove not supported, clear container instead
-                }
-                tradingViewWidgetRef.current = null;
-            }
-            if (widgetRef.current) {
-                widgetRef.current.innerHTML = '';
-            }
-        };
-    }, [isVisible, symbol, interval, exchange, initWidget]);
+    }
 
     const initWidget = () => {
         if (window.TradingView && widgetRef.current) {
             widgetRef.current.innerHTML = '';
-            // Map symbol for OKX (uses BTCUSDT.P format for perpetual swaps)
             const chartSymbol = exchange === 'OKX'
                 ? `OKX:${symbol}.P`
                 : `BINANCE:${symbol}`;
@@ -344,15 +320,36 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze }
         }
     };
 
-    const mapIntervalToTradingView = (appInterval: string): string => {
-        switch (appInterval) {
-            case '5m': return '5';
-            case '15m': return '15';
-            case '1h': return '60';
-            case '4h': return '240';
-            default: return '15';
+    useEffect(() => {
+        if (isVisible && !window.TradingView) {
+            const existingScript = document.querySelector('script[src*="tradingview"]');
+            if (!existingScript) {
+                const script = document.createElement('script');
+                script.src = 'https://s3.tradingview.com/tv.js';
+                script.async = true;
+                script.onload = initWidget;
+                document.head.appendChild(script);
+            }
+        } else if (isVisible && window.TradingView) {
+            initWidget();
         }
-    }
+
+        return () => {
+            if (tradingViewWidgetRef.current) {
+                try {
+                    if (typeof tradingViewWidgetRef.current.remove === 'function') {
+                        tradingViewWidgetRef.current.remove();
+                    }
+                } catch (e) {
+                    // Widget remove not supported, clear container instead
+                }
+                tradingViewWidgetRef.current = null;
+            }
+            if (widgetRef.current) {
+                widgetRef.current.innerHTML = '';
+            }
+        };
+    }, [isVisible, symbol, interval, exchange]);
 
     // AI Analysis for chart
     useEffect(() => {

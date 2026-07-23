@@ -314,7 +314,7 @@ class TradeShareServiceClass {
         try {
             // Try GallerySaver plugin first (Android)
             try {
-                const GallerySaver = (await import('../../../plugins/GallerySaver')).default;
+                const GallerySaver = (await import('../../plugins/GallerySaver')).default;
 
                 // Convert blob to base64
                 const reader = new FileReader();

@@ -42,6 +42,10 @@ export interface SLOptimization {
     // Confidence in recommendation
     confidence: 'high' | 'medium' | 'low';  // Based on sample size
 
+    // UI display helpers
+    hasEnoughData?: boolean;                // Whether there's enough data for meaningful recommendations
+    contextRecommendations?: { context: string; recommendedMultiplier: number }[];  // Context-specific recommendations
+
     // AI prompt injection
     promptInjection: string;
 }
