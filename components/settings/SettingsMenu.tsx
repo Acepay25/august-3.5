@@ -9,9 +9,10 @@
  */
 
 import React, { useState } from 'react';
-import { AIProvider, AccuracySubMode, CustomInstructionsMap, CustomInstruction, AnalystLensConfig } from '../../types';
+import { AIProvider, AccuracySubMode, CustomInstructionsMap, CustomInstruction, AnalystLensConfig, ProviderConfig, ApiFormat } from '../../types';
 import { MemoryProvider, MEMORY_PROVIDER_OPTIONS, MEMORY_MODELS } from '../../services/learning/MemoryService';
 import { AnalystLensSettings } from './AnalystLensSettings';
+import ProviderManager from './ProviderManager';
 
 // Icons
 const CloseIcon = () => (
@@ -116,7 +117,7 @@ const ModelItem: React.FC<{
 );
 
 // View types
-type ViewType = 'main' | 'models' | 'lenses' | 'instructions';
+type ViewType = 'main' | 'models' | 'lenses' | 'instructions' | 'providers';
 
 // Props interface
 interface SettingsMenuProps {
@@ -212,6 +213,12 @@ interface SettingsMenuProps {
     onSetModeratorModel?: (modelId: string) => void;
     // Fallback to full settings
     onOpenFullSettings: () => void;
+    // Provider configuration
+    providerConfigs?: ProviderConfig[];
+    onUpdateProvider?: (id: string, updates: Partial<Omit<ProviderConfig, 'id' | 'isBuiltIn'>>) => Promise<void>;
+    onAddCustomProvider?: (provider: { name: string; baseUrl: string; apiKey: string; apiFormat: ApiFormat; models?: string[]; selectedModel?: string }) => Promise<void>;
+    onRemoveProvider?: (id: string) => Promise<void>;
+    onToggleProviderConfig?: (id: string) => Promise<void>;
 }
 
 const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
@@ -300,6 +307,11 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
         memoryModel,
         setMemoryModel,
         onOpenFullSettings,
+        providerConfigs,
+        onUpdateProvider,
+        onAddCustomProvider,
+        onRemoveProvider,
+        onToggleProviderConfig,
     } = props;
 
     const [currentView, setCurrentView] = useState<ViewType>('main');
@@ -453,6 +465,12 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                             title="AI Models & Providers"
                             description="Configure ensemble intelligence"
                             onClick={() => setCurrentView('models')}
+                        />
+                        <SettingItem
+                            icon={<span className="text-xl">🔑</span>}
+                            title="API Providers"
+                            description="API keys, base URLs & custom providers"
+                            onClick={() => setCurrentView('providers')}
                         />
                         <SettingItem
                             icon={<span className="text-xl">🎭</span>}
@@ -857,6 +875,25 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
         </>
     );
 
+    const renderProvidersView = () => (
+        <>
+            {renderHeader('API Providers', true)}
+            <div className="flex-1 overflow-y-auto px-5 py-4 scrollbar-hide">
+                {providerConfigs && onUpdateProvider && onAddCustomProvider && onRemoveProvider && onToggleProviderConfig ? (
+                    <ProviderManager
+                        configs={providerConfigs}
+                        onUpdateProvider={onUpdateProvider}
+                        onAddCustomProvider={onAddCustomProvider}
+                        onRemoveProvider={onRemoveProvider}
+                        onToggleProvider={onToggleProviderConfig}
+                    />
+                ) : (
+                    <p className="text-sm text-zinc-500">Provider configuration not available.</p>
+                )}
+            </div>
+        </>
+    );
+
     return (
         <>
             {/* Backdrop */}
@@ -871,6 +908,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                 {currentView === 'models' && renderModelsView()}
                 {currentView === 'lenses' && renderLensesView()}
                 {currentView === 'instructions' && renderInstructionsView()}
+                {currentView === 'providers' && renderProvidersView()}
             </aside>
         </>
     );

@@ -9,3 +9,4 @@ export * from './learning';
 export * from './calibration';
 export * from './user';
 export * from './progress';
+export * from './provider';
