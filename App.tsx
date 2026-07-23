@@ -76,7 +76,6 @@ import { backtestSimilarSetups, LiveBacktestResult } from './services/backtestin
 import { pingBinanceAPI } from './services/analysis/MarketDataService';
 import { updateCalibration, updateGranularCalibration, initializeCalibration } from './services/validation/ConfidenceCalibrationService';
 import { runValidationGate, TradeValidationOutput } from './services/validation/TradeValidationGate';
-import { validateTradeOutcome, TradeOutcomeValidation } from './services/backtesting/BacktestingService';
 import { SLOptimization } from './services/backtesting/StopLossOptimizerService';
 import { ConfidenceCalibration, InsightKnowledgeBase } from './types';
 import useNetworkStatus from './hooks/useNetworkStatus';
@@ -84,6 +83,7 @@ import { useUIState } from './hooks/useUIState';
 import { useConversations } from './hooks/useConversations';
 import { useMarketData } from './hooks/useMarketData';
 import { useTradeLogging, MAX_TRADE_SUMMARIES } from './hooks/useTradeLogging';
+import { usePostMortem } from './hooks/usePostMortem';
 import { useUserProfiles } from './hooks/useUserProfiles';
 import { offlineQueue, QueuedRequest } from './services/infrastructure/OfflineQueueService';
 // AI Learning Services - Adaptive Learning, Mistake Patterns, Insight Extraction
@@ -92,7 +92,6 @@ import { generatePersonalizedInjection } from './services/ui/PersonalizedPromptS
 import { extractInsightsFromPostMortem, storeInsights, initializeKnowledgeBase } from './services/learning/InsightExtractionService';
 import * as MemoryService from './services/learning/MemoryService';
 import { MemoryProvider, MEMORY_PROVIDER_OPTIONS, MEMORY_MODELS, getDefaultModelForProvider } from './services/learning/MemoryService';
-import { getTradingWeaknesses } from './services/learning/MistakePatternService';
 import { syncFromTradeLog, syncRollingWindowFromTradeLog, initModelPerformanceService } from './services/backtesting/ModelPerformanceService';
 import { buildUnifiedLearningContext } from './services/learning/UnifiedLearningBuilder';
 import { loadLensConfig, saveLensConfig, getDefaultLensAssignments, getLensPromptForStyle, initAnalystLensService } from './services/ui/AnalystLensService';
@@ -104,7 +103,6 @@ import { PriceAlertService } from './services/ui/PriceAlertService';
 import { initConfluenceService } from './services/analysis/TimeframeConfluenceService';
 import { initPatternMemoryService } from './services/learning/PatternMemorySynthesisService';
 import GlobalLearningService from './services/learning/GlobalLearningService';
-import { jobQueue, JobType } from './services/infrastructure/JobQueueService';
 import { VersionHistoryDashboard } from './components/dashboards/VersionHistoryDashboard';
 
 const App: React.FC = () => {
@@ -251,9 +249,7 @@ const App: React.FC = () => {
     const [expandedPostMortems, setExpandedPostMortems] = useState<Record<string, boolean>>({});
     const [collapsedUserMessages, setCollapsedUserMessages] = useState<Record<string, boolean>>({});
     const [liveThoughts, setLiveThoughts] = useState<LiveThoughts>({ gemini: null, deepseek: null, zhipu: null, groq: null, groqNew: null, groqAlt2: null, openrouter: null, openai: null, grokNative: null });
-    const [livePostMortemThoughts, setLivePostMortemThoughts] = useState<LiveThoughts>({ gemini: null, deepseek: null, zhipu: null, groq: null, groqNew: null, groqAlt2: null, openrouter: null, openai: null, grokNative: null });
     const [currentGateResult, setCurrentGateResult] = useState<GateOutput | null>(null); // Gate Scan result
-    const [typingMessageState, setTypingMessageState] = useState<{ id: string; fullText: string; field: 'postMortem' } | null>(null);
     const [postMortemCandidate, setPostMortemCandidate] = useState<PostMortemCandidate | null>(null);
 
     // Refs for functions defined later but needed by useTradeLogging (breaks circular dependency)
@@ -316,9 +312,6 @@ const App: React.FC = () => {
         setConfidenceCalibration,
     });
 
-    // Mismatch Resolution State
-    const [mismatchData, setMismatchData] = useState<{ candidate: PostMortemCandidate; validation: TradeOutcomeValidation } | null>(null);
-
     const [leverageInput, setLeverageInput] = useState<string>('100');
     const [currentVisionData, setCurrentVisionData] = useState<string[]>([]);
     const appRef = useRef<HTMLDivElement>(null);
@@ -349,6 +342,65 @@ const App: React.FC = () => {
     const addSubStep = (id: string, subStep: { label: string; detail?: string; filename?: string }) => {
         setAnalysisSteps(prev => prev.map(s => s.id === id ? { ...s, subSteps: [...(s.subSteps || []), subStep] } : s));
     };
+
+    // Post-mortem analysis state and handlers (extracted to hooks/usePostMortem.ts)
+    const {
+        mismatchData, setMismatchData,
+        typingMessageState, setTypingMessageState,
+        livePostMortemThoughts, setLivePostMortemThoughts,
+        startPostMortemAnalysis,
+        handleRetryPostMortem,
+        handleAllPostMortemTypingComplete,
+        handleMismatchResolution,
+    } = usePostMortem({
+        messages,
+        updateMessages,
+        isAccuracyModeEnabled,
+        accuracySubMode,
+        isGeminiEnabled,
+        isDeepSeekEnabled,
+        isZhipuEnabled,
+        isGroqEnabled,
+        isGroqNewEnabled,
+        isGroqAlt2Enabled,
+        isOpenrouterEnabled,
+        isOpenaiEnabled,
+        isGrokNativeEnabled,
+        selectedGeminiModel,
+        selectedDeepSeekModel,
+        selectedZhipuModel,
+        selectedGroqModel,
+        selectedGroqNewModel,
+        selectedGroqAlt2Model,
+        selectedOpenrouterModel,
+        selectedOpenaiModel,
+        selectedGrokNativeModel,
+        moderatorProvider,
+        moderatorModel,
+        finalTradeSummary,
+        loggedTrades,
+        setLoggedTrades,
+        globalMemory,
+        setGlobalMemory,
+        memoryModel,
+        memoryProvider,
+        tradeSummaries,
+        setTradeSummaries,
+        setIsPostMortemInProgress,
+        setIsLivePostMortemVisible,
+        setLoadingMessage,
+        setIsPostMortemTypingComplete,
+        setShowMismatchModal,
+        setExpandedPostMortems,
+        initAnalysisSteps,
+        startStep,
+        completeStep,
+        setAnalysisSteps,
+        setPostMortemCandidate,
+    });
+
+    // Update ref for useTradeLogging (breaks circular dependency)
+    startPostMortemAnalysisRef.current = startPostMortemAnalysis;
 
     // Register SW update notification handler
     useEffect(() => {
@@ -1765,349 +1817,6 @@ const App: React.FC = () => {
 
     // ... (handleAssistantChat remains unchanged) ...
 
-    // REFACTORED Post-Mortem Analysis Logic to include DEBATE and SEPARATE BUBBLE
-    const startPostMortemAnalysis = async (candidate: PostMortemCandidate, summaries?: string[], imageUrls?: string[], resolvedValidation?: TradeOutcomeValidation) => {
-        setPostMortemCandidate(null);
-        setIsPostMortemInProgress(true);
-        initAnalysisSteps([
-            { id: 'validation', title: 'Validating trade outcome', status: 'pending' },
-            { id: 'analysis', title: 'Post-mortem analysis', status: 'pending' },
-            { id: 'debate', title: 'Ensemble debate', status: 'pending' },
-        ]);
-        setLoadingMessage("Thinking...");
-        startStep('validation');
-        setIsLivePostMortemVisible(true);
-        setLivePostMortemThoughts({ gemini: null, deepseek: null, zhipu: null, groq: null, groqNew: null, groqAlt2: null, openrouter: null, openai: null, grokNative: null });
-        setIsPostMortemTypingComplete(false);
-
-        const postMortemMessageId = `pm-${Date.now()}`;
-        const placeholderMsg: Message = {
-            id: postMortemMessageId,
-            role: MessageRole.AI,
-            text: '',
-            createdAt: new Date().toISOString(),
-            isDebating: false, // Updated if debate
-            isPostMortem: true, // NEW: Identify this as a Post-Mortem Bubble
-        };
-
-        setExpandedPostMortems(prev => ({ ...prev, [postMortemMessageId]: true })); // Auto-expand by default
-        updateMessages(prev => [...prev, placeholderMsg]);
-
-        try {
-            // Pass empty history to reduce context size and prevent 400 error
-            const history: Message[] = [];
-
-            let enabledProviders: any[] = [];
-
-            if (isAccuracyModeEnabled) {
-                if (isGeminiEnabled) enabledProviders.push({ name: 'Gemini', service: geminiAccuracyService, model: selectedGeminiModel, thoughtsKey: 'gemini' as const });
-                if (isDeepSeekEnabled) enabledProviders.push({ name: 'DeepSeek', service: deepseekAccuracyService, model: selectedDeepSeekModel, thoughtsKey: 'deepseek' as const });
-                if (isGroqEnabled) enabledProviders.push({ name: 'Groq', service: groqAccuracyService, model: selectedGroqModel, thoughtsKey: 'groq' as const });
-                if (isZhipuEnabled) enabledProviders.push({ name: 'Zhipu', service: zhipuAccuracyService, model: selectedZhipuModel, thoughtsKey: 'zhipu' as const });
-                if (isGroqNewEnabled) enabledProviders.push({ name: 'Groq (Alt)', service: groqNewAccuracyService, model: selectedGroqNewModel, thoughtsKey: 'groqNew' as const });
-                if (isGroqAlt2Enabled) enabledProviders.push({ name: 'Groq (Alt 2)', service: groqAlt2AccuracyService, model: selectedGroqAlt2Model, thoughtsKey: 'groqAlt2' as const });
-                if (isOpenrouterEnabled) enabledProviders.push({ name: 'OpenRouter', service: openrouterAccuracyService, model: selectedOpenrouterModel, thoughtsKey: 'openrouter' as const });
-                if (isOpenaiEnabled) enabledProviders.push({ name: 'OpenAI', service: openaiAccuracyService, model: selectedOpenaiModel, thoughtsKey: 'openai' as const });
-
-            } else {
-                if (isGeminiEnabled) enabledProviders.push({ name: 'Gemini', service: geminiService, model: selectedGeminiModel, thoughtsKey: 'gemini' as const });
-                if (isDeepSeekEnabled) enabledProviders.push({ name: 'DeepSeek', service: deepseekService, model: selectedDeepSeekModel, thoughtsKey: 'deepseek' as const });
-                if (isZhipuEnabled) enabledProviders.push({ name: 'Zhipu', service: zhipuService, model: selectedZhipuModel, thoughtsKey: 'zhipu' as const });
-                if (isGroqEnabled) enabledProviders.push({ name: 'Groq', service: groqService, model: selectedGroqModel, thoughtsKey: 'groq' as const });
-                if (isGroqNewEnabled) enabledProviders.push({ name: 'Groq (Alt)', service: groqNewService, model: selectedGroqNewModel, thoughtsKey: 'groqNew' as const });
-                if (isGroqAlt2Enabled) enabledProviders.push({ name: 'Groq (Alt 2)', service: groqAlt2Service, model: selectedGroqAlt2Model, thoughtsKey: 'groqAlt2' as const });
-                if (isOpenrouterEnabled) enabledProviders.push({ name: 'OpenRouter', service: openrouterService, model: selectedOpenrouterModel, thoughtsKey: 'openrouter' as const });
-                if (isOpenaiEnabled) enabledProviders.push({ name: 'OpenAI', service: openaiService, model: selectedOpenaiModel, thoughtsKey: 'openai' as const });
-
-            }
-
-            // Guard: Accuracy Mode has no fallback provider (Standard Mode falls back to Gemini
-            // further below). If nothing is enabled, bail out with an error instead of running
-            // an empty ensemble.
-            if (isAccuracyModeEnabled && enabledProviders.length === 0) {
-                updateMessages(prev => [
-                    ...prev.filter(m => m.id !== postMortemMessageId),
-                    { id: `err-${Date.now()}`, role: MessageRole.SYSTEM, createdAt: new Date().toISOString(), text: "Post-Mortem analysis requires at least one enabled AI provider. Please enable a provider and try again." }
-                ]);
-                setIsPostMortemInProgress(false);
-                setIsLivePostMortemVisible(false);
-                setLoadingMessage(null);
-                return;
-            }
-
-            let finalPostMortemReport = "";
-
-            // --- PRICE-BASED OUTCOME VALIDATION (Before AI Analysis) ---
-            // Validates trade outcome using historical OHLC data (same as backtesting)
-            // Uses ORIGINAL SL (not 150% extended zone)
-            let priceValidation: TradeOutcomeValidation | null = null;
-            let priceValidationInjection = "";
-
-            if (candidate.message.analysis) {
-                // Extract symbol from analysis
-                const symbol = candidate.message.analysis.coinName ||
-                    candidate.message.text?.match(/\b([A-Z]{2,10}USDT?)\b/)?.[1] ||
-                    candidate.message.text?.match(/\b([A-Z]{2,10})\/USDT\b/)?.[1];
-
-                if (symbol) {
-                    try {
-                        console.log(`[PostMortem] Running price validation for ${symbol}...`);
-                        setLoadingMessage("Validating trade outcome against price data...");
-
-                        if (resolvedValidation) {
-                            // Use the user-resolved validation
-                            priceValidation = resolvedValidation;
-                        } else {
-                            priceValidation = await validateTradeOutcome(
-                                candidate.message.analysis,
-                                symbol.toUpperCase().replace('/', ''),
-                                candidate.message.createdAt,
-                                candidate.outcome === TradeOutcome.WIN ? 'WIN' : 'LOSS'
-                            );
-                        }
-
-                        // Check Mismatch (User says LOSS but TP hit FIRST -> isMismatch=true)
-                        if (priceValidation.isMismatch) {
-                            console.log('[PostMortem] Outcome Mismatch Detected. Pausing for user resolution.');
-                            setMismatchData({ candidate, validation: priceValidation });
-                            setShowMismatchModal(true);
-                            setLoadingMessage(null);
-                            setIsPostMortemInProgress(false); // Pause progress
-                            return; // STOP EXECUTION to wait for user input
-                        }
-
-                        console.log(`[PostMortem] Price validation result:`, priceValidation.outcome, priceValidation.hitTarget);
-
-                        // Generate injection for AI context
-                        priceValidationInjection = `
-═══════════════════════════════════════════════════════════════
-📊 PRICE-VALIDATED TRADE OUTCOME (HISTORICAL DATA)
-═══════════════════════════════════════════════════════════════
-${priceValidation.validationSummary}
-
-⚠️ **IMPORTANT:** This outcome is calculated from ACTUAL PRICE DATA, not interpretation.
-Use this as the ground truth for your analysis.
-
-Data Range: ${priceValidation.dataRange}
-Candles Evaluated: ${priceValidation.candlesEvaluated}
-═══════════════════════════════════════════════════════════════
-`;
-
-                        // Check for mismatch between user-reported outcome and price-validated outcome
-                        if (priceValidation.outcome !== 'OPEN' && priceValidation.outcome !== 'ENTRY_NOT_HIT') {
-                            const userOutcome = candidate.outcome === TradeOutcome.WIN ? 'WIN' : 'LOSS';
-                            if (priceValidation.outcome !== userOutcome) {
-                                priceValidationInjection += `
-⚠️ **MISMATCH DETECTED:**
-- User reported: ${userOutcome}
-- Price data shows: ${priceValidation.outcome}
-Please investigate this discrepancy in your analysis.
-`;
-                                console.warn(`[PostMortem] Outcome mismatch! User: ${userOutcome}, Price: ${priceValidation.outcome}`);
-                            }
-                        }
-
-                        setLoadingMessage("Conducting Post-Mortem Ensemble Analysis...");
-                        completeStep('validation'); startStep('analysis');
-                    } catch (err) {
-                        console.warn('[PostMortem] Price validation failed:', err);
-                        // Continue without price validation if it fails
-                    }
-                }
-            }
-
-            // --- STANDARD POST-MORTEM FLOW ---
-
-                // Force Gemini if no providers selected (Standard Mode fallback)
-                if (enabledProviders.length === 0 && !isAccuracyModeEnabled) {
-                    enabledProviders.push({ name: 'Gemini', service: geminiService, model: selectedGeminiModel, thoughtsKey: 'gemini' as const });
-                }
-
-                // Inject price validation data into summaries
-                const enhancedSummaries = priceValidationInjection
-                    ? [...(summaries || []), priceValidationInjection]
-                    : summaries;
-
-                const analysisPromises = enabledProviders.map(p =>
-                    p.service.conductPostMortem(
-                        candidate.message, candidate.outcome, history, finalTradeSummary, p.model, candidate.feedback, enhancedSummaries
-                    ).then((res: string) => {
-                        return { provider: p.name, result: res };
-                    })
-                );
-
-                const results = await Promise.all(analysisPromises);
-
-                // Step 2: Determine if Debate is needed
-                if (results.length > 1) {
-                    // Conduct Ensemble Debate
-                    setLoadingMessage("Ensemble Debate in progress...");
-                    completeStep('analysis'); startStep('debate');
-                    updateMessages(prev => prev.map(m => m.id === postMortemMessageId ? { ...m, isDebating: true, text: 'Ensemble is analyzing trade outcome...' } : m));
-
-                    let debateStream;
-
-                    if (results.length === 2) {
-                        debateStream = ensembleService.conductTwoWayPostMortemDebate(candidate.message, candidate.outcome, results[0].result, results[1].result, results[0].provider, results[1].provider, finalTradeSummary, moderatorProvider, moderatorModel, imageUrls);
-                    } else {
-                        // Default to first 3 if more than 3
-                        const r1 = results[0];
-                        const r2 = results[1];
-                        const r3 = results[2] || results[0];
-                        debateStream = ensembleService.conductThreeWayPostMortemDebate(candidate.message, candidate.outcome, r1.result, r2.result, r3.result, r1.provider, r2.provider, r3.provider, finalTradeSummary, moderatorProvider, moderatorModel, imageUrls);
-                    }
-
-                    let fullDebateText = "";
-                    const turnRegex = /(?:^|\n)\s*(?:[\*_~]*)(Gemini|DeepSeek|Zhipu|Groq|Groq \(Alt\)|Groq \(Alt 2\)|OpenRouter|Claude[^\n:]*|GPT[^\n:]*|Grok[^\n:]*|O1|O3|O4|Puter|Moderator)[^\n:]*?(?:[\*_~]*)\s*:\s*([\s\S]*?)(?=(?:^|\n)\s*(?:[\*_~]*)(?:Gemini|DeepSeek|Zhipu|Groq|Groq \(Alt\)|Groq \(Alt 2\)|OpenRouter|Claude[^\n:]*|GPT[^\n:]*|Grok[^\n:]*|O1|O3|O4|Puter|Moderator)[^\n:]*?(?:[\*_~]*)\s*:|$)/gi;
-
-                    for await (const chunk of debateStream) {
-                        fullDebateText += chunk;
-
-                        // Extract Debate Turns for Real-time UI
-                        const startMatch = fullDebateText.match(/<DEBATE_START>/i);
-                        const endMatch = fullDebateText.match(/<\/DEBATE_END>/i);
-
-                        if (startMatch) {
-                            const startIndex = startMatch.index! + startMatch[0].length;
-                            const endIndex = endMatch ? endMatch.index! : fullDebateText.length;
-                            const debateContent = fullDebateText.slice(startIndex, endIndex);
-
-                            const currentTurns: DebateTurn[] = [];
-                            const matches = [...debateContent.matchAll(turnRegex)];
-                            for (const m of matches) {
-                                currentTurns.push({ speaker: m[1] as any, text: sanitizeAIResponse(m[2].trim()) });
-                            }
-
-                            updateMessages(prev => prev.map(m => m.id === postMortemMessageId ? { ...m, debateTurns: currentTurns } : m));
-                        }
-
-                        // Extract Final Report if streaming
-                        const reportStart = fullDebateText.match(/<FINAL_REPORT_START>/i);
-                        const reportEnd = fullDebateText.match(/<\/FINAL_REPORT_END>/i);
-                        if (reportStart) {
-                            const rStart = reportStart.index! + reportStart[0].length;
-                            const rEnd = reportEnd ? reportEnd.index! : fullDebateText.length;
-                            setTypingMessageState({ id: postMortemMessageId, fullText: fullDebateText.slice(rStart, rEnd).trim(), field: 'postMortem' });
-                        }
-                    }
-
-                    // Finalize Report Extraction
-                    const reportStart = fullDebateText.match(/<FINAL_REPORT_START>/i);
-                    const debateEnd = fullDebateText.match(/<\/DEBATE_END>/i);
-
-                    if (reportStart) {
-                        const reportEnd = fullDebateText.match(/<\/FINAL_REPORT_END>/i);
-                        finalPostMortemReport = fullDebateText.slice(reportStart.index! + reportStart[0].length, reportEnd ? reportEnd.index : undefined).trim();
-                    } else if (debateEnd) {
-                        let contentAfterDebate = fullDebateText.slice(debateEnd.index! + debateEnd[0].length).trim();
-                        if (!contentAfterDebate) {
-                            const lastPart = fullDebateText.slice(-2000);
-                            const headingMatch = lastPart.match(/(?:^|\n)\s*(?:[\*_#]*)\s*FINAL REPORT\s*(?:[\*_#]*)/i);
-                            if (headingMatch) {
-                                finalPostMortemReport = lastPart.slice(headingMatch.index! + headingMatch[0].length).trim();
-                            }
-                        } else {
-                            finalPostMortemReport = contentAfterDebate;
-                        }
-                        if (finalPostMortemReport) {
-                            finalPostMortemReport = finalPostMortemReport.replace(/^(?:[-=_*]*\s*)?(?:2\.\s*)?FINAL REPORT(?:[-=_*]*\s*)?/i, '').trim();
-                        }
-                    } else {
-                        const headingMatch = fullDebateText.match(/(?:^|\n)\s*(?:[\*_#]*)\s*FINAL REPORT\s*(?:[\*_#]*)/i);
-                        if (headingMatch) {
-                            finalPostMortemReport = fullDebateText.slice(headingMatch.index! + headingMatch[0].length).trim();
-                        }
-                    }
-
-                    if (!finalPostMortemReport) {
-                        finalPostMortemReport = "Debate concluded, but final report format was missing. Please review the transcript above for details.";
-                    }
-
-                } else {
-                    // Single Analyst Mode
-                    finalPostMortemReport = results[0].result;
-                }
-
-            // Step 3: Finalize Message Text (Separate Bubble)
-            updateMessages(prev => prev.map(m => m.id === postMortemMessageId ? {
-                ...m,
-                text: finalPostMortemReport, // Set main text
-                isDebating: false, // Turn off debate UI loader
-                postMortemDebateTurns: undefined, // Clear PM specific field, standard debateTurns used
-            } : m));
-
-            // Step 4: Update Trade Log with the report (Keeping database record)
-            setLoggedTrades(prev => prev.map(t => t.analysis.createdAt === candidate.message.analysis?.createdAt ? {
-                ...t,
-                postMortem: finalPostMortemReport,
-                postMortemCreatedAt: new Date().toISOString(),
-                postMortemImages: imageUrls
-            } : t));
-
-            const tradeToUpdate = loggedTrades.find(t => t.analysis.createdAt === candidate.message.analysis?.createdAt);
-            if (tradeToUpdate) {
-                const summary = await MemoryService.summarizeTrade({ ...tradeToUpdate, postMortem: finalPostMortemReport }, memoryModel, memoryProvider);
-                // Enforce FIFO: if at limit, remove oldest (first) entry before adding new one
-                setTradeSummaries(prev => {
-                    const newSummary = { id: tradeToUpdate.id, summaryText: summary, timestamp: new Date().toISOString() };
-                    const updated = [...prev, newSummary];
-                    // Remove oldest entries from the beginning to maintain max limit
-                    return updated.slice(-MAX_TRADE_SUMMARIES);
-                });
-
-                const newMemory = await MemoryService.updateGlobalMemory([tradeToUpdate], globalMemory, memoryProvider);
-                setGlobalMemory(newMemory);
-
-                // AI LEARNING: Extract insights and rules in BACKGROUND
-                try {
-                    const tradeWithPM = { ...tradeToUpdate, postMortem: finalPostMortemReport };
-
-                    // 1. Queue Insight Extraction
-                    jobQueue.addJob(JobType.EXTRACT_INSIGHTS, tradeWithPM);
-
-                    // 2. Queue Rule Extraction (Item 3.1 Feature)
-                    jobQueue.addJob(JobType.EXTRACT_RULES, tradeWithPM);
-
-                } catch (insightError) {
-                    console.error('[AI Learning] Failed to queue background jobs:', insightError);
-                }
-
-                // Update trading weaknesses based on latest trade log
-                try {
-                    const updatedWeaknesses = getTradingWeaknesses(loggedTrades);
-                    console.log('[AI Learning] Updated trading weaknesses analysis');
-                    // Note: TradingWeaknesses is now accessible via getTradingWeaknesses function
-                    // We could potentially store this but it's computed dynamically from trade log
-                } catch (weaknessError) {
-                    console.error('[AI Learning] Failed to update weaknesses:', weaknessError);
-                }
-            }
-
-        } catch (e: any) {
-            console.error("Post Mortem Failed", e);
-            // Store the failed candidate data so user can retry
-            updateMessages(prev => prev.map(m => m.id === postMortemMessageId ? {
-                ...m,
-                text: `Post-Mortem Failed: ${e.message}`,
-                role: MessageRole.SYSTEM,
-                postMortemFailedCandidate: {
-                    message: candidate.message,
-                    outcome: candidate.outcome,
-                    feedback: candidate.feedback,
-                    summaries,
-                    imageUrls
-                }
-            } : m));
-        } finally {
-            setIsPostMortemInProgress(false);
-            setLoadingMessage(null);
-            completeStep('debate');
-            setAnalysisSteps(prev => prev.map(s => s.status === 'running' ? { ...s, status: 'complete' as const, endTime: Date.now() } : s));
-            setTypingMessageState(null);
-        }
-    };
-    startPostMortemAnalysisRef.current = startPostMortemAnalysis;
-
     const handleLiveMarketAnalyze = (data: string) => {
         setIsLiveMarketVisible(false);
         setInput(data); // PREFILL INPUT, DO NOT SEND IMMEDIATELY
@@ -2117,22 +1826,6 @@ Please investigate this discrepancy in your analysis.
     const handleAllAnalysisTypingComplete = useCallback(() => {
         setIsAnalysisTypingComplete(true);
     }, []);
-
-    const handleAllPostMortemTypingComplete = useCallback(() => {
-        setIsPostMortemTypingComplete(true);
-    }, []);
-
-    // Handler to retry a failed post-mortem analysis
-    const handleRetryPostMortem = useCallback((messageId: string) => {
-        const msg = messages.find(m => m.id === messageId);
-        if (msg?.postMortemFailedCandidate) {
-            const { message, outcome, feedback, summaries, imageUrls } = msg.postMortemFailedCandidate;
-            // Remove the failed message first
-            updateMessages(prev => prev.filter(m => m.id !== messageId));
-            // Re-trigger the analysis with the stored candidate
-            startPostMortemAnalysis({ message, outcome, feedback }, summaries, imageUrls);
-        }
-    }, [messages, updateMessages, startPostMortemAnalysis]);
 
     const handleSetSummarizationProvider = (provider: AIProvider) => setSummarizationProvider(provider);
     const handleSetSummarizationModel = (id: string) => setSummarizationModel(id);
@@ -2368,64 +2061,6 @@ Please investigate this discrepancy in your analysis.
         } finally {
             setIsSummaryInProgress(false);
         }
-    };
-
-    const handleMismatchResolution = async (outcome: 'WIN' | 'LOSS') => {
-        if (!mismatchData) return;
-
-        console.log(`[PostMortem] User resolved mismatch to: ${outcome}`);
-
-        let finalValidation = mismatchData.validation;
-
-        if (outcome === 'LOSS') {
-            // User confirms LOSS (meaning they confirm they missed the TP)
-            // We must FORCE LOSS outcome logic (Override TP)
-
-            // We can manually patch the validation object based on SL data
-            finalValidation = {
-                ...finalValidation,
-                outcome: 'LOSS',
-                hitTarget: 'SL',
-                // Use SL touch price if available, else Extended SL price if that was the fail
-                exitPrice: finalValidation.slTouched ? (finalValidation.slTouchPrice ?? finalValidation.stopLoss) : (finalValidation.entryPrice * 0.9), // fallback if extended not calculated?
-                // Actually, if we are here, we know TP hit first. Did SL hit later?
-                // If isMismatch=true, it implies TP hit first.
-                // We need to find if SL hit later.
-                // But we didn't populate SL hit details in 'outcome' fields.
-
-                // However, we DO have `slMatched`, `slTouchTime`, `extendedSlExceeded` in the object.
-                exitTime: finalValidation.slTouched ? finalValidation.slTouchTime : (finalValidation.exitTime), // Fallback
-                isMismatch: false, // Resolved
-
-                // CRITICAL: Rewrite Summary to force AI compliance
-                validationSummary: finalValidation.validationSummary + `\n\n═══════════════════════════════════════════════════════════════\n⚠️ **USER CONFIRMED OUTCOME: LOSS**\n═══════════════════════════════════════════════════════════════\nAlthough price data shows a TP hit first, the USER has explicitly CONFIRMED this trade as a LOSS.\n\n**MANDATORY INSTRUCTION FOR ANALYSTS:**\n1. You MUST accept LOSS as the ground truth.\n2. Do NOT argue that it "should have been a win".\n3. Assume the user missed the TP or manually closed in loss.\n4. Analyze the failure based on the SL hit or manual exit.`
-            };
-        } else {
-            // User Confirms WIN (They accepted the TP hit)
-            // Validation object is already WIN. Just clear mismatch flag.
-            finalValidation = {
-                ...finalValidation,
-                outcome: 'WIN', // Ensure it says WIN
-                isMismatch: false,
-
-                // Add note to confirm validity
-                validationSummary: finalValidation.validationSummary + `\n\n✅ **USER CONFIRMED OUTCOME: WIN**\nUser verified that the TP hit was valid.`
-            };
-        }
-
-        // Update Candidate Outcome if needed?
-        // Context depends on `candidate.outcome`.
-        // If user changed to WIN, we should treat candidate as WIN for AI context.
-        const updatedCandidate = {
-            ...mismatchData.candidate,
-            outcome: outcome === 'WIN' ? TradeOutcome.WIN : TradeOutcome.LOSS
-        };
-
-        setShowMismatchModal(false);
-        setMismatchData(null);
-
-        // Resume Analysis
-        await startPostMortemAnalysis(updatedCandidate, undefined, undefined, finalValidation);
     };
 
     const handleClearAllConversations = () => {
