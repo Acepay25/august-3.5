@@ -66,7 +66,6 @@ import { setUpdateNotificationHandler, activateWaitingWorker } from './index';
 import { GEMINI_MODELS, DEEPSEEK_MODELS, ZHIPU_MODELS, GROQ_MODELS, GROQ_NEW_MODELS, GROQ_ALT2_MODELS, OPENROUTER_MODELS, OPENAI_MODELS, GROK_MODELS, OCR_MODELS, modelIdToName, ocrModelIdToName, DEFAULT_FRAMEWORKS, ACCURACY_MODE_DEFAULTS } from './constants/models';
 import { createNewConversation } from './utils/conversationUtils';
 import { isQuotaError } from './utils/errorUtils';
-import { isValidUserProfile } from './utils/profileUtils';
 import { recalculateAnalysisMetrics, sanitizeTradeAnalysis } from './utils/analysisUtils';
 import { processImagesForSummarization } from './utils/imageProcessor';
 import { extractLastJson } from './utils/jsonUtils';
@@ -85,6 +84,7 @@ import { useUIState } from './hooks/useUIState';
 import { useConversations } from './hooks/useConversations';
 import { useMarketData } from './hooks/useMarketData';
 import { useTradeLogging, MAX_TRADE_SUMMARIES } from './hooks/useTradeLogging';
+import { useUserProfiles } from './hooks/useUserProfiles';
 import { offlineQueue, QueuedRequest } from './services/infrastructure/OfflineQueueService';
 // AI Learning Services - Adaptive Learning, Mistake Patterns, Insight Extraction
 import { generateLearningFromPrompt, isLearningEnabled } from './services/learning/LearningPromptService';
@@ -98,7 +98,6 @@ import { buildUnifiedLearningContext } from './services/learning/UnifiedLearning
 import { loadLensConfig, saveLensConfig, getDefaultLensAssignments, getLensPromptForStyle, initAnalystLensService } from './services/ui/AnalystLensService';
 import { detectTradingStyle, getEffectiveStyle, generateMasterPromptStyleInjection } from './services/ui/TradingStyleDetector';
 import { getGateAnalysis, GateOutput } from './services/validation/GateKeeperService';
-import { exportDataAsFile, exportPreferencesData } from './services/infrastructure/ExportService';
 import { checkDataIntegrity, createStartupBackup, updateTradeCount, logIntegrityEvent, runMigrations } from './services/validation/DataIntegrityService';
 import { initInvalidationRuleService, loadInvalidationRules } from './services/validation/InvalidationRuleService';
 import { PriceAlertService } from './services/ui/PriceAlertService';
@@ -147,11 +146,6 @@ const App: React.FC = () => {
         isEntryNotHitCapturing, setIsEntryNotHitCapturing,
         isRateLimited, setIsRateLimited,
     } = useUIState();
-
-    // User Profile State
-    const [activeUsername, setActiveUsername] = useState<string | null>(null);
-    const [existingUsernames, setExistingUsernames] = useState<string[]>([]);
-    const [saveStatus, setSaveStatus] = useState<'SAVED' | 'SAVING' | 'ERROR'>('SAVED');
 
 
     // Conversation state, derived values, and handlers (extracted to hooks/useConversations.ts)
@@ -523,6 +517,22 @@ const App: React.FC = () => {
             });
         }
     };
+
+    // User Profile state and handlers (extracted to hooks/useUserProfiles.ts)
+    const {
+        activeUsername, setActiveUsername,
+        existingUsernames, setExistingUsernames,
+        saveStatus, setSaveStatus,
+        handleImportData,
+        handleDeleteUser,
+        handleSwitchUser,
+        handleExportData,
+    } = useUserProfiles({
+        resetAppState,
+        setIsUserModalOpen,
+        setIsSettingsVisible,
+        toast,
+    });
 
     const loadUserData = async (username: string) => {
         setIsLoading(true);
@@ -2123,60 +2133,6 @@ Please investigate this discrepancy in your analysis.
             startPostMortemAnalysis({ message, outcome, feedback }, summaries, imageUrls);
         }
     }, [messages, updateMessages, startPostMortemAnalysis]);
-
-    const handleImportData = async (fileContent: string) => {
-        try {
-            const data = JSON.parse(fileContent);
-            if (isValidUserProfile(data)) {
-                await dbService.overwriteUserProfile(data);
-                toast.success("Profile Imported", "Please select the user to log in.");
-                const users = await dbService.getAllUsernames();
-                setExistingUsernames(users);
-            } else {
-                toast.error("Import Failed", "Invalid profile data format.");
-            }
-        } catch (e) {
-            toast.error("Import Failed", "Failed to parse import file.");
-        }
-    };
-
-    const handleDeleteUser = async (username: string) => {
-        if (confirm(`Are you sure you want to delete user "${username}"? This cannot be undone.`)) {
-            await dbService.deleteUserProfile(username);
-            setExistingUsernames(prev => prev.filter(u => u !== username));
-            if (activeUsername === username) {
-                setActiveUsername(null);
-                resetAppState();
-                setIsUserModalOpen(true);
-            }
-        }
-    };
-
-    const handleSwitchUser = () => {
-        setIsUserModalOpen(true);
-        setIsSettingsVisible(false);
-    };
-
-    const handleExportData = async () => {
-        if (!activeUsername) return;
-        const profile = await dbService.getUserProfile(activeUsername);
-        if (profile) {
-            // Create comprehensive backup including preferences settings
-            const fullBackup = {
-                ...profile,
-                _exportedAt: new Date().toISOString(),
-                _appVersion: '3.5',
-                _preferencesBackup: await exportPreferencesData(),
-            };
-
-            const filename = `august_backup_${activeUsername}_${new Date().toISOString().split('T')[0]}.json`;
-            const result = await exportDataAsFile(fullBackup, filename);
-
-            if (!result.success) {
-                toast.error("Export Failed", result.error);
-            }
-        }
-    };
 
     const handleSetSummarizationProvider = (provider: AIProvider) => setSummarizationProvider(provider);
     const handleSetSummarizationModel = (id: string) => setSummarizationModel(id);
