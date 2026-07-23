@@ -2125,7 +2125,6 @@ Please investigate this discrepancy in your analysis.
                     // Single Analyst Mode
                     finalPostMortemReport = results[0].result;
                 }
-            }
 
             // Step 3: Finalize Message Text (Separate Bubble)
             updateMessages(prev => prev.map(m => m.id === postMortemMessageId ? {
@@ -2180,6 +2179,7 @@ Please investigate this discrepancy in your analysis.
                 } catch (weaknessError) {
                     console.error('[AI Learning] Failed to update weaknesses:', weaknessError);
                 }
+            }
 
         } catch (e: any) {
             console.error("Post Mortem Failed", e);
