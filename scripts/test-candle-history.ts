@@ -1,5 +1,5 @@
 
-import { fetchHybridData } from '../services/HybridIntelligenceService';
+import { fetchHybridData } from '../services/analysis/HybridIntelligenceService';
 
 async function testCandleHistory() {
     console.log('Testing Candle History Analysis...');

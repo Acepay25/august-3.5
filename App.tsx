@@ -2,67 +2,67 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { VirtuosoHandle } from 'react-virtuoso';
 import { Message, MessageRole, TradeOutcome, LoggedTrade, ImageMetadata, AIProvider, DebateTurn, Conversation, UserProfile, SavedAnalysis, LiveThoughts, TradeAnalysis, TradeSummary, GlobalMemory, AccuracySubMode, CustomInstructionsMap, CustomInstruction, AnalystLensConfig, LearningRule, AnalysisStep } from './types';
-import * as geminiService from './services/geminiService';
-import * as deepseekService from './services/deepseekService';
-import * as zhipuService from './services/zhipuService';
-import * as groqService from './services/groqService';
-import * as groqNewService from './services/groqNewService';
-import * as groqAlt2Service from './services/groqAlt2Service';
-import * as openrouterService from './services/openrouterService';
-import * as openaiService from './services/openaiService';
-import * as grokNativeService from './services/grokNativeService';
+import * as geminiService from './services/providers/geminiService';
+import * as deepseekService from './services/providers/deepseekService';
+import * as zhipuService from './services/providers/zhipuService';
+import * as groqService from './services/providers/groqService';
+import * as groqNewService from './services/providers/groqNewService';
+import * as groqAlt2Service from './services/providers/groqAlt2Service';
+import * as openrouterService from './services/providers/openrouterService';
+import * as openaiService from './services/providers/openaiService';
+import * as grokNativeService from './services/providers/grokNativeService';
 
-import * as ensembleService from './services/ensembleService';
-import * as dbService from './services/dbService';
-import { fetchRecentLiquidations, fetchOHLCV, LiquidationData, Kline } from './services/MarketDataService';
-import { ProbabilityEngineService } from './services/ProbabilityEngineService';
+import * as ensembleService from './services/providers/ensembleService';
+import * as dbService from './services/infrastructure/dbService';
+import { fetchRecentLiquidations, fetchOHLCV, LiquidationData, Kline } from './services/analysis/MarketDataService';
+import { ProbabilityEngineService } from './services/analysis/ProbabilityEngineService';
 
 // Accuracy Mode Services
-import * as geminiAccuracyService from './services/accuracy/geminiAccuracyService';
-import * as deepseekAccuracyService from './services/accuracy/deepseekAccuracyService';
-import * as zhipuAccuracyService from './services/accuracy/zhipuAccuracyService';
-import * as groqAccuracyService from './services/accuracy/groqAccuracyService';
-import * as groqNewAccuracyService from './services/accuracy/groqNewAccuracyService';
-import * as groqAlt2AccuracyService from './services/accuracy/groqAlt2AccuracyService';
-import * as openrouterAccuracyService from './services/accuracy/openrouterAccuracyService';
-import * as openaiAccuracyService from './services/accuracy/openaiAccuracyService';
-import * as grokNativeAccuracyService from './services/accuracy/grokNativeAccuracyService';
+import * as geminiAccuracyService from './services/providers/accuracy/geminiAccuracyService';
+import * as deepseekAccuracyService from './services/providers/accuracy/deepseekAccuracyService';
+import * as zhipuAccuracyService from './services/providers/accuracy/zhipuAccuracyService';
+import * as groqAccuracyService from './services/providers/accuracy/groqAccuracyService';
+import * as groqNewAccuracyService from './services/providers/accuracy/groqNewAccuracyService';
+import * as groqAlt2AccuracyService from './services/providers/accuracy/groqAlt2AccuracyService';
+import * as openrouterAccuracyService from './services/providers/accuracy/openrouterAccuracyService';
+import * as openaiAccuracyService from './services/providers/accuracy/openaiAccuracyService';
+import * as grokNativeAccuracyService from './services/providers/accuracy/grokNativeAccuracyService';
 
-import * as ensembleAccuracyService from './services/accuracy/ensembleAccuracyService';
+import * as ensembleAccuracyService from './services/providers/accuracy/ensembleAccuracyService';
 
 
 // Modular Imports
-import { ChatContextProps } from './components/MessageItem';
-import { useToastActions } from './components/Toast';
-import { Header } from './components/Header';
-import { ChatArea } from './components/ChatArea';
-import { Journal } from './components/Journal';
-import StrategySearch from './components/StrategySearch';
-import ConversationHistory from './components/ConversationHistory';
-import UserProfileManager from './components/UserProfileManager';
-import SavedAnalyses from './components/SavedAnalyses';
-import Settings from './components/Settings';
-import SettingsMenu from './components/SettingsMenu';
-import LiveAnalysisView from './components/LiveAnalysisView';
-import LivePostMortemView from './components/LivePostMortemView';
-import { LogTradeModal } from './components/LogTradeModal';
-import { PostTradeUploadModal, PostMortemCandidate } from './components/PostTradeUploadModal';
-import { SkipTradeModal } from './components/SkipTradeModal';
-import { DataCaptureModal } from './components/DataCaptureModal';
-import { EntryNotHitCaptureModal } from './components/EntryNotHitCaptureModal';
-import OutcomeMismatchModal from './components/OutcomeMismatchModal';
+import { ChatContextProps } from './components/chat/MessageItem';
+import { useToastActions } from './components/shared/Toast';
+import { Header } from './components/shared/Header';
+import { ChatArea } from './components/chat/ChatArea';
+import { Journal } from './components/journal/Journal';
+import StrategySearch from './components/shared/StrategySearch';
+import ConversationHistory from './components/chat/ConversationHistory';
+import UserProfileManager from './components/settings/UserProfileManager';
+import SavedAnalyses from './components/journal/SavedAnalyses';
+import Settings from './components/settings/Settings';
+import SettingsMenu from './components/settings/SettingsMenu';
+import LiveAnalysisView from './components/analysis/LiveAnalysisView';
+import LivePostMortemView from './components/analysis/LivePostMortemView';
+import { LogTradeModal } from './components/journal/LogTradeModal';
+import { PostTradeUploadModal, PostMortemCandidate } from './components/modals/PostTradeUploadModal';
+import { SkipTradeModal } from './components/modals/SkipTradeModal';
+import { DataCaptureModal } from './components/modals/DataCaptureModal';
+import { EntryNotHitCaptureModal } from './components/modals/EntryNotHitCaptureModal';
+import OutcomeMismatchModal from './components/modals/OutcomeMismatchModal';
 // import ScenarioSimulatorModal from './components/ScenarioSimulatorModal'; // Not created yet
-import { captureForPostMortem, AutoCaptureResult } from './services/AutoCaptureService';
-import { UpdateTradeModal } from './components/UpdateTradeModal';
-import VisionDataViewer from './components/VisionDataViewer';
-import LiveMarket from './components/LiveMarket';
-import { AccuracyModeModal } from './components/AccuracyModeModal';
-import HybridDataPanel from './components/HybridDataPanel';
-import AdvancedAnalyticsSidePanel from './components/AdvancedAnalyticsSidePanel';
-import ScenarioSimulator from './components/ScenarioSimulator';
-import UpdateNotification from './components/UpdateNotification';
-import MistakeWarningBanner from './components/MistakeWarningBanner';
-import AnalysisProgress from './components/AnalysisProgress';
+import { captureForPostMortem, AutoCaptureResult } from './services/ui/AutoCaptureService';
+import { UpdateTradeModal } from './components/journal/UpdateTradeModal';
+import VisionDataViewer from './components/analysis/VisionDataViewer';
+import LiveMarket from './components/market/LiveMarket';
+import { AccuracyModeModal } from './components/modals/AccuracyModeModal';
+import HybridDataPanel from './components/analysis/HybridDataPanel';
+import AdvancedAnalyticsSidePanel from './components/dashboards/AdvancedAnalyticsSidePanel';
+import ScenarioSimulator from './components/modals/ScenarioSimulator';
+import UpdateNotification from './components/shared/UpdateNotification';
+import MistakeWarningBanner from './components/shared/MistakeWarningBanner';
+import AnalysisProgress from './components/analysis/AnalysisProgress';
 import { setUpdateNotificationHandler, activateWaitingWorker } from './index';
 
 import { GEMINI_MODELS, DEEPSEEK_MODELS, ZHIPU_MODELS, GROQ_MODELS, GROQ_NEW_MODELS, GROQ_ALT2_MODELS, OPENROUTER_MODELS, OPENAI_MODELS, GROK_MODELS, OCR_MODELS, modelIdToName, ocrModelIdToName, DEFAULT_FRAMEWORKS, ACCURACY_MODE_DEFAULTS } from './constants/models';
@@ -73,39 +73,39 @@ import { recalculateAnalysisMetrics, sanitizeTradeAnalysis } from './utils/analy
 import { processImagesForSummarization } from './utils/imageProcessor';
 import { extractLastJson } from './utils/jsonUtils';
 import { sanitizeAIResponse } from './utils/sanitizers';
-import { tryFetchHybridDataFromPrompt, tryFetchHybridDataFromPromptWithCalibration, HybridDataPacket, runMonteCarloForSetup } from './services/HybridIntelligenceService';
-import { MonteCarloResult, LabeledMonteCarloResult } from './services/MonteCarloService';
-import { backtestSimilarSetups, LiveBacktestResult } from './services/LiveBacktestService';
-import { pingBinanceAPI } from './services/MarketDataService';
-import { updateCalibration, updateGranularCalibration, initializeCalibration, ConfidenceLevel } from './services/ConfidenceCalibrationService';
-import { runValidationGate, TradeValidationOutput } from './services/TradeValidationGate';
-import { validateTradeOutcome, TradeOutcomeValidation } from './services/BacktestingService';
-import { SLOptimization } from './services/StopLossOptimizerService';
+import { tryFetchHybridDataFromPrompt, tryFetchHybridDataFromPromptWithCalibration, HybridDataPacket, runMonteCarloForSetup } from './services/analysis/HybridIntelligenceService';
+import { MonteCarloResult, LabeledMonteCarloResult } from './services/analysis/MonteCarloService';
+import { backtestSimilarSetups, LiveBacktestResult } from './services/backtesting/LiveBacktestService';
+import { pingBinanceAPI } from './services/analysis/MarketDataService';
+import { updateCalibration, updateGranularCalibration, initializeCalibration, ConfidenceLevel } from './services/validation/ConfidenceCalibrationService';
+import { runValidationGate, TradeValidationOutput } from './services/validation/TradeValidationGate';
+import { validateTradeOutcome, TradeOutcomeValidation } from './services/backtesting/BacktestingService';
+import { SLOptimization } from './services/backtesting/StopLossOptimizerService';
 import { ConfidenceCalibration, InsightKnowledgeBase } from './types';
 import useNetworkStatus from './hooks/useNetworkStatus';
-import { offlineQueue, QueuedRequest } from './services/OfflineQueueService';
+import { offlineQueue, QueuedRequest } from './services/infrastructure/OfflineQueueService';
 // AI Learning Services - Adaptive Learning, Mistake Patterns, Insight Extraction
-import { generateLearningFromPrompt, isLearningEnabled } from './services/LearningPromptService';
-import { generatePersonalizedInjection } from './services/PersonalizedPromptService';
-import { extractInsightsFromPostMortem, storeInsights, initializeKnowledgeBase } from './services/InsightExtractionService';
-import * as MemoryService from './services/MemoryService';
-import { MemoryProvider, MEMORY_PROVIDER_OPTIONS, MEMORY_MODELS, getDefaultModelForProvider } from './services/MemoryService';
-import { getTradingWeaknesses } from './services/MistakePatternService';
-import { syncFromTradeLog, syncRollingWindowFromTradeLog, initModelPerformanceService, trackTradeOutcome } from './services/ModelPerformanceService';
-import { buildUnifiedLearningContext } from './services/UnifiedLearningBuilder';
-import { loadLensConfig, saveLensConfig, getDefaultLensAssignments, getLensPromptForStyle, initAnalystLensService } from './services/AnalystLensService';
-import { detectTradingStyle, getEffectiveStyle, generateMasterPromptStyleInjection } from './services/TradingStyleDetector';
-import { getGateAnalysis, GateOutput } from './services/GateKeeperService';
-import { exportDataAsFile, exportPreferencesData } from './services/ExportService';
-import { checkDataIntegrity, createStartupBackup, updateTradeCount, logIntegrityEvent, runMigrations } from './services/DataIntegrityService';
-import { initInvalidationRuleService, loadInvalidationRules } from './services/InvalidationRuleService';
-import { storeRule, loadLearningRules, saveLearningRules } from './services/LearningRulesService';
-import { PriceAlertService } from './services/PriceAlertService';
-import { initConfluenceService } from './services/TimeframeConfluenceService';
-import { initPatternMemoryService } from './services/PatternMemorySynthesisService';
-import GlobalLearningService from './services/GlobalLearningService';
-import { jobQueue, JobType } from './services/JobQueueService';
-import { VersionHistoryDashboard } from './components/VersionHistoryDashboard';
+import { generateLearningFromPrompt, isLearningEnabled } from './services/learning/LearningPromptService';
+import { generatePersonalizedInjection } from './services/ui/PersonalizedPromptService';
+import { extractInsightsFromPostMortem, storeInsights, initializeKnowledgeBase } from './services/learning/InsightExtractionService';
+import * as MemoryService from './services/learning/MemoryService';
+import { MemoryProvider, MEMORY_PROVIDER_OPTIONS, MEMORY_MODELS, getDefaultModelForProvider } from './services/learning/MemoryService';
+import { getTradingWeaknesses } from './services/learning/MistakePatternService';
+import { syncFromTradeLog, syncRollingWindowFromTradeLog, initModelPerformanceService, trackTradeOutcome } from './services/backtesting/ModelPerformanceService';
+import { buildUnifiedLearningContext } from './services/learning/UnifiedLearningBuilder';
+import { loadLensConfig, saveLensConfig, getDefaultLensAssignments, getLensPromptForStyle, initAnalystLensService } from './services/ui/AnalystLensService';
+import { detectTradingStyle, getEffectiveStyle, generateMasterPromptStyleInjection } from './services/ui/TradingStyleDetector';
+import { getGateAnalysis, GateOutput } from './services/validation/GateKeeperService';
+import { exportDataAsFile, exportPreferencesData } from './services/infrastructure/ExportService';
+import { checkDataIntegrity, createStartupBackup, updateTradeCount, logIntegrityEvent, runMigrations } from './services/validation/DataIntegrityService';
+import { initInvalidationRuleService, loadInvalidationRules } from './services/validation/InvalidationRuleService';
+import { storeRule, loadLearningRules, saveLearningRules } from './services/learning/LearningRulesService';
+import { PriceAlertService } from './services/ui/PriceAlertService';
+import { initConfluenceService } from './services/analysis/TimeframeConfluenceService';
+import { initPatternMemoryService } from './services/learning/PatternMemorySynthesisService';
+import GlobalLearningService from './services/learning/GlobalLearningService';
+import { jobQueue, JobType } from './services/infrastructure/JobQueueService';
+import { VersionHistoryDashboard } from './components/dashboards/VersionHistoryDashboard';
 
 // Maximum number of trade summaries (Recent Insights) to keep - enforces FIFO when limit reached
 const MAX_TRADE_SUMMARIES = 100;
@@ -3093,7 +3093,7 @@ ${result.comparisonBlock}
 
             if (useAlgorithmicSummary) {
                 // Use algorithmic generation (Fast, Free, No tokens)
-                const { generatePatternMemorySynthesis } = await import('./services/AlgorithmicSummaryService');
+                const { generatePatternMemorySynthesis } = await import('./services/ui/AlgorithmicSummaryService');
                 summary = generatePatternMemorySynthesis(loggedTrades);
             } else {
                 // Use AI generation (Slower, Tokens)

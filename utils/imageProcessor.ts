@@ -2,10 +2,10 @@
 
 import React from 'react';
 import { ImageMetadata } from '../types';
-import * as geminiService from '../services/geminiService';
-import * as zhipuService from '../services/zhipuService';
-import * as groqService from '../services/groqService';
-import * as openaiService from '../services/openaiService';
+import * as geminiService from '../services/providers/geminiService';
+import * as zhipuService from '../services/providers/zhipuService';
+import * as groqService from '../services/providers/groqService';
+import * as openaiService from '../services/providers/openaiService';
 import { isQuotaError } from './errorUtils';
 
 export const processImagesForSummarization = async (
@@ -38,7 +38,7 @@ export const processImagesForSummarization = async (
         } else if (ocrModel.startsWith('gpt-')) {
           ({ uiSummary, fullSummary } = await openaiService.summarizeChartImage(file, chartNumber, ocrModel));
         } else if (ocrModel.startsWith('grok-')) {
-          const grokNativeService = await import('../services/grokNativeService');
+          const grokNativeService = await import('../services/providers/grokNativeService');
           ({ uiSummary, fullSummary } = await grokNativeService.summarizeChartImage(file, chartNumber, ocrModel));
         } else {
           console.warn(`Unknown OCR model selected: ${ocrModel}. Falling back to Gemini service.`);

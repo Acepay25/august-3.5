@@ -1,0 +1,1125 @@
+
+// ... existing imports ...
+import OpenAI from "openai";
+import { ChatCompletionMessageParam } from "openai/resources/chat/completions";
+import { Message, TradeOutcome, GroundingChunk, MessageRole, LoggedTrade, StrategySearchResult, TradeAnalysis, TradeSummary, GlobalMemory, AccuracySubMode } from '../../../types';
+import { robustJsonParse, extractAndParseJson } from '../../../utils/jsonUtils';
+import { sanitizeAIResponse, sanitizeJSONString } from '../../../utils/sanitizers';
+import { truncateTextToTokens, sanitizeTradeAnalysis } from '../../../utils/analysisUtils';
+import { truncateToTokenLimit } from '../../../utils/tokenUtils';
+import { MASTER_ANALYSIS_PROMPT, DEVILS_ADVOCATE_PROMPT, INVALIDATION_THESIS_PROMPT, CORRELATION_AWARENESS_PROMPT, LENS_MODE_BASE_PROMPT, COMPACT_ANALYSIS_PROMPT, AI_PROVIDER_MEMORY_ENFORCEMENT_PROMPT } from '../../../constants/prompts';
+import { constructOptimizedContext } from '../../../utils/memoryUtils';
+import { parseLiveMarketData } from '../../../utils/liveMarketParser';
+
+const GROQ_BASE_URL = 'https://api.groq.com/openai/v1/';
+
+const getClient = (): OpenAI => {
+    // Groq Alt 2 API key from environment (inlined at build time via vite.config.ts)
+    const GROQ_API_KEY = process.env.GROQ_ALT2_API_KEY;
+    if (!GROQ_API_KEY) throw new Error("GROQ_ALT2_API_KEY is not set in environment");
+
+    return new OpenAI({
+        baseURL: GROQ_BASE_URL,
+        apiKey: GROQ_API_KEY,
+        dangerouslyAllowBrowser: true,
+    });
+};
+
+// Helper to get max tokens based on model - GPT-OSS 120B has a 7900 token limit
+const getMaxTokens = (modelName: string, defaultTokens: number): number => {
+    if (modelName.includes('gpt-oss-120b')) {
+        return Math.min(defaultTokens, 7900);
+    }
+    return defaultTokens;
+};
+
+// Retry helper with exponential backoff for rate limit (TPM/429) errors
+const withRetry = async <T>(
+    fn: () => Promise<T>,
+    maxRetries: number = 3,
+    baseDelay: number = 3000,
+    operationName: string = 'Groq Alt2 API call'
+): Promise<T> => {
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+            return await fn();
+        } catch (error: any) {
+            lastError = error;
+
+            // Check if it's a retriable error (429 rate limit / TPM exceeded)
+            const is429 = error?.status === 429 ||
+                error?.status === 413 ||
+                error?.message?.includes('429') ||
+                error?.message?.includes('413') ||
+                error?.message?.includes('Too many') ||
+                error?.message?.includes('rate limit') ||
+                error?.message?.includes('TPM') ||
+                error?.message?.includes('too large');
+
+            if (!is429 || attempt === maxRetries) {
+                throw error;
+            }
+
+            // Exponential backoff: 3s, 6s, 12s, etc.
+            const delay = baseDelay * Math.pow(2, attempt);
+            console.warn(`[Groq Alt2] ${operationName} hit rate limit (attempt ${attempt + 1}/${maxRetries + 1}). Retrying in ${delay / 1000}s...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+        }
+    }
+
+    throw lastError || new Error('Retry failed after max attempts');
+};
+
+
+const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+};
+
+export const summarizeChartImage = async (image: File, chartNumber: number, modelName: string): Promise<{ uiSummary: string; fullSummary: string }> => {
+    try {
+        const groq = getClient();
+        const base64Image = await fileToBase64(image);
+
+        const prompt = `You are a state-of-the-art Computer Vision & OCR engine for financial markets.
+        **MODE: ENHANCED VISION STRUCTURING ENABLED**
+        Your task is to analyze Chart ${chartNumber}, discard irrelevant OCR noise, and produce a highly structured data report.
+
+        **STRICT OUTPUT FORMAT:**
+
+        1. Chart Metadata
+        Timeframe: [Value]
+        Asset: [Value]
+        Exchange: [Value]
+        Chart Type: [Value]
+
+        2. Price & Trend
+        Current Price: [Value]
+        24h High: [Value]
+        24h Low: [Value]
+        Trend Summary: [Value]
+
+        3. Indicators
+        Moving Averages
+        MA5: [Value]
+        MA10: [Value]
+        MA20: [Value]
+        MA30: [Value]
+        MA60: [Value]
+        MA200: [Value]
+
+        EMA
+        EMA5: [Value]
+        EMA13: [Value]
+        EMA20: [Value]
+        EMA200: [Value]
+
+        Bollinger Bands
+        BOLL Middle: [Value]
+        BOLL Upper: [Value]
+        BOLL Lower: [Value]
+
+        Volume
+        Volume: [Value]
+        Volume Trend: [Value]
+
+        RSI
+        RSI1: [Value]
+        RSI2: [Value]
+        RSI3: [Value]
+
+        MACD
+        MACD DIF: [Value]
+        MACD DEA: [Value]
+        MACD Histogram: [Value]
+
+        Stochastic
+        Stoch K: [Value]
+        Stoch D: [Value]
+        Stoch J: [Value]
+
+        4. Market Structure
+        Immediate Resistance: [Value]
+        Immediate Support: [Value]
+        Strong Support Zones: [Value]
+        Trend Context: [Value]
+
+        5. Candle Pattern Recognition
+        Latest Candle: [Value] (e.g., Doji, Hammer, Marubozu)
+        Pattern Detected: [Value] (e.g., Bullish Engulfing, Morning Star, None)
+        Candle Position: [Value] (e.g., At Support, In Consolidation)
+        Remaining Time: [Value]
+
+        6. Chart Narrative
+        Narrative: [A 2-3 sentence description of what is happening in the chart. Describe the current price action, trend behavior, and any notable patterns or formations visible. Example: "Price is consolidating near resistance after a strong bullish move. The last 3 candles show indecision with small bodies and long wicks, suggesting a potential reversal or breakout."]
+
+        **INSTRUCTIONS:**
+        - Extract exact numbers where visible.
+        - Look specifically for the specific candlestick shape of the last 1-3 candles.
+        - If a field is not visible or applicable, write "N/A".
+        - Do not mix sections.
+        - Keep descriptions concise.
+        `;
+
+        const completion = await groq.chat.completions.create({
+            model: modelName,
+            messages: [{
+                role: 'user',
+                content: [
+                    { type: 'text', text: prompt },
+                    { type: 'image_url', image_url: { url: `data:${image.type};base64,${base64Image}` } }
+                ]
+            }],
+            max_tokens: getMaxTokens(modelName, 1024),
+        });
+
+        const fullSummary = completion.choices[0].message.content?.trim() || `Analysis failed for Chart ${chartNumber}.`;
+
+        const timeframeMatch = fullSummary.match(/Timeframe:\s*(.*?)(?:\n|$)/i);
+        const priceMatch = fullSummary.match(/(?:Current )?Price:\s*(.*?)(?:\n|$)/i);
+        const patternMatch = fullSummary.match(/Pattern Detected:\s*(.*?)(?:\n|$)/i);
+
+        const timeframe = timeframeMatch ? timeframeMatch[1].trim().replace(/['"]/g, '') : 'N/A';
+        let price = priceMatch ? priceMatch[1].trim().replace(/['"]/g, '') : 'N/A';
+        let pattern = patternMatch ? patternMatch[1].trim().replace(/['"]/g, '') : '';
+
+        if (price !== 'N/A') {
+            const numericPrice = price.replace(/[^0-9.]/g, '');
+            if (numericPrice) {
+                price = `₮${numericPrice}`;
+            } else {
+                price = 'N/A';
+            }
+        }
+
+        if (pattern === 'N/A' || pattern === 'None') pattern = '';
+
+        // Explicitly format: Chart X | Timeframe | Price | Pattern
+        let uiSummary = `Chart ${chartNumber} | ${timeframe} | ${price}`;
+        if (pattern) {
+            uiSummary += ` | ${pattern}`;
+        }
+
+        return { uiSummary, fullSummary };
+    } catch (error) {
+        console.error("Error in Groq (Alt 2) summarizeChartImage:", error);
+        return {
+            uiSummary: `Chart ${chartNumber} | Error | N/A`,
+            fullSummary: `Chart ${chartNumber} Vision Analysis Failed: ${(error as Error).message}`
+        };
+    }
+};
+
+export const analyzeTradingView = async (
+    prompt: string,
+    images: File[],
+    imageSummaries: string[],
+    chatHistory: Message[],
+    finalTradeSummary: string | null,
+    recentInsights: string | null, // New param for distinct Recent Insights
+    modelName: string,
+    activeFrameworks: string[],
+    deepenAnalysis: boolean,
+    globalMemory?: GlobalMemory,
+    threadSummary?: string,
+    subMode?: AccuracySubMode, // Ignored in standard service
+    customInstructions?: string, // New Param
+    isPlaybookEnabledInPureAI?: boolean, // Ignored in standard service
+    isFamiliesEnabledInPureAI?: boolean, // Ignored in standard service
+    isMemoryEnabledInPureAI?: boolean, // Ignored in standard service
+    rolePrompt?: string // Analyst Lens: specialized role prompt prefix
+): Promise<{ analysis: TradeAnalysis; thoughtProcess: string; sources: GroundingChunk[] }> => {
+    const isVisionModel = modelName.includes('llama-4');
+    if (!isVisionModel && images.length > 0) {
+        console.warn(`Groq (Alt 2) model ${modelName} is not vision-capable, but images were provided. Analyzing based on text summaries only.`);
+    }
+
+    const groq = getClient();
+    const hasImages = images.length > 0;
+
+    // --- LIVE MARKET DATA PARSING & INJECTION ---
+    const parsedMarketData = parseLiveMarketData(prompt);
+    let marketDataOverride = "";
+    if (parsedMarketData) {
+        marketDataOverride = `
+    **VERIFIED LIVE MARKET TELEMETRY (HIGHEST PRIORITY):**
+    Use this exact data for your analysis and JSON output. Do NOT output "N/A" for these fields.
+    
+    - **Prices:** ${JSON.stringify(parsedMarketData.prices)}
+    - **Detected Patterns:** ${JSON.stringify(parsedMarketData.patterns)}
+    - **Key Zones:** ${JSON.stringify(parsedMarketData.keyZones)}
+    
+    **MANDATORY:** You MUST populate the 'detectedPatterns', 'keyLevels', and 'marketConditions.prices' fields in your JSON response with this data.
+        `;
+    }
+    // --------------------------------------------
+
+    // Truncate memory context to prevent overflow
+    // MODEL LIMITS: Kimi ~10k, GPT ~8k. System prompt uses ~5k. Budget ~3k for all context.
+    const rawMemoryContext = constructOptimizedContext(chatHistory, threadSummary, globalMemory);
+    const memoryContext = truncateTextToTokens(rawMemoryContext, 800);
+
+    // CRITICAL: Inject Pattern Memory (Synthesis) - Truncate to 600 tokens
+    const rawPatternMemory = finalTradeSummary
+        ? `\n\n**📊 PATTERN MEMORY (SYNTHESIS) - MANDATORY REFERENCE:**\nThe following is a synthesis of your recent trading performance and patterns. You MUST reference this data for Section 4 (Pattern Matching):\n${finalTradeSummary}\n`
+        : "\n\n**📊 PATTERN MEMORY:** No synthesis available yet.\n";
+    const patternMemoryContext = truncateTextToTokens(rawPatternMemory, 600);
+
+    // CRITICAL: Inject Recent Insights (Individual Trades) - Truncate to 600 tokens
+    const rawRecentInsights = recentInsights
+        ? `\n\n**📊 RECENT INSIGHTS (INDIVIDUAL) - MANDATORY REFERENCE:**\nThe following are specific recent trades for detailed comparison:\n${recentInsights}\n`
+        : "\n\n**📊 RECENT INSIGHTS:** No recent trade insights available.\n";
+    const recentInsightsContext = truncateTextToTokens(rawRecentInsights, 600);
+
+    const frameworksList = activeFrameworks.map((fw, index) => `${index + 1}. **${fw}**`).join('\n');
+
+    // Truncate image summaries to 800 tokens
+    const rawImageSummaries = imageSummaries.length > 0 ? `**PRE-PROCESSED VISION ANALYSIS**...\n${imageSummaries.join('\n\n---\n\n')}` : "No chart data provided.";
+    const imageSummaryContext = truncateTextToTokens(rawImageSummaries, 800);
+
+    // Enhanced Vision Instruction
+    const visionDeepDive = hasImages
+        ? `**ENHANCED VISION ANALYTICS PROTOCOL:**
+           - You have direct access to the high-fidelity chart images. 
+           - **OCR & TEXT:** Perform a pixel-perfect scan to read all text labels, indicator settings (e.g. RSI 14), timestamps, and price axes.
+           - **MICRO-STRUCTURE:** Extract PRECISE price levels, wick behaviors, and hidden liquidity pools from the visual data.
+           - **CONTEXT:** If this is a trading terminal screenshot, extract any visible PnL, leverage, or account data.
+           - Visually confirm the "Market Classification Family" based on candle structure.`
+        : '';
+
+    const userOverride = customInstructions
+        ? `\n\n**USER BEHAVIOR OVERRIDE:**\nThe user has provided specific instructions for how you must respond, calculate, and reason. These instructions take precedence over default tone/style settings:\n"${customInstructions}"\n`
+        : "";
+
+    // Use LENS_MODE_BASE_PROMPT when rolePrompt is active, otherwise use full MASTER_ANALYSIS_PROMPT
+    const basePrompt = rolePrompt ? LENS_MODE_BASE_PROMPT : MASTER_ANALYSIS_PROMPT;
+
+    const systemPrompt = `${rolePrompt ? '🎭 **SPECIALIZED ANALYST ROLE ACTIVE**\n\n' + rolePrompt + '\n\n---\n\n' : ''}${basePrompt}
+
+      ${rolePrompt ? '' : visionDeepDive}
+
+      ${rolePrompt ? '' : DEVILS_ADVOCATE_PROMPT}
+      
+      ${rolePrompt ? '' : INVALIDATION_THESIS_PROMPT}
+
+      ${rolePrompt ? '' : CORRELATION_AWARENESS_PROMPT}
+
+      ${AI_PROVIDER_MEMORY_ENFORCEMENT_PROMPT}
+
+      ${userOverride}
+
+      ${marketDataOverride}
+
+      ${rolePrompt ? `
+**OUTPUT:**
+Respond with valid JSON only. Your thoughtProcess should follow YOUR ROLE's structure above.
+{
+  "thoughtProcess": "Your specialized analysis...",
+  "analysis": {"coinName": "...", "direction": "...", "confidence": "...", "probability": 0, "strategy": "...", "entryPoints": [{"price": "..."}], "stopLoss": "...", "stopLossPercentage": "...", "takeProfit": [{"price": "..."}], "detectedPatternFamily": "...", "marketConditions": {}}
+}
+` : `**CONTEXTUAL DATA:**
+      **PLAYBOOK: CORE TRADING FRAMEWORKS**
+      ${frameworksList}
+
+      **ANALYTICAL PROCESS OVERRIDE:**
+      You must perform the analysis exactly as defined in the MASTER PROMPT sections 1-8.
+      
+      **CRITICAL: PATTERN MEMORY INTEGRATION (SECTION 4):**
+      Use the **PATTERN MEMORY** and **RECENT INSIGHTS** provided below as your source of truth for user-specific patterns and corrections. Do NOT use Layer 3 Global Memory for past trade references.
+
+      ${patternMemoryContext}
+      ${recentInsightsContext}
+
+      **MANDATORY RULE: RISK/REWARD & STOP-LOSS PERCENTAGE VALIDATION**
+      1. **Minimum R:R Requirement:** The potential win must be at least 1.2x larger than the potential loss (Ratio >= 1:1.2).
+      2. **Conditional Logic:** If the current setup yields an R:R < 1.2, you must mark the trade as **CONDITIONAL**. Set \`confidence\` to 'Avoid' (or 'Low') and explicitly explain in the \`strategy\` field that a better entry price is required to satisfy the 1:1.2 Risk/Reward rule.
+      3. If R:R >= 1.2, proceed. Calculate profit percentages for each Take Profit target.
+      4. Calculate and include the stop loss percentage in the \`stopLossPercentage\` field.
+      5. Extract the Coin Name (e.g. BTCUSDT, ETH, SOL) from the analysis.
+
+      **SYNTHESIS & OUTPUT (STRICT JSON):**
+
+      ${rolePrompt ? '' : `**FORMATTING RULE (MANDATORY):** Your 'thoughtProcess' MUST follow this EXACT structure with separator lines:
+
+      ────────────────────────────────────────
+      SECTION 1 — MULTI-TIMEFRAME STRUCTURE
+      
+      5m Bias:
+      Trend: [Bullish/Bearish]
+      Market Structure: [HH/HL or LL/LH]
+      Key zones: [Specific levels]
+      Momentum: RSI [value] ([status]). MACD [status].
+      EMA alignment: [Bullish/Bearish/Mixed]
+      Volume behavior: [High/Normal/Low] volume.
+      
+      15m Bias (Code-Calculated):
+      [Same format as 5m]
+      
+      1h Bias (Code-Calculated):
+      [Same format]
+      
+      4h Bias (Code-Calculated):
+      [Same format]
+      
+      Summary Bias: [Bullish/Bearish/Neutral]
+      
+      ────────────────────────────────────────
+      SECTION 2 — PRICE ACTION TYPE
+      
+      Classification: [Continuation/Reversal/Compression/Breakout]
+      Explanation: [2-3 sentences]
+      
+      ────────────────────────────────────────
+      SECTION 3 — FAMILY CLASSIFICATION SYSTEM
+      
+      Classification: FAMILY [A/B/C/Omega] — [Nickname]
+      Reasoning: [Explain why this family based on indicators]
+      
+      ────────────────────────────────────────
+      SECTION 4 — PATTERN MATCHING USING TRADE LOG
+      
+      [List similar trades or "No direct similarity found in trade log."]
+      
+      ────────────────────────────────────────
+      SECTION 5 — CONTINUATION vs COUNTERTREND BIAS FRAMEWORK
+      
+      Continuation Probability % ([Direction]): [X]%
+      Countertrend Probability % ([Direction]): [Y]%
+      Dominant Bias: [Continuation/Countertrend] ([Direction])
+      Exact signals that produce these probabilities: [List signals]
+      What must happen to flip the bias: [Specific conditions]
+      
+      ────────────────────────────────────────
+      SECTION 6 — ADAPTIVE PROBABILITY MODEL
+      
+      Long Probability %: [X]%
+      Short Probability %: [Y]%
+      Confidence Weight (0.0–1.0): [Value]
+      Detected Pattern Family: Family [A/B/C/Omega]
+      Detected Phase: [1-5] ([Phase name])
+      Explanation: [Why these probabilities]
+      
+      ────────────────────────────────────────
+      SECTION 7 — NUMERIC CHART ANALYSIS (MANDATORY)
+
+      Trend Maturity: [Early/Mid/Late]
+      Market Regime: [Trend/Range/Compression/Breakout]
+      Pattern Validation: [Supported/Not Supported by chart data]
+      Wick Bias: [Bullish/Bearish]
+      Volume Trend: [Rising/Falling]
+      State Shift: [Trend_Change/Momentum_Loss/None]
+      
+      ────────────────────────────────────────
+      SECTION 8 — FULL TRADE SETUP (MANDATORY)
+      
+      Direction: [Long/Short]
+      Market Classification Family: [A/B/C/Omega]
+      Entry Zone: [Price range]
+      Stop Loss: [Price]
+      Take Profit 1: [Price]
+      Take Profit 2: [Price]
+      Take Profit 3: [Price]
+      Risk:Reward (R:R): [Ratio]
+      Stop Loss Percentage: [X]%
+      Invalidation conditions: [Specific conditions]
+      Re-entry conditions: [If applicable]
+      
+      😈 DEVIL'S ADVOCATE ANALYSIS (MANDATORY)
+      
+      BEAR CASE / BULL CASE AGAINST THIS TRADE:
+      1. Technical reason: [Why this could fail]
+      2. Volume/Momentum concern: [Volume or momentum issue]
+      3. Market structure risk: [Structure-based risk]
+      
+      FAILURE SCENARIOS:
+      1. Scenario A: [Specific failure scenario]
+      2. Scenario B: [Another failure scenario]
+      
+      CROWDED TRADE CHECK:
+      Funding Rate: [X]% - [Neutral/Elevated/Extreme]
+      Long/Short Ratio: [X] - [Balanced/Crowded]
+      Recent liquidation data: $[X]M ([High/Medium/Low] pressure)
+      
+      DEVIL'S RISK SCORE: [X]/100
+      
+      🚫 TRADE INVALIDATION THESIS (MANDATORY)
+      
+      1. Critical Invalidation Level: This trade is INVALID if price closes [above/below] $[X] on the [timeframe] chart.
+      2. Time Invalidation: If entry is not triggered within [X] hours, re-evaluate the thesis.
+      3. Structure Invalidation: Invalidated by: [Specific structure condition]
+      4. Counter-Signal Watch: Would flip to [Long/Short] if: [Condition]
+      5. Early Exit Triggers: Consider early exit if: [Condition]
+      
+      📊 CORRELATION & MACRO AWARENESS
+      
+      BTC CORRELATION CHECK: [Analysis of BTC impact]
+      MACRO CONSIDERATIONS: [Weekend/events/volatility factors]
+      
+      ────────────────────────────────────────
+      `}
+      
+      Your entire response MUST be a single, valid JSON object with two keys: "thoughtProcess" and "analysis".
+      **Output ONLY valid JSON. Do not wrap it in markdown (\`\`\`json). Do not include any preamble or postscript.**
+
+      **RESPONSE JSON Structure:**
+      {
+        "thoughtProcess": "Your detailed thought process string goes here (Sections 1-8 with separators)...",
+        "analysis": {
+            "coinName": "BTCUSDT", 
+            "direction": "Long", 
+            "confidence": "High", 
+            "probability": 79, 
+            "strategy": "...", 
+            "activeStrategies": ["..."], 
+            "entryPoints": [{"description": "...", "price": "..."}], 
+            "stopLoss": "...", 
+            "stopLossPercentage": "...", 
+            "takeProfit": [{"price": "...", "percentage": "..."}], 
+            "historicalCorrelation": "...", 
+            "marketConditions": { "pattern": "...", "candleBehavior": "...", "timeframeAlignment": "...", "rsi": "...", "macd": "...", "sentiment": "..." },
+            "detectedPatternFamily": "Family A | Family B | Family C | Family Omega"
+        }
+      }
+    `}
+    `;
+
+    // Special handling for Live Market Data injection
+    const isLiveMarketData = prompt.includes("**LIVE MARKET DATA**");
+    const formattedPrompt = isLiveMarketData
+        ? `User's request:\n${prompt}\n\n`
+        : `User's request: "${prompt}"\n\n`;
+
+    const userPromptText = `${formattedPrompt}${imageSummaryContext}\n\n${patternMemoryContext}\n\n${recentInsightsContext}\n\n${memoryContext}\n\nOUTPUT VALID JSON ONLY.`;
+
+    // --- SMALL MODEL DETECTION & COMPACT PROMPT SELECTION ---
+    const lowerModel = modelName.toLowerCase();
+    const isSmallContextModel = lowerModel.includes('kimi') || lowerModel.includes('gpt');
+
+    // For small-context models: use MINIMAL content to stay under 8-10k limits
+    let effectiveSystemPrompt: string;
+    let effectiveUserPrompt: string;
+
+    if (isSmallContextModel) {
+        // Minimal system prompt for extremely small context models
+        effectiveSystemPrompt = COMPACT_ANALYSIS_PROMPT;
+
+        // Minimal user prompt - strictly truncated
+        const minimalPattern = patternMemoryContext.length > 500
+            ? patternMemoryContext.substring(0, 500) + '...[truncated]'
+            : patternMemoryContext;
+        const minimalInsights = recentInsightsContext.length > 300
+            ? recentInsightsContext.substring(0, 300) + '...[truncated]'
+            : recentInsightsContext;
+        const minimalImages = imageSummaryContext.length > 600
+            ? imageSummaryContext.substring(0, 600) + '...[truncated]'
+            : imageSummaryContext;
+
+        effectiveUserPrompt = `${formattedPrompt}\n\n${marketDataOverride}\n\n${minimalImages}\n\n${minimalPattern}\n\n${minimalInsights}\n\nOUTPUT VALID JSON ONLY.`;
+    } else {
+        // GROQ TPM OPTIMIZATION: Keep FULL master prompt (system) but TRUNCATE user input
+        // This preserves output quality while reducing token consumption to avoid TPM limits
+        effectiveSystemPrompt = systemPrompt; // Full master prompt preserved
+
+        // Truncated user content for TPM management
+        const truncatedImages = imageSummaryContext.length > 600
+            ? imageSummaryContext.substring(0, 600) + '...[truncated for TPM]'
+            : imageSummaryContext;
+        const truncatedPattern = patternMemoryContext.length > 400
+            ? patternMemoryContext.substring(0, 400) + '...[truncated for TPM]'
+            : patternMemoryContext;
+        const truncatedInsights = recentInsightsContext.length > 300
+            ? recentInsightsContext.substring(0, 300) + '...[truncated for TPM]'
+            : recentInsightsContext;
+        const truncatedMemory = memoryContext.length > 500
+            ? memoryContext.substring(0, 500) + '...[truncated for TPM]'
+            : memoryContext;
+
+        effectiveUserPrompt = `${formattedPrompt}${truncatedImages}\n\n${truncatedPattern}\n\n${truncatedInsights}\n\n${truncatedMemory}\n\nOUTPUT VALID JSON ONLY.`;
+        console.log(`[Groq Alt2 TPM Opt] Input truncated - Images: ${truncatedImages.length}, Pattern: ${truncatedPattern.length}, Insights: ${truncatedInsights.length}, Memory: ${truncatedMemory.length}`);
+    }
+
+    let rawMessages: ChatCompletionMessageParam[] = [{ role: "system", content: effectiveSystemPrompt }];
+    const userContent: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [{ type: 'text', text: effectiveUserPrompt }];
+
+    if (isVisionModel && images.length > 0) {
+        for (const image of images) {
+            const base64Image = await fileToBase64(image);
+            userContent.push({ type: 'image_url', image_url: { url: `data:${image.type};base64,${base64Image}` } });
+        }
+    }
+    rawMessages.push({ role: "user", content: userContent });
+    // --- TOKEN TRUNCATION LOGIC END ---
+
+    const completion = await withRetry(
+        () => groq.chat.completions.create({
+            model: modelName,
+            messages: rawMessages,
+            response_format: { type: "json_object" },
+            max_tokens: getMaxTokens(modelName, 4096),
+        }),
+        3, // max retries
+        3000, // base delay 3s
+        `analyzeTradingView (${modelName})`
+    );
+
+    const responseText = completion.choices[0].message.content;
+    if (!responseText) throw new Error("Received an empty response from the AI.");
+
+    try {
+        const responseJson = extractAndParseJson(responseText);
+        const thoughtProcess = sanitizeAIResponse(responseJson.thoughtProcess || "No thought process provided.");
+        let analysis: TradeAnalysis = sanitizeTradeAnalysis(responseJson.analysis);
+        if (!analysis) throw new Error("AI response JSON did not contain the 'analysis' object.");
+
+        analysis.activeStrategies = Array.isArray(analysis.activeStrategies) ? analysis.activeStrategies : [];
+        analysis.stopLoss = sanitizeJSONString(analysis.stopLoss);
+        analysis.takeProfit = Array.isArray(analysis.takeProfit) ? analysis.takeProfit.map(tp => ({ price: sanitizeJSONString(String(tp.price || '')), percentage: sanitizeJSONString(String(tp.percentage || '')) })).filter(tp => tp.price) : [];
+        analysis.entryPoints = Array.isArray(analysis.entryPoints) ? analysis.entryPoints.map(ep => ({ description: sanitizeJSONString(String(ep.description || '')), price: sanitizeJSONString(String(ep.price || '')) })).filter(ep => ep.description) : [];
+        analysis.createdAt = new Date().toISOString();
+
+        return { analysis, thoughtProcess, sources: [] };
+    } catch (error) {
+        console.error("Groq (Alt 2) analysis JSON parsing failed:", error, "Response:", responseText);
+        throw new Error("Failed to parse the trading analysis from the AI response.");
+    }
+};
+
+export const getQuickResponse = async (prompt: string, history: Message[], modelName: string, systemInstruction?: string): Promise<string> => {
+    const groq = getClient();
+    const messages: ChatCompletionMessageParam[] = history.map(m => ({
+        role: m.role === MessageRole.AI ? 'assistant' : 'user',
+        content: m.text
+    }));
+
+    messages.unshift({ role: 'system', content: systemInstruction || 'You are a helpful and concise AI assistant specializing in futures trading concepts. Answer user questions clearly.' });
+    messages.push({ role: 'user', content: prompt });
+
+    const completion = await groq.chat.completions.create({ model: modelName, messages, max_tokens: getMaxTokens(modelName, 1024) });
+    return sanitizeAIResponse(completion.choices[0].message.content || "I am sorry, I could not generate a response.");
+};
+
+export const conductPostMortem = async (
+    previousMessage: Message,
+    outcome: TradeOutcome,
+    history: Message[],
+    finalTradeSummary: string | null,
+    modelName: string,
+    feedback: { correctedEntry?: string; correctedStopLoss?: string; correctedTakeProfit?: string; },
+    postTradeImageSummaries?: string[]
+): Promise<string> => {
+    const groq = getClient();
+    const { correctedEntry, correctedStopLoss, correctedTakeProfit } = feedback;
+    let analysisPrompt: string;
+
+    const postTradeContext = postTradeImageSummaries?.length ? `**⚠️ VERIFIED TRADE OUTCOME DATA (HIGHEST PRIORITY):**\n---\n${postTradeImageSummaries.join('\n\n---\n\n')}\n---\n` : '';
+    const tradeHistoryContext = finalTradeSummary ? `**PATTERN MEMORY LIBRARY (Historical Context):**\n${truncateTextToTokens(finalTradeSummary)}` : "No past trades logged.";
+
+    // CRITICAL FIX: Always include TP/SL reference, not just when screenshots are provided
+    const origEntry = previousMessage.analysis?.entryPoints?.[0]?.price || 'N/A';
+    const origSL = previousMessage.analysis?.stopLoss || 'N/A';
+    const origTP1 = previousMessage.analysis?.takeProfit?.[0]?.price || 'N/A';
+    const origTP2 = previousMessage.analysis?.takeProfit?.[1]?.price || '';
+    const origTP3 = previousMessage.analysis?.takeProfit?.[2]?.price || '';
+    const tradeDirection = previousMessage.analysis?.direction || 'N/A';
+
+    const tpSlReferenceDirective = `
+**🎯 MANDATORY TRADE LEVEL REFERENCE (USE FOR ALL CALCULATIONS):**
+You MUST evaluate this trade outcome based on the ORIGINAL trade levels below, NOT the current market price:
+- **Entry**: ${origEntry}
+- **Stop Loss**: ${origSL}
+- **Take Profit 1**: ${origTP1}${origTP2 ? `\n- **Take Profit 2**: ${origTP2}` : ''}${origTP3 ? `\n- **Take Profit 3**: ${origTP3}` : ''}
+- **Direction**: ${tradeDirection}
+
+**OUTCOME EVALUATION RULE:**
+- WIN = Price hit one of the Take Profit levels (TP1/TP2/TP3) listed above
+- LOSS = Price hit the Stop Loss level listed above
+- The CURRENT market price is IRRELEVANT to the outcome - only use it to track what happened AFTER the trade closed
+
+**⚠️ CRITICAL:** When calculating P&L, risk/reward ratios, and analyzing the trade outcome, you MUST use the TP or SL price where the trade EXITED, not where price is now.
+`;
+
+    const groundingDirective = postTradeImageSummaries?.length
+        ? `**CRITICAL DIRECTIVE:** The 'VERIFIED TRADE OUTCOME DATA' section above contains the **ACTUAL EXIT PRICE** where the trade closed (SL or TP hit). You MUST use this exact price for all P&L calculations and analysis. Do NOT use current market price - use the verified hit price from the TRADE OUTCOME section.`
+        : tpSlReferenceDirective;
+
+    const learningDirective = `**PATTERN RECOGNITION (ACCURACY MODE):** You must consult the 'Pattern Memory Library'. Determine if the cause of this trade result aligns with a recurring pattern. If it does, emphasize this pattern.`;
+
+    const extendedSLZoneContext = `**IMPORTANT - 150% EXTENDED SL ZONE LOGIC:**
+This system uses an "Extended SL Zone" where the initial Stop Loss is a SOFT limit:
+- Original SL Distance = |Entry - StopLoss|
+- Extended SL = SL + 50% of original distance (total 150% risk from entry)
+- If price touches original SL but stays within 150% zone and then hits TP → WIN (not a loss!)
+- Only if price exceeds the 150% extended threshold → LOSS
+
+**⚠️ CRITICAL: 150% EXTENDED ZONE BREACH = REAL LOSS**
+When the stop-loss touches the 150% extended zone boundary, this MUST be treated as a LOSS in real trading:
+1. The original SL was hit AND exceeded by 50%
+2. This represents a failure of the trade thesis
+3. In live trading, this position would have been closed at a significant loss
+
+**⚠️ SPECIAL CASE: MISSED WIN DUE TO TIGHT STOP LOSS:**
+When the ORIGINAL stop-loss is hit, price does NOT reach the 150% extended zone, and then reverses to hit TP:
+1. This is still classified as a **LOSS** (because the SL was triggered in live trading)
+2. However, this MUST be flagged as a **"MISSED WIN DUE TO TIGHT SL"**
+3. The trade COULD have been profitable with a wider stop loss
+
+**MANDATORY CORRECTED SL ANALYSIS (When Missed Win Detected):**
+You MUST:
+1. Calculate the **exact minimum SL distance** that would have kept the trade alive
+2. Propose a **corrected optimal SL** (typically 10-20% wider than the minimum)
+3. Explain the **rationale** based on:
+   - Market volatility at the time (ATR considerations)
+   - Key structural levels that should have been used as SL anchors
+   - Whether a better entry would have naturally provided more SL room
+
+**MANDATORY IF-THEN RULE ANALYSIS (When 150% Zone Breached):**
+You MUST explicitly address BOTH of these questions in your conclusion:
+1. **SL Adjustment Question:** Should the initial Stop Loss have been placed wider to accommodate normal volatility, or was the SL placement correct and the market simply moved against the thesis?
+2. **Entry Timing Question:** Was the entry price optimal, or should the trade have been entered at a better price point to give more room before hitting the initial SL?
+
+**📌 PATTERN MEMORY STORAGE (CRITICAL):**
+The 150% zone breach status is stored in Pattern Memory with the flag 'extendedSLZoneBreach: true'.
+The missed win status is stored in Pattern Memory with the flag 'missedWinTightSL: true'.
+When analyzing current trades, ALWAYS check Pattern Memory for trades with these flags to:
+- Identify if similar setups previously hit the 150% zone or were missed wins
+- Automatically apply stricter SL placement (widen by 20-30%)
+- OR require better entry timing (wait for deeper pullback)
+- Reference the specific trade IDs and dates when similar issues occurred
+
+**📌 FUTURE TRADE RECALCULATION ALERT:**
+If this trade hit the 150% extended zone or is a missed win, FLAG THIS PATTERN clearly in your IF/THEN rule:
+- When similar setups appear in the future, AI providers and moderator MUST:
+  a) Check Pattern Memory for 'extendedSLZoneBreach: true' or 'missedWinTightSL: true' trades with matching conditions
+  b) Automatically widen the SL by 20-30% compared to standard calculation
+  c) OR require stricter entry conditions (e.g., wait for deeper pullback)`;
+
+    if (outcome === TradeOutcome.ENTRY_NOT_HIT) {
+        const userFeedbackBlock = correctedEntry ? `**USER FEEDBACK: CORRECTED ENTRY** The user provided a corrected entry: **${correctedEntry}**.` : '';
+        analysisPrompt = `**Role:**
+You are an advanced trade post-analysis engine focused on execution review and learning optimization.
+
+**Task:**
+Perform a mandatory **ENTRY_NOT_HIT** analysis for a trading setup that did not trigger, identifying whether the setup was valid, whether the directional bias was correct, and what execution or timing factors caused the miss.
+
+**Context:**
+This analysis applies **only** to trades where the entry price was not hit. The goal is to extract actionable learning rules to reduce future missed opportunities without changing the original strategy intent.
+
+**PREVIOUS ANALYSIS:**
+${JSON.stringify(previousMessage.analysis, null, 2)}
+
+**ACTUAL OUTCOME:** ${outcome}
+
+${postTradeContext}
+
+${userFeedbackBlock}
+
+${tradeHistoryContext}
+
+${groundingDirective}
+
+**Instructions:**
+Answer **all** of the following **MANDATORY ENTRY_NOT_HIT ANALYSIS QUESTIONS** clearly and objectively:
+
+1. **Setup Validity Check**
+   * Was the original setup objectively valid based on the defined pattern/strategy rules?
+
+2. **Direction Accuracy**
+   * Did price eventually move in the predicted direction?
+   * Explicitly confirm whether the projected TP level would have been hit.
+
+3. **Entry Type Analysis**
+   * Identify the reason the entry was missed:
+     * Limit order miss
+     * Trader hesitation
+     * No valid trigger condition
+
+4. **Market Context at Entry Time**
+   * Describe what was occurring at the exact moment price approached the intended entry (structure, volatility, momentum, liquidity behavior).
+
+5. **Opportunity Cost Assessment**
+   * If direction was correct, quantify the missed move (e.g., percentage move, R multiple, or distance to TP after near-entry).
+
+**Critical Learning Output (REQUIRED):**
+* Generate **one clear IF / THEN rule** that directly addresses **only one** of the following improvement areas:
+  * Better entry placement strategy
+  * Alternative entry types (market vs limit)
+  * Entry anticipation techniques
+  * Setup recognition timing improvements
+
+**Classification Rule:**
+* If the setup was **VALID** and the direction was **CORRECT**, explicitly flag the case as:
+  **"MISSED OPPORTUNITY"**
+  and mark it for future pattern learning and probability adjustment.
+
+**Output Format:**
+* Sectioned responses matching the numbered questions
+* A clearly labeled **IF / THEN Learning Rule**
+* Final classification label (MISSED OPPORTUNITY or NOT MISSED OPPORTUNITY)
+
+**Tone / Style:**
+Analytical, precise, execution-focused, and rule-driven.`;
+    } else if (outcome === TradeOutcome.WIN) {
+        // ============ WIN-SPECIFIC POST-MORTEM PROMPT ============
+        const feedbackBlock = `**USER FEEDBACK (TRADE OUTCOME):**
+${correctedStopLoss ? `- Corrected SL: ${correctedStopLoss}` : ''}
+${correctedTakeProfit ? `- Final TP: ${correctedTakeProfit}` : ''}`;
+
+        analysisPrompt = `**Role:**
+You are an advanced trade post-analysis engine focused on **SUCCESS REPLICATION** and pattern banking.
+
+**Task:**
+Perform a mandatory **WIN ANALYSIS** to extract replicable success factors and bank this pattern.
+
+**PREVIOUS ANALYSIS:**
+${JSON.stringify(previousMessage.analysis, null, 2)}
+
+**ACTUAL OUTCOME:** ${outcome} ✅
+
+${postTradeContext}
+
+${feedbackBlock}
+
+${tradeHistoryContext}
+
+${groundingDirective}
+
+**Instructions:**
+Answer **all** of the following **MANDATORY WIN ANALYSIS QUESTIONS**:
+
+1. **Entry Quality Assessment** - Rate entry precision: EXCELLENT / GOOD / ACCEPTABLE
+2. **Setup Confirmation Signals** - List EXACT technical signals that confirmed this setup
+3. **Risk Management Review** - Was SL threatened? Calculate final R multiple achieved
+4. **Pattern Family Validation** - Does this win STRENGTHEN confidence in this family?
+5. **Replication Checklist** - Extract 3-5 SPECIFIC conditions that MUST be present to replicate
+
+**Critical Learning Output (REQUIRED):**
+* Generate **one IF / THEN rule** that captures the WINNING FORMULA
+* Flag for **PATTERN MEMORY STORAGE** with tag: "CONFIRMED_WIN_PATTERN"
+
+**Tone:** Celebratory but analytical. Focus on what to REPEAT.`;
+
+    } else {
+        // ============ LOSS-SPECIFIC POST-MORTEM PROMPT ============
+        const feedbackBlock = `**USER FEEDBACK (TRADE OUTCOME):**
+${correctedStopLoss ? `- Corrected SL: ${correctedStopLoss}` : ''}
+${correctedTakeProfit ? `- Final TP: ${correctedTakeProfit}` : ''}`;
+
+        analysisPrompt = `**Role:**
+You are an advanced trade post-analysis engine focused on **LOSS PREVENTION** and failure pattern recognition.
+
+**Task:**
+Perform a mandatory **LOSS FORENSIC ANALYSIS** to identify root cause of failure and create defensive rules.
+
+**PREVIOUS ANALYSIS:**
+${JSON.stringify(previousMessage.analysis, null, 2)}
+
+**ACTUAL OUTCOME:** ${outcome} ❌
+
+${postTradeContext}
+
+${feedbackBlock}
+
+${tradeHistoryContext}
+
+${groundingDirective}
+
+${extendedSLZoneContext}
+
+**Instructions:**
+Answer **all** of the following **MANDATORY LOSS ANALYSIS QUESTIONS**:
+
+1. **Failure Point Identification** - EXACT candle/bar that invalidated the trade
+2. **Warning Signs Autopsy** - Rate pre-loss warnings: CLEAR / SUBTLE / NONE
+3. **Stop Loss Evaluation** - Was SL too tight? Did price later hit TP? (MISSED WIN flag)
+4. **Entry Timing Critique** - Was entry premature or too late?
+5. **Pattern Family Reliability Check** - Should this family require STRICTER conditions?
+6. **Blame Assessment** - Setup __% | Execution __% | Market __%
+
+**Critical Learning Output (REQUIRED):**
+* Generate **one IF / THEN rule** that would have PREVENTED this loss
+
+**Special Flags:**
+* If SL hit but price later reached TP: **"MISSED WIN - TIGHT SL"**
+* If 150% extended SL zone breached: **"EXTENDED ZONE BREACH"**
+
+**Tone:** Brutally honest, forensic. No excuses, only lessons.`;
+    }
+    const completion = await groq.chat.completions.create({
+        model: modelName,
+        messages: [{ role: 'user', content: analysisPrompt }],
+        max_tokens: getMaxTokens(modelName, 2048)
+    });
+    return sanitizeAIResponse(completion.choices[0].message.content || "Post-mortem analysis failed.");
+};
+
+export const searchStrategies = async (query: string, activeFrameworks: string[], modelName: string): Promise<StrategySearchResult[]> => {
+    const groq = getClient();
+    const frameworksList = activeFrameworks.join(', ');
+    const prompt = `You are a search engine for a predefined list of trading strategies. Your entire knowledge base is limited to ONLY the following frameworks: [${frameworksList}].
+    
+    The user is searching for: "${query}".
+
+    Your task is to:
+    1. Find the frameworks from your knowledge base that are the most relevant to the user's query.
+    2. For each relevant framework, provide a concise description and rationale.
+    3. If no frameworks are relevant, return an empty array.
+    4. You are strictly forbidden from suggesting or describing any strategy that is not in the provided list.
+    5. Your output must be a single, valid JSON array of objects with keys "name", "description", and "rationale".`;
+
+    const completion = await groq.chat.completions.create({
+        model: modelName,
+        messages: [{ role: "user", content: prompt }],
+        response_format: { type: "json_object" },
+    });
+
+    const responseText = completion.choices[0].message.content;
+    if (!responseText) return [];
+
+    try {
+        const parsed = JSON.parse(responseText);
+        const results = Array.isArray(parsed) ? parsed : (parsed.results || parsed.strategies || []);
+        return results.filter((result: any) =>
+            result.name && typeof result.name === 'string' &&
+            activeFrameworks.some(fw => fw.toLowerCase() === result.name.toLowerCase())
+        );
+    } catch (e) {
+        console.error("Failed to parse Groq (Alt 2) strategy search results:", e);
+        return [];
+    }
+};
+
+export const discoverStrategies = async (chatHistory: Message[], activeFrameworks: string[], modelName: string): Promise<StrategySearchResult[]> => {
+    const groq = getClient();
+    const frameworksList = activeFrameworks.join(', ');
+    const historyText = chatHistory.length > 0
+        ? chatHistory.slice(-5).map(m => `${m.role}: ${m.text} ${m.imageSummaries?.join('\n') || ''}`).join('\n\n')
+        : '';
+
+    const prompt = `You are an AI assistant that suggests relevant trading strategies. Your entire knowledge base is limited to ONLY the following frameworks: [${frameworksList}].
+    
+    ${historyText ? `Based on the recent conversation:\n${historyText}\n` : ''}
+    
+    Your task is to pick 3 interesting or relevant strategies from the list and provide a concise description and rationale.
+    
+    You are strictly forbidden from suggesting any strategy that is not in the provided list. Your output must be a valid JSON array of objects with keys "name", "description", and "rationale".`;
+
+    const completion = await groq.chat.completions.create({
+        model: modelName,
+        messages: [{ role: "user", content: prompt }],
+        response_format: { type: "json_object" },
+    });
+
+    const responseText = completion.choices[0].message.content;
+    if (!responseText) return [];
+
+    try {
+        const parsed = JSON.parse(responseText);
+        const results = Array.isArray(parsed) ? parsed : (parsed.results || parsed.strategies || []);
+        return results.filter((result: any) =>
+            result.name && typeof result.name === 'string' &&
+            activeFrameworks.some(fw => fw.toLowerCase() === result.name.toLowerCase())
+        );
+    } catch (e) {
+        console.error("Failed to parse Groq (Alt 2) strategy discovery results:", e);
+        return [];
+    }
+};
+
+export const getStrategyDescription = async (strategyName: string, modelName: string): Promise<string> => {
+    const groq = getClient();
+    const prompt = `Provide a concise, one-paragraph explanation of the "${strategyName}" trading strategy.`;
+    const completion = await groq.chat.completions.create({ model: modelName, messages: [{ role: 'user', content: prompt }] });
+    return sanitizeAIResponse(completion.choices[0].message.content || "Failed to retrieve strategy description.");
+};
+
+export const summarizeTrade = async (trade: LoggedTrade, modelName: string): Promise<string> => {
+    const groq = getClient();
+    const tradeForAnalysis = {
+        ...trade,
+        postMortemImages: trade.postMortemImages ? `[${trade.postMortemImages.length} screenshots available]` : undefined,
+    };
+
+    const prompt = `You are a trade analysis summarizer. Given the full data of a logged trade, create a concise summary.
+
+**MANDATORY FIELDS TO INCLUDE:**
+1. **Trade Outcome**: WIN, LOSS, or ENTRY_NOT_HIT
+2. **Missed Win Flag**: If outcome is LOSS but the trade would have hit TP with a wider SL, include "[MISSED WIN - TIGHT SL]"
+3. **Extended SL Zone Status**: If the 150% extended SL zone was breached, include "[150% ZONE BREACH]"
+4. **Direction**: LONG or SHORT
+5. **Confidence Level**: The AI's original confidence rating (High/Medium/Low/Avoid)
+6. **Pattern Family**: Include the detected pattern family if available
+7. **Primary Strategy**: The main strategy used
+8. **Entry/SL/TP**: Entry price, Stop Loss, and final Take Profit
+
+**CRITICAL - POST-MORTEM SUMMARY (MANDATORY):**
+You MUST include a 2-3 sentence summary (67 words MAX) of the post-mortem analysis that captures:
+- What happened and why
+- The key lesson learned
+- **MANDATORY**: One clear IF/THEN rule extracted from the post-mortem (e.g., "IF [condition] THEN [action]")
+
+**FORMAT:** Dense, data-rich paragraph. No conversational language. Max 200 words total. CRITICAL: You MUST complete all sentences - never cut off mid-sentence or mid-word.
+
+**Example Outputs:**
+"WIN: LONG (High Confidence) | Family A | Momentum Breakout. Entry: 4350, SL: 4320, TP: 4450. Post-mortem: 1H 20 EMA retest confirmed entry perfectly. Pattern played out as predicted with strong follow-through. IF momentum aligns with EMA retest THEN take full position confidently."
+
+"LOSS [MISSED WIN - TIGHT SL]: SHORT (Medium Confidence) | Family B | Bearish Engulfing. Entry: 2150, SL: 2160, TP: 2100. Post-mortem: SL hit by 5 pips then price reversed to hit TP. Volatility underestimated during consolidation. IF tight consolidation detected THEN widen SL by 15-20%."
+
+**Trade data to summarize:**
+${JSON.stringify(tradeForAnalysis, null, 2)}
+    `;
+
+    const completion = await groq.chat.completions.create({
+        model: modelName,
+        messages: [{ role: 'user', content: prompt }]
+    });
+    return sanitizeAIResponse(completion.choices[0].message.content || "Summary generation failed.");
+};
+
+export const generateFinalSummary = async (summaries: TradeSummary[], modelName: string, charLimit: number = 4000): Promise<string> => {
+    const groq = getClient();
+    const summariesText = summaries.map(s => `- ${s.summaryText}`).join('\n');
+    const tradeCount = summaries.length;
+
+    const prompt = `
+You are a Pattern Recognition Engine.
+
+You MUST output a summary using EXACTLY the following headings and order:
+
+Executive Summary
+Missed Win Analysis
+Extended SL Zone Breach Analysis
+Pattern Family Performance
+Confidence Calibration
+Winning Patterns
+Failure Patterns
+Behavioral Biases
+Statistical Tendencies
+Actionable Rules
+Conclusion
+
+**SPECIAL ATTENTION REQUIRED:**
+- **Missed Win Analysis**: Count "[MISSED WIN - TIGHT SL]" trades. Calculate what % of losses were avoidable. Recommend SL adjustments.
+- **Extended SL Zone Breach Analysis**: Count "[150% ZONE BREACH]" trades. Were these bad entries or failed thesis?
+- **Pattern Family Performance**: Compare Family A/B/C/Omega win rates. Identify best/worst performing families.
+- **Confidence Calibration**: Compare High/Medium/Low confidence win rates. Are confidence ratings accurate?
+
+RULES:
+- All headings MUST appear exactly as written.
+- No new headings, no removed headings, no reordering.
+- Output must be ~${charLimit} characters.
+- Output must be ONE continuous text block.
+
+Analyze the ${tradeCount} historical trades below and generate the summary:
+
+${summariesText}
+
+Return ONLY the structured summary.
+`;
+
+
+    const completion = await groq.chat.completions.create({
+        model: modelName,
+        messages: [{ role: 'user', content: prompt }]
+    });
+    return sanitizeAIResponse(completion.choices[0].message.content || "Final summary generation failed.");
+};
+
+// Memory compression for chat history
+export const compressChatHistory = async (messages: Message[], currentSummary: string = ""): Promise<string> => {
+    const groq = getClient();
+    const messagesText = messages.map(m => `${m.role}: ${m.text}`).join('\n\n');
+
+    const prompt = `
+You are the **Memory Compressor**.
+Your job is to condense a chat history into a highly efficient "Layer 2 Summary".
+
+**RULES:**
+1. **Preserve Key Data:** Keep trade setups, outcomes, specific coin names, and leverage used.
+2. **Discard Fluff:** Remove greetings, small talk, and redundant confirmations.
+3. **Track Decisions:** Note why a trade was taken or skipped.
+4. **Maintain Chronology:** Keep the flow of events logical.
+5. **Update Strategy:** If the user gave a specific instruction (e.g., "Don't use RSI anymore"), highlight it.
+
+**PREVIOUS SUMMARY (LAYER 2):**
+${currentSummary || "None"}
+
+**NEW CONTENT TO COMPRESS:**
+${messagesText}
+
+**INSTRUCTIONS:**
+Merge the new content into the previous summary. 
+Keep it chronological. 
+Discard redundant details.
+Return ONLY the new compressed summary text.
+    `;
+
+    const completion = await groq.chat.completions.create({
+        model: 'llama-3.3-70b-versatile',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 2048
+    });
+    return sanitizeAIResponse(completion.choices[0].message.content || "Memory compression failed.");
+};
+
+// Update global memory with trade insights
+export const updateGlobalMemory = async (recentTrades: LoggedTrade[], currentMemory?: GlobalMemory): Promise<GlobalMemory> => {
+    const groq = getClient();
+    const tradeSummaries = recentTrades.map(t => JSON.stringify({
+        tradeId: t.id,
+        asset: t.analysis.coinName,
+        direction: t.analysis.direction,
+        outcome: t.outcome,
+        leverage: t.leverage,
+        family: t.analysis.detectedPatternFamily || t.analysis.marketConditions.pattern,
+        postMortemReason: t.postMortem ? t.postMortem.substring(0, 100) + "..." : "N/A",
+        timestamp: t.timestamp
+    })).join('\n');
+
+    const currentMemoryJson = currentMemory ? JSON.stringify(currentMemory, null, 2) : "null";
+
+    const prompt = `
+You are the **Global Memory Manager**.
+Your job is to update the long-term "Layer 3" memory bank based on a batch of new trade logs.
+
+**INPUT:**
+- Existing Global Memory JSON
+- New Trade Logs (Layer 2 Data)
+
+**TASK:**
+1. **Update Stats:** Increment total trades.
+2. **Pattern Recognition:** Analyze the new trades. Do they confirm existing patterns in the memory? Do they reveal new ones?
+   - Example: "Family A trades are failing when Volume is low." -> Add to 'aiPatternMemory'.
+3. **User Preferences:** Did the user change leverage or favorite assets in these new trades? Update accordingly.
+4. **Corrections:** If post-mortems exist, extract the "Lesson" and add it to 'globalCorrections'.
+
+**EXISTING GLOBAL MEMORY:**
+${currentMemoryJson}
+
+**RECENT TRADES (LAYER 2 DATA):**
+${tradeSummaries}
+
+**INSTRUCTIONS:**
+Generate the updated Global Memory JSON object.
+    `;
+
+    const completion = await groq.chat.completions.create({
+        model: 'llama-3.3-70b-versatile',
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        max_tokens: 2048
+    });
+
+    const responseText = completion.choices[0].message.content || "{}";
+    try {
+        return JSON.parse(responseText);
+    } catch {
+        console.error("Groq updateGlobalMemory JSON parse failed:", responseText);
+        return currentMemory || {} as GlobalMemory;
+    }
+};
