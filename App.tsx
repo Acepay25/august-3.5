@@ -14,7 +14,6 @@ import * as grokNativeService from './services/providers/grokNativeService';
 
 import * as ensembleService from './services/providers/ensembleService';
 import * as dbService from './services/infrastructure/dbService';
-import { fetchRecentLiquidations, fetchOHLCV, LiquidationData, Kline } from './services/analysis/MarketDataService';
 import { ProbabilityEngineService } from './services/analysis/ProbabilityEngineService';
 
 // Accuracy Mode Services
@@ -84,6 +83,8 @@ import { SLOptimization } from './services/backtesting/StopLossOptimizerService'
 import { ConfidenceCalibration, InsightKnowledgeBase } from './types';
 import useNetworkStatus from './hooks/useNetworkStatus';
 import { useUIState } from './hooks/useUIState';
+import { useConversations } from './hooks/useConversations';
+import { useMarketData } from './hooks/useMarketData';
 import { offlineQueue, QueuedRequest } from './services/infrastructure/OfflineQueueService';
 // AI Learning Services - Adaptive Learning, Mistake Patterns, Insight Extraction
 import { generateLearningFromPrompt, isLearningEnabled } from './services/learning/LearningPromptService';
@@ -157,44 +158,29 @@ const App: React.FC = () => {
     const [saveStatus, setSaveStatus] = useState<'SAVED' | 'SAVING' | 'ERROR'>('SAVED');
 
 
-    // Master state for all conversation data.
-    const [conversationHistory, setConversationHistory] = useState<Conversation[]>([]);
-    const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
-
-    // Derived state for the active conversation.
-    const activeConversation = useMemo(() =>
-        conversationHistory.find(c => c.id === activeConversationId),
-        [conversationHistory, activeConversationId]);
-
-    const messages = activeConversation?.messages || [];
-
-    // Ref to hold the latest messages for async access to prevent stale closures
-    const messagesRef = useRef<Message[]>([]);
-    useEffect(() => {
-        messagesRef.current = messages;
-    }, [messages]);
-
-    const selectedGeminiModel = activeConversation?.geminiModel || GEMINI_MODELS[0].id;
-    const selectedDeepSeekModel = activeConversation?.deepseekModel || DEEPSEEK_MODELS[0].id;
-    const selectedZhipuModel = activeConversation?.zhipuModel || ZHIPU_MODELS[0].id;
-    const selectedGroqModel = activeConversation?.groqModel || GROQ_MODELS[0].id;
-    const selectedGroqNewModel = activeConversation?.groqNewModel || GROQ_NEW_MODELS[0].id;
-    const selectedGroqAlt2Model = activeConversation?.groqAlt2Model || GROQ_ALT2_MODELS[0].id
-    const selectedOpenrouterModel = activeConversation?.openrouterModel || OPENROUTER_MODELS[0].id;
-    const selectedOcrModel = activeConversation?.ocrModel || OCR_MODELS[0].id;
-    const isGeminiEnabled = activeConversation?.isGeminiEnabled ?? true;
-    const isDeepSeekEnabled = activeConversation?.isDeepSeekEnabled ?? true;
-    const isZhipuEnabled = activeConversation?.isZhipuEnabled ?? false; // Zhipu Disabled by default
-    const isGroqEnabled = activeConversation?.isGroqEnabled ?? false;
-    const isGroqNewEnabled = activeConversation?.isGroqNewEnabled ?? false;
-    const isGroqAlt2Enabled = activeConversation?.isGroqAlt2Enabled ?? false;
-    const isOpenrouterEnabled = activeConversation?.isOpenrouterEnabled ?? false;
-    const isOpenaiEnabled = activeConversation?.isOpenaiEnabled ?? false;
-    const selectedOpenaiModel = activeConversation?.openaiModel || OPENAI_MODELS[0].id;
-    const isGrokNativeEnabled = activeConversation?.isGrokNativeEnabled ?? false;
-    const selectedGrokNativeModel = activeConversation?.grokNativeModel || GROK_MODELS[0].id;
-    const moderatorProvider = activeConversation?.moderatorProvider || AIProvider.GEMINI;
-    const moderatorModel = activeConversation?.moderatorModel || 'gemini-2.5-pro';
+    // Conversation state, derived values, and handlers (extracted to hooks/useConversations.ts)
+    const {
+        conversationHistory, setConversationHistory,
+        activeConversationId, setActiveConversationId,
+        activeConversation, messages, messagesRef,
+        updateMessages, updateActiveConversation,
+        selectedGeminiModel, selectedDeepSeekModel, selectedZhipuModel,
+        selectedGroqModel, selectedGroqNewModel, selectedGroqAlt2Model,
+        selectedOpenrouterModel, selectedOcrModel, selectedOpenaiModel, selectedGrokNativeModel,
+        isGeminiEnabled, isDeepSeekEnabled, isZhipuEnabled,
+        isGroqEnabled, isGroqNewEnabled, isGroqAlt2Enabled,
+        isOpenrouterEnabled, isOpenaiEnabled, isGrokNativeEnabled,
+        moderatorProvider, moderatorModel,
+        handleSetIsGeminiEnabled, handleSetIsDeepSeekEnabled, handleSetIsZhipuEnabled,
+        handleSetIsGroqEnabled, handleSetIsGroqNewEnabled, handleSetIsGroqAlt2Enabled,
+        handleSetIsOpenrouterEnabled, handleSetIsOpenaiEnabled, handleSetIsGrokNativeEnabled,
+        handleSetVisionModel,
+        handleSetSelectedGeminiModel, handleSetSelectedDeepSeekModel, handleSetSelectedZhipuModel,
+        handleSetSelectedGroqModel, handleSetSelectedGroqNewModel, handleSetSelectedGroqAlt2Model,
+        handleSetSelectedOpenrouterModel, handleSetSelectedOcrModel,
+        handleSetSelectedOpenaiModel, handleSetSelectedGrokNativeModel,
+        handleToggleProvider, handleSetModeratorProvider, handleSetModeratorModel,
+    } = useConversations();
 
     // UI and other state
     const [loggedTrades, setLoggedTrades] = useState<LoggedTrade[]>([]);
@@ -229,18 +215,19 @@ const App: React.FC = () => {
     const [lensConfig, setLensConfig] = useState<AnalystLensConfig>(() => loadLensConfig());
 
 
-    const [currentHybridData, setCurrentHybridData] = useState<HybridDataPacket | null>(null);
-    const [hybridConnectionStatus, setHybridConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
-    const [latestMonteCarloResult, setLatestMonteCarloResult] = useState<MonteCarloResult | null>(null);
-    const [latestBacktestResult, setLatestBacktestResult] = useState<LiveBacktestResult | null>(null);
-    const [perAIMonteCarloResults, setPerAIMonteCarloResults] = useState<LabeledMonteCarloResult[]>([]);
-    const [currentSlOptimization, setCurrentSlOptimization] = useState<SLOptimization | null>(null);
-    const [currentSuggestedEntryPrice, setCurrentSuggestedEntryPrice] = useState<number | null>(null);
-    const [currentEntryTimingScore, setCurrentEntryTimingScore] = useState<{
-        score: number;
-        timingQuality: string;
-        suggestedEntry?: { price: number; reason: string } | null;
-    } | null>(null);
+    // Market data state and effects (extracted to hooks/useMarketData.ts)
+    const marketData = useMarketData(isHybridIntelligenceEnabled);
+    const {
+        currentHybridData, setCurrentHybridData,
+        hybridConnectionStatus, setHybridConnectionStatus,
+        latestMonteCarloResult, setLatestMonteCarloResult,
+        latestBacktestResult, setLatestBacktestResult,
+        perAIMonteCarloResults, setPerAIMonteCarloResults,
+        currentSlOptimization, setCurrentSlOptimization,
+        currentSuggestedEntryPrice, setCurrentSuggestedEntryPrice,
+        currentEntryTimingScore, setCurrentEntryTimingScore,
+        liveMarketConditions, setLiveMarketConditions,
+    } = marketData;
 
     // Confidence Calibration - tracks AI confidence vs actual outcomes
     const [confidenceCalibration, setConfidenceCalibration] = useState<ConfidenceCalibration | undefined>(undefined);
@@ -251,13 +238,6 @@ const App: React.FC = () => {
     // Network status and offline queue
     const { isOnline, wasOffline } = useNetworkStatus();
     const [pendingQueueCount, setPendingQueueCount] = useState<number>(0);
-
-    // Live Market Conditions (fetched periodically for Global Sessions display)
-    const [liveMarketConditions, setLiveMarketConditions] = useState<{
-        volatility: 'High' | 'Medium' | 'Low';
-        liquidation: 'High' | 'Medium' | 'Low';
-        lastUpdated: string;
-    } | null>(null);
 
     const [activeFrameworks, setActiveFrameworks] = useState<string[]>(DEFAULT_FRAMEWORKS);
     const [summaryCharLimit, setSummaryCharLimit] = useState<number>(4000);
@@ -401,52 +381,6 @@ const App: React.FC = () => {
         }
     }, [activeConversation?.id, activeConversation?.leverage]);
 
-    // Fetch live market conditions periodically for Global Sessions display
-    useEffect(() => {
-        const fetchLiveMarketConditions = async () => {
-            try {
-                // Fetch liquidation data
-                const liquidationData = await fetchRecentLiquidations('BTCUSDT');
-
-                // Fetch recent candles to calculate volatility (ATR approximation)
-                const candles = await fetchOHLCV('BTCUSDT', '1h', 20);
-
-                // Calculate average true range for volatility
-                let volatility: 'High' | 'Medium' | 'Low' = 'Medium';
-                if (candles && candles.length >= 14) {
-                    const recentCandles = candles.slice(-14);
-                    const avgRange = recentCandles.reduce((sum, c) => sum + (c.high - c.low), 0) / recentCandles.length;
-                    const avgPrice = recentCandles.reduce((sum, c) => sum + c.close, 0) / recentCandles.length;
-                    const volatilityPercent = (avgRange / avgPrice) * 100;
-
-                    // Classify volatility based on percentage range
-                    if (volatilityPercent > 2) volatility = 'High';
-                    else if (volatilityPercent > 0.8) volatility = 'Medium';
-                    else volatility = 'Low';
-                }
-
-                // Map liquidation pressure
-                const liquidation = liquidationData.liquidationPressure === 'high' ? 'High' :
-                    liquidationData.liquidationPressure === 'medium' ? 'Medium' : 'Low';
-
-                setLiveMarketConditions({
-                    volatility,
-                    liquidation,
-                    lastUpdated: new Date().toISOString()
-                });
-            } catch (error) {
-                console.error('[LiveMarketConditions] Failed to fetch:', error);
-            }
-        };
-
-        // Fetch immediately on mount
-        fetchLiveMarketConditions();
-
-        // Then refresh every 60 seconds
-        const interval = setInterval(fetchLiveMarketConditions, 60000);
-        return () => clearInterval(interval);
-    }, []);
-
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (isMobileMenuOpen && mobileMenuRef.current && !mobileMenuRef.current.contains(event.target as Node)) {
@@ -461,54 +395,6 @@ const App: React.FC = () => {
             document.removeEventListener('mousedown', handleClickOutside);
         };
     }, [isMobileMenuOpen, isLeverageDropdownOpen]);
-
-    // Check Binance API connection when Hybrid Intelligence is enabled
-    useEffect(() => {
-        let intervalId: NodeJS.Timeout | null = null;
-        let retryCount = 0;
-
-        const checkConnection = async () => {
-            if (isHybridIntelligenceEnabled) {
-                // Only show "connecting" if we are currently disconnected or in error state
-                // This prevents flickering "connecting..." when we are already connected
-                setHybridConnectionStatus(prev => (prev === 'connected' ? 'connected' : 'connecting'));
-
-                try {
-                    const isConnected = await pingBinanceAPI();
-
-                    if (isConnected) {
-                        setHybridConnectionStatus('connected');
-                        retryCount = 0; // Reset retries on success
-                    } else {
-                        // Soft failure handling: Don't show error immediately, retry once
-                        if (retryCount < 1) {
-                            retryCount++;
-                            console.log('[Hybrid Intelligence] Connection check failed, retrying silently...');
-                            setTimeout(checkConnection, 1000); // Quick retry
-                        } else {
-                            setHybridConnectionStatus('error');
-                        }
-                    }
-                } catch {
-                    setHybridConnectionStatus('error');
-                }
-            } else {
-                setHybridConnectionStatus('disconnected');
-            }
-        };
-
-        if (isHybridIntelligenceEnabled) {
-            checkConnection();
-            // Re-check connection every 60 seconds (less aggressive than 30s)
-            intervalId = setInterval(checkConnection, 60000);
-        } else {
-            setHybridConnectionStatus('disconnected');
-        }
-
-        return () => {
-            if (intervalId) clearInterval(intervalId);
-        };
-    }, [isHybridIntelligenceEnabled]);
 
     // Offline Queue: Sync when coming back online
     useEffect(() => {
@@ -533,23 +419,6 @@ const App: React.FC = () => {
             });
         }
     }, [isOnline, wasOffline]);
-
-    const updateMessages = useCallback((updater: (prevMessages: Message[]) => Message[]) => {
-        setConversationHistory(prevHistory => {
-            return prevHistory.map(conv => {
-                if (conv.id === activeConversationId) {
-                    return { ...conv, messages: updater(conv.messages) };
-                }
-                return conv;
-            });
-        });
-    }, [activeConversationId]);
-
-    const updateActiveConversation = useCallback((updater: (conv: Conversation) => Conversation) => {
-        setConversationHistory(prev => prev.map(c =>
-            c.id === activeConversationId ? updater(c) : c
-        ));
-    }, [activeConversationId]);
 
     // --- AUTOMATIC MEMORY COMPRESSION --- DISABLED to save tokens
     // Thread Memory (Layer 2) is no longer used, so no need to compress chat history
@@ -821,19 +690,6 @@ const App: React.FC = () => {
             if (!accuracySubMode) setAccuracySubMode('original');
         }
     };
-
-    // AI Provider Toggle Handlers (for ChatInput Ensemble Configuration)
-    const handleSetIsGeminiEnabled = (enabled: boolean) => updateActiveConversation(c => ({ ...c, isGeminiEnabled: enabled }));
-    const handleSetIsDeepSeekEnabled = (enabled: boolean) => updateActiveConversation(c => ({ ...c, isDeepSeekEnabled: enabled }));
-    const handleSetIsZhipuEnabled = (enabled: boolean) => updateActiveConversation(c => ({ ...c, isZhipuEnabled: enabled }));
-    const handleSetIsGroqEnabled = (enabled: boolean) => updateActiveConversation(c => ({ ...c, isGroqEnabled: enabled }));
-    const handleSetIsGroqNewEnabled = (enabled: boolean) => updateActiveConversation(c => ({ ...c, isGroqNewEnabled: enabled }));
-    const handleSetIsGroqAlt2Enabled = (enabled: boolean) => updateActiveConversation(c => ({ ...c, isGroqAlt2Enabled: enabled }));
-
-    const handleSetIsOpenrouterEnabled = (enabled: boolean) => updateActiveConversation(c => ({ ...c, isOpenrouterEnabled: enabled }));
-    const handleSetIsOpenaiEnabled = (enabled: boolean) => updateActiveConversation(c => ({ ...c, isOpenaiEnabled: enabled }));
-    const handleSetIsGrokNativeEnabled = (enabled: boolean) => updateActiveConversation(c => ({ ...c, isGrokNativeEnabled: enabled }));
-    const handleSetVisionModel = (modelId: string) => updateActiveConversation(c => ({ ...c, ocrModel: modelId }));
 
     // Analyst Lens config handler - updates state and persists to storage
     const handleSetLensConfig = useCallback((newConfig: AnalystLensConfig) => {
@@ -2865,35 +2721,6 @@ ${result.comparisonBlock}
             setIsHybridLoading(false); // Stop loading animation
         }
     }, [updateCandidate, handleSendMessage]);
-
-    const handleSetSelectedGeminiModel = (id: string) => updateActiveConversation(c => ({ ...c, geminiModel: id }));
-    const handleSetSelectedDeepSeekModel = (id: string) => updateActiveConversation(c => ({ ...c, deepseekModel: id }));
-    const handleSetSelectedZhipuModel = (id: string) => updateActiveConversation(c => ({ ...c, zhipuModel: id }));
-    const handleSetSelectedGroqModel = (id: string) => updateActiveConversation(c => ({ ...c, groqModel: id }));
-    const handleSetSelectedGroqNewModel = (id: string) => updateActiveConversation(c => ({ ...c, groqNewModel: id }));
-    const handleSetSelectedGroqAlt2Model = (id: string) => updateActiveConversation(c => ({ ...c, groqAlt2Model: id }));
-    const handleSetSelectedOpenrouterModel = (id: string) => updateActiveConversation(c => ({ ...c, openrouterModel: id }));
-
-    const handleSetSelectedOcrModel = (id: string) => updateActiveConversation(c => ({ ...c, ocrModel: id }));
-    const handleSetSelectedOpenaiModel = (id: string) => updateActiveConversation(c => ({ ...c, openaiModel: id }));
-    const handleSetSelectedGrokNativeModel = (id: string) => updateActiveConversation(c => ({ ...c, grokNativeModel: id }));
-
-    const handleToggleProvider = (provider: 'gemini' | 'deepseek' | 'zhipu' | 'groq' | 'groqNew' | 'groqAlt2' | 'openrouter' | 'openai' | 'grokNative') => {
-        updateActiveConversation(c => {
-            const key = provider === 'gemini' ? 'isGeminiEnabled' :
-                provider === 'deepseek' ? 'isDeepSeekEnabled' :
-                    provider === 'zhipu' ? 'isZhipuEnabled' :
-                        provider === 'groq' ? 'isGroqEnabled' :
-                            provider === 'groqNew' ? 'isGroqNewEnabled' :
-                                provider === 'groqAlt2' ? 'isGroqAlt2Enabled' :
-                                    provider === 'openrouter' ? 'isOpenrouterEnabled' :
-                                        provider === 'grokNative' ? 'isGrokNativeEnabled' : 'isOpenaiEnabled';
-            return { ...c, [key]: !c[key] };
-        });
-    };
-
-    const handleSetModeratorProvider = (provider: AIProvider) => updateActiveConversation(c => ({ ...c, moderatorProvider: provider }));
-    const handleSetModeratorModel = (id: string) => updateActiveConversation(c => ({ ...c, moderatorModel: id }));
 
     const handleSetSummarizationProvider = (provider: AIProvider) => setSummarizationProvider(provider);
     const handleSetSummarizationModel = (id: string) => setSummarizationModel(id);
