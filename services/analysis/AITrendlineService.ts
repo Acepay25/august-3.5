@@ -10,11 +10,10 @@ import { GoogleGenAI } from "@google/genai";
 import { CandlestickData, Time, LineData } from 'lightweight-charts';
 
 const GROQ_BASE_URL = 'https://api.groq.com/openai/v1/';
-// Hardcoded Groq API key (same as groqAlt2Service)
-const GROQ_API_KEY = process.env.GROQ_ALT2_API_KEY;
-if (!GROQ_API_KEY) throw new Error("GROQ_ALT2_API_KEY is not set in environment");
 
 const getGroqClient = (): OpenAI => {
+    const GROQ_API_KEY = process.env.GROQ_ALT2_API_KEY;
+    if (!GROQ_API_KEY) throw new Error("GROQ_ALT2_API_KEY is not set in environment");
     return new OpenAI({
         apiKey: GROQ_API_KEY,
         baseURL: GROQ_BASE_URL,
