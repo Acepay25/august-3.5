@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { AIProvider, TradeSummary } from '../../../types';
+import { AIProvider, TradeSummary } from '../../types';
 import { LoadingIcon, EditIcon, ChevronDownIcon, RefreshIcon, TrashIcon } from '../shared/Icons';
 
 interface PerformanceReviewContentProps {

@@ -7,7 +7,7 @@
  * suggest optimal SL multipliers.
  */
 
-import { LoggedTrade, TradeOutcome } from '../../../types';
+import { LoggedTrade, TradeOutcome } from '../../types';
 
 // ============================================================================
 // TYPES

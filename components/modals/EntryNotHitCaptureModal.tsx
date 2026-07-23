@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Message, TradeOutcome } from '../../../types';
+import { Message, TradeOutcome } from '../../types';
 
 interface EntryNotHitCaptureModalProps {
     message: Message;

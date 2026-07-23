@@ -6,7 +6,7 @@
  * Uses a FIFO queue to process tasks sequentially.
  */
 
-import { LoggedTrade } from '../../../types';
+import { LoggedTrade } from '../../types';
 import { extractInsightsFromPostMortem } from '../learning/InsightExtractionService';
 import {
     processPostMortemForLearning,

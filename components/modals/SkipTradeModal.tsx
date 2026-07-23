@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { TradeOutcome } from '../../../types';
+import { TradeOutcome } from '../../types';
 
 interface SkipTradeModalProps {
   onClose: () => void;

@@ -8,7 +8,7 @@
  * - Calibrated confidence notes
  */
 
-import { LoggedTrade, TradeAnalysis, InsightKnowledgeBase } from '../../../types';
+import { LoggedTrade, TradeAnalysis, InsightKnowledgeBase } from '../../types';
 import {
     computeLearningProfile,
     getSetupSpecificStats,

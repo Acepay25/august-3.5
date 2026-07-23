@@ -2,7 +2,7 @@
 // Replaces AI-based Chat History Compression with a Smart Sliding Window
 // Saves tokens by pruning middle messages instead of summarizing them
 
-import { Message } from '../../../types';
+import { Message } from '../../types';
 
 /**
  * Compresses chat history using a Smart Sliding Window approach.

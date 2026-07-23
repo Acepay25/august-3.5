@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { SavedAnalysis } from '../../../types';
+import { SavedAnalysis } from '../../types';
 import { CloseIcon, ChevronDownIcon, TrashIcon } from '../shared/Icons';
-import { modelIdToName, ocrModelIdToName } from '../../../constants/models';
+import { modelIdToName, ocrModelIdToName } from '../../constants/models';
 
 interface SavedAnalysesProps {
   analyses: SavedAnalysis[];

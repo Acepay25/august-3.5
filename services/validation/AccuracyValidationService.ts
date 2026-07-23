@@ -17,7 +17,7 @@
 
 import { TechnicalIndicators, ConfluenceResult, RegimeAnalysis, AdvancedVolumeAnalysis } from '../analysis/TechnicalAnalysisService';
 import { HybridDataPacket } from '../analysis/HybridIntelligenceService';
-import { ConfidenceCalibration, CorrelationRiskResult } from '../../../types';
+import { ConfidenceCalibration, CorrelationRiskResult } from '../../types';
 import { getCalibrationSummary, getCalibratedWinRateWithDecay } from './ConfidenceCalibrationService';
 import {
     calculateCorrelationRisk,
@@ -29,7 +29,7 @@ import {
     CONFIDENCE_THRESHOLDS,
     CONFIDENCE_PENALTIES,
     MIN_TRADES_FOR_CALIBRATION
-} from '../../../constants/calibrationConstants';
+} from '../../constants/calibrationConstants';
 
 // ============================================================================
 // TYPES

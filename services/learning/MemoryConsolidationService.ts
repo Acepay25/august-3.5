@@ -1,5 +1,5 @@
 
-import { InsightKnowledgeBase, TradeInsight } from '../../../types';
+import { InsightKnowledgeBase, TradeInsight } from '../../types';
 
 // =============================================================================
 // CONSTANTS

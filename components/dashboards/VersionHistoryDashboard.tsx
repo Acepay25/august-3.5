@@ -10,12 +10,12 @@ import { getCalibrationSummary, initializeCalibration } from '../../services/val
 import { storageService } from '../../services/infrastructure/StorageService';
 import { getAttributedInsightsSummary } from '../../services/learning/InsightExtractionService';
 import { jobQueue } from '../../services/infrastructure/JobQueueService'; // Import JobQueue
-import { AIProvider, ConfidenceCalibration, LearningRule } from '../../../types';
+import { AIProvider, ConfidenceCalibration, LearningRule } from '../../types';
 import {
     GATE_SCAN_JSON_SCHEMA,
     MASTER_TRADE_PLAN_JSON_SCHEMA,
     DUAL_SCENARIO_JSON_SCHEMA
-} from '../../../constants/schemas';
+} from '../../constants/schemas';
 
 // Map schemas for display
 const validationSchemas: Record<string, any> = {

@@ -9,7 +9,7 @@
  */
 
 import React, { useState } from 'react';
-import { AIProvider, AccuracySubMode, CustomInstructionsMap, CustomInstruction, AnalystLensConfig } from '../../../types';
+import { AIProvider, AccuracySubMode, CustomInstructionsMap, CustomInstruction, AnalystLensConfig } from '../../types';
 import { MemoryProvider, MEMORY_PROVIDER_OPTIONS, MEMORY_MODELS } from '../../services/learning/MemoryService';
 import { AnalystLensSettings } from './AnalystLensSettings';
 

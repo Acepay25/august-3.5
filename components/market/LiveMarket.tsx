@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { CloseIcon, ActivityIcon, BellIcon, TrashIcon, LoadingIcon, CameraIcon, CheckIcon, ChevronDownIcon, BrainIcon, TrendUpIcon, TrendDownIcon, AlertTriangleIcon } from '../shared/Icons';
-import { Kline } from '../../../types';
-import { detectChartPatterns, detectKeyZones, DetectedPattern } from '../../../utils/patternDetection';
+import { Kline } from '../../types';
+import { detectChartPatterns, detectKeyZones, DetectedPattern } from '../../utils/patternDetection';
 import OKXChart from './OKXChart';
 import { analyzeWithAI, AITrendlineAnalysis, MarketInsights } from '../../services/analysis/AITrendlineService';
 import { CandlestickData, Time } from 'lightweight-charts';

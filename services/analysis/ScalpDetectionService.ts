@@ -7,7 +7,7 @@
  * - Calculates scalp-specific risk parameters
  */
 
-import { TradeAnalysis, LoggedTrade, TradeOutcome } from '../../../types';
+import { TradeAnalysis, LoggedTrade, TradeOutcome } from '../../types';
 
 // ============================================================================
 // TYPES

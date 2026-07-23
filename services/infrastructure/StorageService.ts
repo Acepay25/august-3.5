@@ -12,7 +12,7 @@
  */
 
 import * as dbService from './dbService';
-import { UserProfile, LoggedTrade, SavedAnalysis, LearningRule } from '../../../types';
+import { UserProfile, LoggedTrade, SavedAnalysis, LearningRule } from '../../types';
 
 export enum StorageKey {
     LEARNING_RULES = 'learning_rules_v2',

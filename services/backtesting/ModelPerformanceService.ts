@@ -3,7 +3,7 @@
  * Tracks per-model accuracy and adjusts ensemble weights based on performance
  */
 
-import { AIProvider, LoggedTrade } from '../../../types';
+import { AIProvider, LoggedTrade } from '../../types';
 import { MarketRegime } from '../analysis/TechnicalAnalysisService';
 import {
     getPreferenceObject,

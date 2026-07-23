@@ -7,7 +7,7 @@
  * - Push notifications when price approaches Entry/TP/SL
  */
 
-import { TradeAnalysis } from '../../../types';
+import { TradeAnalysis } from '../../types';
 import { getPreferenceObject, setPreferenceObject, PREF_KEYS } from '../infrastructure/PreferencesService';
 
 export interface PriceAlert {

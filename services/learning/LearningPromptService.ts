@@ -9,7 +9,7 @@
  * - Works with all modes: Standard, Accuracy Original, Pure AI
  */
 
-import { LoggedTrade, InsightKnowledgeBase, TradeAnalysis } from '../../../types';
+import { LoggedTrade, InsightKnowledgeBase, TradeAnalysis } from '../../types';
 import { generateAdaptiveFeedbackInjection, extractContextFromAnalysis } from './AdaptiveLearningService';
 import { generateMistakeWarningInjection } from './MistakePatternService';
 import { generateInsightInjection } from './InsightExtractionService';

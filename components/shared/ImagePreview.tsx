@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { CloseIcon, LoadingIcon } from './Icons';
-import { ImageMetadata } from '../../../types';
+import { ImageMetadata } from '../../types';
 
 interface ImagePreviewProps {
   images: ImageMetadata[];

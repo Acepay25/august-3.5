@@ -3,7 +3,7 @@
  * Modern premium design inspired by ChatGPT and Gemini
  */
 
-import { TradeAnalysis, TradeOutcome } from '../../../types';
+import { TradeAnalysis, TradeOutcome } from '../../types';
 
 export interface ShareCardOptions {
     width?: number;

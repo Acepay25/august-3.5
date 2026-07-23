@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
-import { StrategySearchResult } from '../../../types';
+import { StrategySearchResult } from '../../types';
 import * as geminiService from '../../services/providers/geminiService';
 import { CloseIcon, LoadingIcon, BotIcon, CheckIcon, LockIcon, ChevronDownIcon, SearchIcon, BrainIcon } from './Icons';
-import { FAMILY_UI_DATA } from '../../../constants/models';
+import { FAMILY_UI_DATA } from '../../constants/models';
 
 interface StrategySearchProps {
   isVisible: boolean;

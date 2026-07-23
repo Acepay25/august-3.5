@@ -4,7 +4,7 @@
  * This avoids hardcoded template strings and adapts to the specific trade context.
  */
 
-import { TakeProfitTarget } from '../../../types';
+import { TakeProfitTarget } from '../../types';
 
 interface SchemaOptions {
     includeProbabilities?: boolean;

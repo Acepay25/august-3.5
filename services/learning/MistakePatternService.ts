@@ -9,7 +9,7 @@
  * - Provide UI-ready weakness summaries
  */
 
-import { LoggedTrade, TradeOutcome, RecurringMistake, TradingWeaknesses } from '../../../types';
+import { LoggedTrade, TradeOutcome, RecurringMistake, TradingWeaknesses } from '../../types';
 
 // Minimum occurrences to be considered a "recurring" mistake
 const MIN_RECURRING_COUNT = 3;

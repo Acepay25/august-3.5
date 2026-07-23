@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Message, TradeOutcome } from '../../../types';
+import { Message, TradeOutcome } from '../../types';
 
 export const LogTradeModal: React.FC<{
   message: Message;

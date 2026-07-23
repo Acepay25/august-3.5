@@ -8,7 +8,7 @@
  * them to current analysis.
  */
 
-import { LoggedTrade, AIProvider } from '../../../types';
+import { LoggedTrade, AIProvider } from '../../types';
 import { computeLearningProfile, generateLearningContext, PersonalizedLearningProfile } from './SelfLearningService';
 import { generateMistakeWarningInjection } from './MistakePatternService';
 import { generateLearningRulesPrompt, LearningRulesStorage, loadLearningRules } from './LearningRulesService';

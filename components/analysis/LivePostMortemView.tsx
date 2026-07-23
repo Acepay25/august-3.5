@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useTypingEffect } from '../../../hooks/useTypingEffect';
+import { useTypingEffect } from '../../hooks/useTypingEffect';
 import { CloseIcon, LoadingIcon, BotIcon } from '../shared/Icons';
-import { LiveThoughts } from '../../../types';
+import { LiveThoughts } from '../../types';
 
 interface LivePostMortemViewProps {
   isVisible: boolean;

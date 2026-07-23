@@ -8,9 +8,9 @@
  */
 
 import React, { useMemo } from 'react';
-import { AnalysisStep } from '../../../types';
-import { Task, TaskTrigger, TaskContent, TaskItem, TaskItemFile } from '../../ui/task';
-import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '../../ui/collapsible';
+import { AnalysisStep } from '../../types';
+import { Task, TaskTrigger, TaskContent, TaskItem, TaskItemFile } from '../ui/task';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '../ui/collapsible';
 import {
   ChevronDownIcon,
   LoaderIcon,

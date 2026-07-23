@@ -9,7 +9,7 @@
  * 4. Prompt injection with historical context
  */
 
-import { LoggedTrade, TradeAnalysis, TradeOutcome } from '../../../types';
+import { LoggedTrade, TradeAnalysis, TradeOutcome } from '../../types';
 import { MarketRegime } from '../analysis/TechnicalAnalysisService';
 
 // =============================================================================

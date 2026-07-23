@@ -2,7 +2,7 @@
 // Replaces AI-based Global Memory Manager with deterministic algorithmic updates
 // Saves significant tokens by processing statistics and patterns locally
 
-import { GlobalMemory, LoggedTrade, TradeOutcome, TradeInsight } from '../../../types';
+import { GlobalMemory, LoggedTrade, TradeOutcome, TradeInsight } from '../../types';
 import { detectRecurringMistakes } from './MistakePatternService';
 import { consolidateMemory } from './MemoryConsolidationService';
 

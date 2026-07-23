@@ -10,7 +10,7 @@
  * - Simulate from exact analysis timestamp forward (NEW)
  */
 
-import { TradeAnalysis, BacktestResult } from '../../../types';
+import { TradeAnalysis, BacktestResult } from '../../types';
 import { fetchOHLCV, fetchOHLCVFromTime, Kline } from '../analysis/MarketDataService';
 
 /**

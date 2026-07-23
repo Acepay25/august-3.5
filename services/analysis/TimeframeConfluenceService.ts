@@ -5,7 +5,7 @@
  * by confluence score. Higher confluence typically correlates with higher win rate.
  */
 
-import { LoggedTrade, TradeAnalysis } from '../../../types';
+import { LoggedTrade, TradeAnalysis } from '../../types';
 import { getPreferenceObject, setPreferenceObject, PREF_KEYS } from '../infrastructure/PreferencesService';
 
 // ========================= INTERFACES =========================

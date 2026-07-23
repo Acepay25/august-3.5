@@ -10,7 +10,7 @@
 
 import { Capacitor } from '@capacitor/core';
 import { CapacitorSQLite, SQLiteConnection, SQLiteDBConnection } from '@capacitor-community/sqlite';
-import { LoggedTrade, UserProfile, Conversation, TradeSummary, GlobalMemory, UserSettings } from '../../../types';
+import { LoggedTrade, UserProfile, Conversation, TradeSummary, GlobalMemory, UserSettings } from '../../types';
 
 // Database configuration
 const DB_NAME = 'futuresai_db';

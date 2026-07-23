@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { CloseIcon, ExportIcon, SwitchUserIcon, BookmarkIcon, SearchIcon, ChevronDownIcon, BrainIcon, EditIcon, CheckIcon, TrashIcon, ArchiveIcon } from '../shared/Icons';
-import { AIProvider, AccuracySubMode, CustomInstructionsMap, CustomInstruction, AnalystLensConfig } from '../../../types';
+import { AIProvider, AccuracySubMode, CustomInstructionsMap, CustomInstruction, AnalystLensConfig } from '../../types';
 import { MemoryProvider, MEMORY_PROVIDER_OPTIONS, MEMORY_MODELS, getDefaultModelForProvider } from '../../services/learning/MemoryService';
 import { AnalystLensSettings } from './AnalystLensSettings';
 

@@ -1,10 +1,10 @@
 
 
 import React, { useState, useRef } from 'react';
-import { ImageMetadata, Message, TradeOutcome } from '../../../types';
+import { ImageMetadata, Message, TradeOutcome } from '../../types';
 import ImagePreview from '../shared/ImagePreview';
 import { UploadIcon, LoadingIcon } from '../shared/Icons';
-import { processImagesForSummarization } from '../../../utils/imageProcessor';
+import { processImagesForSummarization } from '../../utils/imageProcessor';
 
 export type PostMortemCandidate = {
     message: Message;

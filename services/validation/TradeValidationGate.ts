@@ -29,7 +29,7 @@ import {
     DevilsAdvocateResult
 } from './AccuracyValidationService';
 import { HybridDataPacket } from '../analysis/HybridIntelligenceService';
-import { TradeAnalysis, ConfidenceCalibration, LoggedTrade, TradeOutcome, AIProvider } from '../../../types';
+import { TradeAnalysis, ConfidenceCalibration, LoggedTrade, TradeOutcome, AIProvider } from '../../types';
 import {
     getCalibrationSummary,
     getCalibratedWinRate,
@@ -74,7 +74,7 @@ import {
     TIMEFRAME_REQUIREMENTS,
     MAX_CONFLICTS_FOR_HIGH_CONFIDENCE
 } from './ValidationConstants';
-import { StructuredRule } from '../../../types';
+import { StructuredRule } from '../../types';
 import { validateAllRules } from '../learning/RuleEngineService';
 
 

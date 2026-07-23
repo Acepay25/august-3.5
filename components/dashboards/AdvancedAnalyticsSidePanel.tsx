@@ -5,7 +5,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { AIProvider, LevelProbabilities } from '../../../types';
+import { AIProvider, LevelProbabilities } from '../../types';
 import { getUnderperformerStatus, generateUnderperformerFeedback } from '../../services/learning/UnderperformerFeedbackService';
 
 // Types for analytics results

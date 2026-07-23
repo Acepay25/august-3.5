@@ -5,7 +5,7 @@
  * Calculates reward scores based on trade outcome and confidence.
  */
 
-import { AIProvider } from '../../../types';
+import { AIProvider } from '../../types';
 import {
     getPreferenceObject,
     setPreferenceObject,

@@ -8,7 +8,7 @@ import {
     AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip,
     ResponsiveContainer, Cell
 } from 'recharts';
-import { LoggedTrade } from '../../../types';
+import { LoggedTrade } from '../../types';
 import {
     calculateOverallStats,
     calculatePerformanceByConfidence,
@@ -22,7 +22,7 @@ import {
     FamilyStats,
     StreakData,
     TrendDataPoint
-} from '../../../utils/dashboardUtils';
+} from '../../utils/dashboardUtils';
 
 interface WinRateDashboardProps {
     trades: LoggedTrade[];

@@ -6,7 +6,7 @@ import WinRateDashboard from '../dashboards/WinRateDashboard';
 import LearningDashboard from '../dashboards/LearningDashboard';
 import ModelPerformanceDashboard from '../dashboards/ModelPerformanceDashboard';
 import { CloseIcon, HistoryIcon, StarIcon, ChartBarIcon, BrainIcon } from '../shared/Icons';
-import { AIProvider, LoggedTrade, TradeSummary, GlobalMemory } from '../../../types';
+import { AIProvider, LoggedTrade, TradeSummary, GlobalMemory } from '../../types';
 
 interface JournalProps {
     isVisible: boolean;

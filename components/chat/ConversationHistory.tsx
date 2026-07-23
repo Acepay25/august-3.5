@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Conversation, MessageRole } from '../../../types';
+import { Conversation, MessageRole } from '../../types';
 import { CloseIcon, TrashIcon } from '../shared/Icons';
 
 interface ConversationHistoryProps {

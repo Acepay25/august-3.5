@@ -6,7 +6,7 @@
  */
 
 import { HybridDataPacket } from '../analysis/HybridIntelligenceService';
-import { TradingStyle } from '../../../types';
+import { TradingStyle } from '../../types';
 
 export interface StyleDetectionResult {
     recommendedStyle: 'swing' | 'scalp';

@@ -2,7 +2,7 @@
 // Dismissible alert that warns users about recurring mistake patterns
 
 import React, { useState, useEffect } from 'react';
-import { LoggedTrade, TradingWeaknesses } from '../../../types';
+import { LoggedTrade, TradingWeaknesses } from '../../types';
 import { getTradingWeaknesses } from '../../services/learning/MistakePatternService';
 
 interface MistakeWarningBannerProps {

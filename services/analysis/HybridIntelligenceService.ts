@@ -53,7 +53,7 @@ import {
 } from './PatternClassificationService';
 
 import { getSessionContext, generateSessionSummary, SessionContext } from '../infrastructure/SessionService';
-import { ConfidenceCalibration } from '../../../types';
+import { ConfidenceCalibration } from '../../types';
 import {
     generateCalibrationPromptInjection,
     generateGranularCalibrationPrompt,
@@ -68,7 +68,7 @@ import { calculateCorrelationRisk } from './CorrelationRiskService';
 import {
     INVALIDATION_THESIS_PROMPT,
     CORRELATION_AWARENESS_PROMPT
-} from '../../../constants/prompts';
+} from '../../constants/prompts';
 import {
     runSimulation,
     generateMonteCarloPromptInjection,

@@ -9,7 +9,7 @@
  * 4. Setup-specific performance tracking
  */
 
-import { LoggedTrade, TradeOutcome, TradeAnalysis } from '../../../types';
+import { LoggedTrade, TradeOutcome, TradeAnalysis } from '../../types';
 import { ConfidenceLevel } from '../validation/ConfidenceCalibrationService';
 
 /**

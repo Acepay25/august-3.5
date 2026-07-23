@@ -2,7 +2,7 @@
 // Visual gauge showing historical win rate based on confidence calibration
 
 import React from 'react';
-import { ConfidenceCalibration } from '../../../types';
+import { ConfidenceCalibration } from '../../types';
 import { getCalibratedWinRateWithDecay, getSampleSize, ConfidenceLevel } from '../../services/validation/ConfidenceCalibrationService';
 
 interface ProbabilityWidgetProps {

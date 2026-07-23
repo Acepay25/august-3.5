@@ -6,7 +6,7 @@
  * and historical pattern matching.
  */
 
-import { TradeAnalysis, LoggedTrade, TradeOutcome } from '../../../types';
+import { TradeAnalysis, LoggedTrade, TradeOutcome } from '../../types';
 import { runSimulation, MonteCarloResult, SimulationConfig } from '../analysis/MonteCarloService';
 
 // =============================================================================

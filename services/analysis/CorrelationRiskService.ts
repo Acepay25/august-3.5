@@ -9,7 +9,7 @@
  * - Warning generation for high-correlation risk scenarios
  */
 
-import { CorrelationRiskResult } from '../../../types';
+import { CorrelationRiskResult } from '../../types';
 import { fetchOHLCV, fetchMarketData, Kline } from './MarketDataService';
 import { calculateKeyLevels } from './TechnicalAnalysisService';
 

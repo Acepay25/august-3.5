@@ -9,7 +9,7 @@
  * 6. Real-time Market Injection
  */
 
-import { LoggedTrade, TradeAnalysis, TradeOutcome, AIProvider } from '../../../types';
+import { LoggedTrade, TradeAnalysis, TradeOutcome, AIProvider } from '../../types';
 import {
     calculateDynamicWeights,
     calculateDynamicWeightsEnhanced,

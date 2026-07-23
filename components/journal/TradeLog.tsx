@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Virtuoso } from 'react-virtuoso';
-import { LoggedTrade, TradeOutcome, AccuracySubMode } from '../../../types';
+import { LoggedTrade, TradeOutcome, AccuracySubMode } from '../../types';
 import { ChevronDownIcon, TrashIcon, StarIcon, LoadingIcon, BrainIcon, EditIcon } from '../shared/Icons';
 import ImageViewerModal from '../modals/ImageViewerModal';
 

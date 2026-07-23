@@ -5,7 +5,7 @@
  * against stored rules to warn about potential violations.
  */
 
-import { LoggedTrade, TradeAnalysis, AIProvider } from '../../../types';
+import { LoggedTrade, TradeAnalysis, AIProvider } from '../../types';
 import { getPreferenceObject, setPreferenceObject, getPreference, PREF_KEYS } from '../infrastructure/PreferencesService';
 import { extractRulesWithLLM } from '../learning/LLMRuleExtractionService';
 

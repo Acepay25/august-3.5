@@ -18,8 +18,8 @@ import {
     SetupContext,
     generateSynthesizedPromptInjection
 } from '../learning/PatternMemorySynthesisService';
-import { LoggedTrade, TradeOutcome } from '../../../types';
-import { GATE_SCAN_PROMPT, MASTER_ANALYSIS_PROMPT } from '../../../constants/prompts';
+import { LoggedTrade, TradeOutcome } from '../../types';
+import { GATE_SCAN_PROMPT, MASTER_ANALYSIS_PROMPT } from '../../constants/prompts';
 
 // ============================================================================
 // TYPES

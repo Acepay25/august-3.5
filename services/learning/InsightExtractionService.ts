@@ -10,7 +10,7 @@
  * - Provider attribution for tracking which AI gave which insight
  */
 
-import { LoggedTrade, TradeInsight, InsightKnowledgeBase, AIProvider } from '../../../types';
+import { LoggedTrade, TradeInsight, InsightKnowledgeBase, AIProvider } from '../../types';
 import {
     addAttributedInsight,
     AttributedInsight,

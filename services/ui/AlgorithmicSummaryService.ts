@@ -1,7 +1,7 @@
 // AlgorithmicSummaryService.ts
 // Generates trade summaries algorithmically without AI to save tokens
 
-import { LoggedTrade, TradeOutcome } from '../../../types';
+import { LoggedTrade, TradeOutcome } from '../../types';
 import { detectTradingSession } from '../validation/ConfidenceCalibrationService';
 
 /**

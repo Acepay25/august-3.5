@@ -1,6 +1,6 @@
 
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
-import { ConfidenceCalibration, TradeOutcome, GranularCalibrationEntry } from '../../../types';
+import { ConfidenceCalibration, TradeOutcome, GranularCalibrationEntry } from '../../types';
 import {
     initializeCalibration,
     updateGranularCalibration,

@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { TradeAnalysis, TradeOutcome, AccuracySubMode, ConfidenceCalibration, ConfluenceData, BacktestResult, DualScenarioAnalysis, LevelProbabilities, ProbabilityReasoning, TradingStyle } from '../../../types';
+import { TradeAnalysis, TradeOutcome, AccuracySubMode, ConfidenceCalibration, ConfluenceData, BacktestResult, DualScenarioAnalysis, LevelProbabilities, ProbabilityReasoning, TradingStyle } from '../../types';
 import { LoadingIcon, ChevronDownIcon, BookmarkIcon, BookmarkSolidIcon, BrainIcon, UpdateIcon } from '../shared/Icons';
-import { FAMILY_UI_DATA } from '../../../constants/models';
+import { FAMILY_UI_DATA } from '../../constants/models';
 import { getCalibratedWinRate, getSampleSize, ConfidenceLevel } from '../../services/validation/ConfidenceCalibrationService';
 import { simulateFromAnalysisTime, TimestampedBacktestResult } from '../../services/backtesting/BacktestingService';
 import { PriceAlertService } from '../../services/ui/PriceAlertService';

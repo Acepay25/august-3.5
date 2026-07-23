@@ -1,6 +1,6 @@
 
 import React, { useMemo } from 'react';
-import { LoggedTrade } from '../../../types';
+import { LoggedTrade } from '../../types';
 import { computeLearningProfile, PersonalizedLearningProfile } from '../../services/learning/SelfLearningService';
 
 interface LearningDashboardProps {

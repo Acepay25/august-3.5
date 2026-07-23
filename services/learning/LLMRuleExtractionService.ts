@@ -14,8 +14,8 @@ import * as zhipuService from '../providers/zhipuService';
 import * as grokNativeService from '../providers/grokNativeService';
 // Add others if needed, but these are the primaries for reasoning
 
-import { AIProvider } from '../../../types';
-import { extractAndParseJson } from '../../../utils/jsonUtils';
+import { AIProvider } from '../../types';
+import { extractAndParseJson } from '../../utils/jsonUtils';
 
 export interface ExtractedRule {
     condition: string;

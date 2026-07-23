@@ -1,6 +1,6 @@
 
 import { HybridDataPacket } from './HybridIntelligenceService';
-import { LoggedTrade, LevelProbabilities, ProbabilityReasoning, TradeOutcome } from '../../../types';
+import { LoggedTrade, LevelProbabilities, ProbabilityReasoning, TradeOutcome } from '../../types';
 
 /**
  * Service responsible for calculating trade probabilities using deterministic algorithms.

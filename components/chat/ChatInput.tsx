@@ -2,8 +2,8 @@
 import React, { useState } from 'react';
 import ImagePreview from '../shared/ImagePreview';
 import { PlusIcon, LoadingIcon, SendIcon, ChevronDownIcon, ChevronUpIcon, BotIcon } from '../shared/Icons';
-import { ImageMetadata, AnalystLensConfig, AIProvider } from '../../../types';
-import { OCR_MODELS } from '../../../constants/models';
+import { ImageMetadata, AnalystLensConfig, AIProvider } from '../../types';
+import { OCR_MODELS } from '../../constants/models';
 
 interface ChatInputProps {
     images: ImageMetadata[];

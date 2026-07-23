@@ -5,7 +5,7 @@
  * Provides structured memory format, similarity matching, and provider attribution.
  */
 
-import { LoggedTrade, AIProvider } from '../../../types';
+import { LoggedTrade, AIProvider } from '../../types';
 import { getPreferenceObject, setPreferenceObject, PREF_KEYS } from '../infrastructure/PreferencesService';
 
 // ========================= INTERFACES =========================

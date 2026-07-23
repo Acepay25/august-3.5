@@ -1,8 +1,8 @@
 
 import { GoogleGenAI } from "@google/genai";
 import OpenAI from "openai";
-import { TradeAnalysis, AIProvider, Message, TradeOutcome, AccuracySubMode, LoggedTrade, AnalystLensConfig, AnalystRole } from '../../../types';
-import { extractAndParseJson } from '../../../utils/jsonUtils';
+import { TradeAnalysis, AIProvider, Message, TradeOutcome, AccuracySubMode, LoggedTrade, AnalystLensConfig, AnalystRole } from '../../types';
+import { extractAndParseJson } from '../../utils/jsonUtils';
 import {
     MODERATOR_SYSTEM_PROMPT_V2,
     PURE_AI_MODERATOR_PROMPT,
@@ -15,10 +15,10 @@ import {
     POST_MORTEM_PATTERN_LEARNING_PROMPT,
     PROBABILITY_ESTIMATION_PROMPT,
     MODERATOR_FINAL_AUTHORITY_PROTOCOL
-} from '../../../constants/prompts';
-import { DUAL_SCENARIO_JSON_SCHEMA } from '../../../constants/schemas';
-import { parseLiveMarketData } from '../../../utils/liveMarketParser';
-import { truncateTextToTokens } from '../../../utils/analysisUtils';
+} from '../../constants/prompts';
+import { DUAL_SCENARIO_JSON_SCHEMA } from '../../constants/schemas';
+import { parseLiveMarketData } from '../../utils/liveMarketParser';
+import { truncateTextToTokens } from '../../utils/analysisUtils';
 import { generateEnhancedDebateContext, EnhancedDebateContext } from '../ui/EnhancedDebateService';
 import { MarketRegime } from '../analysis/TechnicalAnalysisService';
 import {
@@ -45,7 +45,7 @@ import { generateWeightedVotingContext } from '../backtesting/ModelPerformanceSe
 import type { GateOutput } from '../validation/GateKeeperService';
 import { getApiKey, getPreferenceObject, PREF_KEYS } from '../infrastructure/PreferencesService';
 import { getBayesianCalibratedConfidence, ConfidenceLevel } from '../validation/ConfidenceCalibrationService';
-import { ConfidenceCalibration } from '../../../types';
+import { ConfidenceCalibration } from '../../types';
 
 // =============================================================================
 // DUAL SCENARIO EVALUATION PROTOCOL

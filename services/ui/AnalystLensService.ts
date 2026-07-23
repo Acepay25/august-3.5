@@ -5,7 +5,7 @@
  * Each role provides a specialized analytical focus that gets injected into AI prompts.
  */
 
-import { AnalystRole, AIProvider, AnalystRoleAssignment, AnalystLensConfig } from '../../../types';
+import { AnalystRole, AIProvider, AnalystRoleAssignment, AnalystLensConfig } from '../../types';
 import {
     getPreferenceObject,
     setPreferenceObject,

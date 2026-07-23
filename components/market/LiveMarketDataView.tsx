@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { ChevronDownIcon, ActivityIcon, BrainIcon } from '../shared/Icons';
-import { DetectedPattern } from '../../../utils/patternDetection';
+import { DetectedPattern } from '../../utils/patternDetection';
 
 // Interfaces matching the AI-optimized nested structure
 interface TrendIndicators {

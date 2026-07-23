@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { AIProvider, AnalystRole, AnalystRoleAssignment, AnalystLensConfig, TradingStyle } from '../../../types';
+import { AIProvider, AnalystRole, AnalystRoleAssignment, AnalystLensConfig, TradingStyle } from '../../types';
 import {
   ANALYST_ROLE_DEFINITIONS,
   validateLensConfig,

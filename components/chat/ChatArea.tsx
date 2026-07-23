@@ -1,12 +1,12 @@
 
 import React, { useState, useMemo, useCallback } from 'react';
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
-import { Message, AccuracySubMode, AnalystLensConfig, AnalysisStep } from '../../../types';
+import { Message, AccuracySubMode, AnalystLensConfig, AnalysisStep } from '../../types';
 import MessageItem, { ChatContextProps } from './MessageItem';
 import { ChatInput } from './ChatInput';
 import { QuickActionChips } from './QuickActionChips';
 import { ArrowUpIcon, ArrowDownIcon, CloseIcon, LoadingIcon, EyeIcon, EditIcon, CheckIcon, TrashIcon } from '../shared/Icons';
-import { ImageMetadata } from '../../../types';
+import { ImageMetadata } from '../../types';
 import HybridDataPanel from '../analysis/HybridDataPanel';
 import ImageViewerModal from '../modals/ImageViewerModal';
 import AnalysisProgress from '../analysis/AnalysisProgress';

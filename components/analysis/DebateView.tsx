@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { DebateTurn, AnalystLensConfig, AnalystRole, AIProvider } from '../../../types';
+import { DebateTurn, AnalystLensConfig, AnalystRole, AIProvider } from '../../types';
 import { BotIcon, ChevronDownIcon } from '../shared/Icons';
 import { ANALYST_ROLE_DEFINITIONS, getRoleForProvider } from '../../services/ui/AnalystLensService';
 

@@ -1,13 +1,13 @@
 
 import OpenAI from "openai";
 import { ChatCompletionMessageParam } from "openai/resources/chat/completions";
-import { Message, TradeOutcome, TradeAnalysis, GlobalMemory, AccuracySubMode } from '../../../../types';
-import { extractAndParseJson } from '../../../../utils/jsonUtils';
-import { sanitizeAIResponse, sanitizeJSONString } from '../../../../utils/sanitizers';
-import { truncateTextToTokens, sanitizeTradeAnalysis } from '../../../../utils/analysisUtils';
-import { ACCURACY_MODE_PROMPT } from '../../../../constants/prompts';
-import { constructOptimizedContext } from '../../../../utils/memoryUtils';
-import { parseLiveMarketData } from '../../../../utils/liveMarketParser';
+import { Message, TradeOutcome, TradeAnalysis, GlobalMemory, AccuracySubMode } from '../../../types';
+import { extractAndParseJson } from '../../../utils/jsonUtils';
+import { sanitizeAIResponse, sanitizeJSONString } from '../../../utils/sanitizers';
+import { truncateTextToTokens, sanitizeTradeAnalysis } from '../../../utils/analysisUtils';
+import { ACCURACY_MODE_PROMPT } from '../../../constants/prompts';
+import { constructOptimizedContext } from '../../../utils/memoryUtils';
+import { parseLiveMarketData } from '../../../utils/liveMarketParser';
 
 import { getApiKey } from '../../infrastructure/PreferencesService';
 

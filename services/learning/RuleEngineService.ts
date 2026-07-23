@@ -9,11 +9,11 @@
  * 3. Invalidation Rules (Text-based warnings from patterns)
  */
 
-import { TradeAnalysis } from '../../../types';
+import { TradeAnalysis } from '../../types';
 import { ConfidenceLevel } from '../validation/AccuracyValidationService';
 import { HybridDataPacket } from '../analysis/HybridIntelligenceService';
 import { CONFIDENCE_RULES } from './LearningRulesService';
-import { StructuredRule } from '../../../types';
+import { StructuredRule } from '../../types';
 import { checkTradeAgainstRules as checkInvalidationRules, RuleCheckResult } from '../validation/InvalidationRuleService';
 
 export interface RuleValidationResult {

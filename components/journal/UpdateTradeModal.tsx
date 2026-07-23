@@ -1,9 +1,9 @@
 
 import React, { useState, useRef } from 'react';
-import { ImageMetadata, Message } from '../../../types';
+import { ImageMetadata, Message } from '../../types';
 import ImagePreview from '../shared/ImagePreview';
 import { UploadIcon, LoadingIcon, UpdateIcon } from '../shared/Icons';
-import { processImagesForSummarization } from '../../../utils/imageProcessor';
+import { processImagesForSummarization } from '../../utils/imageProcessor';
 
 export const UpdateTradeModal: React.FC<{
     message: Message;

@@ -1,6 +1,6 @@
 
 import { HybridDataPacket } from './HybridIntelligenceService';
-import { TradeAnalysis } from '../../../types';
+import { TradeAnalysis } from '../../types';
 
 /**
  * Pattern Family Enum

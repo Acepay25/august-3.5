@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Message, MessageRole, TradeOutcome, SavedAnalysis, Conversation, DebateTurn, ConfidenceCalibration, AnalystLensConfig } from '../../../types';
+import { Message, MessageRole, TradeOutcome, SavedAnalysis, Conversation, DebateTurn, ConfidenceCalibration, AnalystLensConfig } from '../../types';
 import { BotIcon, ChevronDownIcon, LinkIcon, CopyIcon, CheckIcon, UserIcon } from '../shared/Icons';
 import LiveMarketDataView from '../market/LiveMarketDataView';
 import DebateView from '../analysis/DebateView';

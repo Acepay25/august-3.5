@@ -8,7 +8,7 @@
  * - Generate prompt injections with historical performance data
  */
 
-import { LoggedTrade, TradeAnalysis, TradeOutcome, TradeLessons } from '../../../types';
+import { LoggedTrade, TradeAnalysis, TradeOutcome, TradeLessons } from '../../types';
 
 // Minimum trades needed before showing adaptive feedback
 const MIN_TRADES_FOR_FEEDBACK = 5;

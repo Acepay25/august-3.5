@@ -17,14 +17,14 @@ import {
     GranularCalibrationEntry,
     GranularCalibration,
     AIProvider
-} from '../../../types';
+} from '../../types';
 import {
     MIN_TRADES_FOR_CALIBRATION,
     MIN_TRADES_FOR_PROMPT_DISPLAY,
     MIN_TRADES_FOR_CALIBRATION_NOTE,
     DECAY_FACTOR,
     MAX_TRADE_AGE_DAYS
-} from '../../../constants/calibrationConstants';
+} from '../../constants/calibrationConstants';
 
 export type ConfidenceLevel = 'High' | 'Medium' | 'Low' | 'Avoid';
 
@@ -913,7 +913,7 @@ import {
     EXPECTED_WIN_RATES,
     DANGEROUS_COMBINATION_THRESHOLD,
     MIN_SAMPLES_FOR_CORRELATION
-} from '../../../constants/calibrationConstants';
+} from '../../constants/calibrationConstants';
 
 // =============================================================================
 // 1. STREAK DETECTION & PENALTY SYSTEM

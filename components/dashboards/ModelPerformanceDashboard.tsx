@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { AIProvider, LoggedTrade } from '../../../types';
+import { AIProvider, LoggedTrade } from '../../types';
 import {
     getRollingWindowStats,
     getSituationalExpertise,

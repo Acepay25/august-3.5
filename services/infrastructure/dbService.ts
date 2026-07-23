@@ -9,7 +9,7 @@
  */
 
 import { openDB, IDBPDatabase } from 'idb';
-import { UserProfile } from '../../../types';
+import { UserProfile } from '../../types';
 import { Capacitor } from '@capacitor/core';
 import {
   initSqlite,

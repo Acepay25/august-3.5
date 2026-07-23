@@ -7,7 +7,7 @@
  */
 
 import { HybridDataPacket } from './HybridIntelligenceService';
-import { TradeAnalysis } from '../../../types';
+import { TradeAnalysis } from '../../types';
 
 // ============================================================================
 // TYPES

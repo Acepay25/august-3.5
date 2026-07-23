@@ -8,7 +8,7 @@
  * 3. Track feedback injection status to avoid redundant injections
  */
 
-import { AIProvider } from '../../../types';
+import { AIProvider } from '../../types';
 import {
     getRollingWindowStats,
     getSituationalExpertise,

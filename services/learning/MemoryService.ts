@@ -1,5 +1,5 @@
-import { Message, GlobalMemory, LoggedTrade } from '../../../types';
-import { MEMORY_COMPRESSOR_PROMPT, GLOBAL_MEMORY_MANAGER_PROMPT } from '../../../constants/prompts';
+import { Message, GlobalMemory, LoggedTrade } from '../../types';
+import { MEMORY_COMPRESSOR_PROMPT, GLOBAL_MEMORY_MANAGER_PROMPT } from '../../constants/prompts';
 import { generateAlgorithmicTradeSummary } from '../ui/AlgorithmicSummaryService';
 import { updateGlobalMemoryAlgorithmically } from './AlgorithmicMemoryService';
 import { compressChatHistoryAlgorithmically } from '../ui/AlgorithmicChatService';

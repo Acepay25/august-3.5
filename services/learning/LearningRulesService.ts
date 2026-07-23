@@ -11,7 +11,7 @@
  * - Match and inject relevant rules into future analyses
  */
 
-import { LoggedTrade, TradeOutcome, LearningRule, StructuredRule } from '../../../types';
+import { LoggedTrade, TradeOutcome, LearningRule, StructuredRule } from '../../types';
 import { storageService, StorageKey } from '../infrastructure/StorageService';
 
 /**

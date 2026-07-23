@@ -6,7 +6,7 @@
  * ENHANCED: Now includes historical TP/SL verification with full indicator snapshots
  */
 
-import { TradeAnalysis } from '../../../types';
+import { TradeAnalysis } from '../../types';
 import { fetchHybridData, generateHybridPromptInjection, HybridDataPacket } from '../analysis/HybridIntelligenceService';
 import { fetchFuturesOHLCVFromTime, Kline } from '../analysis/MarketDataService';
 import {
