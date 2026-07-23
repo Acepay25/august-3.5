@@ -15,6 +15,7 @@ interface DebateViewProps {
     openrouterModelName?: string;
 
     lensConfig?: AnalystLensConfig;  // Optional lens configuration
+    isDebating?: boolean;  // Whether the debate is still live (gates the "Syncing Protocol..." indicator)
 }
 
 // Map speaker names to AIProvider enum for role lookup
@@ -100,7 +101,7 @@ const RoundHeader: React.FC<{ title: string, isOpen: boolean, onToggle: () => vo
     </button>
 );
 
-const DebateView: React.FC<DebateViewProps> = ({ debateTurns, geminiModelName, deepseekModelName, zhipuModelName, groqModelName, groqNewModelName, groqAlt2ModelName, openrouterModelName, lensConfig }) => {
+const DebateView: React.FC<DebateViewProps> = ({ debateTurns, geminiModelName, deepseekModelName, zhipuModelName, groqModelName, groqNewModelName, groqAlt2ModelName, openrouterModelName, lensConfig, isDebating }) => {
     const [expandedRounds, setExpandedRounds] = useState<Record<number, boolean>>({});
     const lastRoundCountRef = useRef(0);
 
@@ -254,8 +255,8 @@ const DebateView: React.FC<DebateViewProps> = ({ debateTurns, geminiModelName, d
                     );
                 })}
 
-                {/* Live Thinking Indicator */}
-                {rounds.length > 0 && (
+                {/* Live Thinking Indicator — only shown while debate is actively streaming */}
+                {rounds.length > 0 && isDebating && (
                     <div className="px-4 py-3 flex items-center gap-2 opacity-40">
                         <div className="flex space-x-1">
                             <div className="w-1 h-1 bg-cyan-500 rounded-full animate-bounce delay-0"></div>

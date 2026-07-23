@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { VirtuosoHandle } from 'react-virtuoso';
-import { Message, MessageRole, TradeOutcome, LoggedTrade, ImageMetadata, AIProvider, DebateTurn, Conversation, UserProfile, SavedAnalysis, LiveThoughts, TradeAnalysis, TradeSummary, GlobalMemory, AccuracySubMode, CustomInstructionsMap, CustomInstruction, AnalystLensConfig, LearningRule } from './types';
+import { Message, MessageRole, TradeOutcome, LoggedTrade, ImageMetadata, AIProvider, DebateTurn, Conversation, UserProfile, SavedAnalysis, LiveThoughts, TradeAnalysis, TradeSummary, GlobalMemory, AccuracySubMode, CustomInstructionsMap, CustomInstruction, AnalystLensConfig, LearningRule, AnalysisStep } from './types';
 import * as geminiService from './services/geminiService';
 import * as deepseekService from './services/deepseekService';
 import * as zhipuService from './services/zhipuService';
@@ -62,6 +62,7 @@ import AdvancedAnalyticsSidePanel from './components/AdvancedAnalyticsSidePanel'
 import ScenarioSimulator from './components/ScenarioSimulator';
 import UpdateNotification from './components/UpdateNotification';
 import MistakeWarningBanner from './components/MistakeWarningBanner';
+import AnalysisProgress from './components/AnalysisProgress';
 import { setUpdateNotificationHandler, activateWaitingWorker } from './index';
 
 import { GEMINI_MODELS, DEEPSEEK_MODELS, ZHIPU_MODELS, GROQ_MODELS, GROQ_NEW_MODELS, GROQ_ALT2_MODELS, OPENROUTER_MODELS, OPENAI_MODELS, GROK_MODELS, OCR_MODELS, modelIdToName, ocrModelIdToName, DEFAULT_FRAMEWORKS, ACCURACY_MODE_DEFAULTS } from './constants/models';
@@ -233,6 +234,7 @@ const App: React.FC = () => {
     const [input, setInput] = useState('');
     const [images, setImages] = useState<ImageMetadata[]>([]);
     const [loadingMessage, setLoadingMessage] = useState<string | null>(null);
+    const [analysisSteps, setAnalysisSteps] = useState<AnalysisStep[]>([]);
     const [loggingTradeId, setLoggingTradeId] = useState<string | null>(null);
 
     const [journalState, setJournalState] = useState<{ isOpen: boolean, tab: 'log' | 'performance' | 'analytics' | 'learning' | 'memory' }>({ isOpen: false, tab: 'log' });
@@ -305,6 +307,27 @@ const App: React.FC = () => {
     const mobileMenuRef = useRef<HTMLDivElement>(null);
     const leverageRef = useRef<HTMLDivElement>(null);
     const abortRef = useRef<boolean>(false);
+
+    // ─── Analysis Pipeline Step Tracking ─────────────────────────────────
+    const initAnalysisSteps = (steps: AnalysisStep[]) => {
+        setAnalysisSteps(steps.map(s => ({ ...s, status: 'pending' as const, startTime: undefined, endTime: undefined })));
+    };
+
+    const startStep = (id: string) => {
+        setAnalysisSteps(prev => prev.map(s => s.id === id ? { ...s, status: 'running' as const, startTime: Date.now() } : s));
+    };
+
+    const completeStep = (id: string) => {
+        setAnalysisSteps(prev => prev.map(s => s.id === id ? { ...s, status: 'complete' as const, endTime: Date.now() } : s));
+    };
+
+    const failStep = (id: string) => {
+        setAnalysisSteps(prev => prev.map(s => s.id === id ? { ...s, status: 'error' as const, endTime: Date.now() } : s));
+    };
+
+    const addSubStep = (id: string, subStep: { label: string; detail?: string; filename?: string }) => {
+        setAnalysisSteps(prev => prev.map(s => s.id === id ? { ...s, subSteps: [...(s.subSteps || []), subStep] } : s));
+    };
 
     // Register SW update notification handler
     useEffect(() => {
@@ -983,6 +1006,14 @@ const App: React.FC = () => {
             const memoryToInject = isGlobalMemoryEnabled ? globalMemory : undefined;
             const instructionsToUse = getActiveCustomInstructions();
 
+            // Initialize analysis pipeline steps
+            initAnalysisSteps([
+                { id: 'market-data', title: 'Fetching market data', status: 'pending' },
+                { id: 'gate-scan', title: 'Running pattern gate scan', status: 'pending' },
+                { id: 'analysis', title: 'Analyzing charts', status: 'pending' },
+                { id: 'debate', title: 'Ensemble debate', status: 'pending' },
+            ]);
+
             // HYBRID INTELLIGENCE: Inject real-time market data if enabled
             // Skip fetching if preset data was already passed (from auto-capture)
             let hybridDataInjection = '';
@@ -994,6 +1025,7 @@ const App: React.FC = () => {
                 try {
                     console.warn('[Hybrid Intelligence] Attempting to fetch data for prompt:', effectiveInput);
                     setLoadingMessage('Fetching real-time market data...');
+                    startStep('market-data');
                     const hybridResult = await tryFetchHybridDataFromPromptWithCalibration(
                         effectiveInput,
                         GlobalLearningService.getCalibration()
@@ -1123,6 +1155,7 @@ const App: React.FC = () => {
                 try {
                     console.log(`[GateKeeper] Running Gate check for ${finalSymbol}...`);
                     setLoadingMessage('Running Gate Scan...');
+                    completeStep('market-data'); startStep('gate-scan');
 
                     const gateResult = await getGateAnalysis(finalSymbol, loggedTrades);
                     capturedGateResult = gateResult.gateOutput; // Capture locally for processNewAnalysis
@@ -1362,6 +1395,8 @@ const App: React.FC = () => {
 
                 if (enabledProviders.length > 1) {
                     setLoadingMessage("Thinking...");
+                    completeStep('gate-scan'); startStep('analysis');
+                    setAnalysisSteps(prev => prev.map(s => s.id === 'analysis' ? { ...s, title: `Analyzing with ${enabledProviders.map(p => p.name).join(', ')}` } : s));
                     setIsAnalysisInProgress(true);
                     // Clear previous Monte Carlo results for fresh analysis
                     setPerAIMonteCarloResults([]);
@@ -1410,6 +1445,7 @@ const App: React.FC = () => {
                     const settledResults = await Promise.allSettled(analysisPromises);
                     if (abortRef.current) return;
                     setLoadingMessage(null);
+                    completeStep('analysis');
 
                     // Log analysts that failed, then keep only fulfilled results for downstream processing
                     settledResults.forEach((settled, index) => {
@@ -1521,6 +1557,7 @@ const App: React.FC = () => {
                         if (prev.some(m => m.id === debateMessageId)) return prev;
                         return [...prev, debatePlaceholder];
                     });
+                    startStep('debate');
 
                     // --- ENSEMBLE ROUTING ---
                     let debateStream;
@@ -1726,6 +1763,8 @@ const App: React.FC = () => {
                 } else if (enabledProviders.length === 1) {
                     const provider = enabledProviders[0];
                     setLoadingMessage(isAccuracyModeEnabled ? `Running High-Precision Analysis...` : `Analyzing with ${provider.name}...`);
+                    completeStep('gate-scan'); startStep('analysis');
+                    setAnalysisSteps(prev => prev.map(s => s.id === 'analysis' ? { ...s, title: `Analyzing with ${provider.name}` } : s));
                     const result = await provider.service.analyzeTradingView(
                         enhancedPrompt, // Fixed: was promptToSend, now uses enhancedPrompt with Hybrid data
                         provider.useImages ? imageFiles : [],
@@ -1786,12 +1825,14 @@ const App: React.FC = () => {
                 }
                 const provider = enabledProviders[0];
                 setLoadingMessage("Thinking...");
+                startStep('analysis');
                 const responseText = await provider.service.getQuickResponse(promptToSend, [...currentMessages, userMessage], provider.model);
                 if (abortRef.current) return;
                 updateMessages(prev => [...prev, { id: `ai-${Date.now()}`, role: MessageRole.AI, text: responseText, createdAt: new Date().toISOString(), [provider.thoughtsKey + 'ModelUsed']: provider.model }]);
             }
         } catch (error: any) {
             if (abortRef.current) return;
+            failStep('analysis');
             updateMessages(prev => prev.filter(m => !m.isDebating));
 
             if (isQuotaError(error)) {
@@ -1811,6 +1852,9 @@ const App: React.FC = () => {
         } finally {
             if (analysisAbortController.current === currentAbortController) {
                 setLoadingMessage(null);
+                completeStep('debate');
+                // Mark any still-running steps as complete
+                setAnalysisSteps(prev => prev.map(s => s.status === 'running' ? { ...s, status: 'complete' as const, endTime: Date.now() } : s));
                 analysisAbortController.current = null;
                 setIsAnalysisInProgress(false);
             }
@@ -1823,7 +1867,13 @@ const App: React.FC = () => {
     const startPostMortemAnalysis = async (candidate: PostMortemCandidate, summaries?: string[], imageUrls?: string[], resolvedValidation?: TradeOutcomeValidation) => {
         setPostMortemCandidate(null);
         setIsPostMortemInProgress(true);
+        initAnalysisSteps([
+            { id: 'validation', title: 'Validating trade outcome', status: 'pending' },
+            { id: 'analysis', title: 'Post-mortem analysis', status: 'pending' },
+            { id: 'debate', title: 'Ensemble debate', status: 'pending' },
+        ]);
         setLoadingMessage("Thinking...");
+        startStep('validation');
         setIsLivePostMortemVisible(true);
         setLivePostMortemThoughts({ gemini: null, deepseek: null, zhipu: null, groq: null, groqNew: null, groqAlt2: null, openrouter: null, openai: null, grokNative: null });
         setIsPostMortemTypingComplete(false);
@@ -1956,6 +2006,7 @@ Please investigate this discrepancy in your analysis.
                         }
 
                         setLoadingMessage("Conducting Post-Mortem Ensemble Analysis...");
+                        completeStep('validation'); startStep('analysis');
                     } catch (err) {
                         console.warn('[PostMortem] Price validation failed:', err);
                         // Continue without price validation if it fails
@@ -1989,6 +2040,7 @@ Please investigate this discrepancy in your analysis.
                 if (results.length > 1) {
                     // Conduct Ensemble Debate
                     setLoadingMessage("Ensemble Debate in progress...");
+                    completeStep('analysis'); startStep('debate');
                     updateMessages(prev => prev.map(m => m.id === postMortemMessageId ? { ...m, isDebating: true, text: 'Ensemble is analyzing trade outcome...' } : m));
 
                     let debateStream;
@@ -2147,6 +2199,8 @@ Please investigate this discrepancy in your analysis.
         } finally {
             setIsPostMortemInProgress(false);
             setLoadingMessage(null);
+            completeStep('debate');
+            setAnalysisSteps(prev => prev.map(s => s.status === 'running' ? { ...s, status: 'complete' as const, endTime: Date.now() } : s));
             setTypingMessageState(null);
         }
     };
@@ -3763,6 +3817,8 @@ ${result.comparisonBlock}
 
             <ChatArea
                 messages={messages}
+                analysisSteps={analysisSteps}
+                isAnalysisActive={!!loadingMessage}
                 onSelectMessageForProbability={(id) => {
                     setSelectedProbabilityMessageId(id);
                     setIsAdvancedAnalyticsOpen(true);

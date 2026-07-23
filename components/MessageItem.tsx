@@ -330,7 +330,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 )}
 
                             {/* Main Analysis Debate (Initial) */}
-                            {message.isDebating && message.debateTurns && <DebateView debateTurns={message.debateTurns} geminiModelName={safeGeminiModelName} deepseekModelName={safeDeepSeekModelName} zhipuModelName={safeZhipuModelName} groqModelName={safeGroqModelName} groqNewModelName={safeGroqNewModelName} groqAlt2ModelName={safeGroqAlt2ModelName} openrouterModelName={safeOpenrouterModelName} lensConfig={lensConfig} />}
+                            {message.isDebating && message.debateTurns && <DebateView debateTurns={message.debateTurns} geminiModelName={safeGeminiModelName} deepseekModelName={safeDeepSeekModelName} zhipuModelName={safeZhipuModelName} groqModelName={safeGroqModelName} groqNewModelName={safeGroqNewModelName} groqAlt2ModelName={safeGroqAlt2ModelName} openrouterModelName={safeOpenrouterModelName} lensConfig={lensConfig} isDebating={true} />}
 
                             {message.role === MessageRole.AI && !message.isDebating && Array.isArray(message.debateTurns) && message.debateTurns.length > 0 && (
                                 <div className="mt-4 sm:mt-6 pt-3 sm:pt-5 border-t border-white/10">

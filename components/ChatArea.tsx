@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useCallback } from 'react';
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
-import { Message, AccuracySubMode, AnalystLensConfig } from '../types';
+import { Message, AccuracySubMode, AnalystLensConfig, AnalysisStep } from '../types';
 import MessageItem, { ChatContextProps } from './MessageItem';
 import { ChatInput } from './ChatInput';
 import { QuickActionChips } from './QuickActionChips';
@@ -9,6 +9,7 @@ import { ArrowUpIcon, ArrowDownIcon, CloseIcon, LoadingIcon, EyeIcon, EditIcon, 
 import { ImageMetadata } from '../types';
 import HybridDataPanel from './HybridDataPanel';
 import ImageViewerModal from './ImageViewerModal';
+import AnalysisProgress from './AnalysisProgress';
 
 // Hoisted list components to prevent re-creation on each render
 const ListHeader = () => <div className="h-16"></div>;
@@ -99,6 +100,9 @@ interface ChatAreaProps {
     onOpenAnalytics: () => void;
     onInteract?: () => void;
     onSelectMessageForProbability?: (id: string) => void;
+    // Analysis Progress (Task UI)
+    analysisSteps?: AnalysisStep[];
+    isAnalysisActive?: boolean;
 }
 
 const ChatAreaInner: React.FC<ChatAreaProps> = ({
@@ -176,7 +180,9 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     onOpenLiveMarket,
     onOpenAnalytics,
     onInteract,
-    onSelectMessageForProbability
+    onSelectMessageForProbability,
+    analysisSteps,
+    isAnalysisActive
 }) => {
     const [isSelectionMode, setIsSelectionMode] = useState(false);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -357,18 +363,32 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
             {loadingMessage ? (
                 <div className="absolute bottom-0 left-0 right-0 p-2 sm:p-4 pointer-events-none z-10">
                     <div className="max-w-4xl mx-auto pointer-events-auto">
-                        <div className="flex flex-col items-center justify-center p-6 glass rounded-2xl shadow-[0_0_50px_-12px_rgba(34,211,238,0.2)] animate-fade-in border-t border-cyan-500/20">
-                            <div className="relative">
-                                <div className="absolute inset-0 blur-xl opacity-20 animate-pulse bg-cyan-500"></div>
-                                <LoadingIcon className="h-8 w-8 relative z-10 text-cyan-400" />
+                        {analysisSteps && analysisSteps.length > 0 ? (
+                            <AnalysisProgress
+                                steps={analysisSteps}
+                                isActive={!!loadingMessage}
+                                onCancel={handleCancelAnalysis}
+                                isPostMortem={isPostMortemInProgress}
+                                isAnalysisInProgress={isAnalysisInProgress}
+                                isPostMortemInProgress={isPostMortemInProgress}
+                                onOpenLiveView={() => setIsLiveAnalysisVisible(true)}
+                                onOpenPostMortem={() => setIsLivePostMortemVisible(true)}
+                            />
+                        ) : (
+                            /* Fallback: original spinner overlay when no step data */
+                            <div className="flex flex-col items-center justify-center p-6 glass rounded-2xl shadow-[0_0_50px_-12px_rgba(34,211,238,0.2)] animate-fade-in border-t border-cyan-500/20">
+                                <div className="relative">
+                                    <div className="absolute inset-0 blur-xl opacity-20 animate-pulse bg-cyan-500"></div>
+                                    <LoadingIcon className="h-8 w-8 relative z-10 text-cyan-400" />
+                                </div>
+                                <p className="mt-3 font-mono text-sm animate-pulse text-cyan-300">{loadingMessage}</p>
+                                <div className="flex items-center gap-4 mt-4">
+                                    {isAnalysisInProgress && <button onClick={() => setIsLiveAnalysisVisible(true)} className="flex items-center gap-2 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 font-medium py-1.5 px-4 rounded-full text-xs transition-all uppercase tracking-wide"><EyeIcon />Live View</button>}
+                                    {isPostMortemInProgress && <button onClick={() => setIsLivePostMortemVisible(true)} className="flex items-center gap-2 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 font-medium py-1.5 px-4 rounded-full text-xs transition-all uppercase tracking-wide"><EyeIcon />View Post-Mortem</button>}
+                                    <button onClick={handleCancelAnalysis} className="bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-300 font-medium py-1.5 px-4 rounded-full text-xs transition-all uppercase tracking-wide">Cancel</button>
+                                </div>
                             </div>
-                            <p className="mt-3 font-mono text-sm animate-pulse text-cyan-300">{loadingMessage}</p>
-                            <div className="flex items-center gap-4 mt-4">
-                                {isAnalysisInProgress && <button onClick={() => setIsLiveAnalysisVisible(true)} className="flex items-center gap-2 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 font-medium py-1.5 px-4 rounded-full text-xs transition-all uppercase tracking-wide"><EyeIcon />Live View</button>}
-                                {isPostMortemInProgress && <button onClick={() => setIsLivePostMortemVisible(true)} className="flex items-center gap-2 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 font-medium py-1.5 px-4 rounded-full text-xs transition-all uppercase tracking-wide"><EyeIcon />View Post-Mortem</button>}
-                                <button onClick={handleCancelAnalysis} className="bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-300 font-medium py-1.5 px-4 rounded-full text-xs transition-all uppercase tracking-wide">Cancel</button>
-                            </div>
-                        </div>
+                        )}
                     </div>
                 </div>
             ) : (
