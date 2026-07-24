@@ -11,22 +11,24 @@ export const LogTradeModal: React.FC<{
   const [pnl, setPnl] = useState('');
   const [correctedValue, setCorrectedValue] = useState('');
   const [isAdvanced, setIsAdvanced] = useState(false);
+  const [pnlError, setPnlError] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const pnlNum = parseFloat(pnl);
 
-    if (!isNaN(pnlNum) && pnlNum >= 0) {
-      // Store losses as negative values for proper display in journal
-      const finalPnl = outcome === TradeOutcome.LOSS ? -Math.abs(pnlNum) : Math.abs(pnlNum);
-      onConfirm({
-        pnlAmount: finalPnl,
-        correctedStopLoss: outcome === TradeOutcome.LOSS && isAdvanced ? correctedValue : undefined,
-        correctedTakeProfit: outcome === TradeOutcome.WIN && isAdvanced ? correctedValue : undefined,
-      });
-    } else {
-      alert("Please enter a valid, positive number for the amount.");
+    if (isNaN(pnlNum) || pnlNum < 0) {
+      setPnlError('Please enter a valid, positive number for the amount.');
+      return;
     }
+    setPnlError('');
+    // Store losses as negative values for proper display in journal
+    const finalPnl = outcome === TradeOutcome.LOSS ? -Math.abs(pnlNum) : Math.abs(pnlNum);
+    onConfirm({
+      pnlAmount: finalPnl,
+      correctedStopLoss: outcome === TradeOutcome.LOSS && isAdvanced ? correctedValue : undefined,
+      correctedTakeProfit: outcome === TradeOutcome.WIN && isAdvanced ? correctedValue : undefined,
+    });
   };
 
   const lossContent = {
@@ -50,8 +52,8 @@ export const LogTradeModal: React.FC<{
   const content = outcome === TradeOutcome.WIN ? winContent : lossContent;
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-      <div className="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md border border-gray-700 animate-fade-in">
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Log trade">
+      <div className="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md border border-gray-700 animate-fade-in max-h-[90vh] overflow-y-auto">
         <h3 className={`text-lg font-bold mb-4 ${outcome === TradeOutcome.WIN ? 'text-green-400' : 'text-red-400'}`}>
           {content.title}
         </h3>
@@ -59,7 +61,8 @@ export const LogTradeModal: React.FC<{
           <div className="space-y-4">
             <div>
               <label htmlFor="pnl-amount" className="block text-sm font-medium text-gray-300">{content.pnlLabel}</label>
-              <input type="number" id="pnl-amount" value={pnl} onChange={e => setPnl(e.target.value)} placeholder="e.g., 250" className="mt-1 block w-full bg-gray-900 border border-gray-600 rounded-md p-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500" required autoFocus />
+              <input type="number" id="pnl-amount" value={pnl} onChange={e => { setPnl(e.target.value); setPnlError(''); }} placeholder="e.g., 250" className={`mt-1 block w-full bg-gray-900 border rounded-md p-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 ${pnlError ? 'border-red-500 aria-invalid' : 'border-gray-600'}`} required autoFocus aria-invalid={!!pnlError} aria-describedby={pnlError ? 'pnl-error' : undefined} />
+              {pnlError && <p id="pnl-error" className="mt-1 text-xs text-red-400" role="alert">{pnlError}</p>}
             </div>
 
             <div className="border-t border-gray-700 pt-4">

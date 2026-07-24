@@ -406,8 +406,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
 
     const handleAddInstruction = () => {
         if (currentInstructions.length >= MAX_ITEMS) {
-            alert(`Maximum of ${MAX_ITEMS} instructions allowed per mode.`);
-            return;
+            return; // Button is disabled at limit; guard for safety
         }
 
         const newInstruction: CustomInstruction = {

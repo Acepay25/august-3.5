@@ -10,6 +10,7 @@ import { MASTER_ANALYSIS_PROMPT, DEVILS_ADVOCATE_PROMPT, INVALIDATION_THESIS_PRO
 import { constructOptimizedContext } from '../../utils/memoryUtils';
 import { parseLiveMarketData } from '../../utils/liveMarketParser';
 import { Capacitor } from '@capacitor/core';
+import { withRetry, ProviderName } from '../../utils/apiErrorUtils';
 
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
 const DEEPSEEK_BASE_URL = 'https://api.deepseek.com';
@@ -274,43 +275,19 @@ export const analyzeTradingView = async (
     // Use the patternMemoryContext and recentInsightsContext already defined above
     const userMessageText = `${formattedPrompt}${imageSummaryContext}\n\n${patternMemoryContext}\n\n${recentInsightsContext}\n\n${memoryContext}`;
 
-    // Retry logic for transient connection errors
-    let completion;
-    let lastError;
-    for (let attempt = 1; attempt <= 3; attempt++) {
-        try {
-            // Use native HTTP in Capacitor, OpenAI SDK in browser
-            completion = await callDeepSeek(
-                modelName,
-                [
-                    { role: "system", content: systemPrompt },
-                    { role: "user", content: userMessageText }
-                ],
-                { response_format: { type: "json_object" }, max_tokens: 4096 }
-            );
-            break; // Success, exit retry loop
-        } catch (error: any) {
-            lastError = error;
-            console.warn(`DeepSeek API attempt ${attempt} failed:`, error.message || error);
-
-            // Don't retry on rate limits or auth errors
-            if (error.status === 401 || error.status === 403 || error.message?.includes('401') || error.message?.includes('403')) {
-                throw new Error(`DeepSeek authentication error: ${error.message}`);
-            }
-            if (error.status === 429 || error.message?.includes('429')) {
-                throw new Error(`DeepSeek rate limit exceeded. Please wait and try again.`);
-            }
-
-            // Retry on connection/timeout errors
-            if (attempt < 3) {
-                await new Promise(resolve => setTimeout(resolve, 2000 * attempt)); // Exponential backoff
-            }
-        }
-    }
-
-    if (!completion) {
-        throw new Error(`DeepSeek connection error after 3 attempts: ${lastError?.message || 'Unknown error'}`);
-    }
+    // Use shared retry logic with exponential backoff
+    const completion = await withRetry(
+        () => callDeepSeek(
+            modelName,
+            [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: userMessageText }
+            ],
+            { response_format: { type: "json_object" }, max_tokens: 4096 }
+        ),
+        'DeepSeek' as ProviderName,
+        4
+    );
 
     const responseText = completion.choices[0].message.content;
     if (!responseText) throw new Error("Received an empty response from the AI.");

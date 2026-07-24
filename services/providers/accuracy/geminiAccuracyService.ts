@@ -9,10 +9,10 @@ import { constructOptimizedContext } from '../../../utils/memoryUtils';
 import { parseLiveMarketData } from '../../../utils/liveMarketParser';
 
 const getAiClient = (): GoogleGenAI => {
-    if (!process.env.API_KEY) {
+    if (!process.env.GEMINI_API_KEY) {
         throw new Error("Gemini API key is missing.");
     }
-    return new GoogleGenAI({ apiKey: process.env.API_KEY });
+    return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 };
 
 // ... (schema and fileToGenerativePart and extractTextFromResponse helpers remain the same) ...

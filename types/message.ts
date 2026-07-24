@@ -1,11 +1,11 @@
 // Message and conversation display types
 
-import { AccuracySubMode, MessageRole, TradeOutcome } from './enums';
+import { AccuracySubMode, MessageRole, TradeOutcome, DebateSpeaker } from './enums';
 import { TradingStyle } from './lens';
 import { TradeAnalysis } from './analysis';
 
 export interface DebateTurn {
-  speaker: 'Gemini' | 'DeepSeek' | 'Zhipu' | 'Groq' | 'Groq (Alt)' | 'Groq (Alt 2)' | 'OpenRouter' | 'OpenAI' | 'Claude' | 'GPT' | 'Grok' | 'Moderator';
+  speaker: DebateSpeaker;
   text: string;
 }
 

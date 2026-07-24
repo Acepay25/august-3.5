@@ -11,6 +11,7 @@ interface UserProfileManagerProps {
 
 const UserProfileManager: React.FC<UserProfileManagerProps> = ({ isVisible, onUserSelect, existingUsers, onImportProfile, onDeleteUser }) => {
   const [newUsername, setNewUsername] = useState('');
+  const [formError, setFormError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isVisible) return null;
@@ -20,8 +21,9 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ isVisible, onUs
     const trimmedUsername = newUsername.trim();
     if (trimmedUsername) {
       if (existingUsers.find(u => u.toLowerCase() === trimmedUsername.toLowerCase())) {
-        alert('Username already exists. Please choose another.');
+        setFormError('Username already exists. Please choose another.');
       } else {
+        setFormError('');
         onUserSelect(trimmedUsername);
       }
     }
@@ -41,11 +43,11 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ isVisible, onUs
       if (typeof text === 'string') {
         await onImportProfile(text);
       } else {
-        alert('Could not read the file.');
+        setFormError('Could not read the file.');
       }
     };
     reader.onerror = () => {
-      alert('Error reading file.');
+      setFormError('Error reading file.');
     };
     reader.readAsText(file);
 
@@ -55,7 +57,7 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ isVisible, onUs
   };
 
   return (
-    <div className="fixed inset-0 bg-black z-50 flex items-center justify-center p-4 animate-fade-in">
+    <div className="fixed inset-0 bg-black z-50 flex items-center justify-center p-4 animate-fade-in" role="dialog" aria-modal="true" aria-label="User profile selection">
       <div className="relative w-full max-w-md bg-zinc-900 rounded-3xl border border-white/10 shadow-2xl overflow-hidden">
           {/* Header */}
           <div className="relative px-8 py-10 text-center border-b border-white/5">
@@ -99,11 +101,14 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ isVisible, onUs
                     <input 
                         type="text" 
                         value={newUsername} 
-                        onChange={(e) => setNewUsername(e.target.value)} 
+                        onChange={(e) => { setNewUsername(e.target.value); setFormError(''); }} 
                         placeholder="Create New Workspace" 
-                        className="w-full bg-zinc-950/50 border border-white/10 rounded-xl px-5 py-4 text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-transparent transition-all font-medium"
+                        className={`w-full bg-zinc-950/50 border rounded-xl px-5 py-4 text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-transparent transition-all font-medium ${formError ? 'border-red-500/50' : 'border-white/10'}`}
                         autoFocus
+                        aria-invalid={!!formError}
+                        aria-describedby={formError ? 'username-error' : undefined}
                     />
+                    {formError && <p id="username-error" className="mt-2 text-xs text-red-400" role="alert">{formError}</p>}
                     <button 
                         type="submit" 
                         disabled={!newUsername.trim()}

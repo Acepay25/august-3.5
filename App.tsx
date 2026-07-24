@@ -24,8 +24,7 @@ import UserProfileManager from './components/settings/UserProfileManager';
 import SavedAnalyses from './components/journal/SavedAnalyses';
 import SettingsMenu from './components/settings/SettingsMenu';
 import { useProviderConfigs } from './hooks/useProviderConfigs';
-import LiveAnalysisView from './components/analysis/LiveAnalysisView';
-import LivePostMortemView from './components/analysis/LivePostMortemView';
+import LiveStreamView from './components/analysis/LiveStreamView';
 import { LogTradeModal } from './components/journal/LogTradeModal';
 import { PostTradeUploadModal, PostMortemCandidate } from './components/modals/PostTradeUploadModal';
 import { SkipTradeModal } from './components/modals/SkipTradeModal';
@@ -1360,7 +1359,8 @@ const App: React.FC = () => {
                     onDismiss={() => setShowUpdateNotification(false)}
                 />
             )}
-            <LiveAnalysisView
+            <LiveStreamView
+                variant="analysis"
                 isVisible={isLiveAnalysisVisible}
                 onClose={() => setIsLiveAnalysisVisible(false)}
                 thoughts={liveThoughts}
@@ -1371,12 +1371,10 @@ const App: React.FC = () => {
                 groqNewModelName={isGroqNewEnabled ? modelIdToName[selectedGroqNewModel] : undefined}
                 groqAlt2ModelName={isGroqAlt2Enabled ? modelIdToName[selectedGroqAlt2Model] : undefined}
                 openrouterModelName={isOpenrouterEnabled ? modelIdToName[selectedOpenrouterModel] || selectedOpenrouterModel : undefined}
-
                 onAllTypingComplete={handleAllAnalysisTypingComplete}
-
-
             />
-            <LivePostMortemView
+            <LiveStreamView
+                variant="postmortem"
                 isVisible={isLivePostMortemVisible}
                 onClose={() => setIsLivePostMortemVisible(false)}
                 thoughts={livePostMortemThoughts}
@@ -1387,7 +1385,6 @@ const App: React.FC = () => {
                 groqNewModelName={isGroqNewEnabled ? modelIdToName[selectedGroqNewModel] : undefined}
                 groqAlt2ModelName={isGroqAlt2Enabled ? modelIdToName[selectedGroqAlt2Model] : undefined}
                 openrouterModelName={isOpenrouterEnabled ? modelIdToName[selectedOpenrouterModel] || selectedOpenrouterModel : undefined}
-
                 onAllTypingComplete={handleAllPostMortemTypingComplete}
             />
             <UserProfileManager isVisible={isUserModalOpen} onUserSelect={loadUserData} existingUsers={existingUsernames} onImportProfile={handleImportData} onDeleteUser={handleDeleteUser} />

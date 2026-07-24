@@ -66,7 +66,9 @@ export const Header: React.FC<HeaderProps> = ({
     const [isSessionModalOpen, setIsSessionModalOpen] = useState(false);
     const sessionModalRef = useRef<HTMLDivElement>(null);
 
-    // Update session context periodically
+    // Update session context periodically.
+    // Pause when the tab is hidden to save CPU/battery on mobile,
+    // and use a 5s interval instead of 1s to reduce re-renders.
     useEffect(() => {
         const updateSessions = () => {
             setSessionContext(getSessionContext());
@@ -74,8 +76,31 @@ export const Header: React.FC<HeaderProps> = ({
         };
 
         updateSessions();
-        const interval = setInterval(updateSessions, 1000); // Update every second for realtime countdowns
-        return () => clearInterval(interval);
+
+        let interval: ReturnType<typeof setInterval>;
+        const startInterval = () => {
+            interval = setInterval(updateSessions, 5000);
+        };
+        const stopInterval = () => {
+            clearInterval(interval);
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                updateSessions(); // Refresh immediately on return
+                startInterval();
+            } else {
+                stopInterval();
+            }
+        };
+
+        startInterval();
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            stopInterval();
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
     }, []);
 
     // Close session modal when clicking outside
@@ -109,6 +134,7 @@ export const Header: React.FC<HeaderProps> = ({
                         onClick={() => setIsMobileMenuOpen(prev => !prev)}
                         className="p-2.5 text-zinc-400 hover:text-cyan-400 rounded-xl hover:bg-white/5 transition-colors"
                         title="Menu"
+                        aria-label="Toggle navigation menu"
                     >
                         <HamburgerIcon className="h-5 w-5" />
                     </button>
@@ -227,6 +253,7 @@ export const Header: React.FC<HeaderProps> = ({
                         onClick={onOpenVersionHistory}
                         className="p-2 text-zinc-400 hover:text-cyan-400 hover:bg-white/5 rounded-lg transition-colors"
                         title="Changelog & Features"
+                        aria-label="Changelog and features"
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></svg>
                     </button>
@@ -236,6 +263,7 @@ export const Header: React.FC<HeaderProps> = ({
                             onClick={() => isAnalysisInProgress ? setIsLiveAnalysisVisible(true) : setIsLivePostMortemVisible(true)}
                             className="p-2.5 bg-cyan-500/10 text-cyan-400 rounded-xl animate-pulse"
                             title="Live Analysis"
+                            aria-label="View live analysis progress"
                         >
                             <EyeIcon />
                         </button>

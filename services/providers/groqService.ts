@@ -10,6 +10,9 @@ import { truncateToTokenLimit } from '../../utils/tokenUtils';
 import { MASTER_ANALYSIS_PROMPT, DEVILS_ADVOCATE_PROMPT, INVALIDATION_THESIS_PROMPT, CORRELATION_AWARENESS_PROMPT, LENS_MODE_BASE_PROMPT, COMPACT_ANALYSIS_PROMPT, MEMORY_COMPRESSOR_PROMPT, GLOBAL_MEMORY_MANAGER_PROMPT, AI_PROVIDER_MEMORY_ENFORCEMENT_PROMPT } from '../../constants/prompts';
 import { constructOptimizedContext } from '../../utils/memoryUtils';
 import { parseLiveMarketData } from '../../utils/liveMarketParser';
+import { withRetry, ProviderName } from '../../utils/apiErrorUtils';
+
+const PROVIDER: ProviderName = 'Groq';
 
 const GROQ_BASE_URL = 'https://api.groq.com/openai/v1/';
 
@@ -33,45 +36,6 @@ const getMaxTokens = (modelName: string, defaultTokens: number): number => {
     return defaultTokens;
 };
 
-// Retry helper with exponential backoff for rate limit (TPM/429) errors
-const withRetry = async <T>(
-    fn: () => Promise<T>,
-    maxRetries: number = 3,
-    baseDelay: number = 3000,
-    operationName: string = 'Groq API call'
-): Promise<T> => {
-    let lastError: Error | null = null;
-
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-        try {
-            return await fn();
-        } catch (error: any) {
-            lastError = error;
-
-            // Check if it's a retriable error (429 rate limit / TPM exceeded)
-            const is429 = error?.status === 429 ||
-                error?.status === 413 ||
-                error?.message?.includes('429') ||
-                error?.message?.includes('413') ||
-                error?.message?.includes('Too many') ||
-                error?.message?.includes('rate limit') ||
-                error?.message?.includes('TPM') ||
-                error?.message?.includes('too large');
-
-            if (!is429 || attempt === maxRetries) {
-                throw error;
-            }
-
-            // Exponential backoff: 3s, 6s, 12s, etc.
-            const delay = baseDelay * Math.pow(2, attempt);
-            console.warn(`[Groq] ${operationName} hit rate limit (attempt ${attempt + 1}/${maxRetries + 1}). Retrying in ${delay / 1000}s...`);
-            await new Promise(resolve => setTimeout(resolve, delay));
-        }
-    }
-
-    throw lastError || new Error('Retry failed after max attempts');
-};
-
 
 const fileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -82,7 +46,7 @@ const fileToBase64 = (file: File): Promise<string> => {
     });
 };
 
-export const summarizeChartImage = async (image: File, chartNumber: number, modelName: string): Promise<{ uiSummary: string; fullSummary: string }> => {
+export const summarizeChartImage = async (image: File, chartNumber: number, modelName: string, signal?: AbortSignal): Promise<{ uiSummary: string; fullSummary: string }> => {
     try {
         const groq = getClient();
         const base64Image = await fileToBase64(image);
@@ -167,17 +131,22 @@ export const summarizeChartImage = async (image: File, chartNumber: number, mode
         - Keep descriptions concise.
         `;
 
-        const completion = await groq.chat.completions.create({
-            model: modelName,
-            messages: [{
-                role: 'user',
-                content: [
-                    { type: 'text', text: prompt },
-                    { type: 'image_url', image_url: { url: `data:${image.type};base64,${base64Image}` } }
-                ]
-            }],
-            max_tokens: getMaxTokens(modelName, 1024),
-        });
+        const completion = await withRetry(
+            () => groq.chat.completions.create({
+                model: modelName,
+                messages: [{
+                    role: 'user',
+                    content: [
+                        { type: 'text', text: prompt },
+                        { type: 'image_url', image_url: { url: `data:${image.type};base64,${base64Image}` } }
+                    ]
+                }],
+                max_tokens: getMaxTokens(modelName, 1024),
+            }, { signal }),
+            PROVIDER,
+            4,
+            signal
+        );
 
         const fullSummary = completion.choices[0].message.content?.trim() || `Analysis failed for Chart ${chartNumber}.`;
 
@@ -233,7 +202,8 @@ export const analyzeTradingView = async (
     isPlaybookEnabledInPureAI?: boolean, // Ignored in standard service
     isFamiliesEnabledInPureAI?: boolean, // Ignored in standard service
     isMemoryEnabledInPureAI?: boolean, // Ignored in standard service
-    rolePrompt?: string // Analyst Lens: specialized role prompt prefix
+    rolePrompt?: string, // Analyst Lens: specialized role prompt prefix
+    signal?: AbortSignal
 ): Promise<{ analysis: TradeAnalysis; thoughtProcess: string; sources: GroundingChunk[] }> => {
     const isVisionModel = modelName.includes('llama-4');
     if (!isVisionModel && images.length > 0) {
@@ -567,10 +537,10 @@ export const analyzeTradingView = async (
             messages: rawMessages,
             response_format: { type: "json_object" },
             max_tokens: getMaxTokens(modelName, 4096),
-        }),
-        3, // max retries
-        3000, // base delay 3s
-        `analyzeTradingView (${modelName})`
+        }, { signal }),
+        PROVIDER,
+        4,
+        signal
     );
 
     const responseText = completion.choices[0].message.content;
@@ -595,7 +565,7 @@ export const analyzeTradingView = async (
     }
 };
 
-export const getQuickResponse = async (prompt: string, history: Message[], modelName: string, systemInstruction?: string): Promise<string> => {
+export const getQuickResponse = async (prompt: string, history: Message[], modelName: string, systemInstruction?: string, signal?: AbortSignal): Promise<string> => {
     const groq = getClient();
     const messages: ChatCompletionMessageParam[] = history.map(m => ({
         role: m.role === MessageRole.AI ? 'assistant' : 'user',
@@ -605,7 +575,12 @@ export const getQuickResponse = async (prompt: string, history: Message[], model
     messages.unshift({ role: 'system', content: systemInstruction || 'You are a helpful and concise AI assistant specializing in futures trading concepts. Answer user questions clearly.' });
     messages.push({ role: 'user', content: prompt });
 
-    const completion = await groq.chat.completions.create({ model: modelName, messages, max_tokens: getMaxTokens(modelName, 1024) });
+    const completion = await withRetry(
+        () => groq.chat.completions.create({ model: modelName, messages, max_tokens: getMaxTokens(modelName, 1024) }, { signal }),
+        PROVIDER,
+        4,
+        signal
+    );
     return sanitizeAIResponse(completion.choices[0].message.content || "I am sorry, I could not generate a response.");
 };
 
@@ -616,7 +591,8 @@ export const conductPostMortem = async (
     finalTradeSummary: string | null,
     modelName: string,
     feedback: { correctedEntry?: string; correctedStopLoss?: string; correctedTakeProfit?: string; },
-    postTradeImageSummaries?: string[]
+    postTradeImageSummaries?: string[],
+    signal?: AbortSignal
 ): Promise<string> => {
     const groq = getClient();
     const { correctedEntry, correctedStopLoss, correctedTakeProfit } = feedback;
@@ -855,15 +831,20 @@ Answer **all** of the following **MANDATORY LOSS ANALYSIS QUESTIONS**:
 
 **Tone:** Brutally honest, forensic. No excuses, only lessons.`;
     }
-    const completion = await groq.chat.completions.create({
-        model: modelName,
-        messages: [{ role: 'user', content: analysisPrompt }],
-        max_tokens: getMaxTokens(modelName, 2048)
-    });
+    const completion = await withRetry(
+        () => groq.chat.completions.create({
+            model: modelName,
+            messages: [{ role: 'user', content: analysisPrompt }],
+            max_tokens: getMaxTokens(modelName, 2048)
+        }, { signal }),
+        PROVIDER,
+        4,
+        signal
+    );
     return sanitizeAIResponse(completion.choices[0].message.content || "Post-mortem analysis failed.");
 };
 
-export const searchStrategies = async (query: string, activeFrameworks: string[], modelName: string): Promise<StrategySearchResult[]> => {
+export const searchStrategies = async (query: string, activeFrameworks: string[], modelName: string, signal?: AbortSignal): Promise<StrategySearchResult[]> => {
     const groq = getClient();
     const frameworksList = activeFrameworks.join(', ');
     const prompt = `You are a search engine for a predefined list of trading strategies. Your entire knowledge base is limited to ONLY the following frameworks: [${frameworksList}].
@@ -877,11 +858,16 @@ export const searchStrategies = async (query: string, activeFrameworks: string[]
     4. You are strictly forbidden from suggesting or describing any strategy that is not in the provided list.
     5. Your output must be a single, valid JSON array of objects with keys "name", "description", and "rationale".`;
 
-    const completion = await groq.chat.completions.create({
-        model: modelName,
-        messages: [{ role: "user", content: prompt }],
-        response_format: { type: "json_object" },
-    });
+    const completion = await withRetry(
+        () => groq.chat.completions.create({
+            model: modelName,
+            messages: [{ role: "user", content: prompt }],
+            response_format: { type: "json_object" },
+        }, { signal }),
+        PROVIDER,
+        4,
+        signal
+    );
 
     const responseText = completion.choices[0].message.content;
     if (!responseText) return [];
@@ -899,7 +885,7 @@ export const searchStrategies = async (query: string, activeFrameworks: string[]
     }
 };
 
-export const discoverStrategies = async (chatHistory: Message[], activeFrameworks: string[], modelName: string): Promise<StrategySearchResult[]> => {
+export const discoverStrategies = async (chatHistory: Message[], activeFrameworks: string[], modelName: string, signal?: AbortSignal): Promise<StrategySearchResult[]> => {
     const groq = getClient();
     const frameworksList = activeFrameworks.join(', ');
     const historyText = chatHistory.length > 0
@@ -914,11 +900,16 @@ export const discoverStrategies = async (chatHistory: Message[], activeFramework
     
     You are strictly forbidden from suggesting any strategy that is not in the provided list. Your output must be a valid JSON array of objects with keys "name", "description", and "rationale".`;
 
-    const completion = await groq.chat.completions.create({
-        model: modelName,
-        messages: [{ role: "user", content: prompt }],
-        response_format: { type: "json_object" },
-    });
+    const completion = await withRetry(
+        () => groq.chat.completions.create({
+            model: modelName,
+            messages: [{ role: "user", content: prompt }],
+            response_format: { type: "json_object" },
+        }, { signal }),
+        PROVIDER,
+        4,
+        signal
+    );
 
     const responseText = completion.choices[0].message.content;
     if (!responseText) return [];
@@ -936,14 +927,19 @@ export const discoverStrategies = async (chatHistory: Message[], activeFramework
     }
 };
 
-export const getStrategyDescription = async (strategyName: string, modelName: string): Promise<string> => {
+export const getStrategyDescription = async (strategyName: string, modelName: string, signal?: AbortSignal): Promise<string> => {
     const groq = getClient();
     const prompt = `Provide a concise, one-paragraph explanation of the "${strategyName}" trading strategy.`;
-    const completion = await groq.chat.completions.create({ model: modelName, messages: [{ role: 'user', content: prompt }] });
+    const completion = await withRetry(
+        () => groq.chat.completions.create({ model: modelName, messages: [{ role: 'user', content: prompt }] }, { signal }),
+        PROVIDER,
+        4,
+        signal
+    );
     return sanitizeAIResponse(completion.choices[0].message.content || "Failed to retrieve strategy description.");
 };
 
-export const summarizeTrade = async (trade: LoggedTrade, modelName: string): Promise<string> => {
+export const summarizeTrade = async (trade: LoggedTrade, modelName: string, signal?: AbortSignal): Promise<string> => {
     const groq = getClient();
     const tradeForAnalysis = {
         ...trade,
@@ -979,14 +975,19 @@ You MUST include a 2-3 sentence summary (67 words MAX) of the post-mortem analys
 ${JSON.stringify(tradeForAnalysis, null, 2)}
     `;
 
-    const completion = await groq.chat.completions.create({
-        model: modelName,
-        messages: [{ role: 'user', content: prompt }]
-    });
+    const completion = await withRetry(
+        () => groq.chat.completions.create({
+            model: modelName,
+            messages: [{ role: 'user', content: prompt }]
+        }, { signal }),
+        PROVIDER,
+        4,
+        signal
+    );
     return sanitizeAIResponse(completion.choices[0].message.content || "Summary generation failed.");
 };
 
-export const generateFinalSummary = async (summaries: TradeSummary[], modelName: string, charLimit: number = 4000): Promise<string> => {
+export const generateFinalSummary = async (summaries: TradeSummary[], modelName: string, charLimit: number = 4000, signal?: AbortSignal): Promise<string> => {
     const groq = getClient();
     const summariesText = summaries.map(s => `- ${s.summaryText}`).join('\n');
     const tradeCount = summaries.length;
@@ -1028,15 +1029,20 @@ Return ONLY the structured summary.
 `;
 
 
-    const completion = await groq.chat.completions.create({
-        model: modelName,
-        messages: [{ role: 'user', content: prompt }]
-    });
+    const completion = await withRetry(
+        () => groq.chat.completions.create({
+            model: modelName,
+            messages: [{ role: 'user', content: prompt }]
+        }, { signal }),
+        PROVIDER,
+        4,
+        signal
+    );
     return sanitizeAIResponse(completion.choices[0].message.content || "Final summary generation failed.");
 };
 
 // Memory compression for chat history
-export const compressChatHistory = async (messages: Message[], currentSummary: string = ""): Promise<string> => {
+export const compressChatHistory = async (messages: Message[], currentSummary: string = "", signal?: AbortSignal): Promise<string> => {
     const groq = getClient();
     const messagesText = messages.map(m => `${m.role}: ${m.text}`).join('\n\n');
 
@@ -1056,16 +1062,21 @@ Discard redundant details.
 Return ONLY the new compressed summary text.
     `;
 
-    const completion = await groq.chat.completions.create({
-        model: 'llama-3.3-70b-versatile',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: 2048
-    });
+    const completion = await withRetry(
+        () => groq.chat.completions.create({
+            model: 'llama-3.3-70b-versatile',
+            messages: [{ role: 'user', content: prompt }],
+            max_tokens: 2048
+        }, { signal }),
+        PROVIDER,
+        4,
+        signal
+    );
     return sanitizeAIResponse(completion.choices[0].message.content || "Memory compression failed.");
 };
 
 // Update global memory with trade insights
-export const updateGlobalMemory = async (recentTrades: LoggedTrade[], currentMemory?: GlobalMemory): Promise<GlobalMemory> => {
+export const updateGlobalMemory = async (recentTrades: LoggedTrade[], currentMemory?: GlobalMemory, signal?: AbortSignal): Promise<GlobalMemory> => {
     const groq = getClient();
     const tradeSummaries = recentTrades.map(t => JSON.stringify({
         tradeId: t.id,
@@ -1093,12 +1104,17 @@ ${tradeSummaries}
 Generate the updated Global Memory JSON object.
     `;
 
-    const completion = await groq.chat.completions.create({
-        model: 'llama-3.3-70b-versatile',
-        messages: [{ role: 'user', content: prompt }],
-        response_format: { type: 'json_object' },
-        max_tokens: 2048
-    });
+    const completion = await withRetry(
+        () => groq.chat.completions.create({
+            model: 'llama-3.3-70b-versatile',
+            messages: [{ role: 'user', content: prompt }],
+            response_format: { type: 'json_object' },
+            max_tokens: 2048
+        }, { signal }),
+        PROVIDER,
+        4,
+        signal
+    );
 
     const responseText = completion.choices[0].message.content || "{}";
     try {

@@ -1,115 +1,192 @@
-import { useState } from 'react';
+import { useReducer, useCallback } from 'react';
+
+// =============================================================================
+// STATE SHAPE
+// =============================================================================
+
+interface UIStateShape {
+    // Modal / Panel Visibility
+    isUserModalOpen: boolean;
+    isHistoryVisible: boolean;
+    isStrategySearchVisible: boolean;
+    isSavedAnalysesVisible: boolean;
+    isSettingsMenuVisible: boolean;
+    isLiveMarketVisible: boolean;
+    isAdvancedAnalyticsOpen: boolean;
+    isVersionHistoryVisible: boolean;
+    isLiveAnalysisVisible: boolean;
+    isLivePostMortemVisible: boolean;
+    isMobileMenuOpen: boolean;
+    showMismatchModal: boolean;
+    isFullscreen: boolean;
+    isLeverageDropdownOpen: boolean;
+    isVisionDataVisible: boolean;
+    showUpdateNotification: boolean;
+    showAccuracyModal: boolean;
+    showScrollDown: boolean;
+    showScrollUp: boolean;
+
+    // Loading / Progress State
+    isLoading: boolean;
+    isHybridLoading: boolean;
+    isCalculatingAIProbabilities: boolean;
+    isAnalysisTypingComplete: boolean;
+    isPostMortemTypingComplete: boolean;
+    isAnalysisInProgress: boolean;
+    isPostMortemInProgress: boolean;
+    isSummaryInProgress: boolean;
+    isInsightGenerating: boolean;
+    isAutoCapturing: boolean;
+    isUpdateAutoCapturing: boolean;
+    isEntryNotHitCapturing: boolean;
+    isRateLimited: boolean;
+}
+
+const initialState: UIStateShape = {
+    isUserModalOpen: false,
+    isHistoryVisible: false,
+    isStrategySearchVisible: false,
+    isSavedAnalysesVisible: false,
+    isSettingsMenuVisible: false,
+    isLiveMarketVisible: false,
+    isAdvancedAnalyticsOpen: false,
+    isVersionHistoryVisible: false,
+    isLiveAnalysisVisible: false,
+    isLivePostMortemVisible: false,
+    isMobileMenuOpen: false,
+    showMismatchModal: false,
+    isFullscreen: false,
+    isLeverageDropdownOpen: false,
+    isVisionDataVisible: false,
+    showUpdateNotification: false,
+    showAccuracyModal: false,
+    showScrollDown: false,
+    showScrollUp: false,
+    isLoading: false,
+    isHybridLoading: false,
+    isCalculatingAIProbabilities: false,
+    isAnalysisTypingComplete: false,
+    isPostMortemTypingComplete: false,
+    isAnalysisInProgress: false,
+    isPostMortemInProgress: false,
+    isSummaryInProgress: false,
+    isInsightGenerating: false,
+    isAutoCapturing: false,
+    isUpdateAutoCapturing: false,
+    isEntryNotHitCapturing: false,
+    isRateLimited: false,
+};
+
+// =============================================================================
+// ACTIONS
+// =============================================================================
+
+type UIAction =
+    | { type: 'SET'; key: keyof UIStateShape; value: boolean }
+    | { type: 'TOGGLE'; key: keyof UIStateShape }
+    | { type: 'CLOSE_ALL_OVERLAYS' }
+    | { type: 'RESET_PROGRESS' };
+
+/** Keys that are overlays (modals, drawers, panels) — closed by CLOSE_ALL_OVERLAYS */
+const OVERLAY_KEYS: (keyof UIStateShape)[] = [
+    'isHistoryVisible',
+    'isStrategySearchVisible',
+    'isSavedAnalysesVisible',
+    'isSettingsMenuVisible',
+    'isLiveMarketVisible',
+    'isAdvancedAnalyticsOpen',
+    'isVersionHistoryVisible',
+    'isLiveAnalysisVisible',
+    'isLivePostMortemVisible',
+    'isMobileMenuOpen',
+    'showMismatchModal',
+    'isVisionDataVisible',
+    'showAccuracyModal',
+    'isLeverageDropdownOpen',
+];
+
+/** Keys that are progress/loading flags — reset by RESET_PROGRESS */
+const PROGRESS_KEYS: (keyof UIStateShape)[] = [
+    'isLoading',
+    'isHybridLoading',
+    'isCalculatingAIProbabilities',
+    'isAnalysisTypingComplete',
+    'isPostMortemTypingComplete',
+    'isAnalysisInProgress',
+    'isPostMortemInProgress',
+    'isSummaryInProgress',
+    'isInsightGenerating',
+    'isAutoCapturing',
+    'isUpdateAutoCapturing',
+    'isEntryNotHitCapturing',
+];
+
+function uiReducer(state: UIStateShape, action: UIAction): UIStateShape {
+    switch (action.type) {
+        case 'SET':
+            return { ...state, [action.key]: action.value };
+
+        case 'TOGGLE':
+            return { ...state, [action.key]: !state[action.key] };
+
+        case 'CLOSE_ALL_OVERLAYS': {
+            const next = { ...state };
+            for (const key of OVERLAY_KEYS) {
+                next[key] = false;
+            }
+            return next;
+        }
+
+        case 'RESET_PROGRESS': {
+            const next = { ...state };
+            for (const key of PROGRESS_KEYS) {
+                next[key] = false;
+            }
+            return next;
+        }
+
+        default:
+            return state;
+    }
+}
+
+// =============================================================================
+// HOOK
+// =============================================================================
 
 /**
  * Custom hook that encapsulates all UI visibility and progress state.
- * Extracted from App.tsx to reduce component complexity.
- * These are simple boolean flags with no side effects or complex dependencies.
+ * Uses a single useReducer for predictable, auditable transitions.
+ *
+ * Backward-compatible: returns the same { isX, setIsX } shape as before.
  */
 export function useUIState() {
-    // ─── Modal / Panel Visibility ─────────────────────────────────────────
-    const [isUserModalOpen, setIsUserModalOpen] = useState(false);
-    const [isHistoryVisible, setIsHistoryVisible] = useState(false);
-    const [isStrategySearchVisible, setIsStrategySearchVisible] = useState(false);
-    const [isSavedAnalysesVisible, setIsSavedAnalysesVisible] = useState(false);
-    const [isSettingsMenuVisible, setIsSettingsMenuVisible] = useState(false);
-    const [isLiveMarketVisible, setIsLiveMarketVisible] = useState(false);
-    const [isAdvancedAnalyticsOpen, setIsAdvancedAnalyticsOpen] = useState(false);
-    const [isVersionHistoryVisible, setIsVersionHistoryVisible] = useState(false);
-    const [isLiveAnalysisVisible, setIsLiveAnalysisVisible] = useState(false);
-    const [isLivePostMortemVisible, setIsLivePostMortemVisible] = useState(false);
-    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-    const [showMismatchModal, setShowMismatchModal] = useState(false);
-    const [isFullscreen, setIsFullscreen] = useState(false);
-    const [isLeverageDropdownOpen, setIsLeverageDropdownOpen] = useState(false);
-    const [isVisionDataVisible, setIsVisionDataVisible] = useState(false);
-    const [showUpdateNotification, setShowUpdateNotification] = useState(false);
-    const [showAccuracyModal, setShowAccuracyModal] = useState(false);
-    const [showScrollDown, setShowScrollDown] = useState(false);
-    const [showScrollUp, setShowScrollUp] = useState(false);
+    const [state, dispatch] = useReducer(uiReducer, initialState);
 
-    // ─── Loading / Progress State ─────────────────────────────────────────
-    const [isLoading, setIsLoading] = useState(false);
-    const [isHybridLoading, setIsHybridLoading] = useState(false);
-    const [isCalculatingAIProbabilities, setIsCalculatingAIProbabilities] = useState(false);
-    const [isAnalysisTypingComplete, setIsAnalysisTypingComplete] = useState(false);
-    const [isPostMortemTypingComplete, setIsPostMortemTypingComplete] = useState(false);
-    const [isAnalysisInProgress, setIsAnalysisInProgress] = useState(false);
-    const [isPostMortemInProgress, setIsPostMortemInProgress] = useState(false);
-    const [isSummaryInProgress, setIsSummaryInProgress] = useState(false);
-    const [isInsightGenerating, setIsInsightGenerating] = useState(false);
-    const [isAutoCapturing, setIsAutoCapturing] = useState(false);
-    const [isUpdateAutoCapturing, setIsUpdateAutoCapturing] = useState(false);
-    const [isEntryNotHitCapturing, setIsEntryNotHitCapturing] = useState(false);
-    const [isRateLimited, setIsRateLimited] = useState(false);
+    // Generate setter functions that match the old useState API
+    const setters = {} as { [K in keyof UIStateShape as `set${Capitalize<string & K>}`]: (value: boolean | ((prev: boolean) => boolean)) => void };
+
+    for (const key of Object.keys(initialState) as (keyof UIStateShape)[]) {
+        const setterName = `set${key.charAt(0).toUpperCase()}${key.slice(1)}` as keyof typeof setters;
+        setters[setterName] = (value: boolean | ((prev: boolean) => boolean)) => {
+            if (typeof value === 'function') {
+                // Functional update: read current state and compute
+                dispatch({ type: 'SET', key, value: value(state[key]) });
+            } else {
+                dispatch({ type: 'SET', key, value });
+            }
+        };
+    }
+
+    // Convenience actions
+    const closeAllOverlays = useCallback(() => dispatch({ type: 'CLOSE_ALL_OVERLAYS' }), []);
+    const resetProgress = useCallback(() => dispatch({ type: 'RESET_PROGRESS' }), []);
 
     return {
-        // Modal / Panel Visibility
-        isUserModalOpen,
-        setIsUserModalOpen,
-        isHistoryVisible,
-        setIsHistoryVisible,
-        isStrategySearchVisible,
-        setIsStrategySearchVisible,
-        isSavedAnalysesVisible,
-        setIsSavedAnalysesVisible,
-        isSettingsMenuVisible,
-        setIsSettingsMenuVisible,
-        isLiveMarketVisible,
-        setIsLiveMarketVisible,
-        isAdvancedAnalyticsOpen,
-        setIsAdvancedAnalyticsOpen,
-        isVersionHistoryVisible,
-        setIsVersionHistoryVisible,
-        isLiveAnalysisVisible,
-        setIsLiveAnalysisVisible,
-        isLivePostMortemVisible,
-        setIsLivePostMortemVisible,
-        isMobileMenuOpen,
-        setIsMobileMenuOpen,
-        showMismatchModal,
-        setShowMismatchModal,
-        isFullscreen,
-        setIsFullscreen,
-        isLeverageDropdownOpen,
-        setIsLeverageDropdownOpen,
-        isVisionDataVisible,
-        setIsVisionDataVisible,
-        showUpdateNotification,
-        setShowUpdateNotification,
-        showAccuracyModal,
-        setShowAccuracyModal,
-        showScrollDown,
-        setShowScrollDown,
-        showScrollUp,
-        setShowScrollUp,
-
-        // Loading / Progress State
-        isLoading,
-        setIsLoading,
-        isHybridLoading,
-        setIsHybridLoading,
-        isCalculatingAIProbabilities,
-        setIsCalculatingAIProbabilities,
-        isAnalysisTypingComplete,
-        setIsAnalysisTypingComplete,
-        isPostMortemTypingComplete,
-        setIsPostMortemTypingComplete,
-        isAnalysisInProgress,
-        setIsAnalysisInProgress,
-        isPostMortemInProgress,
-        setIsPostMortemInProgress,
-        isSummaryInProgress,
-        setIsSummaryInProgress,
-        isInsightGenerating,
-        setIsInsightGenerating,
-        isAutoCapturing,
-        setIsAutoCapturing,
-        isUpdateAutoCapturing,
-        setIsUpdateAutoCapturing,
-        isEntryNotHitCapturing,
-        setIsEntryNotHitCapturing,
-        isRateLimited,
-        setIsRateLimited,
+        ...state,
+        ...setters,
+        closeAllOverlays,
+        resetProgress,
     };
 }
 

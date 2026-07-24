@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 import dns from 'dns';
 import * as process from 'process';
 
@@ -16,7 +17,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     base: './', // Crucial: relative paths for Electron
-    plugins: [react()],
+    plugins: [react(), tailwindcss()],
     // This 'define' block is the key part.
     // It takes values from the loaded environment variables
     // and makes them available globally in your browser-side code.
@@ -41,6 +42,20 @@ export default defineConfig(({ mode }) => {
       // Adding server config to ensure it runs smoothly
       host: '0.0.0.0',
       port: 3000,
-    }
+    },
+    build: {
+      sourcemap: true,
+      rollupOptions: {
+        external: ['protobufjs/minimal.js'],
+        output: {
+          manualChunks: {
+            'vendor-ai': ['@google/genai', 'openai'],
+            'vendor-charts': ['lightweight-charts', 'recharts'],
+            'vendor-crypto': ['ccxt', 'technicalindicators'],
+            'vendor-react': ['react', 'react-dom', 'react-virtuoso'],
+          },
+        },
+      },
+    },
   };
 });

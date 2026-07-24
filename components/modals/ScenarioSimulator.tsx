@@ -174,7 +174,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
 
     if (!originalConfig) {
         return (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+            <div role="dialog" aria-modal="true" aria-label="Scenario simulator" className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
                 <div className="bg-zinc-900 rounded-2xl p-8 border border-white/10 text-center">
                     <p className="text-zinc-400">Unable to load scenario data</p>
                     <button onClick={onClose} className="mt-4 px-4 py-2 bg-zinc-800 rounded-lg text-zinc-300 hover:bg-zinc-700">
@@ -186,7 +186,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
     }
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md">
+        <div role="dialog" aria-modal="true" aria-label="Scenario simulator" className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md">
             {/* Modal Container */}
             <div className="relative w-full max-w-5xl h-[90vh] mx-4 bg-zinc-950 rounded-2xl border border-purple-500/30 shadow-2xl shadow-purple-500/10 overflow-hidden flex flex-col">
 
@@ -215,6 +215,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                         </button>
                         <button
                             onClick={onClose}
+                            aria-label="Close"
                             className="p-2 text-zinc-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
                         >
                             <CloseIcon className="w-5 h-5" />

@@ -369,73 +369,84 @@ export const sqliteSaveUserProfile = async (profile: UserProfile): Promise<void>
 
     const now = new Date().toISOString();
 
-    // Upsert user
-    await db.run(`
-        INSERT OR REPLACE INTO users (
-            username, createdAt, updatedAt, globalMemory, settings,
-            finalTradeSummary, tradingWeaknesses, insightKnowledgeBase, learningRules, lastActiveConversationId
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-        profile.username,
-        profile.createdAt || now,
-        now,
-        profile.globalMemory ? JSON.stringify(profile.globalMemory) : null,
-        JSON.stringify(profile.settings),
-        profile.finalTradeSummary,
-        profile.tradingWeaknesses ? JSON.stringify(profile.tradingWeaknesses) : null,
-        profile.insightKnowledgeBase ? JSON.stringify(profile.insightKnowledgeBase) : null,
-        profile.learningRules ? JSON.stringify(profile.learningRules) : null,
-        profile.lastActiveConversationId
-    ]);
-
-    // Sync trades
-    for (const trade of profile.tradeLog || []) {
-        await sqliteSaveTrade(profile.username, trade);
-    }
-
-    // Sync conversations
-    for (const conv of profile.conversations || []) {
-        // Extract settings (everything that is not a core column)
-        const { id, title, timestamp, messages, ...settings } = conv;
-
+    // Wrap all writes in a single transaction for performance.
+    // Without this, each INSERT is a separate native-bridge round trip
+    // (100 trades + 20 conversations = 120+ sequential awaits).
+    await db.execute('BEGIN TRANSACTION');
+    try {
+        // Upsert user
         await db.run(`
-            INSERT OR REPLACE INTO conversations (id, username, title, createdAt, messages, settings)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO users (
+                username, createdAt, updatedAt, globalMemory, settings,
+                finalTradeSummary, tradingWeaknesses, insightKnowledgeBase, learningRules, lastActiveConversationId
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
-            conv.id,
             profile.username,
-            conv.title,
-            new Date(conv.timestamp).toISOString(),
-            JSON.stringify(conv.messages),
-            JSON.stringify(settings) // Save extended flags and models
+            profile.createdAt || now,
+            now,
+            profile.globalMemory ? JSON.stringify(profile.globalMemory) : null,
+            JSON.stringify(profile.settings),
+            profile.finalTradeSummary,
+            profile.tradingWeaknesses ? JSON.stringify(profile.tradingWeaknesses) : null,
+            profile.insightKnowledgeBase ? JSON.stringify(profile.insightKnowledgeBase) : null,
+            profile.learningRules ? JSON.stringify(profile.learningRules) : null,
+            profile.lastActiveConversationId
         ]);
-    }
 
-    // Sync trade summaries
-    for (const summary of profile.tradeSummaries || []) {
-        await db.run(`
-            INSERT OR REPLACE INTO trade_summaries (id, username, summaryText, timestamp)
-            VALUES (?, ?, ?, ?)
-        `, [summary.id, profile.username, summary.summaryText, summary.timestamp]);
-    }
+        // Sync trades
+        for (const trade of profile.tradeLog || []) {
+            await sqliteSaveTrade(profile.username, trade);
+        }
 
+        // Sync conversations
+        for (const conv of profile.conversations || []) {
+            // Extract settings (everything that is not a core column)
+            const { id, title, timestamp, messages, ...settings } = conv;
 
-    // Sync saved analyses
-    for (const analysis of profile.savedAnalyses || []) {
-        // Extract meta (everything not in core columns)
-        const { id, analysis: content, userPrompt, timestamp, ...meta } = analysis;
+            await db.run(`
+                INSERT OR REPLACE INTO conversations (id, username, title, createdAt, messages, settings)
+                VALUES (?, ?, ?, ?, ?, ?)
+            `, [
+                conv.id,
+                profile.username,
+                conv.title,
+                new Date(conv.timestamp).toISOString(),
+                JSON.stringify(conv.messages),
+                JSON.stringify(settings) // Save extended flags and models
+            ]);
+        }
 
-        await db.run(`
-            INSERT OR REPLACE INTO saved_analyses (id, username, analysis, userPrompt, timestamp, meta)
-            VALUES (?, ?, ?, ?, ?, ?)
-        `, [
-            id,
-            profile.username,
-            JSON.stringify(content),
-            userPrompt,
-            timestamp,
-            JSON.stringify(meta) // Save extended fields like modelUsed
-        ]);
+        // Sync trade summaries
+        for (const summary of profile.tradeSummaries || []) {
+            await db.run(`
+                INSERT OR REPLACE INTO trade_summaries (id, username, summaryText, timestamp)
+                VALUES (?, ?, ?, ?)
+            `, [summary.id, profile.username, summary.summaryText, summary.timestamp]);
+        }
+
+        // Sync saved analyses
+        for (const analysis of profile.savedAnalyses || []) {
+            // Extract meta (everything not in core columns)
+            const { id, analysis: content, userPrompt, timestamp, ...meta } = analysis;
+
+            await db.run(`
+                INSERT OR REPLACE INTO saved_analyses (id, username, analysis, userPrompt, timestamp, meta)
+                VALUES (?, ?, ?, ?, ?, ?)
+            `, [
+                id,
+                profile.username,
+                JSON.stringify(content),
+                userPrompt,
+                timestamp,
+                JSON.stringify(meta) // Save extended fields like modelUsed
+            ]);
+        }
+
+        await db.execute('COMMIT');
+    } catch (error) {
+        await db.execute('ROLLBACK');
+        console.error('[SqliteService] Save failed, transaction rolled back:', error);
+        throw error;
     }
 };
 

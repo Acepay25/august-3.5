@@ -8,6 +8,7 @@ import { truncateTextToTokens, sanitizeTradeAnalysis } from '../../utils/analysi
 import { MASTER_ANALYSIS_PROMPT, DEVILS_ADVOCATE_PROMPT, INVALIDATION_THESIS_PROMPT, CORRELATION_AWARENESS_PROMPT, LENS_MODE_BASE_PROMPT, MEMORY_COMPRESSOR_PROMPT, GLOBAL_MEMORY_MANAGER_PROMPT, AI_PROVIDER_MEMORY_ENFORCEMENT_PROMPT } from '../../constants/prompts';
 import { constructOptimizedContext } from '../../utils/memoryUtils';
 import { parseLiveMarketData } from '../../utils/liveMarketParser';
+import { withRetry, ProviderName } from '../../utils/apiErrorUtils';
 
 const GROK_BASE_URL = 'https://api.x.ai/v1';
 

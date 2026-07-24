@@ -9,6 +9,9 @@ import { truncateTextToTokens, sanitizeTradeAnalysis } from '../../utils/analysi
 import { MASTER_ANALYSIS_PROMPT, DEVILS_ADVOCATE_PROMPT, INVALIDATION_THESIS_PROMPT, CORRELATION_AWARENESS_PROMPT, LENS_MODE_BASE_PROMPT, AI_PROVIDER_MEMORY_ENFORCEMENT_PROMPT } from '../../constants/prompts';
 import { constructOptimizedContext } from '../../utils/memoryUtils';
 import { parseLiveMarketData } from '../../utils/liveMarketParser';
+import { withRetry, ProviderName } from '../../utils/apiErrorUtils';
+
+const PROVIDER: ProviderName = 'Groq New';
 
 const GROQ_BASE_URL = 'https://api.groq.com/openai/v1/';
 
@@ -41,7 +44,7 @@ const fileToBase64 = (file: File): Promise<string> => {
     });
 };
 
-export const summarizeChartImage = async (image: File, chartNumber: number, modelName: string): Promise<{ uiSummary: string; fullSummary: string }> => {
+export const summarizeChartImage = async (image: File, chartNumber: number, modelName: string, signal?: AbortSignal): Promise<{ uiSummary: string; fullSummary: string }> => {
     try {
         const groq = getClient();
         const base64Image = await fileToBase64(image);
@@ -126,17 +129,22 @@ export const summarizeChartImage = async (image: File, chartNumber: number, mode
         - Keep descriptions concise.
         `;
 
-        const completion = await groq.chat.completions.create({
-            model: modelName,
-            messages: [{
-                role: 'user',
-                content: [
-                    { type: 'text', text: prompt },
-                    { type: 'image_url', image_url: { url: `data:${image.type};base64,${base64Image}` } }
-                ]
-            }],
-            max_tokens: getMaxTokens(modelName, 1024),
-        });
+        const completion = await withRetry(
+            () => groq.chat.completions.create({
+                model: modelName,
+                messages: [{
+                    role: 'user',
+                    content: [
+                        { type: 'text', text: prompt },
+                        { type: 'image_url', image_url: { url: `data:${image.type};base64,${base64Image}` } }
+                    ]
+                }],
+                max_tokens: getMaxTokens(modelName, 1024),
+            }, { signal }),
+            PROVIDER,
+            4,
+            signal
+        );
 
         const fullSummary = completion.choices[0].message.content?.trim() || `Analysis failed for Chart ${chartNumber}.`;
 
@@ -192,7 +200,8 @@ export const analyzeTradingView = async (
     isPlaybookEnabledInPureAI?: boolean, // Ignored in standard service
     isFamiliesEnabledInPureAI?: boolean, // Ignored in standard service
     isMemoryEnabledInPureAI?: boolean, // Ignored in standard service
-    rolePrompt?: string // Analyst Lens: specialized role prompt prefix
+    rolePrompt?: string, // Analyst Lens: specialized role prompt prefix
+    signal?: AbortSignal
 ): Promise<{ analysis: TradeAnalysis; thoughtProcess: string; sources: GroundingChunk[] }> => {
     const isVisionModel = modelName.includes('llama-4');
     if (!isVisionModel && images.length > 0) {

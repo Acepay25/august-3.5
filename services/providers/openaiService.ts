@@ -8,6 +8,9 @@ import { truncateTextToTokens, sanitizeTradeAnalysis } from '../../utils/analysi
 import { MASTER_ANALYSIS_PROMPT, DEVILS_ADVOCATE_PROMPT, INVALIDATION_THESIS_PROMPT, CORRELATION_AWARENESS_PROMPT, LENS_MODE_BASE_PROMPT, MEMORY_COMPRESSOR_PROMPT, GLOBAL_MEMORY_MANAGER_PROMPT, AI_PROVIDER_MEMORY_ENFORCEMENT_PROMPT } from '../../constants/prompts';
 import { constructOptimizedContext } from '../../utils/memoryUtils';
 import { parseLiveMarketData } from '../../utils/liveMarketParser';
+import { withRetry, ProviderName } from '../../utils/apiErrorUtils';
+
+const PROVIDER: ProviderName = 'OpenAI';
 
 const OPENAI_BASE_URL = 'https://api.openai.com/v1';
 
@@ -41,7 +44,7 @@ const fileToBase64 = (file: File): Promise<string> => {
     });
 };
 
-export const summarizeChartImage = async (image: File, chartNumber: number, modelName: string): Promise<{ uiSummary: string; fullSummary: string }> => {
+export const summarizeChartImage = async (image: File, chartNumber: number, modelName: string, signal?: AbortSignal): Promise<{ uiSummary: string; fullSummary: string }> => {
     try {
         const openai = getClient();
         const base64Image = await fileToBase64(image);
@@ -126,17 +129,22 @@ export const summarizeChartImage = async (image: File, chartNumber: number, mode
         - Keep descriptions concise.
         `;
 
-        const completion = await openai.chat.completions.create({
-            model: modelName,
-            messages: [{
-                role: 'user',
-                content: [
-                    { type: 'text', text: prompt },
-                    { type: 'image_url', image_url: { url: `data:${image.type};base64,${base64Image}` } }
-                ]
-            }],
-            max_tokens: getMaxTokens(modelName, 1024),
-        });
+        const completion = await withRetry(
+            () => openai.chat.completions.create({
+                model: modelName,
+                messages: [{
+                    role: 'user',
+                    content: [
+                        { type: 'text', text: prompt },
+                        { type: 'image_url', image_url: { url: `data:${image.type};base64,${base64Image}` } }
+                    ]
+                }],
+                max_tokens: getMaxTokens(modelName, 1024),
+            }, { signal }),
+            PROVIDER,
+            4,
+            signal
+        );
 
         const fullSummary = completion.choices[0].message.content?.trim() || `Analysis failed for Chart ${chartNumber}.`;
 
@@ -191,7 +199,8 @@ export const analyzeTradingView = async (
     isPlaybookEnabledInPureAI?: boolean,
     isFamiliesEnabledInPureAI?: boolean,
     isMemoryEnabledInPureAI?: boolean,
-    rolePrompt?: string // Analyst Lens: specialized role prompt prefix
+    rolePrompt?: string, // Analyst Lens: specialized role prompt prefix
+    signal?: AbortSignal
 ): Promise<{ analysis: TradeAnalysis; thoughtProcess: string; sources: GroundingChunk[] }> => {
     const openai = getClient();
     const hasImages = images.length > 0;
@@ -336,12 +345,17 @@ export const analyzeTradingView = async (
     }
     messages.push({ role: "user", content: userContent });
 
-    const completion = await openai.chat.completions.create({
-        model: modelName,
-        messages: messages,
-        response_format: { type: "json_object" },
-        max_tokens: getMaxTokens(modelName, 4096),
-    });
+    const completion = await withRetry(
+        () => openai.chat.completions.create({
+            model: modelName,
+            messages: messages,
+            response_format: { type: "json_object" },
+            max_tokens: getMaxTokens(modelName, 4096),
+        }, { signal }),
+        PROVIDER,
+        4,
+        signal
+    );
 
     const responseText = completion.choices[0].message.content;
     if (!responseText) throw new Error("Received an empty response from OpenAI.");
@@ -365,7 +379,7 @@ export const analyzeTradingView = async (
     }
 };
 
-export const getQuickResponse = async (prompt: string, history: Message[], modelName: string, systemInstruction?: string): Promise<string> => {
+export const getQuickResponse = async (prompt: string, history: Message[], modelName: string, systemInstruction?: string, signal?: AbortSignal): Promise<string> => {
     const openai = getClient();
     const messages: ChatCompletionMessageParam[] = history.map(m => ({
         role: m.role === MessageRole.AI ? 'assistant' : 'user',
@@ -375,7 +389,12 @@ export const getQuickResponse = async (prompt: string, history: Message[], model
     messages.unshift({ role: 'system', content: systemInstruction || 'You are a helpful and concise AI assistant specializing in futures trading concepts. Answer user questions clearly.' });
     messages.push({ role: 'user', content: prompt });
 
-    const completion = await openai.chat.completions.create({ model: modelName, messages, max_tokens: getMaxTokens(modelName, 1024) });
+    const completion = await withRetry(
+        () => openai.chat.completions.create({ model: modelName, messages, max_tokens: getMaxTokens(modelName, 1024) }, { signal }),
+        PROVIDER,
+        4,
+        signal
+    );
     return sanitizeAIResponse(completion.choices[0].message.content || "I am sorry, I could not generate a response.");
 };
 
@@ -386,7 +405,8 @@ export const conductPostMortem = async (
     finalTradeSummary: string | null,
     modelName: string,
     feedback: { correctedEntry?: string; correctedStopLoss?: string; correctedTakeProfit?: string; },
-    postTradeImageSummaries?: string[]
+    postTradeImageSummaries?: string[],
+    signal?: AbortSignal
 ): Promise<string> => {
     const openai = getClient();
     const { correctedEntry, correctedStopLoss, correctedTakeProfit } = feedback;
@@ -691,15 +711,20 @@ Answer **all** of the following **MANDATORY LOSS ANALYSIS QUESTIONS** clearly an
 Brutally honest, forensic, and solution-oriented. No excuses, only lessons.`;
     }
 
-    const completion = await openai.chat.completions.create({
-        model: modelName,
-        messages: [{ role: 'user', content: analysisPrompt }],
-        max_tokens: getMaxTokens(modelName, 2048)
-    });
+    const completion = await withRetry(
+        () => openai.chat.completions.create({
+            model: modelName,
+            messages: [{ role: 'user', content: analysisPrompt }],
+            max_tokens: getMaxTokens(modelName, 2048)
+        }, { signal }),
+        PROVIDER,
+        4,
+        signal
+    );
     return sanitizeAIResponse(completion.choices[0].message.content || "Post-mortem analysis failed.");
 };
 
-export const searchStrategies = async (query: string, activeFrameworks: string[], modelName: string): Promise<StrategySearchResult[]> => {
+export const searchStrategies = async (query: string, activeFrameworks: string[], modelName: string, signal?: AbortSignal): Promise<StrategySearchResult[]> => {
     const openai = getClient();
     const frameworksList = activeFrameworks.join(', ');
     const prompt = `You are a search engine for trading strategies. Your knowledge base is limited to: [${frameworksList}].
@@ -708,11 +733,16 @@ export const searchStrategies = async (query: string, activeFrameworks: string[]
     Return a JSON array of objects with keys "name", "description", and "rationale".
     Only include strategies from the provided list.`;
 
-    const completion = await openai.chat.completions.create({
-        model: modelName,
-        messages: [{ role: "user", content: prompt }],
-        response_format: { type: "json_object" },
-    });
+    const completion = await withRetry(
+        () => openai.chat.completions.create({
+            model: modelName,
+            messages: [{ role: "user", content: prompt }],
+            response_format: { type: "json_object" },
+        }, { signal }),
+        PROVIDER,
+        4,
+        signal
+    );
 
     const responseText = completion.choices[0].message.content;
     if (!responseText) return [];
@@ -730,7 +760,7 @@ export const searchStrategies = async (query: string, activeFrameworks: string[]
     }
 };
 
-export const discoverStrategies = async (chatHistory: Message[], activeFrameworks: string[], modelName: string): Promise<StrategySearchResult[]> => {
+export const discoverStrategies = async (chatHistory: Message[], activeFrameworks: string[], modelName: string, signal?: AbortSignal): Promise<StrategySearchResult[]> => {
     const openai = getClient();
     const frameworksList = activeFrameworks.join(', ');
     const historyText = chatHistory.length > 0
@@ -743,11 +773,16 @@ export const discoverStrategies = async (chatHistory: Message[], activeFramework
     
     Pick 3 relevant strategies. Return a JSON array with keys "name", "description", and "rationale".`;
 
-    const completion = await openai.chat.completions.create({
-        model: modelName,
-        messages: [{ role: "user", content: prompt }],
-        response_format: { type: "json_object" },
-    });
+    const completion = await withRetry(
+        () => openai.chat.completions.create({
+            model: modelName,
+            messages: [{ role: "user", content: prompt }],
+            response_format: { type: "json_object" },
+        }, { signal }),
+        PROVIDER,
+        4,
+        signal
+    );
 
     const responseText = completion.choices[0].message.content;
     if (!responseText) return [];
@@ -765,14 +800,19 @@ export const discoverStrategies = async (chatHistory: Message[], activeFramework
     }
 };
 
-export const getStrategyDescription = async (strategyName: string, modelName: string): Promise<string> => {
+export const getStrategyDescription = async (strategyName: string, modelName: string, signal?: AbortSignal): Promise<string> => {
     const openai = getClient();
     const prompt = `Provide a concise, one-paragraph explanation of the "${strategyName}" trading strategy.`;
-    const completion = await openai.chat.completions.create({ model: modelName, messages: [{ role: 'user', content: prompt }] });
+    const completion = await withRetry(
+        () => openai.chat.completions.create({ model: modelName, messages: [{ role: 'user', content: prompt }] }, { signal }),
+        PROVIDER,
+        4,
+        signal
+    );
     return sanitizeAIResponse(completion.choices[0].message.content || "Failed to retrieve strategy description.");
 };
 
-export const summarizeTrade = async (trade: LoggedTrade, modelName: string): Promise<string> => {
+export const summarizeTrade = async (trade: LoggedTrade, modelName: string, signal?: AbortSignal): Promise<string> => {
     const openai = getClient();
     const tradeForAnalysis = {
         ...trade,
@@ -808,14 +848,19 @@ You MUST include a 2-3 sentence summary (67 words MAX) of the post-mortem analys
 ${JSON.stringify(tradeForAnalysis, null, 2)}
     `;
 
-    const completion = await openai.chat.completions.create({
-        model: modelName,
-        messages: [{ role: 'user', content: prompt }]
-    });
+    const completion = await withRetry(
+        () => openai.chat.completions.create({
+            model: modelName,
+            messages: [{ role: 'user', content: prompt }]
+        }, { signal }),
+        PROVIDER,
+        4,
+        signal
+    );
     return sanitizeAIResponse(completion.choices[0].message.content || "Summary generation failed.");
 };
 
-export const generateFinalSummary = async (summaries: TradeSummary[], modelName: string, charLimit: number = 4000): Promise<string> => {
+export const generateFinalSummary = async (summaries: TradeSummary[], modelName: string, charLimit: number = 4000, signal?: AbortSignal): Promise<string> => {
     const openai = getClient();
     const summariesText = summaries.map(s => `- ${s.summaryText}`).join('\n');
     const tradeCount = summaries.length;
@@ -839,14 +884,19 @@ ${summariesText}
 Return ONLY the structured summary.
 `;
 
-    const completion = await openai.chat.completions.create({
-        model: modelName,
-        messages: [{ role: 'user', content: prompt }]
-    });
+    const completion = await withRetry(
+        () => openai.chat.completions.create({
+            model: modelName,
+            messages: [{ role: 'user', content: prompt }]
+        }, { signal }),
+        PROVIDER,
+        4,
+        signal
+    );
     return sanitizeAIResponse(completion.choices[0].message.content || "Final summary generation failed.");
 };
 
-export const compressChatHistory = async (messages: Message[], currentSummary: string = ""): Promise<string> => {
+export const compressChatHistory = async (messages: Message[], currentSummary: string = "", signal?: AbortSignal): Promise<string> => {
     const openai = getClient();
     const messagesText = messages.map(m => `${m.role}: ${m.text}`).join('\n\n');
 
@@ -866,15 +916,20 @@ Discard redundant details.
 Return ONLY the new compressed summary text.
     `;
 
-    const completion = await openai.chat.completions.create({
-        model: 'gpt-5-nano',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: 2048
-    });
+    const completion = await withRetry(
+        () => openai.chat.completions.create({
+            model: 'gpt-5-nano',
+            messages: [{ role: 'user', content: prompt }],
+            max_tokens: 2048
+        }, { signal }),
+        PROVIDER,
+        4,
+        signal
+    );
     return sanitizeAIResponse(completion.choices[0].message.content || "Memory compression failed.");
 };
 
-export const updateGlobalMemory = async (recentTrades: LoggedTrade[], currentMemory?: GlobalMemory): Promise<GlobalMemory> => {
+export const updateGlobalMemory = async (recentTrades: LoggedTrade[], currentMemory?: GlobalMemory, signal?: AbortSignal): Promise<GlobalMemory> => {
     const openai = getClient();
     const tradeSummaries = recentTrades.map(t => JSON.stringify({
         tradeId: t.id,
@@ -902,12 +957,17 @@ ${tradeSummaries}
 Generate the updated Global Memory JSON object.
     `;
 
-    const completion = await openai.chat.completions.create({
-        model: 'gpt-5-nano',
-        messages: [{ role: 'user', content: prompt }],
-        response_format: { type: 'json_object' },
-        max_tokens: 2048
-    });
+    const completion = await withRetry(
+        () => openai.chat.completions.create({
+            model: 'gpt-5-nano',
+            messages: [{ role: 'user', content: prompt }],
+            response_format: { type: 'json_object' },
+            max_tokens: 2048
+        }, { signal }),
+        PROVIDER,
+        4,
+        signal
+    );
 
     const responseText = completion.choices[0].message.content || "{}";
     try {

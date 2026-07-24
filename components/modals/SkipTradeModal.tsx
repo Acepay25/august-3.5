@@ -20,8 +20,8 @@ export const SkipTradeModal: React.FC<SkipTradeModalProps> = ({
   setCorrectedEntry,
 }) => {
   return (
-    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-      <div className="bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-md border border-yellow-500/30 animate-fade-in">
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Trade not executed">
+      <div className="bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-md border border-yellow-500/30 animate-fade-in max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="p-5 border-b border-white/5 bg-yellow-500/10">
           <div className="flex items-center gap-3">

@@ -54,8 +54,8 @@ export const PostTradeUploadModal: React.FC<{
     };
 
     return (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-            <div className="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-lg border border-gray-700 animate-fade-in">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Enhance post-mortem analysis">
+            <div className="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-lg border border-gray-700 animate-fade-in max-h-[90vh] overflow-y-auto">
                 <h3 className="text-lg font-bold text-cyan-400 mb-2">Enhance Post-Mortem Analysis?</h3>
                 <p className="text-sm text-gray-400 mb-4">
                     Uploading screenshots of what happened <strong className="text-cyan-300">after</strong> the trade was called will significantly improve the AI's learning and future accuracy.

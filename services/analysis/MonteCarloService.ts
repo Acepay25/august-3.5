@@ -494,3 +494,74 @@ ${evWarning}
 **Use this data to validate your confidence level.**
 `;
 };
+
+// =============================================================================
+// WEB WORKER API — runs simulations off the main thread
+// =============================================================================
+
+let workerInstance: Worker | null = null;
+let requestId = 0;
+const pendingRequests = new Map<string, { resolve: (v: any) => void; reject: (e: Error) => void }>();
+
+const getWorker = (): Worker => {
+    if (!workerInstance) {
+        workerInstance = new Worker(
+            new URL('./monteCarlo.worker.ts', import.meta.url),
+            { type: 'module' }
+        );
+        workerInstance.onmessage = (e: MessageEvent) => {
+            const { type, id, result, error } = e.data;
+            const pending = pendingRequests.get(id);
+            if (!pending) return;
+            pendingRequests.delete(id);
+            if (type === 'error') {
+                pending.reject(new Error(error));
+            } else {
+                pending.resolve(result);
+            }
+        };
+        workerInstance.onerror = (e) => {
+            // Reject all pending requests on worker crash
+            for (const [id, pending] of pendingRequests) {
+                pending.reject(new Error(e.message || 'Worker crashed'));
+                pendingRequests.delete(id);
+            }
+        };
+    }
+    return workerInstance;
+};
+
+/**
+ * Run Monte Carlo simulation in a Web Worker (non-blocking).
+ * Falls back to synchronous execution if Workers are unavailable.
+ */
+export const runSimulationAsync = (config: SimulationConfig): Promise<MonteCarloResult> => {
+    if (typeof Worker === 'undefined') {
+        return Promise.resolve(runSimulation(config));
+    }
+    const id = `mc-${++requestId}`;
+    return new Promise((resolve, reject) => {
+        pendingRequests.set(id, { resolve, reject });
+        getWorker().postMessage({ type: 'runSimulation', id, config });
+    });
+};
+
+/**
+ * Calculate ruin risk in a Web Worker (non-blocking).
+ * Falls back to synchronous execution if Workers are unavailable.
+ */
+export const calculateRuinRiskAsync = (
+    accountBalance: number,
+    positionSize: number,
+    leverage: number,
+    monteCarloResult: MonteCarloResult
+): Promise<RuinRiskResult> => {
+    if (typeof Worker === 'undefined') {
+        return Promise.resolve(calculateRuinRisk(accountBalance, positionSize, leverage, monteCarloResult));
+    }
+    const id = `mc-${++requestId}`;
+    return new Promise((resolve, reject) => {
+        pendingRequests.set(id, { resolve, reject });
+        getWorker().postMessage({ type: 'calculateRuinRisk', id, accountBalance, positionSize, leverage, monteCarloResult });
+    });
+};

@@ -13,8 +13,8 @@ export const AccuracyModeModal: React.FC<AccuracyModeModalProps> = ({ isOpen, on
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
-      <div className={`bg-zinc-950 border-2 ${isEnabling ? 'border-cyan-600' : 'border-zinc-700'} rounded-2xl max-w-md w-full overflow-hidden shadow-[0_0_50px_rgba(6,182,212,0.3)]`}>
+    <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in" role="dialog" aria-modal="true" aria-label="Accuracy mode">
+      <div className={`bg-zinc-950 border-2 ${isEnabling ? 'border-cyan-600' : 'border-zinc-700'} rounded-2xl max-w-md w-full overflow-hidden shadow-[0_0_50px_rgba(6,182,212,0.3)] max-h-[90vh] overflow-y-auto`}>
         <div className="p-6 text-center">
           {isEnabling ? (
             <>

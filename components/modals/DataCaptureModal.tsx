@@ -99,7 +99,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
     };
 
     return (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+        <div role="dialog" aria-modal="true" aria-label="Capture trade data" className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
             <div className={`bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-lg border ${colors.border} animate-fade-in`}>
                 {/* Header */}
                 <div className={`p-5 border-b border-white/5 ${colors.bg}`}>

@@ -7,6 +7,9 @@ import { sanitizeTradeAnalysis, truncateTextToTokens } from '../../utils/analysi
 import { MASTER_ANALYSIS_PROMPT, MEMORY_COMPRESSOR_PROMPT, GLOBAL_MEMORY_MANAGER_PROMPT, DEVILS_ADVOCATE_PROMPT, INVALIDATION_THESIS_PROMPT, CORRELATION_AWARENESS_PROMPT, LENS_MODE_BASE_PROMPT, AI_PROVIDER_MEMORY_ENFORCEMENT_PROMPT } from '../../constants/prompts';
 import { constructOptimizedContext } from '../../utils/memoryUtils';
 import { parseLiveMarketData } from '../../utils/liveMarketParser';
+import { withRetry, ProviderName } from '../../utils/apiErrorUtils';
+
+const PROVIDER: ProviderName = 'Gemini';
 
 // ... (existing helper functions: getAiClient, fileToGenerativePart, mapGroundingChunks, extractTextFromResponse remain the same) ...
 const getAiClient = (): GoogleGenAI => {
@@ -57,7 +60,7 @@ const extractTextFromResponse = (response: GenerateContentResponse): string => {
     return fullText;
 };
 
-export const summarizeChartImage = async (image: File, chartNumber: number, modelName: string): Promise<{ uiSummary: string; fullSummary: string }> => {
+export const summarizeChartImage = async (image: File, chartNumber: number, modelName: string, signal?: AbortSignal): Promise<{ uiSummary: string; fullSummary: string }> => {
     try {
         const ai = getAiClient();
         const imagePart = await fileToGenerativePart(image);
@@ -142,12 +145,18 @@ export const summarizeChartImage = async (image: File, chartNumber: number, mode
         - Keep descriptions concise.
         `;
 
-        const response = await ai.models.generateContent({
-            model: modelName,
-            contents: {
-                parts: [imagePart, { text: prompt }]
-            },
-        });
+        const response = await withRetry(
+            () => ai.models.generateContent({
+                model: modelName,
+                contents: {
+                    parts: [imagePart, { text: prompt }]
+                },
+                config: { abortSignal: signal },
+            }),
+            PROVIDER,
+            4,
+            signal
+        );
 
         const fullSummary = extractTextFromResponse(response).trim();
 
@@ -296,7 +305,8 @@ export const analyzeTradingView = async (
     isPlaybookEnabledInPureAI?: boolean, // Ignored in standard service
     isFamiliesEnabledInPureAI?: boolean, // Ignored in standard service
     isMemoryEnabledInPureAI?: boolean, // Ignored in standard service
-    rolePrompt?: string // Analyst Lens: specialized role prompt prefix
+    rolePrompt?: string, // Analyst Lens: specialized role prompt prefix
+    signal?: AbortSignal
 ): Promise<{ analysis: TradeAnalysis; thoughtProcess: string; sources: GroundingChunk[] }> => {
     const ai = getAiClient();
     const imageParts = await Promise.all(images.map(fileToGenerativePart));
@@ -412,19 +422,26 @@ export const analyzeTradingView = async (
         config = {
             responseMimeType: "application/json",
             responseSchema: tradeAnalysisSchema,
-            tools: undefined // Explicitly disable tools to prevent conflict with JSON mode
+            tools: undefined, // Explicitly disable tools to prevent conflict with JSON mode
+            abortSignal: signal
         };
     } else {
         config = {
-            tools: [{ googleSearch: {} }]
+            tools: [{ googleSearch: {} }],
+            abortSignal: signal
         };
     }
 
-    const response = await ai.models.generateContent({
-        model: modelName,
-        contents: { parts: [...imageParts, { text: userPromptContent }] },
-        config: config,
-    });
+    const response = await withRetry(
+        () => ai.models.generateContent({
+            model: modelName,
+            contents: { parts: [...imageParts, { text: userPromptContent }] },
+            config: config,
+        }),
+        PROVIDER,
+        4,
+        signal
+    );
 
     let responseText = '';
     try {
@@ -444,7 +461,7 @@ export const analyzeTradingView = async (
     }
 };
 
-export const getQuickResponse = async (prompt: string, history: Message[], modelName: string, systemInstruction?: string): Promise<string> => {
+export const getQuickResponse = async (prompt: string, history: Message[], modelName: string, systemInstruction?: string, signal?: AbortSignal): Promise<string> => {
     // ... (unchanged)
     const ai = getAiClient();
     const contents = history.map(m => ({
@@ -472,11 +489,16 @@ export const getQuickResponse = async (prompt: string, history: Message[], model
         finalContents.push({ role: currentRole, parts: currentParts });
     }
 
-    const response = await ai.models.generateContent({ model: modelName, contents: finalContents });
+    const response = await withRetry(
+        () => ai.models.generateContent({ model: modelName, contents: finalContents, config: { abortSignal: signal } }),
+        PROVIDER,
+        4,
+        signal
+    );
     return sanitizeAIResponse(extractTextFromResponse(response));
 };
 
-export const compressChatHistory = async (messages: Message[], currentSummary: string = ""): Promise<string> => {
+export const compressChatHistory = async (messages: Message[], currentSummary: string = "", signal?: AbortSignal): Promise<string> => {
     // ... (unchanged)
     const ai = getAiClient();
     const messagesText = messages.map(m => `${m.role}: ${m.text}`).join('\n\n');
@@ -497,11 +519,16 @@ Discard redundant details.
 Return ONLY the new compressed summary text.
     `;
 
-    const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: { parts: [{ text: prompt }] } });
+    const response = await withRetry(
+        () => ai.models.generateContent({ model: 'gemini-2.5-flash', contents: { parts: [{ text: prompt }] }, config: { abortSignal: signal } }),
+        PROVIDER,
+        4,
+        signal
+    );
     return sanitizeAIResponse(extractTextFromResponse(response));
 };
 
-export const updateGlobalMemory = async (recentTrades: LoggedTrade[], currentMemory?: GlobalMemory): Promise<GlobalMemory> => {
+export const updateGlobalMemory = async (recentTrades: LoggedTrade[], currentMemory?: GlobalMemory, signal?: AbortSignal): Promise<GlobalMemory> => {
     // ... (unchanged)
     const ai = getAiClient();
     const tradeSummaries = recentTrades.map(t => JSON.stringify({
@@ -530,11 +557,16 @@ ${tradeSummaries}
 Generate the updated Global Memory JSON object.
     `;
 
-    const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: { parts: [{ text: prompt }] },
-        config: { responseMimeType: 'application/json' }
-    });
+    const response = await withRetry(
+        () => ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: { parts: [{ text: prompt }] },
+            config: { responseMimeType: 'application/json', abortSignal: signal }
+        }),
+        PROVIDER,
+        4,
+        signal
+    );
 
     const responseText = extractTextFromResponse(response);
     return extractLastJson(responseText);
@@ -547,7 +579,8 @@ export const conductPostMortem = async (
     finalTradeSummary: string | null,
     modelName: string,
     feedback: { correctedEntry?: string; correctedStopLoss?: string; correctedTakeProfit?: string; },
-    postTradeImageSummaries?: string[]
+    postTradeImageSummaries?: string[],
+    signal?: AbortSignal
 ): Promise<string> => {
     // ... (unchanged)
     const ai = getAiClient();
@@ -855,11 +888,16 @@ Answer **all** of the following **MANDATORY LOSS ANALYSIS QUESTIONS** clearly an
 **Tone / Style:**
 Brutally honest, forensic, and solution-oriented. No excuses, only lessons.`;
     }
-    const response = await ai.models.generateContent({ model: modelName, contents: { parts: [{ text: analysisPrompt }] } });
+    const response = await withRetry(
+        () => ai.models.generateContent({ model: modelName, contents: { parts: [{ text: analysisPrompt }] }, config: { abortSignal: signal } }),
+        PROVIDER,
+        4,
+        signal
+    );
     return sanitizeAIResponse(extractTextFromResponse(response));
 };
 
-export const searchStrategies = async (query: string, activeFrameworks: string[], modelName: string): Promise<StrategySearchResult[]> => {
+export const searchStrategies = async (query: string, activeFrameworks: string[], modelName: string, signal?: AbortSignal): Promise<StrategySearchResult[]> => {
     // ... (unchanged)
     const ai = getAiClient();
     const frameworksList = activeFrameworks.join(', ');
@@ -873,25 +911,31 @@ export const searchStrategies = async (query: string, activeFrameworks: string[]
     3. If no frameworks are relevant, return an empty array.
     4. You are strictly forbidden from suggesting or describing any strategy that is not in the provided list.`;
 
-    const response = await ai.models.generateContent({
-        model: modelName,
-        contents: { parts: [{ text: prompt }] },
-        config: {
-            responseMimeType: "application/json",
-            responseSchema: {
-                type: Type.ARRAY,
-                items: {
-                    type: Type.OBJECT,
-                    properties: {
-                        name: { type: Type.STRING, description: "The name of the strategy from the provided list." },
-                        description: { type: Type.STRING, description: "A concise description of the strategy." },
-                        rationale: { type: Type.STRING, description: "Why this strategy is relevant to the user's query." },
-                    },
-                    required: ["name", "description", "rationale"]
-                }
+    const response = await withRetry(
+        () => ai.models.generateContent({
+            model: modelName,
+            contents: { parts: [{ text: prompt }] },
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.ARRAY,
+                    items: {
+                        type: Type.OBJECT,
+                        properties: {
+                            name: { type: Type.STRING, description: "The name of the strategy from the provided list." },
+                            description: { type: Type.STRING, description: "A concise description of the strategy." },
+                            rationale: { type: Type.STRING, description: "Why this strategy is relevant to the user's query." },
+                        },
+                        required: ["name", "description", "rationale"]
+                    }
+                },
+                abortSignal: signal
             }
-        }
-    });
+        }),
+        PROVIDER,
+        4,
+        signal
+    );
 
     try {
         const responseText = extractTextFromResponse(response);
@@ -906,7 +950,7 @@ export const searchStrategies = async (query: string, activeFrameworks: string[]
     }
 };
 
-export const discoverStrategies = async (chatHistory: Message[], activeFrameworks: string[], modelName: string): Promise<StrategySearchResult[]> => {
+export const discoverStrategies = async (chatHistory: Message[], activeFrameworks: string[], modelName: string, signal?: AbortSignal): Promise<StrategySearchResult[]> => {
     // ... (unchanged)
     const ai = getAiClient();
     const historyText = chatHistory.length > 0
@@ -933,13 +977,19 @@ export const discoverStrategies = async (chatHistory: Message[], activeFramework
     \`\`\`
     `;
 
-    const response = await ai.models.generateContent({
-        model: modelName,
-        contents: { parts: [{ text: prompt }] },
-        config: {
-            tools: [{ googleSearch: {} }],
-        }
-    });
+    const response = await withRetry(
+        () => ai.models.generateContent({
+            model: modelName,
+            contents: { parts: [{ text: prompt }] },
+            config: {
+                tools: [{ googleSearch: {} }],
+                abortSignal: signal
+            }
+        }),
+        PROVIDER,
+        4,
+        signal
+    );
 
     try {
         const responseText = extractTextFromResponse(response);
@@ -952,15 +1002,20 @@ export const discoverStrategies = async (chatHistory: Message[], activeFramework
     }
 };
 
-export const getStrategyDescription = async (strategyName: string, modelName: string): Promise<string> => {
+export const getStrategyDescription = async (strategyName: string, modelName: string, signal?: AbortSignal): Promise<string> => {
     // ... (unchanged)
     const ai = getAiClient();
     const prompt = `Provide a concise, one-paragraph explanation of the "${strategyName}" trading strategy.`;
-    const response = await ai.models.generateContent({ model: modelName, contents: { parts: [{ text: prompt }] } });
+    const response = await withRetry(
+        () => ai.models.generateContent({ model: modelName, contents: { parts: [{ text: prompt }] }, config: { abortSignal: signal } }),
+        PROVIDER,
+        4,
+        signal
+    );
     return sanitizeAIResponse(extractTextFromResponse(response));
 };
 
-export const summarizeTrade = async (trade: LoggedTrade, modelName: string): Promise<string> => {
+export const summarizeTrade = async (trade: LoggedTrade, modelName: string, signal?: AbortSignal): Promise<string> => {
     // ... (unchanged)
     const ai = getAiClient();
 
@@ -998,11 +1053,16 @@ You MUST include a 2-3 sentence summary (67 words MAX) of the post-mortem analys
 **Trade data to summarize:**
 ${JSON.stringify(tradeForAnalysis, null, 2)}
     `;
-    const response = await ai.models.generateContent({ model: modelName, contents: { parts: [{ text: prompt }] } });
+    const response = await withRetry(
+        () => ai.models.generateContent({ model: modelName, contents: { parts: [{ text: prompt }] }, config: { abortSignal: signal } }),
+        PROVIDER,
+        4,
+        signal
+    );
     return sanitizeAIResponse(extractTextFromResponse(response));
 };
 
-export const generateFinalSummary = async (summaries: TradeSummary[], modelName: string, charLimit: number = 4000): Promise<string> => {
+export const generateFinalSummary = async (summaries: TradeSummary[], modelName: string, charLimit: number = 4000, signal?: AbortSignal): Promise<string> => {
     // ... (unchanged)
     const ai = getAiClient();
     const summariesText = summaries.map(s => `- ${s.summaryText}`).join('\n');
@@ -1053,6 +1113,11 @@ The following data represents a log of ${tradeCount} past trades (Recent Insight
 ${summariesText}
     `;
 
-    const response = await ai.models.generateContent({ model: modelName, contents: { parts: [{ text: prompt }] } });
+    const response = await withRetry(
+        () => ai.models.generateContent({ model: modelName, contents: { parts: [{ text: prompt }] }, config: { abortSignal: signal } }),
+        PROVIDER,
+        4,
+        signal
+    );
     return sanitizeAIResponse(extractTextFromResponse(response));
 };
