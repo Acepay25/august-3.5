@@ -11,13 +11,19 @@ import { MASTER_ANALYSIS_PROMPT, DEVILS_ADVOCATE_PROMPT, INVALIDATION_THESIS_PRO
 import { constructOptimizedContext } from '../../utils/memoryUtils';
 import { parseLiveMarketData } from '../../utils/liveMarketParser';
 import { withRetry, ProviderName } from '../../utils/apiErrorUtils';
+import { getGroqKeyPool } from './GroqKeyPool';
 
 const PROVIDER: ProviderName = 'Groq';
 
 const GROQ_BASE_URL = 'https://api.groq.com/openai/v1/';
 
 const getClient = (): OpenAI => {
-    // Groq Alt API key hardcoded as per user's explicit request.
+    // Use the key pool for automatic rotation across all Groq keys on rate limits
+    const pool = getGroqKeyPool();
+    if (pool.hasKeys) {
+        return pool.getClient();
+    }
+    // Fallback to single key if pool is empty
     const GROQ_API_KEY = process.env.GROQ_API_KEY;
     if (!GROQ_API_KEY) throw new Error("GROQ_API_KEY is not set in environment");
 

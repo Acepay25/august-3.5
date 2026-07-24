@@ -203,6 +203,14 @@ const createTables = async (): Promise<void> => {
     }
 
     console.log('[SqliteService] Tables created successfully');
+
+    // Create schema_migrations tracking table for proper migration management
+    await db.execute(`
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            version INTEGER PRIMARY KEY,
+            applied_at TEXT NOT NULL
+        );
+    `);
 };
 
 /**
@@ -563,6 +571,92 @@ export const sqliteGetTradeCount = async (username: string): Promise<number> => 
         [username]
     );
     return result.values?.[0]?.count || 0;
+};
+
+// ============================================================================
+// GRANULAR READ API — lazy-load individual entities instead of full profile
+// ============================================================================
+
+/**
+ * Get a single trade by ID
+ */
+export const sqliteGetTrade = async (tradeId: string): Promise<LoggedTrade | null> => {
+    if (!db) return null;
+    const result = await db.query('SELECT * FROM trades WHERE id = ?', [tradeId]);
+    if (!result.values || result.values.length === 0) return null;
+
+    const row = result.values[0];
+    const meta = row.meta ? JSON.parse(row.meta) : {};
+    const tradeType = row.tradeType || meta.tradeType || undefined;
+
+    return {
+        id: row.id,
+        timestamp: row.timestamp,
+        outcome: row.outcome,
+        analysis: row.analysis ? JSON.parse(row.analysis) : undefined,
+        postMortem: row.postMortem,
+        pnlAmount: row.pnlAmount,
+        investmentAmount: row.investmentAmount,
+        leverage: row.leverage,
+        slOptimizationData: row.slOptimizationData ? JSON.parse(row.slOptimizationData) : undefined,
+        tradeType,
+        ...meta
+    };
+};
+
+/**
+ * List conversations with pagination (newest first)
+ */
+export const sqliteListConversations = async (
+    username: string,
+    options?: { limit?: number; before?: number }
+): Promise<Conversation[]> => {
+    if (!db) return [];
+
+    const limit = options?.limit || 20;
+    let query = 'SELECT * FROM conversations WHERE username = ?';
+    const params: any[] = [username];
+
+    if (options?.before) {
+        query += ' AND createdAt < ?';
+        params.push(new Date(options.before).toISOString());
+    }
+
+    query += ' ORDER BY createdAt DESC LIMIT ?';
+    params.push(limit);
+
+    const result = await db.query(query, params);
+    return (result.values || []).map(row => {
+        const settings = row.settings ? JSON.parse(row.settings) : {};
+        return {
+            id: row.id,
+            title: row.title,
+            timestamp: new Date(row.createdAt).getTime(),
+            messages: row.messages ? JSON.parse(row.messages) : [],
+            ...settings
+        } as Conversation;
+    });
+};
+
+/**
+ * List trade summaries with pagination
+ */
+export const sqliteListSummaries = async (
+    username: string,
+    options?: { limit?: number }
+): Promise<TradeSummary[]> => {
+    if (!db) return [];
+
+    const limit = options?.limit || 50;
+    const result = await db.query(
+        'SELECT * FROM trade_summaries WHERE username = ? ORDER BY timestamp DESC LIMIT ?',
+        [username, limit]
+    );
+    return (result.values || []).map(row => ({
+        id: row.id,
+        summaryText: row.summaryText,
+        timestamp: row.timestamp
+    }));
 };
 
 // ============================================================================
