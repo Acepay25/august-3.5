@@ -1,7 +1,9 @@
 
 import React, { useMemo } from 'react';
+import { BrainCircuit } from 'lucide-react';
 import { LoggedTrade } from '../../types';
 import { computeLearningProfile, PersonalizedLearningProfile } from '../../services/learning/SelfLearningService';
+import { EmptyState } from '../ui/EmptyState';
 
 interface LearningDashboardProps {
     trades: LoggedTrade[];
@@ -81,16 +83,12 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades }) 
 
     if (profile.totalAnalyzedTrades < 3) {
         return (
-            <div className="flex flex-col items-center justify-center h-64 text-center">
-                <div className="text-4xl mb-4">🧠</div>
-                <h3 className="text-lg font-bold text-zinc-300 mb-2">Building Your Profile</h3>
-                <p className="text-sm text-zinc-500 max-w-xs">
-                    Log at least 3 trades (WIN or LOSS) to start seeing personalized AI learnings.
-                </p>
-                <p className="text-xs text-zinc-600 mt-4">
-                    Current: {profile.totalAnalyzedTrades} / 3 trades
-                </p>
-            </div>
+            <EmptyState
+                icon={<BrainCircuit className="w-8 h-8" />}
+                title="Building Your Profile"
+                description={`Log at least 3 trades (WIN or LOSS) to start seeing personalized AI learnings. Current: ${profile.totalAnalyzedTrades} / 3 trades.`}
+                className="h-64"
+            />
         );
     }
 

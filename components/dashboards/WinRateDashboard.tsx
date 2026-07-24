@@ -8,7 +8,9 @@ import {
     AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip,
     ResponsiveContainer, Cell
 } from 'recharts';
-import { LoggedTrade } from '../../types';
+import { BarChart3 } from 'lucide-react';
+import { LoggedTrade, TradeOutcome } from '../../types';
+import { EmptyState } from '../ui/EmptyState';
 import {
     calculateOverallStats,
     calculatePerformanceByConfidence,
@@ -125,15 +127,16 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
         setCustomEndDate('');
     };
 
-    // Empty state
-    if (trades.length === 0) {
+    // Empty state - need at least 3 trades with outcomes (WIN or LOSS)
+    const tradesWithOutcomes = trades.filter(t => t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS);
+    if (tradesWithOutcomes.length < 3) {
         return (
-            <div className="flex flex-col items-center justify-center h-full text-zinc-600 gap-4 p-8">
-                <div className="w-20 h-20 rounded-full bg-zinc-800/50 flex items-center justify-center border border-white/5 text-3xl">
-                    📊
-                </div>
-                <p className="font-medium text-center">No completed trades yet.<br />Log some wins or losses to see your analytics.</p>
-            </div>
+            <EmptyState
+                icon={<BarChart3 className="w-8 h-8" />}
+                title="Not enough data"
+                description="Log at least 3 trades with outcomes to see win rate analytics."
+                className="h-full"
+            />
         );
     }
 

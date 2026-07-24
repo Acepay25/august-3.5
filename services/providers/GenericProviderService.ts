@@ -77,7 +77,15 @@ async function messagesCall(
 
     if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`Messages API error ${response.status}: ${errorText}`);
+        // Sanitize error message — don't leak raw API internals to the user
+        const status = response.status;
+        const friendlyMessage =
+            status === 401 ? 'Invalid API key. Check your provider settings.' :
+            status === 403 ? 'Access denied. Your API key may lack permissions.' :
+            status === 429 ? 'Rate limit reached. Please wait and try again.' :
+            status >= 500 ? `${config.name || 'Provider'} server error. Try again later.` :
+            `${config.name || 'Provider'} request failed (${status}).`;
+        throw new Error(friendlyMessage);
     }
 
     const data = await response.json();

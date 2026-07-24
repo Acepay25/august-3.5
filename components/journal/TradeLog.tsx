@@ -1,9 +1,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { Virtuoso } from 'react-virtuoso';
+import { Bookmark } from 'lucide-react';
 import { LoggedTrade, TradeOutcome, AccuracySubMode } from '../../types';
 import { ChevronDownIcon, TrashIcon, StarIcon, LoadingIcon, BrainIcon, EditIcon } from '../shared/Icons';
 import ImageViewerModal from '../modals/ImageViewerModal';
+import { EmptyState } from '../ui/EmptyState';
 
 interface TradeLogContentProps {
     trades: LoggedTrade[];
@@ -393,10 +395,12 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({ trades, onDeleteTrade
             {/* Trade List - Virtualized */}
             <div className="flex-1 overflow-hidden">
                 {totalTrades === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-full text-zinc-600 gap-4 p-5">
-                        <div className="w-20 h-20 rounded-full bg-zinc-800/50 flex items-center justify-center border border-white/5"><TrashIcon /></div>
-                        <p className="font-medium">No trades recorded yet.</p>
-                    </div>
+                    <EmptyState
+                        icon={<Bookmark className="w-8 h-8" />}
+                        title="No trades logged yet"
+                        description="Run an analysis and log your first trade to start building your journal."
+                        className="h-full"
+                    />
                 ) : (
                     <Virtuoso
                         style={{ height: '100%' }}

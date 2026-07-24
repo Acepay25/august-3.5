@@ -1,7 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
+import { MessageSquare } from 'lucide-react';
 import { Conversation, MessageRole } from '../../types';
 import { CloseIcon, TrashIcon } from '../shared/Icons';
+import { EmptyState } from '../ui/EmptyState';
 
 interface ConversationHistoryProps {
   conversations: Conversation[];
@@ -93,9 +95,12 @@ const ConversationHistory: React.FC<ConversationHistoryProps> = ({
           
           <div className="flex-1 overflow-y-auto p-4">
             {(conversations || []).length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-zinc-600">
-                <p>No saved conversations.</p>
-              </div>
+              <EmptyState
+                icon={<MessageSquare className="w-8 h-8" />}
+                title="No conversations yet"
+                description="Start a new analysis to create your first conversation."
+                className="h-full"
+              />
             ) : (
               <ul className="space-y-3">
                 {(conversations || []).map((conv) => (

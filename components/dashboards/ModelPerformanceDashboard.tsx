@@ -4,7 +4,9 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { Cpu } from 'lucide-react';
 import { AIProvider, LoggedTrade } from '../../types';
+import { EmptyState } from '../ui/EmptyState';
 import {
     getRollingWindowStats,
     getSituationalExpertise,
@@ -373,12 +375,11 @@ const ModelPerformanceDashboard: React.FC<ModelPerformanceDashboardProps> = ({
 
             {/* No Data State */}
             {modelData.length === 0 && (
-                <div className="text-center py-8">
-                    <p className="text-zinc-500">No model data available</p>
-                    <p className="text-xs text-zinc-600 mt-1">
-                        Enable AI providers and log some trades to see performance
-                    </p>
-                </div>
+                <EmptyState
+                    icon={<Cpu className="w-8 h-8" />}
+                    title="Not enough data"
+                    description="Enable AI providers and log some trades to see model performance analytics."
+                />
             )}
 
             {/* Dynamic Weights */}

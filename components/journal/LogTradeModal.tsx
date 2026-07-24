@@ -53,35 +53,35 @@ export const LogTradeModal: React.FC<{
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Log trade">
-      <div className="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md border border-gray-700 animate-fade-in max-h-[90vh] overflow-y-auto">
-        <h3 className={`text-lg font-bold mb-4 ${outcome === TradeOutcome.WIN ? 'text-green-400' : 'text-red-400'}`}>
+      <div className="glass-panel bg-zinc-900 rounded-2xl shadow-2xl p-6 w-full max-w-md border border-white/10 animate-fade-in max-h-[90vh] overflow-y-auto">
+        <h3 className={`text-lg font-bold mb-4 ${outcome === TradeOutcome.WIN ? 'text-emerald-400' : 'text-rose-400'}`}>
           {content.title}
         </h3>
         <form onSubmit={handleSubmit}>
           <div className="space-y-4">
             <div>
-              <label htmlFor="pnl-amount" className="block text-sm font-medium text-gray-300">{content.pnlLabel}</label>
-              <input type="number" id="pnl-amount" value={pnl} onChange={e => { setPnl(e.target.value); setPnlError(''); }} placeholder="e.g., 250" className={`mt-1 block w-full bg-gray-900 border rounded-md p-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 ${pnlError ? 'border-red-500 aria-invalid' : 'border-gray-600'}`} required autoFocus aria-invalid={!!pnlError} aria-describedby={pnlError ? 'pnl-error' : undefined} />
-              {pnlError && <p id="pnl-error" className="mt-1 text-xs text-red-400" role="alert">{pnlError}</p>}
+              <label htmlFor="pnl-amount" className="block text-sm font-medium text-zinc-300">{content.pnlLabel}</label>
+              <input type="number" id="pnl-amount" value={pnl} onChange={e => { setPnl(e.target.value); setPnlError(''); }} placeholder="e.g., 250" className={`mt-1 block w-full bg-zinc-950 border rounded-md p-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 ${pnlError ? 'border-rose-500 aria-invalid' : 'border-white/10'}`} required autoFocus aria-invalid={!!pnlError} aria-describedby={pnlError ? 'pnl-error' : undefined} />
+              {pnlError && <p id="pnl-error" className="mt-1 text-xs text-rose-400" role="alert">{pnlError}</p>}
             </div>
 
-            <div className="border-t border-gray-700 pt-4">
+            <div className="border-t border-white/10 pt-4">
               <label className="flex items-center cursor-pointer">
-                <input type="checkbox" checked={isAdvanced} onChange={() => setIsAdvanced(!isAdvanced)} className="h-4 w-4 rounded border-gray-600 bg-gray-700 text-cyan-600 focus:ring-cyan-500" />
-                <span className="ml-3 text-sm font-medium text-gray-300">{content.advancedToggle}</span>
+                <input type="checkbox" checked={isAdvanced} onChange={() => setIsAdvanced(!isAdvanced)} className="h-4 w-4 rounded border-white/10 bg-zinc-800 text-cyan-600 focus:ring-cyan-500" />
+                <span className="ml-3 text-sm font-medium text-zinc-300">{content.advancedToggle}</span>
               </label>
             </div>
 
             {isAdvanced && (
               <div className="animate-fade-in">
-                <label htmlFor="corrected-value" className="block text-sm font-medium text-gray-300">{content.advancedLabel}</label>
-                <input type="text" id="corrected-value" value={correctedValue} onChange={e => setCorrectedValue(e.target.value)} placeholder={content.advancedPlaceholder} className="mt-1 block w-full bg-gray-900 border border-gray-600 rounded-md p-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500" />
-                <p className="mt-2 text-xs text-gray-500">{content.advancedHelp}</p>
+                <label htmlFor="corrected-value" className="block text-sm font-medium text-zinc-300">{content.advancedLabel}</label>
+                <input type="text" id="corrected-value" value={correctedValue} onChange={e => setCorrectedValue(e.target.value)} placeholder={content.advancedPlaceholder} className="mt-1 block w-full bg-zinc-950 border border-white/10 rounded-md p-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500" />
+                <p className="mt-2 text-xs text-zinc-500">{content.advancedHelp}</p>
               </div>
             )}
           </div>
           <div className="mt-6 flex justify-end gap-4">
-            <button type="button" onClick={onClose} className="py-2 px-4 rounded-md text-gray-300 bg-gray-700 hover:bg-gray-600 transition-colors">Cancel</button>
+            <button type="button" onClick={onClose} className="py-2 px-4 rounded-md text-zinc-300 bg-zinc-800 hover:bg-zinc-700 transition-colors">Cancel</button>
             <button type="submit" className="py-2 px-4 rounded-md text-white bg-cyan-600 hover:bg-cyan-700 transition-colors">Confirm & Log</button>
           </div>
         </form>

@@ -38,8 +38,8 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
         [TradeOutcome.WIN]: { bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', text: 'text-emerald-400', glow: 'shadow-emerald-500/20' },
         [TradeOutcome.LOSS]: { bg: 'bg-rose-500/10', border: 'border-rose-500/30', text: 'text-rose-400', glow: 'shadow-rose-500/20' },
         [TradeOutcome.ENTRY_NOT_HIT]: { bg: 'bg-yellow-500/10', border: 'border-yellow-500/30', text: 'text-yellow-400', glow: 'shadow-yellow-500/20' },
-        [TradeOutcome.SKIPPED]: { bg: 'bg-gray-500/10', border: 'border-gray-500/30', text: 'text-gray-400', glow: 'shadow-gray-500/20' },
-        [TradeOutcome.PENDING]: { bg: 'bg-gray-500/10', border: 'border-gray-500/30', text: 'text-gray-400', glow: 'shadow-gray-500/20' },
+        [TradeOutcome.SKIPPED]: { bg: 'bg-zinc-500/10', border: 'border-zinc-500/30', text: 'text-zinc-400', glow: 'shadow-zinc-500/20' },
+        [TradeOutcome.PENDING]: { bg: 'bg-zinc-500/10', border: 'border-zinc-500/30', text: 'text-zinc-400', glow: 'shadow-zinc-500/20' },
     };
 
     const colors = outcomeColors[outcome] || outcomeColors[TradeOutcome.PENDING];
