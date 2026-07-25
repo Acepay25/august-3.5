@@ -48,6 +48,7 @@ const HybridDataPanel = React.lazy(() => import('./components/analysis/HybridDat
 const AdvancedAnalyticsSidePanel = React.lazy(() => import('./components/dashboards/AdvancedAnalyticsSidePanel'));
 const ScenarioSimulator = React.lazy(() => import('./components/modals/ScenarioSimulator'));
 const UpdateNotification = React.lazy(() => import('./components/shared/UpdateNotification'));
+const UpdateOverlay = React.lazy(() => import('./components/shared/UpdateOverlay'));
 const MistakeWarningBanner = React.lazy(() => import('./components/shared/MistakeWarningBanner'));
 const AnalysisProgress = React.lazy(() => import('./components/analysis/AnalysisProgress'));
 import { setUpdateNotificationHandler, activateWaitingWorker } from './index';
@@ -1566,6 +1567,13 @@ const App: React.FC = () => {
                 />
                 </React.Suspense>
             )}
+
+            {/* Desktop auto-update overlay (Electron only).
+                Renders null in the browser and whenever no update is in
+                progress, so it's a safe no-op outside Electron. */}
+            <React.Suspense fallback={null}>
+                <UpdateOverlay />
+            </React.Suspense>
             <LiveStreamView
                 variant="analysis"
                 isVisible={isLiveAnalysisVisible}

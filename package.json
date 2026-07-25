@@ -1,7 +1,7 @@
 {
   "name": "august-3.5",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "main": "electron/main.cjs",
   "description": "Advanced AI-powered cryptocurrency trading analysis terminal",
@@ -86,9 +86,10 @@
       "icon": "public/favicon.ico"
     },
     "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
+      "oneClick": true,
       "perMachine": false,
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "August 3.5"
