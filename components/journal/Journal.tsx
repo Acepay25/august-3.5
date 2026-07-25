@@ -5,6 +5,7 @@ import PerformanceReviewContent from './PerformanceReview';
 import WinRateDashboard from '../dashboards/WinRateDashboard';
 import LearningDashboard from '../dashboards/LearningDashboard';
 import ModelPerformanceDashboard from '../dashboards/ModelPerformanceDashboard';
+import ReasoningDashboard from '../dashboards/ReasoningDashboard';
 import { CloseIcon, HistoryIcon, StarIcon, ChartBarIcon, BrainIcon } from '../shared/Icons';
 import { AIProvider, LoggedTrade, TradeSummary, GlobalMemory } from '../../types';
 
@@ -160,7 +161,7 @@ const MemoryContent: React.FC<{
 };
 
 // Tab configuration
-type TabId = 'log' | 'performance' | 'analytics' | 'learning' | 'memory' | 'models';
+type TabId = 'log' | 'performance' | 'analytics' | 'learning' | 'memory' | 'models' | 'reasoning';
 
 interface TabConfig {
     id: TabId;
@@ -178,6 +179,7 @@ const TABS: TabConfig[] = [
     { id: 'memory', label: 'Memory', shortLabel: 'Mem', icon: <BrainIcon className="w-5 h-5" />, color: 'text-zinc-500', activeColor: 'text-emerald-400' },
     { id: 'learning', label: 'Learning', shortLabel: 'Learn', icon: <span className="text-lg">🎓</span>, color: 'text-zinc-500', activeColor: 'text-blue-400' },
     { id: 'models', label: 'Models', shortLabel: 'AI', icon: <span className="text-lg">🤖</span>, color: 'text-zinc-500', activeColor: 'text-violet-400' },
+    { id: 'reasoning', label: 'Reasoning', shortLabel: 'Think', icon: <BrainIcon className="w-5 h-5" />, color: 'text-zinc-500', activeColor: 'text-cyan-400' },
 ];
 
 const JournalInner: React.FC<JournalProps> = ({
@@ -290,6 +292,10 @@ const JournalInner: React.FC<JournalProps> = ({
                     ) : activeTab === 'models' ? (
                         <div className="p-4 sm:p-6 overflow-y-auto h-full">
                             <ModelPerformanceDashboard enabledProviders={enabledProviders} trades={trades} selectedModels={selectedModels} />
+                        </div>
+                    ) : activeTab === 'reasoning' ? (
+                        <div className="p-4 sm:p-6 overflow-y-auto h-full">
+                            <ReasoningDashboard username={typeof localStorage !== 'undefined' ? (localStorage.getItem('last_active_user') || 'default') : 'default'} />
                         </div>
                     ) : (
                         <MemoryContent

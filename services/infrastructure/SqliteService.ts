@@ -11,6 +11,7 @@
 import { Capacitor } from '@capacitor/core';
 import { CapacitorSQLite, SQLiteConnection, SQLiteDBConnection } from '@capacitor-community/sqlite';
 import { LoggedTrade, UserProfile, Conversation, TradeSummary, GlobalMemory, UserSettings } from '../../types';
+import { setSqliteDb } from './SqliteServiceHelpers';
 
 // Database configuration
 const DB_NAME = 'futuresai_db';
@@ -63,6 +64,9 @@ export const initSqlite = async (): Promise<boolean> => {
         }
 
         await db.open();
+
+        // Expose the connection to other infrastructure services
+        setSqliteDb(db);
 
         // Create tables
         await createTables();
@@ -164,6 +168,31 @@ const createTables = async (): Promise<void> => {
         );
     `);
 
+    // Thinking records table — stores per-model reasoning for training & analysis
+    await db.execute(`
+        CREATE TABLE IF NOT EXISTS thinking_records (
+            id TEXT PRIMARY KEY,
+            tradeId TEXT NOT NULL,
+            username TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            role TEXT,
+            modelName TEXT,
+            reasoning TEXT,
+            analysisJson TEXT,
+            debateTurnIndex INTEGER,
+            debateTurnSpeaker TEXT,
+            confidence TEXT,
+            probability REAL,
+            outcome TEXT,
+            createdAt TEXT
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_thinking_trade ON thinking_records(tradeId);
+        CREATE INDEX IF NOT EXISTS idx_thinking_provider ON thinking_records(provider);
+        CREATE INDEX IF NOT EXISTS idx_thinking_outcome ON thinking_records(outcome);
+        CREATE INDEX IF NOT EXISTS idx_thinking_username ON thinking_records(username);
+    `);
+
     // VERSION 2 MIGRATION: Add userPrompt if missing
     if (DB_VERSION >= 2) {
         try {
@@ -221,6 +250,7 @@ export const closeSqlite = async (): Promise<void> => {
         await db.close();
         await sqliteConnection?.closeConnection(DB_NAME, false);
         db = null;
+        setSqliteDb(null);
         isInitialized = false;
     }
 };

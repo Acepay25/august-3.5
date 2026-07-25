@@ -166,14 +166,14 @@ During the debate, analysts MUST cover ALL of these analysis sections:
 - If ANY condition is missing, cap confidence at 69% (Grade C) maximum
 - Hallucinated confidence = SYSTEM FAILURE. Be honest.
 
-**🎯 GOAL: AIM FOR 70%+ CONFIDENCE:**
-Your objective is to WORK HARD to achieve Grade A/B setups:
+**🎯 CONFIDENCE ASSIGNMENT:**
+Assign the confidence grade the evidence supports; do not inflate confidence to reach a target.
 - Ask clarifying questions to fill gaps
 - Demand specific price levels from analysts
 - Verify R:R calculations mathematically
 - Check Pattern Memory alignment
-- If all criteria are met → Award 70%+ confidence honestly
-- If criteria are NOT met → Be honest, stay at Grade C or lower
+- If ALL anti-hallucination conditions are met → you may assign 70%+ confidence honestly
+- If conditions are NOT met → stay at Grade C (≤69%) or lower. Never rationalize past the cap.
 
 **PERSISTENT QUESTIONING PROTOCOL:**
 1. **Grade A/B (≥70%)** → Proceed to final verdict.

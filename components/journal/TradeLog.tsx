@@ -6,6 +6,7 @@ import { LoggedTrade, TradeOutcome, AccuracySubMode } from '../../types';
 import { ChevronDownIcon, TrashIcon, StarIcon, LoadingIcon, BrainIcon, EditIcon } from '../shared/Icons';
 import ImageViewerModal from '../modals/ImageViewerModal';
 import { EmptyState } from '../ui/EmptyState';
+import { ReasoningPanel } from './ReasoningPanel';
 
 interface TradeLogContentProps {
     trades: LoggedTrade[];
@@ -267,6 +268,11 @@ const TradeLogRow: React.FC<{
                         <div className="col-span-2 text-[9px] text-zinc-600 pt-3 mt-1 border-t border-white/5 flex justify-between uppercase tracking-wider">
                             <span>Analyst: {(geminiModelUsed || deepseekModelUsed || zhipuModelUsed || groqModelUsed || groqNewModelUsed) ? (modelIdToName[geminiModelUsed || deepseekModelUsed || zhipuModelUsed || groqModelUsed || groqNewModelUsed || ''] || 'AI') : 'Ensemble'}</span>
                             {moderatorModel && <span>Mod: {modelIdToName[moderatorModel] || 'AI'}</span>}
+                        </div>
+
+                        {/* Reasoning Panel — per-analyst reasoning + debate transcript */}
+                        <div className="col-span-2">
+                            <ReasoningPanel tradeId={trade.analysis.createdAt || trade.id} outcome={trade.outcome} />
                         </div>
                     </div>
                 </div>

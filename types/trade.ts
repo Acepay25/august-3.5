@@ -1,8 +1,8 @@
 // Trade logging, conversation, and dashboard types
 
-import { AIProvider, AccuracySubMode, TradeOutcome } from './enums';
+import { AIProvider, AccuracySubMode, TradeOutcome, DebateSpeaker } from './enums';
 import { TradeAnalysis } from './analysis';
-import { Message } from './message';
+import { Message, DebateTurn } from './message';
 
 export interface LoggedTrade {
   id: string;
@@ -40,6 +40,11 @@ export interface LoggedTrade {
   groqNewThoughtProcess?: string;
   groqAlt2ThoughtProcess?: string;
   openrouterThoughtProcess?: string;
+
+  // Debate transcript — the full debate turns and moderator synthesis
+  // Stored for training data and outcome-correlated reasoning analysis
+  debateTurns?: DebateTurn[];
+  moderatorSynthesis?: string;
 
   // Mode Tracking
   isAccuracyMode?: boolean;

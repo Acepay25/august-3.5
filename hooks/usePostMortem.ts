@@ -354,11 +354,38 @@ Please investigate this discrepancy in your analysis.
             }
 
             // Finalize Message Text
+            // Persist post-mortem debate turns to ThinkingStore before clearing from message
+            const postMortemTradeId = candidate.message.analysis?.createdAt || candidate.message.id;
+            const postMortemTurns = messagesRef.current.find(m => m.id === postMortemMessageId)?.postMortemDebateTurns;
+            if (postMortemTurns && postMortemTurns.length > 0) {
+                try {
+                    const { saveThinkingBatch, generateThinkingId } = await import('../services/infrastructure/ThinkingStoreService');
+                    const username = localStorage.getItem('last_active_user') || 'default';
+                    const now = new Date().toISOString();
+                    const turnRecords = postMortemTurns.map((turn, idx) => ({
+                        id: generateThinkingId(),
+                        tradeId: postMortemTradeId,
+                        username,
+                        provider: turn.speaker.toLowerCase().includes('moderator') ? 'moderator' : turn.speaker.toLowerCase(),
+                        role: 'debate_turn' as const,
+                        debateTurnIndex: idx,
+                        debateTurnSpeaker: turn.speaker,
+                        reasoning: turn.text,
+                        createdAt: now,
+                    }));
+                    saveThinkingBatch(turnRecords).catch(err => {
+                        console.warn('[ThinkingStore] Failed to save post-mortem turns:', err);
+                    });
+                } catch (err) {
+                    console.warn('[ThinkingStore] Failed to persist post-mortem turns:', err);
+                }
+            }
+
             updateMessages(prev => prev.map(m => m.id === postMortemMessageId ? {
                 ...m,
                 text: finalPostMortemReport,
                 isDebating: false,
-                postMortemDebateTurns: undefined,
+                postMortemDebateTurns: undefined, // Clear from message (now persisted in ThinkingStore)
             } : m));
 
             // Update Trade Log

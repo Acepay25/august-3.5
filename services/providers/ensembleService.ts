@@ -18,7 +18,7 @@ import {
 } from '../../constants/prompts';
 import { DUAL_SCENARIO_JSON_SCHEMA } from '../../constants/schemas';
 import { parseLiveMarketData } from '../../utils/liveMarketParser';
-import { truncateTextToTokens } from '../../utils/analysisUtils';
+import { truncateTextToTokens, truncateJsonSafely } from '../../utils/analysisUtils';
 import { generateEnhancedDebateContext, EnhancedDebateContext } from '../ui/EnhancedDebateService';
 import { MarketRegime } from '../analysis/TechnicalAnalysisService';
 import {
@@ -85,9 +85,7 @@ After evaluating BOTH scenarios:
 
 **OUTPUT FORMAT FOR dualScenarioAnalysis:**
 \`\`\`json
-\`\`\`json
 ${DUAL_SCENARIO_JSON_SCHEMA}
-\`\`\`
 \`\`\`
 `;
 
@@ -962,7 +960,7 @@ export const conductDebate = (
 
     let analystsInput = "";
     analystsResults.forEach((res, index) => {
-        analystsInput += `\n**${analystNames[index].toUpperCase()} INITIAL ANALYSIS**:\n${truncateTextToTokens(JSON.stringify(res.analysis), 800)}\n`;
+        analystsInput += `\n**${analystNames[index].toUpperCase()} INITIAL ANALYSIS**:\n${truncateJsonSafely(JSON.stringify(res.analysis), 800)}\n`;
     });
 
     // Dynamic Construction of Dialogue Instructions based on active analysts
@@ -1079,7 +1077,9 @@ export const conductTwoWayDebate = async function* (
     activeFrameworks?: string[],
     tradeSummaries?: { id: string; summaryText: string; timestamp: string }[],
     gateResult?: GateOutput | null, // Gate result for reconciliation
-    learningContext?: string // NEW: Unified learning context
+    learningContext?: string, // NEW: Unified learning context
+    enabledProviders?: AIProvider[], // NEW: for weighted voting
+    trades?: LoggedTrade[] // NEW: trade history for weighted voting
 ): AsyncGenerator<string, void, unknown> {
 
     // Format Monte Carlo context
@@ -1225,6 +1225,13 @@ export const conductTwoWayDebate = async function* (
         ? generateGateReconciliationContext(gateResult, [analyst1Result, analyst2Result])
         : '';
 
+    // --- WEIGHTED VOTING CONTEXT ---
+    // Generate per-model performance context so the moderator weights stronger models higher
+    const currentFamily2 = analyst1Result.analysis.detectedPatternFamily || '';
+    const weightedVotingContext2 = enabledProviders && enabledProviders.length > 0
+        ? generateWeightedVotingContext(enabledProviders, currentFamily2)
+        : '';
+
     const moderatorSystemPrompt = `You are a Master Strategist moderating a high-stakes trading debate between ${analyst1Name} and ${analyst2Name}.
 
 
@@ -1239,6 +1246,8 @@ export const conductTwoWayDebate = async function* (
       ${ruleViolationContext}
 
       ${gateReconciliationContext}
+
+      ${weightedVotingContext2}
 
       ${AI_CORE_SKILL_INJECTION}
 
@@ -1537,8 +1546,8 @@ export const conductTwoWayDebate = async function* (
       History: ${tradeHistoryContext}
       ${mcContext}
 
-      **${analyst1Name.toUpperCase()} INITIAL THOUGHTS**: ${truncateTextToTokens(JSON.stringify(sanitizeAnalystOutput(analyst1Result.analysis)), 1000)} ${calibratedAnalysts[0].calibrationNote}
-      **${analyst2Name.toUpperCase()} INITIAL THOUGHTS**: ${truncateTextToTokens(JSON.stringify(sanitizeAnalystOutput(analyst2Result.analysis)), 1000)} ${calibratedAnalysts[1].calibrationNote}
+      **${analyst1Name.toUpperCase()} INITIAL THOUGHTS**: ${truncateJsonSafely(JSON.stringify(sanitizeAnalystOutput(analyst1Result.analysis)), 1000)} ${calibratedAnalysts[0].calibrationNote}
+      **${analyst2Name.toUpperCase()} INITIAL THOUGHTS**: ${truncateJsonSafely(JSON.stringify(sanitizeAnalystOutput(analyst2Result.analysis)), 1000)} ${calibratedAnalysts[1].calibrationNote}
 
       
       Start with <DEBATE_START> now.`;
@@ -2152,13 +2161,13 @@ History:
 ${tradeHistoryContext}
 
 **${analyst1Name.toUpperCase()} INITIAL THOUGHTS:**  
-${truncateTextToTokens(JSON.stringify(sanitizeAnalystOutput(analyst1Result.analysis)), 1500)}
+${truncateJsonSafely(JSON.stringify(sanitizeAnalystOutput(analyst1Result.analysis)), 1500)}
 
 **${analyst2Name.toUpperCase()} INITIAL THOUGHTS:**  
-${truncateTextToTokens(JSON.stringify(sanitizeAnalystOutput(analyst2Result.analysis)), 1500)}
+${truncateJsonSafely(JSON.stringify(sanitizeAnalystOutput(analyst2Result.analysis)), 1500)}
 
 **${analyst3Name.toUpperCase()} INITIAL THOUGHTS:**  
-${truncateTextToTokens(JSON.stringify(sanitizeAnalystOutput(analyst3Result.analysis)), 1500)}
+${truncateJsonSafely(JSON.stringify(sanitizeAnalystOutput(analyst3Result.analysis)), 1500)}
 
 Start with <DEBATE_START> now.
 `;

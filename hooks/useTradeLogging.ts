@@ -160,11 +160,27 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             moderatorProvider: moderatorProvider,
             moderatorModel: moderatorModel,
             isAccuracyMode: message.isAccuracyMode,
-            accuracySubMode: message.accuracySubMode
+            accuracySubMode: message.accuracySubMode,
+            // Persist debate transcript for training data
+            debateTurns: message.debateTurns,
+            moderatorSynthesis: message.text,
         };
 
         setLoggedTrades(prev => [loggedTrade, ...prev]);
         updateMessages(prev => prev.map(m => m.id === message.id ? { ...m, outcome } : m));
+
+        // === ThinkingStore: Update outcome for all thinking records of this trade ===
+        // This correlates the stored reasoning with the actual outcome (WIN/LOSS),
+        // enabling outcome-conditioned training data.
+        try {
+            const { updateThinkingOutcome } = await import('../services/infrastructure/ThinkingStoreService');
+            const tradeId = loggedTrade.analysis.createdAt || loggedTrade.id;
+            updateThinkingOutcome(tradeId, outcome).catch(err => {
+                console.warn('[ThinkingStore] Failed to update outcome:', err);
+            });
+        } catch (err) {
+            console.warn('[ThinkingStore] Failed to import updateThinkingOutcome:', err);
+        }
 
         // Update confidence calibration
         if (message.analysis?.confidence) {

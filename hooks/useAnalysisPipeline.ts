@@ -39,7 +39,9 @@ import { getGateAnalysis, GateOutput } from '../services/validation/GateKeeperSe
 
 // Utils
 import { isQuotaError } from '../utils/errorUtils';
-import { recalculateAnalysisMetrics, sanitizeTradeAnalysis } from '../utils/analysisUtils';
+import { recalculateAnalysisMetrics, sanitizeTradeAnalysis, clampProbabilityToGate } from '../utils/analysisUtils';
+import { saveThinkingBatch, generateThinkingId } from '../services/infrastructure/ThinkingStoreService';
+import { ThinkingRecord } from '../types/thinking';
 import { extractLastJson } from '../utils/jsonUtils';
 import { sanitizeAIResponse } from '../utils/sanitizers';
 import { modelIdToName } from '../constants/models';
@@ -936,7 +938,9 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                                 activeFrameworks, // playbook
                                 tradeSummaries, // recent insights for pattern matching
                                 currentGateResult, // Gate result
-                                moderatorLearningContext // NEW: Unified learning context for moderator
+                                moderatorLearningContext, // Unified learning context for moderator
+                                enabledProviders.map(p => p.aiProvider).filter(Boolean) as AIProvider[], // enabledProviders for weighted voting
+                                loggedTrades // trades for weighted voting
                             );
                         } else if (enabledProviders.length === 3) {
                             debateStream = ensembleService.conductThreeWayDebate(
@@ -944,8 +948,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                                 enabledProviders[0].name, enabledProviders[1].name, enabledProviders[2].name,
                                 enhancedPrompt, finalTradeSummary,
                                 activeModProvider, activeModModel, instructionsToUse,
-                                undefined, // trades
-                                undefined, // enabledProviders (for weighted voting)
+                                loggedTrades, // trades (was undefined — fixes dead weighted voting)
+                                enabledProviders.map(p => p.aiProvider).filter(Boolean) as AIProvider[], // enabledProviders (was undefined)
                                 perAIMC,   // monteCarloResults
                                 lensConfig.enabled ? lensConfig : undefined, // lensConfig
                                 lensConfig.enabled ? enabledProviders.map(p => p.aiProvider).filter(Boolean) as AIProvider[] : undefined, // analystProviders
@@ -1060,6 +1064,34 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
                     finalAnalysis = sanitizeTradeAnalysis(finalAnalysis);
 
+                    // === PROGRAMMATIC GATE CAP ENFORCEMENT ===
+                    // The Gate produces a confidenceCap based on data integrity, pattern memory,
+                    // HTF/LTF conflict, and volume context. The moderator can emit any probability
+                    // in its JSON, but it must never exceed the gate cap. Enforce in code.
+                    if (currentGateResult && finalAnalysis.probability != null) {
+                        const gateCap = currentGateResult.confidenceCap ?? 1.0;
+                        const clampResult = clampProbabilityToGate(
+                            finalAnalysis.probability,
+                            gateCap,
+                            finalAnalysis.rrRatio
+                        );
+                        if (clampResult.wasClamped) {
+                            console.warn(`[Gate Enforcement] Clamped probability ${finalAnalysis.probability}% → ${clampResult.probability}% (${clampResult.reason})`);
+                            finalAnalysis.probability = clampResult.probability;
+                            // Also downgrade the confidence string if probability was clamped below the threshold
+                            if (clampResult.probability < 70 && finalAnalysis.confidence === 'High') {
+                                finalAnalysis.confidence = 'Medium';
+                            } else if (clampResult.probability < 55 && finalAnalysis.confidence === 'Medium') {
+                                finalAnalysis.confidence = 'Low';
+                            }
+                            // Record the clamping in validation warnings
+                            if (!finalAnalysis.validationWarnings) {
+                                finalAnalysis.validationWarnings = [];
+                            }
+                            finalAnalysis.validationWarnings.push(`Gate enforcement: ${clampResult.reason}`);
+                        }
+                    }
+
                     updateMessages(prev => {
                         const messageIndex = prev.findIndex(m => m.id === debateMessageId);
                         if (messageIndex === -1) return prev;
@@ -1100,6 +1132,79 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                         newMessages[messageIndex] = updatedMessage;
                         return newMessages;
                     });
+
+                    // === ThinkingStore: Save reasoning for training & analysis ===
+                    // Persist per-analyst reasoning, moderator synthesis, and debate turns
+                    // so they can be correlated with outcomes and exported for model training.
+                    try {
+                        const tradeId = finalAnalysis.createdAt || new Date().toISOString();
+                        const username = localStorage.getItem('last_active_user') || 'default';
+                        const now = new Date().toISOString();
+                        const thinkingRecords: ThinkingRecord[] = [];
+
+                        // Save each analyst's reasoning + analysis JSON
+                        for (const providerKey of Object.keys(thoughtMap)) {
+                            const analystResult = results.find((r: any, idx: number) => {
+                                const providerName = enabledProviders[idx]?.name?.toLowerCase() || '';
+                                return providerName.includes(providerKey) || providerKey.includes(providerName.split(' ')[0].toLowerCase());
+                            });
+                            thinkingRecords.push({
+                                id: generateThinkingId(),
+                                tradeId,
+                                username,
+                                provider: providerKey,
+                                role: 'analyst',
+                                modelName: enabledProviders.find(p => p.name.toLowerCase().includes(providerKey) || providerKey.includes(p.name.toLowerCase().split(' ')[0]))?.model,
+                                reasoning: thoughtMap[providerKey] || '',
+                                analysisJson: analystResult ? JSON.stringify(analystResult.analysis) : undefined,
+                                confidence: analystResult?.analysis?.confidence,
+                                probability: analystResult?.analysis?.probability,
+                                createdAt: now,
+                            });
+                        }
+
+                        // Save moderator synthesis (the full debate response)
+                        thinkingRecords.push({
+                            id: generateThinkingId(),
+                            tradeId,
+                            username,
+                            provider: 'moderator',
+                            role: 'moderator',
+                            modelName: activeModModel,
+                            reasoning: fullResponseText,
+                            analysisJson: JSON.stringify(finalAnalysis),
+                            confidence: finalAnalysis.confidence,
+                            probability: finalAnalysis.probability,
+                            createdAt: now,
+                        });
+
+                        // Save debate turns (if any were parsed)
+                        const debateTurns = (prev => {
+                            const msg = prev.find(m => m.id === debateMessageId);
+                            return msg?.debateTurns || [];
+                        })(messagesRef.current);
+
+                        debateTurns.forEach((turn, idx) => {
+                            thinkingRecords.push({
+                                id: generateThinkingId(),
+                                tradeId,
+                                username,
+                                provider: turn.speaker.toLowerCase().includes('moderator') ? 'moderator' : turn.speaker.toLowerCase(),
+                                role: 'debate_turn',
+                                debateTurnIndex: idx,
+                                debateTurnSpeaker: turn.speaker,
+                                reasoning: turn.text,
+                                createdAt: now,
+                            });
+                        });
+
+                        // Save asynchronously (non-blocking)
+                        saveThinkingBatch(thinkingRecords).catch(err => {
+                            console.warn('[ThinkingStore] Failed to save thinking records:', err);
+                        });
+                    } catch (thinkingError) {
+                        console.warn('[ThinkingStore] Error preparing thinking records:', thinkingError);
+                    }
 
                 } else if (enabledProviders.length === 1) {
                     const provider = enabledProviders[0];
