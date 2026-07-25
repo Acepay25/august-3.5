@@ -10,6 +10,7 @@ import { MemoryProvider } from '../services/learning/MemoryService';
 import { getTradingWeaknesses } from '../services/learning/MistakePatternService';
 import { jobQueue, JobType } from '../services/infrastructure/JobQueueService';
 import { MAX_TRADE_SUMMARIES } from './useTradeLogging';
+import { saveThinkingBatch, generateThinkingId } from '../services/infrastructure/ThinkingStoreService';
 
 // Provider services (standard mode)
 import * as geminiService from '../services/providers/geminiService';
@@ -34,6 +35,7 @@ import * as openaiAccuracyService from '../services/providers/accuracy/openaiAcc
 export interface UsePostMortemParams {
     // Conversation state
     messages: Message[];
+    messagesRef: MutableRefObject<Message[]>;
     updateMessages: (updater: (prev: Message[]) => Message[]) => void;
     isAccuracyModeEnabled: boolean;
     accuracySubMode: string;
@@ -95,7 +97,7 @@ export interface UsePostMortemParams {
 
 export const usePostMortem = (params: UsePostMortemParams) => {
     const {
-        messages, updateMessages,
+        messages, messagesRef, updateMessages,
         isAccuracyModeEnabled,
         activeUsernameRef,
         isGeminiEnabled, isDeepSeekEnabled, isZhipuEnabled,
@@ -404,7 +406,9 @@ Please investigate this discrepancy in your analysis.
             const postMortemTurns = messagesRef.current.find(m => m.id === postMortemMessageId)?.postMortemDebateTurns;
             if (postMortemTurns && postMortemTurns.length > 0) {
                 try {
-                    const { saveThinkingBatch, generateThinkingId } = await import('../services/infrastructure/ThinkingStoreService');
+                    // LOW #10: static import — this module is already in the
+                    // main bundle (useAnalysisPipeline imports it statically),
+                    // so the dynamic import gave zero code-splitting benefit.
                     const username = localStorage.getItem('last_active_user') || 'default';
                     const now = new Date().toISOString();
                     const turnRecords = postMortemTurns.map((turn, idx) => ({

@@ -63,12 +63,24 @@ const initBackupDB = (): Promise<IDBDatabase> => {
 };
 
 /**
+ * Read a Capacitor Filesystem file result as a string, handling both the
+ * string and Blob return shapes across plugin versions. (Newer typings
+ * return Blob; TextDecoder.decode() won't accept a Blob directly.)
+ */
+const readFileAsString = async (data: string | Blob): Promise<string> => {
+    if (typeof data === 'string') return data;
+    // Blob path — convert via arrayBuffer, then decode.
+    const buf = await (data as Blob).arrayBuffer();
+    return new TextDecoder().decode(buf);
+};
+
+/**
  * Lazy-load the Filesystem API so web builds don't pay the import cost and
  * tests don't fail when the plugin is absent.
  */
 const getFilesystem = async () => {
-    const { Filesystem, Directory } = await import('@capacitor/filesystem');
-    return { Filesystem, Directory };
+    const { Filesystem, Directory, Encoding } = await import('@capacitor/filesystem');
+    return { Filesystem, Directory, Encoding };
 };
 
 /**
@@ -119,22 +131,26 @@ export const createBackup = async (username: string): Promise<BackupMetadata | n
         if (useNativeStorage()) {
             // P1-9: Persist to Filesystem (non-evictable) on native.
             await ensureNativeDir();
-            const { Filesystem, Directory } = await getFilesystem();
+            const { Filesystem, Directory, Encoding } = await getFilesystem();
             // Write the profile + a sidecar metadata file. We encode the
             // metadata in the filename so list operations don't need to read
             // every full backup just to show metadata.
             const safeName = (s: string) => s.replace(/[^a-zA-Z0-9_-]/g, '_');
             const baseName = `${safeName(username)}_${backupId}`;
+            // CRITICAL: encoding: Encoding.UTF8 is required when passing a
+            // string. Without it, Capacitor treats data as base64 binary and
+            // throws on native (silently caught → backup returns null).
             await Filesystem.writeFile({
                 path: `${NATIVE_BACKUP_DIR}/${baseName}.json`,
                 data: profileJson,
                 directory: Directory.Documents,
-                encoding: undefined as any, // binary UTF-8 default; data is a string
+                encoding: Encoding.UTF8,
             });
             await Filesystem.writeFile({
                 path: `${NATIVE_BACKUP_DIR}/${baseName}.meta.json`,
                 data: JSON.stringify(metadata),
                 directory: Directory.Documents,
+                encoding: Encoding.UTF8,
             });
         } else {
             // Web fallback: IndexedDB (subject to eviction under storage
@@ -176,7 +192,7 @@ export const createBackup = async (username: string): Promise<BackupMetadata | n
 export const getBackups = async (username: string): Promise<BackupMetadata[]> => {
     try {
         if (useNativeStorage()) {
-            const { Filesystem, Directory } = await getFilesystem();
+            const { Filesystem, Directory, Encoding } = await getFilesystem();
             const result = await Filesystem.readdir({
                 path: NATIVE_BACKUP_DIR,
                 directory: Directory.Documents,
@@ -193,8 +209,9 @@ export const getBackups = async (username: string): Promise<BackupMetadata[]> =>
                     const { data } = await Filesystem.readFile({
                         path: `${NATIVE_BACKUP_DIR}/${metaFile}`,
                         directory: Directory.Documents,
+                        encoding: Encoding.UTF8,
                     });
-                    metas.push(JSON.parse(typeof data === 'string' ? data : new TextDecoder().decode(data)));
+                    metas.push(JSON.parse(await readFileAsString(data)));
                 } catch (err) {
                     console.warn(`[BackupService] Failed to read native meta ${metaFile}:`, err);
                 }
@@ -237,7 +254,7 @@ export const getBackups = async (username: string): Promise<BackupMetadata[]> =>
  */
 const readBackupProfile = async (backupId: string): Promise<{ username: string; timestamp: string; profileJson: string } | null> => {
     if (useNativeStorage()) {
-        const { Filesystem, Directory } = await getFilesystem();
+        const { Filesystem, Directory, Encoding } = await getFilesystem();
         // Find the .json (non-meta) file whose name ends with the backupId.
         const result = await Filesystem.readdir({
             path: NATIVE_BACKUP_DIR,
@@ -248,8 +265,9 @@ const readBackupProfile = async (backupId: string): Promise<{ username: string; 
         const { data } = await Filesystem.readFile({
             path: `${NATIVE_BACKUP_DIR}/${match.name}`,
             directory: Directory.Documents,
+            encoding: Encoding.UTF8,
         });
-        const profileJson = typeof data === 'string' ? data : new TextDecoder().decode(data);
+        const profileJson = await readFileAsString(data);
         // Recover username + timestamp from the sidecar meta if present.
         let username = '';
         let timestamp = new Date().toISOString();
@@ -257,8 +275,9 @@ const readBackupProfile = async (backupId: string): Promise<{ username: string; 
             const metaResult = await Filesystem.readFile({
                 path: `${NATIVE_BACKUP_DIR}/${match.name.replace('.json', '.meta.json')}`,
                 directory: Directory.Documents,
+                encoding: Encoding.UTF8,
             });
-            const meta = JSON.parse(typeof metaResult.data === 'string' ? metaResult.data : new TextDecoder().decode(metaResult.data));
+            const meta = JSON.parse(await readFileAsString(metaResult.data));
             username = meta.username || '';
             timestamp = meta.timestamp || timestamp;
         } catch { /* meta missing — best effort */ }

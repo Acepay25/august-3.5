@@ -31,7 +31,7 @@ const Journal = React.lazy(() => import('./components/journal/Journal').then(m =
 const StrategySearch = React.lazy(() => import('./components/shared/StrategySearch'));
 const ConversationHistory = React.lazy(() => import('./components/chat/ConversationHistory'));
 const UserProfileManager = React.lazy(() => import('./components/settings/UserProfileManager'));
-const SavedAnalyses = React.lazy(() => import('./components/journal/SavedAnalyses').then(m => ({ default: m.SavedAnalyses })));
+const SavedAnalyses = React.lazy(() => import('./components/journal/SavedAnalyses'));
 const SettingsMenu = React.lazy(() => import('./components/settings/SettingsMenu'));
 const LiveStreamView = React.lazy(() => import('./components/analysis/LiveStreamView'));
 const LogTradeModal = React.lazy(() => import('./components/journal/LogTradeModal').then(m => ({ default: m.LogTradeModal })));
@@ -387,6 +387,7 @@ const App: React.FC = () => {
         handleMismatchResolution,
     } = usePostMortem({
         messages,
+        messagesRef,
         updateMessages,
         isAccuracyModeEnabled,
         accuracySubMode,
@@ -1542,9 +1543,10 @@ const App: React.FC = () => {
 
     // ... (Rest of component remains unchanged) ...
     return (
-        // P1-6: Single Suspense boundary for all lazy-loaded components.
-        // The fallback is minimal so the initial paint isn't blocked.
-        <React.Suspense fallback={<div className="flex items-center justify-center h-full text-zinc-500 text-sm">Loading…</div>}>
+        // P1-6: Outer Suspense boundary. fallback={null} so a suspending lazy
+        // subtree (e.g. a modal opening) does NOT blank the always-visible
+        // chat/header. Per-component Suspense wrappers below isolate suspends.
+        <React.Suspense fallback={null}>
         <div ref={appRef} className="flex flex-col bg-zinc-950 text-zinc-100 font-sans h-full overflow-hidden transition-colors duration-500">
             {/* P2-13: Custom confirm dialog + undo toast (replaces window.confirm) */}
             {ConfirmDialogComponent}
@@ -1555,12 +1557,14 @@ const App: React.FC = () => {
 
             {/* SW Update Notification */}
             {showUpdateNotification && (
+                <React.Suspense fallback={null}>
                 <UpdateNotification
                     onRefresh={() => {
                         activateWaitingWorker();
                     }}
                     onDismiss={() => setShowUpdateNotification(false)}
                 />
+                </React.Suspense>
             )}
             <LiveStreamView
                 variant="analysis"
@@ -1857,9 +1861,11 @@ const App: React.FC = () => {
 
             {/* Mistake Warning Banner - Global Risk Reminder */}
             {loggedTrades.length > 0 && (
+                <React.Suspense fallback={null}>
                 <MistakeWarningBanner
                     tradeLog={loggedTrades}
                 />
+                </React.Suspense>
             )}
 
             {/* P2-12: First-run onboarding card. Shows when no API keys are

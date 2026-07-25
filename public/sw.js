@@ -9,9 +9,6 @@ const URLS_TO_CACHE = [
   '/index.html',
   '/manifest.json',
 
-  // Main script (referenced by index.html)
-  '/index.tsx',
-
   // Assets
   '/vite.svg',
   '/favicon.png',

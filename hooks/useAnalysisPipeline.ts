@@ -135,7 +135,7 @@ export interface UseAnalysisPipelineParams {
     activeFrameworks: string[];
 
     // Toast:
-    toast: { warning: (t: string, m?: string) => void };
+    toast: { warning: (t: string, m?: string) => void; error: (t: string, m?: string) => void };
 }
 
 // ─── Hook ──────────────────────────────────────────────────────────────────────
@@ -894,9 +894,15 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                         .map(s => s.value);
 
                     const thoughtMap: Record<string, string> = {};
-                    results.forEach((res, index) => {
-                        const providerKey = enabledProviders[index].thoughtsKey;
-                        thoughtMap[providerKey] = res.thoughtProcess;
+                    // P1-6 (pre-existing fix): iterate settledResults, NOT the
+                    // re-indexed `results` array — otherwise a failed provider
+                    // at index 0 would cause results[0] (actually provider #1's
+                    // data) to be attributed to enabledProviders[0].thoughtsKey.
+                    settledResults.forEach((settled, index) => {
+                        if (settled.status === 'fulfilled') {
+                            const providerKey = enabledProviders[index].thoughtsKey;
+                            thoughtMap[providerKey] = settled.value.thoughtProcess;
+                        }
                     });
 
                     // FIX: Populate liveThoughts for LiveAnalysisView display
