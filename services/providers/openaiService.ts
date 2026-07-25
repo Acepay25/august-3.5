@@ -6,6 +6,7 @@ import { robustJsonParse, extractAndParseJson } from '../../utils/jsonUtils';
 import { sanitizeAIResponse, sanitizeJSONString } from '../../utils/sanitizers';
 import { truncateTextToTokens, sanitizeTradeAnalysis } from '../../utils/analysisUtils';
 import { MASTER_ANALYSIS_PROMPT, DEVILS_ADVOCATE_PROMPT, INVALIDATION_THESIS_PROMPT, CORRELATION_AWARENESS_PROMPT, LENS_MODE_BASE_PROMPT, MEMORY_COMPRESSOR_PROMPT, GLOBAL_MEMORY_MANAGER_PROMPT, AI_PROVIDER_MEMORY_ENFORCEMENT_PROMPT } from '../../constants/prompts';
+import { AI_CORE_SKILL_INJECTION } from './ensembleService';
 import { constructOptimizedContext } from '../../utils/memoryUtils';
 import { parseLiveMarketData } from '../../utils/liveMarketParser';
 import { withRetry, ProviderName } from '../../utils/apiErrorUtils';
@@ -252,7 +253,16 @@ export const analyzeTradingView = async (
     // Use LENS_MODE_BASE_PROMPT when rolePrompt is active, otherwise use full MASTER_ANALYSIS_PROMPT
     const basePrompt = rolePrompt ? LENS_MODE_BASE_PROMPT : MASTER_ANALYSIS_PROMPT;
 
-    const systemPrompt = `${rolePrompt ? '🎭 **SPECIALIZED ANALYST ROLE ACTIVE**\n\n' + rolePrompt + '\n\n---\n\n' : ''}${basePrompt}
+    // P2-19: Inject the anti-hallucination skill set (Explicit Unknown
+    // Protocol + Verification Self-Check) into the single-analyst path.
+    // Previously these were only injected into ensemble/debate prompts, but
+    // the single-analyst analyzeTradingView path is the highest-volume call
+    // and was missing the strongest anti-hallucination guardrails.
+    const systemPrompt = `${AI_CORE_SKILL_INJECTION}
+
+---
+
+${rolePrompt ? '🎭 **SPECIALIZED ANALYST ROLE ACTIVE**\n\n' + rolePrompt + '\n\n---\n\n' : ''}${basePrompt}
 
       ${rolePrompt ? '' : visionDeepDive}
 
@@ -320,7 +330,14 @@ export const analyzeTradingView = async (
             },
             "detectedPatternFamily": "Family A | Family B | Family C | Family Omega",
             "detectedPatterns": [{ "name": "...", "timeframe": "...", "type": "Bullish | Bearish | Neutral", "confidence": "...", "description": "..." }],
-            "keyLevels": { "support": ["..."], "resistance": ["..."] }
+            "keyLevels": { "support": ["..."], "resistance": ["..."] },
+            "levelProbabilities": {
+                "slProbability": 25,
+                "slReasoning": { "indicatorBasis": "...", "volatilityFactor": "...", "patternMemoryInfluence": "...", "aiAdjustments": "..." },
+                "tpProbabilities": [
+                    { "level": 1, "probability": 70, "reasoning": { "indicatorBasis": "...", "volatilityFactor": "...", "patternMemoryInfluence": "...", "aiAdjustments": "..." } }
+                ]
+            }
         }
       }
     `;
@@ -351,6 +368,11 @@ export const analyzeTradingView = async (
             messages: messages,
             response_format: { type: "json_object" },
             max_tokens: getMaxTokens(modelName, 4096),
+            // P2-18: Low temperature for deterministic, reproducible analysis.
+            // The moderator already uses 0.1; analysts default to 1.0 (high
+            // randomness) which hurts consistency. 0.3 keeps analyses stable
+            // across re-runs while still allowing modest reasoning variance.
+            temperature: 0.3,
         }, { signal }),
         PROVIDER,
         4,

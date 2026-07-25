@@ -666,7 +666,21 @@ export const COMPACT_ANALYSIS_PROMPT = `You are a CRYPTO FUTURES analysis engine
     "stopLossPercentage": "-2%",
     "takeProfit": [{"price": "96000", "percentage": "+2%"}],
     "detectedPatternFamily": "Family C",
-    "marketConditions": {"pattern": "...", "rsi": "...", "macd": "..."}
+    "marketConditions": {"pattern": "...", "rsi": "...", "macd": "..."},
+    "detectedPatterns": [
+      { "name": "Bull Flag", "timeframe": "1h", "type": "Bullish", "confidence": "High", "description": "Consolidating above support" }
+    ],
+    "keyLevels": {
+      "support": ["94500 (4h)", "94000 (1h)"],
+      "resistance": ["96000 (4h)", "97000 (1h)"]
+    },
+    "levelProbabilities": {
+      "slProbability": 25,
+      "slReasoning": { "indicatorBasis": "RSI/MACD alignment", "volatilityFactor": "ATR within normal range", "patternMemoryInfluence": "Similar setups had 25% SL hit rate", "aiAdjustments": "None" },
+      "tpProbabilities": [
+        { "level": 1, "probability": 70, "reasoning": { "indicatorBasis": "Strong momentum", "volatilityFactor": "Close target", "patternMemoryInfluence": "70% hit rate historically", "aiAdjustments": "+5% for trend strength" } }
+      ]
+    }
   }
 }
 

@@ -2,6 +2,13 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Conversation, Message, AIProvider } from '../types';
 import { GEMINI_MODELS, DEEPSEEK_MODELS, ZHIPU_MODELS, GROQ_MODELS, GROQ_NEW_MODELS, GROQ_ALT2_MODELS, OPENROUTER_MODELS, OPENAI_MODELS, GROK_MODELS, OCR_MODELS } from '../constants/models';
 
+// P2-16: Cap messages per conversation. Without this, conversations grow
+// unbounded and the whole messages array (with base64 images) is re-serialized
+// on every 1500ms debounce save. The cap is high enough that real trading
+// sessions won't hit it, but it prevents pathological growth from silently
+// inflating storage and save latency.
+const MAX_MESSAGES_PER_CONVERSATION = 200;
+
 export function useConversations() {
     // Master state for all conversation data.
     const [conversationHistory, setConversationHistory] = useState<Conversation[]>([]);
@@ -46,7 +53,14 @@ export function useConversations() {
         setConversationHistory(prevHistory => {
             return prevHistory.map(conv => {
                 if (conv.id === activeConversationId) {
-                    return { ...conv, messages: updater(conv.messages) };
+                    const next = updater(conv.messages);
+                    // P2-16: Enforce the message cap. Drop the OLDEST messages
+                    // (FIFO) so recent context is preserved. This runs on every
+                    // message append/edit, keeping conversations bounded.
+                    const trimmed = next.length > MAX_MESSAGES_PER_CONVERSATION
+                        ? next.slice(next.length - MAX_MESSAGES_PER_CONVERSATION)
+                        : next;
+                    return { ...conv, messages: trimmed };
                 }
                 return conv;
             });

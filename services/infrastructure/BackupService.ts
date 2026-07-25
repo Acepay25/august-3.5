@@ -1,8 +1,14 @@
 /**
  * BackupService - Automated backup management
  * Handles auto-save, versioned backups, and import validation
+ *
+ * P1-9: On native platforms (Android/iOS), backups are persisted via the
+ * Capacitor Filesystem API to a non-evictable directory, because WebView
+ * IndexedDB can be cleared by the OS under storage pressure. On web, the
+ * original IndexedDB store is used.
  */
 
+import { Capacitor } from '@capacitor/core';
 import { getUserProfile, saveUserProfile } from './dbService';
 
 export interface BackupMetadata {
@@ -18,11 +24,25 @@ export interface BackupMetadata {
 const BACKUP_STORE_NAME = 'backups';
 const MAX_BACKUPS = 5;
 const AUTO_BACKUP_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
+const NATIVE_BACKUP_DIR = 'AugustBackups';
 
-let autoBackupTimer: NodeJS.Timeout | null = null;
+let autoBackupTimer: ReturnType<typeof setInterval> | null = null;
 
 /**
- * Initialize the backup database
+ * Whether to use the native (Filesystem) backup store instead of IndexedDB.
+ * Resolved lazily so tests / SSR don't crash on a missing Capacitor bridge.
+ */
+const useNativeStorage = (): boolean => {
+    try {
+        return Capacitor.isNativePlatform();
+    } catch {
+        return false;
+    }
+};
+
+/**
+ * Initialize the backup database (web fallback only).
+ * On native, backups live in the Filesystem directory, so no init is needed.
  */
 const initBackupDB = (): Promise<IDBDatabase> => {
     return new Promise((resolve, reject) => {
@@ -43,11 +63,38 @@ const initBackupDB = (): Promise<IDBDatabase> => {
 };
 
 /**
+ * Lazy-load the Filesystem API so web builds don't pay the import cost and
+ * tests don't fail when the plugin is absent.
+ */
+const getFilesystem = async () => {
+    const { Filesystem, Directory } = await import('@capacitor/filesystem');
+    return { Filesystem, Directory };
+};
+
+/**
+ * Ensure the native backup directory exists.
+ */
+const ensureNativeDir = async (): Promise<void> => {
+    const { Filesystem, Directory } = await getFilesystem();
+    try {
+        await Filesystem.mkdir({
+            path: NATIVE_BACKUP_DIR,
+            directory: Directory.Documents,
+            recursive: true,
+        });
+    } catch (err: any) {
+        // Already-exists is expected; rethrow real failures.
+        if (!String(err?.message || '').toLowerCase().includes('exist')) {
+            throw err;
+        }
+    }
+};
+
+/**
  * Create a backup of the current user profile
  */
 export const createBackup = async (username: string): Promise<BackupMetadata | null> => {
     try {
-        const db = await initBackupDB();
         const profile = await getUserProfile(username);
 
         if (!profile) {
@@ -56,42 +103,67 @@ export const createBackup = async (username: string): Promise<BackupMetadata | n
         }
 
         const backupId = `backup-${username}-${Date.now()}`;
-        const backupData = {
+        const timestamp = new Date().toISOString();
+        const profileJson = JSON.stringify(profile);
+        const sizeBytes = new Blob([profileJson]).size;
+        const metadata: BackupMetadata = {
             id: backupId,
             username,
-            timestamp: new Date().toISOString(),
+            timestamp,
             version: 1,
-            profile: JSON.stringify(profile),
-            sizeBytes: 0,
+            sizeBytes,
             conversationCount: profile.conversations?.length || 0,
-            tradeCount: profile.tradeLog?.length || 0
+            tradeCount: profile.tradeLog?.length || 0,
         };
 
-        backupData.sizeBytes = new Blob([backupData.profile]).size;
-
-        // Store backup
-        await new Promise<void>((resolve, reject) => {
-            const tx = db.transaction(BACKUP_STORE_NAME, 'readwrite');
-            const store = tx.objectStore(BACKUP_STORE_NAME);
-            const request = store.add(backupData);
-            request.onsuccess = () => resolve();
-            request.onerror = () => reject(request.error);
-        });
+        if (useNativeStorage()) {
+            // P1-9: Persist to Filesystem (non-evictable) on native.
+            await ensureNativeDir();
+            const { Filesystem, Directory } = await getFilesystem();
+            // Write the profile + a sidecar metadata file. We encode the
+            // metadata in the filename so list operations don't need to read
+            // every full backup just to show metadata.
+            const safeName = (s: string) => s.replace(/[^a-zA-Z0-9_-]/g, '_');
+            const baseName = `${safeName(username)}_${backupId}`;
+            await Filesystem.writeFile({
+                path: `${NATIVE_BACKUP_DIR}/${baseName}.json`,
+                data: profileJson,
+                directory: Directory.Documents,
+                encoding: undefined as any, // binary UTF-8 default; data is a string
+            });
+            await Filesystem.writeFile({
+                path: `${NATIVE_BACKUP_DIR}/${baseName}.meta.json`,
+                data: JSON.stringify(metadata),
+                directory: Directory.Documents,
+            });
+        } else {
+            // Web fallback: IndexedDB (subject to eviction under storage
+            // pressure, but acceptable on desktop browsers).
+            const db = await initBackupDB();
+            await new Promise<void>((resolve, reject) => {
+                const tx = db.transaction(BACKUP_STORE_NAME, 'readwrite');
+                const store = tx.objectStore(BACKUP_STORE_NAME);
+                const request = store.add({
+                    id: backupId,
+                    username,
+                    timestamp,
+                    version: 1,
+                    profile: profileJson,
+                    sizeBytes,
+                    conversationCount: metadata.conversationCount,
+                    tradeCount: metadata.tradeCount,
+                });
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error);
+            });
+        }
 
         // Cleanup old backups (keep only MAX_BACKUPS)
         await cleanupOldBackups(username);
 
-        console.log(`[BackupService] Created backup ${backupId} (${(backupData.sizeBytes / 1024).toFixed(1)}KB)`);
+        console.log(`[BackupService] Created backup ${backupId} (${(sizeBytes / 1024).toFixed(1)}KB)${useNativeStorage() ? ' [native]' : ''}`);
 
-        return {
-            id: backupId,
-            username,
-            timestamp: backupData.timestamp,
-            version: backupData.version,
-            sizeBytes: backupData.sizeBytes,
-            conversationCount: backupData.conversationCount,
-            tradeCount: backupData.tradeCount
-        };
+        return metadata;
     } catch (error) {
         console.error('[BackupService] Failed to create backup:', error);
         return null;
@@ -103,8 +175,34 @@ export const createBackup = async (username: string): Promise<BackupMetadata | n
  */
 export const getBackups = async (username: string): Promise<BackupMetadata[]> => {
     try {
-        const db = await initBackupDB();
+        if (useNativeStorage()) {
+            const { Filesystem, Directory } = await getFilesystem();
+            const result = await Filesystem.readdir({
+                path: NATIVE_BACKUP_DIR,
+                directory: Directory.Documents,
+            });
+            const safeUser = (s: string) => s.replace(/[^a-zA-Z0-9_-]/g, '_');
+            const prefix = `${safeUser(username)}_`;
+            // Read only the .meta.json sidecar files for this user.
+            const metaFiles = result.files
+                .map(f => f.name)
+                .filter(name => name.startsWith(prefix) && name.endsWith('.meta.json'));
+            const metas: BackupMetadata[] = [];
+            for (const metaFile of metaFiles) {
+                try {
+                    const { data } = await Filesystem.readFile({
+                        path: `${NATIVE_BACKUP_DIR}/${metaFile}`,
+                        directory: Directory.Documents,
+                    });
+                    metas.push(JSON.parse(typeof data === 'string' ? data : new TextDecoder().decode(data)));
+                } catch (err) {
+                    console.warn(`[BackupService] Failed to read native meta ${metaFile}:`, err);
+                }
+            }
+            return metas.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        }
 
+        const db = await initBackupDB();
         return new Promise((resolve, reject) => {
             const tx = db.transaction(BACKUP_STORE_NAME, 'readonly');
             const store = tx.objectStore(BACKUP_STORE_NAME);
@@ -134,27 +232,64 @@ export const getBackups = async (username: string): Promise<BackupMetadata[]> =>
 };
 
 /**
+ * Read the full profile JSON for a backup (from either storage backend).
+ * Used by restoreBackup and exportBackupToFile.
+ */
+const readBackupProfile = async (backupId: string): Promise<{ username: string; timestamp: string; profileJson: string } | null> => {
+    if (useNativeStorage()) {
+        const { Filesystem, Directory } = await getFilesystem();
+        // Find the .json (non-meta) file whose name ends with the backupId.
+        const result = await Filesystem.readdir({
+            path: NATIVE_BACKUP_DIR,
+            directory: Directory.Documents,
+        });
+        const match = result.files.find(f => f.name.endsWith(`${backupId}.json`) && !f.name.endsWith('.meta.json'));
+        if (!match) return null;
+        const { data } = await Filesystem.readFile({
+            path: `${NATIVE_BACKUP_DIR}/${match.name}`,
+            directory: Directory.Documents,
+        });
+        const profileJson = typeof data === 'string' ? data : new TextDecoder().decode(data);
+        // Recover username + timestamp from the sidecar meta if present.
+        let username = '';
+        let timestamp = new Date().toISOString();
+        try {
+            const metaResult = await Filesystem.readFile({
+                path: `${NATIVE_BACKUP_DIR}/${match.name.replace('.json', '.meta.json')}`,
+                directory: Directory.Documents,
+            });
+            const meta = JSON.parse(typeof metaResult.data === 'string' ? metaResult.data : new TextDecoder().decode(metaResult.data));
+            username = meta.username || '';
+            timestamp = meta.timestamp || timestamp;
+        } catch { /* meta missing — best effort */ }
+        return { username, timestamp, profileJson };
+    }
+
+    const db = await initBackupDB();
+    const backup = await new Promise<any>((resolve, reject) => {
+        const tx = db.transaction(BACKUP_STORE_NAME, 'readonly');
+        const store = tx.objectStore(BACKUP_STORE_NAME);
+        const request = store.get(backupId);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+    if (!backup) return null;
+    return { username: backup.username, timestamp: backup.timestamp, profileJson: backup.profile };
+};
+
+/**
  * Restore profile from a backup
  */
 export const restoreBackup = async (backupId: string): Promise<boolean> => {
     try {
-        const db = await initBackupDB();
-
-        const backup = await new Promise<any>((resolve, reject) => {
-            const tx = db.transaction(BACKUP_STORE_NAME, 'readonly');
-            const store = tx.objectStore(BACKUP_STORE_NAME);
-            const request = store.get(backupId);
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error);
-        });
-
-        if (!backup) {
+        const record = await readBackupProfile(backupId);
+        if (!record) {
             console.error('[BackupService] Backup not found:', backupId);
             return false;
         }
 
-        const profile = JSON.parse(backup.profile);
-        await saveUserProfile(backup.username, profile);
+        const profile = JSON.parse(record.profileJson);
+        await saveUserProfile(record.username, profile);
 
         console.log(`[BackupService] Restored backup ${backupId}`);
         return true;
@@ -169,8 +304,24 @@ export const restoreBackup = async (backupId: string): Promise<boolean> => {
  */
 export const deleteBackup = async (backupId: string): Promise<boolean> => {
     try {
-        const db = await initBackupDB();
+        if (useNativeStorage()) {
+            const { Filesystem, Directory } = await getFilesystem();
+            const result = await Filesystem.readdir({
+                path: NATIVE_BACKUP_DIR,
+                directory: Directory.Documents,
+            });
+            const toDelete = result.files.filter(f => f.name.includes(backupId));
+            for (const f of toDelete) {
+                await Filesystem.deleteFile({
+                    path: `${NATIVE_BACKUP_DIR}/${f.name}`,
+                    directory: Directory.Documents,
+                });
+            }
+            console.log(`[BackupService] Deleted backup ${backupId}`);
+            return true;
+        }
 
+        const db = await initBackupDB();
         await new Promise<void>((resolve, reject) => {
             const tx = db.transaction(BACKUP_STORE_NAME, 'readwrite');
             const store = tx.objectStore(BACKUP_STORE_NAME);
@@ -192,25 +343,16 @@ export const deleteBackup = async (backupId: string): Promise<boolean> => {
  */
 export const exportBackupToFile = async (backupId: string): Promise<void> => {
     try {
-        const db = await initBackupDB();
-
-        const backup = await new Promise<any>((resolve, reject) => {
-            const tx = db.transaction(BACKUP_STORE_NAME, 'readonly');
-            const store = tx.objectStore(BACKUP_STORE_NAME);
-            const request = store.get(backupId);
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error);
-        });
-
-        if (!backup) {
+        const record = await readBackupProfile(backupId);
+        if (!record) {
             throw new Error('Backup not found');
         }
 
-        const blob = new Blob([backup.profile], { type: 'application/json' });
+        const blob = new Blob([record.profileJson], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `august_backup_${backup.username}_${new Date(backup.timestamp).toISOString().split('T')[0]}.json`;
+        a.download = `august_backup_${record.username}_${new Date(record.timestamp).toISOString().split('T')[0]}.json`;
         a.click();
         URL.revokeObjectURL(url);
     } catch (error) {

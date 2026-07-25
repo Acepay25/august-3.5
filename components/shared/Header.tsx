@@ -127,7 +127,7 @@ export const Header: React.FC<HeaderProps> = ({
     };
 
     return (
-        <header className="glass sticky top-0 z-20 px-4 py-2 sm:px-6 sm:py-4 border-b border-transparent shadow-sm flex-shrink-0 transition-all duration-300">
+        <header className="glass sticky top-0 z-20 px-4 py-2 sm:px-6 sm:py-4 border-b border-transparent shadow-sm flex-shrink-0 transition-all duration-300 pt-[calc(env(safe-area-inset-top,0px)+0.5rem)] sm:pt-[calc(env(safe-area-inset-top,0px)+1rem)]">
             <div className="max-w-7xl mx-auto flex items-center justify-between">
                 <div className="flex-1 min-w-0 flex items-center gap-3 sm:gap-4 relative">
                     {/* Hamburger Menu Button */}
@@ -263,6 +263,21 @@ export const Header: React.FC<HeaderProps> = ({
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></svg>
                     </button>
+
+                    {/* P2-12: Desktop Settings shortcut. Previously Settings was
+                        only reachable via the hamburger slide-out menu, which
+                        is awkward on desktop. This adds a dedicated toolbar
+                        button on sm+ screens. */}
+                    <div className="hidden sm:block">
+                        <button
+                            onClick={() => setIsSettingsVisible(true)}
+                            className="p-2 text-zinc-400 hover:text-cyan-400 hover:bg-white/5 rounded-lg transition-colors"
+                            title="Settings"
+                            aria-label="Open settings"
+                        >
+                            <SettingsIcon className="h-5 w-5" />
+                        </button>
+                    </div>
 
                     {(isAnalysisInProgress || isPostMortemInProgress) && (
                         <button
