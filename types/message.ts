@@ -85,7 +85,7 @@ export interface Message {
   postMortemFailedCandidate?: {
     message: Message;
     outcome: TradeOutcome;
-    feedback: {
+    feedback?: {
       pnlAmount?: number;
       correctedEntry?: string;
       correctedStopLoss?: string;

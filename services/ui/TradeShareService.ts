@@ -385,7 +385,9 @@ class TradeShareServiceClass {
      * Check if native sharing is supported
      */
     isNativeShareSupported(): boolean {
-        return !!(navigator.share && navigator.canShare);
+        // Use typeof checks — `navigator.share && navigator.canShare` would
+        // always be truthy because they are function references (TS2774).
+        return typeof navigator.share === 'function' && typeof navigator.canShare === 'function';
     }
 
     /**

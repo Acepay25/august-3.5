@@ -679,9 +679,9 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
                                 </div>
                             )}
 
-                            {slOptimization.contextRecommendations.length > 0 && (
+                            {(slOptimization.contextRecommendations?.length ?? 0) > 0 && (
                                 <div className="space-y-1">
-                                    {slOptimization.contextRecommendations.slice(0, 2).map((rec, i) => (
+                                    {slOptimization.contextRecommendations!.slice(0, 2).map((rec, i) => (
                                         <div key={i} className="text-[9px] text-amber-200/70 bg-black/20 px-2 py-1 rounded">
                                             {rec.context}: {(rec.recommendedMultiplier * 100).toFixed(0)}%
                                         </div>

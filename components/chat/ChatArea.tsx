@@ -18,7 +18,7 @@ const ListFooter = () => <div className="h-32"></div>;
 interface ChatAreaProps {
     messages: Message[];
     chatContext: ChatContextProps;
-    virtuosoRef: React.RefObject<VirtuosoHandle>;
+    virtuosoRef: React.RefObject<VirtuosoHandle | null>;
     isRateLimited: boolean;
     setIsRateLimited: (val: boolean) => void;
     showScrollDown: boolean;
