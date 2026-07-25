@@ -45,6 +45,10 @@ import { ThinkingRecord } from '../types/thinking';
 import { extractLastJson } from '../utils/jsonUtils';
 import { sanitizeAIResponse } from '../utils/sanitizers';
 import { modelIdToName } from '../constants/models';
+import {
+    getCachedResponse, cacheResponse, getImageHash, clearAllCaches,
+} from '../services/infrastructure/responseCache';
+import { useRafThrottle } from './useRafThrottle';
 
 // Learning services
 import { generateLearningFromPrompt, isLearningEnabled } from '../services/learning/LearningPromptService';
@@ -131,7 +135,7 @@ export interface UseAnalysisPipelineParams {
     activeFrameworks: string[];
 
     // Toast:
-    toast: { warning: (t: string, m?: string) => void };
+    toast: { warning: (t: string, m?: string) => void; error: (t: string, m?: string) => void };
 }
 
 // ─── Hook ──────────────────────────────────────────────────────────────────────
@@ -166,6 +170,84 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         isHybridIntelligenceEnabled, lensConfig, activeFrameworks,
         toast,
     } = params;
+
+    // ─── P1-4: Response cache wrapper ─────────────────────────────────────
+    // Wraps a provider's analyzeTradingView call with a short-TTL response
+    // cache. Re-analyzing the same chart (same images + prompt + model) within
+    // 10 minutes returns the cached result instantly instead of re-OCRing,
+    // re-encoding images to base64, and re-calling the API. Cache hits are
+    // logged so they're visible during debugging.
+    const cachedAnalyzeTradingView = useCallback(async (
+        provider: { service: any; model: string; useImages?: boolean; name?: string; thoughtsKey?: string },
+        prompt: string,
+        imageFiles: File[],
+        // The remaining args are passed through unchanged.
+        ...rest: any[]
+    ): Promise<{ thoughtProcess: string; analysis: any; sources?: any[] }> => {
+        // Build cache key from image hashes + prompt + model. We hash the
+        // File names+sizes as a proxy (the responseCache.getImageHash helper
+        // is designed for base64 data URLs; for File objects we synthesize a
+        // key from stable metadata since reading the bytes would defeat the
+        // purpose of caching).
+        const imageHashes = imageFiles.map(f => `${f.name}:${f.size}:${f.lastModified}`);
+        const cacheKey = imageHashes.length > 0 ? imageHashes : ['no-images'];
+
+        const cached = getCachedResponse(cacheKey, prompt, provider.model);
+        if (cached) {
+            console.log(`[ResponseCache] HIT for ${provider.name || provider.model} (${provider.model})`);
+            return {
+                thoughtProcess: cached.thoughtProcess,
+                analysis: cached.analysis,
+                sources: cached.sources,
+            };
+        }
+
+        const result = await provider.service.analyzeTradingView(
+            prompt, provider.useImages ? imageFiles : [], ...rest
+        );
+
+        // Only cache successful, non-empty results.
+        if (result && result.analysis) {
+            cacheResponse(cacheKey, prompt, provider.model, {
+                thoughtProcess: result.thoughtProcess,
+                analysis: result.analysis,
+                sources: result.sources,
+            });
+            console.log(`[ResponseCache] STORED for ${provider.name || provider.model} (${provider.model})`);
+        }
+
+        return result;
+    }, []);
+
+    // ─── P1-5: RAF-throttled debate stream updates ────────────────────────
+    // The debate `for await` loop below calls updateMessages on EVERY token
+    // chunk, rebuilding the messages array and re-rendering the chat subtree
+    // hundreds of times per response. This throttled wrapper coalesces those
+    // calls into one per animation frame (~60fps) — the fastest the browser
+    // can paint anyway. The final flush() at the end of the loop guarantees
+    // the last chunk's state is committed synchronously.
+    const throttledDebateUpdate = useRafThrottle((
+        debateMessageId: string,
+        currentTurns: DebateTurn[],
+        thoughtMap: Record<string, string>
+    ) => {
+        updateMessages(prev => {
+            const messageIndex = prev.findIndex(m => m.id === debateMessageId);
+            if (messageIndex === -1) return prev;
+            const updatedMessage = {
+                ...prev[messageIndex],
+                debateTurns: currentTurns,
+                geminiThoughtProcess: thoughtMap['gemini'],
+                deepseekThoughtProcess: thoughtMap['deepseek'],
+                zhipuThoughtProcess: thoughtMap['zhipu'],
+                groqThoughtProcess: thoughtMap['groq'],
+                groqNewThoughtProcess: thoughtMap['groqNew']
+            };
+            const newMessages = [...prev];
+            newMessages[messageIndex] = updatedMessage;
+            return newMessages;
+        });
+    });
 
     // ─── State ─────────────────────────────────────────────────────────────
     const [input, setInput] = useState('');
@@ -283,7 +365,17 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         // Determine images source (state or override)
         const imagesToUse = customImages || images;
 
-        if (loadingMessage || isSummarizing || (!effectiveInput.trim() && imagesToUse.length === 0) || isRateLimited || enabledProviders.length === 0) return;
+        if (loadingMessage || isSummarizing || (!effectiveInput.trim() && imagesToUse.length === 0) || isRateLimited) return;
+
+        // P0 fix: Surface a clear error when no AI providers are enabled.
+        // Previously this returned silently, leaving the user with no feedback.
+        if (enabledProviders.length === 0) {
+            toast.error(
+                "No AI Providers Enabled",
+                "Add an API key in Settings → AI Models to start analyzing charts."
+            );
+            return;
+        }
 
         if (!isAccuracyModeEnabled && enabledProviders.length > 3) {
             toast.warning("Provider Limit", "A maximum of 3 AI providers can be enabled for an ensemble debate in Standard Mode. Please disable at least one.");
@@ -750,7 +842,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     setIsLiveAnalysisVisible(true);
 
                     const analysisPromises = enabledProviders.map(provider =>
-                        provider.service.analyzeTradingView(
+                        cachedAnalyzeTradingView(
+                            provider,
                             enhancedPrompt,
                             provider.useImages ? imageFiles : [],
                             summaries,
@@ -801,9 +894,15 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                         .map(s => s.value);
 
                     const thoughtMap: Record<string, string> = {};
-                    results.forEach((res, index) => {
-                        const providerKey = enabledProviders[index].thoughtsKey;
-                        thoughtMap[providerKey] = res.thoughtProcess;
+                    // P1-6 (pre-existing fix): iterate settledResults, NOT the
+                    // re-indexed `results` array — otherwise a failed provider
+                    // at index 0 would cause results[0] (actually provider #1's
+                    // data) to be attributed to enabledProviders[0].thoughtsKey.
+                    settledResults.forEach((settled, index) => {
+                        if (settled.status === 'fulfilled') {
+                            const providerKey = enabledProviders[index].thoughtsKey;
+                            thoughtMap[providerKey] = settled.value.thoughtProcess;
+                        }
                     });
 
                     // FIX: Populate liveThoughts for LiveAnalysisView display
@@ -1022,23 +1121,12 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             }
                         }
 
-                        updateMessages(prev => {
-                            const messageIndex = prev.findIndex(m => m.id === debateMessageId);
-                            if (messageIndex === -1) return prev;
-                            const updatedMessage = {
-                                ...prev[messageIndex],
-                                debateTurns: currentTurns,
-                                geminiThoughtProcess: thoughtMap['gemini'],
-                                deepseekThoughtProcess: thoughtMap['deepseek'],
-                                zhipuThoughtProcess: thoughtMap['zhipu'],
-                                groqThoughtProcess: thoughtMap['groq'],
-                                groqNewThoughtProcess: thoughtMap['groqNew']
-                            };
-                            const newMessages = [...prev];
-                            newMessages[messageIndex] = updatedMessage;
-                            return newMessages;
-                        });
+                        // P1-5: Coalesce per-token updates into one per frame.
+                        throttledDebateUpdate(debateMessageId, currentTurns, thoughtMap);
                     }
+                    // Flush the final pending update synchronously so the
+                    // last chunk's state is committed before downstream parsing.
+                    throttledDebateUpdate.flush();
                     if (abortRef.current) return;
 
                     let finalAnalysis: TradeAnalysis;
@@ -1211,7 +1299,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     setLoadingMessage(isAccuracyModeEnabled ? `Running High-Precision Analysis...` : `Analyzing with ${provider.name}...`);
                     completeStep('gate-scan'); startStep('analysis');
                     setAnalysisSteps(prev => prev.map(s => s.id === 'analysis' ? { ...s, title: `Analyzing with ${provider.name}` } : s));
-                    const result = await provider.service.analyzeTradingView(
+                    const result = await cachedAnalyzeTradingView(
+                        provider,
                         enhancedPrompt, // Fixed: was promptToSend, now uses enhancedPrompt with Hybrid data
                         provider.useImages ? imageFiles : [],
                         summaries,

@@ -11,6 +11,17 @@ body {
   /* Prevents pull-to-refresh on mobile */
 }
 
+/* ===== SAFE AREA INSETS (notched / punch-hole devices) =====
+   P1-8: Without these the header renders under the status bar / camera
+   cutout on Android devices with notches. viewport-fit=cover (index.html)
+   is required for env() to resolve to non-zero values. */
+#root {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
 pre,
 code,
 .font-mono {

@@ -68,8 +68,37 @@ export function useMarketData(isHybridIntelligenceEnabled: boolean) {
         fetchLiveMarketConditions();
 
         // Then refresh every 60 seconds
-        const interval = setInterval(fetchLiveMarketConditions, 60000);
-        return () => clearInterval(interval);
+        let interval: ReturnType<typeof setInterval> | null = null;
+        const startInterval = () => {
+            if (interval !== null) return; // already running
+            interval = setInterval(fetchLiveMarketConditions, 60000);
+        };
+        const stopInterval = () => {
+            if (interval !== null) {
+                clearInterval(interval);
+                interval = null;
+            }
+        };
+
+        // P1-7: Pause polling when the tab is hidden to save battery/data on
+        // mobile and avoid wasted network requests. Mirrors the pattern used
+        // in Header.tsx for its session-refresh interval.
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                fetchLiveMarketConditions(); // Refresh immediately on return
+                startInterval();
+            } else {
+                stopInterval();
+            }
+        };
+
+        startInterval();
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            stopInterval();
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
     }, []);
 
     // Check Binance API connection when Hybrid Intelligence is enabled
@@ -111,13 +140,30 @@ export function useMarketData(isHybridIntelligenceEnabled: boolean) {
             checkConnection();
             // Re-check connection every 60 seconds (less aggressive than 30s)
             intervalId = setInterval(checkConnection, 60000);
+
+            // P1-7: Pause the connection check when the tab is hidden.
+            const handleVisibilityChange = () => {
+                if (document.visibilityState === 'visible') {
+                    checkConnection(); // Re-check immediately on return
+                    if (!intervalId) {
+                        intervalId = setInterval(checkConnection, 60000);
+                    }
+                } else {
+                    if (intervalId) {
+                        clearInterval(intervalId);
+                        intervalId = null;
+                    }
+                }
+            };
+            document.addEventListener('visibilitychange', handleVisibilityChange);
+
+            return () => {
+                if (intervalId) clearInterval(intervalId);
+                document.removeEventListener('visibilitychange', handleVisibilityChange);
+            };
         } else {
             setHybridConnectionStatus('disconnected');
         }
-
-        return () => {
-            if (intervalId) clearInterval(intervalId);
-        };
     }, [isHybridIntelligenceEnabled]);
 
     return {
