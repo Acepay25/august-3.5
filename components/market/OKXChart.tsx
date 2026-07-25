@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createChart, IChartApi, CandlestickData, Time, ISeriesApi, CandlestickSeries, LineSeries, LineData, LineStyle } from 'lightweight-charts';
 import { analyzeWithAI, TrendlineResult, convertToLineData } from '../../services/analysis/AITrendlineService';
+import { fetchMultiExchangeKlines } from '../../services/analysis/KlineService';
 
 interface OKXChartProps {
     symbol: string;
@@ -8,164 +9,18 @@ interface OKXChartProps {
     isVisible: boolean;
 }
 
-// OKX API intervals mapping
-const INTERVAL_MAP: Record<string, string> = {
-    '5m': '5m',
-    '15m': '15m',
-    '1h': '1H',
-    '4h': '4H',
-};
-
-// Convert symbol format (BTCUSDT -> BTC-USDT)
-const formatSymbol = (symbol: string): string => {
-    return symbol.replace('USDT', '-USDT');
-};
-
-// Map interval for different exchanges
-const mapInterval = (interval: string, exchange: 'pdax' | 'coinsph' | 'binance'): string => {
-    const map: Record<string, Record<string, string>> = {
-        pdax: { '5m': '5M', '15m': '15M', '1h': '60M', '4h': '4H' },
-        coinsph: { '5m': '5m', '15m': '15m', '1h': '1h', '4h': '4h' },
-        binance: { '5m': '5m', '15m': '15m', '1h': '1h', '4h': '4h' },
-    };
-    return map[exchange][interval] || interval;
-};
-
-// Main fetch function - tries multiple Philippine exchanges first, then Binance
+// Fetch candles via the shared KlineService (PDAX -> Coins.ph -> Binance proxy
+// fallback) and convert the standardized Kline[] (time in ms) into the
+// lightweight-charts CandlestickData format (time in seconds).
 const fetchOKXCandles = async (symbol: string, interval: string): Promise<CandlestickData<Time>[]> => {
-    // Try PDAX first (Philippine exchange)
-    const pdaxData = await tryFetchFromPDAX(symbol, interval);
-    if (pdaxData.length > 0) return pdaxData;
-
-    // Try Coins.ph second (Philippine exchange)
-    const coinsphData = await tryFetchFromCoinsph(symbol, interval);
-    if (coinsphData.length > 0) return coinsphData;
-
-    // Fallback to Binance via proxy
-    console.log('PH exchanges unavailable, trying Binance fallback...');
-    return await fetchFromBinanceFallback(symbol, interval);
-};
-
-// PDAX API - Philippine Digital Asset Exchange
-const tryFetchFromPDAX = async (symbol: string, interval: string): Promise<CandlestickData<Time>[]> => {
-    // PDAX uses PHP pairs, convert: BTCUSDT -> BTC-PHP
-    const pdaxSymbol = symbol.replace('USDT', '-PHP');
-    const pdaxInterval = mapInterval(interval, 'pdax');
-    const url = `https://api.pdax.ph/api/v1/market/klines?symbol=${pdaxSymbol}&interval=${pdaxInterval}&limit=300`;
-
-    try {
-        const controller = new AbortController();
-        const timeoutId = window.setTimeout(() => controller.abort(), 5000);
-
-        const response = await fetch(url, {
-            signal: controller.signal,
-            headers: { 'Accept': 'application/json' }
-        });
-        window.clearTimeout(timeoutId);
-
-        if (!response.ok) {
-            console.warn(`PDAX returned ${response.status}`);
-            return [];
-        }
-
-        const data = await response.json();
-        // PDAX returns array of { time, open, close, high, low, volume }
-        if (Array.isArray(data) && data.length > 0) {
-            console.log(`PDAX data loaded: ${data.length} candles`);
-            return data.map((k: any) => ({
-                time: Math.floor(k.time / 1000) as Time,
-                open: parseFloat(k.open),
-                high: parseFloat(k.high),
-                low: parseFloat(k.low),
-                close: parseFloat(k.close),
-            }));
-        }
-    } catch (e: any) {
-        console.warn('PDAX fetch failed:', e.name === 'AbortError' ? 'timeout' : e.message);
-    }
-    return [];
-};
-
-// Coins.ph API - Philippine Crypto Exchange
-const tryFetchFromCoinsph = async (symbol: string, interval: string): Promise<CandlestickData<Time>[]> => {
-    const coinsphInterval = mapInterval(interval, 'coinsph');
-    const url = `https://api.pro.coins.ph/openapi/quote/v1/klines?symbol=${symbol}&interval=${coinsphInterval}&limit=300`;
-
-    try {
-        const controller = new AbortController();
-        const timeoutId = window.setTimeout(() => controller.abort(), 5000);
-
-        const response = await fetch(url, {
-            signal: controller.signal,
-            headers: { 'Accept': 'application/json' }
-        });
-        window.clearTimeout(timeoutId);
-
-        if (!response.ok) {
-            console.warn(`Coins.ph returned ${response.status}`);
-            return [];
-        }
-
-        const data = await response.json();
-        // Coins.ph returns array similar to Binance: [[time, open, high, low, close, volume], ...]
-        if (Array.isArray(data) && data.length > 0 && Array.isArray(data[0])) {
-            console.log(`Coins.ph data loaded: ${data.length} candles`);
-            return data.map((k: any[]) => ({
-                time: Math.floor(k[0] / 1000) as Time,
-                open: parseFloat(k[1]),
-                high: parseFloat(k[2]),
-                low: parseFloat(k[3]),
-                close: parseFloat(k[4]),
-            }));
-        }
-    } catch (e: any) {
-        console.warn('Coins.ph fetch failed:', e.name === 'AbortError' ? 'timeout' : e.message);
-    }
-    return [];
-};
-
-// Binance fallback - uses proxies that work for indicators
-const fetchFromBinanceFallback = async (symbol: string, interval: string): Promise<CandlestickData<Time>[]> => {
-    const binanceInterval = mapInterval(interval, 'binance');
-    const binanceUrl = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${binanceInterval}&limit=300`;
-
-    const sources = [
-        { url: `https://data-api.binance.vision/api/v3/klines?symbol=${symbol}&interval=${binanceInterval}&limit=300`, timeout: 3000 },
-        { url: `https://api.allorigins.win/raw?url=${encodeURIComponent(binanceUrl)}&t=${Date.now()}`, timeout: 6000 },
-        { url: `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(binanceUrl)}`, timeout: 6000 },
-    ];
-
-    for (const source of sources) {
-        try {
-            const controller = new AbortController();
-            const timeoutId = window.setTimeout(() => controller.abort(), source.timeout);
-
-            const response = await fetch(source.url, {
-                signal: controller.signal,
-                headers: { 'Accept': 'application/json' }
-            });
-            window.clearTimeout(timeoutId);
-
-            if (!response.ok) continue;
-
-            const data = await response.json();
-            if (Array.isArray(data) && data.length > 0 && Array.isArray(data[0])) {
-                console.log(`Binance fallback loaded: ${data.length} candles`);
-                return data.map((k: any[]) => ({
-                    time: Math.floor(k[0] / 1000) as Time,
-                    open: parseFloat(k[1]),
-                    high: parseFloat(k[2]),
-                    low: parseFloat(k[3]),
-                    close: parseFloat(k[4]),
-                }));
-            }
-        } catch (e: any) {
-            console.warn('Binance fallback failed:', e.name === 'AbortError' ? 'timeout' : e.message);
-        }
-    }
-
-    console.error('All data sources failed');
-    return [];
+    const klines = await fetchMultiExchangeKlines(symbol, interval, 300);
+    return klines.map(k => ({
+        time: Math.floor(k.time / 1000) as Time,
+        open: k.open,
+        high: k.high,
+        low: k.low,
+        close: k.close,
+    }));
 };
 
 // --- Auto Trendline Detection ---

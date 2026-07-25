@@ -5,6 +5,7 @@ import { Kline } from '../../types';
 import { detectChartPatterns, detectKeyZones, DetectedPattern } from '../../utils/patternDetection';
 import OKXChart from './OKXChart';
 import { analyzeWithAI, AITrendlineAnalysis, MarketInsights } from '../../services/analysis/AITrendlineService';
+import { fetchKlines } from '../../services/analysis/KlineService';
 import { CandlestickData, Time } from 'lightweight-charts';
 
 interface LiveMarketProps {
@@ -33,59 +34,6 @@ const EXCHANGES = ['BINANCE', 'OKX'] as const;
 type Exchange = typeof EXCHANGES[number];
 
 // --- Data Engine ---
-
-const fetchKlines = async (symbol: string, interval: string, limit: number = 300): Promise<Kline[]> => {
-    // Try Binance Vision first (often allows CORS), then proxies
-    const publicUrl = `https://data-api.binance.vision/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
-    const targetUrl = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
-
-    const sources = [
-        { url: publicUrl, isProxy: false },
-        { url: `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}&t=${Date.now()}`, isProxy: true },
-        { url: `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`, isProxy: true },
-        { url: `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`, isProxy: true },
-    ];
-
-    for (const source of sources) {
-        try {
-            const controller = new AbortController();
-            // Shorter timeout for direct, longer for proxies
-            const timeoutId = window.setTimeout(() => controller.abort(), source.isProxy ? 8000 : 3000);
-
-            const response = await fetch(source.url, {
-                signal: controller.signal,
-                headers: { 'Accept': 'application/json' }
-            });
-            window.clearTimeout(timeoutId);
-
-            if (!response.ok) {
-                continue;
-            }
-
-            const text = await response.text();
-            try {
-                const data = JSON.parse(text);
-                if (Array.isArray(data) && data.length > 0 && Array.isArray(data[0])) {
-                    return data.map((d: any[]) => ({
-                        time: d[0],
-                        open: parseFloat(d[1]),
-                        high: parseFloat(d[2]),
-                        low: parseFloat(d[3]),
-                        close: parseFloat(d[4]),
-                        volume: parseFloat(d[5]),
-                    }));
-                }
-            } catch (parseError) {
-                // console.warn(`JSON parse failed for ${interval}`);
-            }
-        } catch (e) {
-            // console.warn(`Fetch attempt failed for ${symbol} ${interval}`, e);
-        }
-    }
-
-    console.error(`All fetch attempts failed for ${symbol} ${interval}`);
-    return [];
-};
 
 const calculateSMA = (data: number[], period: number): number | null => {
     if (data.length < period) return null;
