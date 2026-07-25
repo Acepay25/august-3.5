@@ -1,4 +1,5 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import type { MutableRefObject } from 'react';
 import { Message, MessageRole, TradeOutcome, LoggedTrade, DebateTurn, LiveThoughts, TradeSummary, GlobalMemory, AnalysisStep } from '../types';
 import { PostMortemCandidate } from '../components/modals/PostTradeUploadModal';
 import { validateTradeOutcome, TradeOutcomeValidation } from '../services/backtesting/BacktestingService';
@@ -9,6 +10,7 @@ import { MemoryProvider } from '../services/learning/MemoryService';
 import { getTradingWeaknesses } from '../services/learning/MistakePatternService';
 import { jobQueue, JobType } from '../services/infrastructure/JobQueueService';
 import { MAX_TRADE_SUMMARIES } from './useTradeLogging';
+import { saveThinkingBatch, generateThinkingId } from '../services/infrastructure/ThinkingStoreService';
 
 // Provider services (standard mode)
 import * as geminiService from '../services/providers/geminiService';
@@ -33,9 +35,16 @@ import * as openaiAccuracyService from '../services/providers/accuracy/openaiAcc
 export interface UsePostMortemParams {
     // Conversation state
     messages: Message[];
+    messagesRef: MutableRefObject<Message[]>;
     updateMessages: (updater: (prev: Message[]) => Message[]) => void;
     isAccuracyModeEnabled: boolean;
     accuracySubMode: string;
+    // P0-2: activeUsername is used to cancel in-flight post-mortem work
+    // when the user switches accounts, preventing the old user's results
+    // from being written into the new user's trade log. Passed as a ref
+    // because this hook is instantiated before App.tsx destructures
+    // activeUsername from useUserProfiles.
+    activeUsernameRef: MutableRefObject<string | null>;
     isGeminiEnabled: boolean;
     isDeepSeekEnabled: boolean;
     isZhipuEnabled: boolean;
@@ -88,8 +97,9 @@ export interface UsePostMortemParams {
 
 export const usePostMortem = (params: UsePostMortemParams) => {
     const {
-        messages, updateMessages,
+        messages, messagesRef, updateMessages,
         isAccuracyModeEnabled,
+        activeUsernameRef,
         isGeminiEnabled, isDeepSeekEnabled, isZhipuEnabled,
         isGroqEnabled, isGroqNewEnabled, isGroqAlt2Enabled,
         isOpenrouterEnabled, isOpenaiEnabled,
@@ -113,8 +123,40 @@ export const usePostMortem = (params: UsePostMortemParams) => {
     const [typingMessageState, setTypingMessageState] = useState<{ id: string; fullText: string; field: 'postMortem' } | null>(null);
     const [livePostMortemThoughts, setLivePostMortemThoughts] = useState<LiveThoughts>({ gemini: null, deepseek: null, zhipu: null, groq: null, groqNew: null, groqAlt2: null, openrouter: null, openai: null, grokNative: null });
 
+    // ─── P0-2: Cancellation guard for in-flight post-mortem work ──────────
+    // When the user switches accounts, any async post-mortem analysis still
+    // running for the OLD user would otherwise resolve and call
+    // setLoggedTrades/setTradeSummaries/setGlobalMemory — clobbering the NEW
+    // user's data. Each run captures the current runId; if the user changes,
+    // runId is bumped and stale runs early-return before mutating state.
+    const postMortemRunIdRef = useRef<number>(0);
+    const lastSeenUsernameRef = useRef<string | null>(activeUsernameRef.current);
+    useEffect(() => {
+        // Bump the run id whenever the active username changes. We read from
+        // the ref (synced by App.tsx) rather than a prop so this hook can be
+        // instantiated before activeUsername is destructured in App.
+        if (activeUsernameRef.current !== lastSeenUsernameRef.current) {
+            lastSeenUsernameRef.current = activeUsernameRef.current;
+            postMortemRunIdRef.current += 1;
+        }
+    });
+
+    /**
+     * Helper: returns true if the calling run is still the active one.
+     * Capture `const myRunId = postMortemRunIdRef.current` at the start of
+     * an async path, then call `isRunStale(myRunId)` before each state write.
+     */
+    const isRunStale = useCallback((runId: number): boolean => {
+        return runId !== postMortemRunIdRef.current;
+    }, []);
+
     // ─── Main Analysis Function ───────────────────────────────────────────
     const startPostMortemAnalysis = async (candidate: PostMortemCandidate, summaries?: string[], imageUrls?: string[], resolvedValidation?: TradeOutcomeValidation) => {
+        // Capture the run id at the start. If the user switches accounts while
+        // this async function is in flight, the ref will be bumped and our
+        // subsequent state writes will be skipped (see isRunStale checks).
+        const myRunId = postMortemRunIdRef.current;
+
         setPostMortemCandidate(null);
         setIsPostMortemInProgress(true);
         initAnalysisSteps([
@@ -289,6 +331,11 @@ Please investigate this discrepancy in your analysis.
                 const turnRegex = /(?:^|\n)\s*(?:[\*_~]*)(Gemini|DeepSeek|Zhipu|Groq|Groq \(Alt\)|Groq \(Alt 2\)|OpenRouter|Claude[^\n:]*|GPT[^\n:]*|Grok[^\n:]*|O1|O3|O4|Puter|Moderator)[^\n:]*?(?:[\*_~]*)\s*:\s*([\s\S]*?)(?=(?:^|\n)\s*(?:[\*_~]*)(?:Gemini|DeepSeek|Zhipu|Groq|Groq \(Alt\)|Groq \(Alt 2\)|OpenRouter|Claude[^\n:]*|GPT[^\n:]*|Grok[^\n:]*|O1|O3|O4|Puter|Moderator)[^\n:]*?(?:[\*_~]*)\s*:|$)/gi;
 
                 for await (const chunk of debateStream) {
+                    // P0-2: abort the stream if the user switched accounts
+                    if (isRunStale(myRunId)) {
+                        console.log('[PostMortem] Aborting debate stream — user switched');
+                        return;
+                    }
                     fullDebateText += chunk;
 
                     const startMatch = fullDebateText.match(/<DEBATE_START>/i);
@@ -359,7 +406,9 @@ Please investigate this discrepancy in your analysis.
             const postMortemTurns = messagesRef.current.find(m => m.id === postMortemMessageId)?.postMortemDebateTurns;
             if (postMortemTurns && postMortemTurns.length > 0) {
                 try {
-                    const { saveThinkingBatch, generateThinkingId } = await import('../services/infrastructure/ThinkingStoreService');
+                    // LOW #10: static import — this module is already in the
+                    // main bundle (useAnalysisPipeline imports it statically),
+                    // so the dynamic import gave zero code-splitting benefit.
                     const username = localStorage.getItem('last_active_user') || 'default';
                     const now = new Date().toISOString();
                     const turnRecords = postMortemTurns.map((turn, idx) => ({
@@ -388,6 +437,16 @@ Please investigate this discrepancy in your analysis.
                 postMortemDebateTurns: undefined, // Clear from message (now persisted in ThinkingStore)
             } : m));
 
+            // P0-2: If the user switched accounts while the post-mortem was
+            // running, do NOT write the old user's results into the new
+            // user's trade log / summaries / global memory. This is the
+            // critical guard — without it, the in-flight setters clobber the
+            // new user's data.
+            if (isRunStale(myRunId)) {
+                console.log('[PostMortem] Discarding results — user switched during analysis');
+                return;
+            }
+
             // Update Trade Log
             setLoggedTrades(prev => prev.map(t => t.analysis.createdAt === candidate.message.analysis?.createdAt ? {
                 ...t,
@@ -399,6 +458,11 @@ Please investigate this discrepancy in your analysis.
             const tradeToUpdate = loggedTrades.find(t => t.analysis.createdAt === candidate.message.analysis?.createdAt);
             if (tradeToUpdate) {
                 const summary = await MemoryService.summarizeTrade({ ...tradeToUpdate, postMortem: finalPostMortemReport }, memoryModel, memoryProvider);
+                // Re-check after the await — the user may have switched during summarizeTrade
+                if (isRunStale(myRunId)) {
+                    console.log('[PostMortem] Discarding summary — user switched during summarizeTrade');
+                    return;
+                }
                 setTradeSummaries(prev => {
                     const newSummary = { id: tradeToUpdate.id, summaryText: summary, timestamp: new Date().toISOString() };
                     const updated = [...prev, newSummary];
@@ -406,6 +470,11 @@ Please investigate this discrepancy in your analysis.
                 });
 
                 const newMemory = await MemoryService.updateGlobalMemory([tradeToUpdate], globalMemory, memoryProvider);
+                // Re-check after the await
+                if (isRunStale(myRunId)) {
+                    console.log('[PostMortem] Discarding global memory update — user switched');
+                    return;
+                }
                 setGlobalMemory(newMemory);
 
                 // AI LEARNING: Extract insights and rules in BACKGROUND
@@ -428,10 +497,16 @@ Please investigate this discrepancy in your analysis.
 
         } catch (e: any) {
             console.error("Post Mortem Failed", e);
+            // P2-15: Keep the role as AI (not SYSTEM) so the message renders
+            // consistently and the persisted record isn't a data-shape
+            // mutation (an AI bubble becoming a SYSTEM message). The
+            // postMortemFailedCandidate payload drives the retry button,
+            // which handleRetryPostMortem wires up — so a failed post-mortem
+            // now renders as an AI message with the error text + a retry CTA.
             updateMessages(prev => prev.map(m => m.id === postMortemMessageId ? {
                 ...m,
                 text: `Post-Mortem Failed: ${e.message}`,
-                role: MessageRole.SYSTEM,
+                role: MessageRole.AI,
                 postMortemFailedCandidate: {
                     message: candidate.message,
                     outcome: candidate.outcome,

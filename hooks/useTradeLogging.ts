@@ -254,12 +254,18 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
 
                 console.log('[AutoInsight] Trade auto-added to Recent Insights:', loggedTrade.id);
             } catch (error) {
+                // P2-14: Surface the failure so the user knows an insight
+                // wasn't created — their trade was still logged successfully.
                 console.error('[AutoInsight] Failed to generate insight:', error);
+                toast.error(
+                    "Insight Generation Failed",
+                    "Your trade was logged, but the AI insight couldn't be generated."
+                );
             } finally {
                 setIsInsightGenerating(false);
             }
         })();
-    }, [activeConversationLeverage, moderatorProvider, moderatorModel, updateMessages, memoryModel, memoryProvider, useAlgorithmicInsights]);
+    }, [activeConversationLeverage, moderatorProvider, moderatorModel, updateMessages, memoryModel, memoryProvider, useAlgorithmicInsights, toast]);
 
     // ─── Data Capture Modal Handlers ──────────────────────────────────────
 
@@ -448,12 +454,18 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
 
                 console.log('[AutoInsight] Entry Not Hit logged to Recent Insights:', loggedTrade.id);
             } catch (error) {
+                // P2-14: Surface the failure so the user knows an insight
+                // wasn't created — their trade was still logged successfully.
                 console.error('[AutoInsight] Failed to generate insight:', error);
+                toast.error(
+                    "Insight Generation Failed",
+                    "Your trade was logged, but the AI insight couldn't be generated."
+                );
             } finally {
                 setIsInsightGenerating(false);
             }
         })();
-    }, [activeConversationLeverage, memoryModel, memoryProvider, useAlgorithmicInsights]);
+    }, [activeConversationLeverage, memoryModel, memoryProvider, useAlgorithmicInsights, toast]);
 
     const handleEntryNotHitAutoCapture = useCallback(async () => {
         if (!entryNotHitCandidate || !entryNotHitCandidate.message.analysis) {

@@ -15,33 +15,41 @@ import { ProbabilityEngineService } from './services/analysis/ProbabilityEngineS
 // Modular Imports
 import { ChatContextProps } from './components/chat/MessageItem';
 import { useToastActions } from './components/shared/Toast';
+import { useConfirmDialog } from './components/shared/ConfirmDialog';
+import { OnboardingCard } from './components/shared/OnboardingCard';
 import { Header } from './components/shared/Header';
 import { ChatArea } from './components/chat/ChatArea';
-import { Journal } from './components/journal/Journal';
-import StrategySearch from './components/shared/StrategySearch';
-import ConversationHistory from './components/chat/ConversationHistory';
-import UserProfileManager from './components/settings/UserProfileManager';
-import SavedAnalyses from './components/journal/SavedAnalyses';
-import SettingsMenu from './components/settings/SettingsMenu';
 import { useProviderConfigs } from './hooks/useProviderConfigs';
-import LiveStreamView from './components/analysis/LiveStreamView';
-import { LogTradeModal } from './components/journal/LogTradeModal';
-import { PostTradeUploadModal, PostMortemCandidate } from './components/modals/PostTradeUploadModal';
-import { SkipTradeModal } from './components/modals/SkipTradeModal';
-import { DataCaptureModal } from './components/modals/DataCaptureModal';
-import { EntryNotHitCaptureModal } from './components/modals/EntryNotHitCaptureModal';
-import OutcomeMismatchModal from './components/modals/OutcomeMismatchModal';
-// import ScenarioSimulatorModal from './components/ScenarioSimulatorModal'; // Not created yet
-import { UpdateTradeModal } from './components/journal/UpdateTradeModal';
-import VisionDataViewer from './components/analysis/VisionDataViewer';
-import LiveMarket from './components/market/LiveMarket';
-import { AccuracyModeModal } from './components/modals/AccuracyModeModal';
-import HybridDataPanel from './components/analysis/HybridDataPanel';
-import AdvancedAnalyticsSidePanel from './components/dashboards/AdvancedAnalyticsSidePanel';
-import ScenarioSimulator from './components/modals/ScenarioSimulator';
-import UpdateNotification from './components/shared/UpdateNotification';
-import MistakeWarningBanner from './components/shared/MistakeWarningBanner';
-import AnalysisProgress from './components/analysis/AnalysisProgress';
+import { PostMortemCandidate } from './components/modals/PostTradeUploadModal';
+
+// P1-6: Lazy-load heavy, conditionally-rendered components so the initial
+// bundle is much smaller. Previously the entire app was one ~1.73 MB chunk.
+// Each lazy() call below produces a separate chunk loaded on demand when
+// the user opens the corresponding panel/modal. ChatArea and Header stay
+// eager (always-rendered, critical path).
+const Journal = React.lazy(() => import('./components/journal/Journal').then(m => ({ default: m.Journal })));
+const StrategySearch = React.lazy(() => import('./components/shared/StrategySearch'));
+const ConversationHistory = React.lazy(() => import('./components/chat/ConversationHistory'));
+const UserProfileManager = React.lazy(() => import('./components/settings/UserProfileManager'));
+const SavedAnalyses = React.lazy(() => import('./components/journal/SavedAnalyses'));
+const SettingsMenu = React.lazy(() => import('./components/settings/SettingsMenu'));
+const LiveStreamView = React.lazy(() => import('./components/analysis/LiveStreamView'));
+const LogTradeModal = React.lazy(() => import('./components/journal/LogTradeModal').then(m => ({ default: m.LogTradeModal })));
+const PostTradeUploadModal = React.lazy(() => import('./components/modals/PostTradeUploadModal').then(m => ({ default: m.PostTradeUploadModal })));
+const SkipTradeModal = React.lazy(() => import('./components/modals/SkipTradeModal').then(m => ({ default: m.SkipTradeModal })));
+const DataCaptureModal = React.lazy(() => import('./components/modals/DataCaptureModal').then(m => ({ default: m.DataCaptureModal })));
+const EntryNotHitCaptureModal = React.lazy(() => import('./components/modals/EntryNotHitCaptureModal').then(m => ({ default: m.EntryNotHitCaptureModal })));
+const OutcomeMismatchModal = React.lazy(() => import('./components/modals/OutcomeMismatchModal'));
+const UpdateTradeModal = React.lazy(() => import('./components/journal/UpdateTradeModal').then(m => ({ default: m.UpdateTradeModal })));
+const VisionDataViewer = React.lazy(() => import('./components/analysis/VisionDataViewer'));
+const LiveMarket = React.lazy(() => import('./components/market/LiveMarket'));
+const AccuracyModeModal = React.lazy(() => import('./components/modals/AccuracyModeModal').then(m => ({ default: m.AccuracyModeModal })));
+const HybridDataPanel = React.lazy(() => import('./components/analysis/HybridDataPanel'));
+const AdvancedAnalyticsSidePanel = React.lazy(() => import('./components/dashboards/AdvancedAnalyticsSidePanel'));
+const ScenarioSimulator = React.lazy(() => import('./components/modals/ScenarioSimulator'));
+const UpdateNotification = React.lazy(() => import('./components/shared/UpdateNotification'));
+const MistakeWarningBanner = React.lazy(() => import('./components/shared/MistakeWarningBanner'));
+const AnalysisProgress = React.lazy(() => import('./components/analysis/AnalysisProgress'));
 import { setUpdateNotificationHandler, activateWaitingWorker } from './index';
 
 import { GEMINI_MODELS, DEEPSEEK_MODELS, ZHIPU_MODELS, GROQ_MODELS, GROQ_NEW_MODELS, GROQ_ALT2_MODELS, OPENROUTER_MODELS, OPENAI_MODELS, GROK_MODELS, OCR_MODELS, modelIdToName, ocrModelIdToName, DEFAULT_FRAMEWORKS, ACCURACY_MODE_DEFAULTS } from './constants/models';
@@ -60,6 +68,7 @@ import { useTradeLogging, MAX_TRADE_SUMMARIES } from './hooks/useTradeLogging';
 import { useAnalysisPipeline } from './hooks/useAnalysisPipeline';
 import { usePostMortem } from './hooks/usePostMortem';
 import { useUserProfiles } from './hooks/useUserProfiles';
+import { useSaveOnUnload } from './hooks/useSaveOnUnload';
 import { offlineQueue, QueuedRequest } from './services/infrastructure/OfflineQueueService';
 // AI Learning Services - Adaptive Learning, Mistake Patterns, Insight Extraction
 import { extractInsightsFromPostMortem, storeInsights, initializeKnowledgeBase } from './services/learning/InsightExtractionService';
@@ -69,15 +78,34 @@ import { syncFromTradeLog, syncRollingWindowFromTradeLog, initModelPerformanceSe
 import { loadLensConfig, saveLensConfig, getDefaultLensAssignments, initAnalystLensService } from './services/ui/AnalystLensService';
 import { detectTradingStyle, getEffectiveStyle, generateMasterPromptStyleInjection } from './services/ui/TradingStyleDetector';
 import { checkDataIntegrity, createStartupBackup, updateTradeCount, logIntegrityEvent, runMigrations } from './services/validation/DataIntegrityService';
+import { startAutoBackup, stopAutoBackup } from './services/infrastructure/BackupService';
 import { initInvalidationRuleService, loadInvalidationRules } from './services/validation/InvalidationRuleService';
 import { PriceAlertService } from './services/ui/PriceAlertService';
+import { clearAllCaches } from './services/infrastructure/responseCache';
+import { initNativeStatusBar } from './services/infrastructure/NativeStatusBar';
 import { initConfluenceService } from './services/analysis/TimeframeConfluenceService';
 import { initPatternMemoryService } from './services/learning/PatternMemorySynthesisService';
 import GlobalLearningService from './services/learning/GlobalLearningService';
-import { VersionHistoryDashboard } from './components/dashboards/VersionHistoryDashboard';
+const VersionHistoryDashboard = React.lazy(() => import('./components/dashboards/VersionHistoryDashboard').then(m => ({ default: m.VersionHistoryDashboard })));
 
 const App: React.FC = () => {
     const toast = useToastActions();
+    const { confirm: confirmDialog, ConfirmDialogComponent } = useConfirmDialog();
+
+    // P2-12: Detect whether any AI provider API key is configured so the
+    // first-run onboarding card can guide new users to Settings. Keys are
+    // inlined at build time via vite.config.ts, so this is a static check.
+    const hasAnyApiKey = !!(
+        process.env.GEMINI_API_KEY ||
+        process.env.OPENAI_API_KEY ||
+        process.env.DEEPSEEK_API_KEY ||
+        process.env.GROQ_API_KEY ||
+        process.env.GROQ_NEW_API_KEY ||
+        process.env.GROQ_ALT2_API_KEY ||
+        process.env.ZHIPU_API_KEY ||
+        process.env.OPENROUTER_API_KEY ||
+        process.env.GROK_API_KEY
+    );
 
     // UI visibility and progress state (extracted to hooks/useUIState.ts)
     const {
@@ -337,6 +365,17 @@ const App: React.FC = () => {
         toast,
     });
 
+    // P0-2: Mirror the (later-declared) activeUsername into a ref so the
+    // usePostMortem hook — which is instantiated BEFORE useUserProfiles
+    // destructures activeUsername — can observe user switches and cancel
+    // in-flight post-mortem work that would otherwise clobber the new user.
+    //
+    // The ref is written to during render from sessionStorage (the same
+    // source of truth loadUserData uses at line 726), and usePostMortem
+    // watches it for changes. We ALSO update it via the effect below once
+    // activeUsername is destructured, so both paths agree.
+    const activeUsernameRef = useRef<string | null>(sessionStorage.getItem('activeUsername'));
+
     // Post-mortem analysis state and handlers (extracted to hooks/usePostMortem.ts)
     const {
         mismatchData, setMismatchData,
@@ -348,9 +387,14 @@ const App: React.FC = () => {
         handleMismatchResolution,
     } = usePostMortem({
         messages,
+        messagesRef,
         updateMessages,
         isAccuracyModeEnabled,
         accuracySubMode,
+        // P0-2: a ref (not the raw string) is passed because usePostMortem
+        // is called before useUserProfiles destructures activeUsername below.
+        // The ref is kept in sync on every render via the effect right after.
+        activeUsernameRef,
         isGeminiEnabled,
         isDeepSeekEnabled,
         isZhipuEnabled,
@@ -580,11 +624,41 @@ const App: React.FC = () => {
         toast,
     });
 
+    // Keep the activeUsernameRef (read by usePostMortem above) in sync with
+    // the canonical activeUsername state. The ref is initialized from
+    // sessionStorage so the very first render has a sensible value; this
+    // effect keeps it accurate as the user switches accounts.
+    useEffect(() => {
+        const previous = activeUsernameRef.current;
+        activeUsernameRef.current = activeUsername ?? null;
+        // P1-4: Clear the AI response cache on user switch so one user's
+        // cached analyses are never served to another user.
+        if (previous !== null && previous !== activeUsername) {
+            clearAllCaches();
+            console.log('[App] Cleared response cache on user switch');
+        }
+        // P1-9: Stop the auto-backup scheduler when the active user changes
+        // (loadUserData starts a fresh one for the new user). Also stops it
+        // on unmount of the last user.
+        if (previous !== null && previous !== activeUsername) {
+            stopAutoBackup();
+        }
+    }, [activeUsername]);
+
+    // P1-9: Final cleanup — stop the auto-backup scheduler when the app unmounts.
+    useEffect(() => {
+        return () => {
+            stopAutoBackup();
+        };
+    }, []);
+
     const loadUserData = async (username: string) => {
         setIsLoading(true);
 
         // Initialize database (SQLite on native, IndexedDB on web)
         await dbService.initDatabase();
+        // P1-8: Configure native status bar (no-op on web)
+        await initNativeStatusBar();
         // Initialize service caches
         await initModelPerformanceService();
         await initAnalystLensService();
@@ -677,6 +751,12 @@ const App: React.FC = () => {
                 console.warn('[DataIntegrity] Startup backup failed:', err)
             );
 
+            // P1-9: Start the 30-minute auto-backup scheduler. Previously
+            // startAutoBackup was dead code — only a single startup backup
+            // ran per app launch, leaving long sessions unprotected. The
+            // scheduler is stopped on user switch / unmount (see effect below).
+            startAutoBackup(username);
+
             // Data Integrity: Check for data loss
             const integrityCheck = await checkDataIntegrity(username, tradeCount);
             if (!integrityCheck.valid && integrityCheck.tradeCountChanged) {
@@ -717,6 +797,37 @@ const App: React.FC = () => {
         return () => { isMounted = false; };
     }, []);
 
+    // ─── P0-1: Save-on-unload flush ──────────────────────────────────────
+    // The debounced saves below lose data if the tab closes mid-window.
+    // This ref tracks the last successfully persisted snapshot so the
+    // useSaveOnUnload hook can skip IO when nothing has changed.
+    const lastSavedSnapshotRef = useRef<Partial<Omit<UserProfile, 'username'>> | null>(null);
+    const buildProfileSnapshot = useCallback((): Partial<Omit<UserProfile, 'username'>> => ({
+        conversations: conversationHistory,
+        tradeLog: loggedTrades,
+        savedAnalyses: savedAnalyses,
+        tradeSummaries: tradeSummaries,
+        finalTradeSummary: finalTradeSummary,
+        globalMemory: globalMemory,
+        settings: { activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, confidenceCalibration, memoryProvider, memoryModel },
+        lastActiveConversationId: activeConversationId || undefined,
+        // AI Learning data
+        insightKnowledgeBase: insightKnowledgeBase,
+    }), [conversationHistory, loggedTrades, activeFrameworks, activeConversationId, savedAnalyses, tradeSummaries, finalTradeSummary, globalMemory, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, confidenceCalibration, insightKnowledgeBase, memoryProvider, memoryModel]);
+
+    // ─── P1-6: Split save into DATA (heavy) + SETTINGS (light) ───────────
+    // Previously a single effect re-serialized ALL conversations (with base64
+    // images) + ALL trades on ANY of 22 dependency changes, including trivial
+    // settings toggles. Now:
+    //   - The DATA effect only re-serializes when conversations/trades/
+    //     summaries/memory actually change (the heavy payload).
+    //   - The SETTINGS effect handles cheap settings toggles (activeFrameworks,
+    //     summaryCharLimit, etc.) with the same 1500ms debounce but a much
+    //     smaller payload (no base64 images, no trade log).
+    // Both write to the same profile; dbService merges them. The net effect:
+    // toggling a settings checkbox no longer triggers a multi-MB re-serialize.
+
+    // (1) DATA save — heavy payload, only on real data changes.
     useEffect(() => {
         if (!activeUsername) return;
 
@@ -724,22 +835,12 @@ const App: React.FC = () => {
 
         const handler = setTimeout(async () => {
             try {
-                const profileData: Partial<Omit<UserProfile, 'username'>> = {
-                    conversations: conversationHistory,
-                    tradeLog: loggedTrades,
-                    savedAnalyses: savedAnalyses,
-                    tradeSummaries: tradeSummaries,
-                    finalTradeSummary: finalTradeSummary,
-                    globalMemory: globalMemory,
-                    settings: { activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, confidenceCalibration, memoryProvider, memoryModel },
-                    lastActiveConversationId: activeConversationId || undefined,
-                    // AI Learning data
-                    insightKnowledgeBase: insightKnowledgeBase,
-                };
+                const profileData = buildProfileSnapshot();
                 await dbService.saveUserProfile(activeUsername, profileData);
+                lastSavedSnapshotRef.current = profileData;
                 setSaveStatus('SAVED');
             } catch (err) {
-                console.error("Failed to save user profile:", err);
+                console.error("Failed to save user profile (data):", err);
                 setSaveStatus('ERROR');
             }
         }, 1500);
@@ -747,7 +848,63 @@ const App: React.FC = () => {
         return () => {
             clearTimeout(handler);
         };
-    }, [conversationHistory, loggedTrades, activeFrameworks, activeUsername, activeConversationId, savedAnalyses, tradeSummaries, finalTradeSummary, globalMemory, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, confidenceCalibration, insightKnowledgeBase, memoryProvider, memoryModel]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [conversationHistory, loggedTrades, savedAnalyses, tradeSummaries, finalTradeSummary, globalMemory, insightKnowledgeBase, activeUsername, activeConversationId, buildProfileSnapshot]);
+
+    // (2) SETTINGS save — light payload, runs on settings toggles. Uses a
+    // longer debounce (2500ms) since settings changes are low-risk and we
+    // don't want every checkbox tick to trigger a save storm.
+    useEffect(() => {
+        if (!activeUsername) return;
+
+        const handler = setTimeout(async () => {
+            try {
+                // Only the settings sub-object — no conversations, no trades,
+                // no base64 images. This is a cheap write.
+                await dbService.saveUserProfile(activeUsername, {
+                    settings: { activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, confidenceCalibration, memoryProvider, memoryModel },
+                });
+            } catch (err) {
+                console.error("Failed to save user profile (settings):", err);
+            }
+        }, 2500);
+
+        return () => {
+            clearTimeout(handler);
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, confidenceCalibration, memoryProvider, memoryModel, activeUsername]);
+
+    // Flush pending state on tab close / hide. The hook keeps an internal
+    // ref to the freshest snapshot (updated every render via getSnapshot)
+    // so the synchronous unload handler always persists the latest data.
+    useSaveOnUnload({
+        enabled: !!activeUsername,
+        getSnapshot: buildProfileSnapshot,
+        isDirty: () => {
+            const last = lastSavedSnapshotRef.current;
+            if (!last) return true; // never saved yet
+            // Shallow reference check on the heavy arrays is sufficient —
+            // any state mutation produces a new array reference (immutable updates).
+            return last.conversations !== conversationHistory
+                || last.tradeLog !== loggedTrades
+                || last.tradeSummaries !== tradeSummaries
+                || last.savedAnalyses !== savedAnalyses
+                || last.finalTradeSummary !== finalTradeSummary
+                || last.globalMemory !== globalMemory
+                || last.insightKnowledgeBase !== insightKnowledgeBase
+                || last.lastActiveConversationId !== (activeConversationId || undefined);
+        },
+        save: async (snapshot) => {
+            if (!activeUsername) return;
+            await dbService.saveUserProfile(activeUsername, snapshot);
+            lastSavedSnapshotRef.current = snapshot;
+        },
+        onFlushed: () => {
+            // Don't touch React state during unload — just log for diagnostics.
+            console.log('[App] Flushed pending save on unload');
+        },
+    });
 
     // --- ACCURACY MODE THEME HANDLER ---
     // Maintain consistent dark theme regardless of mode
@@ -831,8 +988,26 @@ const App: React.FC = () => {
         setTradeSummaries(prev => prev.filter(s => !ids.includes(s.id)));
     };
 
-    const handleClearAllTrades = () => {
-        if (confirm('Delete all trade history?')) {
+    const handleClearAllTrades = async () => {
+        // P2-13: Capture state before deletion for undo. Previously this used
+        // native confirm() (blocking, no undo) — a delete could appear to
+        // succeed in UI but be lost if the tab closed before the debounced save.
+        const prevTrades = loggedTrades;
+        const prevSummaries = tradeSummaries;
+        const prevFinalSummary = finalTradeSummary;
+        const ok = await confirmDialog({
+            title: 'Delete all trade history?',
+            message: `This will remove ${loggedTrades.length} logged trade(s) and their insights. You can undo this for 5 seconds.`,
+            confirmLabel: 'Delete All',
+            destructive: true,
+            onUndo: () => {
+                setLoggedTrades(prevTrades);
+                setTradeSummaries(prevSummaries);
+                setFinalTradeSummary(prevFinalSummary);
+                toast.success('Trade history restored');
+            },
+        });
+        if (ok) {
             setLoggedTrades([]);
             setTradeSummaries([]);
             setFinalTradeSummary(null);
@@ -1038,8 +1213,21 @@ const App: React.FC = () => {
         }
     };
 
-    const handleClearAllConversations = () => {
-        if (confirm('Clear all conversation history?')) {
+    const handleClearAllConversations = async () => {
+        const prevHistory = conversationHistory;
+        const prevActiveId = activeConversationId;
+        const ok = await confirmDialog({
+            title: 'Clear all conversation history?',
+            message: `This will remove ${conversationHistory.length} conversation(s). You can undo this for 5 seconds.`,
+            confirmLabel: 'Clear All',
+            destructive: true,
+            onUndo: () => {
+                setConversationHistory(prevHistory);
+                setActiveConversationId(prevActiveId);
+                toast.success('Conversations restored');
+            },
+        });
+        if (ok) {
             const newConv = createNewConversation();
             setConversationHistory([newConv]);
             setActiveConversationId(newConv.id);
@@ -1102,8 +1290,19 @@ const App: React.FC = () => {
         setSavedAnalyses(prev => prev.filter(a => !ids.includes(a.id)));
     };
 
-    const handleClearAllSavedAnalyses = () => {
-        if (confirm('Clear all saved analyses?')) {
+    const handleClearAllSavedAnalyses = async () => {
+        const prevAnalyses = savedAnalyses;
+        const ok = await confirmDialog({
+            title: 'Clear all saved analyses?',
+            message: `This will remove ${savedAnalyses.length} saved analysis entry/entries. You can undo this for 5 seconds.`,
+            confirmLabel: 'Clear All',
+            destructive: true,
+            onUndo: () => {
+                setSavedAnalyses(prevAnalyses);
+                toast.success('Saved analyses restored');
+            },
+        });
+        if (ok) {
             setSavedAnalyses([]);
         }
     };
@@ -1344,20 +1543,28 @@ const App: React.FC = () => {
 
     // ... (Rest of component remains unchanged) ...
     return (
-        // ... (JSX Return)
+        // P1-6: Outer Suspense boundary. fallback={null} so a suspending lazy
+        // subtree (e.g. a modal opening) does NOT blank the always-visible
+        // chat/header. Per-component Suspense wrappers below isolate suspends.
+        <React.Suspense fallback={null}>
         <div ref={appRef} className="flex flex-col bg-zinc-950 text-zinc-100 font-sans h-full overflow-hidden transition-colors duration-500">
+            {/* P2-13: Custom confirm dialog + undo toast (replaces window.confirm) */}
+            {ConfirmDialogComponent}
+
             {isVersionHistoryVisible && (
                 <VersionHistoryDashboard onClose={() => setIsVersionHistoryVisible(false)} />
             )}
 
             {/* SW Update Notification */}
             {showUpdateNotification && (
+                <React.Suspense fallback={null}>
                 <UpdateNotification
                     onRefresh={() => {
                         activateWaitingWorker();
                     }}
                     onDismiss={() => setShowUpdateNotification(false)}
                 />
+                </React.Suspense>
             )}
             <LiveStreamView
                 variant="analysis"
@@ -1654,10 +1861,19 @@ const App: React.FC = () => {
 
             {/* Mistake Warning Banner - Global Risk Reminder */}
             {loggedTrades.length > 0 && (
+                <React.Suspense fallback={null}>
                 <MistakeWarningBanner
                     tradeLog={loggedTrades}
                 />
+                </React.Suspense>
             )}
+
+            {/* P2-12: First-run onboarding card. Shows when no API keys are
+                configured and the user hasn't dismissed it. */}
+            <OnboardingCard
+                hasAnyApiKey={hasAnyApiKey}
+                onOpenSettings={() => setIsSettingsMenuVisible(true)}
+            />
 
             <ChatArea
                 messages={messages}
@@ -1747,6 +1963,7 @@ const App: React.FC = () => {
                 }}
             />
         </div>
+        </React.Suspense>
     );
 };
 

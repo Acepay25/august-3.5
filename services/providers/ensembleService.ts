@@ -100,7 +100,7 @@ ${DUAL_SCENARIO_JSON_SCHEMA}
  * - Failure condition awareness (avoid common mistakes)
  * - Verification self-check (validate before output)
  */
-const AI_CORE_SKILL_INJECTION = `
+export const AI_CORE_SKILL_INJECTION = `
 **🧠 AI CORE SKILL SET — HIGH-ACCURACY MODE**
 
 **PRIMARY OBJECTIVE:** Produce the most accurate, useful, and high-quality output possible.

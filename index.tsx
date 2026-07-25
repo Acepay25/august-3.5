@@ -63,9 +63,11 @@ export const activateWaitingWorker = () => {
 // Re-enabling Service Worker for offline functionality with a more robust registration strategy.
 if ('serviceWorker' in navigator) {
   const registerServiceWorker = () => {
-    const swUrl = `${window.location.origin}/sw.js`;
-
-    navigator.serviceWorker.register(swUrl)
+    // MEDIUM #7: Use a relative URL so registration respects Vite's BASE_URL
+    // (base: './' in vite.config.ts). The previous `${origin}/sw.js` form
+    // 404'd on subpath deploys (e.g. example.com/august/) and on Electron
+    // file:// loads. Relative URLs resolve against the page's location.
+    navigator.serviceWorker.register('sw.js')
       .then(registration => {
         console.log('ServiceWorker registration successful with scope: ', registration.scope);
 

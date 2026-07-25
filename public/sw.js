@@ -1,4 +1,4 @@
-const CACHE_NAME = 'futures-ai-cache-v5';
+const CACHE_NAME = 'futures-ai-cache-v6';
 
 // This list includes the app's shell and critical third-party libraries
 // hosted on CDNs. Caching these ensures the app can load and function
@@ -9,11 +9,11 @@ const URLS_TO_CACHE = [
   '/index.html',
   '/manifest.json',
 
-  // Main script (referenced by index.html)
-  '/index.tsx',
-
   // Assets
   '/vite.svg',
+  '/favicon.png',
+  '/icon-192.png',
+  '/icon-512.png',
 
   // Critical CDN Assets (from importmap)
   'https://cdn.tailwindcss.com',
@@ -24,7 +24,6 @@ const URLS_TO_CACHE = [
   'https://aistudiocdn.com/@google/genai@1.27.0',
   'https://esm.sh/openai@4.52.7',
   'https://aistudiocdn.com/idb@8.0.0',
-  'https://aistudiocdn.com/process@0.11.10',
 
   // Fonts
   'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap'

@@ -1,12 +1,19 @@
 /**
  * PriceAlertService - Real-time price monitoring for trade alerts
- * 
+ *
  * Features:
  * - WebSocket connection to Binance for real-time prices
  * - Configurable alert thresholds
  * - Push notifications when price approaches Entry/TP/SL
+ *
+ * P1-10: On native platforms, alerts are delivered via
+ * @capacitor/local-notifications (so they fire even when the app is
+ * backgrounded) and the WebSocket/polling loop is paused on `pause` and
+ * resumed on `resume` via @capacitor/app. On web, the Web Notifications API
+ * is used as a fallback.
  */
 
+import { Capacitor } from '@capacitor/core';
 import { TradeAnalysis } from '../../types';
 import { getPreferenceObject, setPreferenceObject, PREF_KEYS } from '../infrastructure/PreferencesService';
 
@@ -41,12 +48,72 @@ class PriceAlertServiceClass {
     private ws: WebSocket | null = null;
     private prices: Map<string, number> = new Map();
     private subscribers: Set<AlertCallback> = new Set();
-    private pollingInterval: NodeJS.Timeout | null = null;
+    private pollingInterval: ReturnType<typeof setInterval> | null = null;
     private wsReconnectAttempts = 0;
     private maxReconnectAttempts = 5;
+    private isPaused = false; // P1-10: true when app is backgrounded
+    private nativeListenersRegistered = false;
+    private nativeNotificationIdCounter = 1000;
 
     constructor() {
-        // Initialization moved to async init() method
+        // P1-10: Wire native app lifecycle (pause/resume) so we stop the
+        // WebSocket + polling loop when the app is backgrounded and restart
+        // it on resume. This saves battery and prevents WebView throttling
+        // from causing stale-price alerts.
+        this.registerNativeLifecycle();
+    }
+
+    /**
+     * Register Capacitor App pause/resume listeners (native only).
+     * No-op on web — web relies on the visibilitychange listeners installed
+     * elsewhere, and the Web Notifications path handles backgrounded delivery.
+     */
+    private async registerNativeLifecycle(): Promise<void> {
+        if (this.nativeListenersRegistered) return;
+        try {
+            if (!Capacitor.isNativePlatform()) return;
+            const { App } = await import('@capacitor/app');
+            App.addListener('appStateChange', ({ isActive }) => {
+                if (isActive) {
+                    this.resume();
+                } else {
+                    this.pause();
+                }
+            });
+            this.nativeListenersRegistered = true;
+        } catch (err) {
+            console.warn('[PriceAlertService] Native lifecycle not registered:', err);
+        }
+    }
+
+    /**
+     * Pause all monitoring (called on app background).
+     */
+    pause(): void {
+        if (this.isPaused) return;
+        this.isPaused = true;
+        console.log('[PriceAlertService] Paused (backgrounded)');
+        // Close the WebSocket — it would be throttled by the WebView anyway.
+        if (this.ws) {
+            this.ws.close();
+            this.ws = null;
+        }
+        if (this.pollingInterval) {
+            clearInterval(this.pollingInterval);
+            this.pollingInterval = null;
+        }
+    }
+
+    /**
+     * Resume monitoring (called on app foreground).
+     */
+    resume(): void {
+        if (!this.isPaused) return;
+        this.isPaused = false;
+        console.log('[PriceAlertService] Resumed (foregrounded)');
+        if (this.alerts.size > 0) {
+            this.ensureMonitoring();
+        }
     }
 
     /**
@@ -54,6 +121,7 @@ class PriceAlertServiceClass {
      */
     async init(): Promise<void> {
         await this.loadAlerts();
+        await this.registerNativeLifecycle();
     }
 
     /**
@@ -158,6 +226,9 @@ class PriceAlertServiceClass {
      */
     private ensureMonitoring(): void {
         if (this.alerts.size === 0) return;
+        // P1-10: Don't start monitoring while backgrounded — resume() will
+        // call this again on foreground.
+        if (this.isPaused) return;
 
         // Use polling for Capacitor/mobile compatibility
         if (!this.pollingInterval) {
@@ -336,7 +407,12 @@ class PriceAlertServiceClass {
     }
 
     /**
-     * Send push notification
+     * Send push notification.
+     *
+     * P1-10: On native platforms, use @capacitor/local-notifications so the
+     * alert fires even when the app is backgrounded (the Web Notifications
+     * API requires a service worker push subscription to work in a WebView,
+     * which this app doesn't have). On web, fall back to the Web Notifications API.
      */
     private async sendNotification(trigger: AlertTrigger): Promise<void> {
         const title = trigger.type === 'ENTRY'
@@ -347,19 +423,51 @@ class PriceAlertServiceClass {
 
         const body = `Price: $${trigger.currentPrice.toLocaleString()} (${trigger.percentAway.toFixed(2)}% away from ${trigger.type === 'TAKE_PROFIT' ? 'TP' + trigger.tpIndex : trigger.type === 'ENTRY' ? 'Entry' : 'SL'})`;
 
-        // Web Notification API
+        // Native path: local notifications fire from the system, not the WebView.
+        if (Capacitor.isNativePlatform()) {
+            try {
+                const { LocalNotifications } = await import('@capacitor/local-notifications');
+                // Request permission on first use.
+                try {
+                    await LocalNotifications.requestPermissions();
+                } catch { /* may already be granted */ }
+                await LocalNotifications.schedule({
+                    notifications: [{
+                        id: this.nativeNotificationIdCounter++,
+                        title,
+                        body,
+                        smallIcon: 'ic_launcher', // resolves to the Android launcher icon
+                    }],
+                });
+            } catch (err) {
+                console.warn('[PriceAlertService] Native notification failed, falling back:', err);
+                this.sendWebNotification(title, body);
+            }
+            // Vibration for mobile
+            if ('vibrate' in navigator) {
+                navigator.vibrate(trigger.type === 'STOP_LOSS' ? [300, 100, 300] : [200]);
+            }
+            return;
+        }
+
+        // Web path
+        this.sendWebNotification(title, body);
+        if ('vibrate' in navigator) {
+            navigator.vibrate(trigger.type === 'STOP_LOSS' ? [300, 100, 300] : [200]);
+        }
+    }
+
+    /**
+     * Web Notifications API fallback (web only).
+     */
+    private async sendWebNotification(title: string, body: string): Promise<void> {
         if ('Notification' in window && Notification.permission === 'granted') {
-            new Notification(title, { body, icon: '/favicon.ico' });
+            new Notification(title, { body, icon: '/favicon.png' });
         } else if ('Notification' in window && Notification.permission !== 'denied') {
             const permission = await Notification.requestPermission();
             if (permission === 'granted') {
-                new Notification(title, { body, icon: '/favicon.ico' });
+                new Notification(title, { body, icon: '/favicon.png' });
             }
-        }
-
-        // Vibration for mobile
-        if ('vibrate' in navigator) {
-            navigator.vibrate(trigger.type === 'STOP_LOSS' ? [300, 100, 300] : [200]);
         }
     }
 
