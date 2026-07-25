@@ -1,29 +1,31 @@
 import React from 'react';
-import { RefreshCw, Download, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { RefreshCw, AlertCircle } from 'lucide-react';
 import { useAutoUpdate } from '../../hooks/useAutoUpdate';
 
 /**
- * Update button for the desktop app.
+ * Header-level entry point for the desktop auto-update flow.
  *
- * Shows different states:
- * - idle: "Check for Updates" button
- * - checking: spinner + "Checking..."
- * - available: "Download v{version}" button (green)
- * - downloading: progress bar + "{progress}%"
- * - downloaded: "Restart to Update" button (green, pulsing)
- * - error: error message + "Retry" button
+ * Handles only the `idle` and `error` states (the "Check for Updates"
+ * button + version label + retry). All active update states
+ * (`checking`, `available`, `downloading`, `downloaded`, `installing`)
+ * are rendered by the full-screen `<UpdateOverlay />` mounted at the app
+ * root, which is solid, prominent, and impossible to miss.
  *
  * In the browser (non-Electron), this component renders nothing.
  */
 export const UpdateButton: React.FC<{ className?: string }> = ({ className = '' }) => {
-    const { isElectron, appVersion, updateStatus, checkForUpdates, downloadUpdate, installUpdate } = useAutoUpdate();
+    const { isElectron, appVersion, updateStatus, checkForUpdates } = useAutoUpdate();
 
     if (!isElectron) return null;
 
-    const { status, progress, version, error } = updateStatus;
+    const { status, error } = updateStatus;
 
-    // Don't render if idle and we haven't checked yet (cleaner UI)
-    if (status === 'idle' && !appVersion) return null;
+    // The active update states are shown in the full-screen overlay —
+    // hide the inline widget while an update is in progress to avoid
+    // duplicate UI.
+    if (status === 'checking' || status === 'available' || status === 'downloading' || status === 'downloaded' || status === 'installing') {
+        return null;
+    }
 
     const baseClasses = 'flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all';
 
@@ -46,59 +48,7 @@ export const UpdateButton: React.FC<{ className?: string }> = ({ className = '' 
         );
     }
 
-    if (status === 'checking') {
-        return (
-            <div className={`${baseClasses} text-zinc-400 ${className}`}>
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                Checking...
-            </div>
-        );
-    }
-
-    if (status === 'available') {
-        return (
-            <button
-                onClick={downloadUpdate}
-                className={`${baseClasses} bg-emerald-600 hover:bg-emerald-500 text-white ${className}`}
-                aria-label={`Download update version ${version}`}
-            >
-                <Download className="w-3.5 h-3.5" />
-                Download v{version}
-            </button>
-        );
-    }
-
-    if (status === 'downloading') {
-        return (
-            <div className={`flex items-center gap-2 ${className}`}>
-                <div className="flex items-center gap-1.5 text-xs text-cyan-400">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    {progress}%
-                </div>
-                <div className="w-20 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                    <div
-                        className="h-full bg-cyan-500 transition-all duration-300"
-                        style={{ width: `${progress}%` }}
-                    />
-                </div>
-            </div>
-        );
-    }
-
-    if (status === 'downloaded') {
-        return (
-            <button
-                onClick={installUpdate}
-                className={`${baseClasses} bg-emerald-600 hover:bg-emerald-500 text-white animate-pulse ${className}`}
-                aria-label="Restart and install update"
-            >
-                <CheckCircle className="w-3.5 h-3.5" />
-                Restart to Update
-            </button>
-        );
-    }
-
-    // Idle state — show version + check button
+    // Idle state — show version + check button (entry point for the flow)
     return (
         <div className={`flex items-center gap-2 ${className}`}>
             {appVersion && (

@@ -36,7 +36,7 @@ function createWindow() {
 // =============================================================================
 
 let updateInfo = {
-    status: 'idle',           // idle | checking | available | downloading | downloaded | error
+    status: 'idle',           // idle | checking | available | downloading | downloaded | installing | error
     progress: 0,
     version: null,
     error: null,
@@ -124,6 +124,10 @@ function setupAutoUpdater() {
     });
 
     ipcMain.handle('update:install', () => {
+        // Push an 'installing' status so the renderer overlay can show a
+        // "Restarting…" message before the app quits.
+        updateInfo = { ...updateInfo, status: 'installing' };
+        sendUpdateStatus();
         // quitAndInstall runs after the renderer acknowledges
         setImmediate(() => autoUpdater.quitAndInstall());
         return true;
