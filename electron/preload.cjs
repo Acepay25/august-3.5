@@ -1,10 +1,28 @@
 // Preload script for Electron — bridges renderer and main process securely.
 // With contextIsolation: true, the renderer cannot access Node.js directly.
-// Expose only what the app needs via contextBridge if IPC becomes necessary.
-const { contextBridge } = require('electron');
+const { contextBridge, ipcRenderer } = require('electron');
 
-// Example: expose a safe API to the renderer if needed later
-// contextBridge.exposeInMainWorld('electronAPI', {
-//   platform: process.platform,
-//   version: process.versions.electron,
-// });
+/**
+ * Expose a safe, minimal API to the renderer for auto-update control.
+ * The renderer calls these via window.electronAPI.*
+ */
+contextBridge.exposeInMainWorld('electronAPI', {
+    // App info
+    getVersion: () => ipcRenderer.invoke('app:get-version'),
+    isElectron: true,
+    platform: process.platform,
+
+    // Auto-update
+    checkForUpdates: () => ipcRenderer.invoke('update:check'),
+    downloadUpdate: () => ipcRenderer.invoke('update:download'),
+    installUpdate: () => ipcRenderer.invoke('update:install'),
+    getUpdateStatus: () => ipcRenderer.invoke('update:get-status'),
+
+    // Listen for real-time status updates pushed from main process
+    onUpdateStatus: (callback) => {
+        const handler = (_event, status) => callback(status);
+        ipcRenderer.on('update-status', handler);
+        // Return an unsubscribe function
+        return () => ipcRenderer.removeListener('update-status', handler);
+    },
+});

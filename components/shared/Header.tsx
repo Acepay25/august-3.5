@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { BotIcon, UserIcon, LoadingIcon, CheckIcon, EyeIcon, CodeIcon, TrashIcon, HistoryIcon, StarIcon, ArchiveIcon, FullscreenExitIcon, FullscreenEnterIcon, SettingsIcon, HamburgerIcon, ActivityIcon, CloudOffIcon, PlusIcon, BookmarkIcon, BellIcon } from './Icons';
 import { getSessionContext, getAllSessionsStatus, SessionContext, SessionStatus } from '../../services/infrastructure/SessionService';
+import { UpdateButton } from './UpdateButton';
 
 interface HeaderProps {
     activeUsername: string | null;
@@ -248,6 +249,11 @@ export const Header: React.FC<HeaderProps> = ({
                     {saveStatus === 'SAVED' && <CheckIcon className="h-4 w-4 text-emerald-500" />}
                     {!isOnline && <CloudOffIcon className="h-4 w-4 text-yellow-500" />}
 
+                    {/* Desktop: Update button */}
+                    <div className="hidden sm:block">
+                        <UpdateButton />
+                    </div>
+
                     {/* Changelog / Version History Button */}
                     <button
                         onClick={onOpenVersionHistory}
@@ -324,6 +330,9 @@ export const Header: React.FC<HeaderProps> = ({
                                     {isFullscreen ? <FullscreenExitIcon /> : <FullscreenEnterIcon />}
                                     {isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
                                 </button>
+                                <div className="px-5 py-2">
+                                    <UpdateButton />
+                                </div>
                                 <button onClick={() => { setIsSettingsVisible(true); setIsMobileMenuOpen(false); }} className="w-full flex items-center gap-4 px-5 py-3 text-zinc-300 hover:bg-white/5 transition-colors">
                                     <SettingsIcon /> Settings
                                 </button>
