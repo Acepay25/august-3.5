@@ -61,8 +61,8 @@ const SpeakerAvatar: React.FC<{ speaker: DebateTurn['speaker'], modelName?: stri
         borderColor = 'border-rose-400';
         initials = 'G2';
     } else if (speaker === 'OpenRouter') {
-        bgColor = 'bg-green-600';
-        borderColor = 'border-green-400';
+        bgColor = 'bg-emerald-600';
+        borderColor = 'border-emerald-400';
         initials = 'OR';
     } else if (speaker.includes('Claude') || speaker.includes('Anthropic')) {
         bgColor = 'bg-purple-600';
@@ -234,7 +234,7 @@ const DebateView: React.FC<DebateViewProps> = ({ debateTurns, geminiModelName, d
                                                                     turn.speaker === 'Groq' ? 'bg-yellow-950/20 border-yellow-500/20 text-yellow-100/90' :
                                                                         turn.speaker === 'Groq (Alt)' ? 'bg-lime-950/20 border-lime-500/20 text-lime-100/90' :
                                                                             turn.speaker === 'Groq (Alt 2)' ? 'bg-rose-950/20 border-rose-500/20 text-rose-100/90' :
-                                                                                turn.speaker === 'OpenRouter' ? 'bg-green-950/20 border-green-500/20 text-green-100/90' :
+                                                                                turn.speaker === 'OpenRouter' ? 'bg-emerald-950/20 border-emerald-500/20 text-emerald-100/90' :
                                                                                     (turn.speaker.includes('Claude') || turn.speaker.includes('Anthropic')) ? 'bg-purple-950/20 border-purple-500/20 text-purple-100/90' :
                                                                                         (turn.speaker.includes('GPT') || turn.speaker.includes('OpenAI')) ? 'bg-violet-950/20 border-violet-500/20 text-violet-100/90' :
                                                                                             (turn.speaker.includes('Grok') || turn.speaker.includes('xAI')) ? 'bg-zinc-900/50 border-white/10 text-zinc-300' :

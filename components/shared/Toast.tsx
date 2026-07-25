@@ -132,7 +132,7 @@ const ToastItem: React.FC<{ toast: Toast; onDismiss: () => void }> = ({ toast, o
                                 toast.action!.onClick();
                                 onDismiss();
                             }}
-                            className="mt-2 text-xs font-bold underline hover:no-underline"
+                            className="mt-2 text-xs font-bold px-3 py-1 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
                         >
                             {toast.action.label}
                         </button>
@@ -140,7 +140,7 @@ const ToastItem: React.FC<{ toast: Toast; onDismiss: () => void }> = ({ toast, o
                 </div>
                 <button
                     onClick={onDismiss}
-                    className="text-current opacity-60 hover:opacity-100 transition-opacity flex-shrink-0"
+                    className="p-1.5 rounded-lg hover:bg-white/10 transition-colors flex-shrink-0"
                     aria-label="Dismiss"
                 >
                     ✕

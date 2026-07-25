@@ -71,6 +71,24 @@ const SectionHeader: React.FC<{ title: string }> = ({ title }) => (
     <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-3 px-1">{title}</h3>
 );
 
+// Color class lookup — avoids dynamic Tailwind classes that the JIT can't detect
+const COLOR_CLASSES: Record<string, { dot: string; text: string; border: string }> = {
+    cyan: { dot: 'bg-cyan-500', text: 'text-cyan-400', border: 'border-cyan-500/30' },
+    blue: { dot: 'bg-blue-500', text: 'text-blue-400', border: 'border-blue-500/30' },
+    emerald: { dot: 'bg-emerald-500', text: 'text-emerald-400', border: 'border-emerald-500/30' },
+    orange: { dot: 'bg-orange-500', text: 'text-orange-400', border: 'border-orange-500/30' },
+    yellow: { dot: 'bg-yellow-500', text: 'text-yellow-400', border: 'border-yellow-500/30' },
+    amber: { dot: 'bg-amber-500', text: 'text-amber-400', border: 'border-amber-500/30' },
+    green: { dot: 'bg-green-500', text: 'text-green-400', border: 'border-green-500/30' },
+    red: { dot: 'bg-red-500', text: 'text-red-400', border: 'border-red-500/30' },
+    purple: { dot: 'bg-purple-500', text: 'text-purple-400', border: 'border-purple-500/30' },
+    violet: { dot: 'bg-violet-500', text: 'text-violet-400', border: 'border-violet-500/30' },
+    rose: { dot: 'bg-rose-500', text: 'text-rose-400', border: 'border-rose-500/30' },
+    zinc: { dot: 'bg-zinc-500', text: 'text-zinc-400', border: 'border-zinc-500/30' },
+};
+
+const getColorClasses = (color: string) => COLOR_CLASSES[color] || COLOR_CLASSES.zinc;
+
 // Model Item
 const ModelItem: React.FC<{
     name: string;
@@ -80,12 +98,14 @@ const ModelItem: React.FC<{
     onSetModel: (id: string) => void;
     isEnabled: boolean;
     onToggle: () => void;
-}> = ({ name, color, models, selectedModel, onSetModel, isEnabled, onToggle }) => (
-    <div className={`p-4 rounded-2xl bg-zinc-900/50 border transition-all ${isEnabled ? `border-${color}-500/30` : 'border-white/5'}`}>
+}> = ({ name, color, models, selectedModel, onSetModel, isEnabled, onToggle }) => {
+    const colors = getColorClasses(color);
+    return (
+    <div className={`p-4 rounded-2xl bg-zinc-900/50 border transition-all ${isEnabled ? colors.border : 'border-white/5'}`}>
         <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-                <span className={`w-2 h-2 rounded-full bg-${color}-500`}></span>
-                <span className={`text-sm font-bold ${isEnabled ? `text-${color}-400` : 'text-zinc-500'}`}>{name}</span>
+                <span className={`w-2 h-2 rounded-full ${colors.dot}`}></span>
+                <span className={`text-sm font-bold ${isEnabled ? colors.text : 'text-zinc-500'}`}>{name}</span>
             </div>
             <ToggleSwitch checked={isEnabled} onChange={onToggle} />
         </div>
@@ -99,7 +119,8 @@ const ModelItem: React.FC<{
             </select>
         )}
     </div>
-);
+    );
+};
 
 // View types
 type ViewType = 'main' | 'models' | 'lenses' | 'instructions';

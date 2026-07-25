@@ -153,7 +153,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
         <div className="absolute bottom-0 left-0 right-0 px-3 sm:px-4 lg:px-8 pointer-events-none z-10 pb-[calc(env(safe-area-inset-bottom,16px)+0.5rem)] sm:pb-[calc(env(safe-area-inset-bottom,24px)+1rem)] lg:pb-8 transition-all duration-300">
             <div className="w-full lg:max-w-3xl lg:mx-auto pointer-events-auto">
                 {/* Main Input Container - Desktop: cleaner centered, Mobile: original */}
-                <div className="glass p-3 sm:p-4 lg:p-4 rounded-3xl lg:rounded-2xl shadow-2xl border border-white/10 transition-all focus-within:border-cyan-500/40 lg:focus-within:border-white/20 bg-zinc-900/90 lg:bg-zinc-800 backdrop-blur-xl lg:backdrop-blur-none">
+                <div className="glass p-3 sm:p-4 lg:p-4 rounded-2xl shadow-2xl border border-white/10 transition-all focus-within:border-cyan-500/40 bg-zinc-900/90 backdrop-blur-md">
 
                     {/* Image Preview */}
                     <ImagePreview images={images} onRemoveImage={removeImage} />

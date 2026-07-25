@@ -207,7 +207,7 @@ const BacktestPanel: React.FC<BacktestPanelProps> = ({
                                 backtestResult.outcome === 'NOT_TRIGGERED' ? (
                                     // Open trade - show current unrealized P&L
                                     backtestResult.wouldHaveTriggered ? (
-                                        <span className={`ml-2 px-2 py-0.5 rounded text-[10px] font-bold border ${backtestResult.currentPnlPercent >= 0 ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>
+                                        <span className={`ml-2 px-2 py-0.5 rounded text-[10px] font-bold border ${backtestResult.currentPnlPercent >= 0 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border-rose-500/20'}`}>
                                             {backtestResult.currentPnlPercent > 0 ? '+' : ''}{backtestResult.currentPnlPercent}% {backtestResult.currentPnlPercent >= 0 ? 'UP!' : 'DOWN!'}
                                         </span>
                                     ) : (

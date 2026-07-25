@@ -128,7 +128,7 @@ const SavedAnalyses: React.FC<SavedAnalysesProps> = ({ analyses, onClose, isVisi
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/60 z-40" onClick={onClose}></div>
+      <div className="fixed inset-0 bg-black/70 z-40 backdrop-blur-sm" onClick={onClose}></div>
       <aside className="fixed top-0 right-0 h-full w-full sm:max-w-2xl bg-zinc-900 shadow-2xl z-50 transform transition-transform duration-300 ease-in-out flex flex-col">
         <header className="flex items-center justify-between p-4 border-b border-white/10">
           <h2 className="text-lg font-bold text-cyan-400">Saved Analyses for Review</h2>

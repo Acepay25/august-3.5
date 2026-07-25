@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createChart, IChartApi, CandlestickData, Time, ISeriesApi, CandlestickSeries, LineSeries, LineData, LineStyle } from 'lightweight-charts';
 import { analyzeWithAI, TrendlineResult, convertToLineData } from '../../services/analysis/AITrendlineService';
 import { fetchMultiExchangeKlines } from '../../services/analysis/KlineService';
+import { Spinner } from '../ui/Spinner';
 
 interface OKXChartProps {
     symbol: string;
@@ -410,7 +411,7 @@ const OKXChart: React.FC<OKXChartProps> = ({ symbol, interval, isVisible }) => {
                         {/* AI Market Bias Badge */}
                         {isAIAnalyzing ? (
                             <div className="flex items-center gap-2 bg-[#ffd700]/10 border border-[#ffd700]/20 rounded-lg px-3 py-1.5">
-                                <div className="w-3 h-3 border-2 border-[#ffd700] border-t-transparent rounded-full animate-spin"></div>
+                                <Spinner size="w-3 h-3" color="border-[#ffd700]" />
                                 <span className="text-[#ffd700] font-bold text-xs">AI Analyzing...</span>
                             </div>
                         ) : marketBias !== 'neutral' && (
@@ -448,7 +449,7 @@ const OKXChart: React.FC<OKXChartProps> = ({ symbol, interval, isVisible }) => {
             {isLoading && (
                 <div className="absolute inset-0 flex items-center justify-center bg-[#0b0e11]/80 z-20">
                     <div className="flex flex-col items-center gap-3">
-                        <div className="w-8 h-8 border-2 border-[#00c896] border-t-transparent rounded-full animate-spin"></div>
+                        <Spinner size="w-8 h-8" color="border-[#00c896]" />
                         <span className="text-[#848e9c] text-sm">Loading OKX data...</span>
                     </div>
                 </div>

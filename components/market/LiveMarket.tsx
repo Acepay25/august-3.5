@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { CloseIcon, ActivityIcon, BellIcon, TrashIcon, LoadingIcon, CameraIcon, CheckIcon, ChevronDownIcon, BrainIcon, TrendUpIcon, TrendDownIcon, AlertTriangleIcon } from '../shared/Icons';
+import { Spinner } from '../ui/Spinner';
 import { Kline } from '../../types';
 import { detectChartPatterns, detectKeyZones, DetectedPattern } from '../../utils/patternDetection';
 import OKXChart from './OKXChart';
@@ -698,12 +699,12 @@ ${JSON.stringify(marketData, null, 2)}
                         {/* Connection Status Badge */}
                         <div className={`hidden xs:flex items-center gap-1.5 px-2.5 py-1 rounded-full border transition-colors ${connectionState.status === 'connected'
                             ? (connectionState.source === 'socket' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-yellow-500/10 border-yellow-500/20 text-yellow-400')
-                            : connectionState.status === 'reconnecting' ? 'bg-red-500/10 border-red-500/20 text-red-400'
+                            : connectionState.status === 'reconnecting' ? 'bg-rose-500/10 border-rose-500/20 text-rose-400'
                                 : 'bg-zinc-500/10 border-zinc-500/20 text-zinc-400'
                             }`}>
                             <div className={`w-2 h-2 rounded-full ${connectionState.status === 'connected'
                                 ? (connectionState.source === 'socket' ? 'bg-emerald-500 animate-pulse' : 'bg-yellow-500 animate-pulse')
-                                : connectionState.status === 'reconnecting' ? 'bg-red-500 animate-pulse'
+                                : connectionState.status === 'reconnecting' ? 'bg-rose-500 animate-pulse'
                                     : 'bg-zinc-500'
                                 }`}></div>
                             <span className="text-[10px] font-bold uppercase tracking-widest">
@@ -817,7 +818,7 @@ ${JSON.stringify(marketData, null, 2)}
                                 {/* AI Analyzing Indicator */}
                                 {isAIAnalyzing && (
                                     <div className="flex items-center gap-2 bg-[#ffd700]/10 border border-[#ffd700]/20 rounded-lg px-3 py-1.5 backdrop-blur-sm">
-                                        <div className="w-3 h-3 border-2 border-[#ffd700] border-t-transparent rounded-full animate-spin"></div>
+                                        <Spinner size="w-3 h-3" color="border-[#ffd700]" />
                                         <span className="text-[#ffd700] font-bold text-xs">AI Analyzing...</span>
                                     </div>
                                 )}
@@ -826,9 +827,9 @@ ${JSON.stringify(marketData, null, 2)}
                                 {!isAIAnalyzing && marketBias !== 'neutral' && (
                                     <div className={`flex items-center gap-2 rounded-lg px-3 py-1.5 backdrop-blur-sm ${marketBias === 'bullish'
                                         ? 'bg-emerald-500/10 border border-emerald-500/20'
-                                        : 'bg-red-500/10 border border-red-500/20'
+                                        : 'bg-rose-500/10 border border-rose-500/20'
                                         }`}>
-                                        <span className={`font-bold text-xs ${marketBias === 'bullish' ? 'text-emerald-400' : 'text-red-400'
+                                        <span className={`font-bold text-xs ${marketBias === 'bullish' ? 'text-emerald-400' : 'text-rose-400'
                                             }`}>
                                             {marketBias === 'bullish' ? '🐂 BULLISH' : '🐻 BEARISH'}
                                         </span>
@@ -842,7 +843,7 @@ ${JSON.stringify(marketData, null, 2)}
                                         <div className="flex flex-col gap-1 mt-1">
                                             {keyLevels.slice(0, 4).map((level, i) => (
                                                 <div key={i} className="flex items-center justify-between gap-2 text-xs">
-                                                    <span className={level.type === 'resistance' ? 'text-red-400' : 'text-emerald-400'}>
+                                                    <span className={level.type === 'resistance' ? 'text-rose-400' : 'text-emerald-400'}>
                                                         {level.type === 'resistance' ? 'R' : 'S'}
                                                     </span>
                                                     <span className="font-mono text-white">${level.price.toLocaleString()}</span>
@@ -876,12 +877,12 @@ ${JSON.stringify(marketData, null, 2)}
                             <BrainIcon className="w-5 h-5 text-cyan-400" />
                             <span className="font-bold text-sm text-cyan-400">AI Market Insights</span>
                             {isAIAnalyzing && (
-                                <div className="w-3 h-3 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin ml-2"></div>
+                                <Spinner size="w-3 h-3" color="border-cyan-400" className="ml-2" />
                             )}
                             {!isAIAnalyzing && marketBias !== 'neutral' && (
                                 <span className={`ml-2 px-2 py-0.5 rounded text-[10px] font-bold uppercase ${marketBias === 'bullish'
                                     ? 'bg-emerald-500/20 text-emerald-400'
-                                    : 'bg-red-500/20 text-red-400'
+                                    : 'bg-rose-500/20 text-rose-400'
                                     }`}>
                                     {marketBias}
                                 </span>
@@ -932,10 +933,10 @@ ${JSON.stringify(marketData, null, 2)}
                                 </div>
 
                                 {/* Bearish Scenario */}
-                                <div className="bg-red-500/5 rounded-xl p-3 border border-red-500/20">
+                                <div className="bg-rose-500/5 rounded-xl p-3 border border-rose-500/20">
                                     <div className="flex items-center gap-2 mb-2">
-                                        <TrendDownIcon className="w-4 h-4 text-red-400" />
-                                        <span className="text-xs font-bold text-red-400 uppercase tracking-wider">Bearish</span>
+                                        <TrendDownIcon className="w-4 h-4 text-rose-400" />
+                                        <span className="text-xs font-bold text-rose-400 uppercase tracking-wider">Bearish</span>
                                     </div>
                                     <p className="text-sm text-zinc-300 leading-relaxed">{marketInsights.potentialMoves.bearish}</p>
                                 </div>
@@ -965,7 +966,7 @@ ${JSON.stringify(marketData, null, 2)}
                     {isInsightsPanelExpanded && isAIAnalyzing && (
                         <div className="px-4 pb-4">
                             <div className="bg-zinc-800/50 rounded-xl p-6 border border-white/5 flex flex-col items-center justify-center gap-3">
-                                <div className="w-8 h-8 border-3 border-cyan-400 border-t-transparent rounded-full animate-spin"></div>
+                                <Spinner size="w-8 h-8" color="border-cyan-400" />
                                 <span className="text-sm text-zinc-400">Analyzing market conditions...</span>
                             </div>
                         </div>
@@ -1014,7 +1015,7 @@ ${JSON.stringify(marketData, null, 2)}
                                 </span>
                                 <button
                                     onClick={() => setAlerts(p => p.filter(a => a.id !== alert.id))}
-                                    className="p-2 text-zinc-600 hover:text-red-400 transition-colors"
+                                    className="p-2 text-zinc-600 hover:text-rose-400 transition-colors"
                                 >
                                     <TrashIcon />
                                 </button>

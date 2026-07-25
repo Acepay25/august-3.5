@@ -174,7 +174,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
 
     if (!originalConfig) {
         return (
-            <div role="dialog" aria-modal="true" aria-label="Scenario simulator" className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+            <div role="dialog" aria-modal="true" aria-label="Scenario simulator" className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
                 <div className="bg-zinc-900 rounded-2xl p-8 border border-white/10 text-center">
                     <p className="text-zinc-400">Unable to load scenario data</p>
                     <button onClick={onClose} className="mt-4 px-4 py-2 bg-zinc-800 rounded-lg text-zinc-300 hover:bg-zinc-700">

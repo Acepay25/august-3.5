@@ -308,8 +308,8 @@ const JournalInner: React.FC<JournalProps> = ({
                                 <button
                                     key={tab.id}
                                     onClick={() => setActiveTab(tab.id)}
-                                    className={`flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-all min-w-[56px] ${isActive
-                                        ? 'bg-white/10'
+                                    className={`flex flex-col items-center gap-1 px-4 py-2.5 rounded-xl transition-all min-w-[56px] ${isActive
+                                        ? 'bg-gradient-to-b from-white/15 to-white/5 ring-1 ring-white/10'
                                         : 'hover:bg-white/5'
                                         }`}
                                 >

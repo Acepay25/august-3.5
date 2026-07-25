@@ -109,7 +109,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
             ? (message.isPostMortem
                 ? 'bg-zinc-800 text-zinc-100 border border-purple-500/20 rounded-2xl rounded-bl-md'
                 : 'bg-zinc-800 text-zinc-200 border border-white/5 rounded-2xl rounded-bl-md')
-            : 'bg-red-500/10 text-red-300 border border-red-500/20 text-center rounded-xl';
+            : 'bg-rose-500/10 text-rose-300 border border-rose-500/20 text-center rounded-xl';
 
     const isSelected = selectedMessageIds?.has(message.id);
 
@@ -296,7 +296,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                                         { provider: 'Groq', model: safeGroqModelName, content: message.groqThoughtProcess, bgClass: 'bg-yellow-950/20', borderClass: 'border-yellow-500/20', titleClass: 'text-yellow-400', textClass: 'text-yellow-100/90' },
                                                         { provider: 'Groq (Alt)', model: safeGroqNewModelName, content: message.groqNewThoughtProcess, bgClass: 'bg-lime-950/20', borderClass: 'border-lime-500/20', titleClass: 'text-lime-400', textClass: 'text-lime-100/90' },
                                                         { provider: 'Groq (Alt 2)', model: safeGroqAlt2ModelName, content: message.groqAlt2ThoughtProcess, bgClass: 'bg-rose-950/20', borderClass: 'border-rose-500/20', titleClass: 'text-rose-400', textClass: 'text-rose-100/90' },
-                                                        { provider: 'OpenRouter', model: safeOpenrouterModelName, content: message.openrouterThoughtProcess, bgClass: 'bg-green-950/20', borderClass: 'border-green-500/20', titleClass: 'text-green-400', textClass: 'text-green-100/90' },
+                                                        { provider: 'OpenRouter', model: safeOpenrouterModelName, content: message.openrouterThoughtProcess, bgClass: 'bg-emerald-950/20', borderClass: 'border-emerald-500/20', titleClass: 'text-emerald-400', textClass: 'text-emerald-100/90' },
                                                     ].filter(i => i.content);
 
                                                     return insights.map((insight, idx) => {

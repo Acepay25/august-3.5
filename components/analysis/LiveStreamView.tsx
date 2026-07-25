@@ -104,7 +104,7 @@ const ANALYST_DEFS = [
   { key: 'groq', title: 'Groq', colors: { bg: 'bg-yellow-950/10', border: 'border-yellow-500/20', text: 'text-yellow-100/90', title: 'text-yellow-400', accent: 'bg-yellow-500' } },
   { key: 'groqNew', title: 'Groq (Alt)', colors: { bg: 'bg-yellow-900/10', border: 'border-yellow-300/20', text: 'text-yellow-100/90', title: 'text-yellow-200', accent: 'bg-yellow-300' } },
   { key: 'groqAlt2', title: 'Groq (Alt 2)', colors: { bg: 'bg-amber-950/10', border: 'border-amber-500/20', text: 'text-amber-100/90', title: 'text-amber-400', accent: 'bg-amber-500' } },
-  { key: 'openrouter', title: 'OpenRouter', colors: { bg: 'bg-green-950/10', border: 'border-green-500/20', text: 'text-green-100/90', title: 'text-green-400', accent: 'bg-green-500' } },
+  { key: 'openrouter', title: 'OpenRouter', colors: { bg: 'bg-emerald-950/10', border: 'border-emerald-500/20', text: 'text-emerald-100/90', title: 'text-emerald-400', accent: 'bg-emerald-500' } },
 ] as const;
 
 const LiveStreamView: React.FC<LiveStreamViewProps> = ({
