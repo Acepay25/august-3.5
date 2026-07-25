@@ -31,7 +31,7 @@ export const MarketConditionsSchema = z.object({
   rsi: z.string(),
   macd: z.string(),
   sentiment: z.string(),
-  prices: z.record(z.string()).optional(),
+  prices: z.record(z.string(), z.string()).optional(),
 });
 
 export const PatternDetailSchema = z.object({

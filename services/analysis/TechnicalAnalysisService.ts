@@ -217,14 +217,18 @@ export interface MomentumIndicators {
 /**
  * Safe calculation wrapper - returns default if not enough data
  */
-const safeCalc = <T>(calc: () => T, defaultValue: T): T => {
+/**
+ * Safely run a calculation, returning a fallback if it throws or yields
+ * undefined/null.
+ */
+function safeCalc<T>(calc: () => T, defaultValue: T): T {
     try {
         const result = calc();
         return result !== undefined && result !== null ? result : defaultValue;
     } catch {
         return defaultValue;
     }
-};
+}
 
 /**
  * Calculate all technical indicators from OHLCV data
@@ -265,22 +269,22 @@ export const calculateIndicators = (klines: Kline[]): TechnicalIndicators => {
         : ((lastMacd.histogram || 0) < (prevMacd.histogram || 0) ? 'bearish' : 'neutral');
 
     // EMAs - All periods
-    const ema5 = safeCalc(() => EMA.calculate({ values: closes, period: 5 }).pop(), currentPrice);
-    const ema9 = safeCalc(() => EMA.calculate({ values: closes, period: 9 }).pop(), currentPrice);
-    const ema13 = safeCalc(() => EMA.calculate({ values: closes, period: 13 }).pop(), currentPrice);
-    const ema20 = safeCalc(() => EMA.calculate({ values: closes, period: 20 }).pop(), currentPrice);
-    const ema21 = safeCalc(() => EMA.calculate({ values: closes, period: 21 }).pop(), currentPrice);
-    const ema50 = safeCalc(() => EMA.calculate({ values: closes, period: 50 }).pop(), currentPrice);
-    const ema200 = safeCalc(() => EMA.calculate({ values: closes, period: 200 }).pop(), currentPrice);
+    const ema5: number = safeCalc(() => EMA.calculate({ values: closes, period: 5 }).pop() ?? currentPrice, currentPrice);
+    const ema9: number = safeCalc(() => EMA.calculate({ values: closes, period: 9 }).pop() ?? currentPrice, currentPrice);
+    const ema13: number = safeCalc(() => EMA.calculate({ values: closes, period: 13 }).pop() ?? currentPrice, currentPrice);
+    const ema20: number = safeCalc(() => EMA.calculate({ values: closes, period: 20 }).pop() ?? currentPrice, currentPrice);
+    const ema21: number = safeCalc(() => EMA.calculate({ values: closes, period: 21 }).pop() ?? currentPrice, currentPrice);
+    const ema50: number = safeCalc(() => EMA.calculate({ values: closes, period: 50 }).pop() ?? currentPrice, currentPrice);
+    const ema200: number = safeCalc(() => EMA.calculate({ values: closes, period: 200 }).pop() ?? currentPrice, currentPrice);
 
     // SMAs (MA) - All periods
-    const ma5 = safeCalc(() => SMA.calculate({ values: closes, period: 5 }).pop(), currentPrice);
-    const ma10 = safeCalc(() => SMA.calculate({ values: closes, period: 10 }).pop(), currentPrice);
-    const ma20 = safeCalc(() => SMA.calculate({ values: closes, period: 20 }).pop(), currentPrice);
-    const ma30 = safeCalc(() => SMA.calculate({ values: closes, period: 30 }).pop(), currentPrice);
-    const ma50 = safeCalc(() => SMA.calculate({ values: closes, period: 50 }).pop(), currentPrice);
-    const ma60 = safeCalc(() => SMA.calculate({ values: closes, period: 60 }).pop(), currentPrice);
-    const ma200 = safeCalc(() => SMA.calculate({ values: closes, period: 200 }).pop(), currentPrice);
+    const ma5: number = safeCalc(() => SMA.calculate({ values: closes, period: 5 }).pop() ?? currentPrice, currentPrice);
+    const ma10: number = safeCalc(() => SMA.calculate({ values: closes, period: 10 }).pop() ?? currentPrice, currentPrice);
+    const ma20: number = safeCalc(() => SMA.calculate({ values: closes, period: 20 }).pop() ?? currentPrice, currentPrice);
+    const ma30: number = safeCalc(() => SMA.calculate({ values: closes, period: 30 }).pop() ?? currentPrice, currentPrice);
+    const ma50: number = safeCalc(() => SMA.calculate({ values: closes, period: 50 }).pop() ?? currentPrice, currentPrice);
+    const ma60: number = safeCalc(() => SMA.calculate({ values: closes, period: 60 }).pop() ?? currentPrice, currentPrice);
+    const ma200: number = safeCalc(() => SMA.calculate({ values: closes, period: 200 }).pop() ?? currentPrice, currentPrice);
 
     // Bollinger Bands (20, 2)
     const bbValues = BollingerBands.calculate({

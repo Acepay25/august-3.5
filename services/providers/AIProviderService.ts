@@ -10,7 +10,7 @@
  * making drift invisible until runtime.
  */
 
-import { TradeAnalysis, Message, GroundingChunk, GlobalMemory, TradeOutcome, AccuracySubMode } from '../types';
+import { TradeAnalysis, Message, GroundingChunk, GlobalMemory, TradeOutcome, AccuracySubMode } from '../../types';
 
 // =============================================================================
 // SHARED TYPES
