@@ -107,7 +107,7 @@ export interface UseAnalysisPipelineParams {
     setCurrentSlOptimization: (v: any) => void;
     setCurrentSuggestedEntryPrice: (v: number | null) => void;
     setCurrentEntryTimingScore: (v: any) => void;
-    setHybridConnectionStatus: React.Dispatch<React.SetStateAction<any>>;
+    setHybridConnectionStatus: React.Dispatch<React.SetStateAction<'disconnected' | 'connecting' | 'connected' | 'error'>>;
 
     // From UI state:
     isAnalysisInProgress: boolean;

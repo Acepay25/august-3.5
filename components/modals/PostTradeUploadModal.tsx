@@ -9,7 +9,7 @@ import { processImagesForSummarization } from '../../utils/imageProcessor';
 export type PostMortemCandidate = {
     message: Message;
     outcome: TradeOutcome;
-    feedback: {
+    feedback?: {
         pnlAmount?: number;
         correctedEntry?: string;
         correctedStopLoss?: string;

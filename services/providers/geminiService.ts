@@ -473,7 +473,7 @@ export const getQuickResponse = async (prompt: string, history: Message[], model
     contents.unshift({ role: 'user', parts: [{ text: systemInstruction || defaultSystemPrompt }] });
     contents.push({ role: 'user', parts: [{ text: prompt }] });
 
-    const finalContents = [];
+    const finalContents: { role: string; parts: { text: string }[] }[] = [];
     if (contents.length > 0) {
         let currentRole = contents[0].role;
         let currentParts = [...contents[0].parts];
