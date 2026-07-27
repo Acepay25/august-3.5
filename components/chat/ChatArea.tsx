@@ -1,12 +1,10 @@
-
 import React, { useState, useMemo, useCallback } from 'react';
+import { Message, ImageMetadata, AccuracySubMode, AnalysisStep, AnalystLensConfig, LiveThoughts, ProviderConfig } from '../../types';
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
-import { Message, AccuracySubMode, AnalystLensConfig, AnalysisStep } from '../../types';
 import MessageItem, { ChatContextProps } from './MessageItem';
 import { ChatInput } from './ChatInput';
 import { QuickActionChips } from './QuickActionChips';
 import { ArrowUpIcon, ArrowDownIcon, CloseIcon, LoadingIcon, EyeIcon, EditIcon, CheckIcon, TrashIcon } from '../shared/Icons';
-import { ImageMetadata } from '../../types';
 import HybridDataPanel from '../analysis/HybridDataPanel';
 import ImageViewerModal from '../modals/ImageViewerModal';
 import AnalysisProgress from '../analysis/AnalysisProgress';
@@ -58,25 +56,9 @@ interface ChatAreaProps {
     isAnyProviderEnabled: boolean;
     isAccuracyModeEnabled: boolean;
     accuracySubMode?: AccuracySubMode;
-    // Ensemble Intelligence Props
-    isGeminiEnabled: boolean;
-    setIsGeminiEnabled: (enabled: boolean) => void;
-    isDeepSeekEnabled: boolean;
-    setIsDeepSeekEnabled: (enabled: boolean) => void;
-    isZhipuEnabled: boolean;
-    setIsZhipuEnabled: (enabled: boolean) => void;
-    isGroqEnabled: boolean;
-    setIsGroqEnabled: (enabled: boolean) => void;
-    isGroqNewEnabled: boolean;
-    setIsGroqNewEnabled: (enabled: boolean) => void;
-    isGroqAlt2Enabled: boolean;
-    setIsGroqAlt2Enabled: (enabled: boolean) => void;
-    isOpenrouterEnabled: boolean;
-    setIsOpenrouterEnabled: (enabled: boolean) => void;
-    isOpenaiEnabled: boolean;
-    setIsOpenaiEnabled: (enabled: boolean) => void;
-    isGrokNativeEnabled: boolean;
-    setIsGrokNativeEnabled: (enabled: boolean) => void;
+    // Ensemble Intelligence Props — dynamic provider list
+    providers: ProviderConfig[];
+    onToggleProvider: (id: string) => void;
     selectedVisionModel: string;
     setSelectedVisionModel: (modelId: string) => void;
     // Lens Config
@@ -147,24 +129,8 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     isAnyProviderEnabled,
     isAccuracyModeEnabled,
     accuracySubMode,
-    isGeminiEnabled,
-    setIsGeminiEnabled,
-    isDeepSeekEnabled,
-    setIsDeepSeekEnabled,
-    isZhipuEnabled,
-    setIsZhipuEnabled,
-    isGroqEnabled,
-    setIsGroqEnabled,
-    isGroqNewEnabled,
-    setIsGroqNewEnabled,
-    isGroqAlt2Enabled,
-    setIsGroqAlt2Enabled,
-    isOpenrouterEnabled,
-    setIsOpenrouterEnabled,
-    isOpenaiEnabled,
-    setIsOpenaiEnabled,
-    isGrokNativeEnabled,
-    setIsGrokNativeEnabled,
+    providers,
+    onToggleProvider,
     selectedVisionModel,
     setSelectedVisionModel,
     lensConfig,
@@ -425,24 +391,8 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                         isSummarizing={isSummarizing}
                         isRateLimited={isRateLimited}
                         isAnyProviderEnabled={isAnyProviderEnabled}
-                        isGeminiEnabled={isGeminiEnabled}
-                        setIsGeminiEnabled={setIsGeminiEnabled}
-                        isDeepSeekEnabled={isDeepSeekEnabled}
-                        setIsDeepSeekEnabled={setIsDeepSeekEnabled}
-                        isZhipuEnabled={isZhipuEnabled}
-                        setIsZhipuEnabled={setIsZhipuEnabled}
-                        isGroqEnabled={isGroqEnabled}
-                        setIsGroqEnabled={setIsGroqEnabled}
-                        isGroqNewEnabled={isGroqNewEnabled}
-                        setIsGroqNewEnabled={setIsGroqNewEnabled}
-                        isGroqAlt2Enabled={isGroqAlt2Enabled}
-                        setIsGroqAlt2Enabled={setIsGroqAlt2Enabled}
-                        isOpenrouterEnabled={isOpenrouterEnabled}
-                        setIsOpenrouterEnabled={setIsOpenrouterEnabled}
-                        isOpenaiEnabled={isOpenaiEnabled}
-                        setIsOpenaiEnabled={setIsOpenaiEnabled}
-                        isGrokNativeEnabled={isGrokNativeEnabled}
-                        setIsGrokNativeEnabled={setIsGrokNativeEnabled}
+                        providers={providers}
+                        onToggleProvider={onToggleProvider}
                         selectedVisionModel={selectedVisionModel}
                         setSelectedVisionModel={setSelectedVisionModel}
                         lensConfig={lensConfig}
