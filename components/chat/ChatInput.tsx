@@ -2,8 +2,10 @@
 import React, { useState } from 'react';
 import ImagePreview from '../shared/ImagePreview';
 import { PlusIcon, LoadingIcon, SendIcon, ChevronDownIcon, ChevronUpIcon, BotIcon } from '../shared/Icons';
-import { ImageMetadata, AnalystLensConfig, AIProvider } from '../../types';
+import { ImageMetadata, AnalystLensConfig } from '../../types';
 import { OCR_MODELS } from '../../constants/models';
+
+import { ProviderConfig } from '../../types/provider';
 
 interface ChatInputProps {
     images: ImageMetadata[];
@@ -25,47 +27,16 @@ interface ChatInputProps {
     isSummarizing: boolean;
     isRateLimited: boolean;
     isAnyProviderEnabled: boolean;
-    // Ensemble Intelligence Configuration (matching Settings)
-    isGeminiEnabled: boolean;
-    setIsGeminiEnabled: (enabled: boolean) => void;
-    isDeepSeekEnabled: boolean;
-    setIsDeepSeekEnabled: (enabled: boolean) => void;
-    isZhipuEnabled: boolean;
-    setIsZhipuEnabled: (enabled: boolean) => void;
-    isGroqEnabled: boolean;
-    setIsGroqEnabled: (enabled: boolean) => void;
-    isGroqNewEnabled: boolean;
-    setIsGroqNewEnabled: (enabled: boolean) => void;
-    isGroqAlt2Enabled: boolean;
-    setIsGroqAlt2Enabled: (enabled: boolean) => void;
-    isOpenrouterEnabled: boolean;
-    setIsOpenrouterEnabled: (enabled: boolean) => void;
-    isOpenaiEnabled: boolean;
-    setIsOpenaiEnabled: (enabled: boolean) => void;
-    isGrokNativeEnabled: boolean;
-    setIsGrokNativeEnabled: (enabled: boolean) => void;
-    // Vision Model Selection
+    // Ensemble Intelligence Configuration — dynamic provider list
+    providers: ProviderConfig[];
+    onToggleProvider: (id: string) => void;
     // Vision Model Selection
     selectedVisionModel: string;
     setSelectedVisionModel: (modelId: string) => void;
-
     // Lens Config
     lensConfig: AnalystLensConfig;
     setLensConfig: (config: AnalystLensConfig) => void;
 }
-
-// AI Provider configuration for list-style display
-const AI_PROVIDERS = [
-    { id: 'gemini', name: 'Gemini', description: 'Google AI', icon: '✦', color: 'blue' },
-    { id: 'deepseek', name: 'DeepSeek', description: 'Reasoning AI', icon: '◈', color: 'purple' },
-    { id: 'zhipu', name: 'Zhipu', description: 'GLM Vision', icon: '◇', color: 'emerald' },
-    { id: 'groq', name: 'Groq', description: 'Fast Inference', icon: '⚡', color: 'orange' },
-    { id: 'groqNew', name: 'Groq (Alt)', description: 'Kimi K2', icon: '⚡', color: 'amber' },
-    { id: 'groqAlt2', name: 'Groq (Alt 2)', description: 'Llama 4', icon: '⚡', color: 'yellow' },
-    { id: 'openrouter', name: 'OpenRouter', description: 'Free Models', icon: '◎', color: 'green' },
-    { id: 'openai', name: 'OpenAI', description: 'GPT Models', icon: '●', color: 'teal' },
-    { id: 'grokNative', name: 'Grok (xAI)', description: 'Grok AI', icon: '◐', color: 'sky' },
-];
 
 const ChatInputInner: React.FC<ChatInputProps> = ({
     images,
@@ -87,24 +58,8 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
     isSummarizing,
     isRateLimited,
     isAnyProviderEnabled,
-    isGeminiEnabled,
-    setIsGeminiEnabled,
-    isDeepSeekEnabled,
-    setIsDeepSeekEnabled,
-    isZhipuEnabled,
-    setIsZhipuEnabled,
-    isGroqEnabled,
-    setIsGroqEnabled,
-    isGroqNewEnabled,
-    setIsGroqNewEnabled,
-    isGroqAlt2Enabled,
-    setIsGroqAlt2Enabled,
-    isOpenrouterEnabled,
-    setIsOpenrouterEnabled,
-    isOpenaiEnabled,
-    setIsOpenaiEnabled,
-    isGrokNativeEnabled,
-    setIsGrokNativeEnabled,
+    providers,
+    onToggleProvider,
     selectedVisionModel,
     setSelectedVisionModel,
     lensConfig,
@@ -114,24 +69,13 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
     const [showLensSettings, setShowLensSettings] = useState(false);
 
     // Count enabled providers
-    const enabledCount = [isGeminiEnabled, isDeepSeekEnabled, isZhipuEnabled, isGroqEnabled, isGroqNewEnabled, isGroqAlt2Enabled, isOpenrouterEnabled, isOpenaiEnabled, isGrokNativeEnabled].filter(Boolean).length;
+    const enabledCount = providers.filter(p => p.isEnabled).length;
     // Global limit reached if 3 providers are enabled
     const globalLimitReached = enabledCount >= 3;
 
-    // Map provider ID to enabled state and setter
-    const providerStates: Record<string, { enabled: boolean; setEnabled: (v: boolean) => void }> = {
-        gemini: { enabled: isGeminiEnabled, setEnabled: setIsGeminiEnabled },
-        deepseek: { enabled: isDeepSeekEnabled, setEnabled: setIsDeepSeekEnabled },
-        zhipu: { enabled: isZhipuEnabled, setEnabled: setIsZhipuEnabled },
-        groq: { enabled: isGroqEnabled, setEnabled: setIsGroqEnabled },
-        groqNew: { enabled: isGroqNewEnabled, setEnabled: setIsGroqNewEnabled },
-        groqAlt2: { enabled: isGroqAlt2Enabled, setEnabled: setIsGroqAlt2Enabled },
-        openrouter: { enabled: isOpenrouterEnabled, setEnabled: setIsOpenrouterEnabled },
-        openai: { enabled: isOpenaiEnabled, setEnabled: setIsOpenaiEnabled },
-        grokNative: { enabled: isGrokNativeEnabled, setEnabled: setIsGrokNativeEnabled },
-    };
-
-    // Get color classes for a provider
+    // Map provider ID to enabled state
+    const providerStates: Record<string, { enabled: boolean }> = {};
+    providers.forEach(p => { providerStates[p.id] = { enabled: p.isEnabled }; });// Get color classes for a provider
     const getColorClasses = (color: string, enabled: boolean): string => {
         if (!enabled) return 'text-zinc-500';
         const colorMap: Record<string, string> = {
@@ -245,25 +189,19 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                                     if (!newConfig.assignments) newConfig.assignments = [];
                                                     const idx = newConfig.assignments.findIndex(a => a.role === 'macro_volatility');
                                                     if (idx >= 0) {
-                                                        newConfig.assignments[idx].assignedProvider = e.target.value as AIProvider;
+                                                        newConfig.assignments[idx].assignedProvider = e.target.value;
                                                     } else {
                                                         // @ts-ignore
-                                                        newConfig.assignments.push({ role: 'macro_volatility', assignedProvider: e.target.value as AIProvider });
+                                                        newConfig.assignments.push({ role: 'macro_volatility', assignedProvider: e.target.value });
                                                     }
                                                     setLensConfig(newConfig);
                                                 }}
                                                 className="w-full bg-zinc-950 border border-white/10 rounded px-2 py-1 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500/50"
                                             >
                                                 <option value="" disabled>Select Provider</option>
-                                                {isGeminiEnabled && <option value="gemini">Gemini</option>}
-                                                {isDeepSeekEnabled && <option value="deepseek">DeepSeek</option>}
-                                                {isZhipuEnabled && <option value="zhipu">ZhipuGLM</option>}
-                                                {isGroqEnabled && <option value="groq">Groq (LLaMA)</option>}
-                                                {isGroqNewEnabled && <option value="groq_new">Groq (Alt)</option>}
-                                                {isGroqAlt2Enabled && <option value="groq_alt2">Groq (Alt 2)</option>}
-                                                {isOpenrouterEnabled && <option value="openrouter">OpenRouter</option>}
-                                                {isOpenaiEnabled && <option value="openai">OpenAI</option>}
-                                                {isGrokNativeEnabled && <option value="grok">Grok</option>}
+                                                {providers.filter(p => p.isEnabled).map(p => (
+                                                    <option key={p.id} value={p.id}>{p.name}</option>
+                                                ))}
                                             </select>
                                         </div>
 
@@ -280,25 +218,19 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                                     if (!newConfig.assignments) newConfig.assignments = [];
                                                     const idx = newConfig.assignments.findIndex(a => a.role === 'technical_analyst');
                                                     if (idx >= 0) {
-                                                        newConfig.assignments[idx].assignedProvider = e.target.value as AIProvider;
+                                                        newConfig.assignments[idx].assignedProvider = e.target.value;
                                                     } else {
                                                         // @ts-ignore
-                                                        newConfig.assignments.push({ role: 'technical_analyst', assignedProvider: e.target.value as AIProvider });
+                                                        newConfig.assignments.push({ role: 'technical_analyst', assignedProvider: e.target.value });
                                                     }
                                                     setLensConfig(newConfig);
                                                 }}
                                                 className="w-full bg-zinc-950 border border-white/10 rounded px-2 py-1 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500/50"
                                             >
                                                 <option value="" disabled>Select Provider</option>
-                                                {isGeminiEnabled && <option value="gemini">Gemini</option>}
-                                                {isDeepSeekEnabled && <option value="deepseek">DeepSeek</option>}
-                                                {isZhipuEnabled && <option value="zhipu">ZhipuGLM</option>}
-                                                {isGroqEnabled && <option value="groq">Groq (LLaMA)</option>}
-                                                {isGroqNewEnabled && <option value="groq_new">Groq (Alt)</option>}
-                                                {isGroqAlt2Enabled && <option value="groq_alt2">Groq (Alt 2)</option>}
-                                                {isOpenrouterEnabled && <option value="openrouter">OpenRouter</option>}
-                                                {isOpenaiEnabled && <option value="openai">OpenAI</option>}
-                                                {isGrokNativeEnabled && <option value="grok">Grok</option>}
+                                                {providers.filter(p => p.isEnabled).map(p => (
+                                                    <option key={p.id} value={p.id}>{p.name}</option>
+                                                ))}
                                             </select>
                                         </div>
 
@@ -315,25 +247,19 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                                     if (!newConfig.assignments) newConfig.assignments = [];
                                                     const idx = newConfig.assignments.findIndex(a => a.role === 'risk_execution');
                                                     if (idx >= 0) {
-                                                        newConfig.assignments[idx].assignedProvider = e.target.value as AIProvider;
+                                                        newConfig.assignments[idx].assignedProvider = e.target.value;
                                                     } else {
                                                         // @ts-ignore
-                                                        newConfig.assignments.push({ role: 'risk_execution', assignedProvider: e.target.value as AIProvider });
+                                                        newConfig.assignments.push({ role: 'risk_execution', assignedProvider: e.target.value });
                                                     }
                                                     setLensConfig(newConfig);
                                                 }}
                                                 className="w-full bg-zinc-950 border border-white/10 rounded px-2 py-1 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500/50"
                                             >
                                                 <option value="" disabled>Select Provider</option>
-                                                {isGeminiEnabled && <option value="gemini">Gemini</option>}
-                                                {isDeepSeekEnabled && <option value="deepseek">DeepSeek</option>}
-                                                {isZhipuEnabled && <option value="zhipu">ZhipuGLM</option>}
-                                                {isGroqEnabled && <option value="groq">Groq (LLaMA)</option>}
-                                                {isGroqNewEnabled && <option value="groq_new">Groq (Alt)</option>}
-                                                {isGroqAlt2Enabled && <option value="groq_alt2">Groq (Alt 2)</option>}
-                                                {isOpenrouterEnabled && <option value="openrouter">OpenRouter</option>}
-                                                {isOpenaiEnabled && <option value="openai">OpenAI</option>}
-                                                {isGrokNativeEnabled && <option value="grok">Grok</option>}
+                                                {providers.filter(p => p.isEnabled).map(p => (
+                                                    <option key={p.id} value={p.id}>{p.name}</option>
+                                                ))}
                                             </select>
                                         </div>
                                     </div>
@@ -402,7 +328,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                         <div className="mt-4 bg-zinc-900/80 rounded-2xl border border-white/10 overflow-hidden animate-fade-in">
                             {/* AI Providers List */}
                             <div className="max-h-[300px] overflow-y-auto">
-                                {AI_PROVIDERS.map((provider, index) => {
+                                {providers.filter(p => p.isEnabled).map((provider, index) => {
                                     const state = providerStates[provider.id];
                                     const isEnabled = state?.enabled || false;
                                     const isDisabled = !isEnabled && globalLimitReached;
@@ -410,7 +336,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                     return (
                                         <button
                                             key={provider.id}
-                                            onClick={() => state?.setEnabled(!isEnabled)}
+                                            onClick={() => onToggleProvider(provider.id)}
                                             disabled={isDisabled}
                                             className={`w-full flex items-center justify-between px-4 py-3 transition-all ${index !== 0 ? 'border-t border-white/5' : ''
                                                 } ${isEnabled
@@ -421,15 +347,15 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                                 }`}
                                         >
                                             <div className="flex items-center gap-3">
-                                                <span className={`text-lg ${getColorClasses(provider.color, isEnabled)}`}>
-                                                    {provider.icon}
+                                                <span className={`text-lg ${getColorClasses(provider.id === 'gemini' ? 'blue' : provider.id === 'deepseek' ? 'purple' : provider.id === 'zhipu' ? 'emerald' : provider.id === 'groq' ? 'orange' : 'cyan', isEnabled)}`}>
+                                                    {'✦'}
                                                 </span>
                                                 <div className="text-left">
                                                     <div className={`text-sm font-medium ${isEnabled ? 'text-white' : 'text-zinc-300'}`}>
                                                         {provider.name}
                                                     </div>
                                                     <div className="text-[11px] text-zinc-500">
-                                                        {isDisabled ? 'Limit reached' : provider.description}
+                                                        {isDisabled ? 'Limit reached' : provider.name}
                                                     </div>
                                                 </div>
                                             </div>

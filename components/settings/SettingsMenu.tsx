@@ -509,195 +509,13 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
     );
 
     // Models View
-    const renderModelsView = () => (
+        const renderModelsView = () => (
         <>
             {renderHeader('AI Models & Providers', true)}
             <div className="flex-1 overflow-y-auto px-5 pb-6 space-y-4 custom-scrollbar">
                 <p className="text-xs text-zinc-500 mb-4">
-                    Enable/disable AI providers for ensemble analysis. Each provider contributes to the final assessment.
+                    Configure your AI providers in the API Configuration section below. Add any provider, set its API key, base URL, and model.
                 </p>
-
-                {/* Gemini */}
-                <div className={`p-4 rounded-2xl bg-zinc-900/50 border transition-all ${isGeminiEnabled ? 'border-blue-500/30' : 'border-white/5'}`}>
-                    <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                            <span className={`text-sm font-bold ${isGeminiEnabled ? 'text-blue-400' : 'text-zinc-500'}`}>Gemini</span>
-                        </div>
-                        <ToggleSwitch checked={isGeminiEnabled} onChange={() => onToggleProvider?.('gemini')} />
-                    </div>
-                    {isGeminiEnabled && geminiModels.length > 0 && (
-                        <select
-                            value={selectedGeminiModel}
-                            onChange={(e) => onSetGeminiModel?.(e.target.value)}
-                            className="w-full bg-zinc-800 border border-white/10 rounded-xl text-sm p-3 text-zinc-300 focus:ring-2 focus:ring-blue-500/50 focus:outline-none"
-                        >
-                            {geminiModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                        </select>
-                    )}
-                </div>
-
-                {/* DeepSeek */}
-                <div className={`p-4 rounded-2xl bg-zinc-900/50 border transition-all ${isDeepSeekEnabled ? 'border-emerald-500/30' : 'border-white/5'}`}>
-                    <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                            <span className={`text-sm font-bold ${isDeepSeekEnabled ? 'text-emerald-400' : 'text-zinc-500'}`}>DeepSeek</span>
-                        </div>
-                        <ToggleSwitch checked={isDeepSeekEnabled} onChange={() => onToggleProvider?.('deepseek')} />
-                    </div>
-                    {isDeepSeekEnabled && deepseekModels.length > 0 && (
-                        <select
-                            value={selectedDeepSeekModel}
-                            onChange={(e) => onSetDeepseekModel?.(e.target.value)}
-                            className="w-full bg-zinc-800 border border-white/10 rounded-xl text-sm p-3 text-zinc-300 focus:ring-2 focus:ring-emerald-500/50 focus:outline-none"
-                        >
-                            {deepseekModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                        </select>
-                    )}
-                </div>
-
-                {/* Zhipu */}
-                <div className={`p-4 rounded-2xl bg-zinc-900/50 border transition-all ${isZhipuEnabled ? 'border-orange-500/30' : 'border-white/5'}`}>
-                    <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-orange-500"></span>
-                            <span className={`text-sm font-bold ${isZhipuEnabled ? 'text-orange-400' : 'text-zinc-500'}`}>Zhipu AI</span>
-                        </div>
-                        <ToggleSwitch checked={isZhipuEnabled} onChange={() => onToggleProvider?.('zhipu')} />
-                    </div>
-                    {isZhipuEnabled && zhipuModels.length > 0 && (
-                        <select
-                            value={selectedZhipuModel}
-                            onChange={(e) => onSetZhipuModel?.(e.target.value)}
-                            className="w-full bg-zinc-800 border border-white/10 rounded-xl text-sm p-3 text-zinc-300 focus:ring-2 focus:ring-orange-500/50 focus:outline-none"
-                        >
-                            {zhipuModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                        </select>
-                    )}
-                </div>
-
-                {/* Groq */}
-                <div className={`p-4 rounded-2xl bg-zinc-900/50 border transition-all ${isGroqEnabled ? 'border-yellow-500/30' : 'border-white/5'}`}>
-                    <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
-                            <span className={`text-sm font-bold ${isGroqEnabled ? 'text-yellow-400' : 'text-zinc-500'}`}>Groq</span>
-                        </div>
-                        <ToggleSwitch checked={isGroqEnabled} onChange={() => onToggleProvider?.('groq')} />
-                    </div>
-                    {isGroqEnabled && groqModels.length > 0 && (
-                        <select
-                            value={selectedGroqModel}
-                            onChange={(e) => onSetGroqModel?.(e.target.value)}
-                            className="w-full bg-zinc-800 border border-white/10 rounded-xl text-sm p-3 text-zinc-300 focus:ring-2 focus:ring-yellow-500/50 focus:outline-none"
-                        >
-                            {groqModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                        </select>
-                    )}
-                </div>
-
-                {/* Groq Alt */}
-                <div className={`p-4 rounded-2xl bg-zinc-900/50 border transition-all ${isGroqNewEnabled ? 'border-amber-500/30' : 'border-white/5'}`}>
-                    <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                            <span className={`text-sm font-bold ${isGroqNewEnabled ? 'text-amber-400' : 'text-zinc-500'}`}>Groq (Alt)</span>
-                        </div>
-                        <ToggleSwitch checked={isGroqNewEnabled} onChange={() => onToggleProvider?.('groqNew')} />
-                    </div>
-                    {isGroqNewEnabled && groqNewModels.length > 0 && (
-                        <select
-                            value={selectedGroqNewModel}
-                            onChange={(e) => onSetGroqNewModel?.(e.target.value)}
-                            className="w-full bg-zinc-800 border border-white/10 rounded-xl text-sm p-3 text-zinc-300 focus:ring-2 focus:ring-amber-500/50 focus:outline-none"
-                        >
-                            {groqNewModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                        </select>
-                    )}
-                </div>
-
-                {/* Groq Alt 2 */}
-                <div className={`p-4 rounded-2xl bg-zinc-900/50 border transition-all ${isGroqAlt2Enabled ? 'border-lime-500/30' : 'border-white/5'}`}>
-                    <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-lime-500"></span>
-                            <span className={`text-sm font-bold ${isGroqAlt2Enabled ? 'text-lime-400' : 'text-zinc-500'}`}>Groq (Alt 2)</span>
-                        </div>
-                        <ToggleSwitch checked={isGroqAlt2Enabled} onChange={() => onToggleProvider?.('groqAlt2')} />
-                    </div>
-                    {isGroqAlt2Enabled && groqAlt2Models.length > 0 && (
-                        <select
-                            value={selectedGroqAlt2Model}
-                            onChange={(e) => onSetGroqAlt2Model?.(e.target.value)}
-                            className="w-full bg-zinc-800 border border-white/10 rounded-xl text-sm p-3 text-zinc-300 focus:ring-2 focus:ring-lime-500/50 focus:outline-none"
-                        >
-                            {groqAlt2Models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                        </select>
-                    )}
-                </div>
-
-                {/* OpenRouter */}
-                <div className={`p-4 rounded-2xl bg-zinc-900/50 border transition-all ${isOpenrouterEnabled ? 'border-pink-500/30' : 'border-white/5'}`}>
-                    <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-pink-500"></span>
-                            <span className={`text-sm font-bold ${isOpenrouterEnabled ? 'text-pink-400' : 'text-zinc-500'}`}>OpenRouter</span>
-                        </div>
-                        <ToggleSwitch checked={isOpenrouterEnabled} onChange={() => onToggleProvider?.('openrouter')} />
-                    </div>
-                    {isOpenrouterEnabled && openrouterModels.length > 0 && (
-                        <select
-                            value={selectedOpenrouterModel}
-                            onChange={(e) => onSetOpenrouterModel?.(e.target.value)}
-                            className="w-full bg-zinc-800 border border-white/10 rounded-xl text-sm p-3 text-zinc-300 focus:ring-2 focus:ring-pink-500/50 focus:outline-none"
-                        >
-                            {openrouterModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                        </select>
-                    )}
-                </div>
-
-                {/* OpenAI */}
-                <div className={`p-4 rounded-2xl bg-zinc-900/50 border transition-all ${isOpenaiEnabled ? 'border-teal-500/30' : 'border-white/5'}`}>
-                    <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-teal-500"></span>
-                            <span className={`text-sm font-bold ${isOpenaiEnabled ? 'text-teal-400' : 'text-zinc-500'}`}>OpenAI</span>
-                        </div>
-                        <ToggleSwitch checked={isOpenaiEnabled} onChange={() => onToggleProvider?.('openai')} />
-                    </div>
-                    {isOpenaiEnabled && openaiModels.length > 0 && (
-                        <select
-                            value={selectedOpenaiModel}
-                            onChange={(e) => onSetOpenaiModel?.(e.target.value)}
-                            className="w-full bg-zinc-800 border border-white/10 rounded-xl text-sm p-3 text-zinc-300 focus:ring-2 focus:ring-teal-500/50 focus:outline-none"
-                        >
-                            {openaiModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                        </select>
-                    )}
-                </div>
-
-
-
-                {/* Grok (xAI Native) */}
-                <div className={`p-4 rounded-2xl bg-zinc-900/50 border transition-all ${isGrokNativeEnabled ? 'border-sky-500/30' : 'border-white/5'}`}>
-                    <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-sky-500"></span>
-                            <span className={`text-sm font-bold ${isGrokNativeEnabled ? 'text-sky-400' : 'text-zinc-500'}`}>Grok (xAI)</span>
-                        </div>
-                        <ToggleSwitch checked={isGrokNativeEnabled} onChange={() => onToggleProvider?.('grokNative')} />
-                    </div>
-                    {isGrokNativeEnabled && grokNativeModels.length > 0 && (
-                        <select
-                            value={selectedGrokNativeModel}
-                            onChange={(e) => onSetGrokNativeModel?.(e.target.value)}
-                            className="w-full bg-zinc-800 border border-white/10 rounded-xl text-sm p-3 text-zinc-300 focus:ring-2 focus:ring-sky-500/50 focus:outline-none"
-                        >
-                            {grokNativeModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                        </select>
-                    )}
-                </div>
 
                 {/* Vision Model */}
                 {ocrModels.length > 0 && (
@@ -726,34 +544,29 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                     <div className="space-y-2">
                         <select
                             value={moderatorProvider || ''}
-                            onChange={(e) => onSetModeratorProvider?.(e.target.value as AIProvider)}
+                            onChange={(e) => onSetModeratorProvider?.(e.target.value)}
                             className="w-full bg-zinc-800 border border-white/10 rounded-xl text-sm p-3 text-zinc-300 focus:ring-2 focus:ring-cyan-500/50 focus:outline-none"
                         >
-                            <option value={AIProvider.GEMINI}>Gemini</option>
-                            <option value={AIProvider.DEEPSEEK}>DeepSeek</option>
-                            <option value={AIProvider.ZHIPU}>Zhipu</option>
-                            <option value={AIProvider.GROQ}>Groq</option>
-                            <option value={AIProvider.GROQ_NEW}>Groq (Alt)</option>
-                            <option value={AIProvider.GROQ_ALT2}>Groq (Alt 2)</option>
-                            <option value={AIProvider.OPENROUTER}>OpenRouter</option>
-                            <option value={AIProvider.OPENAI}>OpenAI</option>
-                            <option value={AIProvider.GROK}>Grok (xAI)</option>
+                            {(providerConfigs ?? []).length > 0 ? (
+                                (providerConfigs ?? []).map(c => (
+                                    <option key={c.id} value={c.id}>{c.name}</option>
+                                ))
+                            ) : (
+                                <option value="" disabled>No providers configured</option>
+                            )}
                         </select>
-                        {/* Model dropdown based on provider */}
                         <select
                             value={moderatorModel || ''}
                             onChange={(e) => onSetModeratorModel?.(e.target.value)}
                             className="w-full bg-zinc-800 border border-white/10 rounded-xl text-sm p-3 text-zinc-300 focus:ring-2 focus:ring-cyan-500/50 focus:outline-none"
                         >
-                            {moderatorProvider === AIProvider.GEMINI && geminiModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                            {moderatorProvider === AIProvider.DEEPSEEK && deepseekModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                            {moderatorProvider === AIProvider.ZHIPU && zhipuModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                            {moderatorProvider === AIProvider.GROQ && groqModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                            {moderatorProvider === AIProvider.GROQ_NEW && groqNewModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                            {moderatorProvider === AIProvider.GROQ_ALT2 && groqAlt2Models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                            {moderatorProvider === AIProvider.OPENROUTER && openrouterModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                            {moderatorProvider === AIProvider.OPENAI && openaiModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                            {moderatorProvider === AIProvider.GROK && grokNativeModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                            {(() => {
+                                const selectedCfg = (providerConfigs ?? []).find(c => c.id === moderatorProvider);
+                                if (selectedCfg && selectedCfg.models.length > 0) {
+                                    return selectedCfg.models.map(m => <option key={m} value={m}>{m}</option>);
+                                }
+                                return <option value="" disabled>Select a provider first</option>;
+                            })()}
                         </select>
                     </div>
                 </div>
@@ -771,7 +584,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                         <span className="text-lg">🔑</span>
                         <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">API Configuration</h3>
                     </div>
-                    <p className="text-[10px] text-zinc-600 mb-3">Configure API keys, base URLs, and add custom providers.</p>
+                    <p className="text-[10px] text-zinc-600 mb-3">Add and manage your AI providers here. Each provider needs an API key, base URL, and model.</p>
                     {providerConfigs && onUpdateProvider && onAddCustomProvider && onRemoveProvider && onToggleProviderConfig ? (
                         <ProviderManager
                             configs={providerConfigs}
@@ -788,7 +601,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
         </>
     );
 
-    // Lenses View
+    // Lenses View    // Lenses View
     const renderLensesView = () => {
         // Build list of enabled providers based on component props
         const enabledProviders: AIProvider[] = [];

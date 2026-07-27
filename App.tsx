@@ -1793,24 +1793,8 @@ const App: React.FC = () => {
                 isAnyProviderEnabled={isAnyProviderEnabled}
                 isAccuracyModeEnabled={isAccuracyModeEnabled}
                 accuracySubMode={accuracySubMode}
-                isGeminiEnabled={readyProviders.some(p => p.id === 'gemini')}
-                setIsGeminiEnabled={() => handleToggleProviderConfig('gemini')}
-                isDeepSeekEnabled={readyProviders.some(p => p.id === 'deepseek')}
-                setIsDeepSeekEnabled={() => handleToggleProviderConfig('deepseek')}
-                isZhipuEnabled={readyProviders.some(p => p.id === 'zhipu')}
-                setIsZhipuEnabled={() => handleToggleProviderConfig('zhipu')}
-                isGroqEnabled={readyProviders.some(p => p.id === 'groq')}
-                setIsGroqEnabled={() => handleToggleProviderConfig('groq')}
-                isGroqNewEnabled={readyProviders.some(p => p.id === 'groq_new')}
-                setIsGroqNewEnabled={() => handleToggleProviderConfig('groq_new')}
-                isGroqAlt2Enabled={readyProviders.some(p => p.id === 'groq_alt2')}
-                setIsGroqAlt2Enabled={() => handleToggleProviderConfig('groq_alt2')}
-                isOpenrouterEnabled={readyProviders.some(p => p.id === 'openrouter')}
-                setIsOpenrouterEnabled={() => handleToggleProviderConfig('openrouter')}
-                isOpenaiEnabled={readyProviders.some(p => p.id === 'openai')}
-                setIsOpenaiEnabled={() => handleToggleProviderConfig('openai')}
-                isGrokNativeEnabled={readyProviders.some(p => p.id === 'grok')}
-                setIsGrokNativeEnabled={() => handleToggleProviderConfig('grok')}
+                providers={readyProviders}
+                onToggleProvider={handleToggleProviderConfig}
 
 
                 selectedVisionModel={selectedOcrModel}
