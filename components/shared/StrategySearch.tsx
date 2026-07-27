@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { StrategySearchResult } from '../../types';
-import * as geminiService from '../../services/providers/geminiService';
+import { searchStrategies, discoverStrategies, getStrategyDescription } from '../../services/providers/GenericAnalysisService';
+import { ProviderConfig } from '../../types/provider';
 import { CloseIcon, LoadingIcon, BotIcon, CheckIcon, LockIcon, ChevronDownIcon, SearchIcon, BrainIcon } from './Icons';
 import { FAMILY_UI_DATA } from '../../constants/models';
 
@@ -10,7 +11,7 @@ interface StrategySearchProps {
   onClose: () => void;
   onApplyStrategy: (strategyName: string) => void;
   onRemoveStrategy: (strategyName: string) => void;
-  geminiModel: string;
+  providerConfig: ProviderConfig;
   activeFrameworks: string[];
   defaultFrameworks: string[];
   initialViewStrategy?: string | null;
@@ -29,7 +30,7 @@ const StrategySearch: React.FC<StrategySearchProps> = ({
     onClose, 
     onApplyStrategy,
     onRemoveStrategy,
-    geminiModel,
+    providerConfig,
     activeFrameworks,
     defaultFrameworks,
     initialViewStrategy,
@@ -73,14 +74,14 @@ const StrategySearch: React.FC<StrategySearchProps> = ({
     setError(null);
     setSearchResults([]);
     try {
-        const results = await geminiService.searchStrategies(searchQuery, activeFrameworks, geminiModel);
+        const results = await searchStrategies(providerConfig, searchQuery, activeFrameworks);
         setSearchResults(results);
         if (results.length === 0) {
             setError("No matching strategies found within your playbook.");
         }
     } catch (err: any) {
         if (isQuotaError(err)) {
-            onQuotaExceeded(geminiModel);
+            onQuotaExceeded(providerConfig.selectedModel);
             setError("Quota exceeded for the selected Gemini model.");
         } else {
             setError(err instanceof Error ? err.message : 'An unknown error occurred.');
@@ -96,14 +97,14 @@ const StrategySearch: React.FC<StrategySearchProps> = ({
     setSearchResults([]);
     setSearchQuery('');
     try {
-        const results = await geminiService.discoverStrategies([], activeFrameworks, geminiModel);
+        const results = await discoverStrategies(providerConfig, [], activeFrameworks);
         setSearchResults(results);
         if (results.length === 0) {
             setError("Could not discover any relevant strategies at this time.");
         }
     } catch (err: any) {
         if (isQuotaError(err)) {
-            onQuotaExceeded(geminiModel);
+            onQuotaExceeded(providerConfig.selectedModel);
             setError("Quota exceeded for the selected Gemini model.");
         } else {
             setError(err instanceof Error ? err.message : 'An unknown error occurred.');
@@ -122,11 +123,11 @@ const StrategySearch: React.FC<StrategySearchProps> = ({
     setIsFetchingDescription(true);
     setFrameworkDescription('');
     try {
-        const description = await geminiService.getStrategyDescription(frameworkName, geminiModel);
+        const description = await getStrategyDescription(providerConfig, frameworkName);
         setFrameworkDescription(description);
     } catch (err: any) {
         if (isQuotaError(err)) {
-            onQuotaExceeded(geminiModel);
+            onQuotaExceeded(providerConfig.selectedModel);
             setFrameworkDescription("Quota exceeded for the selected Gemini model. Please select a different model from the main view and try again.");
         } else if (err.status === 429 || (err.message && err.message.includes('Too Many Requests'))) {
             setFrameworkDescription("Rate limit exceeded. Please try again later.");

@@ -1,6 +1,6 @@
 // User profile, settings, and custom instruction types
 
-import { AIProvider, AccuracySubMode } from './enums';
+import { AccuracySubMode } from './enums';
 import { ConfidenceCalibration } from './calibration';
 import { Conversation, LoggedTrade, SavedAnalysis, TradeSummary } from './trade';
 import { GlobalMemory, InsightKnowledgeBase, LearningRule, TradingWeaknesses } from './learning';
@@ -21,7 +21,7 @@ export interface CustomInstructionsMap {
 export interface UserSettings {
   activeFrameworks: string[];
   summaryCharLimit?: number;
-  summarizationProvider?: AIProvider;
+  summarizationProvider?: string;  // ProviderConfig id
   summarizationModel?: string;
   isGlobalMemoryEnabled?: boolean; // Layer 3 Toggle
   isAccuracyModeEnabled?: boolean; // Accuracy Mode Toggle

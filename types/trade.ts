@@ -1,6 +1,6 @@
 // Trade logging, conversation, and dashboard types
 
-import { AIProvider, AccuracySubMode, TradeOutcome, DebateSpeaker } from './enums';
+import { AccuracySubMode, TradeOutcome, DebateSpeaker } from './enums';
 import { TradeAnalysis } from './analysis';
 import { Message, DebateTurn } from './message';
 
@@ -20,7 +20,10 @@ export interface LoggedTrade {
   investmentAmount?: number;
   pnlAmount?: number;
   marketSnapshot?: unknown; // Stored market context for algorithmic recalculation
-  // Ensemble fields
+  // Ensemble fields — keyed by provider id (ProviderConfig.id)
+  modelsUsed?: Record<string, string>;       // providerId → model id
+  thoughtProcesses?: Record<string, string>; // providerId → thought process text
+  // Legacy per-provider fields (kept for historical data migration)
   geminiModelUsed?: string;
   deepseekModelUsed?: string;
   zhipuModelUsed?: string;
@@ -30,16 +33,8 @@ export interface LoggedTrade {
   openrouterModelUsed?: string;
 
   ocrModelUsed?: string;
-  moderatorProvider?: AIProvider;
+  moderatorProvider?: string;  // ProviderConfig id (historical values like 'gemini' remain valid strings)
   moderatorModel?: string;
-  // Individual thought processes
-  geminiThoughtProcess?: string;
-  deepseekThoughtProcess?: string;
-  zhipuThoughtProcess?: string;
-  groqThoughtProcess?: string;
-  groqNewThoughtProcess?: string;
-  groqAlt2ThoughtProcess?: string;
-  openrouterThoughtProcess?: string;
 
   // Debate transcript — the full debate turns and moderator synthesis
   // Stored for training data and outcome-correlated reasoning analysis
@@ -106,7 +101,7 @@ export interface SavedAnalysis {
   groqAlt2ModelUsed?: string;
 
   ocrModelUsed?: string;
-  moderatorProvider?: AIProvider;
+  moderatorProvider?: string;  // ProviderConfig id
   moderatorModel?: string;
 }
 
@@ -122,30 +117,9 @@ export interface Conversation {
   title?: string;
   messages: Message[];
   threadSummary?: string; // Layer 2: Compressed Conversation Summary
-  geminiModel: string;
-  deepseekModel: string;
-  zhipuModel: string;
-  groqModel: string;
-  groqNewModel: string;
-  groqAlt2Model: string;
-
-  openrouterModel: string;
-  openaiModel: string;
-  grokNativeModel: string;
-
-  ocrModel: string;
-  isGeminiEnabled: boolean;
-  isDeepSeekEnabled: boolean;
-  isZhipuEnabled: boolean;
-  isGroqEnabled: boolean;
-  isGroqNewEnabled: boolean;
-  isGroqAlt2Enabled: boolean;
-
-  isOpenrouterEnabled: boolean;
-  isOpenaiEnabled: boolean;
-  isGrokNativeEnabled: boolean;
-  moderatorProvider: AIProvider;
-  moderatorModel: string;
+  ocrModel: string;              // Vision/OCR model id (from the vision provider's models)
+  moderatorProviderId: string;   // ProviderConfig id of the debate moderator
+  moderatorModel: string;        // Moderator model id
   leverage: number;
 }
 

@@ -5,10 +5,39 @@
  * - chat_completions: OpenAI-compatible /chat/completions (most providers)
  * - messages: Anthropic-style /v1/messages
  * - responses: OpenAI Responses API /responses
+ *
+ * Capabilities:
+ * - Non-streaming chat (`sendChatRequest`)
+ * - Streaming chat (`streamChatRequest`) — async generator
+ * - Multimodal/vision content (image_url parts)
+ * - JSON response mode (`response_format: { type: 'json_object' }`)
+ * - AbortSignal support
  */
 
 import OpenAI from 'openai';
 import { ProviderConfig } from '../../types/provider';
+
+// ─── Types ──────────────────────────────────────────────────────────────────
+
+/** A single message part — text or image. */
+export type ContentPart =
+    | { type: 'text'; text: string }
+    | { type: 'image_url'; image_url: { url: string } };
+
+/** A chat message. `content` may be a plain string or an array of content parts (vision). */
+export interface ChatMessage {
+    role: string;
+    content: string | ContentPart[];
+}
+
+export interface ChatRequestOptions {
+    maxTokens?: number;
+    temperature?: number;
+    /** Request JSON object output (chat_completions only uses response_format). */
+    jsonMode?: boolean;
+    /** Abort signal for cancellation. */
+    signal?: AbortSignal;
+}
 
 // ─── Client Factory ─────────────────────────────────────────────────────────
 
@@ -23,41 +52,90 @@ function createOpenAIClient(config: ProviderConfig): OpenAI {
     });
 }
 
+/** Heuristic: does this model accept vision/image inputs? */
+function isVisionModel(modelId: string): boolean {
+    const m = modelId.toLowerCase();
+    return m.includes('llama-4')
+        || m.includes('vision')
+        || m.includes('gpt-4o')
+        || m.includes('gpt-4.1')
+        || m.includes('gpt-5')
+        || m.includes('glm-4.5v')
+        || m.includes('glm-4.6v')
+        || m.includes('gemini');
+}
+
 // ─── Chat Completions Format ────────────────────────────────────────────────
 
 async function chatCompletionsCall(
     config: ProviderConfig,
-    messages: { role: string; content: string }[],
-    options?: { maxTokens?: number; temperature?: number }
+    messages: ChatMessage[],
+    options?: ChatRequestOptions
 ): Promise<string> {
     const client = createOpenAIClient(config);
-    const response = await client.chat.completions.create({
+    const params: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming = {
         model: config.selectedModel,
         messages: messages as any,
-        max_tokens: options?.maxTokens || 4096,
+        max_tokens: options?.maxTokens ?? 4096,
         temperature: options?.temperature ?? 0.7,
-    });
+    };
+    if (options?.jsonMode) {
+        (params as any).response_format = { type: 'json_object' };
+    }
+    const response = await client.chat.completions.create(params, options?.signal ? { signal: options.signal } : undefined);
     return response.choices[0]?.message?.content || '';
+}
+
+async function* chatCompletionsStream(
+    config: ProviderConfig,
+    messages: ChatMessage[],
+    options?: ChatRequestOptions
+): AsyncGenerator<string, void, unknown> {
+    const client = createOpenAIClient(config);
+    const params: OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming = {
+        model: config.selectedModel,
+        messages: messages as any,
+        max_tokens: options?.maxTokens ?? 4096,
+        temperature: options?.temperature ?? 0.7,
+        stream: true,
+    };
+    if (options?.jsonMode) {
+        (params as any).response_format = { type: 'json_object' };
+    }
+    const stream = await client.chat.completions.create(params, options?.signal ? { signal: options.signal } : undefined);
+    for await (const chunk of stream) {
+        yield chunk.choices[0]?.delta?.content || '';
+    }
 }
 
 // ─── Messages Format (Anthropic-style) ──────────────────────────────────────
 
+/** Convert a ChatMessage's content to Anthropic message content blocks. */
+function toAnthropicContent(content: string | ContentPart[]): any[] {
+    if (typeof content === 'string') {
+        return [{ type: 'text', text: content }];
+    }
+    return content.map(part => {
+        if (part.type === 'text') return { type: 'text', text: part.text };
+        return { type: 'image', source: { type: 'base64', media_type: 'image/png', data: part.image_url.url.split(',')[1] || '' } };
+    });
+}
+
 async function messagesCall(
     config: ProviderConfig,
-    messages: { role: string; content: string }[],
-    options?: { maxTokens?: number; temperature?: number }
+    messages: ChatMessage[],
+    options?: ChatRequestOptions
 ): Promise<string> {
-    // Extract system message if present
     const systemMsg = messages.find(m => m.role === 'system');
     const nonSystemMsgs = messages.filter(m => m.role !== 'system');
 
     const body: any = {
         model: config.selectedModel,
-        max_tokens: options?.maxTokens || 4096,
-        messages: nonSystemMsgs.map(m => ({ role: m.role, content: m.content })),
+        max_tokens: options?.maxTokens ?? 4096,
+        messages: nonSystemMsgs.map(m => ({ role: m.role, content: toAnthropicContent(m.content) })),
     };
     if (systemMsg) {
-        body.system = systemMsg.content;
+        body.system = typeof systemMsg.content === 'string' ? systemMsg.content : (systemMsg.content as ContentPart[]).map(p => p.type === 'text' ? p.text : '').join('');
     }
     if (options?.temperature !== undefined) {
         body.temperature = options.temperature;
@@ -73,11 +151,10 @@ async function messagesCall(
             'anthropic-dangerous-direct-browser-access': 'true',
         },
         body: JSON.stringify(body),
+        signal: options?.signal,
     });
 
     if (!response.ok) {
-        const errorText = await response.text();
-        // Sanitize error message — don't leak raw API internals to the user
         const status = response.status;
         const friendlyMessage =
             status === 401 ? 'Invalid API key. Check your provider settings.' :
@@ -89,7 +166,6 @@ async function messagesCall(
     }
 
     const data = await response.json();
-    // Anthropic returns { content: [{ type: 'text', text: '...' }] }
     if (data.content && Array.isArray(data.content)) {
         return data.content
             .filter((block: any) => block.type === 'text')
@@ -101,17 +177,20 @@ async function messagesCall(
 
 // ─── Responses Format (OpenAI Responses API) ────────────────────────────────
 
+function toResponsesInput(messages: ChatMessage[]): any[] {
+    return messages.map(m => ({
+        role: m.role,
+        content: typeof m.content === 'string'
+            ? m.content
+            : (m.content as ContentPart[]).map(p => p.type === 'text' ? { type: 'input_text', text: p.text } : { type: 'input_image', image_url: p.image_url.url }),
+    }));
+}
+
 async function responsesCall(
     config: ProviderConfig,
-    messages: { role: string; content: string }[],
-    options?: { maxTokens?: number; temperature?: number }
+    messages: ChatMessage[],
+    options?: ChatRequestOptions
 ): Promise<string> {
-    // Convert messages to Responses API input format
-    const input = messages.map(m => ({
-        role: m.role,
-        content: m.content,
-    }));
-
     const url = `${config.baseUrl.replace(/\/$/, '')}/responses`;
     const response = await fetch(url, {
         method: 'POST',
@@ -121,19 +200,25 @@ async function responsesCall(
         },
         body: JSON.stringify({
             model: config.selectedModel,
-            input,
-            max_output_tokens: options?.maxTokens || 4096,
+            input: toResponsesInput(messages),
+            max_output_tokens: options?.maxTokens ?? 4096,
             temperature: options?.temperature ?? 0.7,
         }),
+        signal: options?.signal,
     });
 
     if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`Responses API error ${response.status}: ${errorText}`);
+        const status = response.status;
+        const friendlyMessage =
+            status === 401 ? 'Invalid API key. Check your provider settings.' :
+            status === 429 ? 'Rate limit reached. Please wait and try again.' :
+            status >= 500 ? `${config.name || 'Provider'} server error. Try again later.` :
+            `${config.name || 'Provider'} request failed (${status}).`;
+        throw new Error(friendlyMessage);
     }
 
     const data = await response.json();
-    // Responses API returns { output: [{ type: 'message', content: [{ type: 'output_text', text: '...' }] }] }
     if (data.output && Array.isArray(data.output)) {
         const texts: string[] = [];
         for (const item of data.output) {
@@ -147,25 +232,27 @@ async function responsesCall(
         }
         if (texts.length > 0) return texts.join('\n');
     }
-    // Fallback: try output_text directly
     if (data.output_text) return data.output_text;
     return JSON.stringify(data);
 }
 
-// ─── Universal Dispatcher ───────────────────────────────────────────────────
+// ─── Universal Dispatchers ──────────────────────────────────────────────────
+
+function assertHasKey(config: ProviderConfig): void {
+    if (!config.apiKey || config.apiKey.trim().length === 0) {
+        throw new Error(`No API key configured for ${config.name}`);
+    }
+}
 
 /**
  * Send a chat request to any provider, routing to the correct API format.
  */
 export async function sendChatRequest(
     config: ProviderConfig,
-    messages: { role: string; content: string }[],
-    options?: { maxTokens?: number; temperature?: number }
+    messages: ChatMessage[],
+    options?: ChatRequestOptions
 ): Promise<string> {
-    if (!config.apiKey || config.apiKey.trim().length === 0) {
-        throw new Error(`No API key configured for ${config.name}`);
-    }
-
+    assertHasKey(config);
     switch (config.apiFormat) {
         case 'chat_completions':
             return chatCompletionsCall(config, messages, options);
@@ -179,6 +266,26 @@ export async function sendChatRequest(
 }
 
 /**
+ * Stream a chat response from any provider as an async generator.
+ * Currently supports chat_completions (the dominant format). For messages/responses
+ * formats, falls back to non-streaming and yields the full result once.
+ */
+export async function* streamChatRequest(
+    config: ProviderConfig,
+    messages: ChatMessage[],
+    options?: ChatRequestOptions
+): AsyncGenerator<string, void, unknown> {
+    assertHasKey(config);
+    if (config.apiFormat === 'chat_completions') {
+        yield* chatCompletionsStream(config, messages, options);
+        return;
+    }
+    // Fallback for non-OpenAI-compat formats: fetch then yield once.
+    const full = await sendChatRequest(config, messages, options);
+    yield full;
+}
+
+/**
  * Quick single-turn response from a provider.
  */
 export async function getQuickResponse(
@@ -186,7 +293,7 @@ export async function getQuickResponse(
     prompt: string,
     systemPrompt?: string
 ): Promise<string> {
-    const messages: { role: string; content: string }[] = [];
+    const messages: ChatMessage[] = [];
     if (systemPrompt) {
         messages.push({ role: 'system', content: systemPrompt });
     }

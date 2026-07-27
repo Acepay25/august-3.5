@@ -1,7 +1,5 @@
 // Confidence Calibration - tracks actual outcomes per AI confidence level
 
-import { AIProvider } from './enums';
-
 /**
  * Individual calibration entry for time-decay calculations.
  * Each logged trade creates a new entry to enable recency weighting.
@@ -30,7 +28,7 @@ export interface GranularCalibrationEntry extends CalibrationEntry {
   pattern?: string;                 // e.g., "Family C", "Bull Flag"
   timeframe?: string;               // e.g., "1h", "4h"
   regime?: 'trending' | 'ranging' | 'volatile' | 'compression';
-  provider?: AIProvider;            // Which AI made this prediction
+  provider?: string;              // Which AI made this prediction (ProviderConfig id)
   session?: TradingSession;         // Trading session when trade was taken
 }
 

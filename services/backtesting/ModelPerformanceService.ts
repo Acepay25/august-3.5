@@ -50,7 +50,10 @@ export interface ModelPerformance {
 }
 
 /**
- * Dynamic weights for ensemble models
+ * Dynamic weights for ensemble models.
+ * The fixed legacy fields (gemini, deepseek, etc.) are kept for backward
+ * compatibility with consumers that read them; `byProvider` holds the full
+ * dynamic map keyed by provider id.
  */
 export interface DynamicWeights {
     gemini: number;      // 0-1
@@ -60,8 +63,9 @@ export interface DynamicWeights {
     groqNew: number;     // 0-1
     groqAlt2: number;    // 0-1
     totalWeight: number;
-    dominantModel: AIProvider | null;
+    dominantModel: string | null;
     confidence: 'high' | 'medium' | 'low';
+    byProvider?: Record<string, number>;
 }
 
 // =============================================================================
@@ -277,19 +281,25 @@ const initModelPerformance = (provider: AIProvider): ModelPerformance => ({
 });
 
 /**
- * All tracked model performances
+ * All tracked model performances, keyed by provider id (ProviderConfig.id).
+ * Dynamic — providers are user-configured, so entries are created on demand.
  */
-interface AllModelPerformances {
-    [AIProvider.GEMINI]: ModelPerformance;
-    [AIProvider.DEEPSEEK]: ModelPerformance;
-    [AIProvider.ZHIPU]: ModelPerformance;
-    [AIProvider.GROQ]: ModelPerformance;
-    [AIProvider.GROQ_NEW]: ModelPerformance;
-    [AIProvider.GROQ_ALT2]: ModelPerformance;
-    [AIProvider.OPENROUTER]: ModelPerformance;
-    [AIProvider.OPENAI]: ModelPerformance;
-    [AIProvider.GROK]: ModelPerformance;
-}
+type AllModelPerformances = Record<string, ModelPerformance>;
+
+/** Legacy built-in provider ids, for seeding default/empty data. */
+const KNOWN_PROVIDER_IDS = [
+    AIProvider.GEMINI, AIProvider.DEEPSEEK, AIProvider.ZHIPU, AIProvider.GROQ,
+    AIProvider.GROQ_NEW, AIProvider.GROQ_ALT2, AIProvider.OPENROUTER,
+    AIProvider.OPENAI, AIProvider.GROK,
+];
+
+/** Ensure a provider has a performance entry; create one if missing. */
+const ensureProviderEntry = (data: AllModelPerformances, provider: string): ModelPerformance => {
+    if (!data[provider]) {
+        data[provider] = initModelPerformance(provider);
+    }
+    return data[provider];
+};
 
 /**
  * Load performance data from localStorage
@@ -314,17 +324,10 @@ export const loadPerformanceData = (): AllModelPerformances => {
     }
 
     // Return default empty performances
-    const empty: AllModelPerformances = {
-        [AIProvider.GEMINI]: initModelPerformance(AIProvider.GEMINI),
-        [AIProvider.DEEPSEEK]: initModelPerformance(AIProvider.DEEPSEEK),
-        [AIProvider.ZHIPU]: initModelPerformance(AIProvider.ZHIPU),
-        [AIProvider.GROQ]: initModelPerformance(AIProvider.GROQ),
-        [AIProvider.GROQ_NEW]: initModelPerformance(AIProvider.GROQ_NEW),
-        [AIProvider.GROQ_ALT2]: initModelPerformance(AIProvider.GROQ_ALT2),
-        [AIProvider.OPENROUTER]: initModelPerformance(AIProvider.OPENROUTER),
-        [AIProvider.OPENAI]: initModelPerformance(AIProvider.OPENAI),
-        [AIProvider.GROK]: initModelPerformance(AIProvider.GROK)
-    };
+    const empty: AllModelPerformances = {};
+    for (const id of KNOWN_PROVIDER_IDS) {
+        empty[id] = initModelPerformance(id);
+    }
 
     _performanceCache = empty;
     return empty;
@@ -403,7 +406,7 @@ export const trackTradeOutcome = (
     confidence: string
 ): void => {
     const data = loadPerformanceData();
-    const modelData = data[provider];
+    const modelData = ensureProviderEntry(data, provider);
 
     // Update overall stats
     modelData.overallStats = updateStats(modelData.overallStats, isWin);
@@ -459,7 +462,7 @@ export const trackTradeOutcome = (
  */
 export const getModelPerformance = (provider: AIProvider): ModelPerformance => {
     const data = loadPerformanceData();
-    return data[provider];
+    return ensureProviderEntry(data, provider);
 };
 
 /**
@@ -491,7 +494,7 @@ export const calculateDynamicWeights = (
 
     // Calculate weight for each enabled provider
     for (const provider of enabledProviders) {
-        const modelData = data[provider];
+        const modelData = ensureProviderEntry(data, provider);
         let score = 50; // Base score
 
         // Add regime performance bonus (0-30 points)
@@ -628,7 +631,7 @@ export const generateWeightedVotingContext = (
     const providerStats: { provider: AIProvider; winRate: number; total: number; trend: string; coldStreak: number }[] = [];
 
     for (const provider of enabledProviders) {
-        const perf = data[provider];
+        const perf = ensureProviderEntry(data, provider);
         const rollingStats = getRollingWindowStats(provider);
         providerStats.push({
             provider,
@@ -701,11 +704,11 @@ ${rankingTable}
         const familyKey = mapFamilyToKey(currentFamily);
         if (familyKey) {
             const familyBest = providerStats.reduce((best, current) => {
-                const currentFamilyRate = data[current.provider].byFamily[familyKey]?.winRate || 0;
-                const bestFamilyRate = data[best.provider].byFamily[familyKey]?.winRate || 0;
+                const currentFamilyRate = ensureProviderEntry(data, current.provider).byFamily[familyKey]?.winRate || 0;
+                const bestFamilyRate = ensureProviderEntry(data, best.provider).byFamily[familyKey]?.winRate || 0;
                 return currentFamilyRate > bestFamilyRate ? current : best;
             });
-            const familyWinRate = data[familyBest.provider].byFamily[familyKey]?.winRate;
+            const familyWinRate = ensureProviderEntry(data, familyBest.provider).byFamily[familyKey]?.winRate;
             if (familyWinRate && familyWinRate > 0) {
                 context += `\n**${currentFamily.toUpperCase()} SPECIALIST:** ${familyBest.provider.toUpperCase()} has the highest win rate (${familyWinRate.toFixed(1)}%) for this pattern family.\n`;
             }
@@ -722,17 +725,10 @@ ${rankingTable}
  */
 export const syncFromTradeLog = (trades: LoggedTrade[]): void => {
     // Reset data
-    const data: AllModelPerformances = {
-        [AIProvider.GEMINI]: initModelPerformance(AIProvider.GEMINI),
-        [AIProvider.DEEPSEEK]: initModelPerformance(AIProvider.DEEPSEEK),
-        [AIProvider.ZHIPU]: initModelPerformance(AIProvider.ZHIPU),
-        [AIProvider.GROQ]: initModelPerformance(AIProvider.GROQ),
-        [AIProvider.GROQ_NEW]: initModelPerformance(AIProvider.GROQ_NEW),
-        [AIProvider.GROQ_ALT2]: initModelPerformance(AIProvider.GROQ_ALT2),
-        [AIProvider.OPENROUTER]: initModelPerformance(AIProvider.OPENROUTER),
-        [AIProvider.OPENAI]: initModelPerformance(AIProvider.OPENAI),
-        [AIProvider.GROK]: initModelPerformance(AIProvider.GROK)
-    };
+    const data: AllModelPerformances = {};
+    for (const id of KNOWN_PROVIDER_IDS) {
+        data[id] = initModelPerformance(id);
+    }
 
     // Process each trade
     for (const trade of trades) {
@@ -755,7 +751,7 @@ export const syncFromTradeLog = (trades: LoggedTrade[]): void => {
             if (trade.openrouterModelUsed) usedProviders.push(AIProvider.OPENROUTER);
 
             for (const provider of usedProviders) {
-                const modelData = data[provider];
+                const modelData = ensureProviderEntry(data, provider);
 
                 // Update overall
                 modelData.overallStats = updateStats(modelData.overallStats, isWin);
@@ -1068,7 +1064,7 @@ export const calculateDynamicWeightsEnhanced = (
     const minTradesRequired = 3;
 
     for (const provider of enabledProviders) {
-        const allTimeStats = allTimeData[provider];
+        const allTimeStats = ensureProviderEntry(allTimeData, provider);
         const rollingStats = getRollingWindowStats(provider);
         const expertise = getSituationalExpertise(provider);
 
@@ -1201,7 +1197,7 @@ export const syncRollingWindowFromTradeLog = (trades: LoggedTrade[]): void => {
     }
 
     // Trim to rolling window size per provider
-    const providers = Object.values(AIProvider);
+    const providers = new Set(data.entries.map(e => e.provider));
     for (const provider of providers) {
         const providerEntries = data.entries
             .filter(e => e.provider === provider)
@@ -1779,11 +1775,13 @@ export const getProviderInsightScore = (provider: AIProvider): { avgScore: numbe
 /**
  * Get all provider insight scores for comparison
  */
-export const getAllProviderInsightScores = (): Record<AIProvider, { avgScore: number; count: number }> => {
+export const getAllProviderInsightScores = (): Record<string, { avgScore: number; count: number }> => {
     const data = loadPostMortemInsightData();
-    const result: Record<AIProvider, { avgScore: number; count: number }> = {} as any;
+    const result: Record<string, { avgScore: number; count: number }> = {};
 
-    for (const provider of Object.values(AIProvider)) {
+    // Include all known legacy provider ids plus any tracked providers.
+    const allIds = new Set<string>([...KNOWN_PROVIDER_IDS, ...Object.keys(data.providers)]);
+    for (const provider of allIds) {
         result[provider] = getProviderInsightScore(provider);
     }
 
@@ -1828,7 +1826,7 @@ export const calculateDynamicWeightsWithAllImprovements = (
     const minTradesRequired = 3;
 
     for (const provider of enabledProviders) {
-        const allTimeStats = allTimeData[provider];
+        const allTimeStats = ensureProviderEntry(allTimeData, provider);
         const recencyStats = getRecencyWeightedWinRate(provider);
         const adaptiveStats = getRollingWindowStatsAdaptive(provider);
         const expertise = getSituationalExpertise(provider);

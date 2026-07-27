@@ -1,223 +1,96 @@
+/**
+ * GenericAnalysisService — Consolidated analysis service parameterized by ProviderConfig.
+ *
+ * Replaces the 9 per-provider main services + 9 accuracy services. All AI calls
+ * route through GenericProviderService (no per-provider clients, no process.env keys).
+ *
+ * `analyzeTradingView` unifies the standard-mode and accuracy-mode prompt paths:
+ * - subMode === undefined        → Standard mode (full MASTER_ANALYSIS_PROMPT + formatting)
+ * - subMode === 'pure_ai'        → Pure AI mode (PURE_AI_MODE_PROMPT)
+ * - other accuracy subModes      → Accuracy mode (ACCURACY_MODE_PROMPT + MASTER_ANALYSIS_PROMPT)
+ */
 
-// ... existing imports ...
-import OpenAI from "openai";
-import { ChatCompletionMessageParam } from "openai/resources/chat/completions";
-import { Message, TradeOutcome, GroundingChunk, MessageRole, LoggedTrade, StrategySearchResult, TradeAnalysis, TradeSummary, GlobalMemory, AccuracySubMode } from '../../types';
-import { robustJsonParse, extractAndParseJson } from '../../utils/jsonUtils';
+import { ProviderConfig } from '../../types/provider';
+import { Message, GroundingChunk, TradeAnalysis, GlobalMemory, AccuracySubMode, TradeOutcome, LoggedTrade, StrategySearchResult, TradeSummary, MessageRole } from '../../types';
+import { extractAndParseJson } from '../../utils/jsonUtils';
 import { sanitizeAIResponse, sanitizeJSONString } from '../../utils/sanitizers';
-import { truncateTextToTokens, sanitizeTradeAnalysis } from '../../utils/analysisUtils';
-import { truncateToTokenLimit } from '../../utils/tokenUtils';
-import { MASTER_ANALYSIS_PROMPT, DEVILS_ADVOCATE_PROMPT, INVALIDATION_THESIS_PROMPT, CORRELATION_AWARENESS_PROMPT, LENS_MODE_BASE_PROMPT, COMPACT_ANALYSIS_PROMPT, MEMORY_COMPRESSOR_PROMPT, GLOBAL_MEMORY_MANAGER_PROMPT, AI_PROVIDER_MEMORY_ENFORCEMENT_PROMPT } from '../../constants/prompts';
+import { sanitizeTradeAnalysis, truncateTextToTokens } from '../../utils/analysisUtils';
+import {
+    MASTER_ANALYSIS_PROMPT, DEVILS_ADVOCATE_PROMPT, INVALIDATION_THESIS_PROMPT, CORRELATION_AWARENESS_PROMPT,
+    LENS_MODE_BASE_PROMPT, COMPACT_ANALYSIS_PROMPT, ACCURACY_MODE_PROMPT, PURE_AI_MODE_PROMPT,
+    RISK_MANAGEMENT_RULES, TRADING_FAMILIES_PROMPT, AI_PROVIDER_MEMORY_ENFORCEMENT_PROMPT,
+} from '../../constants/prompts';
 import { constructOptimizedContext } from '../../utils/memoryUtils';
 import { parseLiveMarketData } from '../../utils/liveMarketParser';
-import { withRetry, ProviderName } from '../../utils/apiErrorUtils';
-import { getGroqKeyPool } from './GroqKeyPool';
+import {
+    sendChatRequest, ChatMessage, ContentPart, ChatRequestOptions,
+} from './GenericProviderService';
 
-const PROVIDER: ProviderName = 'Groq';
+// ─── Helpers ────────────────────────────────────────────────────────────────
 
-const GROQ_BASE_URL = 'https://api.groq.com/openai/v1/';
+const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+});
 
-const getClient = (): OpenAI => {
-    // Use the key pool for automatic rotation across all Groq keys on rate limits
-    const pool = getGroqKeyPool();
-    if (pool.hasKeys) {
-        return pool.getClient();
-    }
-    // Fallback to single key if pool is empty
-    const GROQ_API_KEY = process.env.GROQ_API_KEY;
-    if (!GROQ_API_KEY) throw new Error("GROQ_API_KEY is not set in environment");
+/** Heuristic: does this model accept vision/image inputs? */
+function isVisionModel(modelId: string): boolean {
+    const m = modelId.toLowerCase();
+    return m.includes('llama-4')
+        || m.includes('vision')
+        || m.includes('gpt-4o')
+        || m.includes('gpt-4.1')
+        || m.includes('gpt-5')
+        || m.includes('glm-4.5v')
+        || m.includes('glm-4.6v')
+        || m.includes('gemini');
+}
 
-    return new OpenAI({
-        baseURL: GROQ_BASE_URL,
-        apiKey: GROQ_API_KEY,
-        dangerouslyAllowBrowser: true,
-    });
-};
+/** Small-context models need aggressively truncated prompts. */
+function isSmallContextModel(modelId: string): boolean {
+    const m = modelId.toLowerCase();
+    return m.includes('kimi') || m.includes('gpt-oss-20b') || m.includes('mistral-7b');
+}
 
-// Helper to get max tokens based on model - GPT-OSS 120B has a 7900 token limit
-const getMaxTokens = (modelName: string, defaultTokens: number): number => {
-    if (modelName.includes('gpt-oss-120b')) {
-        return Math.min(defaultTokens, 7800);
-    }
-    return defaultTokens;
-};
+// ─── analyzeTradingView ─────────────────────────────────────────────────────
 
+export interface AnalyzeTradingViewParams {
+    prompt: string;
+    images: File[];
+    imageSummaries: string[];
+    chatHistory: Message[];
+    finalTradeSummary: string | null;       // Pattern Memory (synthesis)
+    recentInsights: string | null;          // Recent Insights (individual)
+    activeFrameworks: string[];
+    deepenAnalysis: boolean;
+    globalMemory?: GlobalMemory;
+    threadSummary?: string;
+    subMode?: AccuracySubMode;
+    customInstructions?: string;
+    isPlaybookEnabledInPureAI?: boolean;
+    isFamiliesEnabledInPureAI?: boolean;
+    isMemoryEnabledInPureAI?: boolean;
+    rolePrompt?: string;                    // Analyst Lens: specialized role prompt
+    signal?: AbortSignal;
+}
 
-const fileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-    });
-};
+export async function analyzeTradingView(
+    config: ProviderConfig,
+    params: AnalyzeTradingViewParams
+): Promise<{ analysis: TradeAnalysis; thoughtProcess: string; sources: GroundingChunk[] }> {
+    const {
+        prompt, images, imageSummaries, chatHistory, finalTradeSummary, recentInsights,
+        activeFrameworks, globalMemory, threadSummary, subMode, customInstructions,
+        isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI,
+        rolePrompt, signal,
+    } = params;
 
-export const summarizeChartImage = async (image: File, chartNumber: number, modelName: string, signal?: AbortSignal): Promise<{ uiSummary: string; fullSummary: string }> => {
-    try {
-        const groq = getClient();
-        const base64Image = await fileToBase64(image);
-
-        const prompt = `You are a state-of-the-art Computer Vision & OCR engine for financial markets.
-        **MODE: ENHANCED VISION STRUCTURING ENABLED**
-        Your task is to analyze Chart ${chartNumber}, discard irrelevant OCR noise, and produce a highly structured data report.
-
-        **STRICT OUTPUT FORMAT:**
-
-        1. Chart Metadata
-        Timeframe: [Value]
-        Asset: [Value]
-        Exchange: [Value]
-        Chart Type: [Value]
-
-        2. Price & Trend
-        Current Price: [Value]
-        24h High: [Value]
-        24h Low: [Value]
-        Trend Summary: [Value]
-
-        3. Indicators
-        Moving Averages
-        MA5: [Value]
-        MA10: [Value]
-        MA20: [Value]
-        MA30: [Value]
-        MA60: [Value]
-        MA200: [Value]
-
-        EMA
-        EMA5: [Value]
-        EMA13: [Value]
-        EMA20: [Value]
-        EMA200: [Value]
-
-        Bollinger Bands
-        BOLL Middle: [Value]
-        BOLL Upper: [Value]
-        BOLL Lower: [Value]
-
-        Volume
-        Volume: [Value]
-        Volume Trend: [Value]
-
-        RSI
-        RSI1: [Value]
-        RSI2: [Value]
-        RSI3: [Value]
-
-        MACD
-        MACD DIF: [Value]
-        MACD DEA: [Value]
-        MACD Histogram: [Value]
-
-        Stochastic
-        Stoch K: [Value]
-        Stoch D: [Value]
-        Stoch J: [Value]
-
-        4. Market Structure
-        Immediate Resistance: [Value]
-        Immediate Support: [Value]
-        Strong Support Zones: [Value]
-        Trend Context: [Value]
-
-        5. Candle Pattern Recognition
-        Latest Candle: [Value] (e.g., Doji, Hammer, Marubozu)
-        Pattern Detected: [Value] (e.g., Bullish Engulfing, Morning Star, None)
-        Candle Position: [Value] (e.g., At Support, In Consolidation)
-        Remaining Time: [Value]
-
-        6. Chart Narrative
-        Narrative: [A 2-3 sentence description of what is happening in the chart. Describe the current price action, trend behavior, and any notable patterns or formations visible. Example: "Price is consolidating near resistance after a strong bullish move. The last 3 candles show indecision with small bodies and long wicks, suggesting a potential reversal or breakout."]
-
-        **INSTRUCTIONS:**
-        - Extract exact numbers where visible.
-        - Look specifically for the specific candlestick shape of the last 1-3 candles.
-        - If a field is not visible or applicable, write "N/A".
-        - Do not mix sections.
-        - Keep descriptions concise.
-        `;
-
-        const completion = await withRetry(
-            () => groq.chat.completions.create({
-                model: modelName,
-                messages: [{
-                    role: 'user',
-                    content: [
-                        { type: 'text', text: prompt },
-                        { type: 'image_url', image_url: { url: `data:${image.type};base64,${base64Image}` } }
-                    ]
-                }],
-                max_tokens: getMaxTokens(modelName, 1024),
-            }, { signal }),
-            PROVIDER,
-            4,
-            signal
-        );
-
-        const fullSummary = completion.choices[0].message.content?.trim() || `Analysis failed for Chart ${chartNumber}.`;
-
-        const timeframeMatch = fullSummary.match(/Timeframe:\s*(.*?)(?:\n|$)/i);
-        const priceMatch = fullSummary.match(/(?:Current )?Price:\s*(.*?)(?:\n|$)/i);
-        const patternMatch = fullSummary.match(/Pattern Detected:\s*(.*?)(?:\n|$)/i);
-
-        const timeframe = timeframeMatch ? timeframeMatch[1].trim().replace(/['"]/g, '') : 'N/A';
-        let price = priceMatch ? priceMatch[1].trim().replace(/['"]/g, '') : 'N/A';
-        let pattern = patternMatch ? patternMatch[1].trim().replace(/['"]/g, '') : '';
-
-        if (price !== 'N/A') {
-            const numericPrice = price.replace(/[^0-9.]/g, '');
-            if (numericPrice) {
-                price = `₮${numericPrice}`;
-            } else {
-                price = 'N/A';
-            }
-        }
-
-        if (pattern === 'N/A' || pattern === 'None') pattern = '';
-
-        // Explicitly format: Chart X | Timeframe | Price | Pattern
-        let uiSummary = `Chart ${chartNumber} | ${timeframe} | ${price}`;
-        if (pattern) {
-            uiSummary += ` | ${pattern}`;
-        }
-
-        return { uiSummary, fullSummary };
-    } catch (error) {
-        console.error("Error in Groq (Alt) summarizeChartImage:", error);
-        return {
-            uiSummary: `Chart ${chartNumber} | Error | N/A`,
-            fullSummary: `Chart ${chartNumber} Vision Analysis Failed: ${(error as Error).message}`
-        };
-    }
-};
-
-export const analyzeTradingView = async (
-    prompt: string,
-    images: File[],
-    imageSummaries: string[],
-    chatHistory: Message[],
-    finalTradeSummary: string | null,
-    recentInsights: string | null, // New param for distinct Recent Insights
-    modelName: string,
-    activeFrameworks: string[],
-    deepenAnalysis: boolean,
-    globalMemory?: GlobalMemory,
-    threadSummary?: string,
-    subMode?: AccuracySubMode, // Ignored in standard service
-    customInstructions?: string, // New Param
-    isPlaybookEnabledInPureAI?: boolean, // Ignored in standard service
-    isFamiliesEnabledInPureAI?: boolean, // Ignored in standard service
-    isMemoryEnabledInPureAI?: boolean, // Ignored in standard service
-    rolePrompt?: string, // Analyst Lens: specialized role prompt prefix
-    signal?: AbortSignal
-): Promise<{ analysis: TradeAnalysis; thoughtProcess: string; sources: GroundingChunk[] }> => {
-    const isVisionModel = modelName.includes('llama-4');
-    if (!isVisionModel && images.length > 0) {
-        console.warn(`Groq (Alt) model ${modelName} is not vision-capable, but images were provided. Analyzing based on text summaries only.`);
-    }
-
-    const groq = getClient();
+    const modelName = config.selectedModel;
     const hasImages = images.length > 0;
+    const isAccuracyMode = subMode !== undefined && subMode !== 'original';
+    const isPureAiMode = subMode === 'pure_ai';
 
     // --- LIVE MARKET DATA PARSING & INJECTION ---
     const parsedMarketData = parseLiveMarketData(prompt);
@@ -226,62 +99,110 @@ export const analyzeTradingView = async (
         marketDataOverride = `
     **VERIFIED LIVE MARKET TELEMETRY (HIGHEST PRIORITY):**
     Use this exact data for your analysis and JSON output. Do NOT output "N/A" for these fields.
-    
+
     - **Prices:** ${JSON.stringify(parsedMarketData.prices)}
     - **Detected Patterns:** ${JSON.stringify(parsedMarketData.patterns)}
     - **Key Zones:** ${JSON.stringify(parsedMarketData.keyZones)}
-    
+
     **MANDATORY:** You MUST populate the 'detectedPatterns', 'keyLevels', and 'marketConditions.prices' fields in your JSON response with this data.
         `;
     }
-    // --------------------------------------------
 
-    // Truncate memory context to prevent overflow
-    // MODEL LIMITS: Kimi ~10k, GPT ~8k. System prompt uses ~5k. Budget ~3k for all context.
-    const rawMemoryContext = constructOptimizedContext(chatHistory, threadSummary, globalMemory);
-    const memoryContext = truncateTextToTokens(rawMemoryContext, 800);
-
-    // CRITICAL: Inject Pattern Memory (Synthesis) - Truncate to 600 tokens
-    const rawPatternMemory = finalTradeSummary
-        ? `\n\n**📊 PATTERN MEMORY (SYNTHESIS) - MANDATORY REFERENCE:**\nThe following is a synthesis of your recent trading performance and patterns. You MUST reference this data for Section 4 (Pattern Matching):\n${finalTradeSummary}\n`
-        : "\n\n**📊 PATTERN MEMORY:** No synthesis available yet.\n";
-    const patternMemoryContext = truncateTextToTokens(rawPatternMemory, 600);
-
-    // CRITICAL: Inject Recent Insights (Individual Trades) - Truncate to 600 tokens
-    const rawRecentInsights = recentInsights
-        ? `\n\n**📊 RECENT INSIGHTS (INDIVIDUAL) - MANDATORY REFERENCE:**\nThe following are specific recent trades for detailed comparison:\n${recentInsights}\n`
-        : "\n\n**📊 RECENT INSIGHTS:** No recent trade insights available.\n";
-    const recentInsightsContext = truncateTextToTokens(rawRecentInsights, 600);
+    const memoryToUse = (isPureAiMode && !isMemoryEnabledInPureAI) ? undefined : globalMemory;
+    const memoryContext = isAccuracyMode
+        ? constructOptimizedContext(chatHistory, threadSummary, memoryToUse)
+        : truncateTextToTokens(constructOptimizedContext(chatHistory, threadSummary, globalMemory), 800);
 
     const frameworksList = activeFrameworks.map((fw, index) => `${index + 1}. **${fw}**`).join('\n');
+    const imageSummaryContext = imageSummaries.length > 0
+        ? `**PRE-PROCESSED VISION ANALYSIS**...\n${imageSummaries.join('\n\n---\n\n')}`
+        : "No chart data provided.";
 
-    // Truncate image summaries to 800 tokens
-    const rawImageSummaries = imageSummaries.length > 0 ? `**PRE-PROCESSED VISION ANALYSIS**...\n${imageSummaries.join('\n\n---\n\n')}` : "No chart data provided.";
-    const imageSummaryContext = truncateTextToTokens(rawImageSummaries, 800);
+    const userOverride = customInstructions
+        ? `\n\n**USER BEHAVIOR OVERRIDE:**\nThe user has provided specific instructions for how you must respond, calculate, and reason. These instructions take precedence over default tone/style settings:\n"${customInstructions}"\n`
+        : "";
 
-    // Enhanced Vision Instruction
     const visionDeepDive = hasImages
         ? `**ENHANCED VISION ANALYTICS PROTOCOL:**
-           - You have direct access to the high-fidelity chart images. 
+           - You have direct access to the high-fidelity chart images.
            - **OCR & TEXT:** Perform a pixel-perfect scan to read all text labels, indicator settings (e.g. RSI 14), timestamps, and price axes.
            - **MICRO-STRUCTURE:** Extract PRECISE price levels, wick behaviors, and hidden liquidity pools from the visual data.
            - **CONTEXT:** If this is a trading terminal screenshot, extract any visible PnL, leverage, or account data.
            - Visually confirm the "Market Classification Family" based on candle structure.`
         : '';
 
-    const userOverride = customInstructions
-        ? `\n\n**USER BEHAVIOR OVERRIDE:**\nThe user has provided specific instructions for how you must respond, calculate, and reason. These instructions take precedence over default tone/style settings:\n"${customInstructions}"\n`
-        : "";
+    // --- BUILD SYSTEM PROMPT ---
+    let systemPrompt: string;
 
-    // Use LENS_MODE_BASE_PROMPT when rolePrompt is active, otherwise use full MASTER_ANALYSIS_PROMPT
-    const basePrompt = rolePrompt ? LENS_MODE_BASE_PROMPT : MASTER_ANALYSIS_PROMPT;
+    if (isPureAiMode) {
+        const playbookContext = isPlaybookEnabledInPureAI
+            ? `**PLAYBOOK REFERENCE (ENABLED BY USER):**\nAlthough this is Pure AI Mode, the user has enabled access to the following frameworks as a reference:\n${frameworksList}\nYou may use these if they align with your reasoning.`
+            : "";
+        const familiesContext = isFamiliesEnabledInPureAI
+            ? `**MARKET CLASSIFICATION FAMILIES (ENABLED BY USER):**\nAlthough this is Pure AI Mode, the user has explicitly requested that you classify the setup into one of the following Families:\n${TRADING_FAMILIES_PROMPT}\nYou MUST assign a 'detectedPatternFamily' (Family A, B, C, or Omega) based on your reasoning.`
+            : "";
+        const memoryContextPrompt = isMemoryEnabledInPureAI
+            ? `\n\n**PATTERN MEMORY REFERENCE (ENABLED BY USER):**\nAlthough this is Pure AI Mode, the user has enabled access to your historical Pattern Memory. You may use this as a reference to identify recurring patterns from the user's past trades.\n`
+            : "";
 
-    const systemPrompt = `${rolePrompt ? '🎭 **SPECIALIZED ANALYST ROLE ACTIVE**\n\n' + rolePrompt + '\n\n---\n\n' : ''}${basePrompt}
+        systemPrompt = `${PURE_AI_MODE_PROMPT}
+
+      ${visionDeepDive}
+
+      ${userOverride}
+
+      ${marketDataOverride}
+
+      ${playbookContext}
+
+      ${familiesContext}
+
+      ${memoryContextPrompt}
+
+      ${RISK_MANAGEMENT_RULES}
+
+      **SYNTHESIS & OUTPUT:**
+      Your entire response MUST be a single, valid JSON object with two keys: "thoughtProcess" and "analysis".
+      Adhere strictly to the provided JSON structure.
+      - Put the full text output into the "thoughtProcess" field.
+      - Extract the trade details into the "analysis" field.
+    `;
+    } else if (isAccuracyMode) {
+        systemPrompt = `${ACCURACY_MODE_PROMPT}
+
+      ${MASTER_ANALYSIS_PROMPT}
+
+      ${visionDeepDive}
+
+      ${userOverride}
+
+      ${marketDataOverride}
+
+      **CONTEXTUAL DATA:**
+      **PLAYBOOK: CORE TRADING FRAMEWORKS**
+      ${frameworksList}
+
+      **CRITICAL: PATTERN MEMORY INTEGRATION (SECTION 4):**
+      Use the **PATTERN MEMORY** and **RECENT INSIGHTS** provided below for user-specific patterns. Do NOT use Layer 3 Global Memory for past trade references.
+
+      ${RISK_MANAGEMENT_RULES}
+
+      **SYNTHESIS & OUTPUT:**
+      Your entire response MUST be a single, valid JSON object with two keys: "thoughtProcess" and "analysis".
+      Adhere strictly to the provided JSON structure.
+      - Put the full text output (Sections 1-8) into the "thoughtProcess" field.
+      - Extract the trade details into the "analysis" field based on Section 7.
+    `;
+    } else {
+        // Standard mode — full master prompt with formatting rules and lens support.
+        const basePrompt = rolePrompt ? LENS_MODE_BASE_PROMPT : MASTER_ANALYSIS_PROMPT;
+
+        systemPrompt = `${rolePrompt ? '🎭 **SPECIALIZED ANALYST ROLE ACTIVE**\n\n' + rolePrompt + '\n\n---\n\n' : ''}${basePrompt}
 
       ${rolePrompt ? '' : visionDeepDive}
 
       ${rolePrompt ? '' : DEVILS_ADVOCATE_PROMPT}
-      
+
       ${rolePrompt ? '' : INVALIDATION_THESIS_PROMPT}
 
       ${rolePrompt ? '' : CORRELATION_AWARENESS_PROMPT}
@@ -298,19 +219,11 @@ export const analyzeTradingView = async (
 
       **ANALYTICAL PROCESS OVERRIDE:**
       You must perform the analysis exactly as defined in the MASTER PROMPT sections 1-8.
-      
+
       **CRITICAL: PATTERN MEMORY INTEGRATION (SECTION 4):**
       Use the **PATTERN MEMORY** and **RECENT INSIGHTS** provided below as your source of truth for user-specific patterns and corrections. Do NOT use Layer 3 Global Memory for past trade references.
 
-      ${patternMemoryContext}
-      ${recentInsightsContext}
-
-      **MANDATORY RULE: RISK/REWARD & STOP-LOSS PERCENTAGE VALIDATION**
-      1. **Minimum R:R Requirement:** The potential win must be at least 1.2x larger than the potential loss (Ratio >= 1:1.2).
-      2. **Conditional Logic:** If the current setup yields an R:R < 1.2, you must mark the trade as **CONDITIONAL**. Set \`confidence\` to 'Avoid' (or 'Low') and explicitly explain in the \`strategy\` field that a better entry price is required to satisfy the 1:1.2 Risk/Reward rule.
-      3. If R:R >= 1.2, proceed. Calculate profit percentages for each Take Profit target.
-      4. Calculate and include the stop loss percentage in the \`stopLossPercentage\` field.
-      5. Extract the Coin Name (e.g. BTCUSDT, ETH, SOL) from the analysis.
+      ${RISK_MANAGEMENT_RULES}
 
       **SYNTHESIS & OUTPUT (STRICT JSON):**
 
@@ -318,7 +231,7 @@ export const analyzeTradingView = async (
 
       ────────────────────────────────────────
       SECTION 1 — MULTI-TIMEFRAME STRUCTURE
-      
+
       5m Bias:
       Trend: [Bullish/Bearish]
       Market Structure: [HH/HL or LL/LH]
@@ -326,54 +239,54 @@ export const analyzeTradingView = async (
       Momentum: RSI [value] ([status]). MACD [status].
       EMA alignment: [Bullish/Bearish/Mixed]
       Volume behavior: [High/Normal/Low] volume.
-      
+
       15m Bias (Code-Calculated):
       [Same format as 5m]
-      
+
       1h Bias (Code-Calculated):
       [Same format]
-      
+
       4h Bias (Code-Calculated):
       [Same format]
-      
+
       Summary Bias: [Bullish/Bearish/Neutral]
-      
+
       ────────────────────────────────────────
       SECTION 2 — PRICE ACTION TYPE
-      
+
       Classification: [Continuation/Reversal/Compression/Breakout]
       Explanation: [2-3 sentences]
-      
+
       ────────────────────────────────────────
       SECTION 3 — FAMILY CLASSIFICATION SYSTEM
-      
+
       Classification: FAMILY [A/B/C/Omega] — [Nickname]
       Reasoning: [Explain why this family based on indicators]
-      
+
       ────────────────────────────────────────
       SECTION 4 — PATTERN MATCHING USING TRADE LOG
-      
+
       [List similar trades or "No direct similarity found in trade log."]
-      
+
       ────────────────────────────────────────
       SECTION 5 — CONTINUATION vs COUNTERTREND BIAS FRAMEWORK
-      
+
       Continuation Probability % ([Direction]): [X]%
       Countertrend Probability % ([Direction]): [Y]%
       Dominant Bias: [Continuation/Countertrend] ([Direction])
       Exact signals that produce these probabilities: [List signals]
       What must happen to flip the bias: [Specific conditions]
-      
+
       ────────────────────────────────────────
       SECTION 6 — ADAPTIVE PROBABILITY MODEL
-      
+
       Long Probability %: [X]%
       Short Probability %: [Y]%
       Confidence Weight (0.0–1.0): [Value]
       Detected Pattern Family: Family [A/B/C/Omega]
       Detected Phase: [1-5] ([Phase name])
       Explanation: [Why these probabilities]
-      
+
       ────────────────────────────────────────
       SECTION 7 — NUMERIC CHART ANALYSIS (MANDATORY)
 
@@ -383,10 +296,10 @@ export const analyzeTradingView = async (
       Wick Bias: [Bullish/Bearish]
       Volume Trend: [Rising/Falling]
       State Shift: [Trend_Change/Momentum_Loss/None]
-      
+
       ────────────────────────────────────────
       SECTION 8 — FULL TRADE SETUP (MANDATORY)
-      
+
       Direction: [Long/Short]
       Market Classification Family: [A/B/C/Omega]
       Entry Zone: [Price range]
@@ -398,41 +311,41 @@ export const analyzeTradingView = async (
       Stop Loss Percentage: [X]%
       Invalidation conditions: [Specific conditions]
       Re-entry conditions: [If applicable]
-      
+
       😈 DEVIL'S ADVOCATE ANALYSIS (MANDATORY)
-      
+
       BEAR CASE / BULL CASE AGAINST THIS TRADE:
       1. Technical reason: [Why this could fail]
       2. Volume/Momentum concern: [Volume or momentum issue]
       3. Market structure risk: [Structure-based risk]
-      
+
       FAILURE SCENARIOS:
       1. Scenario A: [Specific failure scenario]
       2. Scenario B: [Another failure scenario]
-      
+
       CROWDED TRADE CHECK:
       Funding Rate: [X]% - [Neutral/Elevated/Extreme]
       Long/Short Ratio: [X] - [Balanced/Crowded]
       Recent liquidation data: $[X]M ([High/Medium/Low] pressure)
-      
+
       DEVIL'S RISK SCORE: [X]/100
-      
+
       🚫 TRADE INVALIDATION THESIS (MANDATORY)
-      
+
       1. Critical Invalidation Level: This trade is INVALID if price closes [above/below] $[X] on the [timeframe] chart.
       2. Time Invalidation: If entry is not triggered within [X] hours, re-evaluate the thesis.
       3. Structure Invalidation: Invalidated by: [Specific structure condition]
       4. Counter-Signal Watch: Would flip to [Long/Short] if: [Condition]
       5. Early Exit Triggers: Consider early exit if: [Condition]
-      
+
       📊 CORRELATION & MACRO AWARENESS
-      
+
       BTC CORRELATION CHECK: [Analysis of BTC impact]
       MACRO CONSIDERATIONS: [Weekend/events/volatility factors]
-      
+
       ────────────────────────────────────────
       `}
-      
+
       Your entire response MUST be a single, valid JSON object with two keys: "thoughtProcess" and "analysis".
       **Output ONLY valid JSON. Do not wrap it in markdown (\`\`\`json). Do not include any preamble or postscript.**
 
@@ -440,23 +353,23 @@ export const analyzeTradingView = async (
       {
         "thoughtProcess": "Your detailed thought process string goes here (Sections 1-8 with separators)...",
         "analysis": {
-            "coinName": "BTCUSDT", 
-            "direction": "Long", 
-            "confidence": "High", 
-            "probability": 79, 
-            "strategy": "...", 
-            "activeStrategies": ["..."], 
-            "entryPoints": [{"description": "...", "price": "..."}], 
-            "stopLoss": "...", 
-            "stopLossPercentage": "...", 
-            "takeProfit": [{"price": "...", "percentage": "..."}], 
-            "historicalCorrelation": "...", 
-            "marketConditions": { 
-                "pattern": "...", 
-                "candleBehavior": "...", 
-                "timeframeAlignment": "...", 
-                "rsi": "...", 
-                "macd": "...", 
+            "coinName": "BTCUSDT",
+            "direction": "Long",
+            "confidence": "High",
+            "probability": 79,
+            "strategy": "...",
+            "activeStrategies": ["..."],
+            "entryPoints": [{"description": "...", "price": "..."}],
+            "stopLoss": "...",
+            "stopLossPercentage": "...",
+            "takeProfit": [{"price": "...", "percentage": "..."}],
+            "historicalCorrelation": "...",
+            "marketConditions": {
+                "pattern": "...",
+                "candleBehavior": "...",
+                "timeframeAlignment": "...",
+                "rsi": "...",
+                "macd": "...",
                 "sentiment": "...",
                 "prices": { "5m": "...", "15m": "...", "1h": "...", "4h": "..." }
             },
@@ -466,90 +379,64 @@ export const analyzeTradingView = async (
         }
       }
     `;
+    }
 
+    // --- BUILD USER PROMPT ---
     const isLiveMarketData = prompt.includes("**LIVE MARKET DATA**");
     const isHybridIntelligenceData = prompt.includes("HYBRID INTELLIGENCE") || prompt.includes("VERIFIED MARKET DATA");
     const formattedPrompt = (isLiveMarketData || isHybridIntelligenceData)
         ? `User's request:\n${prompt}\n\n`
         : `User's request: "${prompt}"\n\n`;
 
-    const userPromptText = `${formattedPrompt}${imageSummaryContext}\n\n${patternMemoryContext}\n\n${recentInsightsContext}\n\n${memoryContext}\n\nOUTPUT VALID JSON ONLY.`;
-
-    // --- SMALL MODEL DETECTION & COMPACT PROMPT SELECTION ---
-    const lowerModel = modelName.toLowerCase();
-    const isSmallContextModel = lowerModel.includes('kimi') || lowerModel.includes('gpt');
-
-    // For small-context models: use MINIMAL content to stay under 8-10k limits
-    // System prompt (~500) + User prompt (~2000) + Response buffer (~2000) = ~4500 tokens max
-    let effectiveSystemPrompt: string;
-    let effectiveUserPrompt: string;
-
-    if (isSmallContextModel) {
-        // Minimal system prompt for extremely small context models
-        effectiveSystemPrompt = COMPACT_ANALYSIS_PROMPT;
-
-        // Minimal user prompt - strictly truncated
-        const minimalPattern = patternMemoryContext.length > 500
-            ? patternMemoryContext.substring(0, 500) + '...[truncated]'
-            : patternMemoryContext;
-        const minimalInsights = recentInsightsContext.length > 300
-            ? recentInsightsContext.substring(0, 300) + '...[truncated]'
-            : recentInsightsContext;
-        const minimalImages = imageSummaryContext.length > 600
-            ? imageSummaryContext.substring(0, 600) + '...[truncated]'
-            : imageSummaryContext;
-
-        effectiveUserPrompt = `${formattedPrompt}\n\n${marketDataOverride}\n\n${minimalImages}\n\n${minimalPattern}\n\n${minimalInsights}\n\nOUTPUT VALID JSON ONLY.`;
+    // Standard mode uses pattern memory + recent insights blocks; accuracy mode relies on global memory context.
+    let userPromptText: string;
+    if (isAccuracyMode) {
+        userPromptText = `${formattedPrompt}${imageSummaryContext}\n\n${memoryContext}\n\nOUTPUT VALID JSON ONLY.`;
     } else {
-        // GROQ TPM OPTIMIZATION: Keep FULL master prompt (system) but TRUNCATE user input
-        // This preserves output quality while reducing token consumption to avoid TPM limits
-        effectiveSystemPrompt = systemPrompt; // Full master prompt preserved
+        const patternMemoryContext = finalTradeSummary
+            ? truncateTextToTokens(`\n\n**📊 PATTERN MEMORY (SYNTHESIS) - MANDATORY REFERENCE:**\nThe following is a synthesis of your recent trading performance and patterns. You MUST reference this data for Section 4 (Pattern Matching):\n${finalTradeSummary}\n`, 600)
+            : "\n\n**📊 PATTERN MEMORY:** No synthesis available yet.\n";
+        const recentInsightsContext = recentInsights
+            ? truncateTextToTokens(`\n\n**📊 RECENT INSIGHTS (INDIVIDUAL) - MANDATORY REFERENCE:**\nThe following are specific recent trades for detailed comparison:\n${recentInsights}\n`, 600)
+            : "\n\n**📊 RECENT INSIGHTS:** No recent trade insights available.\n";
 
-        // Truncated user content for TPM management
-        const truncatedImages = imageSummaryContext.length > 600
-            ? imageSummaryContext.substring(0, 600) + '...[truncated for TPM]'
-            : imageSummaryContext;
-        const truncatedPattern = patternMemoryContext.length > 400
-            ? patternMemoryContext.substring(0, 400) + '...[truncated for TPM]'
-            : patternMemoryContext;
-        const truncatedInsights = recentInsightsContext.length > 300
-            ? recentInsightsContext.substring(0, 300) + '...[truncated for TPM]'
-            : recentInsightsContext;
-        const truncatedMemory = memoryContext.length > 500
-            ? memoryContext.substring(0, 500) + '...[truncated for TPM]'
-            : memoryContext;
-
-        effectiveUserPrompt = `${formattedPrompt}${truncatedImages}\n\n${truncatedPattern}\n\n${truncatedInsights}\n\n${truncatedMemory}\n\nOUTPUT VALID JSON ONLY.`;
-        console.log(`[Groq TPM Opt] Input truncated - Images: ${truncatedImages.length}, Pattern: ${truncatedPattern.length}, Insights: ${truncatedInsights.length}, Memory: ${truncatedMemory.length}`);
-    }
-
-    // Initial messages construction
-    let rawMessages: ChatCompletionMessageParam[] = [{ role: "system", content: effectiveSystemPrompt }];
-    const userContent: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [{ type: 'text', text: effectiveUserPrompt }];
-
-    // OpenAI vision models handling
-    if (isVisionModel && images.length > 0) {
-        for (const image of images) {
-            const base64Image = await fileToBase64(image);
-            userContent.push({ type: 'image_url', image_url: { url: `data:${image.type};base64,${base64Image}` } });
+        if (isSmallContextModel(modelName)) {
+            const effectiveSystemPrompt = COMPACT_ANALYSIS_PROMPT;
+            const minimalPattern = patternMemoryContext.length > 500 ? patternMemoryContext.substring(0, 500) + '...[truncated]' : patternMemoryContext;
+            const minimalInsights = recentInsightsContext.length > 300 ? recentInsightsContext.substring(0, 300) + '...[truncated]' : recentInsightsContext;
+            const minimalImages = imageSummaryContext.length > 600 ? imageSummaryContext.substring(0, 600) + '...[truncated]' : imageSummaryContext;
+            systemPrompt = effectiveSystemPrompt;
+            userPromptText = `${formattedPrompt}\n\n${marketDataOverride}\n\n${minimalImages}\n\n${minimalPattern}\n\n${minimalInsights}\n\nOUTPUT VALID JSON ONLY.`;
+        } else {
+            const truncatedImages = imageSummaryContext.length > 600 ? imageSummaryContext.substring(0, 600) + '...[truncated for TPM]' : imageSummaryContext;
+            const truncatedPattern = patternMemoryContext.length > 400 ? patternMemoryContext.substring(0, 400) + '...[truncated for TPM]' : patternMemoryContext;
+            const truncatedInsights = recentInsightsContext.length > 300 ? recentInsightsContext.substring(0, 300) + '...[truncated for TPM]' : recentInsightsContext;
+            const truncatedMemory = memoryContext.length > 500 ? memoryContext.substring(0, 500) + '...[truncated for TPM]' : memoryContext;
+            userPromptText = `${formattedPrompt}${truncatedImages}\n\n${truncatedPattern}\n\n${truncatedInsights}\n\n${truncatedMemory}\n\nOUTPUT VALID JSON ONLY.`;
         }
     }
-    rawMessages.push({ role: "user", content: userContent });
-    // --- TOKEN TRUNCATION LOGIC END ---
 
-    const completion = await withRetry(
-        () => groq.chat.completions.create({
-            model: modelName,
-            messages: rawMessages,
-            response_format: { type: "json_object" },
-            max_tokens: getMaxTokens(modelName, 4096),
-        }, { signal }),
-        PROVIDER,
-        4,
-        signal
-    );
+    // --- BUILD MESSAGES (with optional vision content) ---
+    const messages: ChatMessage[] = [{ role: 'system', content: systemPrompt }];
 
-    const responseText = completion.choices[0].message.content;
+    const canUseVision = isVisionModel(modelName);
+    if (canUseVision && hasImages) {
+        const parts: ContentPart[] = [{ type: 'text', text: userPromptText }];
+        for (const image of images) {
+            const base64 = await fileToBase64(image);
+            parts.push({ type: 'image_url', image_url: { url: `data:${image.type};base64,${base64}` } });
+        }
+        messages.push({ role: 'user', content: parts });
+    } else {
+        if (hasImages && !canUseVision) {
+            console.warn(`Model ${modelName} is not vision-capable, but images were provided. Analyzing based on text summaries only.`);
+        }
+        messages.push({ role: 'user', content: userPromptText });
+    }
+
+    // --- CALL THE GENERIC CLIENT ---
+    const options: ChatRequestOptions = { jsonMode: true, signal };
+    const responseText = await sendChatRequest(config, messages, options);
     if (!responseText) throw new Error("Received an empty response from the AI.");
 
     try {
@@ -560,54 +447,44 @@ export const analyzeTradingView = async (
 
         analysis.activeStrategies = Array.isArray(analysis.activeStrategies) ? analysis.activeStrategies : [];
         analysis.stopLoss = sanitizeJSONString(analysis.stopLoss);
-        analysis.takeProfit = Array.isArray(analysis.takeProfit) ? analysis.takeProfit.map(tp => ({ price: sanitizeJSONString(String(tp.price || '')), percentage: sanitizeJSONString(String(tp.percentage || '')) })).filter(tp => tp.price) : [];
-        analysis.entryPoints = Array.isArray(analysis.entryPoints) ? analysis.entryPoints.map(ep => ({ description: sanitizeJSONString(String(ep.description || '')), price: sanitizeJSONString(String(ep.price || '')) })).filter(ep => ep.description) : [];
+        analysis.takeProfit = Array.isArray(analysis.takeProfit)
+            ? analysis.takeProfit.map(tp => ({ price: sanitizeJSONString(String(tp.price || '')), percentage: sanitizeJSONString(String(tp.percentage || '')) })).filter(tp => tp.price)
+            : [];
+        analysis.entryPoints = Array.isArray(analysis.entryPoints)
+            ? analysis.entryPoints.map(ep => ({ description: sanitizeJSONString(String(ep.description || '')), price: sanitizeJSONString(String(ep.price || '')) })).filter(ep => ep.description)
+            : [];
         analysis.createdAt = new Date().toISOString();
 
         return { analysis, thoughtProcess, sources: [] };
     } catch (error) {
-        console.error("Groq (Alt) analysis JSON parsing failed:", error, "Response:", responseText);
+        console.error(`${config.name} analysis JSON parsing failed:`, error, "Response:", responseText);
         throw new Error("Failed to parse the trading analysis from the AI response.");
     }
-};
+}
 
-export const getQuickResponse = async (prompt: string, history: Message[], modelName: string, systemInstruction?: string, signal?: AbortSignal): Promise<string> => {
-    const groq = getClient();
-    const messages: ChatCompletionMessageParam[] = history.map(m => ({
-        role: m.role === MessageRole.AI ? 'assistant' : 'user',
-        content: m.text
-    }));
+// ─── conductPostMortem ──────────────────────────────────────────────────────
 
-    messages.unshift({ role: 'system', content: systemInstruction || 'You are a helpful and concise AI assistant specializing in futures trading concepts. Answer user questions clearly.' });
-    messages.push({ role: 'user', content: prompt });
+export interface ConductPostMortemParams {
+    previousMessage: Message;
+    outcome: TradeOutcome;
+    history: Message[];
+    finalTradeSummary: string | null;
+    feedback?: { correctedEntry?: string; correctedStopLoss?: string; correctedTakeProfit?: string };
+    postTradeImageSummaries?: string[];
+    signal?: AbortSignal;
+}
 
-    const completion = await withRetry(
-        () => groq.chat.completions.create({ model: modelName, messages, max_tokens: getMaxTokens(modelName, 1024) }, { signal }),
-        PROVIDER,
-        4,
-        signal
-    );
-    return sanitizeAIResponse(completion.choices[0].message.content || "I am sorry, I could not generate a response.");
-};
-
-export const conductPostMortem = async (
-    previousMessage: Message,
-    outcome: TradeOutcome,
-    history: Message[],
-    finalTradeSummary: string | null,
-    modelName: string,
-    feedback: { correctedEntry?: string; correctedStopLoss?: string; correctedTakeProfit?: string; },
-    postTradeImageSummaries?: string[],
-    signal?: AbortSignal
-): Promise<string> => {
-    const groq = getClient();
-    const { correctedEntry, correctedStopLoss, correctedTakeProfit } = feedback;
+export async function conductPostMortem(
+    config: ProviderConfig,
+    params: ConductPostMortemParams
+): Promise<string> {
+    const { previousMessage, outcome, finalTradeSummary, feedback, postTradeImageSummaries, signal } = params;
+    const { correctedEntry, correctedStopLoss, correctedTakeProfit } = feedback ?? {};
     let analysisPrompt: string;
 
     const postTradeContext = postTradeImageSummaries?.length ? `**⚠️ VERIFIED TRADE OUTCOME DATA (HIGHEST PRIORITY):**\n---\n${postTradeImageSummaries.join('\n\n---\n\n')}\n---\n` : '';
     const tradeHistoryContext = finalTradeSummary ? `**PATTERN MEMORY LIBRARY (Historical Context):**\n${truncateTextToTokens(finalTradeSummary)}` : "No past trades logged.";
 
-    // CRITICAL FIX: Always include TP/SL reference, not just when screenshots are provided
     const origEntry = previousMessage.analysis?.entryPoints?.[0]?.price || 'N/A';
     const origSL = previousMessage.analysis?.stopLoss || 'N/A';
     const origTP1 = previousMessage.analysis?.takeProfit?.[0]?.price || 'N/A';
@@ -752,7 +629,6 @@ Answer **all** of the following **MANDATORY ENTRY_NOT_HIT ANALYSIS QUESTIONS** c
 **Tone / Style:**
 Analytical, precise, execution-focused, and rule-driven.`;
     } else if (outcome === TradeOutcome.WIN) {
-        // ============ WIN-SPECIFIC POST-MORTEM PROMPT ============
         const feedbackBlock = `**USER FEEDBACK (TRADE OUTCOME):**
 ${correctedStopLoss ? `- Corrected SL: ${correctedStopLoss}` : ''}
 ${correctedTakeProfit ? `- Final TP: ${correctedTakeProfit}` : ''}`;
@@ -790,9 +666,7 @@ Answer **all** of the following **MANDATORY WIN ANALYSIS QUESTIONS**:
 * Flag for **PATTERN MEMORY STORAGE** with tag: "CONFIRMED_WIN_PATTERN"
 
 **Tone:** Celebratory but analytical. Focus on what to REPEAT.`;
-
     } else {
-        // ============ LOSS-SPECIFIC POST-MORTEM PROMPT ============
         const feedbackBlock = `**USER FEEDBACK (TRADE OUTCOME):**
 ${correctedStopLoss ? `- Corrected SL: ${correctedStopLoss}` : ''}
 ${correctedTakeProfit ? `- Final TP: ${correctedTakeProfit}` : ''}`;
@@ -837,24 +711,181 @@ Answer **all** of the following **MANDATORY LOSS ANALYSIS QUESTIONS**:
 
 **Tone:** Brutally honest, forensic. No excuses, only lessons.`;
     }
-    const completion = await withRetry(
-        () => groq.chat.completions.create({
-            model: modelName,
-            messages: [{ role: 'user', content: analysisPrompt }],
-            max_tokens: getMaxTokens(modelName, 2048)
-        }, { signal }),
-        PROVIDER,
-        4,
-        signal
-    );
-    return sanitizeAIResponse(completion.choices[0].message.content || "Post-mortem analysis failed.");
-};
 
-export const searchStrategies = async (query: string, activeFrameworks: string[], modelName: string, signal?: AbortSignal): Promise<StrategySearchResult[]> => {
-    const groq = getClient();
+    const result = await sendChatRequest(
+        config,
+        [{ role: 'user', content: analysisPrompt }],
+        { signal }
+    );
+    return sanitizeAIResponse(result || "Post-mortem analysis failed.");
+}
+
+// ─── getQuickResponse ───────────────────────────────────────────────────────
+
+export async function getQuickResponse(
+    config: ProviderConfig,
+    prompt: string,
+    history: Message[],
+    systemInstruction?: string,
+    signal?: AbortSignal
+): Promise<string> {
+    const messages: ChatMessage[] = (history || []).map(m => ({
+        role: m.role === MessageRole.AI ? 'assistant' : 'user',
+        content: m.text,
+    }));
+    messages.unshift({ role: 'system', content: systemInstruction || 'You are a helpful and concise AI assistant specializing in futures trading concepts. Answer user questions clearly.' });
+    messages.push({ role: 'user', content: prompt });
+
+    const result = await sendChatRequest(config, messages, { maxTokens: 1024, signal });
+    return sanitizeAIResponse(result || "I am sorry, I could not generate a response.");
+}
+
+// ─── summarizeChartImage (vision/OCR) ───────────────────────────────────────
+
+export async function summarizeChartImage(
+    config: ProviderConfig,
+    image: File,
+    chartNumber: number,
+    signal?: AbortSignal
+): Promise<{ uiSummary: string; fullSummary: string }> {
+    try {
+        const base64Image = await fileToBase64(image);
+
+        const prompt = `You are a state-of-the-art Computer Vision & OCR engine for financial markets.
+        **MODE: ENHANCED VISION STRUCTURING ENABLED**
+        Your task is to analyze Chart ${chartNumber}, discard irrelevant OCR noise, and produce a highly structured data report.
+
+        **STRICT OUTPUT FORMAT:**
+
+        1. Chart Metadata
+        Timeframe: [Value]
+        Asset: [Value]
+        Exchange: [Value]
+        Chart Type: [Value]
+
+        2. Price & Trend
+        Current Price: [Value]
+        24h High: [Value]
+        24h Low: [Value]
+        Trend Summary: [Value]
+
+        3. Indicators
+        Moving Averages
+        MA5: [Value]
+        MA10: [Value]
+        MA20: [Value]
+        MA30: [Value]
+        MA60: [Value]
+        MA200: [Value]
+
+        EMA
+        EMA5: [Value]
+        EMA13: [Value]
+        EMA20: [Value]
+        EMA200: [Value]
+
+        Bollinger Bands
+        BOLL Middle: [Value]
+        BOLL Upper: [Value]
+        BOLL Lower: [Value]
+
+        Volume
+        Volume: [Value]
+        Volume Trend: [Value]
+
+        RSI
+        RSI1: [Value]
+        RSI2: [Value]
+        RSI3: [Value]
+
+        MACD
+        MACD DIF: [Value]
+        MACD DEA: [Value]
+        MACD Histogram: [Value]
+
+        Stochastic
+        Stoch K: [Value]
+        Stoch D: [Value]
+        Stoch J: [Value]
+
+        4. Market Structure
+        Immediate Resistance: [Value]
+        Immediate Support: [Value]
+        Strong Support Zones: [Value]
+        Trend Context: [Value]
+
+        5. Candle Pattern Recognition
+        Latest Candle: [Value] (e.g., Doji, Hammer, Marubozu)
+        Pattern Detected: [Value] (e.g., Bullish Engulfing, Morning Star, None)
+        Candle Position: [Value] (e.g., At Support, In Consolidation)
+        Remaining Time: [Value]
+
+        6. Chart Narrative
+        Narrative: [A 2-3 sentence description of what is happening in the chart. Describe the current price action, trend behavior, and any notable patterns or formations visible. Example: "Price is consolidating near resistance after a strong bullish move. The last 3 candles show indecision with small bodies and long wicks, suggesting a potential reversal or breakout."]
+
+        **INSTRUCTIONS:**
+        - Extract exact numbers where visible.
+        - Look specifically for the specific candlestick shape of the last 1-3 candles.
+        - If a field is not visible or applicable, write "N/A".
+        - Do not mix sections.
+        - Keep descriptions concise.
+        `;
+
+        const messages: ChatMessage[] = [{
+            role: 'user',
+            content: [
+                { type: 'text', text: prompt },
+                { type: 'image_url', image_url: { url: `data:${image.type};base64,${base64Image}` } },
+            ],
+        }];
+
+        const fullSummary = await sendChatRequest(config, messages, { maxTokens: 1024, signal });
+
+        const timeframeMatch = fullSummary.match(/Timeframe:\s*(.*?)(?:\n|$)/i);
+        const priceMatch = fullSummary.match(/(?:Current )?Price:\s*(.*?)(?:\n|$)/i);
+        const patternMatch = fullSummary.match(/Pattern Detected:\s*(.*?)(?:\n|$)/i);
+
+        const timeframe = timeframeMatch ? timeframeMatch[1].trim().replace(/['"]/g, '') : 'N/A';
+        let price = priceMatch ? priceMatch[1].trim().replace(/['"]/g, '') : 'N/A';
+        let pattern = patternMatch ? patternMatch[1].trim().replace(/['"]/g, '') : '';
+
+        if (price !== 'N/A') {
+            const numericPrice = price.replace(/[^0-9.]/g, '');
+            if (numericPrice) {
+                price = `₮${numericPrice}`;
+            } else {
+                price = 'N/A';
+            }
+        }
+
+        if (pattern === 'N/A' || pattern === 'None') pattern = '';
+
+        let uiSummary = `Chart ${chartNumber} | ${timeframe} | ${price}`;
+        if (pattern) {
+            uiSummary += ` | ${pattern}`;
+        }
+
+        return { uiSummary, fullSummary };
+    } catch (error) {
+        console.error(`Error in ${config.name} summarizeChartImage:`, error);
+        return {
+            uiSummary: `Chart ${chartNumber} | Error | N/A`,
+            fullSummary: `Chart ${chartNumber} Vision Analysis Failed: ${(error as Error).message}`
+        };
+    }
+}
+
+// ─── Strategy helpers ───────────────────────────────────────────────────────
+
+export async function searchStrategies(
+    config: ProviderConfig,
+    query: string,
+    activeFrameworks: string[],
+    signal?: AbortSignal
+): Promise<StrategySearchResult[]> {
     const frameworksList = activeFrameworks.join(', ');
     const prompt = `You are a search engine for a predefined list of trading strategies. Your entire knowledge base is limited to ONLY the following frameworks: [${frameworksList}].
-    
+
     The user is searching for: "${query}".
 
     Your task is to:
@@ -864,89 +895,72 @@ export const searchStrategies = async (query: string, activeFrameworks: string[]
     4. You are strictly forbidden from suggesting or describing any strategy that is not in the provided list.
     5. Your output must be a single, valid JSON array of objects with keys "name", "description", and "rationale".`;
 
-    const completion = await withRetry(
-        () => groq.chat.completions.create({
-            model: modelName,
-            messages: [{ role: "user", content: prompt }],
-            response_format: { type: "json_object" },
-        }, { signal }),
-        PROVIDER,
-        4,
-        signal
-    );
-
-    const responseText = completion.choices[0].message.content;
-    if (!responseText) return [];
-
+    const result = await sendChatRequest(config, [{ role: 'user', content: prompt }], { jsonMode: true, signal });
+    if (!result) return [];
     try {
-        const parsed = JSON.parse(responseText);
+        const parsed = JSON.parse(result);
         const results = Array.isArray(parsed) ? parsed : (parsed.results || parsed.strategies || []);
-        return results.filter((result: any) =>
-            result.name && typeof result.name === 'string' &&
-            activeFrameworks.some(fw => fw.toLowerCase() === result.name.toLowerCase())
+        return results.filter((r: any) =>
+            r.name && typeof r.name === 'string' &&
+            activeFrameworks.some(fw => fw.toLowerCase() === r.name.toLowerCase())
         );
     } catch (e) {
-        console.error("Failed to parse Groq (Alt) strategy search results:", e);
+        console.error(`Failed to parse ${config.name} strategy search results:`, e);
         return [];
     }
-};
+}
 
-export const discoverStrategies = async (chatHistory: Message[], activeFrameworks: string[], modelName: string, signal?: AbortSignal): Promise<StrategySearchResult[]> => {
-    const groq = getClient();
+export async function discoverStrategies(
+    config: ProviderConfig,
+    chatHistory: Message[],
+    activeFrameworks: string[],
+    signal?: AbortSignal
+): Promise<StrategySearchResult[]> {
     const frameworksList = activeFrameworks.join(', ');
     const historyText = chatHistory.length > 0
         ? chatHistory.slice(-5).map(m => `${m.role}: ${m.text} ${m.imageSummaries?.join('\n') || ''}`).join('\n\n')
         : '';
 
     const prompt = `You are an AI assistant that suggests relevant trading strategies. Your entire knowledge base is limited to ONLY the following frameworks: [${frameworksList}].
-    
+
     ${historyText ? `Based on the recent conversation:\n${historyText}\n` : ''}
-    
+
     Your task is to pick 3 interesting or relevant strategies from the list and provide a concise description and rationale.
-    
+
     You are strictly forbidden from suggesting any strategy that is not in the provided list. Your output must be a valid JSON array of objects with keys "name", "description", and "rationale".`;
 
-    const completion = await withRetry(
-        () => groq.chat.completions.create({
-            model: modelName,
-            messages: [{ role: "user", content: prompt }],
-            response_format: { type: "json_object" },
-        }, { signal }),
-        PROVIDER,
-        4,
-        signal
-    );
-
-    const responseText = completion.choices[0].message.content;
-    if (!responseText) return [];
-
+    const result = await sendChatRequest(config, [{ role: 'user', content: prompt }], { jsonMode: true, signal });
+    if (!result) return [];
     try {
-        const parsed = JSON.parse(responseText);
+        const parsed = JSON.parse(result);
         const results = Array.isArray(parsed) ? parsed : (parsed.results || parsed.strategies || []);
-        return results.filter((result: any) =>
-            result.name && typeof result.name === 'string' &&
-            activeFrameworks.some(fw => fw.toLowerCase() === result.name.toLowerCase())
+        return results.filter((r: any) =>
+            r.name && typeof r.name === 'string' &&
+            activeFrameworks.some(fw => fw.toLowerCase() === r.name.toLowerCase())
         );
     } catch (e) {
-        console.error("Failed to parse Groq (Alt) strategy discovery results:", e);
+        console.error(`Failed to parse ${config.name} strategy discovery results:`, e);
         return [];
     }
-};
+}
 
-export const getStrategyDescription = async (strategyName: string, modelName: string, signal?: AbortSignal): Promise<string> => {
-    const groq = getClient();
+export async function getStrategyDescription(
+    config: ProviderConfig,
+    strategyName: string,
+    signal?: AbortSignal
+): Promise<string> {
     const prompt = `Provide a concise, one-paragraph explanation of the "${strategyName}" trading strategy.`;
-    const completion = await withRetry(
-        () => groq.chat.completions.create({ model: modelName, messages: [{ role: 'user', content: prompt }] }, { signal }),
-        PROVIDER,
-        4,
-        signal
-    );
-    return sanitizeAIResponse(completion.choices[0].message.content || "Failed to retrieve strategy description.");
-};
+    const result = await sendChatRequest(config, [{ role: 'user', content: prompt }], { signal });
+    return sanitizeAIResponse(result || "Failed to retrieve strategy description.");
+}
 
-export const summarizeTrade = async (trade: LoggedTrade, modelName: string, signal?: AbortSignal): Promise<string> => {
-    const groq = getClient();
+// ─── Memory helpers ─────────────────────────────────────────────────────────
+
+export async function summarizeTrade(
+    config: ProviderConfig,
+    trade: LoggedTrade,
+    signal?: AbortSignal
+): Promise<string> {
     const tradeForAnalysis = {
         ...trade,
         postMortemImages: trade.postMortemImages ? `[${trade.postMortemImages.length} screenshots available]` : undefined,
@@ -981,20 +995,16 @@ You MUST include a 2-3 sentence summary (67 words MAX) of the post-mortem analys
 ${JSON.stringify(tradeForAnalysis, null, 2)}
     `;
 
-    const completion = await withRetry(
-        () => groq.chat.completions.create({
-            model: modelName,
-            messages: [{ role: 'user', content: prompt }]
-        }, { signal }),
-        PROVIDER,
-        4,
-        signal
-    );
-    return sanitizeAIResponse(completion.choices[0].message.content || "Summary generation failed.");
-};
+    const result = await sendChatRequest(config, [{ role: 'user', content: prompt }], { signal });
+    return sanitizeAIResponse(result || "Summary generation failed.");
+}
 
-export const generateFinalSummary = async (summaries: TradeSummary[], modelName: string, charLimit: number = 4000, signal?: AbortSignal): Promise<string> => {
-    const groq = getClient();
+export async function generateFinalSummary(
+    config: ProviderConfig,
+    summaries: TradeSummary[],
+    charLimit: number = 4000,
+    signal?: AbortSignal
+): Promise<string> {
     const summariesText = summaries.map(s => `- ${s.summaryText}`).join('\n');
     const tradeCount = summaries.length;
 
@@ -1034,26 +1044,20 @@ ${summariesText}
 Return ONLY the structured summary.
 `;
 
+    const result = await sendChatRequest(config, [{ role: 'user', content: prompt }], { signal });
+    return sanitizeAIResponse(result || "Final summary generation failed.");
+}
 
-    const completion = await withRetry(
-        () => groq.chat.completions.create({
-            model: modelName,
-            messages: [{ role: 'user', content: prompt }]
-        }, { signal }),
-        PROVIDER,
-        4,
-        signal
-    );
-    return sanitizeAIResponse(completion.choices[0].message.content || "Final summary generation failed.");
-};
-
-// Memory compression for chat history
-export const compressChatHistory = async (messages: Message[], currentSummary: string = "", signal?: AbortSignal): Promise<string> => {
-    const groq = getClient();
+export async function compressChatHistory(
+    config: ProviderConfig,
+    messages: Message[],
+    currentSummary: string = "",
+    signal?: AbortSignal
+): Promise<string> {
     const messagesText = messages.map(m => `${m.role}: ${m.text}`).join('\n\n');
 
     const prompt = `
-${MEMORY_COMPRESSOR_PROMPT}
+You are a memory compressor for a trading chat.
 
 **PREVIOUS SUMMARY (LAYER 2):**
 ${currentSummary || "None"}
@@ -1062,28 +1066,22 @@ ${currentSummary || "None"}
 ${messagesText}
 
 **INSTRUCTIONS:**
-Merge the new content into the previous summary. 
-Keep it chronological. 
+Merge the new content into the previous summary.
+Keep it chronological.
 Discard redundant details.
 Return ONLY the new compressed summary text.
     `;
 
-    const completion = await withRetry(
-        () => groq.chat.completions.create({
-            model: 'llama-3.3-70b-versatile',
-            messages: [{ role: 'user', content: prompt }],
-            max_tokens: 2048
-        }, { signal }),
-        PROVIDER,
-        4,
-        signal
-    );
-    return sanitizeAIResponse(completion.choices[0].message.content || "Memory compression failed.");
-};
+    const result = await sendChatRequest(config, [{ role: 'user', content: prompt }], { maxTokens: 2048, signal });
+    return sanitizeAIResponse(result || "Memory compression failed.");
+}
 
-// Update global memory with trade insights
-export const updateGlobalMemory = async (recentTrades: LoggedTrade[], currentMemory?: GlobalMemory, signal?: AbortSignal): Promise<GlobalMemory> => {
-    const groq = getClient();
+export async function updateGlobalMemory(
+    config: ProviderConfig,
+    recentTrades: LoggedTrade[],
+    currentMemory: GlobalMemory | undefined,
+    signal?: AbortSignal
+): Promise<GlobalMemory> {
     const tradeSummaries = recentTrades.map(t => JSON.stringify({
         tradeId: t.id,
         asset: t.analysis.coinName,
@@ -1098,7 +1096,7 @@ export const updateGlobalMemory = async (recentTrades: LoggedTrade[], currentMem
     const currentMemoryJson = currentMemory ? JSON.stringify(currentMemory, null, 2) : "null";
 
     const prompt = `
-${GLOBAL_MEMORY_MANAGER_PROMPT}
+You are a Global Memory Manager for a trading system.
 
 **EXISTING GLOBAL MEMORY:**
 ${currentMemoryJson}
@@ -1110,23 +1108,11 @@ ${tradeSummaries}
 Generate the updated Global Memory JSON object.
     `;
 
-    const completion = await withRetry(
-        () => groq.chat.completions.create({
-            model: 'llama-3.3-70b-versatile',
-            messages: [{ role: 'user', content: prompt }],
-            response_format: { type: 'json_object' },
-            max_tokens: 2048
-        }, { signal }),
-        PROVIDER,
-        4,
-        signal
-    );
-
-    const responseText = completion.choices[0].message.content || "{}";
+    const result = await sendChatRequest(config, [{ role: 'user', content: prompt }], { jsonMode: true, maxTokens: 2048, signal });
     try {
-        return JSON.parse(responseText);
+        return JSON.parse(result || "{}");
     } catch {
-        console.error("Groq updateGlobalMemory JSON parse failed:", responseText);
+        console.error(`${config.name} updateGlobalMemory JSON parse failed:`, result);
         return currentMemory || {
             totalTradesAnalyzed: 0,
             familyPerformance: {},
@@ -1136,4 +1122,4 @@ Generate the updated Global Memory JSON object.
             lastUpdated: new Date().toISOString()
         };
     }
-};
+}

@@ -1,7 +1,7 @@
 
-import { GoogleGenAI } from "@google/genai";
-import OpenAI from "openai";
-import { TradeAnalysis, AIProvider, Message, TradeOutcome, AccuracySubMode, LoggedTrade, AnalystLensConfig, AnalystRole } from '../../types';
+import { TradeAnalysis, Message, TradeOutcome, AccuracySubMode, LoggedTrade, AnalystLensConfig, AnalystRole } from '../../types';
+import { ProviderConfig } from '../../types/provider';
+import { streamChatRequest, ChatMessage } from './GenericProviderService';
 import { extractAndParseJson } from '../../utils/jsonUtils';
 import {
     MODERATOR_SYSTEM_PROMPT_V2,
@@ -43,7 +43,7 @@ import {
 } from '../ui/AnalystLensService';
 import { generateWeightedVotingContext } from '../backtesting/ModelPerformanceService';
 import type { GateOutput } from '../validation/GateKeeperService';
-import { getApiKey, getPreferenceObject, PREF_KEYS } from '../infrastructure/PreferencesService';
+import { getPreferenceObject, PREF_KEYS } from '../infrastructure/PreferencesService';
 import { getBayesianCalibratedConfidence, ConfidenceLevel } from '../validation/ConfidenceCalibrationService';
 import { ConfidenceCalibration } from '../../types';
 
@@ -240,85 +240,41 @@ Reasoning: ${gateResult.familyBias.reasoning.slice(0, 2).join('; ')}
 
 
 
-const getGeminiClient = (): GoogleGenAI => {
-    if (!process.env.GEMINI_API_KEY) throw new Error("GEMINI_API_KEY is not set in environment");
-    return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-};
+// Moderator system message — helps OpenRouter free models follow complex instructions.
+const MODERATOR_SYSTEM_MESSAGE = `You are an expert trading debate moderator. Your PRIMARY OBJECTIVE is to extract concrete trade values from the analysts' discussion.
 
-const getDeepSeekClient = (): OpenAI => {
-    const apiKey = process.env.DEEPSEEK_API_KEY;
-    if (!apiKey) throw new Error("DEEPSEEK_API_KEY is not set in environment");
-    return new OpenAI({ baseURL: 'https://api.deepseek.com', apiKey, dangerouslyAllowBrowser: true });
-};
+CRITICAL RULES:
+1. ALWAYS provide specific numeric prices for Entry, Stop Loss, and Take Profit - NEVER output "N/A" or "Not Available"
+2. If analysts provide prices in their analysis, USE THOSE EXACT PRICES
+3. If prices are unclear, ESTIMATE based on the discussion context
+4. The JSON_PLAN must contain real price values, not placeholders
+5. Every trade setup needs: direction, entry price, stop loss price, take profit price(s)
 
-const getZhipuClient = (): OpenAI => {
-    const apiKey = process.env.ZHIPU_API_KEY;
-    if (!apiKey) throw new Error("Zhipu AI API key is missing.");
-    return new OpenAI({ baseURL: 'https://open.bigmodel.cn/api/paas/v4/', apiKey, dangerouslyAllowBrowser: true });
-};
+You must complete the ENTIRE response including the JSON_PLAN block at the end.`;
 
-const getGroqClient = (): OpenAI => {
-    const apiKey = process.env.GROQ_API_KEY;
-    if (!apiKey) throw new Error("GROQ_API_KEY is not set in environment");
-    return new OpenAI({ baseURL: 'https://api.groq.com/openai/v1/', apiKey, dangerouslyAllowBrowser: true });
-};
-
-const getGroqNewClient = (): OpenAI => {
-    const apiKey = process.env.GROQ_NEW_API_KEY;
-    if (!apiKey) throw new Error("GROQ_NEW_API_KEY is not set in environment");
-    return new OpenAI({ baseURL: 'https://api.groq.com/openai/v1/', apiKey, dangerouslyAllowBrowser: true });
-};
-
-const getGroqAlt2Client = (): OpenAI => {
-    const apiKey = process.env.GROQ_ALT2_API_KEY;
-    if (!apiKey) throw new Error("GROQ_ALT2_API_KEY is not set in environment");
-    return new OpenAI({ baseURL: 'https://api.groq.com/openai/v1/', apiKey, dangerouslyAllowBrowser: true });
-};
-
-const getOpenrouterClient = (): OpenAI => {
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) throw new Error("OPENROUTER_API_KEY is not set in environment");
-    return new OpenAI({
-        baseURL: 'https://openrouter.ai/api/v1',
-        apiKey,
-        dangerouslyAllowBrowser: true,
-        defaultHeaders: {
-            "HTTP-Referer": typeof window !== 'undefined' ? window.location.origin : 'https://august.app',
-            "X-Title": "August Trading Assistant"
+/**
+ * Stream the moderator analysis from any configured provider via the generic client.
+ * `config` is the moderator provider's ProviderConfig; `model` overrides config.selectedModel
+ * (kept for backward-compat with the per-conversation moderator model selection).
+ */
+const getModeratorAnalysisStream = async function* (config: ProviderConfig, model: string, prompt: string): AsyncGenerator<string> {
+    const effectiveConfig: ProviderConfig = { ...config, selectedModel: model || config.selectedModel };
+    const messages: ChatMessage[] = [
+        { role: 'system', content: MODERATOR_SYSTEM_MESSAGE },
+        { role: 'user', content: prompt },
+    ];
+    try {
+        for await (const chunk of streamChatRequest(effectiveConfig, messages, { temperature: 0.1 })) {
+            if (chunk) yield chunk;
         }
-    });
-};
-
-const getOpenaiClient = async (): Promise<OpenAI> => {
-    const apiKey = await getApiKey('openai');
-    return new OpenAI({
-        baseURL: 'https://api.openai.com/v1',
-        apiKey,
-        dangerouslyAllowBrowser: true,
-    });
-};
-
-const getGrokClient = async (): Promise<OpenAI> => {
-    const apiKey = await getApiKey('grok');
-    return new OpenAI({
-        baseURL: 'https://api.x.ai/v1',
-        apiKey,
-        dangerouslyAllowBrowser: true,
-    });
-};
-
-const getModeratorClient = async (provider: AIProvider): Promise<OpenAI | GoogleGenAI> => {
-    switch (provider) {
-        case AIProvider.GEMINI: return getGeminiClient();
-        case AIProvider.DEEPSEEK: return getDeepSeekClient();
-        case AIProvider.ZHIPU: return getZhipuClient();
-        case AIProvider.GROQ: return getGroqClient();
-        case AIProvider.GROQ_NEW: return getGroqNewClient();
-        case AIProvider.GROQ_ALT2: return getGroqAlt2Client();
-        case AIProvider.OPENROUTER: return getOpenrouterClient();
-        case AIProvider.OPENAI: return await getOpenaiClient();
-        case AIProvider.GROK: return await getGrokClient();
-        default: throw new Error(`Unsupported moderator provider: ${provider}`);
+    } catch (e: any) {
+        console.error("Moderator stream error:", e);
+        // For rate limit errors, throw to be handled by outer catch block
+        if (e.status === 429 || e.message?.includes('429') || e.message?.includes('Rate limit')) {
+            throw e;
+        }
+        // For other errors, yield an error marker that App.tsx can detect
+        yield `\n<MODERATOR_ERROR>${e.message}</MODERATOR_ERROR>\n`;
     }
 };
 
@@ -342,7 +298,7 @@ export type LensVerbosity = 'full' | 'medium' | 'minimal';
  */
 export const generateLensContext = (
     analystNames: string[],
-    analystProviders: AIProvider[],
+    analystProviders: string[],
     lensConfig?: AnalystLensConfig,
     verbosity: LensVerbosity = 'full',
     tradingStyle?: 'swing' | 'scalp' | 'position'
@@ -842,84 +798,15 @@ ${analysis.details.map(d => `- ${d}`).join('\n')}
     return context.trim();
 };
 
-const getModeratorAnalysisStream = async function* (provider: AIProvider, model: string, prompt: string): AsyncGenerator<string> {
-
-    const client = await getModeratorClient(provider);
-
-    if (client instanceof GoogleGenAI) {
-        try {
-            const response = await client.models.generateContentStream({ model, contents: { parts: [{ text: prompt }] } });
-            for await (const chunk of response) {
-                let text = '';
-                if (chunk.candidates && chunk.candidates[0] && chunk.candidates[0].content && chunk.candidates[0].content.parts) {
-                    for (const part of chunk.candidates[0].content.parts) {
-                        if (part.text) {
-                            text += part.text;
-                        }
-                    }
-                }
-                if (text) {
-                    yield text;
-                }
-            }
-        } catch (e: any) {
-            console.error("Accuracy Moderator stream error (Gemini):", e);
-            // For rate limit errors, throw to be handled by outer catch block
-            if (e.status === 429 || e.message?.includes('429') || e.message?.includes('Rate limit')) {
-                throw e;
-            }
-            // For other errors, yield an error marker that App.tsx can detect
-            yield `\n<MODERATOR_ERROR>${e.message}</MODERATOR_ERROR>\n`;
-        }
-    } else if (client instanceof OpenAI) {
-        try {
-            // System message helps OpenRouter free models follow complex instructions
-            const systemMessage = `You are an expert trading debate moderator. Your PRIMARY OBJECTIVE is to extract concrete trade values from the analysts' discussion.
-
-CRITICAL RULES:
-1. ALWAYS provide specific numeric prices for Entry, Stop Loss, and Take Profit - NEVER output "N/A" or "Not Available"
-2. If analysts provide prices in their analysis, USE THOSE EXACT PRICES
-3. If prices are unclear, ESTIMATE based on the discussion context
-4. The JSON_PLAN must contain real price values, not placeholders
-5. Every trade setup needs: direction, entry price, stop loss price, take profit price(s)
-
-You must complete the ENTIRE response including the JSON_PLAN block at the end.`;
-
-            const stream = await client.chat.completions.create({
-                model: model,
-                messages: [
-                    { role: 'system', content: systemMessage },
-                    { role: 'user', content: prompt }
-                ],
-                stream: true,
-                temperature: 0.1 // Low temperature for strict instruction following
-            });
-            for await (const chunk of stream) {
-                yield chunk.choices[0]?.delta?.content || "";
-            }
-        } catch (e: any) {
-            console.error("Accuracy Moderator stream error (OpenAI/Compat):", e);
-            // For rate limit errors, throw to be handled by outer catch block
-            if (e.status === 429 || e.message?.includes('429') || e.message?.includes('Rate limit')) {
-                throw e;
-            }
-            // For other errors, yield an error marker that App.tsx can detect
-            yield `\n<MODERATOR_ERROR>${e.message}</MODERATOR_ERROR>\n`;
-        }
-    } else {
-        throw new Error("Invalid moderator client type.");
-    }
-};
-
 export const conductDebate = (
     analystsResults: { analysis: TradeAnalysis, thoughtProcess: string }[],
     analystNames: string[],
     userPrompt: string,
     finalTradeSummary: string | null,
     subMode: AccuracySubMode = 'original',
-    customInstructions?: string,
-    moderatorProvider: AIProvider = AIProvider.GROQ,
-    moderatorModel: string = 'moonshotai/kimi-k2-instruct-0905',
+    customInstructions: string | undefined,
+    moderatorConfig: ProviderConfig,
+    moderatorModel: string = '',
     isFamiliesEnabledInPureAI?: boolean,
     isMemoryEnabledInPureAI?: boolean,
     gateResult?: GateOutput | null, // Gate result for reconciliation
@@ -1034,7 +921,7 @@ ${analystsInput}
 Start the simulation now. Begin with <DEBATE_START>.
 `;
 
-    return getModeratorAnalysisStream(moderatorProvider, moderatorModel, finalPrompt);
+    return getModeratorAnalysisStream(moderatorConfig, moderatorModel, finalPrompt);
 };
 
 /**
@@ -1068,17 +955,17 @@ export const conductTwoWayDebate = async function* (
     analyst2Name: string,
     userPrompt: string,
     finalTradeSummary: string | null,
-    moderatorProvider: AIProvider,
+    moderatorConfig: ProviderConfig,
     moderatorModel: string,
     customInstructions?: string,
     monteCarloResults?: { provider: string, result: any }[],
     lensConfig?: AnalystLensConfig,
-    analystProviders?: AIProvider[],
+    analystProviders?: string[],
     activeFrameworks?: string[],
     tradeSummaries?: { id: string; summaryText: string; timestamp: string }[],
     gateResult?: GateOutput | null, // Gate result for reconciliation
     learningContext?: string, // NEW: Unified learning context
-    enabledProviders?: AIProvider[], // NEW: for weighted voting
+    enabledProviders?: string[], // NEW: for weighted voting
     trades?: LoggedTrade[] // NEW: trade history for weighted voting
 ): AsyncGenerator<string, void, unknown> {
 
@@ -1552,7 +1439,7 @@ export const conductTwoWayDebate = async function* (
       
       Start with <DEBATE_START> now.`;
 
-    yield* getModeratorAnalysisStream(moderatorProvider, moderatorModel, moderatorSystemPrompt);
+    yield* getModeratorAnalysisStream(moderatorConfig, moderatorModel, moderatorSystemPrompt);
 };
 
 export const conductThreeWayDebate = async function* (
@@ -1564,14 +1451,14 @@ export const conductThreeWayDebate = async function* (
     analyst3Name: string,
     userPrompt: string,
     finalTradeSummary: string | null,
-    moderatorProvider: AIProvider,
+    moderatorConfig: ProviderConfig,
     moderatorModel: string,
     customInstructions?: string,
     trades?: LoggedTrade[],
-    enabledProviders?: AIProvider[],
+    enabledProviders?: string[],
     monteCarloResults?: { provider: string, result: any }[],
     lensConfig?: AnalystLensConfig,
-    analystProviders?: AIProvider[],
+    analystProviders?: string[],
     activeFrameworks?: string[],
     tradeSummaries?: { id: string; summaryText: string; timestamp: string }[],
     gateResult?: GateOutput | null, // Gate result for reconciliation
@@ -2173,7 +2060,7 @@ Start with <DEBATE_START> now.
 `;
 
 
-    yield* getModeratorAnalysisStream(moderatorProvider, moderatorModel, moderatorSystemPrompt);
+    yield* getModeratorAnalysisStream(moderatorConfig, moderatorModel, moderatorSystemPrompt);
 };
 
 export const conductTwoWayPostMortemDebate = (
@@ -2184,7 +2071,7 @@ export const conductTwoWayPostMortemDebate = (
     analyst1Name: string,
     analyst2Name: string,
     finalTradeSummary: string | null,
-    moderatorProvider: AIProvider,
+    moderatorConfig: ProviderConfig,
     moderatorModel: string,
     postTradeImageSummaries?: string[],
     trades?: LoggedTrade[] // NEW: Pass trades for synthesis
@@ -2362,7 +2249,7 @@ You MUST:
 
     Start with <DEBATE_START> now.`;
 
-    return getModeratorAnalysisStream(moderatorProvider, moderatorModel, moderatorPrompt);
+    return getModeratorAnalysisStream(moderatorConfig, moderatorModel, moderatorPrompt);
 };
 
 /**
@@ -2371,7 +2258,7 @@ You MUST:
  */
 export const recalculateProbabilities = async function* (
     analysis: TradeAnalysis,
-    moderatorProvider: AIProvider,
+    moderatorConfig: ProviderConfig,
     moderatorModel: string,
     snapshot?: any // Optional market snapshot for historical consistency
 ): AsyncGenerator<string, void, unknown> {
@@ -2400,7 +2287,7 @@ export const recalculateProbabilities = async function* (
         4. If you wrap the JSON in a field, use "levelProbabilities" as the top-level key.
     `;
 
-    yield* getModeratorAnalysisStream(moderatorProvider, moderatorModel, prompt);
+    yield* getModeratorAnalysisStream(moderatorConfig, moderatorModel, prompt);
 };
 
 export const conductThreeWayPostMortemDebate = (
@@ -2413,7 +2300,7 @@ export const conductThreeWayPostMortemDebate = (
     analyst2Name: string,
     analyst3Name: string,
     finalTradeSummary: string | null,
-    moderatorProvider: AIProvider,
+    moderatorConfig: ProviderConfig,
     moderatorModel: string,
     postTradeImageSummaries?: string[]
 ): AsyncGenerator<string, void, unknown> => {
@@ -2576,5 +2463,5 @@ You MUST:
 
     Start with <DEBATE_START> now.`;
 
-    return getModeratorAnalysisStream(moderatorProvider, moderatorModel, moderatorPrompt);
+    return getModeratorAnalysisStream(moderatorConfig, moderatorModel, moderatorPrompt);
 };

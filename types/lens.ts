@@ -2,15 +2,15 @@
 // ANALYST LENS TYPES - Specialized roles for 3-analyst ensemble debates
 // =============================================================================
 
-import { AIProvider, AnalystRole } from './enums';
+import { AnalystRole } from './enums';
 
 /**
  * User's role assignment configuration.
- * Maps a role to a specific AI provider.
+ * Maps a role to a specific AI provider (by ProviderConfig id).
  */
 export interface AnalystRoleAssignment {
   role: AnalystRole;
-  assignedProvider: AIProvider | null;
+  assignedProvider: string | null;  // ProviderConfig id
   assignedModel?: string;  // Optional specific model override
 }
 

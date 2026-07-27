@@ -1,9 +1,9 @@
 import { useState, useCallback } from 'react';
-import { Message, TradeOutcome, LoggedTrade, SavedAnalysis, TradeSummary, AIProvider, LearningRule, ImageMetadata } from '../types';
+import { Message, TradeOutcome, LoggedTrade, SavedAnalysis, TradeSummary, LearningRule, ImageMetadata, AIProvider } from '../types';
 import { PostMortemCandidate } from '../components/modals/PostTradeUploadModal';
 import { captureForPostMortem } from '../services/ui/AutoCaptureService';
 import * as MemoryService from '../services/learning/MemoryService';
-import { MemoryProvider } from '../services/learning/MemoryService';
+import { ProviderConfig } from '../types/provider';
 import GlobalLearningService from '../services/learning/GlobalLearningService';
 import { storeRule, loadLearningRules, saveLearningRules } from '../services/learning/LearningRulesService';
 import { trackTradeOutcome } from '../services/backtesting/ModelPerformanceService';
@@ -16,10 +16,10 @@ export interface UseTradeLoggingParams {
     messages: Message[];
     updateMessages: (updater: (prev: Message[]) => Message[]) => void;
     activeConversationLeverage?: number;
-    moderatorProvider: AIProvider;
+    moderatorProviderId: string;
     moderatorModel: string;
     memoryModel: string;
-    memoryProvider: MemoryProvider;
+    memoryConfig: ProviderConfig;
     useAlgorithmicInsights: boolean;
     // UI state setters needed by handlers:
     setIsAutoCapturing: (v: boolean) => void;
@@ -43,8 +43,8 @@ export interface UseTradeLoggingParams {
 export const useTradeLogging = (params: UseTradeLoggingParams) => {
     const {
         messages, updateMessages, activeConversationLeverage,
-        moderatorProvider, moderatorModel,
-        memoryModel, memoryProvider, useAlgorithmicInsights,
+        moderatorProviderId, moderatorModel,
+        memoryModel, memoryConfig, useAlgorithmicInsights,
         setIsAutoCapturing, setIsHybridLoading, setIsEntryNotHitCapturing,
         setIsUpdateAutoCapturing, setIsInsightGenerating,
         setCurrentHybridData, startPostMortemAnalysis, handleSendMessage,
@@ -140,24 +140,11 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             correctedTakeProfit: feedback.correctedTakeProfit,
             triggeredEntryIndices: feedback.selectedEntryIndices, // Store which entries were triggered
             marketSnapshot: message.analysis?.marketSnapshot, // Persist for Algo Mode
-            geminiModelUsed: message.geminiModelUsed,
-            deepseekModelUsed: message.deepseekModelUsed,
-            zhipuModelUsed: message.zhipuModelUsed,
-            groqModelUsed: message.groqModelUsed,
-            groqNewModelUsed: message.groqNewModelUsed,
-            groqAlt2ModelUsed: message.groqAlt2ModelUsed,
-            openrouterModelUsed: message.openrouterModelUsed,
-
-            geminiThoughtProcess: message.geminiThoughtProcess,
-            deepseekThoughtProcess: message.deepseekThoughtProcess,
-            zhipuThoughtProcess: message.zhipuThoughtProcess,
-            groqThoughtProcess: message.groqThoughtProcess,
-            groqNewThoughtProcess: message.groqNewThoughtProcess,
-            groqAlt2ThoughtProcess: message.groqAlt2ThoughtProcess,
-            openrouterThoughtProcess: message.openrouterThoughtProcess,
+            modelsUsed: message.modelsUsed,
+            thoughtProcesses: message.thoughtProcesses,
 
             ocrModelUsed: message.ocrModelUsed,
-            moderatorProvider: moderatorProvider,
+            moderatorProvider: moderatorProviderId,
             moderatorModel: moderatorModel,
             isAccuracyMode: message.isAccuracyMode,
             accuracySubMode: message.accuracySubMode,
@@ -222,7 +209,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
                 const summary = await MemoryService.summarizeTrade(
                     loggedTrade,
                     memoryModel,
-                    memoryProvider,
+                    memoryConfig,
                     useAlgorithmicInsights // Pass the toggle state
                 );
                 const newSummary = {
@@ -265,7 +252,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
                 setIsInsightGenerating(false);
             }
         })();
-    }, [activeConversationLeverage, moderatorProvider, moderatorModel, updateMessages, memoryModel, memoryProvider, useAlgorithmicInsights, toast]);
+    }, [activeConversationLeverage, moderatorProviderId, moderatorModel, updateMessages, memoryModel, memoryConfig, useAlgorithmicInsights, toast]);
 
     // ─── Data Capture Modal Handlers ──────────────────────────────────────
 
@@ -415,7 +402,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             timestamp: new Date().toISOString(),
             leverage: activeConversationLeverage || 100,
             correctedEntry: candidate.correctedEntry,
-            geminiModelUsed: candidate.message.geminiModelUsed,
+            modelsUsed: candidate.message.modelsUsed,
             isAccuracyMode: candidate.message.isAccuracyMode,
             accuracySubMode: candidate.message.accuracySubMode
         };
@@ -429,7 +416,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
                 const summary = await MemoryService.summarizeTrade(
                     loggedTrade,
                     memoryModel,
-                    memoryProvider,
+                    memoryConfig,
                     useAlgorithmicInsights // Pass the toggle state
                 );
                 const newSummary = {
@@ -465,7 +452,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
                 setIsInsightGenerating(false);
             }
         })();
-    }, [activeConversationLeverage, memoryModel, memoryProvider, useAlgorithmicInsights, toast]);
+    }, [activeConversationLeverage, memoryModel, memoryConfig, useAlgorithmicInsights, toast]);
 
     const handleEntryNotHitAutoCapture = useCallback(async () => {
         if (!entryNotHitCandidate || !entryNotHitCandidate.message.analysis) {

@@ -5,16 +5,8 @@
  * Follows the MemoryService pattern of reusing existing provider wrappers.
  */
 
-import * as geminiService from '../providers/geminiService';
-import * as openaiService from '../providers/openaiService';
-import * as deepseekService from '../providers/deepseekService';
-import * as groqService from '../providers/groqService';
-import * as openrouterService from '../providers/openrouterService';
-import * as zhipuService from '../providers/zhipuService';
-import * as grokNativeService from '../providers/grokNativeService';
-// Add others if needed, but these are the primaries for reasoning
-
-import { AIProvider } from '../../types';
+import { getQuickResponse } from '../providers/GenericProviderService';
+import { ProviderConfig } from '../../types/provider';
 import { extractAndParseJson } from '../../utils/jsonUtils';
 
 export interface ExtractedRule {
@@ -62,51 +54,15 @@ Return ONLY a valid JSON array of objects. No markdown formatting.
  * Generic response fetcher that routes to the correct provider service
  */
 const getLLMResponse = async (
-    provider: AIProvider,
-    prompt: string,
-    modelOverride?: string
+    config: ProviderConfig,
+    prompt: string
 ): Promise<string> => {
     const systemInstruction = "You are a JSON-only rule extraction engine.";
 
-    // Default models if not specified
-    const geminiModel = 'gemini-2.0-flash';
-    const openaiModel = 'gpt-4o';
-    const deepseekModel = 'deepseek-chat';
-    const groqModel = 'llama-3.3-70b-versatile';
-    const openrouterModel = 'meta-llama/llama-3.3-70b-instruct:free';
-    const zhipuModel = 'glm-4-flash';
-    const grokModel = 'grok-2-1212';
-
     try {
-        switch (provider) {
-            case AIProvider.GEMINI:
-                return await geminiService.getQuickResponse(prompt, [], modelOverride || geminiModel, systemInstruction);
-            case AIProvider.OPENAI:
-                return await openaiService.getQuickResponse(prompt, [], modelOverride || openaiModel, systemInstruction);
-            case AIProvider.DEEPSEEK:
-                return await deepseekService.getQuickResponse(prompt, [], modelOverride || deepseekModel, systemInstruction);
-            case AIProvider.GROQ:
-            case AIProvider.GROQ_NEW:
-            case AIProvider.GROQ_ALT2:
-                return await groqService.getQuickResponse(prompt, [], modelOverride || groqModel, systemInstruction);
-            case AIProvider.OPENROUTER:
-                return await openrouterService.getQuickResponse(prompt, [], modelOverride || openrouterModel, systemInstruction);
-            case AIProvider.ZHIPU:
-                return await zhipuService.getQuickResponse(prompt, [], modelOverride || zhipuModel, systemInstruction);
-            case AIProvider.GROK:
-                return await grokNativeService.getQuickResponse(prompt, [], modelOverride || grokModel, systemInstruction);
-            default:
-                console.warn(`[LLMRuleExtraction] Provider ${provider} not explicitly supported, falling back to Gemini.`);
-                return await geminiService.getQuickResponse(prompt, [], geminiModel, systemInstruction);
-        }
+        return await getQuickResponse(config, prompt, systemInstruction);
     } catch (error) {
-        console.error(`[LLMRuleExtraction] Error with provider ${provider}:`, error);
-        // Fallback to Gemini on error if strictly needed, or just rethrow. 
-        // For robustness, let's try Gemini as backup if primary fails.
-        if (provider !== AIProvider.GEMINI) {
-            console.log('[LLMRuleExtraction] Attempting fallback to Gemini...');
-            return await geminiService.getQuickResponse(prompt, [], geminiModel, systemInstruction);
-        }
+        console.error(`[LLMRuleExtraction] Error extracting rules:`, error);
         throw error;
     }
 };
@@ -117,14 +73,14 @@ const getLLMResponse = async (
 export const extractRulesWithLLM = async (
     postMortemText: string,
     tradeDetails: string = "",
-    provider: AIProvider = AIProvider.GEMINI
+    config: ProviderConfig
 ): Promise<ExtractedRule[]> => {
     if (!postMortemText || postMortemText.length < 20) return [];
 
     const prompt = generateExtractionPrompt(postMortemText, tradeDetails);
 
     try {
-        const responseText = await getLLMResponse(provider, prompt);
+        const responseText = await getLLMResponse(config, prompt);
         const parsed = extractAndParseJson(responseText);
 
         if (Array.isArray(parsed)) {
