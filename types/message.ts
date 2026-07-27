@@ -53,27 +53,12 @@ export interface Message {
   correctedEntry?: string; // To store the user-provided correct entry price
   correctedStopLoss?: string; // To store user-provided corrected stop loss
   correctedTakeProfit?: string; // To store user-provided corrected take profit
-  // Ensemble fields
-  geminiModelUsed?: string;
-  deepseekModelUsed?: string;
-  zhipuModelUsed?: string;
-  groqModelUsed?: string;
-  groqNewModelUsed?: string;
-  groqAlt2ModelUsed?: string;
-  openrouterModelUsed?: string;
-  grokNativeModelUsed?: string;
+  // Ensemble fields — keyed by provider id (ProviderConfig.id)
+  modelsUsed?: Record<string, string>;       // providerId → model id used
+  thoughtProcesses?: Record<string, string>; // providerId → thought process text
 
   isDebating?: boolean; // Flag for showing the debate UI
   debateTurns?: DebateTurn[]; // Holds the live debate conversation
-  // Individual thought processes for ensemble pre-synthesis display
-  geminiThoughtProcess?: string;
-  deepseekThoughtProcess?: string;
-  zhipuThoughtProcess?: string;
-  groqThoughtProcess?: string;
-  groqNewThoughtProcess?: string;
-  groqAlt2ThoughtProcess?: string;
-  openrouterThoughtProcess?: string;
-  grokNativeThoughtProcess?: string;
 
   // Mode Tracking
   isAccuracyMode?: boolean;
@@ -108,14 +93,5 @@ export interface ImageMetadata {
 }
 
 export interface LiveThoughts {
-  gemini: string | null;
-  deepseek: string | null;
-  zhipu: string | null;
-  groq: string | null;
-  groqNew: string | null;
-  groqAlt2: string | null;
-  openrouter: string | null;
-  openai: string | null;
-  grokNative: string | null;
-
+  [providerId: string]: string | null;
 }

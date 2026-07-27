@@ -6,7 +6,8 @@
  */
 
 import { LoggedTrade, TradeAnalysis, AIProvider } from '../../types';
-import { getPreferenceObject, setPreferenceObject, getPreference, PREF_KEYS } from '../infrastructure/PreferencesService';
+import { ProviderConfig } from '../../types/provider';
+import { getPreferenceObject, setPreferenceObject, PREF_KEYS } from '../infrastructure/PreferencesService';
 import { extractRulesWithLLM } from '../learning/LLMRuleExtractionService';
 
 // ========================= INTERFACES =========================
@@ -246,34 +247,22 @@ function categorizeRule(ruleText: string): InvalidationRule['category'] {
 export async function addRulesFromPostMortem(
     postMortemText: string,
     trade: LoggedTrade,
-    sourceProvider?: AIProvider | string
+    sourceProvider?: AIProvider | string,
+    providerConfig?: ProviderConfig
 ): Promise<InvalidationRule[]> {
     // 1. Regex Extraction (Fast)
     const regexRules = extractRulesFromPostMortem(postMortemText, trade, sourceProvider);
 
-    // 2. LLM Extraction (Smart)
+    // 2. LLM Extraction (Smart) — requires a configured provider
     let llmRules: InvalidationRule[] = [];
+    if (!providerConfig) {
+        // No provider configured; skip LLM extraction and return regex rules only.
+        return regexRules;
+    }
     try {
         const tradeContext = `Coin: ${trade.analysis.coinName}, Direction: ${trade.analysis.direction}, Outcome: ${trade.outcome}`;
 
-        let selectedProvider: AIProvider;
-
-        // 1. Explicit Argument
-        if (sourceProvider && Object.values(AIProvider).includes(sourceProvider as AIProvider)) {
-            selectedProvider = sourceProvider as AIProvider;
-        }
-        // 2. Fallback to User Preference
-        else {
-            const savedProvider = await getPreference(PREF_KEYS.MEMORY_PROVIDER);
-            if (savedProvider && Object.values(AIProvider).includes(savedProvider as AIProvider)) {
-                selectedProvider = savedProvider as AIProvider;
-            } else {
-                // 3. Default
-                selectedProvider = AIProvider.GEMINI;
-            }
-        }
-
-        const extracted = await extractRulesWithLLM(postMortemText, tradeContext, selectedProvider);
+        const extracted = await extractRulesWithLLM(postMortemText, tradeContext, providerConfig);
 
         llmRules = extracted.map(ex => {
             const fullRule = `IF ${ex.condition}, THEN ${ex.action}`;

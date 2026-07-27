@@ -2,6 +2,7 @@
 
 import React, { useState, useRef } from 'react';
 import { ImageMetadata, Message, TradeOutcome } from '../../types';
+import { ProviderConfig } from '../../types/provider';
 import ImagePreview from '../shared/ImagePreview';
 import { UploadIcon, LoadingIcon } from '../shared/Icons';
 import { processImagesForSummarization } from '../../utils/imageProcessor';
@@ -21,9 +22,9 @@ export const PostTradeUploadModal: React.FC<{
   candidate: PostMortemCandidate;
   onClose: () => void;
   onAnalyze: (summaries?: string[], images?: string[]) => void;
-  ocrModel: string;
+  visionConfig: ProviderConfig;
   onQuotaExceeded: (modelId: string) => void;
-}> = ({ candidate, onClose, onAnalyze, ocrModel, onQuotaExceeded }) => {
+}> = ({ candidate, onClose, onAnalyze, visionConfig, onQuotaExceeded }) => {
     const [images, setImages] = useState<ImageMetadata[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
     
@@ -32,7 +33,7 @@ export const PostTradeUploadModal: React.FC<{
             const newFiles: File[] = Array.from(event.target.files);
             const placeholderMetadata: ImageMetadata[] = newFiles.map(file => ({ file, dataURL: '', isLoading: true }));
             setImages(prev => [...prev, ...placeholderMetadata].slice(0, 5));
-            processImagesForSummarization(newFiles, images.length, ocrModel, setImages, onQuotaExceeded);
+            processImagesForSummarization(newFiles, images.length, visionConfig, setImages, onQuotaExceeded);
             if (event.target) event.target.value = '';
         }
     };

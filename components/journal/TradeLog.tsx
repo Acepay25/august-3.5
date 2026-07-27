@@ -53,7 +53,7 @@ const TradeLogRow: React.FC<{
     isInsight: boolean;
     onUpdateLeverage: (id: string, leverage: number) => void;
 }> = ({ trade, onToggle, isExpanded, isSelected, onSelect, onViewImage, modelIdToName, ocrModelIdToName, isInsight, onUpdateLeverage }) => {
-    const { analysis, outcome, timestamp, postMortem, postMortemImages, correctedEntry, correctedStopLoss, correctedTakeProfit, pnlAmount, geminiModelUsed, deepseekModelUsed, zhipuModelUsed, groqModelUsed, groqNewModelUsed, moderatorModel, geminiThoughtProcess, deepseekThoughtProcess, zhipuThoughtProcess, groqThoughtProcess, groqNewThoughtProcess, leverage, isAccuracyMode, accuracySubMode } = trade;
+    const { analysis, outcome, timestamp, postMortem, postMortemImages, correctedEntry, correctedStopLoss, correctedTakeProfit, pnlAmount, geminiModelUsed, deepseekModelUsed, zhipuModelUsed, groqModelUsed, groqNewModelUsed, moderatorModel, leverage, isAccuracyMode, accuracySubMode } = trade;
     const { direction, stopLoss, stopLossPercentage, entryPoints, takeProfit, activeStrategies, coinName } = analysis;
     const [isInsightsVisible, setIsInsightsVisible] = useState(false);
     const [isPostMortemVisible, setIsPostMortemVisible] = useState(false);
@@ -224,22 +224,6 @@ const TradeLogRow: React.FC<{
                         </div>
 
                         {correctedEntry && <div className="col-span-2 bg-yellow-500/10 p-2 rounded border border-yellow-500/20 text-yellow-200 font-medium">Corrected Entry: {correctedEntry}</div>}
-
-                        {(geminiThoughtProcess || deepseekThoughtProcess || zhipuThoughtProcess || groqThoughtProcess || groqNewThoughtProcess) && (
-                            <div className="col-span-2 mt-2">
-                                <button onClick={() => setIsInsightsVisible(!isInsightsVisible)} className="text-cyan-400 hover:text-cyan-300 text-[10px] uppercase font-bold tracking-widest flex items-center gap-1 mb-2 transition-colors">
-                                    Raw AI Insights <ChevronDownIcon className={`w-3 h-3 transition-transform ${isInsightsVisible ? 'rotate-180' : ''}`} />
-                                </button>
-                                <div className={`collapsible-content ${isInsightsVisible ? 'expanded' : ''} space-y-2`}>
-                                    {geminiThoughtProcess && <div className="p-3 bg-zinc-900/80 rounded border border-white/5 text-zinc-400 leading-relaxed"><strong>Gemini ({modelIdToName[geminiModelUsed!] || 'Gemini'}):</strong> {geminiThoughtProcess.slice(0, 200)}...</div>}
-                                    {deepseekThoughtProcess && <div className="p-3 bg-zinc-900/80 rounded border border-white/5 text-zinc-400 leading-relaxed"><strong>DeepSeek ({modelIdToName[deepseekModelUsed!] || 'DeepSeek'}):</strong> {deepseekThoughtProcess.slice(0, 200)}...</div>}
-                                    {zhipuThoughtProcess && <div className="p-3 bg-zinc-900/80 rounded border border-white/5 text-zinc-400 leading-relaxed"><strong>Zhipu ({modelIdToName[zhipuModelUsed!] || 'Zhipu'}):</strong> {zhipuThoughtProcess.slice(0, 200)}...</div>}
-                                    {groqThoughtProcess && <div className="p-3 bg-zinc-900/80 rounded border border-white/5 text-zinc-400 leading-relaxed"><strong>Groq ({modelIdToName[groqModelUsed!] || 'Groq'}):</strong> {groqThoughtProcess.slice(0, 200)}...</div>}
-                                    {groqNewThoughtProcess && <div className="p-3 bg-zinc-900/80 rounded border border-white/5 text-zinc-400 leading-relaxed"><strong>Groq (Alt) ({modelIdToName[groqNewModelUsed!] || 'Groq'}):</strong> {groqNewThoughtProcess.slice(0, 200)}...</div>}
-
-                                </div>
-                            </div>
-                        )}
 
                         {postMortem && (
                             <div className="col-span-2 mt-2">

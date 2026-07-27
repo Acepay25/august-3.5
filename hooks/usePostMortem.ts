@@ -6,31 +6,12 @@ import { validateTradeOutcome, TradeOutcomeValidation } from '../services/backte
 import { sanitizeAIResponse } from '../utils/sanitizers';
 import * as ensembleService from '../services/providers/ensembleService';
 import * as MemoryService from '../services/learning/MemoryService';
-import { MemoryProvider } from '../services/learning/MemoryService';
 import { getTradingWeaknesses } from '../services/learning/MistakePatternService';
 import { jobQueue, JobType } from '../services/infrastructure/JobQueueService';
 import { MAX_TRADE_SUMMARIES } from './useTradeLogging';
 import { saveThinkingBatch, generateThinkingId } from '../services/infrastructure/ThinkingStoreService';
-
-// Provider services (standard mode)
-import * as geminiService from '../services/providers/geminiService';
-import * as deepseekService from '../services/providers/deepseekService';
-import * as zhipuService from '../services/providers/zhipuService';
-import * as groqService from '../services/providers/groqService';
-import * as groqNewService from '../services/providers/groqNewService';
-import * as groqAlt2Service from '../services/providers/groqAlt2Service';
-import * as openrouterService from '../services/providers/openrouterService';
-import * as openaiService from '../services/providers/openaiService';
-
-// Provider services (accuracy mode)
-import * as geminiAccuracyService from '../services/providers/accuracy/geminiAccuracyService';
-import * as deepseekAccuracyService from '../services/providers/accuracy/deepseekAccuracyService';
-import * as zhipuAccuracyService from '../services/providers/accuracy/zhipuAccuracyService';
-import * as groqAccuracyService from '../services/providers/accuracy/groqAccuracyService';
-import * as groqNewAccuracyService from '../services/providers/accuracy/groqNewAccuracyService';
-import * as groqAlt2AccuracyService from '../services/providers/accuracy/groqAlt2AccuracyService';
-import * as openrouterAccuracyService from '../services/providers/accuracy/openrouterAccuracyService';
-import * as openaiAccuracyService from '../services/providers/accuracy/openaiAccuracyService';
+import { ProviderConfig } from '../types/provider';
+import { conductPostMortem, summarizeTrade, getQuickResponse } from '../services/providers/GenericAnalysisService';
 
 export interface UsePostMortemParams {
     // Conversation state
@@ -45,25 +26,8 @@ export interface UsePostMortemParams {
     // because this hook is instantiated before App.tsx destructures
     // activeUsername from useUserProfiles.
     activeUsernameRef: MutableRefObject<string | null>;
-    isGeminiEnabled: boolean;
-    isDeepSeekEnabled: boolean;
-    isZhipuEnabled: boolean;
-    isGroqEnabled: boolean;
-    isGroqNewEnabled: boolean;
-    isGroqAlt2Enabled: boolean;
-    isOpenrouterEnabled: boolean;
-    isOpenaiEnabled: boolean;
-    isGrokNativeEnabled: boolean;
-    selectedGeminiModel: string;
-    selectedDeepSeekModel: string;
-    selectedZhipuModel: string;
-    selectedGroqModel: string;
-    selectedGroqNewModel: string;
-    selectedGroqAlt2Model: string;
-    selectedOpenrouterModel: string;
-    selectedOpenaiModel: string;
-    selectedGrokNativeModel: string;
-    moderatorProvider: any;
+    providerConfigs: ProviderConfig[];
+    moderatorConfig: ProviderConfig;
     moderatorModel: string;
 
     // Trade/memory state
@@ -73,7 +37,7 @@ export interface UsePostMortemParams {
     globalMemory: GlobalMemory | undefined;
     setGlobalMemory: (v: GlobalMemory | undefined) => void;
     memoryModel: string;
-    memoryProvider: MemoryProvider;
+    memoryConfig: ProviderConfig | null;
     tradeSummaries: TradeSummary[];
     setTradeSummaries: (updater: (prev: TradeSummary[]) => TradeSummary[]) => void;
 
@@ -100,16 +64,11 @@ export const usePostMortem = (params: UsePostMortemParams) => {
         messages, messagesRef, updateMessages,
         isAccuracyModeEnabled,
         activeUsernameRef,
-        isGeminiEnabled, isDeepSeekEnabled, isZhipuEnabled,
-        isGroqEnabled, isGroqNewEnabled, isGroqAlt2Enabled,
-        isOpenrouterEnabled, isOpenaiEnabled,
-        selectedGeminiModel, selectedDeepSeekModel, selectedZhipuModel,
-        selectedGroqModel, selectedGroqNewModel, selectedGroqAlt2Model,
-        selectedOpenrouterModel, selectedOpenaiModel,
-        moderatorProvider, moderatorModel,
+        providerConfigs,
+        moderatorConfig, moderatorModel,
         finalTradeSummary, loggedTrades, setLoggedTrades,
         globalMemory, setGlobalMemory,
-        memoryModel, memoryProvider,
+        memoryModel, memoryConfig,
         tradeSummaries, setTradeSummaries,
         setIsPostMortemInProgress, setIsLivePostMortemVisible,
         setLoadingMessage, setIsPostMortemTypingComplete,
@@ -185,27 +144,9 @@ export const usePostMortem = (params: UsePostMortemParams) => {
 
         try {
             const history: Message[] = [];
-            let enabledProviders: any[] = [];
-
-            if (isAccuracyModeEnabled) {
-                if (isGeminiEnabled) enabledProviders.push({ name: 'Gemini', service: geminiAccuracyService, model: selectedGeminiModel, thoughtsKey: 'gemini' as const });
-                if (isDeepSeekEnabled) enabledProviders.push({ name: 'DeepSeek', service: deepseekAccuracyService, model: selectedDeepSeekModel, thoughtsKey: 'deepseek' as const });
-                if (isGroqEnabled) enabledProviders.push({ name: 'Groq', service: groqAccuracyService, model: selectedGroqModel, thoughtsKey: 'groq' as const });
-                if (isZhipuEnabled) enabledProviders.push({ name: 'Zhipu', service: zhipuAccuracyService, model: selectedZhipuModel, thoughtsKey: 'zhipu' as const });
-                if (isGroqNewEnabled) enabledProviders.push({ name: 'Groq (Alt)', service: groqNewAccuracyService, model: selectedGroqNewModel, thoughtsKey: 'groqNew' as const });
-                if (isGroqAlt2Enabled) enabledProviders.push({ name: 'Groq (Alt 2)', service: groqAlt2AccuracyService, model: selectedGroqAlt2Model, thoughtsKey: 'groqAlt2' as const });
-                if (isOpenrouterEnabled) enabledProviders.push({ name: 'OpenRouter', service: openrouterAccuracyService, model: selectedOpenrouterModel, thoughtsKey: 'openrouter' as const });
-                if (isOpenaiEnabled) enabledProviders.push({ name: 'OpenAI', service: openaiAccuracyService, model: selectedOpenaiModel, thoughtsKey: 'openai' as const });
-            } else {
-                if (isGeminiEnabled) enabledProviders.push({ name: 'Gemini', service: geminiService, model: selectedGeminiModel, thoughtsKey: 'gemini' as const });
-                if (isDeepSeekEnabled) enabledProviders.push({ name: 'DeepSeek', service: deepseekService, model: selectedDeepSeekModel, thoughtsKey: 'deepseek' as const });
-                if (isZhipuEnabled) enabledProviders.push({ name: 'Zhipu', service: zhipuService, model: selectedZhipuModel, thoughtsKey: 'zhipu' as const });
-                if (isGroqEnabled) enabledProviders.push({ name: 'Groq', service: groqService, model: selectedGroqModel, thoughtsKey: 'groq' as const });
-                if (isGroqNewEnabled) enabledProviders.push({ name: 'Groq (Alt)', service: groqNewService, model: selectedGroqNewModel, thoughtsKey: 'groqNew' as const });
-                if (isGroqAlt2Enabled) enabledProviders.push({ name: 'Groq (Alt 2)', service: groqAlt2Service, model: selectedGroqAlt2Model, thoughtsKey: 'groqAlt2' as const });
-                if (isOpenrouterEnabled) enabledProviders.push({ name: 'OpenRouter', service: openrouterService, model: selectedOpenrouterModel, thoughtsKey: 'openrouter' as const });
-                if (isOpenaiEnabled) enabledProviders.push({ name: 'OpenAI', service: openaiService, model: selectedOpenaiModel, thoughtsKey: 'openai' as const });
-            }
+            const enabledProviders = providerConfigs
+                .filter(config => config.isEnabled && config.apiKey)
+                .map(config => ({ config, name: config.name, model: config.selectedModel }));
 
             // Guard: Accuracy Mode has no fallback provider
             if (isAccuracyModeEnabled && enabledProviders.length === 0) {
@@ -293,17 +234,25 @@ Please investigate this discrepancy in your analysis.
             }
 
             // --- STANDARD POST-MORTEM FLOW ---
-            if (enabledProviders.length === 0 && !isAccuracyModeEnabled) {
-                enabledProviders.push({ name: 'Gemini', service: geminiService, model: selectedGeminiModel, thoughtsKey: 'gemini' as const });
-            }
-
             const enhancedSummaries = priceValidationInjection
                 ? [...(summaries || []), priceValidationInjection]
                 : summaries;
 
             const analysisPromises = enabledProviders.map(p =>
-                p.service.conductPostMortem(
-                    candidate.message, candidate.outcome, history, finalTradeSummary, p.model, candidate.feedback, enhancedSummaries
+                conductPostMortem(
+                    p.config,
+                    {
+                        previousMessage: candidate.message,
+                        outcome: candidate.outcome,
+                        history,
+                        finalTradeSummary,
+                        feedback: candidate.feedback ? {
+                            correctedEntry: candidate.feedback.correctedEntry,
+                            correctedStopLoss: candidate.feedback.correctedStopLoss,
+                            correctedTakeProfit: candidate.feedback.correctedTakeProfit,
+                        } : undefined,
+                        postTradeImageSummaries: enhancedSummaries,
+                    }
                 ).then((res: string) => {
                     return { provider: p.name, result: res };
                 })
@@ -319,12 +268,12 @@ Please investigate this discrepancy in your analysis.
                 let debateStream;
 
                 if (results.length === 2) {
-                    debateStream = ensembleService.conductTwoWayPostMortemDebate(candidate.message, candidate.outcome, results[0].result, results[1].result, results[0].provider, results[1].provider, finalTradeSummary, moderatorProvider, moderatorModel, imageUrls);
+                    debateStream = ensembleService.conductTwoWayPostMortemDebate(candidate.message, candidate.outcome, results[0].result, results[1].result, results[0].provider, results[1].provider, finalTradeSummary, moderatorConfig, moderatorModel, imageUrls);
                 } else {
                     const r1 = results[0];
                     const r2 = results[1];
                     const r3 = results[2] || results[0];
-                    debateStream = ensembleService.conductThreeWayPostMortemDebate(candidate.message, candidate.outcome, r1.result, r2.result, r3.result, r1.provider, r2.provider, r3.provider, finalTradeSummary, moderatorProvider, moderatorModel, imageUrls);
+                    debateStream = ensembleService.conductThreeWayPostMortemDebate(candidate.message, candidate.outcome, r1.result, r2.result, r3.result, r1.provider, r2.provider, r3.provider, finalTradeSummary, moderatorConfig, moderatorModel, imageUrls);
                 }
 
                 let fullDebateText = "";
@@ -457,7 +406,7 @@ Please investigate this discrepancy in your analysis.
 
             const tradeToUpdate = loggedTrades.find(t => t.analysis.createdAt === candidate.message.analysis?.createdAt);
             if (tradeToUpdate) {
-                const summary = await MemoryService.summarizeTrade({ ...tradeToUpdate, postMortem: finalPostMortemReport }, memoryModel, memoryProvider);
+                const summary = await MemoryService.summarizeTrade({ ...tradeToUpdate, postMortem: finalPostMortemReport }, memoryModel, memoryConfig!);
                 // Re-check after the await — the user may have switched during summarizeTrade
                 if (isRunStale(myRunId)) {
                     console.log('[PostMortem] Discarding summary — user switched during summarizeTrade');
@@ -469,7 +418,7 @@ Please investigate this discrepancy in your analysis.
                     return updated.slice(-MAX_TRADE_SUMMARIES);
                 });
 
-                const newMemory = await MemoryService.updateGlobalMemory([tradeToUpdate], globalMemory, memoryProvider);
+                const newMemory = await MemoryService.updateGlobalMemory([tradeToUpdate], globalMemory, memoryConfig!);
                 // Re-check after the await
                 if (isRunStale(myRunId)) {
                     console.log('[PostMortem] Discarding global memory update — user switched');

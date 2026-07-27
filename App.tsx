@@ -2,12 +2,8 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { VirtuosoHandle } from 'react-virtuoso';
 import { Message, MessageRole, TradeOutcome, ImageMetadata, AIProvider, Conversation, UserProfile, SavedAnalysis, TradeSummary, GlobalMemory, AccuracySubMode, CustomInstructionsMap, AnalystLensConfig } from './types';
-import * as geminiService from './services/providers/geminiService';
-import * as deepseekService from './services/providers/deepseekService';
-import * as zhipuService from './services/providers/zhipuService';
-import * as groqService from './services/providers/groqService';
-import * as groqNewService from './services/providers/groqNewService';
 import * as ensembleService from './services/providers/ensembleService';
+import { generateFinalSummary } from './services/providers/GenericAnalysisService';
 import * as dbService from './services/infrastructure/dbService';
 import { ProbabilityEngineService } from './services/analysis/ProbabilityEngineService';
 
@@ -74,7 +70,7 @@ import { offlineQueue, QueuedRequest } from './services/infrastructure/OfflineQu
 // AI Learning Services - Adaptive Learning, Mistake Patterns, Insight Extraction
 import { extractInsightsFromPostMortem, storeInsights, initializeKnowledgeBase } from './services/learning/InsightExtractionService';
 import * as MemoryService from './services/learning/MemoryService';
-import { MemoryProvider, MEMORY_PROVIDER_OPTIONS, MEMORY_MODELS, getDefaultModelForProvider } from './services/learning/MemoryService';
+import { ProviderConfig } from './types/provider';
 import { syncFromTradeLog, syncRollingWindowFromTradeLog, initModelPerformanceService } from './services/backtesting/ModelPerformanceService';
 import { loadLensConfig, saveLensConfig, getDefaultLensAssignments, initAnalystLensService } from './services/ui/AnalystLensService';
 import { detectTradingStyle, getEffectiveStyle, generateMasterPromptStyleInjection } from './services/ui/TradingStyleDetector';
@@ -147,6 +143,7 @@ const App: React.FC = () => {
     // Provider configuration (API keys, base URLs, custom providers)
     const {
         configs: providerConfigs,
+        readyProviders,
         handleUpdateProvider,
         handleAddCustomProvider,
         handleRemoveProvider,
@@ -159,22 +156,11 @@ const App: React.FC = () => {
         activeConversationId, setActiveConversationId,
         activeConversation, messages, messagesRef,
         updateMessages, updateActiveConversation,
-        selectedGeminiModel, selectedDeepSeekModel, selectedZhipuModel,
-        selectedGroqModel, selectedGroqNewModel, selectedGroqAlt2Model,
-        selectedOpenrouterModel, selectedOcrModel, selectedOpenaiModel, selectedGrokNativeModel,
-        isGeminiEnabled, isDeepSeekEnabled, isZhipuEnabled,
-        isGroqEnabled, isGroqNewEnabled, isGroqAlt2Enabled,
-        isOpenrouterEnabled, isOpenaiEnabled, isGrokNativeEnabled,
-        moderatorProvider, moderatorModel,
-        handleSetIsGeminiEnabled, handleSetIsDeepSeekEnabled, handleSetIsZhipuEnabled,
-        handleSetIsGroqEnabled, handleSetIsGroqNewEnabled, handleSetIsGroqAlt2Enabled,
-        handleSetIsOpenrouterEnabled, handleSetIsOpenaiEnabled, handleSetIsGrokNativeEnabled,
+        selectedOcrModel,
+        moderatorProviderId, moderatorModel,
         handleSetVisionModel,
-        handleSetSelectedGeminiModel, handleSetSelectedDeepSeekModel, handleSetSelectedZhipuModel,
-        handleSetSelectedGroqModel, handleSetSelectedGroqNewModel, handleSetSelectedGroqAlt2Model,
-        handleSetSelectedOpenrouterModel, handleSetSelectedOcrModel,
-        handleSetSelectedOpenaiModel, handleSetSelectedGrokNativeModel,
-        handleToggleProvider, handleSetModeratorProvider, handleSetModeratorModel,
+        handleSetSelectedOcrModel,
+        handleSetModeratorProvider, handleSetModeratorModel,
     } = useConversations();
 
     // UI and other state
@@ -183,9 +169,17 @@ const App: React.FC = () => {
     const [globalMemory, setGlobalMemory] = useState<GlobalMemory | undefined>(undefined);
 
     // Memory Provider Selection (for compressChatHistory and updateGlobalMemory)
-    const [memoryProvider, setMemoryProvider] = useState<MemoryProvider>('gemini');
+    const [memoryConfig, setMemoryConfig] = useState<ProviderConfig | null>(null);
     const [memoryModel, setMemoryModel] = useState<string>('gemini-2.5-flash');
     const [isGlobalMemoryEnabled, setIsGlobalMemoryEnabled] = useState<boolean>(true);
+
+    // Derive the moderator ProviderConfig from readyProviders
+    const moderatorConfig: ProviderConfig = useMemo(() =>
+        readyProviders.find(p => p.id === moderatorProviderId) || readyProviders[0] || {
+            id: 'none', name: 'None', apiKey: '', baseUrl: '', apiFormat: 'chat_completions' as const,
+            isEnabled: false, isBuiltIn: true, models: [], selectedModel: '',
+        },
+    [readyProviders, moderatorProviderId]);
 
     // Accuracy Mode State
     const [isAccuracyModeEnabled, setIsAccuracyModeEnabled] = useState<boolean>(false);
@@ -293,10 +287,10 @@ const App: React.FC = () => {
         messages,
         updateMessages,
         activeConversationLeverage: activeConversation?.leverage,
-        moderatorProvider,
+        moderatorProviderId,
         moderatorModel,
         memoryModel,
-        memoryProvider,
+        memoryConfig: memoryConfig || moderatorConfig,
         useAlgorithmicInsights,
         setIsAutoCapturing,
         setIsHybridLoading,
@@ -338,14 +332,9 @@ const App: React.FC = () => {
         getActiveCustomInstructions,
     } = useAnalysisPipeline({
         messages, messagesRef, updateMessages, activeConversation, activeConversationId,
-        selectedGeminiModel, selectedDeepSeekModel, selectedZhipuModel,
-        selectedGroqModel, selectedGroqNewModel, selectedGroqAlt2Model,
-        selectedOpenrouterModel, selectedOpenaiModel, selectedGrokNativeModel,
+        providerConfigs: readyProviders,
         selectedOcrModel,
-        isGeminiEnabled, isDeepSeekEnabled, isZhipuEnabled,
-        isGroqEnabled, isGroqNewEnabled, isGroqAlt2Enabled,
-        isOpenrouterEnabled, isOpenaiEnabled, isGrokNativeEnabled,
-        moderatorProvider, moderatorModel,
+        moderatorConfig, moderatorModel,
         finalTradeSummary, loggedTrades, tradeSummaries,
         globalMemory, insightKnowledgeBase, confidenceCalibration,
         currentHybridData, setCurrentHybridData,
@@ -396,25 +385,8 @@ const App: React.FC = () => {
         // is called before useUserProfiles destructures activeUsername below.
         // The ref is kept in sync on every render via the effect right after.
         activeUsernameRef,
-        isGeminiEnabled,
-        isDeepSeekEnabled,
-        isZhipuEnabled,
-        isGroqEnabled,
-        isGroqNewEnabled,
-        isGroqAlt2Enabled,
-        isOpenrouterEnabled,
-        isOpenaiEnabled,
-        isGrokNativeEnabled,
-        selectedGeminiModel,
-        selectedDeepSeekModel,
-        selectedZhipuModel,
-        selectedGroqModel,
-        selectedGroqNewModel,
-        selectedGroqAlt2Model,
-        selectedOpenrouterModel,
-        selectedOpenaiModel,
-        selectedGrokNativeModel,
-        moderatorProvider,
+        providerConfigs: readyProviders,
+        moderatorConfig,
         moderatorModel,
         finalTradeSummary,
         loggedTrades,
@@ -422,7 +394,7 @@ const App: React.FC = () => {
         globalMemory,
         setGlobalMemory,
         memoryModel,
-        memoryProvider,
+        memoryConfig,
         tradeSummaries,
         setTradeSummaries,
         setIsPostMortemInProgress,
@@ -452,7 +424,7 @@ const App: React.FC = () => {
 
     const isImageUploadDisabled = isAnalysisInProgress || isPostMortemInProgress;
     const isSummarizing = images.some(img => img.isLoading);
-    const isAnyProviderEnabled = isGeminiEnabled || isDeepSeekEnabled || isZhipuEnabled || isGroqEnabled || isGroqNewEnabled || isGroqAlt2Enabled || isOpenrouterEnabled || isOpenaiEnabled || isGrokNativeEnabled || isAccuracyModeEnabled;
+    const isAnyProviderEnabled = readyProviders.length > 0 || isAccuracyModeEnabled;
 
     const familyWinRates = useMemo(() => {
         // ... (same implementation) ...
@@ -728,7 +700,7 @@ const App: React.FC = () => {
             setIsMemoryEnabledInPureAI(profile.settings?.isMemoryEnabledInPureAI ?? false);
             setIsHybridIntelligenceEnabled(profile.settings?.isHybridIntelligenceEnabled ?? false);
             setConfidenceCalibration(profile.settings?.confidenceCalibration);
-            setMemoryProvider((profile.settings?.memoryProvider as any) || 'gemini');
+            setMemoryConfig(providerConfigs.find(p => p.id === profile.settings?.memoryProvider) || null);
             setMemoryModel(profile.settings?.memoryModel || 'gemini-2.5-flash');
 
             // AI Learning: Load knowledge base
@@ -810,11 +782,11 @@ const App: React.FC = () => {
         tradeSummaries: tradeSummaries,
         finalTradeSummary: finalTradeSummary,
         globalMemory: globalMemory,
-        settings: { activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, confidenceCalibration, memoryProvider, memoryModel },
+        settings: { activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, confidenceCalibration, memoryProvider: memoryConfig?.id || '', memoryModel },
         lastActiveConversationId: activeConversationId || undefined,
         // AI Learning data
         insightKnowledgeBase: insightKnowledgeBase,
-    }), [conversationHistory, loggedTrades, activeFrameworks, activeConversationId, savedAnalyses, tradeSummaries, finalTradeSummary, globalMemory, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, confidenceCalibration, insightKnowledgeBase, memoryProvider, memoryModel]);
+    }), [conversationHistory, loggedTrades, activeFrameworks, activeConversationId, savedAnalyses, tradeSummaries, finalTradeSummary, globalMemory, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, confidenceCalibration, insightKnowledgeBase, memoryConfig, memoryModel]);
 
     // ─── P1-6: Split save into DATA (heavy) + SETTINGS (light) ───────────
     // Previously a single effect re-serialized ALL conversations (with base64
@@ -863,7 +835,7 @@ const App: React.FC = () => {
                 // Only the settings sub-object — no conversations, no trades,
                 // no base64 images. This is a cheap write.
                 await dbService.saveUserProfile(activeUsername, {
-                    settings: { activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, confidenceCalibration, memoryProvider, memoryModel },
+                    settings: { activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, confidenceCalibration, memoryProvider: memoryConfig?.id || '', memoryModel },
                 });
             } catch (err) {
                 console.error("Failed to save user profile (settings):", err);
@@ -874,7 +846,7 @@ const App: React.FC = () => {
             clearTimeout(handler);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, confidenceCalibration, memoryProvider, memoryModel, activeUsername]);
+    }, [activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, confidenceCalibration, memoryConfig, memoryModel, activeUsername]);
 
     // Flush pending state on tab close / hide. The hook keeps an internal
     // ref to the freshest snapshot (updated every render via getSnapshot)
@@ -928,17 +900,7 @@ const App: React.FC = () => {
         if (!isAccuracyModeEnabled) { // Enabling Accuracy Mode
             updateActiveConversation(conv => ({
                 ...conv,
-                isGeminiEnabled: true,
-                isDeepSeekEnabled: true,
-                isZhipuEnabled: false, // Ensure Zhipu is Disabled
-                isGroqEnabled: true,
-                isGroqNewEnabled: false,
-                geminiModel: ACCURACY_MODE_DEFAULTS.GEMINI,
-                deepseekModel: ACCURACY_MODE_DEFAULTS.DEEPSEEK,
-                zhipuModel: ACCURACY_MODE_DEFAULTS.ZHIPU,
-                groqModel: ACCURACY_MODE_DEFAULTS.GROQ,
-                groqNewModel: GROQ_NEW_MODELS[0].id,
-                moderatorProvider: ACCURACY_MODE_DEFAULTS.MODERATOR_PROVIDER,
+                moderatorProviderId: ACCURACY_MODE_DEFAULTS.MODERATOR_PROVIDER,
                 moderatorModel: ACCURACY_MODE_DEFAULTS.MODERATOR_MODEL,
                 ocrModel: ACCURACY_MODE_DEFAULTS.VISION
             }));
@@ -1034,7 +996,7 @@ const App: React.FC = () => {
 
             for (const trade of newTrades) {
                 // Use the user's preference for Algo vs AI insight generation
-                const summary = await MemoryService.summarizeTrade(trade, memoryModel, memoryProvider, useAlgorithmicInsights);
+                const summary = await MemoryService.summarizeTrade(trade, memoryModel, memoryConfig || moderatorConfig, useAlgorithmicInsights);
                 newSummaries.push({
                     id: trade.id,
                     summaryText: summary,
@@ -1110,22 +1072,11 @@ const App: React.FC = () => {
                 const trade = loggedTrades.find(t => t.id === id);
                 console.log(`[AIRewrite] Looking for trade with id: ${id}, found: ${!!trade}`);
                 if (trade) {
-                    // Convert AIProvider enum to MemoryProvider string
-                    const providerMap: Record<string, MemoryProvider> = {
-                        'gemini': 'gemini',
-                        'deepseek': 'deepseek',
-                        'groq': 'groq',
-                        'groq_new': 'groq', // Map groq_new to groq
-                        'groq_alt2': 'groq-alt2', // Note: AIProvider uses underscore, MemoryProvider uses hyphen
-                        'zhipu': 'zhipu',
-                        'openrouter': 'openrouter',
-                        'openai': 'openai',
-                        'grok': 'grok-native', // AIProvider.GROK maps to MemoryProvider 'grok-native'
-                    };
-                    const provider = providerMap[summarizationProvider] || 'gemini';
-                    console.log(`[AIRewrite] Calling MemoryService.summarizeTrade with provider: ${provider} (from UI: ${summarizationProvider}), model: ${summarizationModel}, useAlgorithmic: false`);
+                    // Find the provider config matching the summarization provider
+                    const summaryConfig = readyProviders.find(p => p.id === summarizationProvider) || readyProviders[0] || moderatorConfig;
+                    console.log(`[AIRewrite] Calling MemoryService.summarizeTrade with provider: ${summaryConfig.name}, model: ${summarizationModel}, useAlgorithmic: false`);
                     // Force AI mode (false = use AI, not algo)
-                    const summary = await MemoryService.summarizeTrade(trade, summarizationModel, provider, false);
+                    const summary = await MemoryService.summarizeTrade(trade, summarizationModel, summaryConfig, false);
                     console.log(`[AIRewrite] Got summary for ${id}:`, summary?.substring(0, 100));
                     updatedSummaries.push({
                         id: trade.id,
@@ -1185,24 +1136,10 @@ const App: React.FC = () => {
                 const { generatePatternMemorySynthesis } = await import('./services/ui/AlgorithmicSummaryService');
                 summary = generatePatternMemorySynthesis(loggedTrades);
             } else {
-                // Use AI generation (Slower, Tokens)
-                switch (summarizationProvider) {
-                    case AIProvider.DEEPSEEK:
-                        summary = await deepseekService.generateFinalSummary(tradeSummaries, summarizationModel, summaryCharLimit);
-                        break;
-                    case AIProvider.ZHIPU:
-                        summary = await zhipuService.generateFinalSummary(tradeSummaries, summarizationModel, summaryCharLimit);
-                        break;
-                    case AIProvider.GROQ:
-                        summary = await groqService.generateFinalSummary(tradeSummaries, summarizationModel, summaryCharLimit);
-                        break;
-                    case AIProvider.GROQ_NEW:
-                        summary = await groqNewService.generateFinalSummary(tradeSummaries, summarizationModel, summaryCharLimit);
-                        break;
-                    case AIProvider.GEMINI:
-                    default:
-                        summary = await geminiService.generateFinalSummary(tradeSummaries, summarizationModel, summaryCharLimit);
-                        break;
+                // Use AI generation (Slower, Tokens) via GenericAnalysisService
+                const summaryConfig = readyProviders.find(p => p.id === summarizationProvider) || readyProviders[0];
+                if (summaryConfig) {
+                    summary = await generateFinalSummary(summaryConfig, tradeSummaries, summaryCharLimit);
                 }
             }
 
@@ -1257,18 +1194,8 @@ const App: React.FC = () => {
     const handleStartNewConversation = () => {
         const newConv = createNewConversation();
         if (activeConversation) {
-            newConv.geminiModel = activeConversation.geminiModel;
-            newConv.deepseekModel = activeConversation.deepseekModel;
-            newConv.zhipuModel = activeConversation.zhipuModel;
-            newConv.groqModel = activeConversation.groqModel;
-            newConv.groqNewModel = activeConversation.groqNewModel;
             newConv.ocrModel = activeConversation.ocrModel;
-            newConv.isGeminiEnabled = activeConversation.isGeminiEnabled;
-            newConv.isDeepSeekEnabled = activeConversation.isDeepSeekEnabled;
-            newConv.isZhipuEnabled = activeConversation.isZhipuEnabled;
-            newConv.isGroqEnabled = activeConversation.isGroqEnabled;
-            newConv.isGroqNewEnabled = activeConversation.isGroqNewEnabled;
-            newConv.moderatorProvider = activeConversation.moderatorProvider;
+            newConv.moderatorProviderId = activeConversation.moderatorProviderId;
             newConv.moderatorModel = activeConversation.moderatorModel;
             newConv.leverage = activeConversation.leverage;
         }
@@ -1378,7 +1305,8 @@ const App: React.FC = () => {
             const filesToProcess = newFiles.slice(0, remainingSlots);
             const placeholderMetadata: ImageMetadata[] = filesToProcess.map(file => ({ file, dataURL: '', isLoading: true }));
             setImages(prev => [...prev, ...placeholderMetadata]);
-            processImagesForSummarization(filesToProcess, images.length, selectedOcrModel, setImages, handleQuotaExceeded);
+            const visionConfig = readyProviders.find(p => p.selectedModel === selectedOcrModel) || readyProviders[0] || moderatorConfig;
+            processImagesForSummarization(filesToProcess, images.length, visionConfig, setImages, handleQuotaExceeded);
             if (event.target) event.target.value = '';
         }
     };
@@ -1422,15 +1350,15 @@ const App: React.FC = () => {
                 analysis: msg.analysis,
                 userPrompt,
                 timestamp: new Date().toISOString(),
-                geminiModelUsed: msg.geminiModelUsed,
-                deepseekModelUsed: msg.deepseekModelUsed,
-                zhipuModelUsed: msg.zhipuModelUsed,
-                groqModelUsed: msg.groqModelUsed,
-                groqNewModelUsed: msg.groqNewModelUsed,
-                groqAlt2ModelUsed: msg.groqAlt2ModelUsed,
+                geminiModelUsed: msg.modelsUsed?.['gemini'],
+                deepseekModelUsed: msg.modelsUsed?.['deepseek'],
+                zhipuModelUsed: msg.modelsUsed?.['zhipu'],
+                groqModelUsed: msg.modelsUsed?.['groq'],
+                groqNewModelUsed: msg.modelsUsed?.['groq_new'],
+                groqAlt2ModelUsed: msg.modelsUsed?.['groq_alt2'],
 
                 ocrModelUsed: msg.ocrModelUsed,
-                moderatorProvider,
+                moderatorProvider: moderatorProviderId,
                 moderatorModel
             };
             setSavedAnalyses(prev => {
@@ -1468,7 +1396,7 @@ const App: React.FC = () => {
         try {
             const stream = ensembleService.recalculateProbabilities(
                 msg.analysis,
-                moderatorProvider,
+                moderatorConfig,
                 moderatorModel,
                 msg.analysis.marketSnapshot // Pass snapshot for historical consistency
             );
@@ -1579,13 +1507,13 @@ const App: React.FC = () => {
                 isVisible={isLiveAnalysisVisible}
                 onClose={() => setIsLiveAnalysisVisible(false)}
                 thoughts={liveThoughts}
-                geminiModelName={isGeminiEnabled ? modelIdToName[selectedGeminiModel] : undefined}
-                deepseekModelName={isDeepSeekEnabled ? modelIdToName[selectedDeepSeekModel] : undefined}
-                zhipuModelName={isAccuracyModeEnabled ? undefined : (isZhipuEnabled ? modelIdToName[selectedZhipuModel] : undefined)}
-                groqModelName={isGroqEnabled ? modelIdToName[selectedGroqModel] : undefined}
-                groqNewModelName={isGroqNewEnabled ? modelIdToName[selectedGroqNewModel] : undefined}
-                groqAlt2ModelName={isGroqAlt2Enabled ? modelIdToName[selectedGroqAlt2Model] : undefined}
-                openrouterModelName={isOpenrouterEnabled ? modelIdToName[selectedOpenrouterModel] || selectedOpenrouterModel : undefined}
+                geminiModelName={readyProviders.find(p => p.id === 'gemini')?.selectedModel}
+                deepseekModelName={readyProviders.find(p => p.id === 'deepseek')?.selectedModel}
+                zhipuModelName={isAccuracyModeEnabled ? undefined : readyProviders.find(p => p.id === 'zhipu')?.selectedModel}
+                groqModelName={readyProviders.find(p => p.id === 'groq')?.selectedModel}
+                groqNewModelName={readyProviders.find(p => p.id === 'groq_new')?.selectedModel}
+                groqAlt2ModelName={readyProviders.find(p => p.id === 'groq_alt2')?.selectedModel}
+                openrouterModelName={readyProviders.find(p => p.id === 'openrouter')?.selectedModel}
                 onAllTypingComplete={handleAllAnalysisTypingComplete}
             />
             <LiveStreamView
@@ -1593,13 +1521,13 @@ const App: React.FC = () => {
                 isVisible={isLivePostMortemVisible}
                 onClose={() => setIsLivePostMortemVisible(false)}
                 thoughts={livePostMortemThoughts}
-                geminiModelName={isGeminiEnabled ? modelIdToName[selectedGeminiModel] : undefined}
-                deepseekModelName={isDeepSeekEnabled ? modelIdToName[selectedDeepSeekModel] : undefined}
-                zhipuModelName={isAccuracyModeEnabled ? undefined : (isZhipuEnabled ? modelIdToName[selectedZhipuModel] : undefined)}
-                groqModelName={isGroqEnabled ? modelIdToName[selectedGroqModel] : undefined}
-                groqNewModelName={isGroqNewEnabled ? modelIdToName[selectedGroqNewModel] : undefined}
-                groqAlt2ModelName={isGroqAlt2Enabled ? modelIdToName[selectedGroqAlt2Model] : undefined}
-                openrouterModelName={isOpenrouterEnabled ? modelIdToName[selectedOpenrouterModel] || selectedOpenrouterModel : undefined}
+                geminiModelName={readyProviders.find(p => p.id === 'gemini')?.selectedModel}
+                deepseekModelName={readyProviders.find(p => p.id === 'deepseek')?.selectedModel}
+                zhipuModelName={isAccuracyModeEnabled ? undefined : readyProviders.find(p => p.id === 'zhipu')?.selectedModel}
+                groqModelName={readyProviders.find(p => p.id === 'groq')?.selectedModel}
+                groqNewModelName={readyProviders.find(p => p.id === 'groq_new')?.selectedModel}
+                groqAlt2ModelName={readyProviders.find(p => p.id === 'groq_alt2')?.selectedModel}
+                openrouterModelName={readyProviders.find(p => p.id === 'openrouter')?.selectedModel}
                 onAllTypingComplete={handleAllPostMortemTypingComplete}
             />
             <UserProfileManager isVisible={isUserModalOpen} onUserSelect={loadUserData} existingUsers={existingUsernames} onImportProfile={handleImportData} onDeleteUser={handleDeleteUser} />
@@ -1627,8 +1555,8 @@ const App: React.FC = () => {
                     isCapturing={isEntryNotHitCapturing}
                 />
             )}
-            {postMortemCandidate && <PostTradeUploadModal candidate={postMortemCandidate} onClose={() => setPostMortemCandidate(null)} onAnalyze={(summaries, urls) => startPostMortemAnalysis(postMortemCandidate, summaries, urls)} ocrModel={isAccuracyModeEnabled ? selectedOcrModel : (postMortemCandidate.message.ocrModelUsed?.split(',')[0].trim() || selectedOcrModel)} onQuotaExceeded={handleQuotaExceeded} />}
-            {updateCandidate && <UpdateTradeModal message={updateCandidate} onClose={() => setUpdateCandidate(null)} onConfirm={handleConfirmUpdateTrade} onAutoCapture={handleUpdateAutoCapture} isCapturing={isUpdateAutoCapturing} ocrModel={isAccuracyModeEnabled ? selectedOcrModel : (updateCandidate.ocrModelUsed?.split(',')[0].trim() || selectedOcrModel)} onQuotaExceeded={handleQuotaExceeded} />}
+            {postMortemCandidate && <PostTradeUploadModal candidate={postMortemCandidate} onClose={() => setPostMortemCandidate(null)} onAnalyze={(summaries, urls) => startPostMortemAnalysis(postMortemCandidate, summaries, urls)} visionConfig={readyProviders.find(p => p.selectedModel === selectedOcrModel) || readyProviders[0] || moderatorConfig} onQuotaExceeded={handleQuotaExceeded} />}
+            {updateCandidate && <UpdateTradeModal message={updateCandidate} onClose={() => setUpdateCandidate(null)} onConfirm={handleConfirmUpdateTrade} onAutoCapture={handleUpdateAutoCapture} isCapturing={isUpdateAutoCapturing} visionConfig={readyProviders.find(p => p.selectedModel === selectedOcrModel) || readyProviders[0] || moderatorConfig} onQuotaExceeded={handleQuotaExceeded} />}
             {simulatorCandidate && (
                 <ScenarioSimulator
                     message={simulatorCandidate}
@@ -1653,8 +1581,8 @@ const App: React.FC = () => {
                 setIsHybridIntelligenceEnabled={setIsHybridIntelligenceEnabled}
                 isGlobalMemoryEnabled={isGlobalMemoryEnabled}
                 setIsGlobalMemoryEnabled={setIsGlobalMemoryEnabled}
-                memoryProvider={memoryProvider}
-                setMemoryProvider={setMemoryProvider}
+                memoryConfig={memoryConfig}
+                onMemoryConfigChange={setMemoryConfig}
                 memoryModel={memoryModel}
                 setMemoryModel={setMemoryModel}
                 isPlaybookEnabledInPureAI={isPlaybookEnabledInPureAI}
@@ -1667,55 +1595,13 @@ const App: React.FC = () => {
                 setCustomInstructions={setCustomInstructions}
                 lensConfig={lensConfig}
                 onSetLensConfig={handleSetLensConfig}
-                geminiModels={GEMINI_MODELS}
-                deepseekModels={DEEPSEEK_MODELS}
-                zhipuModels={ZHIPU_MODELS}
-                groqModels={GROQ_MODELS}
-                groqNewModels={GROQ_NEW_MODELS}
-                groqAlt2Models={GROQ_ALT2_MODELS}
-                openrouterModels={OPENROUTER_MODELS}
-                openaiModels={OPENAI_MODELS}
-                grokNativeModels={GROK_MODELS}
-
-                selectedGeminiModel={selectedGeminiModel}
-                selectedDeepSeekModel={selectedDeepSeekModel}
-                selectedZhipuModel={selectedZhipuModel}
-                selectedGroqModel={selectedGroqModel}
-                selectedGroqNewModel={selectedGroqNewModel}
-                selectedGroqAlt2Model={selectedGroqAlt2Model}
-                selectedOpenrouterModel={selectedOpenrouterModel}
-                selectedOpenaiModel={selectedOpenaiModel}
-                selectedGrokNativeModel={selectedGrokNativeModel}
-
-                onSetGeminiModel={handleSetSelectedGeminiModel}
-                onSetDeepseekModel={handleSetSelectedDeepSeekModel}
-                onSetZhipuModel={handleSetSelectedZhipuModel}
-                onSetGroqModel={handleSetSelectedGroqModel}
-                onSetGroqNewModel={handleSetSelectedGroqNewModel}
-                onSetGroqAlt2Model={handleSetSelectedGroqAlt2Model}
-                onSetOpenrouterModel={handleSetSelectedOpenrouterModel}
-                onSetOpenaiModel={handleSetSelectedOpenaiModel}
-                onSetGrokNativeModel={handleSetSelectedGrokNativeModel}
-
-                isGeminiEnabled={isGeminiEnabled}
-                isDeepSeekEnabled={isDeepSeekEnabled}
-                isZhipuEnabled={isZhipuEnabled}
-                isGroqEnabled={isGroqEnabled}
-                isGroqNewEnabled={isGroqNewEnabled}
-                isGroqAlt2Enabled={isGroqAlt2Enabled}
-                isOpenrouterEnabled={isOpenrouterEnabled}
-                isOpenaiEnabled={isOpenaiEnabled}
-                isGrokNativeEnabled={isGrokNativeEnabled}
-
-                onToggleProvider={handleToggleProvider}
-                ocrModels={OCR_MODELS}
+                providerConfigs={providerConfigs}
                 selectedOcrModel={selectedOcrModel}
                 onSetOcrModel={handleSetSelectedOcrModel}
-                moderatorProvider={moderatorProvider}
+                moderatorProvider={moderatorProviderId as AIProvider}
                 moderatorModel={moderatorModel}
                 onSetModeratorProvider={handleSetModeratorProvider}
                 onSetModeratorModel={handleSetModeratorModel}
-                providerConfigs={providerConfigs}
                 onUpdateProvider={handleUpdateProvider}
                 onAddCustomProvider={handleAddCustomProvider}
                 onRemoveProvider={handleRemoveProvider}
@@ -1756,26 +1642,8 @@ const App: React.FC = () => {
                 onClose={() => setJournalState(prev => ({ ...prev, isOpen: false }))}
                 initialTab={journalState.tab}
                 trades={loggedTrades}
-                enabledProviders={[
-                    ...(isGeminiEnabled ? [AIProvider.GEMINI] : []),
-                    ...(isDeepSeekEnabled ? [AIProvider.DEEPSEEK] : []),
-                    ...(isZhipuEnabled ? [AIProvider.ZHIPU] : []),
-                    ...(isGroqEnabled ? [AIProvider.GROQ] : []),
-                    ...(isGroqNewEnabled ? [AIProvider.GROQ_NEW] : []),
-                    ...(isGroqAlt2Enabled ? [AIProvider.GROQ_ALT2] : []),
-
-                    ...(isOpenrouterEnabled ? [AIProvider.OPENROUTER] : []),
-                ]}
-                selectedModels={{
-                    [AIProvider.GEMINI]: modelIdToName[selectedGeminiModel] || selectedGeminiModel,
-                    [AIProvider.DEEPSEEK]: modelIdToName[selectedDeepSeekModel] || selectedDeepSeekModel,
-                    [AIProvider.ZHIPU]: modelIdToName[selectedZhipuModel] || selectedZhipuModel,
-                    [AIProvider.GROQ]: modelIdToName[selectedGroqModel] || selectedGroqModel,
-                    [AIProvider.GROQ_NEW]: modelIdToName[selectedGroqNewModel] || selectedGroqNewModel,
-                    [AIProvider.GROQ_ALT2]: modelIdToName[selectedGroqAlt2Model] || selectedGroqAlt2Model,
-
-                    [AIProvider.OPENROUTER]: modelIdToName[selectedOpenrouterModel] || selectedOpenrouterModel,
-                }}
+                enabledProviders={readyProviders.map(p => p.id)}
+                selectedModels={Object.fromEntries(readyProviders.map(p => [p.id, p.selectedModel]))}
                 onDeleteTrades={handleDeleteTrades}
                 onClearAllTrades={handleClearAllTrades}
                 modelIdToName={modelIdToName}
@@ -1815,7 +1683,7 @@ const App: React.FC = () => {
                 onRewriteInsightsWithAI={handleRewriteInsightsWithAI}
             />
 
-            <StrategySearch isVisible={isStrategySearchVisible} onClose={() => { setIsStrategySearchVisible(false); setStrategyToView(null); }} onApplyStrategy={handleApplyStrategy} onRemoveStrategy={handleRemoveStrategy} geminiModel={selectedGeminiModel} activeFrameworks={activeFrameworks} defaultFrameworks={DEFAULT_FRAMEWORKS} initialViewStrategy={strategyToView} onQuotaExceeded={handleQuotaExceeded} familyWinRates={familyWinRates} />
+            <StrategySearch isVisible={isStrategySearchVisible} onClose={() => { setIsStrategySearchVisible(false); setStrategyToView(null); }} onApplyStrategy={handleApplyStrategy} onRemoveStrategy={handleRemoveStrategy} providerConfig={readyProviders[0] || moderatorConfig} activeFrameworks={activeFrameworks} defaultFrameworks={DEFAULT_FRAMEWORKS} initialViewStrategy={strategyToView} onQuotaExceeded={handleQuotaExceeded} familyWinRates={familyWinRates} />
             <SavedAnalyses analyses={savedAnalyses} isVisible={isSavedAnalysesVisible} onClose={() => setIsSavedAnalysesVisible(false)} onDelete={handleDeleteSavedAnalyses} onClearAll={handleClearAllSavedAnalyses} modelIdToName={modelIdToName} ocrModelIdToName={ocrModelIdToName} />
             {skipCandidate && <SkipTradeModal onClose={() => setSkipCandidate(null)} onConfirm={handleConfirmSkipTrade} skipReason={skipReason} setSkipReason={setSkipReason} correctedEntry={correctedEntry} setCorrectedEntry={setCorrectedEntry} />}
             {showMismatchModal && mismatchData && (
@@ -1832,16 +1700,7 @@ const App: React.FC = () => {
 
             {/* Advanced Analytics Side Panel - Fixed on right edge */}
             <AdvancedAnalyticsSidePanel
-                enabledProviders={[
-                    ...(isGeminiEnabled ? [AIProvider.GEMINI] : []),
-                    ...(isDeepSeekEnabled ? [AIProvider.DEEPSEEK] : []),
-                    ...(isZhipuEnabled ? [AIProvider.ZHIPU] : []),
-                    ...(isGroqEnabled ? [AIProvider.GROQ] : []),
-                    ...(isGroqNewEnabled ? [AIProvider.GROQ_NEW] : []),
-                    ...(isGroqAlt2Enabled ? [AIProvider.GROQ_ALT2] : []),
-
-                    ...(isOpenrouterEnabled ? [AIProvider.OPENROUTER] : []),
-                ]}
+                enabledProviders={readyProviders.map(p => p.id)}
                 monteCarloResult={latestMonteCarloResult}
                 backtestResult={latestBacktestResult}
                 isCalculating={isAnalysisInProgress || isCalculatingAIProbabilities}
@@ -1934,24 +1793,24 @@ const App: React.FC = () => {
                 isAnyProviderEnabled={isAnyProviderEnabled}
                 isAccuracyModeEnabled={isAccuracyModeEnabled}
                 accuracySubMode={accuracySubMode}
-                isGeminiEnabled={isGeminiEnabled}
-                setIsGeminiEnabled={handleSetIsGeminiEnabled}
-                isDeepSeekEnabled={isDeepSeekEnabled}
-                setIsDeepSeekEnabled={handleSetIsDeepSeekEnabled}
-                isZhipuEnabled={isZhipuEnabled}
-                setIsZhipuEnabled={handleSetIsZhipuEnabled}
-                isGroqEnabled={isGroqEnabled}
-                setIsGroqEnabled={handleSetIsGroqEnabled}
-                isGroqNewEnabled={isGroqNewEnabled}
-                setIsGroqNewEnabled={handleSetIsGroqNewEnabled}
-                isGroqAlt2Enabled={isGroqAlt2Enabled}
-                setIsGroqAlt2Enabled={handleSetIsGroqAlt2Enabled}
-                isOpenrouterEnabled={isOpenrouterEnabled}
-                setIsOpenrouterEnabled={handleSetIsOpenrouterEnabled}
-                isOpenaiEnabled={isOpenaiEnabled}
-                setIsOpenaiEnabled={handleSetIsOpenaiEnabled}
-                isGrokNativeEnabled={isGrokNativeEnabled}
-                setIsGrokNativeEnabled={handleSetIsGrokNativeEnabled}
+                isGeminiEnabled={readyProviders.some(p => p.id === 'gemini')}
+                setIsGeminiEnabled={() => handleToggleProviderConfig('gemini')}
+                isDeepSeekEnabled={readyProviders.some(p => p.id === 'deepseek')}
+                setIsDeepSeekEnabled={() => handleToggleProviderConfig('deepseek')}
+                isZhipuEnabled={readyProviders.some(p => p.id === 'zhipu')}
+                setIsZhipuEnabled={() => handleToggleProviderConfig('zhipu')}
+                isGroqEnabled={readyProviders.some(p => p.id === 'groq')}
+                setIsGroqEnabled={() => handleToggleProviderConfig('groq')}
+                isGroqNewEnabled={readyProviders.some(p => p.id === 'groq_new')}
+                setIsGroqNewEnabled={() => handleToggleProviderConfig('groq_new')}
+                isGroqAlt2Enabled={readyProviders.some(p => p.id === 'groq_alt2')}
+                setIsGroqAlt2Enabled={() => handleToggleProviderConfig('groq_alt2')}
+                isOpenrouterEnabled={readyProviders.some(p => p.id === 'openrouter')}
+                setIsOpenrouterEnabled={() => handleToggleProviderConfig('openrouter')}
+                isOpenaiEnabled={readyProviders.some(p => p.id === 'openai')}
+                setIsOpenaiEnabled={() => handleToggleProviderConfig('openai')}
+                isGrokNativeEnabled={readyProviders.some(p => p.id === 'grok')}
+                setIsGrokNativeEnabled={() => handleToggleProviderConfig('grok')}
 
 
                 selectedVisionModel={selectedOcrModel}

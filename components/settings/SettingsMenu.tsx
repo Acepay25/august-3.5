@@ -10,7 +10,6 @@
 
 import React, { useState } from 'react';
 import { AIProvider, AccuracySubMode, CustomInstructionsMap, AnalystLensConfig, ProviderConfig, ApiFormat } from '../../types';
-import { MemoryProvider } from '../../services/learning/MemoryService';
 import { AnalystLensSettings } from './AnalystLensSettings';
 import ProviderManager from './ProviderManager';
 import { ToggleSwitch } from './SettingsToggle';
@@ -146,8 +145,8 @@ interface SettingsMenuProps {
     // Memory
     isGlobalMemoryEnabled: boolean;
     setIsGlobalMemoryEnabled: (enabled: boolean) => void;
-    memoryProvider: MemoryProvider;
-    setMemoryProvider: (provider: MemoryProvider) => void;
+    memoryConfig: ProviderConfig | null;
+    onMemoryConfigChange: (config: ProviderConfig | null) => void;
     memoryModel: string;
     setMemoryModel: (model: string) => void;
     // Pure AI toggles
@@ -306,8 +305,8 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
         onSetModeratorProvider,
         onSetModeratorModel,
         // Memory
-        memoryProvider,
-        setMemoryProvider,
+        memoryConfig,
+        onMemoryConfigChange,
         memoryModel,
         setMemoryModel,
         providerConfigs,
@@ -761,10 +760,9 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
 
                 {/* Memory Provider */}
                 <MemorySettings
-                    memoryProvider={memoryProvider}
-                    setMemoryProvider={setMemoryProvider}
-                    memoryModel={memoryModel}
-                    setMemoryModel={setMemoryModel}
+                    providerConfigs={providerConfigs ?? []}
+                    memoryConfig={memoryConfig}
+                    onMemoryConfigChange={onMemoryConfigChange}
                 />
 
                 {/* API Configuration */}

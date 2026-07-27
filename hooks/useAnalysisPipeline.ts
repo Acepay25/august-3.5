@@ -1,34 +1,14 @@
 import React, { useState, useRef, useCallback } from 'react';
 import {
-    Message, MessageRole, TradeOutcome, LoggedTrade, ImageMetadata, AIProvider,
+    Message, MessageRole, TradeOutcome, LoggedTrade, ImageMetadata,
     DebateTurn, Conversation, LiveThoughts, TradeAnalysis, TradeSummary,
     GlobalMemory, AccuracySubMode, CustomInstructionsMap, CustomInstruction,
     AnalystLensConfig, AnalysisStep, InsightKnowledgeBase, ConfidenceCalibration,
 } from '../types';
 
-// Provider services (standard mode)
-import * as geminiService from '../services/providers/geminiService';
-import * as deepseekService from '../services/providers/deepseekService';
-import * as zhipuService from '../services/providers/zhipuService';
-import * as groqService from '../services/providers/groqService';
-import * as groqNewService from '../services/providers/groqNewService';
-import * as groqAlt2Service from '../services/providers/groqAlt2Service';
-import * as openrouterService from '../services/providers/openrouterService';
-import * as openaiService from '../services/providers/openaiService';
-import * as grokNativeService from '../services/providers/grokNativeService';
+import { ProviderConfig } from '../types/provider';
+import { analyzeTradingView, getQuickResponse } from '../services/providers/GenericAnalysisService';
 import * as ensembleService from '../services/providers/ensembleService';
-
-// Accuracy mode services
-import * as geminiAccuracyService from '../services/providers/accuracy/geminiAccuracyService';
-import * as deepseekAccuracyService from '../services/providers/accuracy/deepseekAccuracyService';
-import * as zhipuAccuracyService from '../services/providers/accuracy/zhipuAccuracyService';
-import * as groqAccuracyService from '../services/providers/accuracy/groqAccuracyService';
-import * as groqNewAccuracyService from '../services/providers/accuracy/groqNewAccuracyService';
-import * as groqAlt2AccuracyService from '../services/providers/accuracy/groqAlt2AccuracyService';
-import * as openrouterAccuracyService from '../services/providers/accuracy/openrouterAccuracyService';
-import * as openaiAccuracyService from '../services/providers/accuracy/openaiAccuracyService';
-import * as grokNativeAccuracyService from '../services/providers/accuracy/grokNativeAccuracyService';
-import * as ensembleAccuracyService from '../services/providers/accuracy/ensembleAccuracyService';
 
 // Analysis / validation / backtesting services
 import { tryFetchHybridDataFromPromptWithCalibration, HybridDataPacket, runMonteCarloForSetup } from '../services/analysis/HybridIntelligenceService';
@@ -68,26 +48,9 @@ export interface UseAnalysisPipelineParams {
     activeConversationId: string | null;
 
     // All model/provider values:
-    selectedGeminiModel: string;
-    selectedDeepSeekModel: string;
-    selectedZhipuModel: string;
-    selectedGroqModel: string;
-    selectedGroqNewModel: string;
-    selectedGroqAlt2Model: string;
-    selectedOpenrouterModel: string;
-    selectedOpenaiModel: string;
-    selectedGrokNativeModel: string;
+    providerConfigs: ProviderConfig[];
     selectedOcrModel: string;
-    isGeminiEnabled: boolean;
-    isDeepSeekEnabled: boolean;
-    isZhipuEnabled: boolean;
-    isGroqEnabled: boolean;
-    isGroqNewEnabled: boolean;
-    isGroqAlt2Enabled: boolean;
-    isOpenrouterEnabled: boolean;
-    isOpenaiEnabled: boolean;
-    isGrokNativeEnabled: boolean;
-    moderatorProvider: AIProvider;
+    moderatorConfig: ProviderConfig;
     moderatorModel: string;
 
     // From memory/trade:
@@ -143,14 +106,9 @@ export interface UseAnalysisPipelineParams {
 export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     const {
         messages, messagesRef, updateMessages, activeConversation, activeConversationId,
-        selectedGeminiModel, selectedDeepSeekModel, selectedZhipuModel,
-        selectedGroqModel, selectedGroqNewModel, selectedGroqAlt2Model,
-        selectedOpenrouterModel, selectedOpenaiModel, selectedGrokNativeModel,
+        providerConfigs,
         selectedOcrModel,
-        isGeminiEnabled, isDeepSeekEnabled, isZhipuEnabled,
-        isGroqEnabled, isGroqNewEnabled, isGroqAlt2Enabled,
-        isOpenrouterEnabled, isOpenaiEnabled, isGrokNativeEnabled,
-        moderatorProvider, moderatorModel,
+        moderatorConfig, moderatorModel,
         finalTradeSummary, loggedTrades, tradeSummaries,
         globalMemory, insightKnowledgeBase, confidenceCalibration,
         currentHybridData, setCurrentHybridData,
@@ -178,7 +136,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     // re-encoding images to base64, and re-calling the API. Cache hits are
     // logged so they're visible during debugging.
     const cachedAnalyzeTradingView = useCallback(async (
-        provider: { service: any; model: string; useImages?: boolean; name?: string; thoughtsKey?: string },
+        config: ProviderConfig,
+        model: string,
         prompt: string,
         imageFiles: File[],
         // The remaining args are passed through unchanged.
@@ -192,9 +151,9 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         const imageHashes = imageFiles.map(f => `${f.name}:${f.size}:${f.lastModified}`);
         const cacheKey = imageHashes.length > 0 ? imageHashes : ['no-images'];
 
-        const cached = getCachedResponse(cacheKey, prompt, provider.model);
+        const cached = getCachedResponse(cacheKey, prompt, model);
         if (cached) {
-            console.log(`[ResponseCache] HIT for ${provider.name || provider.model} (${provider.model})`);
+            console.log(`[ResponseCache] HIT for ${config.name || model} (${model})`);
             return {
                 thoughtProcess: cached.thoughtProcess,
                 analysis: cached.analysis,
@@ -202,18 +161,33 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             };
         }
 
-        const result = await provider.service.analyzeTradingView(
-            prompt, provider.useImages ? imageFiles : [], ...rest
-        );
+        const result = await analyzeTradingView(config, {
+            prompt,
+            images: imageFiles,
+            imageSummaries: rest[0] as string[],
+            chatHistory: rest[1] as Message[],
+            finalTradeSummary: rest[2] as string | null,
+            recentInsights: rest[3] as string | null,
+            activeFrameworks: rest[4] as string[],
+            deepenAnalysis: rest[5] as boolean,
+            globalMemory: rest[6] as GlobalMemory | undefined,
+            threadSummary: rest[7] as string | undefined,
+            subMode: rest[8] as AccuracySubMode | undefined,
+            customInstructions: rest[9] as string,
+            isPlaybookEnabledInPureAI: rest[10] as boolean,
+            isFamiliesEnabledInPureAI: rest[11] as boolean,
+            isMemoryEnabledInPureAI: rest[12] as boolean,
+            rolePrompt: rest[13] as string | undefined,
+        });
 
         // Only cache successful, non-empty results.
         if (result && result.analysis) {
-            cacheResponse(cacheKey, prompt, provider.model, {
+            cacheResponse(cacheKey, prompt, model, {
                 thoughtProcess: result.thoughtProcess,
                 analysis: result.analysis,
                 sources: result.sources,
             });
-            console.log(`[ResponseCache] STORED for ${provider.name || provider.model} (${provider.model})`);
+            console.log(`[ResponseCache] STORED for ${config.name || model} (${model})`);
         }
 
         return result;
@@ -237,11 +211,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             const updatedMessage = {
                 ...prev[messageIndex],
                 debateTurns: currentTurns,
-                geminiThoughtProcess: thoughtMap['gemini'],
-                deepseekThoughtProcess: thoughtMap['deepseek'],
-                zhipuThoughtProcess: thoughtMap['zhipu'],
-                groqThoughtProcess: thoughtMap['groq'],
-                groqNewThoughtProcess: thoughtMap['groqNew']
+                thoughtProcesses: thoughtMap,
             };
             const newMessages = [...prev];
             newMessages[messageIndex] = updatedMessage;
@@ -254,7 +224,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     const [images, setImages] = useState<ImageMetadata[]>([]);
     const [loadingMessage, setLoadingMessage] = useState<string | null>(null);
     const [analysisSteps, setAnalysisSteps] = useState<AnalysisStep[]>([]);
-    const [liveThoughts, setLiveThoughts] = useState<LiveThoughts>({ gemini: null, deepseek: null, zhipu: null, groq: null, groqNew: null, groqAlt2: null, openrouter: null, openai: null, grokNative: null });
+    const [liveThoughts, setLiveThoughts] = useState<LiveThoughts>({});
     const [currentGateResult, setCurrentGateResult] = useState<GateOutput | null>(null);
     const [currentVisionData, setCurrentVisionData] = useState<string[]>([]);
     const [isDeepAnalysis, setIsDeepAnalysis] = useState<boolean>(false);
@@ -308,52 +278,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         if (isAnalysisInProgress) return;
 
         // --- ROUTING LOGIC: Standard vs Accuracy Mode ---
-        let enabledProviders: any[] = [];
-
-        if (isAccuracyModeEnabled) {
-            if (isGeminiEnabled) {
-                enabledProviders.push({ name: 'Gemini', service: geminiAccuracyService, model: selectedGeminiModel, useImages: true, thoughtsKey: 'gemini' as const, aiProvider: AIProvider.GEMINI });
-            }
-            if (isDeepSeekEnabled) {
-                enabledProviders.push({ name: 'DeepSeek', service: deepseekAccuracyService, model: selectedDeepSeekModel, useImages: false, thoughtsKey: 'deepseek' as const, aiProvider: AIProvider.DEEPSEEK });
-            }
-            if (isGroqEnabled) {
-                enabledProviders.push({ name: 'Groq', service: groqAccuracyService, model: selectedGroqModel, useImages: false, thoughtsKey: 'groq' as const, aiProvider: AIProvider.GROQ });
-            }
-            if (isZhipuEnabled) {
-                enabledProviders.push({ name: 'Zhipu', service: zhipuAccuracyService, model: selectedZhipuModel, useImages: true, thoughtsKey: 'zhipu' as const, aiProvider: AIProvider.ZHIPU });
-            }
-            if (isGroqNewEnabled) {
-                enabledProviders.push({ name: 'Groq (Alt)', service: groqNewAccuracyService, model: selectedGroqNewModel, useImages: false, thoughtsKey: 'groqNew' as const, aiProvider: AIProvider.GROQ_NEW });
-            }
-            if (isGroqAlt2Enabled) {
-                enabledProviders.push({ name: 'Groq (Alt 2)', service: groqAlt2AccuracyService, model: selectedGroqAlt2Model, useImages: false, thoughtsKey: 'groqAlt2' as const, aiProvider: AIProvider.GROQ_ALT2 });
-            }
-
-            if (isOpenrouterEnabled) {
-                enabledProviders.push({ name: 'OpenRouter', service: openrouterAccuracyService, model: selectedOpenrouterModel, useImages: false, thoughtsKey: 'openrouter' as const, aiProvider: AIProvider.OPENROUTER });
-            }
-            if (isOpenaiEnabled) {
-                enabledProviders.push({ name: 'OpenAI', service: openaiAccuracyService, model: selectedOpenaiModel, useImages: false, thoughtsKey: 'openai' as const, aiProvider: AIProvider.OPENAI });
-            }
-            if (isGrokNativeEnabled) {
-                enabledProviders.push({ name: 'Grok', service: grokNativeAccuracyService, model: selectedGrokNativeModel, useImages: false, thoughtsKey: 'grokNative' as const, aiProvider: AIProvider.GROK });
-            }
-
-        } else {
-            enabledProviders = [
-                isGeminiEnabled && { name: 'Gemini', service: geminiService, model: selectedGeminiModel, useImages: true, thoughtsKey: 'gemini' as const, aiProvider: AIProvider.GEMINI },
-                isDeepSeekEnabled && { name: 'DeepSeek', service: deepseekService, model: selectedDeepSeekModel, useImages: false, thoughtsKey: 'deepseek' as const, aiProvider: AIProvider.DEEPSEEK },
-                isZhipuEnabled && { name: 'Zhipu', service: zhipuService, model: selectedZhipuModel, useImages: true, thoughtsKey: 'zhipu' as const, aiProvider: AIProvider.ZHIPU },
-                isGroqEnabled && { name: 'Groq', service: groqService, model: selectedGroqModel, useImages: false, thoughtsKey: 'groq' as const, aiProvider: AIProvider.GROQ },
-                isGroqNewEnabled && { name: 'Groq (Alt)', service: groqNewService, model: selectedGroqNewModel, useImages: false, thoughtsKey: 'groqNew' as const, aiProvider: AIProvider.GROQ_NEW },
-                isGroqAlt2Enabled && { name: 'Groq (Alt 2)', service: groqAlt2Service, model: selectedGroqAlt2Model, useImages: false, thoughtsKey: 'groqAlt2' as const, aiProvider: AIProvider.GROQ_ALT2 },
-                isOpenrouterEnabled && { name: 'OpenRouter', service: openrouterService, model: selectedOpenrouterModel, useImages: false, thoughtsKey: 'openrouter' as const, aiProvider: AIProvider.OPENROUTER },
-                isOpenaiEnabled && { name: 'OpenAI', service: openaiService, model: selectedOpenaiModel, useImages: false, thoughtsKey: 'openai' as const, aiProvider: AIProvider.OPENAI },
-                isGrokNativeEnabled && { name: 'Grok', service: grokNativeService, model: selectedGrokNativeModel, useImages: false, thoughtsKey: 'grokNative' as const, aiProvider: AIProvider.GROK },
-
-            ].filter(Boolean) as any[];
-        }
+        const enabledProviders = providerConfigs.filter(c => c.isEnabled && c.apiKey.trim().length > 0).map(c => ({ config: c, name: c.name, model: c.selectedModel, useImages: false, thoughtsKey: c.id }));
 
         let effectiveInput = '';
         if (typeof customPrompt === 'string') {
@@ -514,7 +439,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     direction: effectiveInput.toLowerCase().includes('long') ? 'Long' :
                         effectiveInput.toLowerCase().includes('short') ? 'Short' : 'Neutral'
                 },
-                enabledProviders.map(p => p.aiProvider).filter(Boolean) as AIProvider[]
+                enabledProviders.map(p => p.config.id)
             );
 
             if (!unifiedLearning.isEmpty) {
@@ -837,20 +762,21 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     setPerAIMonteCarloResults([]);
                     setLatestMonteCarloResult(null);
                     setLatestBacktestResult(null);
-                    setLiveThoughts({ gemini: null, deepseek: null, zhipu: null, groq: null, groqNew: null, groqAlt2: null, openrouter: null, openai: null, grokNative: null });
+                    setLiveThoughts(Object.fromEntries(enabledProviders.map(p => [p.thoughtsKey, null])));
                     setIsAnalysisTypingComplete(false);
                     setIsLiveAnalysisVisible(true);
 
                     const analysisPromises = enabledProviders.map(provider =>
                         cachedAnalyzeTradingView(
-                            provider,
+                            provider.config,
+                            provider.model,
                             enhancedPrompt,
-                            provider.useImages ? imageFiles : [],
+                            imageFiles,
                             summaries,
                             currentMessages,
                             enhancedFinalTradeSummary, // Pattern Memory (Synthesis)
                             recentInsightsString,      // Recent Insights (Individual)
-                            provider.model,
+                            // provider.model removed from rest (now param 2)
                             activeFrameworks,
                             isDeepAnalysis,
                             memoryToInject,
@@ -861,9 +787,9 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             isFamiliesEnabledInPureAI,
                             isMemoryEnabledInPureAI,
                             // Analyst Lens: pass role-specific prompt based on trading style
-                            lensConfig.enabled && provider.aiProvider
+                            lensConfig.enabled && provider.config.id
                                 ? getLensPromptForStyle(
-                                    provider.aiProvider,
+                                    provider.config.id,
                                     lensConfig.assignments,
                                     // For auto mode, use swing as default (will be detected per-call with hybrid data)
                                     lensConfig.tradingStyle === 'auto' ? 'swing' : lensConfig.tradingStyle
@@ -971,22 +897,10 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     const debatePlaceholder: Message = {
                         id: debateMessageId, role: MessageRole.AI, text: '', createdAt: new Date().toISOString(), isDebating: true, debateTurns: [], ocrModelUsed: userMessage.ocrModelUsed,
                         imageSummaries: userMessage.imageSummaries,
-                        geminiModelUsed: isGeminiEnabled ? selectedGeminiModel : undefined,
-                        deepseekModelUsed: isDeepSeekEnabled ? selectedDeepSeekModel : undefined,
-                        zhipuModelUsed: isZhipuEnabled ? selectedZhipuModel : undefined,
-                        groqModelUsed: isGroqEnabled ? selectedGroqModel : undefined,
-                        groqNewModelUsed: isGroqNewEnabled ? selectedGroqNewModel : undefined,
-                        groqAlt2ModelUsed: isGroqAlt2Enabled ? selectedGroqAlt2Model : undefined,
-                        openrouterModelUsed: isOpenrouterEnabled ? selectedOpenrouterModel : undefined,
+                        modelsUsed: Object.fromEntries(enabledProviders.map(p => [p.config.id, p.model])),
 
-                        // Add individual thought processes so all analysts appear in UI
-                        geminiThoughtProcess: thoughtMap['gemini'] || undefined,
-                        deepseekThoughtProcess: thoughtMap['deepseek'] || undefined,
-                        zhipuThoughtProcess: thoughtMap['zhipu'] || undefined,
-                        groqThoughtProcess: thoughtMap['groq'] || undefined,
-                        groqNewThoughtProcess: thoughtMap['groqNew'] || undefined,
-                        groqAlt2ThoughtProcess: thoughtMap['groqAlt2'] || undefined,
-                        openrouterThoughtProcess: thoughtMap['openrouter'] || undefined,
+                        // Add thought processes so all analysts appear in UI
+                        thoughtProcesses: { ...thoughtMap },
 
                         isAccuracyMode: isAccuracyModeEnabled,
                         isLensMode: lensConfig?.enabled ?? false,
@@ -1004,19 +918,18 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     // --- ENSEMBLE ROUTING ---
                     let debateStream;
 
-                    const activeModProvider = moderatorProvider;
                     const activeModModel = moderatorModel;
 
                     if (isAccuracyModeEnabled) {
                         // ACCURACY MODE
-                        debateStream = ensembleAccuracyService.conductDebate(
+                        debateStream = ensembleService.conductDebate(
                             results,
                             enabledProviders.map(p => p.name),
                             enhancedPrompt,
                             finalTradeSummary,
                             accuracySubMode,
                             instructionsToUse,
-                            activeModProvider,
+                            moderatorConfig,
                             activeModModel,
                             isFamiliesEnabledInPureAI,
                             isMemoryEnabledInPureAI,
@@ -1031,14 +944,14 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                                 results[0], results[1],
                                 enabledProviders[0].name, enabledProviders[1].name,
                                 enhancedPrompt, finalTradeSummary,
-                                activeModProvider, activeModModel, instructionsToUse, perAIMC,
+                                moderatorConfig, activeModModel, instructionsToUse, perAIMC,
                                 lensConfig.enabled ? lensConfig : undefined, // lensConfig
-                                lensConfig.enabled ? enabledProviders.map(p => p.aiProvider).filter(Boolean) as AIProvider[] : undefined, // analystProviders
+                                lensConfig.enabled ? enabledProviders.map(p => p.config.id) : undefined, // analystProviders
                                 activeFrameworks, // playbook
                                 tradeSummaries, // recent insights for pattern matching
                                 currentGateResult, // Gate result
                                 moderatorLearningContext, // Unified learning context for moderator
-                                enabledProviders.map(p => p.aiProvider).filter(Boolean) as AIProvider[], // enabledProviders for weighted voting
+                                enabledProviders.map(p => p.config.id), // enabledProviders for weighted voting
                                 loggedTrades // trades for weighted voting
                             );
                         } else if (enabledProviders.length === 3) {
@@ -1046,12 +959,12 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                                 results[0], results[1], results[2],
                                 enabledProviders[0].name, enabledProviders[1].name, enabledProviders[2].name,
                                 enhancedPrompt, finalTradeSummary,
-                                activeModProvider, activeModModel, instructionsToUse,
+                                moderatorConfig, activeModModel, instructionsToUse,
                                 loggedTrades, // trades (was undefined — fixes dead weighted voting)
-                                enabledProviders.map(p => p.aiProvider).filter(Boolean) as AIProvider[], // enabledProviders (was undefined)
+                                enabledProviders.map(p => p.config.id), // enabledProviders (was undefined)
                                 perAIMC,   // monteCarloResults
                                 lensConfig.enabled ? lensConfig : undefined, // lensConfig
-                                lensConfig.enabled ? enabledProviders.map(p => p.aiProvider).filter(Boolean) as AIProvider[] : undefined, // analystProviders
+                                lensConfig.enabled ? enabledProviders.map(p => p.config.id) : undefined, // analystProviders
                                 activeFrameworks, // playbook
                                 tradeSummaries, // recent insights for pattern matching
                                 currentGateResult, // Gate result
@@ -1192,11 +1105,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             analysis: processNewAnalysis(finalAnalysis),
                             outcome: TradeOutcome.PENDING,
                             debateTurns: existingMessage.debateTurns,
-                            geminiThoughtProcess: thoughtMap['gemini'],
-                            deepseekThoughtProcess: thoughtMap['deepseek'],
-                            zhipuThoughtProcess: thoughtMap['zhipu'],
-                            groqThoughtProcess: thoughtMap['groq'],
-                            groqNewThoughtProcess: thoughtMap['groqNew'],
+                            thoughtProcesses: { ...thoughtMap },
                             // Multi-Timeframe Confluence from Hybrid Intelligence
                             confluenceData: freshHybridData?.confluence ? {
                                 score: freshHybridData.confluence.score,
@@ -1299,39 +1208,40 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     setLoadingMessage(isAccuracyModeEnabled ? `Running High-Precision Analysis...` : `Analyzing with ${provider.name}...`);
                     completeStep('gate-scan'); startStep('analysis');
                     setAnalysisSteps(prev => prev.map(s => s.id === 'analysis' ? { ...s, title: `Analyzing with ${provider.name}` } : s));
-                    const result = await cachedAnalyzeTradingView(
-                        provider,
-                        enhancedPrompt, // Fixed: was promptToSend, now uses enhancedPrompt with Hybrid data
-                        provider.useImages ? imageFiles : [],
-                        summaries,
-                        currentMessages,
-                        finalTradeSummary,
-                        recentInsightsString,      // Recent Insights (Individual) - must match multi-provider arg order
-                        provider.model,
-                        activeFrameworks,
-                        isDeepAnalysis,
-                        memoryToInject,
-                        currentThreadSummary,
-                        isAccuracyModeEnabled ? accuracySubMode : undefined,
-                        instructionsToUse,
-                        isPlaybookEnabledInPureAI,
-                        isFamiliesEnabledInPureAI,
-                        isMemoryEnabledInPureAI,
-                        // Analyst Lens: pass role-specific prompt based on trading style
-                        lensConfig.enabled && provider.aiProvider
-                            ? getLensPromptForStyle(
-                                provider.aiProvider,
-                                lensConfig.assignments,
-                                lensConfig.tradingStyle === 'auto' ? 'swing' : lensConfig.tradingStyle
-                            )
-                            : undefined
-                    );
+const result = await cachedAnalyzeTradingView(
+                            provider.config,
+                            provider.model,
+                            enhancedPrompt, // Fixed: was promptToSend, now uses enhancedPrompt with Hybrid data
+                            imageFiles,
+                            summaries,
+                            currentMessages,
+                            finalTradeSummary,
+                            recentInsightsString,      // Recent Insights (Individual) - must match multi-provider arg order
+                            // provider.model removed from rest (now param 2)
+                            activeFrameworks,
+                            isDeepAnalysis,
+                            memoryToInject,
+                            currentThreadSummary,
+                            isAccuracyModeEnabled ? accuracySubMode : undefined,
+                            instructionsToUse,
+                            isPlaybookEnabledInPureAI,
+                            isFamiliesEnabledInPureAI,
+                            isMemoryEnabledInPureAI,
+                            // Analyst Lens: pass role-specific prompt based on trading style
+                            lensConfig.enabled && provider.config.id
+                                ? getLensPromptForStyle(
+                                    provider.config.id,
+                                    lensConfig.assignments,
+                                    lensConfig.tradingStyle === 'auto' ? 'swing' : lensConfig.tradingStyle
+                                )
+                                : undefined
+                        );
                     if (abortRef.current) return;
                     const soloAiMessage: Message = {
                         id: `ai-${Date.now()}`, role: MessageRole.AI, text: result.thoughtProcess, createdAt: new Date().toISOString(), analysis: processNewAnalysis(result.analysis), sources: result.sources || [], outcome: TradeOutcome.PENDING, ocrModelUsed: userMessage.ocrModelUsed,
                         imageSummaries: userMessage.imageSummaries,
-                        [provider.thoughtsKey + 'ModelUsed']: provider.model,
-                        [provider.thoughtsKey + 'ThoughtProcess']: result.thoughtProcess,
+                        modelsUsed: { [provider.config.id]: provider.model },
+                        thoughtProcesses: { [provider.config.id]: result.thoughtProcess },
                         isAccuracyMode: isAccuracyModeEnabled,
                         isLensMode: lensConfig?.enabled ?? false,
                         // Always set tradingStyle regardless of Lens mode
@@ -1361,9 +1271,9 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 const provider = enabledProviders[0];
                 setLoadingMessage("Thinking...");
                 startStep('analysis');
-                const responseText = await provider.service.getQuickResponse(promptToSend, [...currentMessages, userMessage], provider.model);
+                const responseText = await getQuickResponse(provider.config, promptToSend, [...currentMessages, userMessage]);
                 if (abortRef.current) return;
-                updateMessages(prev => [...prev, { id: `ai-${Date.now()}`, role: MessageRole.AI, text: responseText, createdAt: new Date().toISOString(), [provider.thoughtsKey + 'ModelUsed']: provider.model }]);
+                updateMessages(prev => [...prev, { id: `ai-${Date.now()}`, role: MessageRole.AI, text: responseText, createdAt: new Date().toISOString(), modelsUsed: { [provider.config.id]: provider.model }, thoughtProcesses: { [provider.config.id]: responseText } }]);
             }
         } catch (error: any) {
             if (abortRef.current) return;
@@ -1394,7 +1304,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 setIsAnalysisInProgress(false);
             }
         }
-    }, [input, images, loadingMessage, finalTradeSummary, activeFrameworks, isRateLimited, selectedGeminiModel, selectedDeepSeekModel, selectedZhipuModel, selectedGroqModel, selectedGroqNewModel, selectedGroqAlt2Model, selectedOpenrouterModel, selectedOpenaiModel, selectedGrokNativeModel, isGeminiEnabled, isDeepSeekEnabled, isZhipuEnabled, isGroqEnabled, isGroqNewEnabled, isGroqAlt2Enabled, isOpenrouterEnabled, isOpenaiEnabled, isGrokNativeEnabled, isDeepAnalysis, selectedOcrModel, updateMessages, moderatorProvider, moderatorModel, activeConversationId, activeConversation, isAnalysisInProgress, globalMemory, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, lensConfig, isHybridIntelligenceEnabled, loggedTrades, confidenceCalibration, insightKnowledgeBase, currentHybridData]);
+    }, [input, images, loadingMessage, finalTradeSummary, activeFrameworks, isRateLimited, providerConfigs, isDeepAnalysis, selectedOcrModel, updateMessages, moderatorConfig, moderatorModel, activeConversationId, activeConversation, isAnalysisInProgress, globalMemory, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, lensConfig, isHybridIntelligenceEnabled, loggedTrades, confidenceCalibration, insightKnowledgeBase, currentHybridData]);
 
     // ─── Cancel Analysis ───────────────────────────────────────────────────
     const handleCancelAnalysis = () => {

@@ -11,6 +11,19 @@ const isSafeUrl = (url: string): boolean => {
     return url.startsWith('http://') || url.startsWith('https://');
 };
 
+// Per-provider display metadata for thought-process insights, keyed by provider id.
+const PROVIDER_INSIGHT_STYLES: Record<string, { name: string; bgClass: string; borderClass: string; titleClass: string; textClass: string }> = {
+    gemini: { name: 'Gemini', bgClass: 'bg-blue-950/20', borderClass: 'border-blue-500/20', titleClass: 'text-blue-400', textClass: 'text-blue-100/90' },
+    deepseek: { name: 'DeepSeek', bgClass: 'bg-emerald-950/20', borderClass: 'border-emerald-500/20', titleClass: 'text-emerald-400', textClass: 'text-emerald-100/90' },
+    zhipu: { name: 'Zhipu AI', bgClass: 'bg-orange-950/20', borderClass: 'border-orange-500/20', titleClass: 'text-orange-400', textClass: 'text-orange-100/90' },
+    groq: { name: 'Groq', bgClass: 'bg-yellow-950/20', borderClass: 'border-yellow-500/20', titleClass: 'text-yellow-400', textClass: 'text-yellow-100/90' },
+    groqNew: { name: 'Groq (Alt)', bgClass: 'bg-lime-950/20', borderClass: 'border-lime-500/20', titleClass: 'text-lime-400', textClass: 'text-lime-100/90' },
+    groqAlt2: { name: 'Groq (Alt 2)', bgClass: 'bg-rose-950/20', borderClass: 'border-rose-500/20', titleClass: 'text-rose-400', textClass: 'text-rose-100/90' },
+    openrouter: { name: 'OpenRouter', bgClass: 'bg-emerald-950/20', borderClass: 'border-emerald-500/20', titleClass: 'text-emerald-400', textClass: 'text-emerald-100/90' },
+    grokNative: { name: 'Grok (xAI)', bgClass: 'bg-sky-950/20', borderClass: 'border-sky-500/20', titleClass: 'text-sky-400', textClass: 'text-sky-100/90' },
+};
+const DEFAULT_INSIGHT_STYLE = { name: 'AI', bgClass: 'bg-zinc-950/20', borderClass: 'border-zinc-500/20', titleClass: 'text-zinc-400', textClass: 'text-zinc-100/90' };
+
 export interface ChatContextProps {
     typingMessageState: { id: string; fullText: string; field: 'postMortem' } | null;
     setTypingMessageState: React.Dispatch<React.SetStateAction<{ id: string; fullText: string; field: 'postMortem' } | null>>;
@@ -77,13 +90,20 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
     const isUserMessage = message.role === MessageRole.USER;
     const isCollapsed = isUserMessage && collapsedUserMessages[message.id];
 
-    const safeGeminiModelName = (modelIdToName[message.geminiModelUsed!] ?? message.geminiModelUsed ?? "Unknown");
-    const safeDeepSeekModelName = (modelIdToName[message.deepseekModelUsed!] ?? message.deepseekModelUsed ?? "Unknown");
-    const safeZhipuModelName = (modelIdToName[message.zhipuModelUsed!] ?? message.zhipuModelUsed ?? "Unknown");
-    const safeGroqModelName = (modelIdToName[message.groqModelUsed!] ?? message.groqModelUsed ?? "Unknown");
-    const safeGroqNewModelName = (modelIdToName[message.groqNewModelUsed!] ?? message.groqNewModelUsed ?? "Unknown");
-    const safeGroqAlt2ModelName = (modelIdToName[message.groqAlt2ModelUsed!] ?? message.groqAlt2ModelUsed ?? "Unknown");
-    const safeOpenrouterModelName = (modelIdToName[message.openrouterModelUsed!] ?? message.openrouterModelUsed ?? "Unknown");
+    // Resolve a human-readable model name for a given provider id from message.modelsUsed.
+    const resolveModelName = (providerId: string): string => {
+        const modelId = message.modelsUsed?.[providerId];
+        if (!modelId) return "Unknown";
+        return modelIdToName[modelId] ?? modelId;
+    };
+
+    const safeGeminiModelName = resolveModelName('gemini');
+    const safeDeepSeekModelName = resolveModelName('deepseek');
+    const safeZhipuModelName = resolveModelName('zhipu');
+    const safeGroqModelName = resolveModelName('groq');
+    const safeGroqNewModelName = resolveModelName('groqNew');
+    const safeGroqAlt2ModelName = resolveModelName('groqAlt2');
+    const safeOpenrouterModelName = resolveModelName('openrouter');
 
     // Extract embedded Live Market JSON if present
     const liveMarketMatch = message.text.match(/\*\*LIVE MARKET DATA\*\*\s*```json\s*([\s\S]*?)\s*```/);
@@ -271,63 +291,58 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 </div>
                             )}
 
-                            {message.role === MessageRole.AI && (
-                                message.geminiThoughtProcess || message.deepseekThoughtProcess || message.zhipuThoughtProcess || message.groqThoughtProcess || message.groqNewThoughtProcess || message.groqAlt2ThoughtProcess || message.openrouterThoughtProcess
-                            ) && (
-                                    <div className="mt-4 sm:mt-6 pt-3 sm:pt-5 border-t border-white/10">
-                                        <button
-                                            onClick={(e) => {
-                                                if (isSelectionMode) return;
-                                                setExpandedIndividualThoughts(prev => ({ ...prev, [message.id]: !prev[message.id] }))
-                                            }}
-                                            className="flex justify-between items-center w-full text-left text-zinc-400 hover:text-white transition-colors py-2 sm:py-3"
-                                            aria-expanded={expandedIndividualThoughts[message.id]}
-                                        >
-                                            <strong className="text-xs sm:text-sm uppercase tracking-wider font-bold opacity-80">Individual AI Insights</strong><ChevronDownIcon className={`w-5 h-5 sm:w-6 sm:h-6 transform transition-transform duration-300 ${expandedIndividualThoughts[message.id] ? 'rotate-180' : ''}`} />
-                                        </button>
-                                        <div className={`collapsible-content ${expandedIndividualThoughts[message.id] ? 'expanded' : ''}`}>
-                                            <div className="pt-3 sm:pt-5 space-y-3 sm:space-y-4 text-xs sm:text-sm md:text-base">
-                                                {/* Collapsible Insight Helper */}
-                                                {(() => {
-                                                    const insights = [
-                                                        { provider: 'Gemini', model: safeGeminiModelName, content: message.geminiThoughtProcess, bgClass: 'bg-blue-950/20', borderClass: 'border-blue-500/20', titleClass: 'text-blue-400', textClass: 'text-blue-100/90' },
-                                                        { provider: 'DeepSeek', model: safeDeepSeekModelName, content: message.deepseekThoughtProcess, bgClass: 'bg-emerald-950/20', borderClass: 'border-emerald-500/20', titleClass: 'text-emerald-400', textClass: 'text-emerald-100/90' },
-                                                        { provider: 'Zhipu AI', model: safeZhipuModelName, content: message.zhipuThoughtProcess, bgClass: 'bg-orange-950/20', borderClass: 'border-orange-500/20', titleClass: 'text-orange-400', textClass: 'text-orange-100/90' },
-                                                        { provider: 'Groq', model: safeGroqModelName, content: message.groqThoughtProcess, bgClass: 'bg-yellow-950/20', borderClass: 'border-yellow-500/20', titleClass: 'text-yellow-400', textClass: 'text-yellow-100/90' },
-                                                        { provider: 'Groq (Alt)', model: safeGroqNewModelName, content: message.groqNewThoughtProcess, bgClass: 'bg-lime-950/20', borderClass: 'border-lime-500/20', titleClass: 'text-lime-400', textClass: 'text-lime-100/90' },
-                                                        { provider: 'Groq (Alt 2)', model: safeGroqAlt2ModelName, content: message.groqAlt2ThoughtProcess, bgClass: 'bg-rose-950/20', borderClass: 'border-rose-500/20', titleClass: 'text-rose-400', textClass: 'text-rose-100/90' },
-                                                        { provider: 'OpenRouter', model: safeOpenrouterModelName, content: message.openrouterThoughtProcess, bgClass: 'bg-emerald-950/20', borderClass: 'border-emerald-500/20', titleClass: 'text-emerald-400', textClass: 'text-emerald-100/90' },
-                                                    ].filter(i => i.content);
+                            {message.role === MessageRole.AI && message.thoughtProcesses && Object.values(message.thoughtProcesses).some(c => c) && (
+                                <div className="mt-4 sm:mt-6 pt-3 sm:pt-5 border-t border-white/10">
+                                    <button
+                                        onClick={(e) => {
+                                            if (isSelectionMode) return;
+                                            setExpandedIndividualThoughts(prev => ({ ...prev, [message.id]: !prev[message.id] }))
+                                        }}
+                                        className="flex justify-between items-center w-full text-left text-zinc-400 hover:text-white transition-colors py-2 sm:py-3"
+                                        aria-expanded={expandedIndividualThoughts[message.id]}
+                                    >
+                                        <strong className="text-xs sm:text-sm uppercase tracking-wider font-bold opacity-80">Individual AI Insights</strong><ChevronDownIcon className={`w-5 h-5 sm:w-6 sm:h-6 transform transition-transform duration-300 ${expandedIndividualThoughts[message.id] ? 'rotate-180' : ''}`} />
+                                    </button>
+                                    <div className={`collapsible-content ${expandedIndividualThoughts[message.id] ? 'expanded' : ''}`}>
+                                        <div className="pt-3 sm:pt-5 space-y-3 sm:space-y-4 text-xs sm:text-sm md:text-base">
+                                            {/* Collapsible Insight Helper */}
+                                            {(() => {
+                                                const insights = Object.entries(message.thoughtProcesses ?? {})
+                                                    .filter(([, content]) => content)
+                                                    .map(([providerId, content]) => {
+                                                        const style = PROVIDER_INSIGHT_STYLES[providerId] ?? DEFAULT_INSIGHT_STYLE;
+                                                        return { providerId, provider: style.name, model: resolveModelName(providerId), content, bgClass: style.bgClass, borderClass: style.borderClass, titleClass: style.titleClass, textClass: style.textClass };
+                                                    });
 
-                                                    return insights.map((insight, idx) => {
-                                                        const insightKey = `${message.id}-insight-${insight.provider}`;
-                                                        const isExpanded = expandedIndividualThoughts[insightKey] === true; // Default to collapsed
-                                                        return (
-                                                            <div key={insightKey} className={`${insight.bgClass} rounded-xl border ${insight.borderClass} overflow-hidden`}>
-                                                                <button
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        if (isSelectionMode) return;
-                                                                        setExpandedIndividualThoughts(prev => ({ ...prev, [insightKey]: !isExpanded }));
-                                                                    }}
-                                                                    className="w-full flex items-center justify-between p-3 sm:p-4 hover:bg-white/5 transition-colors"
-                                                                >
-                                                                    <p className={`font-bold ${insight.titleClass}`}>{insight.provider} ({insight.model})</p>
-                                                                    <ChevronDownIcon className={`w-4 h-4 ${insight.titleClass} transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
-                                                                </button>
-                                                                <div className={`collapsible-content ${isExpanded ? 'expanded' : ''}`}>
-                                                                    <div className="px-4 pb-4 sm:px-5 sm:pb-5">
-                                                                        <p className={`whitespace-pre-wrap ${insight.textClass} leading-relaxed`}>{insight.content}</p>
-                                                                    </div>
+                                                return insights.map((insight) => {
+                                                    const insightKey = `${message.id}-insight-${insight.providerId}`;
+                                                    const isExpanded = expandedIndividualThoughts[insightKey] === true; // Default to collapsed
+                                                    return (
+                                                        <div key={insightKey} className={`${insight.bgClass} rounded-xl border ${insight.borderClass} overflow-hidden`}>
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    if (isSelectionMode) return;
+                                                                    setExpandedIndividualThoughts(prev => ({ ...prev, [insightKey]: !isExpanded }));
+                                                                }}
+                                                                className="w-full flex items-center justify-between p-3 sm:p-4 hover:bg-white/5 transition-colors"
+                                                            >
+                                                                <p className={`font-bold ${insight.titleClass}`}>{insight.provider} ({insight.model})</p>
+                                                                <ChevronDownIcon className={`w-4 h-4 ${insight.titleClass} transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
+                                                            </button>
+                                                            <div className={`collapsible-content ${isExpanded ? 'expanded' : ''}`}>
+                                                                <div className="px-4 pb-4 sm:px-5 sm:pb-5">
+                                                                    <p className={`whitespace-pre-wrap ${insight.textClass} leading-relaxed`}>{insight.content}</p>
                                                                 </div>
                                                             </div>
-                                                        );
-                                                    });
-                                                })()}
-                                            </div>
+                                                        </div>
+                                                    );
+                                                });
+                                            })()}
                                         </div>
                                     </div>
-                                )}
+                                </div>
+                            )}
 
                             {/* Main Analysis Debate (Initial) */}
                             {message.isDebating && message.debateTurns && <DebateView debateTurns={message.debateTurns} geminiModelName={safeGeminiModelName} deepseekModelName={safeDeepSeekModelName} zhipuModelName={safeZhipuModelName} groqModelName={safeGroqModelName} groqNewModelName={safeGroqNewModelName} groqAlt2ModelName={safeGroqAlt2ModelName} openrouterModelName={safeOpenrouterModelName} lensConfig={lensConfig} isDebating={true} />}
@@ -354,13 +369,13 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 <div className="mt-4 sm:mt-6 pt-3 sm:pt-5 border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-[10px] sm:text-sm text-zinc-500">
                                     <div className="flex flex-col gap-1.5 sm:gap-2">
                                         <div className="flex flex-wrap gap-x-4 sm:gap-x-6 gap-y-1">
-                                            {message.geminiModelUsed && <span>Gemini: <span className="text-zinc-300">{safeGeminiModelName}</span></span>}
-                                            {message.deepseekModelUsed && <span>DeepSeek: <span className="text-zinc-300">{safeDeepSeekModelName}</span></span>}
-                                            {message.zhipuModelUsed && <span>Zhipu: <span className="text-zinc-300">{safeZhipuModelName}</span></span>}
-                                            {message.groqModelUsed && <span>Groq: <span className="text-zinc-300">{safeGroqModelName}</span></span>}
-                                            {message.groqNewModelUsed && <span>Groq (Alt): <span className="text-zinc-300">{safeGroqNewModelName}</span></span>}
-                                            {message.groqAlt2ModelUsed && <span>Groq (Alt 2): <span className="text-zinc-300">{safeGroqAlt2ModelName}</span></span>}
-                                            {message.openrouterModelUsed && <span>OpenRouter: <span className="text-zinc-300">{safeOpenrouterModelName}</span></span>}
+                                            {Object.entries(message.modelsUsed ?? {}).map(([providerId, modelId]) => {
+                                                const style = PROVIDER_INSIGHT_STYLES[providerId] ?? DEFAULT_INSIGHT_STYLE;
+                                                const displayName = modelIdToName[modelId] ?? modelId;
+                                                return (
+                                                    <span key={providerId}>{style.name}: <span className="text-zinc-300">{displayName}</span></span>
+                                                );
+                                            })}
                                         </div>
                                         {message.ocrModelUsed && <span className="block">Vision: <span className="text-zinc-300">{(message.ocrModelUsed || '').split(',').map(id => id.trim()).map(id => ocrModelIdToName[id] || id).join(' & ')}</span></span>}
                                     </div>
