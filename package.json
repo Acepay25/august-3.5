@@ -1,7 +1,7 @@
 {
   "name": "august-3.5",
   "private": true,
-  "version": "1.0.4",
+  "version": "1.0.5",
   "type": "module",
   "main": "electron/main.cjs",
   "description": "Advanced AI-powered cryptocurrency trading analysis terminal",
