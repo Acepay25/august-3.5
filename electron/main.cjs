@@ -1,8 +1,29 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, protocol, net } = require('electron');
 const path = require('path');
+const { pathToFileURL } = require('url');
 const { autoUpdater } = require('electron-updater');
 
 const isDev = !app.isPackaged;
+
+// =============================================================================
+// CUSTOM PROTOCOL (app://) — must be registered before app.ready
+// =============================================================================
+// Using a custom protocol instead of file:// gives the renderer a proper origin,
+// which fixes CORS failures on <script type="module" crossorigin> tags that Vite
+// emits in the production build. On file:// the origin is opaque ("null") and
+// module script fetches fail silently, causing a white screen.
+protocol.registerSchemesAsPrivileged([
+    {
+        scheme: 'app',
+        privileges: {
+            standard: true,
+            secure: true,
+            supportFetchAPI: true,
+            corsEnabled: true,
+            stream: true,
+        },
+    },
+]);
 
 let mainWindow = null;
 
@@ -27,7 +48,25 @@ function createWindow() {
         mainWindow.loadURL(`http://localhost:${port}`);
         mainWindow.webContents.openDevTools();
     } else {
-        mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+        // Serve the built dist/ folder via the custom app:// protocol
+        const distPath = path.join(__dirname, '../dist');
+
+        protocol.handle('app', (request) => {
+            // app://./index.html -> dist/index.html
+            // app://./assets/foo.js -> dist/assets/foo.js
+            const url = new URL(request.url);
+            let filePath = decodeURIComponent(url.pathname);
+
+            // Default to index.html for root or SPA routes
+            if (filePath === '/' || filePath === '') {
+                filePath = '/index.html';
+            }
+
+            const fullPath = path.join(distPath, filePath);
+            return net.fetch(pathToFileURL(fullPath).toString());
+        });
+
+        mainWindow.loadURL('app://./index.html');
     }
 }
 

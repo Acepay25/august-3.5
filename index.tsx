@@ -61,7 +61,10 @@ export const activateWaitingWorker = () => {
 
 // --- Service Worker Registration ---
 // Re-enabling Service Worker for offline functionality with a more robust registration strategy.
-if ('serviceWorker' in navigator) {
+// Skip registration in Electron — service workers are not supported on custom protocols
+// and the desktop app has its own auto-update mechanism via electron-updater.
+const isElectron = !!(window as any).electronAPI;
+if ('serviceWorker' in navigator && !isElectron) {
   const registerServiceWorker = () => {
     // MEDIUM #7: Use a relative URL so registration respects Vite's BASE_URL
     // (base: './' in vite.config.ts). The previous `${origin}/sw.js` form

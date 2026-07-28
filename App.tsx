@@ -89,21 +89,6 @@ const App: React.FC = () => {
     const toast = useToastActions();
     const { confirm: confirmDialog, ConfirmDialogComponent } = useConfirmDialog();
 
-    // P2-12: Detect whether any AI provider API key is configured so the
-    // first-run onboarding card can guide new users to Settings. Keys are
-    // inlined at build time via vite.config.ts, so this is a static check.
-    const hasAnyApiKey = !!(
-        process.env.GEMINI_API_KEY ||
-        process.env.OPENAI_API_KEY ||
-        process.env.DEEPSEEK_API_KEY ||
-        process.env.GROQ_API_KEY ||
-        process.env.GROQ_NEW_API_KEY ||
-        process.env.GROQ_ALT2_API_KEY ||
-        process.env.ZHIPU_API_KEY ||
-        process.env.OPENROUTER_API_KEY ||
-        process.env.GROK_API_KEY
-    );
-
     // UI visibility and progress state (extracted to hooks/useUIState.ts)
     const {
         isUserModalOpen, setIsUserModalOpen,
@@ -628,6 +613,7 @@ const App: React.FC = () => {
     const loadUserData = async (username: string) => {
         setIsLoading(true);
 
+        try {
         // Initialize database (SQLite on native, IndexedDB on web)
         await dbService.initDatabase();
         // P1-8: Configure native status bar (no-op on web)
@@ -751,18 +737,34 @@ const App: React.FC = () => {
         setHighlightedAnalysisId(null);
         setCollapsedUserMessages({});
         setIsLoading(false);
+        } catch (error) {
+            console.error('App: failed to load user data', error);
+            // Ensure the app doesn't stay stuck on a loading screen
+            setActiveUsername(username);
+            sessionStorage.setItem('activeUsername', username);
+            setIsUserModalOpen(false);
+            setIsLoading(false);
+        }
     };
 
     useEffect(() => {
         let isMounted = true;
         const initializeApp = async () => {
-            const users = await dbService.getAllUsernames();
-            if (!isMounted) return;
-            setExistingUsernames(users);
-            const sessionUser = sessionStorage.getItem('activeUsername');
-            if (sessionUser && users.includes(sessionUser)) {
-                loadUserData(sessionUser);
-            } else {
+            try {
+                const users = await dbService.getAllUsernames();
+                if (!isMounted) return;
+                setExistingUsernames(users);
+                const sessionUser = sessionStorage.getItem('activeUsername');
+                if (sessionUser && users.includes(sessionUser)) {
+                    loadUserData(sessionUser);
+                } else {
+                    setIsUserModalOpen(true);
+                }
+            } catch (error) {
+                console.error('App: initialization failed', error);
+                if (!isMounted) return;
+                // Show the user modal even if DB init fails so the app
+                // doesn't get stuck on a blank screen.
                 setIsUserModalOpen(true);
             }
         };
@@ -1735,10 +1737,10 @@ const App: React.FC = () => {
                 </React.Suspense>
             )}
 
-            {/* P2-12: First-run onboarding card. Shows when no API keys are
+            {/* P2-12: First-run onboarding card. Shows when no providers are
                 configured and the user hasn't dismissed it. */}
             <OnboardingCard
-                hasAnyApiKey={hasAnyApiKey}
+                hasAnyApiKey={readyProviders.length > 0}
                 onOpenSettings={() => setIsSettingsMenuVisible(true)}
             />
 
