@@ -3,31 +3,34 @@
  * Uses Groq for fast AI-powered trendline detection on candlestick charts.
  * Falls back to Gemini if Groq fails.
  * Identifies key support/resistance lines, trend channels, and optimal entry zones.
+ *
+ * API keys are read from user-configured providers (ProviderConfigService).
  */
 
 import OpenAI from "openai";
 import { GoogleGenAI } from "@google/genai";
 import { CandlestickData, Time, LineData } from 'lightweight-charts';
+import { loadProviderConfigs } from '../infrastructure/ProviderConfigService';
 
-const GROQ_BASE_URL = 'https://api.groq.com/openai/v1/';
-
-const getGroqClient = (): OpenAI => {
-    const GROQ_API_KEY = process.env.GROQ_ALT2_API_KEY;
-    if (!GROQ_API_KEY) throw new Error("GROQ_ALT2_API_KEY is not set in environment");
+const getGroqClient = async (): Promise<OpenAI> => {
+    const configs = await loadProviderConfigs();
+    const groqProvider = configs.find(c => c.id === 'groq' && c.isEnabled && c.apiKey);
+    if (!groqProvider) throw new Error("No Groq provider configured. Add your API key in Settings.");
     return new OpenAI({
-        apiKey: GROQ_API_KEY,
-        baseURL: GROQ_BASE_URL,
+        apiKey: groqProvider.apiKey,
+        baseURL: groqProvider.baseUrl || 'https://api.groq.com/openai/v1/',
         dangerouslyAllowBrowser: true
     });
 };
 
-const getGeminiClient = (): GoogleGenAI | null => {
-    const apiKey = process.env.API_KEY;
-    if (!apiKey) {
-        console.warn('[AITrendlineService] No Gemini API key found for fallback');
+const getGeminiClient = async (): Promise<GoogleGenAI | null> => {
+    const configs = await loadProviderConfigs();
+    const geminiProvider = configs.find(c => c.id === 'gemini' && c.isEnabled && c.apiKey);
+    if (!geminiProvider) {
+        console.warn('[AITrendlineService] No Gemini provider configured for fallback');
         return null;
     }
-    return new GoogleGenAI({ apiKey });
+    return new GoogleGenAI({ apiKey: geminiProvider.apiKey });
 };
 
 export interface TrendlineResult {
@@ -68,7 +71,7 @@ export const analyzeWithAI = async (
     interval: string,
     modelName: string = 'llama-3.3-70b-versatile'
 ): Promise<AITrendlineAnalysis> => {
-    const groq = getGroqClient();
+    const groq = await getGroqClient();
 
     // Prepare summarized candle data (last 100 candles for efficiency)
     const recentCandles = candles.slice(-100);
@@ -215,7 +218,7 @@ RESPOND IN THIS EXACT JSON FORMAT:
         console.warn('[AITrendlineService] Groq failed, trying Gemini fallback:', groqError.message);
 
         // Try Gemini as fallback
-        const gemini = getGeminiClient();
+        const gemini = await getGeminiClient();
         if (gemini) {
             try {
                 const geminiPrompt = `You are a technical analyst. Analyze this chart data and respond with ONLY valid JSON.
