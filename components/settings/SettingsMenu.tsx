@@ -15,6 +15,8 @@ import ProviderManager from './ProviderManager';
 import { ToggleSwitch } from './SettingsToggle';
 import CustomInstructionsEditor, { InstructionTab } from './CustomInstructionsEditor';
 import MemorySettings from './MemorySettings';
+import { DiagnosticsPanel } from './DiagnosticsPanel';
+import { APP_NAME, APP_VERSION } from '../../constants/version';
 
 // Icons
 const CloseIcon = () => (
@@ -656,6 +658,14 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                 {currentView === 'models' && renderModelsView()}
                 {currentView === 'lenses' && renderLensesView()}
                 {currentView === 'instructions' && renderInstructionsView()}
+
+                {/* Footer: Diagnostics + Version */}
+                <div className="border-t border-white/5 px-5 py-4 space-y-3">
+                    <DiagnosticsPanel />
+                    <p className="text-[10px] text-zinc-600 text-center">
+                        {APP_NAME} v{APP_VERSION}
+                    </p>
+                </div>
             </aside>
         </>
     );

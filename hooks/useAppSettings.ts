@@ -1,0 +1,76 @@
+/**
+ * useAppSettings — manages AI analysis settings state.
+ * Extracted from App.tsx to reduce component complexity.
+ */
+
+import { useState } from 'react';
+import { AccuracySubMode, CustomInstructionsMap, AnalystLensConfig, GlobalMemory, ConfidenceCalibration, InsightKnowledgeBase, AIProvider } from '../types';
+import { ProviderConfig } from '../types/provider';
+import { DEFAULT_FRAMEWORKS } from '../constants/models';
+import { GEMINI_MODELS } from '../constants/models';
+import { loadLensConfig } from '../services/ui/AnalystLensService';
+
+export function useAppSettings() {
+    // Layer 3: Global Long-Term Memory
+    const [globalMemory, setGlobalMemory] = useState<GlobalMemory | undefined>(undefined);
+
+    // Memory Provider Selection
+    const [memoryConfig, setMemoryConfig] = useState<ProviderConfig | null>(null);
+    const [memoryModel, setMemoryModel] = useState<string>('gemini-2.5-flash');
+    const [isGlobalMemoryEnabled, setIsGlobalMemoryEnabled] = useState<boolean>(true);
+
+    // Accuracy Mode State
+    const [isAccuracyModeEnabled, setIsAccuracyModeEnabled] = useState<boolean>(false);
+    const [accuracySubMode, setAccuracySubMode] = useState<AccuracySubMode>('original');
+
+    // Custom AI Behavior
+    const [customInstructions, setCustomInstructions] = useState<CustomInstructionsMap>({
+        general: [],
+        accuracyOriginal: [],
+        accuracyPure: []
+    });
+    const [isPlaybookEnabledInPureAI, setIsPlaybookEnabledInPureAI] = useState<boolean>(false);
+    const [isFamiliesEnabledInPureAI, setIsFamiliesEnabledInPureAI] = useState<boolean>(false);
+    const [isMemoryEnabledInPureAI, setIsMemoryEnabledInPureAI] = useState<boolean>(false);
+    const [isHybridIntelligenceEnabled, setIsHybridIntelligenceEnabled] = useState<boolean>(false);
+
+    // Analyst Lens Configuration
+    const [lensConfig, setLensConfig] = useState<AnalystLensConfig>(() => loadLensConfig());
+
+    // Confidence Calibration
+    const [confidenceCalibration, setConfidenceCalibration] = useState<ConfidenceCalibration | undefined>(undefined);
+
+    // AI Learning - Knowledge base
+    const [insightKnowledgeBase, setInsightKnowledgeBase] = useState<InsightKnowledgeBase | undefined>(undefined);
+
+    // Summarization settings
+    const [activeFrameworks, setActiveFrameworks] = useState<string[]>(DEFAULT_FRAMEWORKS);
+    const [summaryCharLimit, setSummaryCharLimit] = useState<number>(4000);
+    const [summarizationProvider, setSummarizationProvider] = useState<AIProvider>(AIProvider.GEMINI);
+    const [summarizationModel, setSummarizationModel] = useState<string>(GEMINI_MODELS[0].id);
+    const [useAlgorithmicSummary, setUseAlgorithmicSummary] = useState<boolean>(true);
+    const [useAlgorithmicInsights, setUseAlgorithmicInsights] = useState<boolean>(true);
+
+    return {
+        globalMemory, setGlobalMemory,
+        memoryConfig, setMemoryConfig,
+        memoryModel, setMemoryModel,
+        isGlobalMemoryEnabled, setIsGlobalMemoryEnabled,
+        isAccuracyModeEnabled, setIsAccuracyModeEnabled,
+        accuracySubMode, setAccuracySubMode,
+        customInstructions, setCustomInstructions,
+        isPlaybookEnabledInPureAI, setIsPlaybookEnabledInPureAI,
+        isFamiliesEnabledInPureAI, setIsFamiliesEnabledInPureAI,
+        isMemoryEnabledInPureAI, setIsMemoryEnabledInPureAI,
+        isHybridIntelligenceEnabled, setIsHybridIntelligenceEnabled,
+        lensConfig, setLensConfig,
+        confidenceCalibration, setConfidenceCalibration,
+        insightKnowledgeBase, setInsightKnowledgeBase,
+        activeFrameworks, setActiveFrameworks,
+        summaryCharLimit, setSummaryCharLimit,
+        summarizationProvider, setSummarizationProvider,
+        summarizationModel, setSummarizationModel,
+        useAlgorithmicSummary, setUseAlgorithmicSummary,
+        useAlgorithmicInsights, setUseAlgorithmicInsights,
+    };
+}
