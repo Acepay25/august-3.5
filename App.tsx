@@ -16,6 +16,8 @@ import { OnboardingCard } from './components/shared/OnboardingCard';
 import { Header } from './components/shared/Header';
 import { ChatArea } from './components/chat/ChatArea';
 import { useProviderConfigs } from './hooks/useProviderConfigs';
+import { useAppSettings } from './hooks/useAppSettings';
+import { useJournalUI } from './hooks/useJournalUI';
 import { PostMortemCandidate } from './components/modals/PostTradeUploadModal';
 
 // P1-6: Lazy-load heavy, conditionally-rendered components so the initial
@@ -43,12 +45,9 @@ const AccuracyModeModal = React.lazy(() => import('./components/modals/AccuracyM
 const HybridDataPanel = React.lazy(() => import('./components/analysis/HybridDataPanel'));
 const AdvancedAnalyticsSidePanel = React.lazy(() => import('./components/dashboards/AdvancedAnalyticsSidePanel'));
 const ScenarioSimulator = React.lazy(() => import('./components/modals/ScenarioSimulator'));
-const UpdateNotification = React.lazy(() => import('./components/shared/UpdateNotification'));
 const UpdateOverlay = React.lazy(() => import('./components/shared/UpdateOverlay'));
 const MistakeWarningBanner = React.lazy(() => import('./components/shared/MistakeWarningBanner'));
 const AnalysisProgress = React.lazy(() => import('./components/analysis/AnalysisProgress'));
-import { setUpdateNotificationHandler, activateWaitingWorker } from './index';
-
 import { GEMINI_MODELS, DEEPSEEK_MODELS, ZHIPU_MODELS, GROQ_MODELS, GROQ_NEW_MODELS, GROQ_ALT2_MODELS, OPENROUTER_MODELS, OPENAI_MODELS, GROK_MODELS, OCR_MODELS, modelIdToName, ocrModelIdToName, DEFAULT_FRAMEWORKS, ACCURACY_MODE_DEFAULTS } from './constants/models';
 import { createNewConversation } from './utils/conversationUtils';
 import { recalculateAnalysisMetrics } from './utils/analysisUtils';
@@ -72,7 +71,7 @@ import { extractInsightsFromPostMortem, storeInsights, initializeKnowledgeBase }
 import * as MemoryService from './services/learning/MemoryService';
 import { ProviderConfig } from './types/provider';
 import { syncFromTradeLog, syncRollingWindowFromTradeLog, initModelPerformanceService } from './services/backtesting/ModelPerformanceService';
-import { loadLensConfig, saveLensConfig, getDefaultLensAssignments, initAnalystLensService } from './services/ui/AnalystLensService';
+import { saveLensConfig, initAnalystLensService } from './services/ui/AnalystLensService';
 import { detectTradingStyle, getEffectiveStyle, generateMasterPromptStyleInjection } from './services/ui/TradingStyleDetector';
 import { checkDataIntegrity, createStartupBackup, updateTradeCount, logIntegrityEvent, runMigrations } from './services/validation/DataIntegrityService';
 import { startAutoBackup, stopAutoBackup } from './services/infrastructure/BackupService';
@@ -106,7 +105,6 @@ const App: React.FC = () => {
         isFullscreen, setIsFullscreen,
         isLeverageDropdownOpen, setIsLeverageDropdownOpen,
         isVisionDataVisible, setIsVisionDataVisible,
-        showUpdateNotification, setShowUpdateNotification,
         showAccuracyModal, setShowAccuracyModal,
         showScrollDown, setShowScrollDown,
         showScrollUp, setShowScrollUp,
@@ -150,13 +148,29 @@ const App: React.FC = () => {
 
     // UI and other state
 
-    // Layer 3: Global Long-Term Memory
-    const [globalMemory, setGlobalMemory] = useState<GlobalMemory | undefined>(undefined);
-
-    // Memory Provider Selection (for compressChatHistory and updateGlobalMemory)
-    const [memoryConfig, setMemoryConfig] = useState<ProviderConfig | null>(null);
-    const [memoryModel, setMemoryModel] = useState<string>('gemini-2.5-flash');
-    const [isGlobalMemoryEnabled, setIsGlobalMemoryEnabled] = useState<boolean>(true);
+    // AI analysis settings (memory, accuracy, instructions, summarization, lens)
+    const {
+        globalMemory, setGlobalMemory,
+        memoryConfig, setMemoryConfig,
+        memoryModel, setMemoryModel,
+        isGlobalMemoryEnabled, setIsGlobalMemoryEnabled,
+        isAccuracyModeEnabled, setIsAccuracyModeEnabled,
+        accuracySubMode, setAccuracySubMode,
+        customInstructions, setCustomInstructions,
+        isPlaybookEnabledInPureAI, setIsPlaybookEnabledInPureAI,
+        isFamiliesEnabledInPureAI, setIsFamiliesEnabledInPureAI,
+        isMemoryEnabledInPureAI, setIsMemoryEnabledInPureAI,
+        isHybridIntelligenceEnabled, setIsHybridIntelligenceEnabled,
+        lensConfig, setLensConfig,
+        confidenceCalibration, setConfidenceCalibration,
+        insightKnowledgeBase, setInsightKnowledgeBase,
+        activeFrameworks, setActiveFrameworks,
+        summaryCharLimit, setSummaryCharLimit,
+        summarizationProvider, setSummarizationProvider,
+        summarizationModel, setSummarizationModel,
+        useAlgorithmicSummary, setUseAlgorithmicSummary,
+        useAlgorithmicInsights, setUseAlgorithmicInsights,
+    } = useAppSettings();
 
     // Derive the moderator ProviderConfig from readyProviders
     const moderatorConfig: ProviderConfig = useMemo(() =>
@@ -165,25 +179,6 @@ const App: React.FC = () => {
             isEnabled: false, isBuiltIn: true, models: [], selectedModel: '',
         },
     [readyProviders, moderatorProviderId]);
-
-    // Accuracy Mode State
-    const [isAccuracyModeEnabled, setIsAccuracyModeEnabled] = useState<boolean>(false);
-    const [accuracySubMode, setAccuracySubMode] = useState<AccuracySubMode>('original');
-
-    // Custom AI Behavior
-    const [customInstructions, setCustomInstructions] = useState<CustomInstructionsMap>({
-        general: [],
-        accuracyOriginal: [],
-        accuracyPure: []
-    });
-    const [isPlaybookEnabledInPureAI, setIsPlaybookEnabledInPureAI] = useState<boolean>(false);
-    const [isFamiliesEnabledInPureAI, setIsFamiliesEnabledInPureAI] = useState<boolean>(false);
-    const [isMemoryEnabledInPureAI, setIsMemoryEnabledInPureAI] = useState<boolean>(false);
-    const [isHybridIntelligenceEnabled, setIsHybridIntelligenceEnabled] = useState<boolean>(false);
-
-    // Analyst Lens Configuration - specialized roles for ensemble debates
-    const [lensConfig, setLensConfig] = useState<AnalystLensConfig>(() => loadLensConfig());
-
 
     // Market data state and effects (extracted to hooks/useMarketData.ts)
     const marketData = useMarketData(isHybridIntelligenceEnabled);
@@ -199,36 +194,24 @@ const App: React.FC = () => {
         liveMarketConditions, setLiveMarketConditions,
     } = marketData;
 
-    // Confidence Calibration - tracks AI confidence vs actual outcomes
-    const [confidenceCalibration, setConfidenceCalibration] = useState<ConfidenceCalibration | undefined>(undefined);
-
-    // AI Learning - Knowledge base for extracted insights from post-mortems
-    const [insightKnowledgeBase, setInsightKnowledgeBase] = useState<InsightKnowledgeBase | undefined>(undefined);
-
     // Network status and offline queue
     const { isOnline, wasOffline } = useNetworkStatus();
     const [pendingQueueCount, setPendingQueueCount] = useState<number>(0);
 
-    const [activeFrameworks, setActiveFrameworks] = useState<string[]>(DEFAULT_FRAMEWORKS);
-    const [summaryCharLimit, setSummaryCharLimit] = useState<number>(4000);
-    const [summarizationProvider, setSummarizationProvider] = useState<AIProvider>(AIProvider.GEMINI);
-    const [summarizationModel, setSummarizationModel] = useState<string>(GEMINI_MODELS[0].id);
-    const [useAlgorithmicSummary, setUseAlgorithmicSummary] = useState<boolean>(true); // Default to Algo (saves tokens)
-    const [useAlgorithmicInsights, setUseAlgorithmicInsights] = useState<boolean>(true); // NEW: Toggle for individual insights (Algo vs AI)
-
-
-    const [journalState, setJournalState] = useState<{ isOpen: boolean, tab: 'log' | 'performance' | 'analytics' | 'learning' | 'memory' }>({ isOpen: false, tab: 'log' });
-
-    const [selectedProbabilityMessageId, setSelectedProbabilityMessageId] = useState<string | null>(null); // Trade selection for AI Probability panel
-    const [strategyToView, setStrategyToView] = useState<string | null>(null);
-    const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
-    const [highlightedAnalysisId, setHighlightedAnalysisId] = useState<string | null>(null);
-    const [expandedIndividualThoughts, setExpandedIndividualThoughts] = useState<Record<string, boolean>>({});
-    const [expandedDebateTranscripts, setExpandedDebateTranscripts] = useState<Record<string, boolean>>({});
-    const [expandedPostMortemImages, setExpandedPostMortemImages] = useState<Record<string, boolean>>({});
-    const [expandedPostMortems, setExpandedPostMortems] = useState<Record<string, boolean>>({});
-    const [collapsedUserMessages, setCollapsedUserMessages] = useState<Record<string, boolean>>({});
-    const [postMortemCandidate, setPostMortemCandidate] = useState<PostMortemCandidate | null>(null);
+    // Journal and message expansion state
+    const {
+        journalState, setJournalState,
+        selectedProbabilityMessageId, setSelectedProbabilityMessageId,
+        strategyToView, setStrategyToView,
+        copiedMessageId, setCopiedMessageId,
+        highlightedAnalysisId, setHighlightedAnalysisId,
+        expandedIndividualThoughts, setExpandedIndividualThoughts,
+        expandedDebateTranscripts, setExpandedDebateTranscripts,
+        expandedPostMortemImages, setExpandedPostMortemImages,
+        expandedPostMortems, setExpandedPostMortems,
+        collapsedUserMessages, setCollapsedUserMessages,
+        postMortemCandidate, setPostMortemCandidate,
+    } = useJournalUI();
 
     // Refs for functions defined later but needed by useTradeLogging (breaks circular dependency)
     const handleSendMessageRef = useRef<(...args: any[]) => any>(null!);
@@ -397,11 +380,6 @@ const App: React.FC = () => {
 
     // Update ref for useTradeLogging (breaks circular dependency)
     startPostMortemAnalysisRef.current = startPostMortemAnalysis;
-
-    // Register SW update notification handler
-    useEffect(() => {
-        setUpdateNotificationHandler(() => setShowUpdateNotification(true));
-    }, []);
 
     // ... (Rest of existing hooks/functions) ...
     const analysisMessages = useMemo(() => messages.filter(m => m.analysis || m.isDebating), [messages]);
@@ -1484,18 +1462,6 @@ const App: React.FC = () => {
 
             {isVersionHistoryVisible && (
                 <VersionHistoryDashboard onClose={() => setIsVersionHistoryVisible(false)} />
-            )}
-
-            {/* SW Update Notification */}
-            {showUpdateNotification && (
-                <React.Suspense fallback={null}>
-                <UpdateNotification
-                    onRefresh={() => {
-                        activateWaitingWorker();
-                    }}
-                    onDismiss={() => setShowUpdateNotification(false)}
-                />
-                </React.Suspense>
             )}
 
             {/* Desktop auto-update overlay (Electron only).

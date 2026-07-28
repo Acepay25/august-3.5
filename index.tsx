@@ -5,6 +5,16 @@ import App from './App';
 import { ToastProvider } from './components/shared/Toast';
 import ErrorBoundary from './components/shared/ErrorBoundary';
 
+// Self-hosted fonts (offline-capable, no external CDN dependency)
+import '@fontsource/inter/300.css';
+import '@fontsource/inter/400.css';
+import '@fontsource/inter/500.css';
+import '@fontsource/inter/600.css';
+import '@fontsource/inter/700.css';
+import '@fontsource/jetbrains-mono/400.css';
+import '@fontsource/jetbrains-mono/500.css';
+import '@fontsource/jetbrains-mono/700.css';
+
 // --- Global Error Handlers ---
 // Catch unhandled Promise rejections (common issue on Android WebView)
 window.addEventListener('unhandledrejection', (event) => {
@@ -44,74 +54,6 @@ window.addEventListener('error', (event) => {
     // Ignore storage errors
   }
 });
-
-// Global state for SW update notification
-let showUpdateNotification: (() => void) | null = null;
-let waitingWorker: ServiceWorker | null = null;
-
-export const setUpdateNotificationHandler = (handler: () => void) => {
-  showUpdateNotification = handler;
-};
-
-export const activateWaitingWorker = () => {
-  if (waitingWorker) {
-    waitingWorker.postMessage('SKIP_WAITING');
-  }
-};
-
-// --- Service Worker Registration ---
-// Re-enabling Service Worker for offline functionality with a more robust registration strategy.
-// Skip registration in Electron — service workers are not supported on custom protocols
-// and the desktop app has its own auto-update mechanism via electron-updater.
-const isElectron = !!(window as any).electronAPI;
-if ('serviceWorker' in navigator && !isElectron) {
-  const registerServiceWorker = () => {
-    // MEDIUM #7: Use a relative URL so registration respects Vite's BASE_URL
-    // (base: './' in vite.config.ts). The previous `${origin}/sw.js` form
-    // 404'd on subpath deploys (e.g. example.com/august/) and on Electron
-    // file:// loads. Relative URLs resolve against the page's location.
-    navigator.serviceWorker.register('sw.js')
-      .then(registration => {
-        console.log('ServiceWorker registration successful with scope: ', registration.scope);
-
-        // Check for updates on page load
-        registration.update();
-
-        // Listen for new service worker installing
-        registration.addEventListener('updatefound', () => {
-          const newWorker = registration.installing;
-          if (!newWorker) return;
-
-          newWorker.addEventListener('statechange', () => {
-            // New service worker is installed and waiting
-            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              console.log('New service worker available, prompting for update...');
-              waitingWorker = newWorker;
-              if (showUpdateNotification) {
-                showUpdateNotification();
-              }
-            }
-          });
-        });
-      })
-      .catch(err => {
-        console.error('ServiceWorker registration failed: ', err);
-      });
-
-    // Handle controller change (when new SW takes over)
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      console.log('New service worker activated, reloading...');
-      window.location.reload();
-    });
-  };
-
-  if (document.readyState === 'complete') {
-    registerServiceWorker();
-  } else {
-    window.addEventListener('load', registerServiceWorker);
-  }
-}
-// --- End of Service Worker Registration ---
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
