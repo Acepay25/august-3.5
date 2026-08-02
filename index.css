@@ -379,6 +379,15 @@ body,
   outline-offset: 2px;
 }
 
+/* Text inputs keep their own focus treatment (border-color / none) — the
+   global gold outline would otherwise draw a box around the message input
+   (and every field) when clicked. */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
+}
+
 /* Reduced motion for users who prefer it */
 @media (prefers-reduced-motion: reduce) {
 
