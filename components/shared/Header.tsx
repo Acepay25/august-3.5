@@ -183,13 +183,13 @@ export const Header: React.FC<HeaderProps> = ({
                                                                 liveMarketConditions.volatility === 'Medium' ? 'border-amber-500/40 text-amber-400 bg-amber-500/15' :
                                                                     'border-emerald-500/40 text-emerald-400 bg-emerald-500/15'
                                                                 }`}>
-                                                                ⚡ {liveMarketConditions.volatility} Volatility
+                                                                 {liveMarketConditions.volatility} Volatility
                                                             </span>
                                                             <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${liveMarketConditions.liquidation === 'High' ? 'border-purple-500/40 text-purple-400 bg-purple-500/15' :
                                                                 liveMarketConditions.liquidation === 'Medium' ? 'border-blue-500/40 text-blue-400 bg-blue-500/15' :
                                                                     'border-zinc-500/40 text-zinc-400 bg-zinc-500/15'
                                                                 }`}>
-                                                                🌊 {liveMarketConditions.liquidation} Liq
+                                                                 {liveMarketConditions.liquidation} Liq
                                                             </span>
                                                         </div>
                                                     </div>
@@ -199,7 +199,7 @@ export const Header: React.FC<HeaderProps> = ({
                                                     {allSessions.map(session => (
                                                         <div key={session.id} className="flex items-center justify-between text-xs py-0.5">
                                                             <div className="flex items-center gap-2 min-w-0">
-                                                                <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${session.isOpen ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-zinc-700'}`} />
+                                                                <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${session.isOpen ? 'bg-emerald-500 shadow-[0_0_8px_rgba(212,212,216,0.5)]' : 'bg-zinc-700'}`} />
                                                                 <span className={session.isOpen ? 'text-white font-medium truncate' : 'text-zinc-500 truncate'}>{session.name.replace(' Session', '')}</span>
                                                             </div>
                                                             <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -207,7 +207,7 @@ export const Header: React.FC<HeaderProps> = ({
                                                                     session.volatility === 'Medium' ? 'border-amber-500/30 text-amber-400 bg-amber-500/10' :
                                                                         'border-emerald-500/30 text-emerald-400 bg-emerald-500/10'
                                                                     }`}>
-                                                                    ⚡🌊 {session.volatility}
+                                                                     {session.volatility}
                                                                 </span>
                                                                 <div className="text-right w-20 whitespace-nowrap relative">
                                                                     {session.isOpen ? (
@@ -231,7 +231,7 @@ export const Header: React.FC<HeaderProps> = ({
                                                             <span className="text-[10px] font-bold">Market Condition</span>
                                                         </div>
                                                         <div className="text-[10px] text-zinc-400 leading-tight">
-                                                            {sessionContext.warnings[0].replace('⚠️ ', '')}
+                                                            {sessionContext.warnings[0].replace(' ', '')}
                                                         </div>
                                                     </div>
                                                 )}

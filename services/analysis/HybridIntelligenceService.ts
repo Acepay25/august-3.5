@@ -415,28 +415,28 @@ export const fetchHybridData = async (symbol: string): Promise<HybridDataPacket>
  */
 export const generateHybridPromptInjection = (data: HybridDataPacket): string => {
     const fundingDisplay = (data.fundingRate * 100).toFixed(4);
-    const confluenceEmoji = data.confluence.direction === 'bullish' ? '🟢' :
-        data.confluence.direction === 'bearish' ? '🔴' : '⚪';
+    const confluenceEmoji = data.confluence.direction === 'bullish' ? '' :
+        data.confluence.direction === 'bearish' ? '' : '';
 
-    const sentimentEmoji = data.derivatives.overallSentiment === 'very_bullish' ? '🟢🟢' :
-        data.derivatives.overallSentiment === 'bullish' ? '🟢' :
-            data.derivatives.overallSentiment === 'very_bearish' ? '🔴🔴' :
-                data.derivatives.overallSentiment === 'bearish' ? '🔴' : '⚪';
+    const sentimentEmoji = data.derivatives.overallSentiment === 'very_bullish' ? '' :
+        data.derivatives.overallSentiment === 'bullish' ? '' :
+            data.derivatives.overallSentiment === 'very_bearish' ? '' :
+                data.derivatives.overallSentiment === 'bearish' ? '' : '';
 
-    const regimeEmoji = data.regime.regime.includes('trend_up') ? '📈' :
-        data.regime.regime.includes('trend_down') ? '📉' :
-            data.regime.regime === 'compression' ? '🔄' :
-                data.regime.regime === 'volatile_chop' ? '⚡' : '↔️';
+    const regimeEmoji = data.regime.regime.includes('trend_up') ? '' :
+        data.regime.regime.includes('trend_down') ? '' :
+            data.regime.regime === 'compression' ? '' :
+                data.regime.regime === 'volatile_chop' ? '' : '↔';
 
     return `
 ═══════════════════════════════════════════════════════════════
-🤖 HYBRID INTELLIGENCE V2: ENHANCED MARKET DATA
+ HYBRID INTELLIGENCE V2: ENHANCED MARKET DATA
 ═══════════════════════════════════════════════════════════════
 **Symbol:** ${data.symbol}
 **Data Timestamp:** ${data.dataTimestamp}
 **Source:** Binance API (Real-Time)
 
-📊 **MARKET OVERVIEW:**
+ **MARKET OVERVIEW:**
 - Current Price: $${data.marketData.currentPrice}
 - 24H High: $${data.marketData.price24hHigh} | Low: $${data.marketData.price24hLow}
 - 24H Change: ${data.marketData.priceChangePercent24h >= 0 ? '+' : ''}${data.marketData.priceChangePercent24h.toFixed(2)}%
@@ -448,9 +448,9 @@ ${regimeEmoji} **MARKET REGIME (ADX-Based):**
 - ADX: ${data.regime.adx} | +DI: ${data.regime.plusDI} | -DI: ${data.regime.minusDI}
 - Trend Direction: ${data.regime.trendDirection.toUpperCase()} (${data.regime.trendStrength})
 - Trading Bias: ${data.regime.tradingBias.replace('_', ' ').toUpperCase()}
-- 💡 ${data.regime.recommendation}
+-  ${data.regime.recommendation}
 
-🧬 **PATTERN FAMILY (ML CLASSIFICATION):**
+ **PATTERN FAMILY (ML CLASSIFICATION):**
 - Detected: **${data.patternClassification.family.toUpperCase()}** (Confidence: ${(data.patternClassification.confidence * 100).toFixed(0)}%)
 - Reasoning: ${data.patternClassification.reasoning.join('; ')}
 - Scores: A=${data.patternClassification.scores.familyA} | B=${data.patternClassification.scores.familyB} | C=${data.patternClassification.scores.familyC} | Ω=${data.patternClassification.scores.familyOmega}
@@ -462,7 +462,7 @@ ${sentimentEmoji} **DERIVATIVES SENTIMENT:**
 - Taker Buy/Sell: ${data.derivatives.takerBuySell.ratio.toFixed(2)} (${data.derivatives.takerBuySell.pressure.replace('_', ' ')})
 - Overall: ${data.derivatives.overallSentiment.replace('_', ' ').toUpperCase()} (Score: ${data.derivatives.sentimentScore})
 
-📖 **ORDER BOOK DEPTH:**
+ **ORDER BOOK DEPTH:**
 - Spread: $${data.orderBook.spread.toFixed(2)} (${data.orderBook.spreadPercent.toFixed(3)}%)
 - Bid Depth (1%): $${(data.orderBook.bidDepth / 1000000).toFixed(2)}M | Ask Depth: $${(data.orderBook.askDepth / 1000000).toFixed(2)}M
 - Depth Imbalance: ${(data.orderBook.depthImbalance * 100).toFixed(1)}% (${data.orderBook.dominantSide.toUpperCase()})
@@ -471,48 +471,48 @@ ${data.orderBook.sellWalls.length > 0 ? `- Sell Walls: ${data.orderBook.sellWall
 ${data.orderBook.wallDistance.nearestBuyWall ? `- Nearest Buy Wall: $${data.orderBook.wallDistance.nearestBuyWall.price} (${data.orderBook.wallDistance.nearestBuyWall.distance.toFixed(2)}% below)` : ''}
 ${data.orderBook.wallDistance.nearestSellWall ? `- Nearest Sell Wall: $${data.orderBook.wallDistance.nearestSellWall.price} (${data.orderBook.wallDistance.nearestSellWall.distance.toFixed(2)}% above)` : ''}
 
-🔥 **RECENT LIQUIDATIONS (1H):**
+ **RECENT LIQUIDATIONS (1H):**
 - Long Liquidations: $${(data.liquidations.recentLongLiquidations / 1000000).toFixed(2)}M
 - Short Liquidations: $${(data.liquidations.recentShortLiquidations / 1000000).toFixed(2)}M
 - Total: $${(data.liquidations.totalRecentLiquidations / 1000000).toFixed(2)}M (${data.liquidations.liquidationPressure.toUpperCase()} pressure)
 - Dominant: ${data.liquidations.dominantLiquidations.toUpperCase()}
-- 💡 ${data.liquidations.sentiment}
+-  ${data.liquidations.sentiment}
 
-📊 **ADVANCED VOLUME ANALYSIS:**
+ **ADVANCED VOLUME ANALYSIS:**
 - Relative Volume: ${data.advancedVolume.relativeVolume}x (${data.advancedVolume.trend})
 - OBV Trend: ${data.advancedVolume.obvTrend.toUpperCase()} | Divergence: ${data.advancedVolume.obvDivergence.toUpperCase()}
 - CVD: ${data.advancedVolume.cvdTrend.replace('_', ' ').toUpperCase()}
 - Volume POC: $${data.advancedVolume.volumeProfile.poc} (Price ${data.advancedVolume.volumeProfile.priceVsPOC} POC)
 - Volume Bias: ${data.advancedVolume.volumeWeightedBias.toUpperCase()}
 
-🔄 **MULTI-TIMEFRAME CONFLUENCE (MTF):**
+ **MULTI-TIMEFRAME CONFLUENCE (MTF):**
 - ${confluenceEmoji} Score: ${data.confluence.score}/100 — ${data.confluence.direction.toUpperCase()} (${data.confluence.strength})
 - Aligned: ${data.confluence.alignment.slice(0, 4).join(', ') || 'None'}
 - Conflicts: ${data.confluence.conflicts.slice(0, 2).join(', ') || 'None'}
-${data.confluence.score >= 70 ? '⚡ STRONG BULLISH CONFLUENCE' :
-            data.confluence.score <= 30 ? '⚡ STRONG BEARISH CONFLUENCE' :
-                '⚠️ Mixed signals - Exercise caution'}
+${data.confluence.score >= 70 ? ' STRONG BULLISH CONFLUENCE' :
+            data.confluence.score <= 30 ? ' STRONG BEARISH CONFLUENCE' :
+                ' Mixed signals - Exercise caution'}
 
-☁️ **ICHIMOKU CLOUD (4H):**
+ **ICHIMOKU CLOUD (4H):**
 - Signal: ${data.ichimoku['4h'].signal.replace('_', ' ').toUpperCase()}
 - Cloud Color: ${data.ichimoku['4h'].cloudColor.toUpperCase()}
 - Price vs Cloud: ${data.ichimoku['4h'].priceVsCloud.toUpperCase()}
 - TK Cross: ${data.ichimoku['4h'].tkCross.toUpperCase()}
 - Cloud: $${data.ichimoku['4h'].cloudBottom} - $${data.ichimoku['4h'].cloudTop}
 
-📉 **VWAP (1H):**
+ **VWAP (1H):**
 - VWAP: $${data.vwap['1h'].vwap}
 - Position: ${data.vwap['1h'].pricePosition.replace(/_/g, ' ').toUpperCase()}
 - Bands: $${data.vwap['1h'].lowerBand2} | $${data.vwap['1h'].lowerBand1} | VWAP | $${data.vwap['1h'].upperBand1} | $${data.vwap['1h'].upperBand2}
 
-🚀 **MOMENTUM (1H/4H):**
+ **MOMENTUM (1H/4H):**
 - 1H ROC: 5p=${data.momentum['1h'].roc5}% | 10p=${data.momentum['1h'].roc10}% | 20p=${data.momentum['1h'].roc20}%
 - 1H State: ${data.momentum['1h'].momentum.replace(/_/g, ' ').toUpperCase()} (Score: ${data.momentum['1h'].momentumScore})
 - 1H Divergence: RSI=${data.momentum['1h'].rsiDivergence?.toUpperCase() || 'NONE'} | MACD=${data.momentum['1h'].macdDivergence?.toUpperCase() || 'NONE'}
 - 4H ROC: 5p=${data.momentum['4h'].roc5}% | 10p=${data.momentum['4h'].roc10}%
 - 4H Divergence: RSI=${data.momentum['4h'].rsiDivergence?.toUpperCase() || 'NONE'} | MACD=${data.momentum['4h'].macdDivergence?.toUpperCase() || 'NONE'}
 
-📈 **TECHNICAL ANALYSIS (CODE-CALCULATED):**
+ **TECHNICAL ANALYSIS (CODE-CALCULATED):**
 
 ${generateTASummary(data.indicators['4h'], '4H Timeframe')}
 
@@ -522,7 +522,7 @@ ${generateTASummary(data.indicators['15m'], '15M Timeframe')}
 
 ${generateTASummary(data.indicators['5m'], '5M Timeframe')}
 
-🎯 **ENHANCED KEY LEVELS:**
+ **ENHANCED KEY LEVELS:**
 **Pivot Points (4H):**
 - R3: $${data.enhancedKeyLevels.pivotPoints.daily.r3} | R2: $${data.enhancedKeyLevels.pivotPoints.daily.r2} | R1: $${data.enhancedKeyLevels.pivotPoints.daily.r1}
 - PP: $${data.enhancedKeyLevels.pivotPoints.daily.pp}
@@ -536,18 +536,18 @@ ${data.enhancedKeyLevels.fibLevels.levels.filter(l => ['0.382', '0.5', '0.618'].
 
 ${generateSessionSummary(data.session)}
 
-🕯️ **CANDLE HISTORY (Last 20 Completed):**
-- 5m (Entry Confirmation):  ${data.candleHistory['5m'].sequence.join('')} (${data.candleHistory['5m'].summary}) ${data.candleHistory['5m'].dominantTrend === 'bullish' ? '📈' : data.candleHistory['5m'].dominantTrend === 'bearish' ? '📉' : '↔️'}
-- 15m (Market Structure): ${data.candleHistory['15m'].sequence.join('')} (${data.candleHistory['15m'].summary}) ${data.candleHistory['15m'].dominantTrend === 'bullish' ? '📈' : data.candleHistory['15m'].dominantTrend === 'bearish' ? '📉' : '↔️'}
-- 1h (Key Levels):  ${data.candleHistory['1h'].sequence.join('')} (${data.candleHistory['1h'].summary}) ${data.candleHistory['1h'].dominantTrend === 'bullish' ? '📈' : data.candleHistory['1h'].dominantTrend === 'bearish' ? '📉' : '↔️'}
-- 4h (Key Levels):  ${data.candleHistory['4h'].sequence.join('')} (${data.candleHistory['4h'].summary}) ${data.candleHistory['4h'].dominantTrend === 'bullish' ? '📈' : data.candleHistory['4h'].dominantTrend === 'bearish' ? '📉' : '↔️'}
+ **CANDLE HISTORY (Last 20 Completed):**
+- 5m (Entry Confirmation):  ${data.candleHistory['5m'].sequence.join('')} (${data.candleHistory['5m'].summary}) ${data.candleHistory['5m'].dominantTrend === 'bullish' ? '' : data.candleHistory['5m'].dominantTrend === 'bearish' ? '' : '↔'}
+- 15m (Market Structure): ${data.candleHistory['15m'].sequence.join('')} (${data.candleHistory['15m'].summary}) ${data.candleHistory['15m'].dominantTrend === 'bullish' ? '' : data.candleHistory['15m'].dominantTrend === 'bearish' ? '' : '↔'}
+- 1h (Key Levels):  ${data.candleHistory['1h'].sequence.join('')} (${data.candleHistory['1h'].summary}) ${data.candleHistory['1h'].dominantTrend === 'bullish' ? '' : data.candleHistory['1h'].dominantTrend === 'bearish' ? '' : '↔'}
+- 4h (Key Levels):  ${data.candleHistory['4h'].sequence.join('')} (${data.candleHistory['4h'].summary}) ${data.candleHistory['4h'].dominantTrend === 'bullish' ? '' : data.candleHistory['4h'].dominantTrend === 'bearish' ? '' : '↔'}
 
-📐 **TIMEFRAME PURPOSE GUIDE:**
+ **TIMEFRAME PURPOSE GUIDE:**
 - 4H & 1H: Use for key price levels and overall direction
 - 15m: Use for market structure (BOS, CHoCH, HH/HL, LH/LL)
 - 5m: Use for entry confirmation and timing
 
-💡 **Candle History Insight:**
+ **Candle History Insight:**
 ${(() => {
             const bullish4h = data.candleHistory['4h'].dominantTrend === 'bullish';
             const bearish4h = data.candleHistory['4h'].dominantTrend === 'bearish';
@@ -562,31 +562,31 @@ ${(() => {
 
             // HTF alignment
             if (bullish4h && bullish1h) {
-                insight += '🟢 HTF BULLISH: Both 4H and 1H show strong bullish candle dominance. Favor long setups.';
+                insight += ' HTF BULLISH: Both 4H and 1H show strong bullish candle dominance. Favor long setups.';
             } else if (bearish4h && bearish1h) {
-                insight += '🔴 HTF BEARISH: Both 4H and 1H show strong bearish candle dominance. Favor short setups.';
+                insight += ' HTF BEARISH: Both 4H and 1H show strong bearish candle dominance. Favor short setups.';
             } else if ((bullish4h && bearish1h) || (bearish4h && bullish1h)) {
-                insight += '⚠️ HTF DIVERGENCE: 4H vs 1H disagree. Possible reversal or consolidation.';
+                insight += ' HTF DIVERGENCE: 4H vs 1H disagree. Possible reversal or consolidation.';
             } else {
-                insight += '↔️ HTF NEUTRAL: No clear HTF candle trend dominance.';
+                insight += '↔ HTF NEUTRAL: No clear HTF candle trend dominance.';
             }
 
             // LTF entry context
             insight += '\n';
             if (bullish15m && bullish5m) {
-                insight += '🟢 LTF ENTRY FAVORABLE: 15m structure and 5m confirmation both bullish.';
+                insight += ' LTF ENTRY FAVORABLE: 15m structure and 5m confirmation both bullish.';
             } else if (bearish15m && bearish5m) {
-                insight += '🔴 LTF ENTRY FAVORABLE: 15m structure and 5m confirmation both bearish.';
+                insight += ' LTF ENTRY FAVORABLE: 15m structure and 5m confirmation both bearish.';
             } else if ((bullish15m && bearish5m) || (bearish15m && bullish5m)) {
-                insight += '⚠️ LTF MIXED: 15m and 5m disagree. Wait for alignment before entry.';
+                insight += ' LTF MIXED: 15m and 5m disagree. Wait for alignment before entry.';
             } else {
-                insight += '↔️ LTF NEUTRAL: No clear LTF trend. Be cautious with entry timing.';
+                insight += '↔ LTF NEUTRAL: No clear LTF trend. Be cautious with entry timing.';
             }
 
             return insight;
         })()}
 
-⚠️ **CRITICAL INSTRUCTIONS:**
+ **CRITICAL INSTRUCTIONS:**
 1. Use EXACT prices and indicator values - they are CODE-CALCULATED.
 2. Consider REGIME (${data.regime.regime}) when choosing strategy: ${data.regime.tradingBias}
 3. Check DERIVATIVES sentiment (${data.derivatives.overallSentiment}) for positioning bias.
@@ -594,27 +594,27 @@ ${(() => {
 5. Session is ${data.session.sessionName} - volatility expectation: ${data.session.volatilityExpectation}.
 6. Use Pivot/Fib levels for precise entry, SL, and TP placement.
 7. MTF Confluence Score ${data.confluence.score}/100 indicates ${data.confluence.strength} signal strength.
-8. **🕯️ CANDLE HISTORY (MANDATORY CITATION):** You MUST cite the Candle History data above in your analysis:
+8. ** CANDLE HISTORY (MANDATORY CITATION):** You MUST cite the Candle History data above in your analysis:
    - Cite 4H/1H counts for key level direction (e.g., "4H shows ${data.candleHistory['4h'].summary}")
    - Cite 15m for market structure proof
    - Cite 5m for entry confirmation reasoning
    - If proposing direction AGAINST dominant HTF candle trend, you MUST provide strong justification.
 
-🛡️ **ACCURACY VALIDATION REQUIREMENTS:**
+ **ACCURACY VALIDATION REQUIREMENTS:**
 8. **R:R MINIMUM:** High confidence = 2:1, Medium = 1.5:1, Low = 1.2:1
 9. **ATR STOP RULE:** Stop loss MUST be >= 1x ATR ($${data.indicators['1h'].atr}) from entry
-10. **VOLUME CHECK:** ${data.advancedVolume.trend === 'low' ? '⚠️ LOW VOLUME - Cap confidence at Medium for breakouts' : '✅ Volume adequate'}
-11. **CONFLUENCE RULE:** ${data.confluence.score >= 65 || data.confluence.score <= 35 ? '✅ Strong confluence - High confidence possible' : '⚠️ Weak/mixed confluence - Cap at Medium confidence'}
-12. **DIVERGENCE CHECK:** ${data.momentum['1h'].rsiDivergence !== 'none' || data.momentum['4h'].rsiDivergence !== 'none' ? '✅ DIVERGENCE DETECTED - Increases reversal confidence' : 'No major divergence'}
+10. **VOLUME CHECK:** ${data.advancedVolume.trend === 'low' ? ' LOW VOLUME - Cap confidence at Medium for breakouts' : ' Volume adequate'}
+11. **CONFLUENCE RULE:** ${data.confluence.score >= 65 || data.confluence.score <= 35 ? ' Strong confluence - High confidence possible' : ' Weak/mixed confluence - Cap at Medium confidence'}
+12. **DIVERGENCE CHECK:** ${data.momentum['1h'].rsiDivergence !== 'none' || data.momentum['4h'].rsiDivergence !== 'none' ? ' DIVERGENCE DETECTED - Increases reversal confidence' : 'No major divergence'}
 
-📊 **REGIME TRADING RULES (ADX: ${data.regime.adx}):**
+ **REGIME TRADING RULES (ADX: ${data.regime.adx}):**
 ${data.regime.adx > 25 ? `- STRONG TREND: Trade WITH the trend only. Counter-trend = AVOID.
 - If ${data.regime.trendDirection === 'bullish' ? 'proposing SHORT' : 'proposing LONG'}: You MUST downgrade confidence to LOW or AVOID.` :
             data.regime.adx < 15 ? `- RANGING MARKET: Use mean-reversion strategy. Breakout trades will likely fail.
 - If proposing breakout trade: Add warning about low ADX range-bound price action.` :
                 `- WEAK TREND: Confirmation required. Counter-trend only at major structure levels.`}
 
-😈 **DEVIL'S ADVOCATE (MANDATORY):**
+ **DEVIL'S ADVOCATE (MANDATORY):**
 Before finalizing, you MUST provide:
 1. Three reasons this trade could FAIL
 2. The specific price action that invalidates the setup
@@ -727,7 +727,7 @@ export const generateEnhancedHybridPromptInjection = (
     // Build accuracy enhancement section
     const accuracyEnhancements = `
 ═══════════════════════════════════════════════════════════════
-🎯 ACCURACY ENHANCEMENT PROTOCOLS
+ ACCURACY ENHANCEMENT PROTOCOLS
 ═══════════════════════════════════════════════════════════════
 
 ${correlationRiskPrompt ? correlationRiskPrompt : CORRELATION_AWARENESS_PROMPT}

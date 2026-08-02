@@ -57,7 +57,7 @@ export const LogTradeModal: React.FC<{
         {/* Header */}
         <div className={`p-5 border-b border-white/5 ${outcome === TradeOutcome.WIN ? 'bg-emerald-500/10' : 'bg-rose-500/10'}`}>
           <div className="flex items-center gap-3">
-            <span className="text-2xl">{outcome === TradeOutcome.WIN ? '🎯' : '📉'}</span>
+            <span className="text-2xl">{outcome === TradeOutcome.WIN ? '' : ''}</span>
             <div>
               <h3 className={`text-lg font-bold ${outcome === TradeOutcome.WIN ? 'text-emerald-400' : 'text-rose-400'}`}>
                 {content.title}

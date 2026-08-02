@@ -416,10 +416,10 @@ class PriceAlertServiceClass {
      */
     private async sendNotification(trigger: AlertTrigger): Promise<void> {
         const title = trigger.type === 'ENTRY'
-            ? `📍 ${trigger.coinName} Entry Zone`
+            ? ` ${trigger.coinName} Entry Zone`
             : trigger.type === 'STOP_LOSS'
-                ? `⚠️ ${trigger.coinName} Near Stop Loss!`
-                : `🎯 ${trigger.coinName} Near TP${trigger.tpIndex}`;
+                ? ` ${trigger.coinName} Near Stop Loss!`
+                : ` ${trigger.coinName} Near TP${trigger.tpIndex}`;
 
         const body = `Price: $${trigger.currentPrice.toLocaleString()} (${trigger.percentAway.toFixed(2)}% away from ${trigger.type === 'TAKE_PROFIT' ? 'TP' + trigger.tpIndex : trigger.type === 'ENTRY' ? 'Entry' : 'SL'})`;
 

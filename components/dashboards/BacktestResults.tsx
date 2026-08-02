@@ -40,7 +40,7 @@ const BacktestResults: React.FC<BacktestResultsProps> = ({
         <SectionCard
             title="Live Backtest"
             subtitle="Similar historical trades"
-            icon="📊"
+            icon=""
             accentColor="amber"
             status={status}
             statusLabel={statusLabel}
@@ -114,17 +114,17 @@ const BacktestResults: React.FC<BacktestResultsProps> = ({
                             : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
                         }`}>
                         {backtestResult!.expectedValue >= 1.5
-                            ? '✅ Strong Edge — High Probability Setup'
+                            ? ' Strong Edge — High Probability Setup'
                             : backtestResult!.expectedValue >= 0
-                                ? '⚖️ Marginal Edge — Proceed with Caution'
-                                : '❌ Negative Edge — Consider Skipping'}
+                                ? ' Marginal Edge — Proceed with Caution'
+                                : ' Negative Edge — Consider Skipping'}
                     </div>
 
                     {/* Session Performance Breakdown */}
                     {backtestResult!.sessionBreakdown && backtestResult!.sessionBreakdown.length > 0 && (
                         <div className="p-3 rounded-xl bg-black/20 border border-white/[0.04]">
                             <div className="flex items-center justify-between mb-2">
-                                <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-medium">🕐 Session Performance</span>
+                                <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-medium"> Session Performance</span>
                                 {backtestResult!.bestSession && (
                                     <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">
                                         Best: {backtestResult!.bestSession}
@@ -158,13 +158,13 @@ const BacktestResults: React.FC<BacktestResultsProps> = ({
 
                     {backtestResult!.warning && (
                         <div className="text-[10px] text-amber-400/80 bg-amber-500/10 p-3 rounded-xl border border-amber-500/15">
-                            ⚠️ {backtestResult!.warning}
+                             {backtestResult!.warning}
                         </div>
                     )}
                 </div>
             ) : (
                 <div className="text-center py-4">
-                    <div className="text-2xl mb-2 opacity-40">📊</div>
+                    <div className="text-2xl mb-2 opacity-40"></div>
                     <div className="text-[11px] text-zinc-500 mb-1">Requires 3+ logged trades with similar patterns</div>
                     <div className="text-[10px] text-zinc-600">Same coin, direction, and pattern family</div>
                 </div>

@@ -46,7 +46,7 @@ const MonteCarloPanel: React.FC<MonteCarloPanelProps> = ({
         <SectionCard
             title="Monte Carlo"
             subtitle={subtitle}
-            icon="🎲"
+            icon=""
             accentColor="cyan"
             status={status}
             statusLabel={statusLabel}
@@ -143,7 +143,7 @@ const MonteCarloPanel: React.FC<MonteCarloPanelProps> = ({
                 </div>
             ) : (
                 <div className="text-center py-4">
-                    <div className="text-2xl mb-2 opacity-40">🎲</div>
+                    <div className="text-2xl mb-2 opacity-40"></div>
                     <div className="text-[11px] text-zinc-500">Run analysis with trade setup to see results</div>
                 </div>
             )}

@@ -59,7 +59,7 @@ const ShareMenu: React.FC<ShareMenuProps> = ({
             className="px-3 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-lg transition-colors flex items-center justify-center gap-1 relative"
             title="Share Trade Card"
         >
-            {isSharing ? <LoadingIcon className="w-4 h-4" /> : '📤'}
+            {isSharing ? <LoadingIcon className="w-4 h-4" /> : ''}
             {shareSuccess && (
                 <span className="absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-1 bg-emerald-600 text-white text-[10px] rounded whitespace-nowrap">
                     {shareSuccess}

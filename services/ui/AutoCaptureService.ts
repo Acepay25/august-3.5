@@ -316,7 +316,7 @@ export const verifyHistoricalOutcome = async (
                         entryTriggerTime = new Date(candle.time).toISOString();
                         triggeredEntryPrice = entry.price;
                         triggeredEntryIndex = entry.index;
-                        console.log(`[AutoCapture] ✅ Entry ${entry.index + 1} triggered at candle #${i} (${getTimeframe(i)}) - Low: ${candle.low} <= Entry: ${entry.price}`);
+                        console.log(`[AutoCapture]  Entry ${entry.index + 1} triggered at candle #${i} (${getTimeframe(i)}) - Low: ${candle.low} <= Entry: ${entry.price}`);
                         break;
                     }
                 } else {
@@ -326,7 +326,7 @@ export const verifyHistoricalOutcome = async (
                         entryTriggerTime = new Date(candle.time).toISOString();
                         triggeredEntryPrice = entry.price;
                         triggeredEntryIndex = entry.index;
-                        console.log(`[AutoCapture] ✅ Entry ${entry.index + 1} triggered at candle #${i} (${getTimeframe(i)}) - High: ${candle.high} >= Entry: ${entry.price}`);
+                        console.log(`[AutoCapture]  Entry ${entry.index + 1} triggered at candle #${i} (${getTimeframe(i)}) - High: ${candle.high} >= Entry: ${entry.price}`);
                         break;
                     }
                 }
@@ -393,7 +393,7 @@ export const verifyHistoricalOutcome = async (
                 if (!slTouched && candle.low <= stopLoss) {
                     slTouched = true;
                     // DEBUG: Log the exact candle that triggered SL detection
-                    console.log(`[AutoCapture] 🔴 SL TOUCHED at candle ${i}:`, {
+                    console.log(`[AutoCapture]  SL TOUCHED at candle ${i}:`, {
                         candleTime: candleTimeStr,
                         candleOHLC: { open: candle.open, high: candle.high, low: candle.low, close: candle.close },
                         stopLoss: stopLoss,
@@ -567,15 +567,15 @@ export const verifyHistoricalOutcome = async (
             details = `⏳ TRADE STILL OPEN | ${klines.length} candles checked (${limited1m.length}×1m + ${limited15m.length}×15m + ${limited1h.length}×1h). Neither SL nor TP hit.`;
         } else if (outcome === 'SL_HIT') {
             if (extendedSlExceeded) {
-                details = `❌ STOP LOSS HARD FAIL | Price broke 150% extended SL zone at candle #${slHit!.candleIndex} (${slHit!.timeAfterAnalysis}). Trade Invalid.`;
+                details = ` STOP LOSS HARD FAIL | Price broke 150% extended SL zone at candle #${slHit!.candleIndex} (${slHit!.timeAfterAnalysis}). Trade Invalid.`;
             } else {
                 // Touched SL but held within 150%
-                details = `❌ STOP LOSS HIT (Review Required):\n` +
+                details = ` STOP LOSS HIT (Review Required):\n` +
                     `   • Price touched SL ($${stopLoss.toLocaleString()}) at candle #${slHit?.candleIndex} (${slHit?.timeAfterAnalysis})\n` +
                     `   • Price HELD within the 150% Extended Zone ($${extendedSlPrice.toLocaleString()})\n`;
 
                 if (tpHits.length > 0) {
-                    details += `   • ⚠️ AFTER TRIGGERING SL: Price reversed and hit ${tpHits[tpHits.length - 1].level} ($${tpHits[tpHits.length - 1].price.toLocaleString()}) at candle #${tpHits[tpHits.length - 1].candleIndex} (${tpHits[tpHits.length - 1].timeAfterAnalysis}).\n` +
+                    details += `   •  AFTER TRIGGERING SL: Price reversed and hit ${tpHits[tpHits.length - 1].level} ($${tpHits[tpHits.length - 1].price.toLocaleString()}) at candle #${tpHits[tpHits.length - 1].candleIndex} (${tpHits[tpHits.length - 1].timeAfterAnalysis}).\n` +
                         `   • ANALYSIS: SL likely too tight. Trade was correct but entry/SL precision failed.`;
                 } else {
                     details += `   • Price is currently floating in the 150% zone without hitting TP. Trade Pending.`;
@@ -646,64 +646,64 @@ const generateIndicatorComparisonBlock = (
 
     return `
 ═══════════════════════════════════════════════════════════════
-📈 FULL INDICATOR COMPARISON (Analysis → Outcome)
+ FULL INDICATOR COMPARISON (Analysis → Outcome)
 ═══════════════════════════════════════════════════════════════
 
-🔹 RSI:
+ RSI:
    - RSI6: ${fmt(a.indicators.rsi.rsi6)} → ${fmt(o.indicators.rsi.rsi6)} | RSI12: ${fmt(a.indicators.rsi.rsi12)} → ${fmt(o.indicators.rsi.rsi12)}
    - RSI14: ${fmt(a.indicators.rsi.rsi14)} → ${fmt(o.indicators.rsi.rsi14)} | RSI24: ${fmt(a.indicators.rsi.rsi24)} → ${fmt(o.indicators.rsi.rsi24)}
    - Trend: ${rsiTrend(a.indicators.rsi.rsi14)} → ${rsiTrend(o.indicators.rsi.rsi14)}
 
-🔹 EMA:
+ EMA:
    - EMA9: ${fmtPrice(a.indicators.ema.ema9)} → ${fmtPrice(o.indicators.ema.ema9)}
    - EMA21: ${fmtPrice(a.indicators.ema.ema21)} → ${fmtPrice(o.indicators.ema.ema21)}
    - EMA50: ${fmtPrice(a.indicators.ema.ema50)} → ${fmtPrice(o.indicators.ema.ema50)}
    - EMA200: ${fmtPrice(a.indicators.ema.ema200)} → ${fmtPrice(o.indicators.ema.ema200)}
 
-🔹 MACD:
+ MACD:
    - DIF: ${fmt(a.indicators.macd.dif, 4)} → ${fmt(o.indicators.macd.dif, 4)}
    - DEA: ${fmt(a.indicators.macd.dea, 4)} → ${fmt(o.indicators.macd.dea, 4)}
    - Histogram: ${fmt(a.indicators.macd.histogram, 4)} → ${fmt(o.indicators.macd.histogram, 4)}
    - Trend: ${macdTrend(a.indicators.macd.histogram)} → ${macdTrend(o.indicators.macd.histogram)}
 
-🔹 Bollinger Bands:
+ Bollinger Bands:
    - Upper: ${fmtPrice(a.indicators.bollingerBands.upper)} → ${fmtPrice(o.indicators.bollingerBands.upper)}
    - Middle: ${fmtPrice(a.indicators.bollingerBands.middle)} → ${fmtPrice(o.indicators.bollingerBands.middle)}
    - Lower: ${fmtPrice(a.indicators.bollingerBands.lower)} → ${fmtPrice(o.indicators.bollingerBands.lower)}
    - Bandwidth: ${fmt(a.indicators.bollingerBands.bandwidth)}% → ${fmt(o.indicators.bollingerBands.bandwidth)}%
 
-🔹 Stochastic:
+ Stochastic:
    - K: ${fmt(a.indicators.stochastic.k)} → ${fmt(o.indicators.stochastic.k)}
    - D: ${fmt(a.indicators.stochastic.d)} → ${fmt(o.indicators.stochastic.d)}
    - J: ${fmt(a.indicators.stochastic.j)} → ${fmt(o.indicators.stochastic.j)}
 
-🔹 ATR:
+ ATR:
    - Value: ${fmtPrice(a.indicators.atr)} → ${fmtPrice(o.indicators.atr)}
    - Percent: ${fmt(a.indicators.atrPercent)}% → ${fmt(o.indicators.atrPercent)}%
 
-🔹 Volume:
+ Volume:
    - Current: ${fmt(a.indicators.volume.current / 1000000)}M → ${fmt(o.indicators.volume.current / 1000000)}M
    - Average: ${fmt(a.indicators.volume.average / 1000000)}M → ${fmt(o.indicators.volume.average / 1000000)}M
    - Trend: ${a.indicators.volume.trend} → ${o.indicators.volume.trend}
 
-🔹 VWAP:
+ VWAP:
    - Value: ${fmtPrice(a.vwap.vwap)} → ${fmtPrice(o.vwap.vwap)}
    - Position: ${a.vwap.pricePosition.replace(/_/g, ' ')} → ${o.vwap.pricePosition.replace(/_/g, ' ')}
    - Bias: ${a.vwap.bias} → ${o.vwap.bias}
 
-🔹 Ichimoku:
+ Ichimoku:
    - Cloud Color: ${a.ichimoku.cloudColor} → ${o.ichimoku.cloudColor}
    - Price vs Cloud: ${a.ichimoku.priceVsCloud} → ${o.ichimoku.priceVsCloud}
    - TK Cross: ${a.ichimoku.tkCross} → ${o.ichimoku.tkCross}
    - Signal: ${a.ichimoku.signal.replace(/_/g, ' ')} → ${o.ichimoku.signal.replace(/_/g, ' ')}
 
-🔹 Momentum:
+ Momentum:
    - ROC5: ${fmt(a.momentum.roc5)}% → ${fmt(o.momentum.roc5)}%
    - ROC10: ${fmt(a.momentum.roc10)}% → ${fmt(o.momentum.roc10)}%
    - ROC20: ${fmt(a.momentum.roc20)}% → ${fmt(o.momentum.roc20)}%
    - State: ${a.momentum.momentum.replace(/_/g, ' ')} → ${o.momentum.momentum.replace(/_/g, ' ')}
 
-🔹 Regime:
+ Regime:
    - Type: ${a.regime.regime.replace(/_/g, ' ')} → ${o.regime.regime.replace(/_/g, ' ')}
    - ADX: ${fmt(a.regime.adx)} → ${fmt(o.regime.adx)}
    - Trend Direction: ${a.regime.trendDirection} → ${o.regime.trendDirection}
@@ -793,8 +793,8 @@ export const generateComparisonBlock = (
     // Build historical verification section
     let historicalSection = '';
     if (historicalOutcome?.verified) {
-        const outcomeEmoji = historicalOutcome.outcome === 'TP_HIT' ? '✅' :
-            historicalOutcome.outcome === 'SL_HIT' ? '❌' : '⏳';
+        const outcomeEmoji = historicalOutcome.outcome === 'TP_HIT' ? '' :
+            historicalOutcome.outcome === 'SL_HIT' ? '' : '⏳';
 
         historicalSection = `
 ═══════════════════════════════════════════════════════════════
@@ -829,22 +829,22 @@ ${outcomeEmoji} **HISTORICAL OUTCOME VERIFICATION**
 
     const tradeOutcomeSection = historicalOutcome?.verified ? `
 ═══════════════════════════════════════════════════════════════
-🎯 **TRADE OUTCOME (USE THIS FOR POST-MORTEM)**
+ **TRADE OUTCOME (USE THIS FOR POST-MORTEM)**
 ═══════════════════════════════════════════════════════════════
 - Final Exit Price: $${finalReferencePrice.toLocaleString()} (${referenceSource})
 - P&L from Entry: ${finalPriceChangePercent}
 - Exit Timestamp: ${historicalOutcome.hitCandleTime || 'N/A'}
 ${tpProgressSection ? `- TP Levels Hit:\n${tpProgressSection}` : ''}
-⚠️ IMPORTANT: All post-mortem analysis MUST reference the Final Exit Price above,
+ IMPORTANT: All post-mortem analysis MUST reference the Final Exit Price above,
    NOT the current market price which may have moved significantly since trade close.
 ` : '';
 
     return `
 ═══════════════════════════════════════════════════════════════
-📊 **TRADE SETUP VS MARKET COMPARISON**
+ **TRADE SETUP VS MARKET COMPARISON**
 ═══════════════════════════════════════════════════════════════
 
-🔹 **ORIGINAL TRADE SETUP:**
+ **ORIGINAL TRADE SETUP:**
 - Entry: ${origEntry}
 - Stop Loss: ${origSL}
 - Take Profit: ${origTP}
@@ -853,7 +853,7 @@ ${tpProgressSection ? `- TP Levels Hit:\n${tpProgressSection}` : ''}
 - Pattern/Family: ${origPattern}
 - Strategy: ${originalAnalysis.strategy || 'N/A'}
 ${tradeOutcomeSection}
-🔹 **CURRENT MARKET STATE (for reference only):**
+ **CURRENT MARKET STATE (for reference only):**
 - Current Price: $${currentPrice.toLocaleString()} (vs entry: ${currentPriceChangePercent})
 - RSI (1H): ${currentData.indicators['1h'].rsi.rsi14}
 - MACD (1H): ${currentData.indicators['1h'].macd.histogram >= 0 ? 'Bullish' : 'Bearish'}
@@ -861,7 +861,7 @@ ${tradeOutcomeSection}
 - Confluence: ${currentData.confluence.score}/100 (${currentData.confluence.direction})
 ${historicalSection}
 ═══════════════════════════════════════════════════════════════
-⚠️ **POST-MORTEM ANALYSIS REQUIREMENTS:**
+ **POST-MORTEM ANALYSIS REQUIREMENTS:**
 1. What changed between entry and the ACTUAL EXIT (${referenceSource})?
 2. Warning signs the AI might have missed BEFORE the exit?
 3. Key learnings for future similar setups?
@@ -999,7 +999,7 @@ export const logPostMortemDataVerification = (
     const summary = extractPostMortemDataSummary(originalAnalysis, historicalOutcome);
 
     console.log('\n╔═══════════════════════════════════════════════════════════════╗');
-    console.log('║ 🔍 POST-MORTEM DATA VERIFICATION - AI WILL RECEIVE:          ║');
+    console.log('║  POST-MORTEM DATA VERIFICATION - AI WILL RECEIVE:          ║');
     console.log('╠═══════════════════════════════════════════════════════════════╣');
     console.log(`║ Original Setup:                                               ║`);
     console.log(`║   Entry: ${summary.originalSetup.entry.padEnd(52)}║`);
@@ -1009,7 +1009,7 @@ export const logPostMortemDataVerification = (
     console.log('╠═══════════════════════════════════════════════════════════════╣');
 
     if (summary.actualOutcome) {
-        console.log(`║ ✅ VERIFIED OUTCOME (AI WILL USE THIS):                       ║`);
+        console.log(`║  VERIFIED OUTCOME (AI WILL USE THIS):                       ║`);
         console.log(`║   Hit Target: ${(summary.actualOutcome.hitTarget || 'N/A').padEnd(47)}║`);
         console.log(`║   Exit Price: $${(summary.actualOutcome.exitPrice?.toLocaleString() || 'N/A').padEnd(45)}║`);
         console.log(`║   Hit Time: ${(summary.actualOutcome.hitTime || 'N/A').padEnd(49)}║`);
@@ -1017,10 +1017,10 @@ export const logPostMortemDataVerification = (
             console.log(`║   TP Levels Hit: ${summary.actualOutcome.tpLevelsHit.join(', ').substring(0, 43).padEnd(43)}║`);
         }
     } else {
-        console.log(`║ ⚠️ NO VERIFIED OUTCOME - AI will fallback to original data   ║`);
+        console.log(`║  NO VERIFIED OUTCOME - AI will fallback to original data   ║`);
     }
 
     console.log('╠═══════════════════════════════════════════════════════════════╣');
-    console.log(`║ 📤 AI Receives: ${summary.aiWillReceive.substring(0, 44).padEnd(44)}║`);
+    console.log(`║  AI Receives: ${summary.aiWillReceive.substring(0, 44).padEnd(44)}║`);
     console.log('╚═══════════════════════════════════════════════════════════════╝\n');
 };

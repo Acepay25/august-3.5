@@ -400,7 +400,7 @@ export function constructStage2Prompt(
 
     // Build penalty breakdown (transparent)
     const penaltyDetails = penalties.effectiveTotal > 0 ? `
-📊 **Confidence Adjustments:**
+ **Confidence Adjustments:**
 ${penalties.dataIntegrity > 0 ? `  • Data Integrity: −${(penalties.dataIntegrity * 100).toFixed(0)}%` : ''}
 ${penalties.patternMemory > 0 ? `  • Pattern Memory: −${(penalties.patternMemory * 100).toFixed(0)}%` : ''}
 ${penalties.htfConflict > 0 ? `  • HTF Conflict: −${(penalties.htfConflict * 100).toFixed(0)}%` : ''}
@@ -410,7 +410,7 @@ ${penalties.volumeContext > 0 ? `  • Volume Context: −${(penalties.volumeCon
 
     // Build family bias section
     const familyBiasSection = gateOutput.familyBias.reasoning.length > 0 ? `
-🎯 **Family Bias Analysis:**
+ **Family Bias Analysis:**
   • Family A: ${gateOutput.familyBias.A > 0 ? '+' : ''}${(gateOutput.familyBias.A * 100).toFixed(0)}%
   • Family B: ${gateOutput.familyBias.B > 0 ? '+' : ''}${(gateOutput.familyBias.B * 100).toFixed(0)}%
   • Family C: ${gateOutput.familyBias.C > 0 ? '+' : ''}${(gateOutput.familyBias.C * 100).toFixed(0)}%
@@ -421,7 +421,7 @@ ${penalties.volumeContext > 0 ? `  • Volume Context: −${(penalties.volumeCon
     // Build Gate constraints injection
     const gateConstraintsBlock = `
 ────────────────────────────────────────
-🚨 GATE SCAN RESULTS
+ GATE SCAN RESULTS
 ────────────────────────────────────────
 Symbol: ${gateOutput.symbol}
 Gate Status: ${gateOutput.pass ? 'PASSED' : 'BLOCKED'}
@@ -431,14 +431,14 @@ Allowed Families: ${gateOutput.allowedFamilies.join(', ')}
 ${penaltyDetails}
 ${familyBiasSection}
 ${gateOutput.suggestedDirection ? `
-🧠 **PATTERN MEMORY INSIGHT:**
+ **PATTERN MEMORY INSIGHT:**
 Suggested Direction: **${gateOutput.suggestedDirection}**
 Reason: ${gateOutput.patternMemoryNote || 'Based on historical pattern analysis'}
 ` : ''}${gateOutput.warnings.length > 0 ? `
-⚠️ **Warnings:**
+ **Warnings:**
 ${gateOutput.warnings.map(w => `  • ${w}`).join('\n')}
 ` : ''}${gateOutput.insights.length > 0 ? `
-💡 **Insights:**
+ **Insights:**
 ${gateOutput.insights.map(i => `  • ${i}`).join('\n')}
 ` : ''}
 **CONSTRAINTS:**
@@ -668,14 +668,14 @@ export async function getGateAnalysis(
     const penalties = gateOutput.confidencePenalties;
     const promptPrefix = `
 ────────────────────────────────────────
-🚨 GATE SCAN: ${gateOutput.symbol}
+ GATE SCAN: ${gateOutput.symbol}
 ────────────────────────────────────────
 Confidence Cap: ${(gateOutput.confidenceCap * 100).toFixed(0)}%
 ${penalties.effectiveTotal > 0 ? `Penalties: −${(penalties.effectiveTotal * 100).toFixed(0)}% (data: ${(penalties.dataIntegrity * 100).toFixed(0)}%, memory: ${(penalties.patternMemory * 100).toFixed(0)}%, HTF: ${(penalties.htfConflict * 100).toFixed(0)}%, vol: ${(penalties.volumeContext * 100).toFixed(0)}%)` : 'No penalties applied'}
-${gateOutput.suggestedDirection ? `⚠️ Pattern Memory suggests: ${gateOutput.suggestedDirection}` : ''}
+${gateOutput.suggestedDirection ? ` Pattern Memory suggests: ${gateOutput.suggestedDirection}` : ''}
 ${gateOutput.familyBias.reasoning.length > 0 ? `Family Bias: A${gateOutput.familyBias.A > 0 ? '+' : ''}${(gateOutput.familyBias.A * 100).toFixed(0)}%, B${gateOutput.familyBias.B > 0 ? '+' : ''}${(gateOutput.familyBias.B * 100).toFixed(0)}%, C${gateOutput.familyBias.C > 0 ? '+' : ''}${(gateOutput.familyBias.C * 100).toFixed(0)}%, Ω${gateOutput.familyBias.Omega > 0 ? '+' : ''}${(gateOutput.familyBias.Omega * 100).toFixed(0)}%` : ''}
 ${gateOutput.warnings.slice(0, 3).map(w => `• ${w}`).join('\n')}
-${gateOutput.insights.slice(0, 2).map(i => `💡 ${i}`).join('\n')}
+${gateOutput.insights.slice(0, 2).map(i => ` ${i}`).join('\n')}
 ────────────────────────────────────────
 
 `;

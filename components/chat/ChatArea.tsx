@@ -344,7 +344,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                             />
                         ) : (
                             /* Fallback: original spinner overlay when no step data */
-                            <div className="flex flex-col items-center justify-center p-6 glass rounded-2xl shadow-[0_0_50px_-12px_rgba(34,211,238,0.2)] animate-fade-in border-t border-cyan-500/20">
+                            <div className="flex flex-col items-center justify-center p-6 glass rounded-2xl shadow-[0_0_50px_-12px_rgba(212,212,216,0.2)] animate-fade-in border-t border-cyan-500/20">
                                 <div className="relative">
                                     <div className="absolute inset-0 blur-xl opacity-20 animate-pulse bg-cyan-500"></div>
                                     <LoadingIcon className="h-8 w-8 relative z-10 text-cyan-400" />

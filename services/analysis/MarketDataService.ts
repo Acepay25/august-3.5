@@ -954,10 +954,10 @@ export const fetchRecentLiquidations = async (symbol: string): Promise<Liquidati
         let sentiment = '';
         if (liquidationPressure === 'high') {
             sentiment = dominantLiquidations === 'longs'
-                ? '🔴 Heavy long liquidations — bearish pressure'
+                ? ' Heavy long liquidations — bearish pressure'
                 : dominantLiquidations === 'shorts'
-                    ? '🟢 Heavy short liquidations — bullish squeeze'
-                    : '⚪ Mixed liquidations — volatile conditions';
+                    ? ' Heavy short liquidations — bullish squeeze'
+                    : ' Mixed liquidations — volatile conditions';
         } else if (liquidationPressure === 'medium') {
             sentiment = dominantLiquidations === 'longs'
                 ? 'Moderate long liquidations — bearish lean'

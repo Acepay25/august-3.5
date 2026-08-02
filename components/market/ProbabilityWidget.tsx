@@ -68,7 +68,7 @@ const ProbabilityWidget: React.FC<ProbabilityWidgetProps> = ({
             {/* Header */}
             <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
-                    <span className="text-base">📊</span>
+                    <span className="text-base"></span>
                     <span className="text-[10px] uppercase font-bold tracking-widest text-zinc-400">
                         Historical Accuracy
                     </span>

@@ -28,7 +28,7 @@ const InstructionCard: React.FC<{
     const [isExpanded, setIsExpanded] = useState(false);
 
     return (
-        <div className={`rounded-2xl border transition-all duration-300 ${instruction.isActive ? 'bg-zinc-900/80 border-cyan-500/30 shadow-[0_0_15px_-5px_rgba(6,182,212,0.1)]' : 'bg-zinc-900/30 border-white/5 opacity-80 hover:opacity-100'}`}>
+        <div className={`rounded-2xl border transition-all duration-300 ${instruction.isActive ? 'bg-zinc-900/80 border-cyan-500/30 shadow-[0_0_15px_-5px_rgba(212,212,216,0.1)]' : 'bg-zinc-900/30 border-white/5 opacity-80 hover:opacity-100'}`}>
             <div className="p-3 flex items-center justify-between gap-3">
                 <div className="flex-1 flex items-center gap-3 min-w-0">
                     <button
@@ -198,7 +198,7 @@ const CustomInstructionsEditor: React.FC<CustomInstructionsEditorProps> = ({
             <div className="space-y-3">
                 {currentInstructions.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-10 text-center border border-dashed border-white/10 rounded-2xl">
-                        <span className="text-3xl mb-3">📝</span>
+                        <span className="text-3xl mb-3"></span>
                         <p className="text-xs text-zinc-600 italic">No custom instructions for this mode yet.</p>
                     </div>
                 ) : (

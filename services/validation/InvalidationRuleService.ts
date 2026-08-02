@@ -360,7 +360,7 @@ export function checkTradeAgainstRules(
 
     // Generate warnings
     for (const v of violations) {
-        const severityIcon = v.severity === 'high' ? '🔴' : v.severity === 'medium' ? '🟠' : '🟡';
+        const severityIcon = v.severity === 'high' ? '' : v.severity === 'medium' ? '' : '';
         warnings.push(`${severityIcon} RULE VIOLATION: ${v.rule.fullRule}`);
         warnings.push(`   Reason: ${v.matchReason}`);
     }
@@ -553,19 +553,19 @@ function generateRuleViolationPrompt(violations: RuleViolation[]): string {
     if (violations.length === 0) return '';
 
     const parts: string[] = [];
-    parts.push('⚠️ **INVALIDATION RULE VIOLATIONS DETECTED**\n');
+    parts.push(' **INVALIDATION RULE VIOLATIONS DETECTED**\n');
     parts.push('The following rules from past post-mortems are being violated by this setup:\n');
 
     for (let i = 0; i < Math.min(violations.length, 3); i++) {
         const v = violations[i];
-        const icon = v.severity === 'high' ? '🔴' : v.severity === 'medium' ? '🟠' : '🟡';
+        const icon = v.severity === 'high' ? '' : v.severity === 'medium' ? '' : '';
         parts.push(`${i + 1}. ${icon} **${v.rule.fullRule}**`);
         parts.push(`   Category: ${v.rule.category} | Effectiveness: ${v.rule.effectiveness}%`);
         parts.push(`   Trigger: ${v.matchReason}`);
     }
 
     if (violations.some(v => v.severity === 'high')) {
-        parts.push('\n**⚠️ MODERATOR WARNING:** High-severity rule violation detected. Consider skipping this trade or reducing size.');
+        parts.push('\n** MODERATOR WARNING:** High-severity rule violation detected. Consider skipping this trade or reducing size.');
     }
 
     return parts.join('\n');

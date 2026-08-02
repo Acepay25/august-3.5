@@ -338,11 +338,11 @@ export const backtestSimilarSetups = (
     // Warnings
     let warning: string | undefined;
     if (totalMatches < MIN_MATCHES_FOR_STATS) {
-        warning = `⚠️ Insufficient historical data (${totalMatches} matches). Results may not be statistically significant.`;
+        warning = ` Insufficient historical data (${totalMatches} matches). Results may not be statistically significant.`;
     } else if (expectedValue < 0) {
-        warning = `⚠️ NEGATIVE EXPECTED VALUE (${expectedValue.toFixed(2)}%). This setup type has historically lost money.`;
+        warning = ` NEGATIVE EXPECTED VALUE (${expectedValue.toFixed(2)}%). This setup type has historically lost money.`;
     } else if (winRate < 40) {
-        warning = `⚠️ Low historical win rate (${winRate.toFixed(1)}%). Consider reducing position size.`;
+        warning = ` Low historical win rate (${winRate.toFixed(1)}%). Consider reducing position size.`;
     }
 
     return {
@@ -382,7 +382,7 @@ export const calculateExpectedValue = (
 export const generateBacktestPromptInjection = (result: LiveBacktestResult): string => {
     if (result.totalMatches < MIN_MATCHES_FOR_STATS) {
         return `
-📜 **HISTORICAL BACKTEST:**
+ **HISTORICAL BACKTEST:**
 Insufficient historical data (${result.totalMatches} similar trades found).
 Unable to provide statistical validation.
 `;
@@ -391,12 +391,12 @@ Unable to provide statistical validation.
     const evSign = result.expectedValue >= 0 ? '+' : '';
     let injection = `
 ═══════════════════════════════════════════════════════════════
-📜 **HISTORICAL BACKTEST: SIMILAR SETUPS FOUND**
+ **HISTORICAL BACKTEST: SIMILAR SETUPS FOUND**
 ═══════════════════════════════════════════════════════════════
 
 **Matched Trades:** ${result.totalMatches} historical trades
 
-📊 **PERFORMANCE SUMMARY:**
+ **PERFORMANCE SUMMARY:**
 - Win Rate: ${result.winRate.toFixed(1)}%
 - Avg Win: ${result.avgWinPercent.toFixed(2)}%
 - Avg Loss: -${result.avgLossPercent.toFixed(2)}%
@@ -406,7 +406,7 @@ Unable to provide statistical validation.
     // Regime breakdown
     if (result.regimeBreakdown.length > 0) {
         injection += `
-📈 **REGIME BREAKDOWN:**
+ **REGIME BREAKDOWN:**
 `;
         for (const regime of result.regimeBreakdown) {
             const marker = result.currentRegimeStats?.regime === regime.regime ? ' ← Current' : '';
@@ -431,10 +431,10 @@ ${result.warning}
             .sort((a, b) => a.pnlPercent - b.pnlPercent)[0];
 
         if (best) {
-            injection += `✅ Best Outcome: +${best.pnlPercent.toFixed(1)}% (${best.coin})\n`;
+            injection += ` Best Outcome: +${best.pnlPercent.toFixed(1)}% (${best.coin})\n`;
         }
         if (worst) {
-            injection += `❌ Worst Outcome: ${worst.pnlPercent.toFixed(1)}% (${worst.coin})\n`;
+            injection += ` Worst Outcome: ${worst.pnlPercent.toFixed(1)}% (${worst.coin})\n`;
         }
     }
 
@@ -452,7 +452,7 @@ ${result.warning}
  */
 export const generateBacktestSummary = (result: LiveBacktestResult): string => {
     const evSign = result.expectedValue >= 0 ? '+' : '';
-    const evEmoji = result.expectedValue >= 0 ? '✅' : '⚠️';
+    const evEmoji = result.expectedValue >= 0 ? '' : '';
 
     return `
 ╔═══════════════════════════════════════════════════════════════╗

@@ -719,7 +719,7 @@ const App: React.FC = () => {
             const integrityCheck = await checkDataIntegrity(username, tradeCount);
             if (!integrityCheck.valid && integrityCheck.tradeCountChanged) {
                 logIntegrityEvent('DATA_LOSS_DETECTED', integrityCheck);
-                const message = `⚠️ Data Issue Detected\n\n` +
+                const message = ` Data Issue Detected\n\n` +
                     `Your trade log appears to have fewer trades than before ` +
                     `(${integrityCheck.previousTradeCount} → ${integrityCheck.currentTradeCount}).\n\n` +
                     (integrityCheck.hasBackups && integrityCheck.latestBackup

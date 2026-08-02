@@ -188,8 +188,8 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({
   const visibleSteps = steps.filter((s) => s.status !== 'pending');
   const accentBorder = isPostMortem ? 'border-purple-500/20' : 'border-cyan-500/20';
   const glowColor = isPostMortem
-    ? 'shadow-[0_0_50px_-12px_rgba(168,85,247,0.2)]'
-    : 'shadow-[0_0_50px_-12px_rgba(34,211,238,0.2)]';
+    ? 'shadow-[0_0_50px_-12px_rgba(161,161,170,0.2)]'
+    : 'shadow-[0_0_50px_-12px_rgba(212,212,216,0.2)]';
 
   const taskBlocks = (
     <div className="space-y-1">

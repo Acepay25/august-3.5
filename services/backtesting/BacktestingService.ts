@@ -415,7 +415,7 @@ export const simulateFromAnalysisTime = async (
             let wouldHaveTriggered = false;
 
             if (klines.length === 0) {
-                errorDetails = `⚠️ No market data available for ${symbol}.\n\n` +
+                errorDetails = ` No market data available for ${symbol}.\n\n` +
                     `Possible causes:\n` +
                     `• Invalid symbol (${symbol} may not exist on Binance)\n` +
                     `• Network connection issue\n` +
@@ -494,9 +494,9 @@ export const simulateFromAnalysisTime = async (
                 maxDrawdown: 0,
                 timeToOutcome: 0,
                 priceAtExit: 0,
-                simulationDetails: `⚠️ Cannot backtest: Invalid trade parameters.\n\n` +
-                    `Entry: ${entryPrice === 0 ? '❌ Missing' : `✅ $${entryPrice.toLocaleString()}`}\n` +
-                    `Stop Loss: ${stopLoss === 0 ? '❌ Missing' : `✅ $${stopLoss.toLocaleString()}`}`,
+                simulationDetails: ` Cannot backtest: Invalid trade parameters.\n\n` +
+                    `Entry: ${entryPrice === 0 ? ' Missing' : ` $${entryPrice.toLocaleString()}`}\n` +
+                    `Stop Loss: ${stopLoss === 0 ? ' Missing' : ` $${stopLoss.toLocaleString()}`}`,
                 analysisTime: analysisTimestamp,
                 candlesEvaluated: klines.length,
                 leverage
@@ -527,7 +527,7 @@ export const simulateFromAnalysisTime = async (
                     entryTriggeredAtIndex = i;
                     entryTriggerTime = new Date(candle.time).toISOString();
                     triggeredEntryPrice = entry.price;
-                    console.log(`[BacktestingService] ✅ Entry ${entry.index + 1} triggered at candle ${i} (Price touched $${entry.price.toLocaleString()}), time: ${entryTriggerTime}`);
+                    console.log(`[BacktestingService]  Entry ${entry.index + 1} triggered at candle ${i} (Price touched $${entry.price.toLocaleString()}), time: ${entryTriggerTime}`);
                     break;
                 }
             }
@@ -552,7 +552,7 @@ export const simulateFromAnalysisTime = async (
                 priceAtExit: 0,
                 simulationDetails: `⏳ WAITING FOR ENTRY | ${klines.length} candles scanned\n` +
                     `   Entry: $${entryPrice.toLocaleString()} | Current: $${currentPrice.toLocaleString()}\n` +
-                    `   ${isApproaching ? '📈 Price' : '📉 Price'} is ${Math.abs(parseFloat(priceDistanceToEntry))}% ${isLong ? (isApproaching ? 'above' : 'below') : (isApproaching ? 'below' : 'above')} entry\n` +
+                    `   ${isApproaching ? ' Price' : ' Price'} is ${Math.abs(parseFloat(priceDistanceToEntry))}% ${isLong ? (isApproaching ? 'above' : 'below') : (isApproaching ? 'below' : 'above')} entry\n` +
                     `   Status: Entry ${isLong ? 'buy' : 'sell'} order has NOT been filled yet`,
                 analysisTime: analysisTimestamp,
                 candlesEvaluated: klines.length,
@@ -647,7 +647,7 @@ export const simulateFromAnalysisTime = async (
                 if (!slTouched && candle.low <= stopLoss) {
                     slTouched = true;
                     // DEBUG: Log the exact candle that triggered SL detection
-                    console.log(`[BacktestingService] 🔴 SL TOUCHED at candle ${i}:`, {
+                    console.log(`[BacktestingService]  SL TOUCHED at candle ${i}:`, {
                         candleTime: candleTimeStr,
                         candleOHLC: { open: candle.open, high: candle.high, low: candle.low, close: candle.close },
                         stopLoss: stopLoss,
@@ -719,7 +719,7 @@ export const simulateFromAnalysisTime = async (
                 if (!slTouched && candle.high >= stopLoss) {
                     slTouched = true;
                     // DEBUG: Log the exact candle that triggered SL detection
-                    console.log(`[BacktestingService] 🔴 SL TOUCHED (SHORT) at candle ${i}:`, {
+                    console.log(`[BacktestingService]  SL TOUCHED (SHORT) at candle ${i}:`, {
                         candleTime: candleTimeStr,
                         candleOHLC: { open: candle.open, high: candle.high, low: candle.low, close: candle.close },
                         stopLoss: stopLoss,
@@ -805,20 +805,20 @@ export const simulateFromAnalysisTime = async (
             // Show R:R as whole number, P&L with leverage
             details = `⏳ TRADE STILL OPEN | ${klines.length} candles since analysis (${totalTimeElapsed} elapsed)\n` +
                 `   Entry: $${entryPrice.toLocaleString()} | SL: $${stopLoss.toLocaleString()} | Extended SL: $${extendedSlPrice.toLocaleString()}\n` +
-                `   📈 Current: $${currentPrice.toLocaleString()} | P&L: ${pnlSign}${currentPnlPercent.toFixed(0)}% (${leverage}x) | R:R: ${rrSign}${Math.round(currentRR)}R\n` +
+                `    Current: $${currentPrice.toLocaleString()} | P&L: ${pnlSign}${currentPnlPercent.toFixed(0)}% (${leverage}x) | R:R: ${rrSign}${Math.round(currentRR)}R\n` +
                 `   Max drawdown: ${maxDrawdown.toFixed(2)}%\n` +
                 `   Status: ${status}`;
         } else if (hitTarget === 'SL') {
-            details = `❌ STOP LOSS EXCEEDED | Loss exceeded 150% of original SL distance at candle #${hitCandleIndex} (${timeToOutcomeReadable})\n` +
+            details = ` STOP LOSS EXCEEDED | Loss exceeded 150% of original SL distance at candle #${hitCandleIndex} (${timeToOutcomeReadable})\n` +
                 `   Entry: $${entryPrice.toLocaleString()} → Extended SL at: $${exitPrice.toLocaleString()}\n` +
                 `   Max drawdown: ${maxDrawdown.toFixed(2)}%`;
         } else {
             // TP hit - show TPs, and note if SL was touched first
-            details = `✅ TARGETS HIT:\n${tpHits.map(t =>
+            details = ` TARGETS HIT:\n${tpHits.map(t =>
                 `   • ${t.level}: $${t.price.toLocaleString()} @ candle #${t.candleIndex} (${t.timeAfterAnalysis})`
             ).join('\n')}\n   Entry: $${entryPrice.toLocaleString()} | Max DD: ${maxDrawdown.toFixed(2)}%`;
             if (slTouched) {
-                details += `\n\n📊 **NOTE:** Price touched SL ($${stopLoss.toLocaleString()}) but recovered within 150% zone to hit TP.`;
+                details += `\n\n **NOTE:** Price touched SL ($${stopLoss.toLocaleString()}) but recovered within 150% zone to hit TP.`;
             }
         }
 
@@ -930,14 +930,14 @@ export const simulateFromAnalysisTime = async (
 
         let errorDetails: string;
         if (isNetworkError) {
-            errorDetails = `🌐 Network Error\n\n` +
+            errorDetails = ` Network Error\n\n` +
                 `Could not fetch market data from Binance.\n\n` +
                 `Possible causes:\n` +
                 `• Check your internet connection\n` +
                 `• Binance may be blocked on your network\n` +
                 `• Try again in a few moments`;
         } else {
-            errorDetails = `⚠️ Backtest Error\n\n${errorMessage}`;
+            errorDetails = ` Backtest Error\n\n${errorMessage}`;
         }
 
         return {
@@ -1020,7 +1020,7 @@ export const generateBacktestSummary = (result: BacktestResult): string => {
         return `⏳ Entry not triggered`;
     }
 
-    const emoji = result.outcome === 'WIN' ? '✅' : result.outcome === 'LOSS' ? '❌' : '⏳';
+    const emoji = result.outcome === 'WIN' ? '' : result.outcome === 'LOSS' ? '' : '⏳';
 
     if (result.outcome === 'WIN') {
         return `${emoji} Would have hit ${result.hitTarget} in ${result.timeToOutcome} candles (${result.maxDrawdown.toFixed(1)}% max DD)`;
@@ -1233,7 +1233,7 @@ export const validateTradeOutcome = async (
                 entryPrice,
                 stopLoss,
                 maxDrawdown: 0,
-                validationSummary: `⚠️ No market data available for ${symbol}. Cannot validate trade outcome.`,
+                validationSummary: ` No market data available for ${symbol}. Cannot validate trade outcome.`,
                 candlesEvaluated: 0,
                 dataRange,
                 isMismatch: false
@@ -1250,7 +1250,7 @@ export const validateTradeOutcome = async (
                 entryPrice,
                 stopLoss,
                 maxDrawdown: 0,
-                validationSummary: `⚠️ Invalid trade parameters. Entry: ${entryPrice}, SL: ${stopLoss}`,
+                validationSummary: ` Invalid trade parameters. Entry: ${entryPrice}, SL: ${stopLoss}`,
                 candlesEvaluated: klines.length,
                 dataRange,
                 isMismatch: false
@@ -1622,7 +1622,7 @@ export const validateTradeOutcome = async (
         let validationSummary = '';
 
         if (outcome === 'WIN') {
-            validationSummary = `✅ **PRICE-VALIDATED WIN**\n` +
+            validationSummary = ` **PRICE-VALIDATED WIN**\n` +
                 `Entry: $${entryPrice.toLocaleString()} triggered at ${entryTriggerTime}\n` +
                 `Exit: ${hitTarget} hit at $${exitPrice?.toLocaleString()} (${timeToOutcome})\n` +
                 `P&L: ${pnlPercent !== undefined ? (pnlPercent >= 0 ? '+' : '') + pnlPercent.toFixed(2) : 'N/A'}%\n` +
@@ -1632,10 +1632,10 @@ export const validateTradeOutcome = async (
 
             // Add note if SL was touched before hitting TP
             if (slTouched) {
-                validationSummary += `\n🚨 **NOTE:** Original SL ($${stopLoss.toLocaleString()}) was touched at ${slTouchTime}, but price recovered within 150% zone to hit TP.`;
+                validationSummary += `\n **NOTE:** Original SL ($${stopLoss.toLocaleString()}) was touched at ${slTouchTime}, but price recovered within 150% zone to hit TP.`;
             }
         } else if (outcome === 'LOSS') {
-            validationSummary = `❌ **PRICE-VALIDATED LOSS**\n` +
+            validationSummary = ` **PRICE-VALIDATED LOSS**\n` +
                 `Entry: $${entryPrice.toLocaleString()} triggered at ${entryTriggerTime}\n` +
                 `Exit: 150% extended SL exceeded at $${extendedSlPrice.toLocaleString()} (${timeToOutcome})\n` +
                 `Original SL: $${stopLoss.toLocaleString()} | Extended SL (150%): $${extendedSlPrice.toLocaleString()}\n` +
@@ -1651,12 +1651,12 @@ export const validateTradeOutcome = async (
                 `Max Drawdown: ${maxDrawdown.toFixed(2)}%`;
 
             if (slTouched) {
-                validationSummary += `\n🚨 **NOTE:** SL was touched at ${slTouchTime} but price is still within 150% zone.`;
+                validationSummary += `\n **NOTE:** SL was touched at ${slTouchTime} but price is still within 150% zone.`;
             }
         }
 
         if (indicatorsAtExit) {
-            validationSummary += `\n\n📊 **Indicators at Exit:**\n` +
+            validationSummary += `\n\n **Indicators at Exit:**\n` +
                 `RSI(14): ${indicatorsAtExit.rsi14} | MACD: ${indicatorsAtExit.macdHistogram}\n` +
                 `EMA20: $${indicatorsAtExit.ema20} | EMA50: $${indicatorsAtExit.ema50}\n` +
                 `ATR: $${indicatorsAtExit.atr} | Volume: ${indicatorsAtExit.volumeTrend}`;
@@ -1701,7 +1701,7 @@ export const validateTradeOutcome = async (
             entryPrice: 0,
             stopLoss: 0,
             maxDrawdown: 0,
-            validationSummary: `⚠️ Validation failed: ${errorMessage}`,
+            validationSummary: ` Validation failed: ${errorMessage}`,
             candlesEvaluated: 0,
             dataRange: 'Error'
         };

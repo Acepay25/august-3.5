@@ -114,7 +114,7 @@ const ConfluenceScoreIndicator: React.FC<ConfluenceScoreIndicatorProps> = ({ dat
                     {alignedSignals.length > 0 && (
                         <div className="mt-3">
                             <span className="text-[9px] uppercase tracking-widest text-emerald-600 font-bold block mb-1.5">
-                                ✅ Aligned Signals
+                                 Aligned Signals
                             </span>
                             <div className="space-y-1">
                                 {alignedSignals.slice(0, 6).map((signal, idx) => (
@@ -135,7 +135,7 @@ const ConfluenceScoreIndicator: React.FC<ConfluenceScoreIndicatorProps> = ({ dat
                     {conflictingSignals.length > 0 && (
                         <div className="mt-3">
                             <span className="text-[9px] uppercase tracking-widest text-rose-600 font-bold block mb-1.5">
-                                ⚠️ Conflicting Signals
+                                 Conflicting Signals
                             </span>
                             <div className="space-y-1">
                                 {conflictingSignals.slice(0, 4).map((signal, idx) => (

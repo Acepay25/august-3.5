@@ -71,7 +71,7 @@ class ErrorBoundary extends Component<Props, State> {
                 <div className="fixed inset-0 bg-zinc-900 flex flex-col items-center justify-center p-6 text-white">
                     <div className="max-w-md w-full text-center space-y-6">
                         {/* Error Icon */}
-                        <div className="text-6xl mb-4">⚠️</div>
+                        <div className="text-6xl mb-4"></div>
 
                         {/* Title */}
                         <h1 className="text-2xl font-bold text-rose-400">

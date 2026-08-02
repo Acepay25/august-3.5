@@ -14,7 +14,7 @@ export const AccuracyModeModal: React.FC<AccuracyModeModalProps> = ({ isOpen, on
 
   return (
     <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in" role="dialog" aria-modal="true" aria-label="Accuracy mode">
-      <div className={`bg-zinc-950 border-2 ${isEnabling ? 'border-cyan-600' : 'border-zinc-700'} rounded-2xl max-w-md w-full overflow-hidden shadow-[0_0_50px_rgba(6,182,212,0.3)] max-h-[90vh] overflow-y-auto`}>
+      <div className={`bg-zinc-950 border-2 ${isEnabling ? 'border-cyan-600' : 'border-zinc-700'} rounded-2xl max-w-md w-full overflow-hidden shadow-[0_0_50px_rgba(212,212,216,0.3)] max-h-[90vh] overflow-y-auto`}>
         <div className="p-6 text-center">
           {isEnabling ? (
             <>
@@ -26,10 +26,10 @@ export const AccuracyModeModal: React.FC<AccuracyModeModalProps> = ({ isOpen, on
                 This will activate the <strong>10-Layer Accuracy Protocol</strong>.
               </p>
               <ul className="text-left text-xs text-cyan-300 space-y-2 bg-black/40 p-4 rounded-xl border border-cyan-900/50 mb-6">
-                <li className="flex gap-2">🔥 <strong>Strict Logic:</strong> Lazy analysis is forbidden.</li>
-                <li className="flex gap-2">🔒 <strong>Model Lockdown:</strong> Dropdowns will disappear.</li>
+                <li className="flex gap-2"> <strong>Strict Logic:</strong> Lazy analysis is forbidden.</li>
+                <li className="flex gap-2"> <strong>Model Lockdown:</strong> Dropdowns will disappear.</li>
 
-                <li className="flex gap-2">🤖 <strong>Ensemble:</strong> Forced debate & cross-validation.</li>
+                <li className="flex gap-2"> <strong>Ensemble:</strong> Forced debate & cross-validation.</li>
               </ul>
             </>
           ) : (

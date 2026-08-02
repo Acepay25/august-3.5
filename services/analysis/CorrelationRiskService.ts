@@ -189,7 +189,7 @@ export const calculateCorrelationRisk = async (symbol: string): Promise<Correlat
         riskScore += 25;
         const levelType = btcLevels.atSupport ? 'support' : 'resistance';
         warnings.push(
-            `⚠️ BTC at major ${levelType} ($${btcLevels.level?.toLocaleString()}). ` +
+            ` BTC at major ${levelType} ($${btcLevels.level?.toLocaleString()}). ` +
             `Potential for correlated move affecting ${normalizedSymbol}.`
         );
     }
@@ -198,7 +198,7 @@ export const calculateCorrelationRisk = async (symbol: string): Promise<Correlat
     if (dominanceTrend === 'rising') {
         riskScore += 20;
         warnings.push(
-            `📊 BTC dominance rising (${dominance.toFixed(1)}%). ` +
+            ` BTC dominance rising (${dominance.toFixed(1)}%). ` +
             `Alt performance may lag or underperform.`
         );
     }
@@ -207,7 +207,7 @@ export const calculateCorrelationRisk = async (symbol: string): Promise<Correlat
     if (dominance > 55) {
         riskScore += 15;
         warnings.push(
-            `🔶 High BTC dominance environment (${dominance.toFixed(1)}%). ` +
+            ` High BTC dominance environment (${dominance.toFixed(1)}%). ` +
             `Reduce alt exposure or tighten stops.`
         );
     }
@@ -216,7 +216,7 @@ export const calculateCorrelationRisk = async (symbol: string): Promise<Correlat
     if (dominance > 60) {
         riskScore += 15;
         warnings.push(
-            `🔴 Extreme BTC dominance (${dominance.toFixed(1)}%). ` +
+            ` Extreme BTC dominance (${dominance.toFixed(1)}%). ` +
             `Consider waiting for BTC to consolidate before alt entries.`
         );
     }
@@ -225,7 +225,7 @@ export const calculateCorrelationRisk = async (symbol: string): Promise<Correlat
     if (btcLevels.atResistance && dominanceTrend === 'rising') {
         riskScore += 10;
         warnings.push(
-            `⚡ Double risk: BTC at resistance + rising dominance. ` +
+            ` Double risk: BTC at resistance + rising dominance. ` +
             `Alt longs especially risky.`
         );
     }
@@ -253,21 +253,21 @@ export const generateCorrelationWarnings = (
     // Additional direction-specific warnings
     if (direction === 'Long' && risk.btcLevelType === 'resistance') {
         warnings.push(
-            `🎯 Long entry while BTC at resistance. ` +
+            ` Long entry while BTC at resistance. ` +
             `If BTC rejects, expect correlated pullback.`
         );
     }
 
     if (direction === 'Short' && risk.btcLevelType === 'support') {
         warnings.push(
-            `🎯 Short entry while BTC at support. ` +
+            ` Short entry while BTC at support. ` +
             `If BTC bounces, expect correlated squeeze.`
         );
     }
 
     if (direction === 'Long' && risk.btcDominanceTrend === 'rising') {
         warnings.push(
-            `📈 Going long on alt while BTC dominance rising. ` +
+            ` Going long on alt while BTC dominance rising. ` +
             `Consider BTC-paired trade instead.`
         );
     }
@@ -284,7 +284,7 @@ export const generateCorrelationRiskPrompt = (risk: CorrelationRiskResult): stri
     }
 
     let prompt = `
-📊 **CORRELATION RISK ASSESSMENT** (Score: ${risk.correlationRiskScore}/100)
+ **CORRELATION RISK ASSESSMENT** (Score: ${risk.correlationRiskScore}/100)
 
 **BTC Dominance:** ${risk.btcDominance.toFixed(1)}% (${risk.btcDominanceTrend})
 **BTC at Major Level:** ${risk.btcAtMajorLevel ? `YES - ${risk.btcLevelType} at $${risk.btcLevelPrice?.toLocaleString()}` : 'No'}

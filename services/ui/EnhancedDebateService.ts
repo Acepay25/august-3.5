@@ -218,13 +218,13 @@ export const getModelCalibrations = (
         // Generate calibration note
         let calibrationNote: string;
         if (overallWinRate >= 60) {
-            calibrationNote = `✅ Reliable (${overallWinRate.toFixed(0)}% overall)`;
+            calibrationNote = ` Reliable (${overallWinRate.toFixed(0)}% overall)`;
         } else if (overallWinRate >= 50) {
-            calibrationNote = `🟡 Average (${overallWinRate.toFixed(0)}% overall)`;
+            calibrationNote = ` Average (${overallWinRate.toFixed(0)}% overall)`;
         } else if (performance.overallStats.total >= 5) {
-            calibrationNote = `⚠️ Underperforming (${overallWinRate.toFixed(0)}% overall)`;
+            calibrationNote = ` Underperforming (${overallWinRate.toFixed(0)}% overall)`;
         } else {
-            calibrationNote = `📊 Insufficient data (n=${performance.overallStats.total})`;
+            calibrationNote = ` Insufficient data (n=${performance.overallStats.total})`;
         }
 
         return {
@@ -310,7 +310,7 @@ export const generateDevilsAdvocateQuery = (
     const confidences = analyses.map(a => a.analysis.confidence).filter(Boolean);
     const hasHighConfidence = confidences.some(c => c === 'High');
 
-    let query = '🔴 **DEVIL\'S ADVOCATE CHALLENGE:**\n';
+    let query = ' **DEVIL\'S ADVOCATE CHALLENGE:**\n';
 
     if (dominantDirection !== 'Mixed' && oppositeDirection) {
         query += `If all models agree on ${dominantDirection}, what would make a ${oppositeDirection} trade actually correct here?\n`;
@@ -399,7 +399,7 @@ export const generateEnhancedDebateContext = (
     // Build prompt injection
     let promptInjection = `
 ═══════════════════════════════════════════════════════════════════════
-🧠 ENHANCED INTELLIGENCE LAYER (Self-Learning System)
+ ENHANCED INTELLIGENCE LAYER (Self-Learning System)
 ═══════════════════════════════════════════════════════════════════════
 
 ${performanceSummary}
@@ -408,7 +408,7 @@ ${performanceSummary}
 
     // Add model weights (dynamic providers)
     if (modelWeights.confidence !== 'low') {
-        promptInjection += `\n📊 **DYNAMIC MODEL WEIGHTS (Rolling Window):**\n`;
+        promptInjection += `\n **DYNAMIC MODEL WEIGHTS (Rolling Window):**\n`;
         const providerToName: Record<string, string> = {};
         if (nameToProvider) {
             for (const [name, id] of Object.entries(nameToProvider)) {
@@ -422,7 +422,7 @@ ${performanceSummary}
             }
         }
         if (modelWeights.dominantModel) {
-            promptInjection += `⭐ **Historically strongest model for this context: ${modelWeights.dominantModel.toUpperCase()}**\n`;
+            promptInjection += ` **Historically strongest model for this context: ${modelWeights.dominantModel.toUpperCase()}**\n`;
         }
     }
 
@@ -432,10 +432,10 @@ ${performanceSummary}
         recencyWeightedStats[p]?.trendDirection === 'declining'
     );
     if (trendingProviders.length > 0) {
-        promptInjection += `\n📈 **RECENT PERFORMANCE TRENDS:**\n`;
+        promptInjection += `\n **RECENT PERFORMANCE TRENDS:**\n`;
         for (const p of trendingProviders) {
             const stats = recencyWeightedStats[p];
-            const icon = stats.trendDirection === 'improving' ? '↗️' : '↘️';
+            const icon = stats.trendDirection === 'improving' ? '↗' : '↘';
             promptInjection += `${icon} ${p.toUpperCase()}: ${stats.trendDirection} (recency-weighted: ${stats.recencyWeightedWinRate}%, standard: ${stats.standardWinRate}%)\n`;
         }
     }
@@ -445,7 +445,7 @@ ${performanceSummary}
         confidenceCalibrations[p]?.isOverconfident
     );
     if (overconfidentProviders.length > 0) {
-        promptInjection += `\n⚠️ **CONFIDENCE CALIBRATION WARNINGS:**\n`;
+        promptInjection += `\n **CONFIDENCE CALIBRATION WARNINGS:**\n`;
         for (const p of overconfidentProviders) {
             const cal = confidenceCalibrations[p];
             if (cal.calibrationWarning) {
@@ -465,7 +465,7 @@ ${performanceSummary}
     }
 
     // Add calibrations
-    promptInjection += `\n🎯 **MODEL CALIBRATION:**\n`;
+    promptInjection += `\n **MODEL CALIBRATION:**\n`;
     modelCalibrations.forEach(cal => {
         promptInjection += `- ${cal.model}: ${cal.calibrationNote}`;
         if (cal.contextWinRate !== null) {
@@ -476,9 +476,9 @@ ${performanceSummary}
 
     // Add disagreements
     if (disagreements.length > 0) {
-        promptInjection += `\n⚠️ **DETECTED DISAGREEMENTS:**\n`;
+        promptInjection += `\n **DETECTED DISAGREEMENTS:**\n`;
         disagreements.forEach(d => {
-            const icon = d.severity === 'high' ? '🔴' : d.severity === 'medium' ? '🟡' : '🟢';
+            const icon = d.severity === 'high' ? '' : d.severity === 'medium' ? '' : '';
             promptInjection += `${icon} ${d.description}\n`;
         });
         promptInjection += `\n**Moderator:** You MUST address these disagreements explicitly in the debate.\n`;
@@ -496,9 +496,9 @@ ${performanceSummary}
 
     // Add similar trades
     if (similarTrades.length > 0) {
-        promptInjection += `\n📜 **SIMILAR HISTORICAL TRADES:**\n`;
+        promptInjection += `\n **SIMILAR HISTORICAL TRADES:**\n`;
         similarTrades.forEach(t => {
-            const icon = t.outcome === TradeOutcome.WIN ? '✅' : '❌';
+            const icon = t.outcome === TradeOutcome.WIN ? '' : '';
             promptInjection += `${icon} ${t.coin} ${t.direction} (${t.pattern}): ${t.lesson}\n`;
         });
     }

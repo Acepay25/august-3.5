@@ -479,11 +479,11 @@ export const generateMonteCarloSummary = (
 export const generateMonteCarloPromptInjection = (result: MonteCarloResult): string => {
     const evSign = result.expectedValue >= 0 ? '+' : '';
     const evWarning = result.expectedValue < 0
-        ? '⚠️ NEGATIVE EXPECTED VALUE - This setup has historically lost money on average.'
+        ? ' NEGATIVE EXPECTED VALUE - This setup has historically lost money on average.'
         : '';
 
     return `
-📊 **MONTE CARLO VALIDATION (${result.simulations} simulations on ${result.timeframe.padEnd(8)}):**
+ **MONTE CARLO VALIDATION (${result.simulations} simulations on ${result.timeframe.padEnd(8)}):**
 - Simulated Win Rate: ${result.winRate.toFixed(1)}% (${result.winCount}/${result.simulations})
 - Expected Value: ${evSign}${result.expectedValue.toFixed(2)}% per trade
 - TP1 Probability: ${result.probabilities.tp1Hit.toFixed(1)}%

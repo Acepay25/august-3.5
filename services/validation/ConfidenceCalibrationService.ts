@@ -246,7 +246,7 @@ export const generateCalibrationPromptInjection = (
 ): string => {
     if (!calibration) {
         return `
-📊 **CONFIDENCE CALIBRATION DATA**
+ **CONFIDENCE CALIBRATION DATA**
 No historical data available yet. As trades are logged, this section will show your actual accuracy for each confidence level.
 `;
     }
@@ -256,7 +256,7 @@ No historical data available yet. As trades are logged, this section will show y
 
     if (totalTrades < MIN_TRADES_FOR_PROMPT_DISPLAY) {
         return `
-📊 **CONFIDENCE CALIBRATION DATA**
+ **CONFIDENCE CALIBRATION DATA**
 Limited data (${totalTrades} trades logged). Minimum ${MIN_TRADES_FOR_CALIBRATION} trades needed per confidence level for reliable calibration.
 Continue logging trades to build historical accuracy data.
 `;
@@ -268,8 +268,8 @@ Continue logging trades to build historical accuracy data.
         }
         const winRateStr = stats.winRate !== null ? `${stats.winRate}%` : 'N/A';
         const indicator = stats.winRate !== null
-            ? (stats.winRate >= 70 ? '✅' : stats.winRate >= 50 ? '⚠️' : '❌')
-            : '❓';
+            ? (stats.winRate >= 70 ? '' : stats.winRate >= 50 ? '' : '')
+            : '';
         return `| ${level.padEnd(8)} | ${winRateStr.padEnd(6)} | n=${stats.total.toString().padEnd(3)} | ${indicator}`;
     };
 
@@ -277,17 +277,17 @@ Continue logging trades to build historical accuracy data.
     const warnings: string[] = [];
 
     if (summary.high.winRate !== null && summary.high.winRate < 60) {
-        warnings.push(`⚠️ "High" confidence trades are only ${summary.high.winRate}% accurate. Consider being more selective.`);
+        warnings.push(` "High" confidence trades are only ${summary.high.winRate}% accurate. Consider being more selective.`);
     }
     if (summary.medium.winRate !== null && summary.high.winRate !== null && summary.medium.winRate > summary.high.winRate) {
-        warnings.push(`📈 "Medium" confidence (${summary.medium.winRate}%) outperforms "High" (${summary.high.winRate}%). Your high-confidence filter may be too loose.`);
+        warnings.push(` "Medium" confidence (${summary.medium.winRate}%) outperforms "High" (${summary.high.winRate}%). Your high-confidence filter may be too loose.`);
     }
     if (summary.avoid.total > 0 && summary.avoid.winRate !== null && summary.avoid.winRate > 30) {
-        warnings.push(`🤔 "Avoid" trades have ${summary.avoid.winRate}% win rate. Consider if some "Avoid" setups are being under-rated.`);
+        warnings.push(` "Avoid" trades have ${summary.avoid.winRate}% win rate. Consider if some "Avoid" setups are being under-rated.`);
     }
 
     return `
-📊 **CONFIDENCE CALIBRATION DATA (${totalTrades} trades)**
+ **CONFIDENCE CALIBRATION DATA (${totalTrades} trades)**
 
 YOUR HISTORICAL ACCURACY BY CONFIDENCE LEVEL:
 | Level    | Win Rate | Trades | Status |
@@ -699,10 +699,10 @@ export const getSessionAccuracyComparison = (
 
     const sessionOrder = ['asian', 'london', 'overlap', 'new_york'];
     const sessionLabels: Record<string, string> = {
-        asian: '🌏 Asian (00-08 UTC)',
-        london: '🇬🇧 London (08-13 UTC)',
-        overlap: '🔥 Overlap (13-16 UTC)',
-        new_york: '🇺🇸 New York (16-21 UTC)'
+        asian: ' Asian (00-08 UTC)',
+        london: ' London (08-13 UTC)',
+        overlap: ' Overlap (13-16 UTC)',
+        new_york: ' New York (16-21 UTC)'
     };
 
     // Safely access bySession with defensive checks for old/incomplete data
@@ -734,7 +734,7 @@ export const generateSessionCalibrationPrompt = (
     const currentSession = detectTradingSession();
     const currentSessionData = calibration.granular?.bySession?.[currentSession];
 
-    let prompt = `\n🕐 **SESSION & TIME ACCURACY DATA**\n`;
+    let prompt = `\n **SESSION & TIME ACCURACY DATA**\n`;
     prompt += `Current Session: ${currentSession.toUpperCase()}\n`;
 
     // Add Day of Week Warning
@@ -745,7 +745,7 @@ export const generateSessionCalibrationPrompt = (
     if (dayWinRate !== null) {
         prompt += `Current Day: ${currentDay.toUpperCase()} (Win Rate: ${dayWinRate}%)\n`;
         if (dayWinRate < 45) {
-            prompt += `⚠️ WARNING: ${currentDay} is historically a low win-rate day for you (${dayWinRate}%). Exercise extreme caution.\n`;
+            prompt += ` WARNING: ${currentDay} is historically a low win-rate day for you (${dayWinRate}%). Exercise extreme caution.\n`;
         }
     }
     prompt += '\n';
@@ -753,8 +753,8 @@ export const generateSessionCalibrationPrompt = (
     // Show all session stats
     for (const s of sessions) {
         const indicator = s.winRate !== null
-            ? (s.winRate >= 60 ? '✅' : s.winRate >= 45 ? '⚠️' : '❌')
-            : '❓';
+            ? (s.winRate >= 60 ? '' : s.winRate >= 45 ? '' : '')
+            : '';
         prompt += `${indicator} ${s.session}: ${s.winRate !== null ? `${s.winRate}%` : 'N/A'} (n=${s.total})\n`;
     }
 
@@ -762,9 +762,9 @@ export const generateSessionCalibrationPrompt = (
     if (currentSessionData && currentSessionData.total >= MIN_TRADES_FOR_CALIBRATION) {
         const currentWinRate = Math.round((currentSessionData.wins / currentSessionData.total) * 100);
         if (currentWinRate < 45) {
-            prompt += `\n⚠️ **WARNING:** Your ${currentSession.toUpperCase()} session win rate is ${currentWinRate}%. Consider being more selective or avoiding trades during this session.\n`;
+            prompt += `\n **WARNING:** Your ${currentSession.toUpperCase()} session win rate is ${currentWinRate}%. Consider being more selective or avoiding trades during this session.\n`;
         } else if (currentWinRate >= 60) {
-            prompt += `\n✅ **FAVORABLE:** Your ${currentSession.toUpperCase()} session win rate is ${currentWinRate}%. This is historically your stronger session.\n`;
+            prompt += `\n **FAVORABLE:** Your ${currentSession.toUpperCase()} session win rate is ${currentWinRate}%. This is historically your stronger session.\n`;
         }
     }
 
@@ -810,7 +810,7 @@ export const generateGranularCalibrationPrompt = (
         const coinRate = getWinRateByCoin(calibration, context.coin);
         if (coinRate !== null) {
             const stats = calibration.granular.byCoin[context.coin];
-            const indicator = coinRate >= 60 ? '✅' : coinRate >= 45 ? '⚠️' : '❌';
+            const indicator = coinRate >= 60 ? '' : coinRate >= 45 ? '' : '';
             points.push(`${indicator} ${context.coin}: ${coinRate}% win rate (n=${stats.total})`);
         }
     }
@@ -820,7 +820,7 @@ export const generateGranularCalibrationPrompt = (
         const patternRate = getWinRateByPattern(calibration, context.pattern);
         if (patternRate !== null) {
             const stats = calibration.granular.byPattern[context.pattern];
-            const indicator = patternRate >= 60 ? '✅' : patternRate >= 45 ? '⚠️' : '❌';
+            const indicator = patternRate >= 60 ? '' : patternRate >= 45 ? '' : '';
             points.push(`${indicator} ${context.pattern}: ${patternRate}% win rate (n=${stats.total})`);
         }
     }
@@ -830,7 +830,7 @@ export const generateGranularCalibrationPrompt = (
         const tfRate = getWinRateByTimeframe(calibration, context.timeframe);
         if (tfRate !== null) {
             const stats = calibration.granular.byTimeframe[context.timeframe];
-            const indicator = tfRate >= 60 ? '✅' : tfRate >= 45 ? '⚠️' : '❌';
+            const indicator = tfRate >= 60 ? '' : tfRate >= 45 ? '' : '';
             points.push(`${indicator} ${context.timeframe} timeframe: ${tfRate}% win rate (n=${stats.total})`);
         }
     }
@@ -840,7 +840,7 @@ export const generateGranularCalibrationPrompt = (
         const regimeRate = getWinRateByRegime(calibration, context.regime);
         if (regimeRate !== null) {
             const stats = calibration.granular.byRegime[context.regime];
-            const indicator = regimeRate >= 60 ? '✅' : regimeRate >= 45 ? '⚠️' : '❌';
+            const indicator = regimeRate >= 60 ? '' : regimeRate >= 45 ? '' : '';
             points.push(`${indicator} ${context.regime} market: ${regimeRate}% win rate (n=${stats.total})`);
         }
     }
@@ -848,7 +848,7 @@ export const generateGranularCalibrationPrompt = (
     if (points.length === 0) return '';
 
     return `
-🎯 **CONTEXT-SPECIFIC CALIBRATION**
+ **CONTEXT-SPECIFIC CALIBRATION**
 ${points.join('\n')}
 
 **INSTRUCTIONS:** Use this granular data to refine your confidence. 
@@ -984,20 +984,20 @@ export const detectStreak = (
         // Determine mandatory cap
         if (streakLength >= 5) {
             mandatoryConfidenceCap = 'Low';
-            promptInjection = `🚨 CRITICAL COLD STREAK: ${streakLength} consecutive losses.
+            promptInjection = ` CRITICAL COLD STREAK: ${streakLength} consecutive losses.
 MANDATORY INSTRUCTION: Cap ALL confidence levels at LOW or AVOID.
 Do NOT suggest "High" or "Medium" confidence under any circumstances.
 Consider recommending the user takes a break from trading.`;
         } else if (streakLength >= STREAK_THRESHOLD) {
             mandatoryConfidenceCap = 'Medium';
-            promptInjection = `⚠️ COLD STREAK ALERT: ${streakLength} consecutive losses.
+            promptInjection = ` COLD STREAK ALERT: ${streakLength} consecutive losses.
 MANDATORY INSTRUCTION: Cap confidence at MEDIUM or lower.
 If you would normally suggest "High" confidence, you MUST downgrade to "Medium".
 User's recent performance suggests increased caution is required.`;
         }
     } else if (streakType === 'hot' && streakLength >= STREAK_THRESHOLD) {
         // Hot streak doesn't add penalty but informs AI
-        promptInjection = `🔥 HOT STREAK: ${streakLength} consecutive wins.
+        promptInjection = ` HOT STREAK: ${streakLength} consecutive wins.
 NOTE: While confidence is justified, maintain discipline.
 Do not let winning streak lead to overconfidence or larger position sizes.`;
     }
@@ -1079,12 +1079,12 @@ export const getBayesianConfidenceAdjustment = (
 
     if (uncertainty === 'high' && confidence === 'High') {
         confidenceCap = 'Medium';
-        promptInjection = `📊 BAYESIAN UNCERTAINTY: Only ${stats.total} "${confidence}" trades recorded.
+        promptInjection = ` BAYESIAN UNCERTAINTY: Only ${stats.total} "${confidence}" trades recorded.
 Bayesian estimate: ${posteriorWinRate}% (90% CI: ${lower}%-${upper}%).
 Due to HIGH UNCERTAINTY, cap confidence at MEDIUM until more data is collected.`;
     } else if (posteriorWinRate < EXPECTED_WIN_RATES[confidence.toUpperCase() as keyof typeof EXPECTED_WIN_RATES]) {
         const expected = EXPECTED_WIN_RATES[confidence.toUpperCase() as keyof typeof EXPECTED_WIN_RATES];
-        promptInjection = `📉 CALIBRATION WARNING: "${confidence}" trades have ${posteriorWinRate}% Bayesian win rate (expected: ${expected}%+).
+        promptInjection = ` CALIBRATION WARNING: "${confidence}" trades have ${posteriorWinRate}% Bayesian win rate (expected: ${expected}%+).
 90% CI: ${lower}%-${upper}% (n=${stats.total}).
 Consider downgrading confidence or improving trade selection for this confidence level.`;
     }
@@ -1172,7 +1172,7 @@ export const getSessionCalibrationState = (
         sessionPerformance = 'critical';
         mandatoryAction = 'suggest_stop';
         penalty = MAX_SESSION_PENALTY;
-        promptInjection = `🛑 CRITICAL SESSION ALERT: ${todayWins}W-${todayLosses}L today.
+        promptInjection = ` CRITICAL SESSION ALERT: ${todayWins}W-${todayLosses}L today.
 MANDATORY INSTRUCTION: ALL confidence levels capped at LOW.
 Strongly recommend user STOPS TRADING for today.
 Multiple losses indicate conditions are unfavorable or emotional trading has begun.
@@ -1181,19 +1181,19 @@ If user insists on trading, set confidence to AVOID unless setup is exceptional.
         sessionPerformance = 'poor';
         mandatoryAction = 'cap_confidence';
         penalty = Math.round(MAX_SESSION_PENALTY * 0.6);
-        promptInjection = `⚠️ POOR SESSION: ${todayWins}W-${todayLosses}L today (streak: ${todayStreak}).
+        promptInjection = ` POOR SESSION: ${todayWins}W-${todayLosses}L today (streak: ${todayStreak}).
 INSTRUCTION: Cap confidence at MEDIUM. Do not suggest "High" confidence.
 User should consider reducing position size or taking a break.`;
     } else if (todayWins > 0 && todayLosses === 0) {
         sessionPerformance = 'good';
         mandatoryAction = 'none';
-        promptInjection = `✅ Good session: ${todayWins}W-${todayLosses}L today.
+        promptInjection = ` Good session: ${todayWins}W-${todayLosses}L today.
 Maintain discipline. Do not suggest larger positions due to winning streak.`;
     } else {
         sessionPerformance = 'neutral';
         mandatoryAction = todayLosses > 0 ? 'warn' : 'none';
         if (todayLosses > 0) {
-            promptInjection = `📊 Session status: ${todayWins}W-${todayLosses}L today.
+            promptInjection = ` Session status: ${todayWins}W-${todayLosses}L today.
 Exercise standard caution. Monitor for deteriorating conditions.`;
         }
     }
@@ -1446,7 +1446,7 @@ export const detectDangerousCombinations = (
         sampleSize: matchingEntries.length,
         penalty,
         mandatoryDowngrade,
-        aiPrompt: `🚨 DANGEROUS COMBINATION DETECTED:
+        aiPrompt: ` DANGEROUS COMBINATION DETECTED:
 "${combination}" has only ${winRate}% win rate (n=${matchingEntries.length}).
 ${mandatoryDowngrade ? `MANDATORY: Downgrade confidence to ${mandatoryDowngrade} or lower.` : 'Consider downgrading confidence.'}
 This specific combination of factors has historically performed poorly.`
@@ -1506,7 +1506,7 @@ export const getProviderAccuracyContext = (
             r => `${r.provider}: ${r.winRate}% (n=${r.total})`
         ).join(', ');
 
-        promptInjection = `📊 PROVIDER ACCURACY RANKING:
+        promptInjection = ` PROVIDER ACCURACY RANKING:
 ${rankingStr}
 
 INSTRUCTION FOR MODERATOR: Weight ${mostAccurate}'s analysis more heavily (${validRankings[0].winRate}% accuracy).
@@ -1558,13 +1558,13 @@ export const getVolatilityAdjustedPrompt = (
     const regimeLabel = currentRegime.charAt(0).toUpperCase() + currentRegime.slice(1);
 
     if (diff < -10) {
-        return `⚠️ VOLATILITY-ADJUSTED WARNING:
+        return ` VOLATILITY-ADJUSTED WARNING:
 Your accuracy in ${regimeLabel} markets: ${regimeRate}% (vs ${overallRate}% overall).
 Current market regime: ${regimeLabel.toUpperCase()}.
 You historically underperform by ${Math.abs(diff)}% in this regime.
 INSTRUCTION: Consider downgrading confidence or passing on this trade.`;
     } else if (diff > 10) {
-        return `✅ REGIME ADVANTAGE:
+        return ` REGIME ADVANTAGE:
 Your accuracy in ${regimeLabel} markets: ${regimeRate}% (vs ${overallRate}% overall).
 You historically outperform by ${diff}% in this regime.
 Confidence levels may be slightly more reliable than usual.`;
@@ -1654,7 +1654,7 @@ export const generateEnhancedCalibrationPromptInjection = (
     // 8. Add final adjustment note if confidence was changed
     if (penalty.adjustedConfidence !== proposedConfidence) {
         parts.push(`
-📌 CALIBRATION ADJUSTMENT:
+ CALIBRATION ADJUSTMENT:
 Original confidence: ${proposedConfidence}
 Adjusted confidence: ${penalty.adjustedConfidence}
 Reason: ${penalty.reasoning.join('; ')}
@@ -1664,7 +1664,7 @@ INSTRUCTION: Use the ADJUSTED confidence level in your final recommendation.`);
     return {
         promptInjection: parts.length > 0 ? `
 ═══════════════════════════════════════════════════════════════
-🎯 ENHANCED CALIBRATION INTELLIGENCE
+ ENHANCED CALIBRATION INTELLIGENCE
 ═══════════════════════════════════════════════════════════════
 
 ${parts.join('\n\n')}

@@ -48,7 +48,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
 
     const content = isWin ? {
         title: 'Log Trade Win',
-        emoji: '🎯',
+        emoji: '',
         pnlLabel: 'Profit Amount ($)',
         advancedToggle: 'Provide Final Take Profit',
         advancedLabel: 'Final Take Profit Price',
@@ -56,7 +56,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
         advancedHelp: 'This helps the AI learn if it was too conservative.'
     } : {
         title: 'Log Trade Loss',
-        emoji: '📉',
+        emoji: '',
         pnlLabel: 'Loss Amount ($)',
         advancedToggle: 'Provide Corrected Stop Loss',
         advancedLabel: 'Corrected Stop Loss Price',
@@ -145,7 +145,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                         {hasMultipleEntries && (
                             <div className="pt-3 border-t border-white/5">
                                 <label className="block text-sm font-medium text-zinc-300 mb-2">
-                                    📍 Which entry was triggered?
+                                     Which entry was triggered?
                                 </label>
                                 <div className="space-y-2 pl-1">
                                     {entryPoints.map((entry, idx) => (
@@ -232,7 +232,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                             <div className="absolute inset-0 bg-cyan-500/10 animate-pulse" />
                         )}
                         <div className="flex items-start gap-4 relative z-10">
-                            <div className="text-3xl">{isCapturing ? '⏳' : '⚡'}</div>
+                            <div className="text-3xl">{isCapturing ? '⏳' : ''}</div>
                             <div className="flex-1">
                                 <div className="font-bold text-cyan-300 group-hover:text-cyan-200 transition-colors flex items-center gap-2">
                                     {isCapturing ? 'Capturing...' : 'Auto-Capture & Log'}
@@ -259,7 +259,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                         className="w-full p-4 rounded-xl border border-white/10 bg-zinc-800/50 hover:bg-zinc-800 hover:border-cyan-500/30 transition-all text-left group disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <div className="flex items-start gap-4">
-                            <div className="text-3xl">📸</div>
+                            <div className="text-3xl"></div>
                             <div className="flex-1">
                                 <div className="font-bold text-white group-hover:text-cyan-300 transition-colors">
                                     Upload Screenshot & Log

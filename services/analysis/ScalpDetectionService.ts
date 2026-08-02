@@ -171,7 +171,7 @@ export const validateScalpTrade = (
         if (risk > 0 && reward > 0) {
             const rrRatio = reward / risk;
             if (rrRatio < SCALP_THRESHOLDS.minScalpRR) {
-                warnings.push(`⚡ SCALP R:R ${rrRatio.toFixed(2)}:1 below minimum 1:1`);
+                warnings.push(` SCALP R:R ${rrRatio.toFixed(2)}:1 below minimum 1:1`);
                 shouldDowngrade = true;
             }
         }
@@ -180,12 +180,12 @@ export const validateScalpTrade = (
     // Rule 2: Session check - scalps are risky in off-hours
     if (sessionInfo) {
         if (sessionInfo.currentSession === 'off_hours') {
-            warnings.push('⚡ SCALP WARNING: Off-hours - wider spreads, slippage risk');
+            warnings.push(' SCALP WARNING: Off-hours - wider spreads, slippage risk');
             shouldDowngrade = true;
         }
 
         if (sessionInfo.isWeekend) {
-            warnings.push('⚡ SCALP AVOID: Weekend scalping is extremely risky');
+            warnings.push(' SCALP AVOID: Weekend scalping is extremely risky');
             shouldDowngrade = true;
         }
     }
@@ -194,7 +194,7 @@ export const validateScalpTrade = (
     if (analysis.confidence === 'High' && analysis.stopLossPercentage) {
         const slPercent = parseFloat(analysis.stopLossPercentage.replace(/[^0-9.-]/g, ''));
         if (!isNaN(slPercent) && slPercent > 0.8) {
-            warnings.push(`⚡ SCALP: High confidence but SL ${slPercent}% is loose for a scalp`);
+            warnings.push(` SCALP: High confidence but SL ${slPercent}% is loose for a scalp`);
         }
     }
 
@@ -234,14 +234,14 @@ export const validateSwingTrade = (
         if (risk > 0 && reward > 0) {
             const rrRatio = reward / risk;
             if (rrRatio < SCALP_THRESHOLDS.minSwingRR) {
-                warnings.push(`📊 SWING: R:R ${rrRatio.toFixed(2)}:1 below recommended ${SCALP_THRESHOLDS.minSwingRR}:1`);
+                warnings.push(` SWING: R:R ${rrRatio.toFixed(2)}:1 below recommended ${SCALP_THRESHOLDS.minSwingRR}:1`);
             }
         }
     }
 
     // Rule 2: Swing trades should have longer validity
     if (analysis.validityDurationMinutes !== undefined && analysis.validityDurationMinutes < 60) {
-        warnings.push(`📊 SWING: Short validity window (${analysis.validityDurationMinutes}min) - consider extending`);
+        warnings.push(` SWING: Short validity window (${analysis.validityDurationMinutes}min) - consider extending`);
     }
 
     return {

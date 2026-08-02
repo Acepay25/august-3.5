@@ -193,7 +193,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-gradient-to-r from-purple-950/50 to-zinc-950">
                     <div className="flex items-center gap-4">
-                        <span className="text-2xl">🎮</span>
+                        <span className="text-2xl"></span>
                         <div>
                             <h2 className="text-lg font-black text-white tracking-tight">
                                 SCENARIO SIMULATOR
@@ -383,7 +383,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                             {scenarioResult?.suggestions && scenarioResult.suggestions.length > 0 && (
                                 <div className="bg-cyan-950/20 rounded-xl border border-cyan-500/20 p-4">
                                     <h4 className="text-[10px] uppercase font-bold text-cyan-400 tracking-widest mb-3">
-                                        💡 Suggestions
+                                         Suggestions
                                     </h4>
                                     <div className="space-y-2">
                                         {scenarioResult.suggestions.map((s, i) => (

@@ -84,14 +84,14 @@ export const generatePersonalizedContext = (
             s.description.toLowerCase().includes(coin.toLowerCase())
         );
         if (coinWorse) {
-            warnings.push(`⚠️ Historical Warning: Your ${coinWorse.description} setups have only ${coinWorse.winRate}% win rate`);
+            warnings.push(` Historical Warning: Your ${coinWorse.description} setups have only ${coinWorse.winRate}% win rate`);
         }
     }
 
     // Warn about overconfident AI
     const highConf = profile.confidenceAccuracy.find(c => c.level === 'High');
     if (highConf && highConf.count >= 5 && highConf.winRate < 55) {
-        warnings.push(`⚠️ Calibration Warning: "High" confidence trades only win ${highConf.winRate}%—be skeptical of high confidence calls`);
+        warnings.push(` Calibration Warning: "High" confidence trades only win ${highConf.winRate}%—be skeptical of high confidence calls`);
     }
 
     // Combine learning context with existing learning prompt injection
@@ -113,7 +113,7 @@ export const generatePersonalizedContext = (
 
     // Add setup-specific note if available
     if (setupStats) {
-        promptInjection += `\n📊 **SETUP-SPECIFIC CALIBRATION:**\n${setupStats.note}\n`;
+        promptInjection += `\n **SETUP-SPECIFIC CALIBRATION:**\n${setupStats.note}\n`;
     }
 
     return {
@@ -141,7 +141,7 @@ export const generatePersonalizedInjection = (
     let injection = '';
 
     // Quick stats header
-    injection += `\n📊 **PERSONALIZED STATS (${profile.totalAnalyzedTrades} trades analyzed):**\n`;
+    injection += `\n **PERSONALIZED STATS (${profile.totalAnalyzedTrades} trades analyzed):**\n`;
     injection += `- Overall Win Rate: ${profile.overallWinRate}%\n`;
 
     // Current coin performance if relevant
@@ -150,7 +150,7 @@ export const generatePersonalizedInjection = (
             c.coin.toUpperCase() === currentCoin.toUpperCase()
         );
         if (coinStat) {
-            const emoji = coinStat.winRate >= 60 ? '🟢' : coinStat.winRate >= 45 ? '🟡' : '🔴';
+            const emoji = coinStat.winRate >= 60 ? '' : coinStat.winRate >= 45 ? '' : '';
             injection += `- ${currentCoin} Performance: ${emoji} ${coinStat.winRate}% win rate (n=${coinStat.count})\n`;
         }
 
@@ -159,7 +159,7 @@ export const generatePersonalizedInjection = (
             s.description.toLowerCase().includes(currentCoin.toLowerCase())
         );
         if (worstMatch) {
-            injection += `⚠️ WARNING: ${worstMatch.description} historically loses (${worstMatch.winRate}% WR)\n`;
+            injection += ` WARNING: ${worstMatch.description} historically loses (${worstMatch.winRate}% WR)\n`;
         }
     }
 
@@ -167,9 +167,9 @@ export const generatePersonalizedInjection = (
     const highConf = profile.confidenceAccuracy.find(c => c.level === 'High');
     if (highConf && highConf.count >= 5) {
         if (highConf.winRate < 55) {
-            injection += `⚠️ CALIBRATION: "High" confidence = ${highConf.winRate}% actual WR—adjust expectations!\n`;
+            injection += ` CALIBRATION: "High" confidence = ${highConf.winRate}% actual WR—adjust expectations!\n`;
         } else if (highConf.winRate >= 70) {
-            injection += `✅ CALIBRATION: "High" confidence is reliable at ${highConf.winRate}% WR\n`;
+            injection += ` CALIBRATION: "High" confidence is reliable at ${highConf.winRate}% WR\n`;
         }
     }
 
@@ -177,7 +177,7 @@ export const generatePersonalizedInjection = (
     if (profile.bestPatterns.length > 0) {
         const best = profile.bestPatterns[0];
         if (best.winRate >= 65) {
-            injection += `💪 STRENGTH: ${best.pattern} patterns work well for this user (${best.winRate}% WR)\n`;
+            injection += ` STRENGTH: ${best.pattern} patterns work well for this user (${best.winRate}% WR)\n`;
         }
     }
 

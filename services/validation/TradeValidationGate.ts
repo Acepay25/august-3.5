@@ -286,7 +286,7 @@ export const matchPatternMemory = (
     // Only warn if similarity >= warning threshold
     if (highestSimilarity >= PATTERN_MEMORY_WARNING_THRESHOLD && bestMatch) {
         return {
-            warning: `⚠️ PATTERN MEMORY ALERT: This setup is ${highestSimilarity.toFixed(0)}% similar to a previous LOSS (${bestMatch.analysis.coinName} ${bestMatch.analysis.direction}, ${new Date(bestMatch.timestamp).toLocaleDateString()}). Consider reducing confidence.`,
+            warning: ` PATTERN MEMORY ALERT: This setup is ${highestSimilarity.toFixed(0)}% similar to a previous LOSS (${bestMatch.analysis.coinName} ${bestMatch.analysis.direction}, ${new Date(bestMatch.timestamp).toLocaleDateString()}). Consider reducing confidence.`,
             matchedTrade: bestMatch,
             similarity: highestSimilarity
         };
@@ -339,7 +339,7 @@ export const detectCrowdedTrade = (
 
     return {
         isCrowded: warnings.length > 0,
-        warning: warnings.length > 0 ? `🚨 CROWDED TRADE: ${warnings.join('; ')}` : null,
+        warning: warnings.length > 0 ? ` CROWDED TRADE: ${warnings.join('; ')}` : null,
         shouldDowngrade
     };
 };
@@ -361,35 +361,35 @@ export const validateSessionRisk = (
 
     // Weekend warning
     if (session.isWeekend) {
-        warnings.push('⚠️ WEEKEND: Low liquidity, avoid new positions');
+        warnings.push(' WEEKEND: Low liquidity, avoid new positions');
         shouldDowngrade = true;
     }
 
     // Weekly close warning
     if (session.isWeeklyClose) {
-        warnings.push('⚠️ Weekly close approaching - position sizing caution');
+        warnings.push(' Weekly close approaching - position sizing caution');
     }
 
     // Monthly close warning
     if (session.isMonthlyClose) {
-        warnings.push('⚠️ Monthly close - potential rebalancing flows');
+        warnings.push(' Monthly close - potential rebalancing flows');
     }
 
     // Asia session + breakout = low reliability
     if ((session.currentSession === 'asia' || session.sessionName.includes('Asia')) &&
         tradeType.toLowerCase().includes('breakout')) {
-        warnings.push('⚠️ Breakout in Asia session - lower reliability due to low liquidity');
+        warnings.push(' Breakout in Asia session - lower reliability due to low liquidity');
     }
 
     // Off-hours warning
     if (session.currentSession === 'off_hours') {
-        warnings.push('⚠️ Off-hours trading - wider spreads, lower liquidity');
+        warnings.push(' Off-hours trading - wider spreads, lower liquidity');
         shouldDowngrade = true;
     }
 
     // Close to daily close (within configured minutes)
     if (session.minutesToSessionEnd <= SESSION_CLOSING_SOON_MINUTES && session.currentSession !== 'off_hours') {
-        warnings.push('⚠️ Session closing soon - potential end-of-session manipulation');
+        warnings.push(' Session closing soon - potential end-of-session manipulation');
     }
 
     return { warnings, shouldDowngrade };
@@ -484,7 +484,7 @@ export const runValidationGate = (
     // ====== STEP 1: OUTPUT VALIDATION ======
     const outputErrors = validateAnalysisOutput(analysis);
     if (outputErrors.length > 0) {
-        errors.push(...outputErrors.map(e => `❌ ${e}`));
+        errors.push(...outputErrors.map(e => ` ${e}`));
     }
 
     // ====== STEP 2: SKIP IF NO HYBRID DATA ======
@@ -494,13 +494,13 @@ export const runValidationGate = (
 
         const report = `
 ═══ VALIDATION GATE REPORT (LIMITED) ═══
-⚠️ Hybrid Intelligence data not available - limited validation only.
+ Hybrid Intelligence data not available - limited validation only.
 
-${errors.length > 0 ? `❌ ERRORS:\n${errors.join('\n')}` : '✅ No critical errors detected'}
-${warnings.length > 0 ? `\n⚠️ WARNINGS:\n${warnings.join('\n')}` : ''}
-${patternMatch.warning ? `\n🔍 PATTERN MEMORY:\n${patternMatch.warning}` : ''}
+${errors.length > 0 ? ` ERRORS:\n${errors.join('\n')}` : ' No critical errors detected'}
+${warnings.length > 0 ? `\n WARNINGS:\n${warnings.join('\n')}` : ''}
+${patternMatch.warning ? `\n PATTERN MEMORY:\n${patternMatch.warning}` : ''}
 
-📌 CONFIDENCE: ${adjustedConfidence}
+ CONFIDENCE: ${adjustedConfidence}
 ═════════════════════════════════════════
 `.trim();
 
@@ -599,7 +599,7 @@ ${patternMatch.warning ? `\n🔍 PATTERN MEMORY:\n${patternMatch.warning}` : ''}
         // HARD RULE: Low volume + High confidence = Force to Medium
         if (hybridData.advancedVolume.trend === 'low' && adjustedConfidence === 'High') {
             adjustedConfidence = 'Medium';
-            warnings.push('📉 VOLUME RULE: Low volume detected - confidence capped at Medium');
+            warnings.push(' VOLUME RULE: Low volume detected - confidence capped at Medium');
         }
 
         if (volumeResult.adjustedConfidence && isLowerConfidence(volumeResult.adjustedConfidence, adjustedConfidence)) {
@@ -629,11 +629,11 @@ ${patternMatch.warning ? `\n🔍 PATTERN MEMORY:\n${patternMatch.warning}` : ''}
         if (devilsAdvocate.overallRiskScore >= DEVILS_ADVOCATE_HIGH_RISK_THRESHOLD) {
             if (adjustedConfidence !== 'Avoid') {
                 adjustedConfidence = 'Low';
-                warnings.push(`😈 Devil's Advocate risk score: ${devilsAdvocate.overallRiskScore}/100. HIGH RISK - Confidence set to Low.`);
+                warnings.push(` Devil's Advocate risk score: ${devilsAdvocate.overallRiskScore}/100. HIGH RISK - Confidence set to Low.`);
             }
         } else if (devilsAdvocate.overallRiskScore >= DEVILS_ADVOCATE_MEDIUM_RISK_THRESHOLD && adjustedConfidence === 'High') {
             adjustedConfidence = 'Medium';
-            warnings.push(`😈 Devil's Advocate risk score: ${devilsAdvocate.overallRiskScore}/100. Confidence downgraded to Medium.`);
+            warnings.push(` Devil's Advocate risk score: ${devilsAdvocate.overallRiskScore}/100. Confidence downgraded to Medium.`);
         }
     }
 
@@ -645,7 +645,7 @@ ${patternMatch.warning ? `\n🔍 PATTERN MEMORY:\n${patternMatch.warning}` : ''}
         // Downgrade if candle just opened and confidence is High
         if (!candleCheck.isConfirmed && adjustedConfidence === 'High') {
             adjustedConfidence = 'Medium';
-            warnings.push('🕯️ CANDLE RULE: Unconfirmed candle - confidence capped at Medium');
+            warnings.push(' CANDLE RULE: Unconfirmed candle - confidence capped at Medium');
         }
     }
 
@@ -700,7 +700,7 @@ ${patternMatch.warning ? `\n🔍 PATTERN MEMORY:\n${patternMatch.warning}` : ''}
         // Downgrade confidence if entry timing is very poor
         if (entryTiming.score < ENTRY_TIMING_POOR_THRESHOLD && adjustedConfidence === 'High') {
             adjustedConfidence = 'Medium';
-            warnings.push('🎯 ENTRY TIMING RULE: Poor entry timing - confidence capped at Medium');
+            warnings.push(' ENTRY TIMING RULE: Poor entry timing - confidence capped at Medium');
         }
     }
 
@@ -728,11 +728,11 @@ ${patternMatch.warning ? `\n🔍 PATTERN MEMORY:\n${patternMatch.warning}` : ''}
         const levelStats = summary[levelKey];
 
         if (levelStats.winRate !== null && levelStats.total >= CALIBRATION_MIN_TRADES) {
-            calibrationNote = `📊 Historical "${adjustedConfidence}" trades: ${levelStats.winRate}% win rate (n=${levelStats.total})`;
+            calibrationNote = ` Historical "${adjustedConfidence}" trades: ${levelStats.winRate}% win rate (n=${levelStats.total})`;
 
             // Warn if historical performance is poor
             if (adjustedConfidence === 'High' && levelStats.winRate < HIGH_CONFIDENCE_MIN_WIN_RATE) {
-                warnings.push(`⚠️ Historical "High" confidence trades only ${levelStats.winRate}% accurate. Consider recalibrating.`);
+                warnings.push(` Historical "High" confidence trades only ${levelStats.winRate}% accurate. Consider recalibrating.`);
             }
         }
     }
@@ -755,7 +755,7 @@ ${patternMatch.warning ? `\n🔍 PATTERN MEMORY:\n${patternMatch.warning}` : ''}
         // Add penalty reasoning to warnings
         if (calibrationPenalty.totalPenalty > 0) {
             calibrationPenalty.reasoning.forEach(reason => {
-                warnings.push(`📊 ${reason}`);
+                warnings.push(` ${reason}`);
             });
         }
 
@@ -763,7 +763,7 @@ ${patternMatch.warning ? `\n🔍 PATTERN MEMORY:\n${patternMatch.warning}` : ''}
         if (calibrationPenalty.adjustedConfidence !== adjustedConfidence) {
             const oldConf = adjustedConfidence;
             adjustedConfidence = calibrationPenalty.adjustedConfidence;
-            warnings.push(`🎯 CALIBRATION ADJUSTMENT: ${oldConf} → ${adjustedConfidence} (penalty: ${calibrationPenalty.totalPenalty} pts)`);
+            warnings.push(` CALIBRATION ADJUSTMENT: ${oldConf} → ${adjustedConfidence} (penalty: ${calibrationPenalty.totalPenalty} pts)`);
         }
 
         // Check for dangerous combinations
@@ -787,13 +787,13 @@ ${patternMatch.warning ? `\n🔍 PATTERN MEMORY:\n${patternMatch.warning}` : ''}
         const sessionState = getSessionCalibrationState(calibration);
 
         if (streakInfo.streakType === 'cold' && streakInfo.streakLength >= 3) {
-            warnings.push(`🥶 COLD STREAK: ${streakInfo.streakLength} consecutive losses`);
+            warnings.push(` COLD STREAK: ${streakInfo.streakLength} consecutive losses`);
         }
 
         if (sessionState.sessionPerformance === 'critical') {
-            warnings.push(`🛑 CRITICAL SESSION: ${sessionState.todayWins}W-${sessionState.todayLosses}L today - consider stopping`);
+            warnings.push(` CRITICAL SESSION: ${sessionState.todayWins}W-${sessionState.todayLosses}L today - consider stopping`);
         } else if (sessionState.sessionPerformance === 'poor') {
-            warnings.push(`⚠️ POOR SESSION: ${sessionState.todayWins}W-${sessionState.todayLosses}L today`);
+            warnings.push(` POOR SESSION: ${sessionState.todayWins}W-${sessionState.todayLosses}L today`);
         }
     }
 
@@ -811,7 +811,7 @@ ${patternMatch.warning ? `\n🔍 PATTERN MEMORY:\n${patternMatch.warning}` : ''}
         }
 
         if (ruleValidation.promptInjection) {
-            warnings.push('⚠️ Invalidation Rules: ' + ruleValidation.promptInjection);
+            warnings.push(' Invalidation Rules: ' + ruleValidation.promptInjection);
         }
     }
 
@@ -822,33 +822,33 @@ ${patternMatch.warning ? `\n🔍 PATTERN MEMORY:\n${patternMatch.warning}` : ''}
 
     const report = `
 ═══════════════════════════════════════════════════════════════
-🛡️ TRADE VALIDATION GATE REPORT
+ TRADE VALIDATION GATE REPORT
 ═══════════════════════════════════════════════════════════════
 
-📊 VALIDATION SCORES:
+ VALIDATION SCORES:
 - Confluence: ${validationScores.confluence}/100
 - Risk/Reward: ${validationScores.riskReward}/100
 - Volume: ${validationScores.volume}/100
 - Regime: ${validationScores.regime}/100
 - Devil's Advocate: ${validationScores.devilsAdvocate}/100
 
-${errors.length > 0 ? `\n❌ ERRORS (${errors.length}):\n${errors.map(e => `  ${e}`).join('\n')}` : ''}
+${errors.length > 0 ? `\n ERRORS (${errors.length}):\n${errors.map(e => `  ${e}`).join('\n')}` : ''}
 
-${warnings.length > 0 ? `\n⚠️ WARNINGS (${warnings.length}):\n${warnings.map(w => `  • ${w}`).join('\n')}` : '✅ No warnings'}
+${warnings.length > 0 ? `\n WARNINGS (${warnings.length}):\n${warnings.map(w => `  • ${w}`).join('\n')}` : ' No warnings'}
 
 ${devilsAdvocate ? `
-😈 DEVIL'S ADVOCATE (Risk Score: ${devilsAdvocate.overallRiskScore}/100):
+ DEVIL'S ADVOCATE (Risk Score: ${devilsAdvocate.overallRiskScore}/100):
 ${devilsAdvocate.bearCaseReasons.slice(0, 3).map(r => `  • ${r}`).join('\n')}
-${devilsAdvocate.liquidityTrapWarning ? '  🚨 LIQUIDITY TRAP WARNING ACTIVE' : ''}
+${devilsAdvocate.liquidityTrapWarning ? '   LIQUIDITY TRAP WARNING ACTIVE' : ''}
 ` : ''}
 
-${calibrationNote ? `\n📈 CALIBRATION:\n  ${calibrationNote}` : ''}
+${calibrationNote ? `\n CALIBRATION:\n  ${calibrationNote}` : ''}
 
-${patternMatchWarning ? `\n🔍 PATTERN MEMORY:\n  ${patternMatchWarning}` : ''}
+${patternMatchWarning ? `\n PATTERN MEMORY:\n  ${patternMatchWarning}` : ''}
 
 ───────────────────────────────────────────────────────────────
-📌 FINAL CONFIDENCE: ${adjustedConfidence}${confidenceWasAdjusted ? ` (adjusted from ${originalConfidence})` : ''}
-✅ VALIDATION: ${errors.length === 0 ? 'PASSED' : 'FAILED'}
+ FINAL CONFIDENCE: ${adjustedConfidence}${confidenceWasAdjusted ? ` (adjusted from ${originalConfidence})` : ''}
+ VALIDATION: ${errors.length === 0 ? 'PASSED' : 'FAILED'}
 ═══════════════════════════════════════════════════════════════
 `.trim();
 
@@ -865,7 +865,7 @@ ${patternMatchWarning ? `\n🔍 PATTERN MEMORY:\n  ${patternMatchWarning}` : ''}
         warnings.push(...scalpValidation.warnings);
         if (scalpValidation.shouldDowngrade && adjustedConfidence === 'High') {
             adjustedConfidence = 'Medium';
-            warnings.push('⚡ SCALP RULE: Conditions unfavorable - confidence capped');
+            warnings.push(' SCALP RULE: Conditions unfavorable - confidence capped');
         }
     } else {
         const swingValidation = validateSwingTrade(analysis);

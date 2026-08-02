@@ -221,7 +221,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
                         ? 'bg-gradient-to-br from-rose-900/90 to-rose-900/90 border-2 border-rose-500/50 shadow-rose-500/20'
                         : 'bg-gradient-to-br from-zinc-800/90 to-zinc-900/90 border-2 border-zinc-600/50 shadow-zinc-500/10'
                         }`}>
-                        <span className="text-lg opacity-60">🤖</span>
+                        <span className="text-lg opacity-60"></span>
                         {/* Status dot */}
                         <div className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-zinc-900 ${connectionStatus === 'error' ? 'bg-rose-500' : 'bg-zinc-500'
                             }`}></div>
@@ -258,7 +258,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
                         {connectionStatus === 'connecting' && (
                             <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-yellow-400 animate-spin"></div>
                         )}
-                        <span className="text-lg">🤖</span>
+                        <span className="text-lg"></span>
                         {/* Status dot */}
                         <div className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-zinc-900 ${connectionStatus === 'connecting' ? 'bg-yellow-500 animate-pulse' : 'bg-emerald-500'
                             }`}></div>
@@ -292,7 +292,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
                     <div className="relative w-14 h-14 bg-gradient-to-br from-emerald-900/90 to-cyan-900/90 border-2 border-emerald-500/70 rounded-full flex items-center justify-center shadow-lg shadow-emerald-500/30">
                         {/* Rotating ring */}
                         <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-emerald-400 animate-spin"></div>
-                        <span className="text-2xl animate-pulse">🤖</span>
+                        <span className="text-2xl animate-pulse"></span>
                     </div>
                 </div>
 
@@ -303,7 +303,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
                             {/* Animated icon */}
                             <div className="relative">
                                 <div className="w-10 h-10 bg-emerald-500/20 rounded-full flex items-center justify-center">
-                                    <span className="text-xl">🤖</span>
+                                    <span className="text-xl"></span>
                                 </div>
                                 <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-emerald-400 animate-spin"></div>
                             </div>
@@ -366,7 +366,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
                     title={`Drag to move • Click to view ${data.symbol}`}
                     style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
                 >
-                    <span className="text-xl pointer-events-none">🤖</span>
+                    <span className="text-xl pointer-events-none"></span>
                     <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full ${data.marketData.priceChangePercent24h >= 0 ? 'bg-emerald-500' : 'bg-rose-500'} border border-black animate-pulse pointer-events-none`}></div>
                     <div className="absolute left-14 opacity-0 group-hover:opacity-100 transition-opacity bg-zinc-900/95 border border-white/10 rounded-lg px-3 py-2 whitespace-nowrap pointer-events-none">
                         <div className="text-[10px] text-zinc-300 font-bold">{data.symbol}</div>
@@ -399,7 +399,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
                             <div className="flex gap-0.5"><div className="w-1 h-1 bg-zinc-400 rounded-full"></div><div className="w-1 h-1 bg-zinc-400 rounded-full"></div></div>
                             <div className="flex gap-0.5"><div className="w-1 h-1 bg-zinc-400 rounded-full"></div><div className="w-1 h-1 bg-zinc-400 rounded-full"></div></div>
                         </div>
-                        <span className="text-lg">🤖</span>
+                        <span className="text-lg"></span>
                         <div>
                             <div className="text-zinc-200 font-bold text-xs">HYBRID DATA</div>
                             <div className="text-zinc-500 text-[9px]">{data.symbol} • {new Date(data.dataTimestamp).toLocaleTimeString()}</div>
@@ -521,7 +521,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
                     {/* NEW: Order Book Depth */}
                     {data.orderBook && (
                         <div className="bg-zinc-900/50 rounded-xl p-3 border border-white/5">
-                            <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2">📖 Order Book Depth</div>
+                            <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2"> Order Book Depth</div>
                             <div className="flex items-center justify-between mb-2">
                                 <div className={`text-xs font-bold ${data.orderBook.dominantSide === 'buyers' ? 'text-emerald-400' :
                                     data.orderBook.dominantSide === 'sellers' ? 'text-rose-400' : 'text-zinc-300'
@@ -560,7 +560,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
                     {/* NEW: Recent Liquidations */}
                     {data.liquidations && (
                         <div className="bg-zinc-900/50 rounded-xl p-3 border border-white/5">
-                            <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2">🔥 Recent Liquidations (1H)</div>
+                            <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2"> Recent Liquidations (1H)</div>
                             <div className="flex items-center justify-between mb-2">
                                 <div className={`text-xs font-bold ${data.liquidations.liquidationPressure === 'high' ? 'text-orange-400' :
                                     data.liquidations.liquidationPressure === 'medium' ? 'text-yellow-400' : 'text-zinc-300'
@@ -599,7 +599,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
                                     color: entryTimingScore.score >= 70 ? '#e4e4e7' :
                                         entryTimingScore.score >= 50 ? '#d4d4d8' :
                                             entryTimingScore.score >= 35 ? '#a1a1aa' : '#71717a'
-                                }}>🎯 Entry Timing</div>
+                                }}> Entry Timing</div>
                                 <div className={`text-[9px] px-1.5 py-0.5 rounded-full ${entryTimingScore.score >= 70 ? 'bg-emerald-500/20 text-emerald-300' :
                                     entryTimingScore.score >= 50 ? 'bg-yellow-500/20 text-yellow-300' :
                                         entryTimingScore.score >= 35 ? 'bg-orange-500/20 text-orange-300' :
@@ -623,7 +623,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
                             {/* Suggested Better Entry */}
                             {entryTimingScore.suggestedEntry && (
                                 <div className="bg-black/30 rounded-lg p-2 border border-cyan-500/20">
-                                    <div className="text-[9px] text-cyan-400 mb-1">💡 Better Entry Available:</div>
+                                    <div className="text-[9px] text-cyan-400 mb-1"> Better Entry Available:</div>
                                     <div className="text-[11px] text-cyan-100 font-mono">
                                         ${entryTimingScore.suggestedEntry.price.toLocaleString()}
                                     </div>
@@ -643,7 +643,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
                     {slOptimization && slOptimization.hasEnoughData && (
                         <div className="bg-amber-950/30 rounded-xl p-3 border border-amber-500/20">
                             <div className="flex items-center justify-between mb-2">
-                                <div className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">📊 SL Optimization</div>
+                                <div className="text-[10px] font-bold text-amber-400 uppercase tracking-wider"> SL Optimization</div>
                                 <div className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300">
                                     {slOptimization.missedWinRate.toFixed(0)}% missed wins
                                 </div>
@@ -660,7 +660,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
                             {/* Show optimized SL calculation from Entry Timing suggested price */}
                             {suggestedEntryPrice && slOptimization.recommendedMultiplier > 1 && (
                                 <div className="bg-black/30 rounded-lg p-2 mb-2 border border-amber-500/10">
-                                    <div className="text-[9px] text-cyan-400 mb-1">💡 From Entry Timing suggested price:</div>
+                                    <div className="text-[9px] text-cyan-400 mb-1"> From Entry Timing suggested price:</div>
                                     <div className="grid grid-cols-2 gap-2 text-[10px]">
                                         <div>
                                             <div className="text-zinc-500">Suggested Entry</div>

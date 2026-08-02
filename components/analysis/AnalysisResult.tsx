@@ -257,7 +257,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
     let modeBadge;
     if (isAccuracyMode) {
         modeBadge = (
-            <span className="px-2 py-1 rounded text-[9px] font-black bg-cyan-950/80 border border-cyan-500/50 text-cyan-400 uppercase tracking-widest shadow-[0_0_10px_-3px_rgba(34,211,238,0.4)] animate-pulse">
+            <span className="px-2 py-1 rounded text-[9px] font-black bg-cyan-950/80 border border-cyan-500/50 text-cyan-400 uppercase tracking-widest shadow-[0_0_10px_-3px_rgba(212,212,216,0.4)] animate-pulse">
                 {accuracySubMode === 'pure_ai' ? 'PURE AI REASONING' : 'STRICT ACCURACY MODE'}
             </span>
         );
@@ -272,7 +272,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
     // Lens Mode Badge - shows when this trade was analyzed with Analyst Lenses enabled
     const lensBadge = isLensMode ? (
         <span className="px-2 py-1 rounded text-[9px] font-bold bg-indigo-950/80 border border-indigo-500/40 text-indigo-300 uppercase tracking-widest flex items-center gap-1">
-            <span>🎭</span> LENS MODE
+            <span></span> LENS MODE
         </span>
     ) : null;
 
@@ -285,7 +285,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
             {/* Coin Name Header */}
             <div className="mb-4 sm:mb-6 flex items-center px-1 justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-3 sm:gap-4 overflow-hidden min-w-0">
-                    <div className={`w-1.5 h-10 sm:w-2 sm:h-14 rounded-full shrink-0 ${isLong ? 'bg-gradient-to-b from-emerald-400 to-emerald-600 shadow-[0_0_20px_rgba(52,211,153,0.5)]' : isShort ? 'bg-gradient-to-b from-rose-400 to-rose-600 shadow-[0_0_20px_rgba(244,63,94,0.5)]' : 'bg-gradient-to-b from-cyan-400 to-cyan-600 shadow-[0_0_20px_rgba(34,211,238,0.5)]'}`}></div>
+                    <div className={`w-1.5 h-10 sm:w-2 sm:h-14 rounded-full shrink-0 ${isLong ? 'bg-gradient-to-b from-emerald-400 to-emerald-600 shadow-[0_0_20px_rgba(228,228,231,0.5)]' : isShort ? 'bg-gradient-to-b from-rose-400 to-rose-600 shadow-[0_0_20px_rgba(113,113,122,0.5)]' : 'bg-gradient-to-b from-cyan-400 to-cyan-600 shadow-[0_0_20px_rgba(212,212,216,0.5)]'}`}></div>
                     <h3 className="text-2xl sm:text-4xl font-black text-white tracking-tight uppercase truncate min-w-0 drop-shadow-lg">{coinName}</h3>
                     <span className="px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-[10px] sm:text-xs font-bold bg-white/5 backdrop-blur-sm text-zinc-300 border border-white/10 uppercase tracking-wider shrink-0 shadow-lg">FUTURES</span>
                 </div>
@@ -295,16 +295,16 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                     {onSelectForProbability && (
                         <button
                             onClick={() => onSelectForProbability(messageId)}
-                            className="px-2 py-1 rounded text-[9px] font-bold bg-purple-950/80 border border-purple-500/40 text-purple-300 uppercase tracking-widest flex items-center gap-1 hover:bg-purple-500/30 transition-colors shadow-[0_0_10px_-3px_rgba(168,85,247,0.4)]"
+                            className="px-2 py-1 rounded text-[9px] font-bold bg-purple-950/80 border border-purple-500/40 text-purple-300 uppercase tracking-widest flex items-center gap-1 hover:bg-purple-500/30 transition-colors shadow-[0_0_10px_-3px_rgba(161,161,170,0.4)]"
                             title="View AI Probability estimations in side panel"
                         >
-                            <span>📊</span> VIEW PROBABILITIES
+                            <span></span> VIEW PROBABILITIES
                         </button>
                     )}
                 </div>
 
                 {isUpdate && (
-                    <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-900/50 to-cyan-800/30 border border-cyan-400/40 text-cyan-300 shadow-[0_0_25px_-5px_rgba(34,211,238,0.4)] animate-pulse backdrop-blur-sm">
+                    <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-900/50 to-cyan-800/30 border border-cyan-400/40 text-cyan-300 shadow-[0_0_25px_-5px_rgba(212,212,216,0.4)] animate-pulse backdrop-blur-sm">
                         <UpdateIcon className="w-4 h-4" />
                         <span className="text-[10px] font-black uppercase tracking-widest">
                             Updated Setup {updateInterval ? `(+${updateInterval})` : ''}
@@ -336,7 +336,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                     <div className={`mb-4 px-4 py-3 rounded-2xl bg-gradient-to-r ${theme} border shadow-lg backdrop-blur-sm animate-fade-in`}>
                         <div className="flex items-start justify-between gap-3 flex-wrap">
                             <div className="min-w-0">
-                                <div className="text-[10px] font-black uppercase tracking-widest opacity-80">🎯 Autopilot Detection</div>
+                                <div className="text-[10px] font-black uppercase tracking-widest opacity-80"> Autopilot Detection</div>
                                 <div className="text-xs sm:text-sm font-semibold mt-1">{r.detail}</div>
                                 {r.timeToOutcome && <div className="text-[10px] opacity-60 mt-0.5">Resolved {r.timeToOutcome} after analysis</div>}
                             </div>
@@ -360,7 +360,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                                         className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-white/10 hover:bg-white/20 border border-white/20 transition-all"
                                         title="Open the capture flow to attach a chart screenshot"
                                     >
-                                        📷 Attach Screenshot
+                                         Attach Screenshot
                                     </button>
                                 )}
                                 {onDismissAutopilot && (
@@ -415,10 +415,10 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                                     ${tradingStyle === 'scalp'
                                         ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
                                         : 'bg-violet-500/10 text-violet-400 border-violet-500/30'}`}>
-                                    <span>{tradingStyle === 'scalp' ? '⚡' : '🔄'}</span>
+                                    <span>{tradingStyle === 'scalp' ? '' : ''}</span>
                                     <span>{tradingStyle.toUpperCase()}</span>
                                     {tradeTypeManualOverride && (
-                                        <span className="absolute -top-1 -right-1 w-2 h-2 bg-cyan-500 rounded-full animate-pulse shadow-[0_0_5px_rgba(6,182,212,0.8)]" title="Manually overridden by user"></span>
+                                        <span className="absolute -top-1 -right-1 w-2 h-2 bg-cyan-500 rounded-full animate-pulse shadow-[0_0_5px_rgba(212,212,216,0.8)]" title="Manually overridden by user"></span>
                                     )}
                                 </div>
                             )}
@@ -455,7 +455,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                                 ${isExpired ? 'text-rose-400 bg-rose-500/10 border-rose-500/20' :
                                     isCloseToExpiry ? 'text-amber-400 bg-amber-500/10 border-amber-500/20' :
                                         'text-cyan-400 bg-cyan-500/10 border-cyan-500/20'}`}>
-                                <span>⏱️</span>
+                                <span>⏱</span>
                                 <span>{isExpired ? 'EXPIRED' : `${formatValidityDuration(remainingMinutes)} left`}</span>
                             </div>
                         )}
@@ -464,7 +464,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                         {isTradeActive && outcome === TradeOutcome.PENDING && (
                             <div className="flex items-center gap-1.5 text-[10px] font-mono px-2 py-1.5 rounded-lg 
                                 text-emerald-400 bg-emerald-500/10 border border-emerald-500/20">
-                                <span>🟢</span>
+                                <span></span>
                                 <span>ACTIVE</span>
                             </div>
                         )}
@@ -527,7 +527,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                         {/* Suggested Better Entry */}
                         {analysisEntryTiming?.suggestedEntry && (
                             <div className="mt-2 p-2 bg-cyan-950/30 border border-cyan-500/20 rounded-lg">
-                                <div className="text-[9px] uppercase font-bold text-cyan-500 tracking-widest mb-1">💡 Better Entry Available</div>
+                                <div className="text-[9px] uppercase font-bold text-cyan-500 tracking-widest mb-1"> Better Entry Available</div>
                                 <div className="text-xs text-cyan-200">
                                     <span className="font-mono font-bold">${analysisEntryTiming.suggestedEntry.price.toLocaleString()}</span>
                                     <span className="text-cyan-400/70 ml-2">({analysisEntryTiming.suggestedEntry.reason})</span>
@@ -615,7 +615,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                                         <div className="mt-3 pt-2 border-t border-rose-500/10">
                                             <div className="flex justify-between items-center">
                                                 <span className="text-[9px] uppercase font-bold text-zinc-500 tracking-wider flex items-center gap-1">
-                                                    <span className="text-amber-500">⚠️</span> Extended SL (150%)
+                                                    <span className="text-amber-500"></span> Extended SL (150%)
                                                 </span>
                                                 <span className="text-xs font-mono font-bold text-amber-400 bg-amber-950/30 px-2 py-0.5 rounded-lg">
                                                     ${extendedSlPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -666,7 +666,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                             {/* Grade Badge */}
                             {grade && (
                                 <span className={`px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wide border ml-auto
-                                    ${grade === 'A' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30 shadow-[0_0_10px_-3px_rgba(16,185,129,0.4)]' :
+                                    ${grade === 'A' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30 shadow-[0_0_10px_-3px_rgba(212,212,216,0.4)]' :
                                         grade === 'B' ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' :
                                             grade === 'C' ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30' :
                                                 grade === 'D' ? 'bg-orange-500/20 text-orange-300 border-orange-500/30' :
@@ -682,7 +682,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                 {detectedPatterns && detectedPatterns.length > 0 && (
                     <div className="px-4 py-3 sm:px-6 sm:py-4 border-t border-white/10">
                         <h4 className="text-[10px] uppercase font-bold text-zinc-500 mb-2 flex items-center gap-2 tracking-widest">
-                            <span>📊</span> Detected Patterns ({detectedPatterns.length})
+                            <span></span> Detected Patterns ({detectedPatterns.length})
                         </h4>
                         <div className="flex flex-wrap gap-2">
                             {detectedPatterns.map((pattern, idx) => (
@@ -691,7 +691,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                                         pattern.type === 'Bearish' ? 'bg-rose-500/10 border-rose-500/20 text-rose-300' :
                                             'bg-zinc-500/10 border-zinc-500/20 text-zinc-300'}`}>
                                     <div className="font-bold flex items-center gap-1.5">
-                                        <span>{pattern.type === 'Bullish' ? '📈' : pattern.type === 'Bearish' ? '📉' : '➡️'}</span>
+                                        <span>{pattern.type === 'Bullish' ? '' : pattern.type === 'Bearish' ? '' : ''}</span>
                                         {pattern.name}
                                     </div>
                                     <div className="text-[10px] opacity-70 mt-0.5">
@@ -710,7 +710,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                 {keyLevels && (keyLevels.support?.length > 0 || keyLevels.resistance?.length > 0) && (
                     <div className="px-4 py-3 sm:px-6 sm:py-4 border-t border-white/10">
                         <h4 className="text-[10px] uppercase font-bold text-zinc-500 mb-2 flex items-center gap-2 tracking-widest">
-                            <span>🎯</span> Key Levels
+                            <span></span> Key Levels
                         </h4>
                         <div className="grid grid-cols-2 gap-4">
                             {/* Support Levels */}
@@ -747,7 +747,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                 {dualScenarioAnalysis && (
                     <div className="px-4 py-4 sm:px-6 sm:py-5 border-t border-white/10 bg-gradient-to-b from-indigo-950/20 to-transparent">
                         <h4 className="text-[10px] uppercase font-bold text-indigo-400 mb-3 flex items-center gap-2 tracking-widest">
-                            <span className="text-base">⚖️</span> Dual Scenario Analysis
+                            <span className="text-base"></span> Dual Scenario Analysis
                         </h4>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
@@ -756,7 +756,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                                 ? 'bg-emerald-500/15 border-emerald-400/40 ring-2 ring-emerald-500/20'
                                 : 'bg-emerald-500/5 border-emerald-500/20'}`}>
                                 <div className="flex items-center gap-2 mb-2">
-                                    <span className="text-lg">📈</span>
+                                    <span className="text-lg"></span>
                                     <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Bullish Scenario</span>
                                     {dualScenarioAnalysis.selectedScenario === 'bullish' && (
                                         <span className="ml-auto px-2 py-0.5 rounded text-[9px] font-bold bg-emerald-500/30 text-emerald-300 border border-emerald-400/30">
@@ -789,7 +789,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                                 ? 'bg-rose-500/15 border-rose-400/40 ring-2 ring-rose-500/20'
                                 : 'bg-rose-500/5 border-rose-500/20'}`}>
                                 <div className="flex items-center gap-2 mb-2">
-                                    <span className="text-lg">📉</span>
+                                    <span className="text-lg"></span>
                                     <span className="text-xs font-bold text-rose-400 uppercase tracking-wider">Bearish Scenario</span>
                                     {dualScenarioAnalysis.selectedScenario === 'bearish' && (
                                         <span className="ml-auto px-2 py-0.5 rounded text-[9px] font-bold bg-rose-500/30 text-rose-300 border border-rose-400/30">
@@ -849,7 +849,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                     <div className="px-4 py-4 sm:px-6 sm:py-5 border-t border-white/10 bg-gradient-to-b from-cyan-950/20 to-transparent">
                         <div className="flex items-center justify-between mb-3">
                             <h4 className="text-[10px] uppercase font-bold text-cyan-400 tracking-widest flex items-center gap-2">
-                                <span className="text-base">🚨</span> Gate Scan
+                                <span className="text-base"></span> Gate Scan
                             </h4>
                             <div className={`px-2 py-1 rounded text-[9px] font-bold uppercase tracking-widest ${analysis.gateResult.passed
                                 ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
@@ -937,7 +937,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                                 : 'bg-rose-950/30 border-rose-500/20'
                                 }`}>
                                 <div className="flex items-center gap-2">
-                                    <span className="text-base">{analysis.gateResult.suggestedDirection === 'Long' ? '📈' : '📉'}</span>
+                                    <span className="text-base">{analysis.gateResult.suggestedDirection === 'Long' ? '' : ''}</span>
                                     <span className={`text-xs font-bold ${analysis.gateResult.suggestedDirection === 'Long' ? 'text-emerald-400' : 'text-rose-400'
                                         }`}>
                                         Pattern Memory suggests {analysis.gateResult.suggestedDirection}
@@ -963,7 +963,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                             <div>
                                 {analysis.gateResult.insights.map((insight, idx) => (
                                     <div key={idx} className="flex items-start gap-1.5 text-[10px] text-cyan-300/80 mb-1">
-                                        <span>💡</span>
+                                        <span></span>
                                         <span>{insight}</span>
                                     </div>
                                 ))}
@@ -989,7 +989,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                     <div className="px-4 py-3 sm:px-6 sm:py-4 border-t border-white/10 bg-gradient-to-r from-amber-950/30 to-transparent">
                         <div className="flex items-center gap-3">
                             <div className="w-8 h-8 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400">
-                                ⚠️
+                                
                             </div>
                             <div>
                                 <h4 className="text-[10px] uppercase font-bold text-amber-500 tracking-widest mb-0.5">Confidence Adjusted</h4>
@@ -1089,7 +1089,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                     <div className="px-4 py-4 sm:px-6 sm:py-5 border-t border-white/10 bg-gradient-to-b from-purple-950/20 to-transparent">
                         <div className="flex items-center justify-between mb-3">
                             <h4 className="text-[10px] uppercase font-bold text-purple-400 tracking-widest flex items-center gap-2">
-                                <span className="text-base">😈</span> Devil's Advocate Analysis
+                                <span className="text-base"></span> Devil's Advocate Analysis
                             </h4>
                             <div className={`px-2 py-1 rounded text-[9px] font-bold uppercase tracking-widest ${devilsAdvocate.riskScore >= 70 ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' :
                                 devilsAdvocate.riskScore >= 50 ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
@@ -1132,7 +1132,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                         {devilsAdvocate.crowdedTradeWarning && (
                             <div className="mt-2 p-2 bg-rose-950/30 border border-rose-500/30 rounded-lg">
                                 <div className="flex items-center gap-2 text-xs text-rose-300">
-                                    <span className="text-rose-400">🚨</span>
+                                    <span className="text-rose-400"></span>
                                     {devilsAdvocate.crowdedTradeWarning}
                                 </div>
                             </div>
@@ -1346,7 +1346,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                                 className="flex-1 min-w-[60px] px-3 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1"
                                 title="Scenario Simulator"
                             >
-                                🎮 <span className="hidden sm:inline">Simulate</span><span className="sm:hidden">Sim</span>
+                                 <span className="hidden sm:inline">Simulate</span><span className="sm:hidden">Sim</span>
                             </button>
                         )}
                         <button onClick={() => onSaveAnalysis(messageId)} disabled={isSaved} className={`px-3 py-2 rounded-lg transition-colors flex items-center justify-center ${isSaved ? 'text-purple-400 bg-purple-500/20' : 'text-zinc-300 bg-zinc-700 hover:bg-zinc-600'}`} title="Save Analysis">
