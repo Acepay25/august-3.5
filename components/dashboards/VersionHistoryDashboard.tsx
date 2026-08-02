@@ -150,15 +150,15 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                                     <AreaChart data={signals.length ? signals : [{ timestamp: 0, rewardScore: 0 }]}>
                                         <defs>
                                             <linearGradient id="colorReward" x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset="5%" stopColor="#10B981" stopOpacity={0.3} />
-                                                <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
+                                                <stop offset="5%" stopColor="#D4D4D8" stopOpacity={0.3} />
+                                                <stop offset="95%" stopColor="#D4D4D8" stopOpacity={0} />
                                             </linearGradient>
                                         </defs>
                                         <Tooltip
                                             contentStyle={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '12px' }}
-                                            itemStyle={{ color: '#10B981' }}
+                                            itemStyle={{ color: '#D4D4D8' }}
                                         />
-                                        <Area type="monotone" dataKey="rewardScore" stroke="#10B981" strokeWidth={2} fillOpacity={1} fill="url(#colorReward)" />
+                                        <Area type="monotone" dataKey="rewardScore" stroke="#D4D4D8" strokeWidth={2} fillOpacity={1} fill="url(#colorReward)" />
                                     </AreaChart>
                                 </ResponsiveContainer>
                             </div>

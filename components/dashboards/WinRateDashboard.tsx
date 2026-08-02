@@ -32,13 +32,13 @@ interface WinRateDashboardProps {
 
 // Color constants
 const COLORS = {
-    cyan: '#06b6d4',
-    emerald: '#10b981',
-    rose: '#f43f5e',
-    yellow: '#eab308',
-    orange: '#f97316',
-    purple: '#a855f7',
-    blue: '#3b82f6',
+    cyan: '#d4d4d8',
+    emerald: '#e4e4e7',
+    rose: '#71717a',
+    yellow: '#a1a1aa',
+    orange: '#82828a',
+    purple: '#b8b8bf',
+    blue: '#909097',
     zinc: '#71717a'
 };
 
@@ -156,7 +156,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
             <div className="flex flex-col gap-2 sm:gap-3 border-b border-white/5 pb-3 sm:pb-4">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 sm:gap-3">
-                        <div className="w-1 h-6 sm:h-8 bg-cyan-500 rounded-full shadow-[0_0_10px_#06b6d4]"></div>
+                        <div className="w-1 h-6 sm:h-8 bg-cyan-500 rounded-full shadow-[0_0_10px_#d4d4d8]"></div>
                         <h2 className="text-base sm:text-xl font-black text-white uppercase tracking-wide">Analytics</h2>
                     </div>
                     <span className="text-[10px] text-zinc-500 font-mono">

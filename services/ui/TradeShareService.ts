@@ -43,8 +43,8 @@ class TradeShareServiceClass {
         // Direction colors
         const isLong = analysis.direction === 'Long';
         const isShort = analysis.direction === 'Short';
-        const primaryColor = isLong ? '#10b981' : isShort ? '#f43f5e' : '#6366f1';
-        const primaryDark = isLong ? '#059669' : isShort ? '#e11d48' : '#4f46e5';
+        const primaryColor = isLong ? '#d4d4d8' : isShort ? '#71717a' : '#a1a1aa';
+        const primaryDark = isLong ? '#d4d4d8' : isShort ? '#71717a' : '#a1a1aa';
 
         // === BACKGROUND ===
         const bgGradient = ctx.createLinearGradient(0, 0, w, h);
@@ -92,7 +92,7 @@ class TradeShareServiceClass {
         if (tradingStyle) {
             const styleX = 32 * s + pillW + 12 * s;
             const styleW = 80 * s;
-            const styleColor = tradingStyle === 'scalp' ? '#f59e0b' : '#8b5cf6'; // Orange for scalp, purple for swing
+            const styleColor = tradingStyle === 'scalp' ? '#a1a1aa' : '#b8b8bf'; // Orange for scalp, purple for swing
             const styleEmoji = tradingStyle === 'scalp' ? '⚡' : '🔄';
 
             ctx.fillStyle = styleColor + '25';
@@ -117,9 +117,9 @@ class TradeShareServiceClass {
 
         // Confidence badge
         const confY = headerY + 110 * s;
-        const confColor = analysis.confidence === 'High' ? '#22c55e' :
-            analysis.confidence === 'Medium' ? '#eab308' :
-                analysis.confidence === 'Low' ? '#f97316' : '#ef4444';
+        const confColor = analysis.confidence === 'High' ? '#d4d4d8' :
+            analysis.confidence === 'Medium' ? '#a1a1aa' :
+                analysis.confidence === 'Low' ? '#82828a' : '#71717a';
         ctx.fillStyle = confColor + '20';
         this.roundRect(ctx, 32 * s, confY, 180 * s, 32 * s, 8 * s);
         ctx.fill();
@@ -148,11 +148,11 @@ class TradeShareServiceClass {
         let curY = cardY + 36 * s;
 
         // Entry section
-        ctx.fillStyle = '#3b82f6';
+        ctx.fillStyle = '#a1a1aa';
         ctx.beginPath();
         ctx.arc(secX, curY + 8 * s, 6 * s, 0, Math.PI * 2);
         ctx.fill();
-        ctx.shadowColor = '#3b82f6';
+        ctx.shadowColor = '#a1a1aa';
         ctx.shadowBlur = 10;
         ctx.fill();
         ctx.shadowBlur = 0;
@@ -168,11 +168,11 @@ class TradeShareServiceClass {
 
         // Stop Loss section
         curY += 80 * s;
-        ctx.fillStyle = '#f43f5e';
+        ctx.fillStyle = '#71717a';
         ctx.beginPath();
         ctx.arc(secX, curY + 8 * s, 6 * s, 0, Math.PI * 2);
         ctx.fill();
-        ctx.shadowColor = '#f43f5e';
+        ctx.shadowColor = '#71717a';
         ctx.shadowBlur = 10;
         ctx.fill();
         ctx.shadowBlur = 0;
@@ -181,29 +181,29 @@ class TradeShareServiceClass {
         ctx.font = `${12 * s}px -apple-system, BlinkMacSystemFont, sans-serif`;
         ctx.fillText('STOP LOSS', secX + 20 * s, curY + 4 * s);
 
-        ctx.fillStyle = '#fda4af';
+        ctx.fillStyle = '#e4e4e7';
         ctx.font = `bold ${24 * s}px -apple-system, BlinkMacSystemFont, sans-serif`;
         ctx.fillText(analysis.stopLoss || 'N/A', secX + 20 * s, curY + 32 * s);
 
         // SL percentage badge
         if (analysis.stopLossPercentage) {
             const slW = ctx.measureText(analysis.stopLoss || 'N/A').width;
-            ctx.fillStyle = '#f43f5e30';
+            ctx.fillStyle = '#71717a30';
             ctx.font = `bold ${16 * s}px -apple-system, BlinkMacSystemFont, sans-serif`;
             const pctW = ctx.measureText(analysis.stopLossPercentage).width + 20 * s;
             this.roundRect(ctx, secX + 20 * s + slW + 16 * s, curY + 12 * s, pctW, 28 * s, 8 * s);
             ctx.fill();
-            ctx.fillStyle = '#f43f5e';
+            ctx.fillStyle = '#71717a';
             ctx.fillText(analysis.stopLossPercentage, secX + 20 * s + slW + 26 * s, curY + 32 * s);
         }
 
         // Take Profit section
         curY += 80 * s;
-        ctx.fillStyle = '#22c55e';
+        ctx.fillStyle = '#d4d4d8';
         ctx.beginPath();
         ctx.arc(secX, curY + 8 * s, 6 * s, 0, Math.PI * 2);
         ctx.fill();
-        ctx.shadowColor = '#22c55e';
+        ctx.shadowColor = '#d4d4d8';
         ctx.shadowBlur = 10;
         ctx.fill();
         ctx.shadowBlur = 0;
@@ -216,19 +216,19 @@ class TradeShareServiceClass {
         if (tps.length > 0) {
             tps.slice(0, 3).forEach((tp, i) => {
                 const yOff = curY + 28 * s + (i * 34 * s);
-                ctx.fillStyle = '#86efac';
+                ctx.fillStyle = '#d4d4d8';
                 ctx.font = `bold ${20 * s}px -apple-system, BlinkMacSystemFont, sans-serif`;
                 const tpText = `TP${i + 1}: ${typeof tp.price === 'string' ? tp.price : 'N/A'}`;
                 ctx.fillText(tpText, secX + 20 * s, yOff);
 
                 if (tp.percentage && typeof tp.percentage === 'string') {
                     const tpW = ctx.measureText(tpText).width;
-                    ctx.fillStyle = '#22c55e30';
+                    ctx.fillStyle = '#d4d4d830';
                     ctx.font = `bold ${14 * s}px -apple-system, BlinkMacSystemFont, sans-serif`;
                     const pctW = ctx.measureText(tp.percentage).width + 16 * s;
                     this.roundRect(ctx, secX + 20 * s + tpW + 16 * s, yOff - 16 * s, pctW, 22 * s, 6 * s);
                     ctx.fill();
-                    ctx.fillStyle = '#22c55e';
+                    ctx.fillStyle = '#d4d4d8';
                     ctx.fillText(tp.percentage, secX + 20 * s + tpW + 24 * s, yOff);
                 }
             });
@@ -243,7 +243,7 @@ class TradeShareServiceClass {
 
         // R:R badge
         if (analysis.rrRatio) {
-            const rrColor = analysis.rrRatio >= 2 ? '#22c55e' : analysis.rrRatio >= 1.2 ? '#eab308' : '#f97316';
+            const rrColor = analysis.rrRatio >= 2 ? '#d4d4d8' : analysis.rrRatio >= 1.2 ? '#a1a1aa' : '#82828a';
             ctx.fillStyle = rrColor + '15';
             this.roundRect(ctx, 32 * s, botY, 80 * s, 40 * s, 12 * s);
             ctx.fill();
@@ -261,7 +261,7 @@ class TradeShareServiceClass {
 
         // Outcome badge
         if (outcome && outcome !== TradeOutcome.PENDING) {
-            const oColor = outcome === TradeOutcome.WIN ? '#22c55e' : outcome === TradeOutcome.LOSS ? '#ef4444' : '#71717a';
+            const oColor = outcome === TradeOutcome.WIN ? '#d4d4d8' : outcome === TradeOutcome.LOSS ? '#71717a' : '#71717a';
             const oText = outcome === TradeOutcome.WIN ? '✓ WIN' : outcome === TradeOutcome.LOSS ? '✗ LOSS' : 'SKIPPED';
 
             ctx.fillStyle = oColor + '20';

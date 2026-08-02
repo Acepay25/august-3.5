@@ -502,7 +502,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                     <div className="p-4 sm:p-6 space-y-3">
                         <div className="text-[10px] uppercase font-bold text-zinc-500 tracking-widest flex items-center gap-2 flex-wrap">
                             <div className="flex items-center gap-2">
-                                <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_#3b82f6]"></div>
+                                <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_#a1a1aa]"></div>
                                 <span>Entry Zone</span>
                             </div>
                             {/* Entry Timing Score Badge */}
@@ -539,7 +539,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                     {/* Stop Loss */}
                     <div className="p-4 sm:p-6 space-y-3 bg-rose-500/[0.02]">
                         <div className="text-[10px] uppercase font-bold text-zinc-500 tracking-widest flex items-center gap-2">
-                            <div className="w-2 h-2 rounded-full bg-rose-500 shadow-[0_0_8px_#f43f5e]"></div> Stop Loss
+                            <div className="w-2 h-2 rounded-full bg-rose-500 shadow-[0_0_8px_#71717a]"></div> Stop Loss
                         </div>
                         <div className="bg-gradient-to-br from-rose-500/15 to-rose-600/5 border border-rose-400/25 rounded-2xl sm:rounded-2xl p-4 backdrop-blur-sm shadow-lg hover:shadow-rose-500/10 transition-all duration-300 hover:scale-[1.02]">
                             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-baseline gap-2 sm:gap-3">
@@ -635,7 +635,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                     {/* Take Profit */}
                     <div className="p-4 sm:p-6 space-y-3 bg-emerald-500/[0.03]">
                         <div className="text-[10px] uppercase font-bold text-zinc-500 tracking-widest flex items-center gap-2">
-                            <div className="w-2.5 h-2.5 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-[0_0_12px_#10b981]"></div> Targets
+                            <div className="w-2.5 h-2.5 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-[0_0_12px_#d4d4d8]"></div> Targets
                         </div>
                         <div className="space-y-2.5">
                             {(takeProfit && takeProfit.length > 0) ? (takeProfit || []).map((tp, i) => (

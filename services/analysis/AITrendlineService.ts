@@ -175,7 +175,7 @@ RESPOND IN THIS EXACT JSON FORMAT:
                 startPrice,
                 endTime: endCandle.time as number,
                 endPrice,
-                color: tl.type === 'resistance' ? '#f03a50' : tl.type === 'support' ? '#00c896' : '#ffd700',
+                color: tl.type === 'resistance' ? '#71717a' : tl.type === 'support' ? '#e4e4e7' : '#a1a1aa',
                 importance: tl.importance || 'medium',
                 label: tl.label,
             };
