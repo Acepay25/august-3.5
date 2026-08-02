@@ -888,7 +888,7 @@ const App: React.FC = () => {
     useEffect(() => {
         if (appRef.current) {
             // Remove all legacy theme classes and use consistent dark theme
-            appRef.current.classList.remove('bg-zinc-950', 'bg-[#1A0000]', 'bg-[#00121F]');
+            appRef.current.classList.remove('bg-zinc-950', 'bg-[#000000]', 'bg-[#000000]');
             appRef.current.classList.add('bg-zinc-950');
         }
     }, [isAccuracyModeEnabled, accuracySubMode]);
