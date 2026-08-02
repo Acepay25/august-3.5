@@ -50,7 +50,7 @@ const PROVIDER_BRAND_HINTS: Record<string, { name: string; color: string }> = {
     grok: { name: 'Grok', color: '#6b6b73' },
 };
 
-const FALLBACK_PALETTE = ['#f5f5f6', '#d2d2d6', '#b0b0b6', '#8a8a92', '#b0b0b6', '#6b6b73', '#6b6b73', '#8a8a92', '#d0c9bc', '#6b6b73'];
+const FALLBACK_PALETTE = ['#f5f5f6', '#d2d2d6', '#b0b0b6', '#8a8a92', '#b0b0b6', '#6b6b73', '#6b6b73', '#8a8a92', '#dedee2', '#6b6b73'];
 
 const resolveModelDisplay = (provider: AIProvider, index: number): { provider: AIProvider; name: string; color: string } => {
     const hint = PROVIDER_BRAND_HINTS[provider];
