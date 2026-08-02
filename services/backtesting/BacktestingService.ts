@@ -505,12 +505,11 @@ export const simulateFromAnalysisTime = async (
 
         // === ENTRY DETECTION PHASE ===
         // Scan candles to find when price actually reached ANY of the selected entry levels
-        // Unified Logic: Price "touches" entry if Entry is within [Low, High] range.
-        // This handles:
-        // 1. Long Limit (Dip): Price drops to Entry.
-        // 2. Long Stop (Breakout): Price rises to Entry.
-        // 3. Short Limit (Rally): Price rises to Entry.
-        // 4. Short Stop (Breakdown): Price drops to Entry.
+        // Unified Logic: a limit entry fills when price TRADES THROUGH the level:
+        //   Long  (buy the dip)  : price falls to the entry -> candle.low <= entry
+        //   Short (sell the rally): price rises to the entry -> candle.high >= entry
+        // This is intentionally identical to validateTradeOutcome — using a
+        // `[low, high]` overlap here would disagree (and miss gap-through fills).
 
         let entryTriggeredAtIndex = -1;
         let entryTriggerTime: string | undefined;
@@ -521,7 +520,10 @@ export const simulateFromAnalysisTime = async (
 
             // Check ALL selected entries - trigger on first one hit
             for (const entry of entriesToCheck) {
-                if (entry.price >= candle.low && entry.price <= candle.high) {
+                const reached = isLong
+                    ? candle.low <= entry.price
+                    : candle.high >= entry.price;
+                if (reached) {
                     entryTriggeredAtIndex = i;
                     entryTriggerTime = new Date(candle.time).toISOString();
                     triggeredEntryPrice = entry.price;

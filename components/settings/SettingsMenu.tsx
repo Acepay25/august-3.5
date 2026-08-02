@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { APP_NAME, APP_VERSION } from '../../constants/version';
 import { AIProvider, AccuracySubMode, LoggedTrade, GlobalMemory, TradeSummary } from '../../types';
 import { AnalystLensConfig } from '../../types/lens';
@@ -207,6 +207,18 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
 
     // First ready provider — used as the default summarization provider for the embedded journal
     const firstReadyProvider = readyConfigProviders[0];
+
+    // Heal a stale vision-model selection: `selectedOcrModel` is a bare model
+    // id, and if its provider was disabled/removed it appears in no dropdown
+    // option (the select renders blank). Fall back to the first ready
+    // provider's model so the UI and the vision path stay in sync.
+    useEffect(() => {
+        if (!selectedOcrModel || readyConfigProviders.length === 0) return;
+        const known = readyConfigProviders.some(p => p.models.includes(selectedOcrModel));
+        if (!known) {
+            onSetOcrModel?.(firstReadyProvider?.selectedModel || firstReadyProvider?.models?.[0] || '');
+        }
+    }, [readyConfigProviders, selectedOcrModel, firstReadyProvider, onSetOcrModel]);
 
     return (
         <>
