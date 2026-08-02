@@ -32,11 +32,18 @@ export const parseAPIError = (error: any, provider: ProviderName): ParsedAPIErro
 
     // Rate Limit (429)
     if (errorStatus === 429 || errorMessage.includes('rate limit') || errorMessage.includes('too many requests')) {
-        const retryAfter = error?.headers?.['retry-after'] || 30;
+        // Only trust a real Retry-After header. SDK errors expose headers as a
+        // Headers object (no array access), and a missing/NaN value used to
+        // fall back to 30s — stalling the pipeline for 30s per attempt. Use a
+        // short 1s default so transient bursts recover quickly.
+        const headers = error?.headers;
+        const headerRaw = headers?.get ? headers.get('retry-after') : headers?.['retry-after'];
+        const headerParsed = parseInt(headerRaw, 10);
+        const retryAfterSeconds = Number.isFinite(headerParsed) && headerParsed >= 0 ? headerParsed : 1;
         return {
             type: 'rate_limit',
-            message: `${provider} rate limit reached. Retrying in ${retryAfter}s...`,
-            retryAfterSeconds: parseInt(retryAfter),
+            message: `${provider} rate limit reached. Retrying in ${retryAfterSeconds}s...`,
+            retryAfterSeconds,
             provider
         };
     }
