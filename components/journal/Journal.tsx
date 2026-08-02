@@ -7,6 +7,7 @@ import LearningDashboard from '../dashboards/LearningDashboard';
 import ModelPerformanceDashboard from '../dashboards/ModelPerformanceDashboard';
 import ReasoningDashboard from '../dashboards/ReasoningDashboard';
 import { CloseIcon, HistoryIcon, StarIcon, ChartBarIcon, BrainIcon } from '../shared/Icons';
+import { exportTradesCSV, exportTradesHTML } from '../../utils/reportExport';
 import { AIProvider, LoggedTrade, TradeSummary, GlobalMemory } from '../../types';
 import { ProviderConfig } from '../../types/provider';
 
@@ -330,12 +331,30 @@ const JournalInner: React.FC<JournalProps> = ({
                             <h1 className="text-xl font-bold text-white tracking-tight">Trading Journal</h1>
                             <p className="text-xs text-zinc-500 mt-0.5">{trades.length} trades logged</p>
                         </div>
-                        <button
-                            onClick={onClose}
-                            className="p-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white transition-all"
-                        >
-                            <CloseIcon />
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => exportTradesCSV(trades)}
+                                disabled={trades.length === 0}
+                                title="Download trade log as CSV"
+                                className="p-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white text-[10px] font-bold uppercase tracking-wide transition-all disabled:opacity-40"
+                            >
+                                CSV
+                            </button>
+                            <button
+                                onClick={() => exportTradesHTML(trades)}
+                                disabled={trades.length === 0}
+                                title="Open printable report (Ctrl+P to save as PDF)"
+                                className="p-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white text-[10px] font-bold uppercase tracking-wide transition-all disabled:opacity-40"
+                            >
+                                Report
+                            </button>
+                            <button
+                                onClick={onClose}
+                                className="p-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white transition-all"
+                            >
+                                <CloseIcon />
+                            </button>
+                        </div>
                     </div>
                 </header>
 

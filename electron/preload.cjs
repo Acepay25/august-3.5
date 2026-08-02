@@ -18,6 +18,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     installUpdate: () => ipcRenderer.invoke('update:install'),
     getUpdateStatus: () => ipcRenderer.invoke('update:get-status'),
 
+    // Secret encryption (OS keychain via safeStorage) — used by
+    // ProviderConfigService to encrypt API keys at rest on desktop.
+    encryptSecret: (plaintext) => ipcRenderer.invoke('crypto:encrypt', plaintext),
+    decryptSecret: (payload) => ipcRenderer.invoke('crypto:decrypt', payload),
+
     // Listen for real-time status updates pushed from main process
     onUpdateStatus: (callback) => {
         const handler = (_event, status) => callback(status);

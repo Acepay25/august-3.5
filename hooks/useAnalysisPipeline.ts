@@ -11,7 +11,7 @@ import { analyzeTradingView, getQuickResponse } from '../services/providers/Gene
 import * as ensembleService from '../services/providers/ensembleService';
 
 // Analysis / validation / backtesting services
-import { tryFetchHybridDataFromPromptWithCalibration, HybridDataPacket, runMonteCarloForSetup } from '../services/analysis/HybridIntelligenceService';
+import { tryFetchHybridDataFromPromptWithCalibration, HybridDataPacket, runMonteCarloForSetupAsync } from '../services/analysis/HybridIntelligenceService';
 import { LabeledMonteCarloResult } from '../services/analysis/MonteCarloService';
 import { backtestSimilarSetups } from '../services/backtesting/LiveBacktestService';
 import { runValidationGate } from '../services/validation/TradeValidationGate';
@@ -684,18 +684,18 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
                         // Run if we have entry points and stop loss (Hybrid data is optional - will use fallback ATR)
                         if (finalAnalysis.entryPoints?.length && finalAnalysis.stopLoss) {
-                            try {
-                                const mcResult = runMonteCarloForSetup({
-                                    direction: finalAnalysis.direction,
-                                    entryPoints: finalAnalysis.entryPoints,
-                                    stopLoss: finalAnalysis.stopLoss,
-                                    takeProfit: finalAnalysis.takeProfit
-                                }, freshHybridData || {
-                                    // Fallback minimal hybrid data when Hybrid Intelligence is off
-                                    indicators: {},
-                                    regime: { detected: 'unknown', trendDirection: 'neutral' }
-                                } as any);
-
+                            // Worker-backed (async); only state setters depend on the
+                            // result, so this runs off the main thread fire-and-forget.
+                            runMonteCarloForSetupAsync({
+                                direction: finalAnalysis.direction,
+                                entryPoints: finalAnalysis.entryPoints,
+                                stopLoss: finalAnalysis.stopLoss,
+                                takeProfit: finalAnalysis.takeProfit
+                            }, freshHybridData || {
+                                // Fallback minimal hybrid data when Hybrid Intelligence is off
+                                indicators: {},
+                                regime: { detected: 'unknown', trendDirection: 'neutral' }
+                            } as any).then(mcResult => {
                                 if (mcResult) {
                                     setLatestMonteCarloResult(mcResult);
                                     // Also add to perAI results as the final moderator result
@@ -703,22 +703,22 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                                     setPerAIMonteCarloResults(current => [
                                         ...current.filter(r => !r.isModeratorFinal), // Remove any previous moderator
                                         {
-                                            provider: '🏛️ MODERATOR (Final)',
+                                            provider: 'MODERATOR (Final)',
                                             result: mcResult,
                                             isModeratorFinal: true
                                         }
                                     ]);
-                                    console.log(`[MonteCarlo] ✅ Simulation complete: WinRate=${mcResult.winRate}%, EV=${mcResult.expectedValue}%`);
+                                    console.log(`[MonteCarlo] Simulation complete: WinRate=${mcResult.winRate}%, EV=${mcResult.expectedValue}%`);
                                 } else {
-                                    console.log('[MonteCarlo] ⚠️ Simulation returned null - insufficient trade data');
+                                    console.log('[MonteCarlo] Simulation returned null - insufficient trade data');
                                 }
-                            } catch (mcError) {
-                                console.error('[MonteCarlo] ❌ Simulation failed:', mcError);
-                            }
+                            }).catch(mcError => {
+                                console.error('[MonteCarlo] Simulation failed:', mcError);
+                            });
                         } else {
-                            console.log('[MonteCarlo] ⏭️ Skipped - missing conditions:', {
-                                needsEntryPoints: !finalAnalysis.entryPoints?.length ? 'No entry points in analysis' : '✓',
-                                needsStopLoss: !finalAnalysis.stopLoss ? 'No stop loss in analysis' : '✓'
+                            console.log('[MonteCarlo] Skipped - missing conditions:', {
+                                needsEntryPoints: !finalAnalysis.entryPoints?.length ? 'No entry points in analysis' : 'present',
+                                needsStopLoss: !finalAnalysis.stopLoss ? 'No stop loss in analysis' : 'present'
                             });
                         }
                         // ========== END MONTE CARLO ==========
@@ -862,8 +862,11 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     // the re-indexed `results` array): if an analyst at index 0
                     // fails, results[0] would be provider #1's data labeled as
                     // provider #0. Same bug class as the P1-6 thoughtMap fix.
-                    settledResults.forEach((settled, index) => {
-                        if (settled.status !== 'fulfilled') return; // failed analyst has no analysis
+                    // Runs off the main thread via a Web Worker (with a
+                    // synchronous fallback) so 1000 simulations per analyst
+                    // never block the debate UI.
+                    for (const [index, settled] of settledResults.entries()) {
+                        if (settled.status !== 'fulfilled') continue; // failed analyst has no analysis
                         const providerName = enabledProviders[index]?.name || `Unknown-${index}`;
                         const analysis = settled.value?.analysis;
 
@@ -871,7 +874,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
                         if (!analysis) {
                             console.warn(`[PerAI-MonteCarlo] ${providerName} - Missing analysis object`);
-                            return;
+                            continue;
                         }
 
                         // Validate specific fields
@@ -881,7 +884,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
                         if (hasEntry && hasSL && hasTP) {
                             try {
-                                const mcResult = runMonteCarloForSetup({
+                                const mcResult = await runMonteCarloForSetupAsync({
                                     direction: analysis.direction,
                                     entryPoints: analysis.entryPoints,
                                     stopLoss: analysis.stopLoss,
@@ -902,7 +905,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                         } else {
                             console.warn(`[PerAI-MonteCarlo] ${providerName} - Skipped (Missing components: Entry=${hasEntry}, SL=${hasSL}, TP=${hasTP})`);
                         }
-                    });
+                    }
 
                     // Store per-AI Monte Carlo results
                     if (perAIMC.length > 0) {
@@ -1325,7 +1328,11 @@ const result = await cachedAnalyzeTradingView(
             }
 
             if (error.status === 429 || (error.message && error.message.includes('Too Many Requests'))) return setIsRateLimited(true);
-            updateMessages(prev => [...prev, { id: `err-${Date.now()}`, role: MessageRole.SYSTEM, createdAt: new Date().toISOString(), text: error instanceof Error ? error.message : "An unknown error occurred." }]);
+            // Sanitize the fallback: never leak long key-like tokens (API keys)
+            // and cap length so internal SDK errors stay readable but bounded.
+            const rawMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+            const safeMessage = rawMessage.replace(/\b[A-Za-z0-9_-]{24,}\b/g, '***').slice(0, 500);
+            updateMessages(prev => [...prev, { id: `err-${Date.now()}`, role: MessageRole.SYSTEM, createdAt: new Date().toISOString(), text: safeMessage }]);
         } finally {
             if (analysisAbortController.current === currentAbortController) {
                 setLoadingMessage(null);

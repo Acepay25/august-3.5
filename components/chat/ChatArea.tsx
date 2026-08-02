@@ -35,6 +35,9 @@ interface ChatAreaProps {
     setIsLivePostMortemVisible: (val: boolean) => void;
     handleCancelAnalysis: () => void;
     onDeleteMessages: (ids: string[]) => void;
+    // First-run onboarding: true when at least one provider is ready to call.
+    hasReadyProviders: boolean;
+    onOpenSettings?: () => void;
 
     // ChatInput Props
     images: ImageMetadata[];
@@ -110,6 +113,8 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     setIsLivePostMortemVisible,
     handleCancelAnalysis,
     onDeleteMessages,
+    hasReadyProviders,
+    onOpenSettings,
     // ChatInput Props
     images,
     removeImage,
@@ -361,6 +366,28 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 </div>
             ) : (
                 <>
+                    {/* First-run onboarding: no providers configured yet */}
+                    {!hasReadyProviders && messages.length === 0 && (
+                        <div className="absolute bottom-[230px] lg:bottom-[285px] left-0 right-0 px-3 sm:px-4 lg:px-0 z-10 lg:w-full lg:max-w-3xl lg:mx-auto pointer-events-none">
+                            <div className="pointer-events-auto glass rounded-2xl border border-white/10 p-4 sm:p-5 animate-fade-in">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex-1">
+                                        <h3 className="text-sm font-bold text-zinc-100">Connect an AI provider to start analyzing</h3>
+                                        <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
+                                            August uses your own API keys — add a provider (Gemini, OpenAI, Groq, DeepSeek…)
+                                            in Settings to enable ensemble debates and chart analysis.
+                                        </p>
+                                    </div>
+                                    <button
+                                        onClick={onOpenSettings}
+                                        className="shrink-0 bg-zinc-100 hover:bg-zinc-200 text-zinc-950 font-bold text-xs px-4 py-2.5 rounded-xl transition-colors"
+                                    >
+                                        Open Settings
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                     {/* Quick Action Chips - positioned above ChatInput */}
                     <div className="absolute bottom-[140px] lg:bottom-[180px] left-0 right-0 px-3 sm:px-4 lg:px-0 pointer-events-none z-10 lg:w-full lg:max-w-3xl lg:mx-auto">
                         <div className="w-full pointer-events-auto">

@@ -41,6 +41,18 @@ const OutcomeBadge: React.FC<{ outcome: TradeOutcome }> = ({ outcome }) => {
     );
 };
 
+/**
+ * Extract the first IF/THEN learning rule from a post-mortem text so it can
+ * be surfaced on the trade card (the learning loop the app already generates).
+ */
+const extractIfThenRule = (text: string | undefined): string | null => {
+    if (!text) return null;
+    const match = text.match(/IF\s+([^.]{5,220}?)\s+THEN\s+([^.]{5,220}?)[.\n]/i);
+    if (!match) return null;
+    const rule = `IF ${match[1].trim()} THEN ${match[2].trim()}`;
+    return rule.length > 240 ? rule.slice(0, 240) + '…' : rule;
+};
+
 const TradeLogRow: React.FC<{
     trade: LoggedTrade;
     onToggle: () => void;
@@ -247,6 +259,16 @@ const TradeLogRow: React.FC<{
                         )}
 
                         {correctedEntry && <div className="col-span-2 bg-yellow-500/10 p-2 rounded border border-yellow-500/20 text-yellow-200 font-medium">Corrected Entry: {correctedEntry}</div>}
+
+                        {(() => {
+                            const rule = extractIfThenRule(postMortem);
+                            return rule ? (
+                                <div className="col-span-2 bg-zinc-800/60 border border-zinc-600/40 rounded-lg px-3 py-2">
+                                    <span className="text-[10px] uppercase font-bold tracking-widest text-zinc-400">Rule</span>
+                                    <p className="text-xs text-zinc-200 mt-0.5 leading-relaxed">{rule}</p>
+                                </div>
+                            ) : null;
+                        })()}
 
                         {postMortem && (
                             <div className="col-span-2 mt-2">

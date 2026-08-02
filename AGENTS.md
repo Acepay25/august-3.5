@@ -4,192 +4,167 @@ This file contains guidelines and commands for agentic coding agents working in 
 
 ## Project Overview
 
-August 3.5 is a React + TypeScript trading analysis application that uses multiple AI providers to deliver trading insights, pattern recognition, and post-trade analysis. The app features ensemble AI debates, accuracy mode validation, hybrid intelligence with real-time market data, and comprehensive trade logging with learning capabilities.
+August 3.5 is a React + TypeScript trading analysis application that uses multiple AI
+providers to deliver trading insights, pattern recognition, and post-trade analysis.
+The app features ensemble AI debates, accuracy mode validation, hybrid intelligence with
+real-time market data, comprehensive trade logging with learning capabilities, and an
+Electron desktop shell (with Capacitor for mobile). Code lives at the repository root
+(no `src/` directory).
 
 ## Build Commands
 
 ```bash
-# Development
 npm run dev                 # Start development server on port 3000
-
-# Build & Deploy
-npm run build              # Build for production
-npm run preview            # Preview production build locally
-
-# No test framework configured
-# No linting configured
-# No type checking configured
+npm run build               # tsc --noEmit && vite build (production)
+npm run preview             # Preview production build locally
+npm run typecheck           # tsc --noEmit
+npm run test                # vitest run
+npm run test:watch          # vitest watch mode
+npm run lint                # eslint (errors only; warnings are tolerated)
+npm run electron:dev        # Vite dev server + Electron window
+npm run electron:build      # Build + package Windows installer
+npm run electron:release    # Build + publish GitHub release (via release.yml on tag push)
 ```
+
+CI (`.github/workflows/release.yml`) runs `tsc`, `vitest`, `vite build`, then
+`electron-builder --publish always` whenever a `v*` tag is pushed.
 
 ## Project Structure
 
 ```
-src/
-├── components/          # React UI components
-├── services/           # AI provider integrations & business logic
-├── utils/              # Helper functions and utilities
-├── constants/          # Configuration constants
-├── types.ts            # TypeScript type definitions
-└── App.tsx             # Main application component
+├── App.tsx                 # Main application component (large — split work welcome)
+├── components/             # React UI components (flat, one dir per domain)
+├── hooks/                  # Custom hooks (useAnalysisPipeline, useTradeLogging, …)
+├── services/               # AI provider integration & business logic
+│   ├── providers/          # GenericProviderService + GenericAnalysisService (the only
+│   │                       #   provider clients — legacy per-provider services were removed)
+│   ├── analysis/           # Technical analysis, Monte Carlo (+ web worker), backtest data
+│   ├── backtesting/        # Backtesting, model performance, live backtest
+│   ├── learning/           # Pattern memory, rules, insights, global memory
+│   ├── ui/                 # Autopilot, debates, price alerts, share-image generation
+│   └── infrastructure/     # SQLite, Preferences, ProviderConfigService, backups
+├── constants/              # models, prompts (per-domain files)
+├── schemas/                # zod boundary schemas (tradeAnalysis, learning)
+├── types/                  # TypeScript types (analysis, trade, provider, message, …)
+├── utils/                  # analysisUtils, sanitizers, jsonUtils, providerUtils, …
+├── tests/                  # Vitest suites (incl. debate pipeline + financial math)
+└── electron/               # main.cjs + preload.cjs (desktop shell, safeStorage, auto-update)
 ```
+
+## Providers are runtime-configured (dynamic migration)
+
+There are NO hardcoded provider/model constants anymore. Providers are configured at
+runtime by the user (Settings → Providers) and stored in Preferences
+(`provider_configs_v1`) via `services/infrastructure/ProviderConfigService.ts`:
+
+- `ProviderConfig.id` is a string (`'gemini'`, `'custom-1720000000'`, …). `AIProvider`
+  is kept only as a legacy const object of built-in ids.
+- Everything resolves through `utils/providerUtils.ts` (`getFirstReadyProvider`,
+  `buildModelIdToName`, `buildProviderNameToId`) and `ProviderConfigService.getReadyProviders`.
+- All AI calls go through `services/providers/GenericProviderService.ts` (3 API formats:
+  chat_completions / messages / responses; retry + 120s timeout built in) and
+  `services/providers/GenericAnalysisService.ts` (analysis, post-mortem, vision, memory).
+- Analysis/journal data carries `modelsUsed: Record<providerId, modelId>`; legacy
+  per-provider fields (`geminiModelUsed`, …) are READ-ONLY fallbacks for historical rows.
+- On desktop, API keys are encrypted at rest via Electron `safeStorage` (bridge in
+  `electron/preload.cjs` → `ProviderConfigService` encrypts on save, decrypts on load;
+  web/Capacitor keep plaintext).
 
 ## Code Style Guidelines
 
 ### TypeScript & Types
-- Use strict TypeScript - all functions must have return types
-- Import types from `types.ts` - don't redefine common types
-- Use interfaces for object shapes, enums for constants
-- Prefer union types over enums for simple string constants
-- Use generic types where appropriate (`<T>`, `<K extends string>`)
+- `strict: true` — all functions must have return types
+- Import types from `types/` — don't redefine common types
+- Interfaces for object shapes, unions for simple string constants
+- zod schemas in `schemas/` for AI-boundary validation (lenient coercion +
+  semantic fixups live in `schemas/tradeAnalysis.ts`)
 
 ### Import Organization
 ```typescript
 // 1. React & UI libraries
 import React, { useState, useEffect } from 'react';
-import { VirtuosoHandle } from 'react-virtuoso';
 
 // 2. Internal types (always first)
-import { Message, TradeAnalysis, AIProvider } from './types';
+import { Message, TradeAnalysis } from './types';
 
 // 3. Internal services (alphabetical)
-import * as openaiService from './services/openaiService';
 import * as dbService from './services/dbService';
+import { ProviderConfigService } from './services/infrastructure/ProviderConfigService';
 
 // 4. Internal components (alphabetical)
-import { Header } from './components/Header';
-import { ChatArea } from './components/ChatArea';
+import { ChatArea } from './components/chat/ChatArea';
 
 // 5. Utilities (alphabetical)
 import { sanitizeAIResponse } from './utils/sanitizers';
-import { constructOptimizedContext } from './utils/memoryUtils';
 ```
 
 ### Component Patterns
-- Use functional components with hooks
-- Define props interfaces separately: `interface ComponentProps { ... }`
-- Use `React.FC<ComponentProps>` type annotation
-- Extract complex logic into custom hooks or services
-- Use memo for performance-critical components: `React.memo(Component)`
+- Functional components with hooks; `interface ComponentProps { … }`
+- Extract complex logic into custom hooks (`hooks/`) or services
+- `React.memo` for performance-critical components
 
 ### State Management
-- Use `useState` for simple local state
-- Use `useReducer` for complex state logic
-- Use `useCallback` for event handlers to prevent unnecessary re-renders
-- Use `useMemo` for expensive computations
-- Store refs for values that don't trigger re-renders: `const messagesRef = useRef<Message[]>([])`
+- `useState` for simple local state; `useCallback` for event handlers
+- `useMemo` for expensive computations; refs for non-render values
 
 ### Error Handling
-- Always wrap async operations in try-catch blocks
-- Use specific error types: `throw new Error("Descriptive message")`
-- Log errors with context: `console.error("ServiceName: operation failed", error)`
+- Wrap async operations in try/catch; log with context
 - Return fallback values for non-critical failures
-- Use error boundaries for React component errors
+- Provider errors are mapped to user-safe messages in `GenericProviderService`
+  (`toFriendlyProviderError`) — never surface raw API error bodies
 
 ### Service Layer Architecture
-- Each AI provider has its own service file: `openaiService.ts`, `geminiService.ts`
-- Export functions with consistent naming: `analyzeTradingView`, `summarizeChartImage`
-- Use response format objects for structured outputs
-- Sanitize all AI responses before using: `sanitizeAIResponse()`, `sanitizeTradeAnalysis()`
-- Handle rate limits and API errors gracefully
+- `GenericAnalysisService` is the single analysis service (parameterized by `ProviderConfig`)
+- Sanitize all AI responses: `sanitizeAIResponse()`, `sanitizeTradeAnalysis()`
+- Validate AI JSON at boundaries with `schemas/tradeAnalysis.ts`
 
 ### Database & Persistence
-- Use SQLite via Capacitor for native, IndexedDB for web
-- All database operations go through `dbService`
-- Use type-safe interfaces for all stored data
-- Implement data integrity checks and migrations
-- Create backups before major data operations
-
-### Constants & Configuration
-- Store AI model definitions in `constants/models.ts`
-- Use enums for provider names and message roles
-- Keep API keys and secrets in environment variables
-- Define default values for all configurable options
+- SQLite via Capacitor for native, IndexedDB for web (through `SqliteService`)
+- Preferences (`@capacitor/preferences`, localStorage fallback) for settings/keys
+- Backups before major data operations (`BackupService`)
 
 ### Naming Conventions
-- Components: PascalCase (`Header`, `ChatArea`)
-- Functions: camelCase (`analyzeTradingView`, `sanitizeAIResponse`)
-- Variables: camelCase (`activeConversation`, `selectedModel`)
-- Constants: UPPER_SNAKE_CASE (`DEFAULT_FRAMEWORKS`, `MAX_TRADE_SUMMARIES`)
+- Components: PascalCase; functions/variables: camelCase; constants: UPPER_SNAKE_CASE
 - Files: camelCase for services/utils, PascalCase for components
 
-### Code Organization
-- Keep files focused on single responsibility
-- Extract reusable logic into utility functions
-- Use barrel exports for service modules: `export * from './openaiService'`
-- Group related functionality in folders
-- Use index files for clean imports
-
 ### Performance Guidelines
-- Lazy load heavy components with `React.lazy()`
-- Use virtualization for long lists (react-virtuoso)
-- Implement debouncing for user inputs
-- Cache API responses when appropriate
-- Optimize re-renders with memo and useMemo
+- Lazy-load heavy components with `React.lazy()` (see App.tsx imports)
+- Virtualize long lists (react-virtuoso)
+- Monte Carlo runs in a Web Worker (`services/analysis/monteCarlo.worker.ts`) with
+  synchronous fallback (`runMonteCarloForSetupAsync`)
+- Cache AI responses (`services/infrastructure/responseCache`)
 
 ### Security Best Practices
-- Never commit API keys or secrets
-- Sanitize all user inputs and AI responses
-- Use environment variables for configuration
-- Validate data from external sources
-- Implement proper error boundaries
-
-## AI Provider Integration
-
-When working with AI services:
-1. Always check if the provider is enabled before making requests
-2. Handle rate limits and quota errors gracefully
-3. Use the correct model ID from `constants/models.ts`
-4. Implement proper error handling and fallbacks
-5. Sanitize responses before using in UI
+- Never commit API keys; `.env.local` is gitignored (and no longer read at runtime —
+  keys are user-configured in-app)
+- Sanitize AI responses before rendering
+- Validate data from external sources (zod at boundaries)
 
 ## Testing Notes
 
-This project doesn't have automated tests configured. When adding features:
-1. Test manually in development mode
-2. Verify functionality across different AI providers
-3. Check data persistence and integrity
-4. Test error scenarios and edge cases
+`npm run test` (Vitest, jsdom). Key suites:
+- `tests/debateFlow.test.ts` — ensemble debate generators with a mocked transport
+- `tests/financialMath.test.ts` — leverage math, probability clamping
+- `tests/tradeAnalysisSchema.test.ts` — AI-boundary schema coercion
+- `tests/outcomeAutopilot.test.ts` — TP/SL auto-detection
+- `tests/providerConfigService.test.ts` — provider CRUD (mocked Preferences)
 
-## Common Patterns
-
-### Async Service Calls
-```typescript
-const result = await service.operation(params);
-if (!result) throw new Error("Operation failed");
-return sanitizeResponse(result);
-```
-
-### State Updates
-```typescript
-updateActiveConversation(conv => ({
-  ...conv,
-  messages: updater(conv.messages)
-}));
-```
-
-### Error Handling
-```typescript
-try {
-  const result = await operation();
-  return result;
-} catch (error) {
-  console.error("Context: operation failed", error);
-  return fallbackValue;
-}
-```
+When adding features: add/extend tests, verify in dev mode (`npm run dev`), then
+`npm run typecheck && npm run test && npm run build`.
 
 ## Environment Variables
 
-Required environment variables (set in `.env.local`):
-- `GEMINI_API_KEY` - Google Gemini API key
-- `DEEPSEEK_API_KEY` - DeepSeek API key
-- `GROQ_API_KEY` - Groq API key
-- `ZHIPU_API_KEY` - Zhipu AI API key
+No API keys are required at build or runtime — providers are configured in-app
+(Settings → Providers) and stored in Preferences (encrypted on desktop).
+
+Optional build-time variables:
+- `PORT` — dev server port for `electron:dev` (default 3000)
 
 ## Development Notes
 
-- The app uses Vite for fast development and building
-- Capacitor is used for native mobile deployment
-- React 19 with strict mode enabled
-- TypeScript with strict type checking
-- No CSS framework - uses Tailwind CSS classes directly
+- Vite 7 + Tailwind v4 (monochrome zinc theme — color tokens are remapped to gray
+  in `index.css` `@theme`; do not reintroduce colored utilities)
+- React 19 strict mode; TypeScript strict
+- Electron shell in `electron/` (custom `app://` protocol for production, safeStorage,
+  auto-updater); Capacitor config for mobile
+- The UI is intentionally black/gray: avoid colored text/borders/gradients

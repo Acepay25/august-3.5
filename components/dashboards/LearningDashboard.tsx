@@ -122,7 +122,7 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades }) 
             <div className="grid grid-cols-1 gap-3 sm:gap-4">
                 {/* Best Coins */}
                 <StatCard
-                    title=" Best Coins"
+                    title="Best Coins"
                     items={profile.bestCoins.slice(0, 4).map(c => ({
                         name: c.coin,
                         value: `${c.winRate}%`,
@@ -133,7 +133,7 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades }) 
 
                 {/* Best Patterns */}
                 <StatCard
-                    title=" Best Patterns"
+                    title="Best Patterns"
                     items={profile.bestPatterns.slice(0, 4).map(p => ({
                         name: p.pattern,
                         value: `${p.winRate}%`,
@@ -144,7 +144,7 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades }) 
 
                 {/* Best Directions */}
                 <StatCard
-                    title="↗ Direction Performance"
+                    title="Direction Performance"
                     items={profile.bestDirections.map(d => ({
                         name: d.direction,
                         value: `${d.winRate}%`,
@@ -155,7 +155,7 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades }) 
 
                 {/* Market Regimes */}
                 <StatCard
-                    title=" Regime Performance"
+                    title="Regime Performance"
                     items={profile.bestRegimes.map(r => ({
                         name: r.regime,
                         value: `${r.winRate}%`,
@@ -169,7 +169,7 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades }) 
             {profile.worstSetups.length > 0 && (
                 <div className="bg-red-950/20 rounded-xl border border-red-500/20 p-3 sm:p-4">
                     <h4 className="text-[10px] sm:text-xs font-bold text-red-400 uppercase tracking-wider mb-2 sm:mb-3 flex items-center gap-2">
-                        <span></span> Setups to Avoid
+                        Setups to Avoid
                     </h4>
                     <div className="space-y-2">
                         {profile.worstSetups.slice(0, 4).map((s, i) => (
@@ -182,11 +182,11 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades }) 
                 </div>
             )}
 
-            {/* Confidence Calibration */}
+            {/*Confidence Calibration */}
             {profile.confidenceAccuracy.length > 0 && (
                 <div className="bg-zinc-900/50 rounded-xl border border-white/5 p-3 sm:p-4">
                     <h4 className="text-[10px] sm:text-xs font-bold text-zinc-500 uppercase tracking-wider mb-3 sm:mb-4">
-                         Confidence Calibration
+                        Confidence Calibration
                     </h4>
                     <div className="space-y-4">
                         {profile.confidenceAccuracy

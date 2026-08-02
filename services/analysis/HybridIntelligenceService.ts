@@ -71,6 +71,7 @@ import {
 } from '../../constants/prompts';
 import {
     runSimulation,
+    runSimulationAsync,
     generateMonteCarloPromptInjection,
     MonteCarloResult,
     SimulationConfig
@@ -862,6 +863,47 @@ export const runMonteCarloForSetup = (
     hybridData: HybridDataPacket
 ): MonteCarloResult | null => {
     try {
+        const config = buildMonteCarloConfig(analysis, hybridData);
+        return config ? runSimulation(config) : null;
+    } catch (error) {
+        console.error('[MonteCarloForSetup] Simulation failed:', error);
+        return null;
+    }
+};
+
+/**
+ * Run Monte Carlo for a setup in a Web Worker (non-blocking) when workers are
+ * available; falls back to the synchronous path. Identical inputs/outputs to
+ * runMonteCarloForSetup — the pipeline uses this so 1000 simulations per
+ * analyst never block the UI during a debate.
+ */
+export const runMonteCarloForSetupAsync = async (
+    analysis: Parameters<typeof runMonteCarloForSetup>[0],
+    hybridData: HybridDataPacket
+): Promise<MonteCarloResult | null> => {
+    try {
+        const config = buildMonteCarloConfig(analysis, hybridData);
+        return config ? await runSimulationAsync(config) : null;
+    } catch (error) {
+        console.error('[MonteCarloForSetup] Async simulation failed:', error);
+        return null;
+    }
+};
+
+/**
+ * Parse a trade setup + hybrid data into a SimulationConfig.
+ * Shared by the synchronous and worker-backed Monte Carlo paths so the
+ * parsing/validation logic exists exactly once.
+ */
+const buildMonteCarloConfig = (
+    analysis: {
+        direction?: string;
+        entryPoints?: { price?: string }[];
+        stopLoss?: string;
+        takeProfit?: { price?: string }[];
+    },
+    hybridData: HybridDataPacket
+): SimulationConfig | null => {
         // Debug: Log the raw input
         console.log('[MonteCarloForSetup] Raw input:', {
             direction: analysis.direction,
@@ -962,8 +1004,7 @@ export const runMonteCarloForSetup = (
             trendBias = direction === 'Short' ? 0.3 : -0.3;
         }
 
-        // Run simulation
-        const result = runSimulation({
+        return {
             entry,
             stopLoss,
             takeProfits: tps,
@@ -974,16 +1015,8 @@ export const runMonteCarloForSetup = (
             numSimulations: 1000,
             maxSteps: 100,
             marketRegime: hybridData.regime?.regime
-        });
-
-        console.log(`[MonteCarloForSetup] Simulation complete: WinRate=${result.winRate}%, EV=${result.expectedValue}%`);
-
-        return result;
-    } catch (error) {
-        console.error('[MonteCarloForSetup] Simulation failed:', error);
-        return null;
-    }
-};
+        };
+    };
 
 /**
  * Generate Monte Carlo prompt injection for AI context

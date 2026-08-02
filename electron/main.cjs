@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, protocol, net } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, protocol, net, safeStorage } = require('electron');
 const path = require('path');
 const { pathToFileURL } = require('url');
 const { autoUpdater } = require('electron-updater');
@@ -175,6 +175,33 @@ function setupAutoUpdater() {
     ipcMain.handle('update:get-status', () => updateInfo);
 
     ipcMain.handle('app:get-version', () => app.getVersion());
+
+    // =========================================================================
+    // SECRET ENCRYPTION — API keys at rest
+    // =========================================================================
+    // The renderer stores provider API keys; on desktop we encrypt them with
+    // the OS keychain (DPAPI on Windows, Keychain on macOS) via safeStorage.
+    // Payloads are prefixed "enc:v1:" so the renderer can tell encrypted
+    // values from legacy plaintext and fall back gracefully when unavailable.
+    ipcMain.handle('crypto:encrypt', (_event, plaintext) => {
+        try {
+            if (typeof plaintext !== 'string' || !plaintext || !safeStorage.isEncryptionAvailable()) return null;
+            return 'enc:v1:' + safeStorage.encryptString(plaintext).toString('base64');
+        } catch (err) {
+            console.warn('[main] crypto:encrypt failed:', err);
+            return null;
+        }
+    });
+
+    ipcMain.handle('crypto:decrypt', (_event, payload) => {
+        try {
+            if (typeof payload !== 'string' || !payload.startsWith('enc:v1:')) return null;
+            return safeStorage.decryptString(Buffer.from(payload.slice(7), 'base64'));
+        } catch (err) {
+            console.warn('[main] crypto:decrypt failed:', err);
+            return null;
+        }
+    });
 }
 
 // =============================================================================
