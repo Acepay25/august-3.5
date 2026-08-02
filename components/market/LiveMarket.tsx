@@ -809,7 +809,7 @@ ${JSON.stringify(marketData, null, 2)}
                                         }`}>
                                         <span className={`font-bold text-xs ${marketBias === 'bullish' ? 'text-emerald-400' : 'text-rose-400'
                                             }`}>
-                                            {marketBias === 'bullish' ? '🐂 BULLISH' : '🐻 BEARISH'}
+                                            {marketBias === 'bullish' ? '▲ BULLISH' : '▼ BEARISH'}
                                         </span>
                                     </div>
                                 )}
@@ -883,7 +883,7 @@ ${JSON.stringify(marketData, null, 2)}
                             {marketInsights.observations.length > 0 && (
                                 <div className="bg-zinc-800/50 rounded-xl p-3 border border-white/5">
                                     <div className="flex items-center gap-2 mb-2">
-                                        <span className="text-base">👁️</span>
+                                        <span className="text-base"></span>
                                         <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Key Observations</span>
                                     </div>
                                     <ul className="space-y-1.5">
@@ -928,7 +928,7 @@ ${JSON.stringify(marketData, null, 2)}
                                     <ul className="space-y-1.5">
                                         {marketInsights.riskFactors.map((risk, i) => (
                                             <li key={i} className="flex items-start gap-2 text-sm text-zinc-300">
-                                                <span className="text-amber-400 mt-1">⚠️</span>
+                                                <span className="text-amber-400 mt-1"></span>
                                                 <span>{risk}</span>
                                             </li>
                                         ))}

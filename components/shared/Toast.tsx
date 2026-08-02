@@ -109,7 +109,7 @@ const ToastItem: React.FC<{ toast: Toast; onDismiss: () => void }> = ({ toast, o
     const iconStyles = {
         success: '✓',
         error: '✕',
-        warning: '⚠',
+        warning: '!',
         info: 'ℹ',
     };
 

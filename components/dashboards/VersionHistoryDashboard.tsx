@@ -361,7 +361,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                         <div>
                             <h1 className="text-xl font-medium text-white tracking-tight">System Intelligence</h1>
                             <div className="flex items-center gap-2 text-xs text-zinc-500 font-mono mt-0.5">
-                                <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span>
+                                <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(212,212,216,0.5)]"></span>
                                 v6.0.0 Live
                             </div>
                         </div>

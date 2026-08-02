@@ -63,7 +63,7 @@ export const QuickActionChips: React.FC<QuickActionChipsProps> = ({
                         disabled={isDisabled}
                         className="flex items-center justify-center lg:justify-start gap-2 px-4 py-2.5 lg:py-3 bg-zinc-800/60 hover:bg-zinc-700/60 border border-white/10 hover:border-purple-500/30 rounded-full lg:rounded-xl whitespace-nowrap text-sm font-medium text-zinc-300 hover:text-white transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shrink-0 lg:w-full"
                     >
-                        <span>🔬</span>
+                        <span></span>
                         <span>Analytics</span>
                     </button>
                     <button

@@ -34,10 +34,10 @@ const PROVIDER_DISPLAY_NAMES: Record<AIProvider, string> = {
 
 // Trading style options
 const TRADING_STYLES: { value: TradingStyle; label: string; emoji: string; description: string }[] = [
-  { value: 'position', label: 'Position', emoji: '🏛️', description: 'Daily/Weekly focus' },
-  { value: 'swing', label: 'Swing', emoji: '🔄', description: '4H/Daily focus' },
-  { value: 'scalp', label: 'Scalp', emoji: '⚡', description: '1m/5m/15m focus' },
-  { value: 'auto', label: 'Auto', emoji: '🤖', description: 'AI detects best' },
+  { value: 'position', label: 'Position', emoji: '', description: 'Daily/Weekly focus' },
+  { value: 'swing', label: 'Swing', emoji: '', description: '4H/Daily focus' },
+  { value: 'scalp', label: 'Scalp', emoji: '', description: '1m/5m/15m focus' },
+  { value: 'auto', label: 'Auto', emoji: '', description: 'AI detects best' },
 ];
 
 export const AnalystLensSettings: React.FC<Props> = ({ config, enabledProviders, onChange }) => {
@@ -80,7 +80,7 @@ export const AnalystLensSettings: React.FC<Props> = ({ config, enabledProviders,
       {/* Header with toggle */}
       <div className="lens-header">
         <div className="lens-title">
-          <span className="lens-icon">🎭</span>
+          <span className="lens-icon"></span>
           <h4>Analyst Lenses</h4>
         </div>
         <label className="toggle-switch">
@@ -115,16 +115,16 @@ export const AnalystLensSettings: React.FC<Props> = ({ config, enabledProviders,
           ))}
         </div>
         <div className="style-description">
-          {config.tradingStyle === 'swing' && '📈 Analyzing 15m/1H/4H for swing entries'}
-          {config.tradingStyle === 'scalp' && '⚡ Analyzing 1m/5m/15m for quick scalps'}
-          {config.tradingStyle === 'auto' && '🤖 AI detects best style from market conditions'}
+          {config.tradingStyle === 'swing' && ' Analyzing 15m/1H/4H for swing entries'}
+          {config.tradingStyle === 'scalp' && ' Analyzing 1m/5m/15m for quick scalps'}
+          {config.tradingStyle === 'auto' && ' AI detects best style from market conditions'}
         </div>
       </div>
 
       {/* Validation error banner */}
       {validationError && (
         <div className="lens-error-banner">
-          ⚠️ {validationError}
+           {validationError}
         </div>
       )}
 
@@ -183,7 +183,7 @@ export const AnalystLensSettings: React.FC<Props> = ({ config, enabledProviders,
           </div>
           {enabledProviders.length < 3 && (
             <div className="info-warning">
-              ⚠️ Enable at least 3 AI providers to fully utilize analyst lenses.
+               Enable at least 3 AI providers to fully utilize analyst lenses.
             </div>
           )}
         </div>

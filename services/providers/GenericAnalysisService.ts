@@ -198,7 +198,7 @@ export async function analyzeTradingView(
         // Standard mode — full master prompt with formatting rules and lens support.
         const basePrompt = rolePrompt ? LENS_MODE_BASE_PROMPT : MASTER_ANALYSIS_PROMPT;
 
-        systemPrompt = `${rolePrompt ? '🎭 **SPECIALIZED ANALYST ROLE ACTIVE**\n\n' + rolePrompt + '\n\n---\n\n' : ''}${basePrompt}
+        systemPrompt = `${rolePrompt ? ' **SPECIALIZED ANALYST ROLE ACTIVE**\n\n' + rolePrompt + '\n\n---\n\n' : ''}${basePrompt}
 
       ${rolePrompt ? '' : visionDeepDive}
 
@@ -313,7 +313,7 @@ export async function analyzeTradingView(
       Invalidation conditions: [Specific conditions]
       Re-entry conditions: [If applicable]
 
-      😈 DEVIL'S ADVOCATE ANALYSIS (MANDATORY)
+       DEVIL'S ADVOCATE ANALYSIS (MANDATORY)
 
       BEAR CASE / BULL CASE AGAINST THIS TRADE:
       1. Technical reason: [Why this could fail]
@@ -331,7 +331,7 @@ export async function analyzeTradingView(
 
       DEVIL'S RISK SCORE: [X]/100
 
-      🚫 TRADE INVALIDATION THESIS (MANDATORY)
+       TRADE INVALIDATION THESIS (MANDATORY)
 
       1. Critical Invalidation Level: This trade is INVALID if price closes [above/below] $[X] on the [timeframe] chart.
       2. Time Invalidation: If entry is not triggered within [X] hours, re-evaluate the thesis.
@@ -339,7 +339,7 @@ export async function analyzeTradingView(
       4. Counter-Signal Watch: Would flip to [Long/Short] if: [Condition]
       5. Early Exit Triggers: Consider early exit if: [Condition]
 
-      📊 CORRELATION & MACRO AWARENESS
+       CORRELATION & MACRO AWARENESS
 
       BTC CORRELATION CHECK: [Analysis of BTC impact]
       MACRO CONSIDERATIONS: [Weekend/events/volatility factors]
@@ -413,11 +413,11 @@ export async function analyzeTradingView(
         userPromptText = `${formattedPrompt}${imageSummaryContext}\n\n${memoryContext}\n\nOUTPUT VALID JSON ONLY.`;
     } else {
         const patternMemoryContext = finalTradeSummary
-            ? truncateTextToTokens(`\n\n**📊 PATTERN MEMORY (SYNTHESIS) - MANDATORY REFERENCE:**\nThe following is a synthesis of your recent trading performance and patterns. You MUST reference this data for Section 4 (Pattern Matching):\n${finalTradeSummary}\n`, 600)
-            : "\n\n**📊 PATTERN MEMORY:** No synthesis available yet.\n";
+            ? truncateTextToTokens(`\n\n** PATTERN MEMORY (SYNTHESIS) - MANDATORY REFERENCE:**\nThe following is a synthesis of your recent trading performance and patterns. You MUST reference this data for Section 4 (Pattern Matching):\n${finalTradeSummary}\n`, 600)
+            : "\n\n** PATTERN MEMORY:** No synthesis available yet.\n";
         const recentInsightsContext = recentInsights
-            ? truncateTextToTokens(`\n\n**📊 RECENT INSIGHTS (INDIVIDUAL) - MANDATORY REFERENCE:**\nThe following are specific recent trades for detailed comparison:\n${recentInsights}\n`, 600)
-            : "\n\n**📊 RECENT INSIGHTS:** No recent trade insights available.\n";
+            ? truncateTextToTokens(`\n\n** RECENT INSIGHTS (INDIVIDUAL) - MANDATORY REFERENCE:**\nThe following are specific recent trades for detailed comparison:\n${recentInsights}\n`, 600)
+            : "\n\n** RECENT INSIGHTS:** No recent trade insights available.\n";
 
         if (isSmallContextModel(modelName)) {
             const effectiveSystemPrompt = COMPACT_ANALYSIS_PROMPT;
@@ -501,7 +501,7 @@ export async function conductPostMortem(
     const { correctedEntry, correctedStopLoss, correctedTakeProfit } = feedback ?? {};
     let analysisPrompt: string;
 
-    const postTradeContext = postTradeImageSummaries?.length ? `**⚠️ VERIFIED TRADE OUTCOME DATA (HIGHEST PRIORITY):**\n---\n${postTradeImageSummaries.join('\n\n---\n\n')}\n---\n` : '';
+    const postTradeContext = postTradeImageSummaries?.length ? `** VERIFIED TRADE OUTCOME DATA (HIGHEST PRIORITY):**\n---\n${postTradeImageSummaries.join('\n\n---\n\n')}\n---\n` : '';
     const tradeHistoryContext = finalTradeSummary ? `**PATTERN MEMORY LIBRARY (Historical Context):**\n${truncateTextToTokens(finalTradeSummary)}` : "No past trades logged.";
 
     const origEntry = previousMessage.analysis?.entryPoints?.[0]?.price || 'N/A';

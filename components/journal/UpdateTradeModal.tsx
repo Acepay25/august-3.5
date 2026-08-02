@@ -74,7 +74,7 @@ export const UpdateTradeModal: React.FC<{
                                 <div className="absolute inset-0 bg-cyan-500/10 animate-pulse" />
                             )}
                             <div className="flex items-start gap-4 relative z-10">
-                                <div className="text-3xl">{isCapturing ? '⏳' : '⚡'}</div>
+                                <div className="text-3xl">{isCapturing ? '⏳' : ''}</div>
                                 <div className="flex-1">
                                     <div className="font-bold text-cyan-300 group-hover:text-cyan-200 transition-colors flex items-center gap-2">
                                         {isCapturing ? 'Fetching Market Data...' : 'Auto-Capture Market Data'}

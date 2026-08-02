@@ -125,7 +125,7 @@ const StatusBadge: React.FC<{ stats: RollingWindowStats }> = ({ stats }) => {
     if (stats.isDemoted) {
         return (
             <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-500/20 border border-red-500/50">
-                <span className="text-red-400 text-xs font-medium">🔴 DEMOTED</span>
+                <span className="text-red-400 text-xs font-medium">DEMOTED</span>
             </div>
         );
     }
@@ -133,7 +133,7 @@ const StatusBadge: React.FC<{ stats: RollingWindowStats }> = ({ stats }) => {
     if (stats.coldStreakCount >= 2) {
         return (
             <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-yellow-500/20 border border-yellow-500/50">
-                <span className="text-yellow-400 text-xs font-medium">🟡 COOLING</span>
+                <span className="text-yellow-400 text-xs font-medium">COOLING</span>
             </div>
         );
     }
@@ -141,14 +141,14 @@ const StatusBadge: React.FC<{ stats: RollingWindowStats }> = ({ stats }) => {
     if (stats.hotStreakCount >= 3) {
         return (
             <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-500/20 border border-green-500/50">
-                <span className="text-green-400 text-xs font-medium">⚡ HOT</span>
+                <span className="text-green-400 text-xs font-medium">HOT</span>
             </div>
         );
     }
 
     return (
         <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-700/50 border border-zinc-600/50">
-            <span className="text-zinc-400 text-xs font-medium">🟢 STABLE</span>
+            <span className="text-zinc-400 text-xs font-medium">STABLE</span>
         </div>
     );
 };
@@ -291,7 +291,7 @@ const ColdStreakAlerts: React.FC<{ modelData: ModelCardData[] }> = ({ modelData 
     return (
         <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30">
             <h3 className="text-sm font-semibold text-red-400 mb-2 flex items-center gap-2">
-                ⚠️ Cold Streak Alerts
+                 Cold Streak Alerts
             </h3>
             <div className="space-y-1">
                 {demotedModels.map(m => (
@@ -364,7 +364,7 @@ const ModelPerformanceDashboard: React.FC<ModelPerformanceDashboardProps> = ({
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                    <span className="text-2xl">🧠</span>
+                    <span className="text-2xl"></span>
                     <div>
                         <h2 className="text-lg font-semibold text-white">AI Model Performance</h2>
                         <p className="text-xs text-zinc-500">
@@ -380,7 +380,7 @@ const ModelPerformanceDashboard: React.FC<ModelPerformanceDashboardProps> = ({
                         : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white'
                         }`}
                 >
-                    <span className={`inline-block ${isRefreshing ? 'animate-spin' : ''}`}>🔄</span>
+                    <span className={`inline-block ${isRefreshing ? 'animate-spin' : ''}`}></span>
                     {isRefreshing ? 'Refreshing...' : 'Refresh'}
                 </button>
             </div>
@@ -405,7 +405,7 @@ const ModelPerformanceDashboard: React.FC<ModelPerformanceDashboardProps> = ({
             {weights && modelData.length > 0 && (
                 <div className="p-4 rounded-xl bg-zinc-800/50 border border-zinc-700/50">
                     <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
-                        📊 Dynamic Weights
+                         Dynamic Weights
                         <span className="text-xs font-normal text-zinc-500">
                             (Confidence: {weights.confidence})
                         </span>
@@ -413,7 +413,7 @@ const ModelPerformanceDashboard: React.FC<ModelPerformanceDashboardProps> = ({
                     <WeightsChart weights={weights} enabledProviders={enabledProviders} />
                     {weights.dominantModel && (
                         <p className="text-xs text-violet-400 mt-3">
-                            ⭐ Dominant model for current context: {weights.dominantModel.toUpperCase()}
+                             Dominant model for current context: {weights.dominantModel.toUpperCase()}
                         </p>
                     )}
                 </div>

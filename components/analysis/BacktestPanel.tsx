@@ -127,7 +127,7 @@ const BacktestPanel: React.FC<BacktestPanelProps> = ({
                 setOutcomeValidation({
                     show: true,
                     intendedOutcome: selectedOutcome,
-                    message: `⚠️ Backtest shows the trade hit STOP LOSS, not Take Profit.\n\nAre you sure you want to log this as a WIN? This may have been a misclick.`
+                    message: ` Backtest shows the trade hit STOP LOSS, not Take Profit.\n\nAre you sure you want to log this as a WIN? This may have been a misclick.`
                 });
                 return;
             }
@@ -137,7 +137,7 @@ const BacktestPanel: React.FC<BacktestPanelProps> = ({
                 setOutcomeValidation({
                     show: true,
                     intendedOutcome: selectedOutcome,
-                    message: `⚠️ Backtest shows the trade hit TAKE PROFIT, not Stop Loss.\n\nAre you sure you want to log this as a LOSS? This may have been a misclick.`
+                    message: ` Backtest shows the trade hit TAKE PROFIT, not Stop Loss.\n\nAre you sure you want to log this as a LOSS? This may have been a misclick.`
                 });
                 return;
             }
@@ -149,7 +149,7 @@ const BacktestPanel: React.FC<BacktestPanelProps> = ({
                     setOutcomeValidation({
                         show: true,
                         intendedOutcome: selectedOutcome,
-                        message: `⚠️ Backtest shows the ENTRY was never hit.\n\nThis trade should be marked as "Skip" (Entry Not Hit) instead of ${selectedOutcome}.\n\nProceed anyway?`
+                        message: ` Backtest shows the ENTRY was never hit.\n\nThis trade should be marked as "Skip" (Entry Not Hit) instead of ${selectedOutcome}.\n\nProceed anyway?`
                     });
                     return;
                 } else {
@@ -157,7 +157,7 @@ const BacktestPanel: React.FC<BacktestPanelProps> = ({
                     setOutcomeValidation({
                         show: true,
                         intendedOutcome: selectedOutcome,
-                        message: `⚠️ Backtest shows the trade is still OPEN - neither TP nor SL was hit yet.\n\nAre you manually closing this trade as a ${selectedOutcome}?`
+                        message: ` Backtest shows the trade is still OPEN - neither TP nor SL was hit yet.\n\nAre you manually closing this trade as a ${selectedOutcome}?`
                     });
                     return;
                 }
@@ -218,12 +218,12 @@ const BacktestPanel: React.FC<BacktestPanelProps> = ({
                                 ) : backtestResult.outcome === 'WIN' ? (
                                     // WIN - show realized profit
                                     <span className="ml-2 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                                        +{backtestResult.currentPnlPercent}% PROFIT 🎯
+                                        +{backtestResult.currentPnlPercent}% PROFIT 
                                     </span>
                                 ) : backtestResult.outcome === 'LOSS' ? (
                                     // LOSS - show realized loss
                                     <span className="ml-2 px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">
-                                        {backtestResult.currentPnlPercent}% LOSS 💔
+                                        {backtestResult.currentPnlPercent}% LOSS 
                                     </span>
                                 ) : null
                             )}
@@ -298,7 +298,7 @@ const BacktestPanel: React.FC<BacktestPanelProps> = ({
                                 ? 'text-amber-400'
                                 : 'text-emerald-400'
                                 }`}>
-                                <span>{backtestResult.optimalEntry.improvement > 0.1 ? '⏱️' : '✅'}</span>
+                                <span>{backtestResult.optimalEntry.improvement > 0.1 ? '⏱' : ''}</span>
                                 Entry Timing
                             </div>
                             {backtestResult.optimalEntry.improvement > 0.1 ? (
@@ -310,7 +310,7 @@ const BacktestPanel: React.FC<BacktestPanelProps> = ({
                                         </span>
                                     </div>
                                     <div className="text-[9px] text-amber-400/70 mt-0.5">
-                                        💡 {backtestResult.optimalEntry.waitRecommendation}
+                                         {backtestResult.optimalEntry.waitRecommendation}
                                     </div>
                                 </>
                             ) : (
@@ -362,7 +362,7 @@ const BacktestPanel: React.FC<BacktestPanelProps> = ({
                     {hasMultipleEntries && (
                         <div className="mb-2 p-2 bg-zinc-800/50 rounded-lg border border-white/5">
                             <div className="text-[9px] uppercase font-bold text-zinc-500 mb-1.5 flex items-center gap-1">
-                                <span>📍</span> Select entries to backtest
+                                <span></span> Select entries to backtest
                             </div>
                             <div className="flex flex-wrap gap-1.5">
                                 {entryPoints.map((ep, idx) => (
@@ -397,7 +397,7 @@ const BacktestPanel: React.FC<BacktestPanelProps> = ({
                             className="flex-1 min-w-[60px] px-3 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
                             title="Run Backtest"
                         >
-                            {isBacktesting ? <LoadingIcon className="w-3 h-3" /> : <>📊 Test</>}
+                            {isBacktesting ? <LoadingIcon className="w-3 h-3" /> : <> Test</>}
                         </button>
                         {children}
                     </div>
@@ -417,7 +417,7 @@ const BacktestPanel: React.FC<BacktestPanelProps> = ({
                         className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider text-zinc-400 bg-zinc-800 hover:text-cyan-400 hover:bg-zinc-700 transition-colors disabled:opacity-50"
                         title="Run Backtest Simulation"
                     >
-                        {isBacktesting ? <LoadingIcon className="w-3 h-3" /> : '📊 Backtest'}
+                        {isBacktesting ? <LoadingIcon className="w-3 h-3" /> : ' Backtest'}
                     </button>
                 </div>
             )}

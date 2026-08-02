@@ -271,33 +271,33 @@ export function generateSuggestions(
 
     // R:R too low
     if (metrics.rrRatio < 1.2) {
-        suggestions.push('⚠️ R:R below 1.2 - consider tightening entry or widening target');
+        suggestions.push(' R:R below 1.2 - consider tightening entry or widening target');
     }
 
     // R:R is good
     if (metrics.rrRatio >= 2.0) {
-        suggestions.push('✅ R:R is excellent (2.0+)');
+        suggestions.push(' R:R is excellent (2.0+)');
     }
 
     // Risk too high
     if (metrics.leveragedRiskPercent > 5) {
-        suggestions.push(`⚠️ High leveraged risk (${metrics.leveragedRiskPercent}%) - consider reducing position or leverage`);
+        suggestions.push(` High leveraged risk (${metrics.leveragedRiskPercent}%) - consider reducing position or leverage`);
     }
 
     // Historical win rate check
     const historicalStats = calculateHistoricalWinRate(historicalMatches);
     if (historicalStats.total >= 3) {
         if (historicalStats.winRate >= 65) {
-            suggestions.push(`✅ Strong historical edge: ${historicalStats.winRate}% win rate on similar setups (${historicalStats.total} trades)`);
+            suggestions.push(` Strong historical edge: ${historicalStats.winRate}% win rate on similar setups (${historicalStats.total} trades)`);
         } else if (historicalStats.winRate < 40) {
-            suggestions.push(`⚠️ Weak historical performance: ${historicalStats.winRate}% win rate on similar setups - proceed with caution`);
+            suggestions.push(` Weak historical performance: ${historicalStats.winRate}% win rate on similar setups - proceed with caution`);
         }
     }
 
     // Check for losing streak pattern
     const recentLosses = historicalMatches.filter(m => m.trade.outcome === TradeOutcome.LOSS);
     if (recentLosses.length >= 3) {
-        suggestions.push('⚠️ Similar setups have recent losing streak - review pattern conditions');
+        suggestions.push(' Similar setups have recent losing streak - review pattern conditions');
     }
 
     return suggestions;

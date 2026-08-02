@@ -30,7 +30,7 @@ export const ANALYST_ROLE_DEFINITIONS: Record<AnalystRole, RoleDefinition> = {
         id: AnalystRole.MACRO_VOLATILITY,
         name: 'Macro & Volatility Analyst',
         shortName: 'Macro',
-        emoji: '🌊',
+        emoji: '',
         focus: 'Higher timeframes (4H/Daily), volatility regimes, liquidity zones, ATR, macro trend',
         promptPrefix: `
 ## **ROLE**
@@ -54,7 +54,7 @@ Before making any claim, you MUST check Pattern Memory and Recent Insights for:
 - Any past lessons or IF/THEN rules that apply
 
 Your analysis must include:
-"📚 PATTERN MEMORY CHECK: [Found/Not Found] similar setup. Historical outcome: [X wins / Y losses]."
+" PATTERN MEMORY CHECK: [Found/Not Found] similar setup. Historical outcome: [X wins / Y losses]."
 
 ---
 
@@ -67,7 +67,7 @@ If another analyst makes a claim that:
 - Ignores obvious risk factors
 
 You MUST issue a formal challenge:
-"🚨 CHALLENGE to [Analyst Name]: Your claim '[specific claim]' is [unsupported/contradicted by evidence]. PROVE IT with specific data or retract."
+" CHALLENGE to [Analyst Name]: Your claim '[specific claim]' is [unsupported/contradicted by evidence]. PROVE IT with specific data or retract."
 
 When challenged, you MUST:
 1. Cite specific price levels, timeframes, or Pattern Memory entries
@@ -269,7 +269,7 @@ This output must be suitable for **desk-level decision support**.
         id: AnalystRole.TECHNICAL_ANALYST,
         name: 'Technical Analyst',
         shortName: 'Technical',
-        emoji: '📊',
+        emoji: '',
         focus: 'Patterns, SMC, order blocks, EMAs, RSI, MACD, structure, momentum',
         promptPrefix: `
 ## **ROLE**
@@ -290,7 +290,7 @@ Before making any claim, you MUST check Pattern Memory and Recent Insights for:
 - Any past lessons or IF/THEN rules that apply
 
 Your analysis must include:
-"📚 PATTERN MEMORY CHECK: [Found/Not Found] similar setup. Historical outcome: [X wins / Y losses]."
+" PATTERN MEMORY CHECK: [Found/Not Found] similar setup. Historical outcome: [X wins / Y losses]."
 
 ---
 
@@ -303,7 +303,7 @@ If another analyst makes a claim that:
 - Ignores obvious risk factors
 
 You MUST issue a formal challenge:
-"🚨 CHALLENGE to [Analyst Name]: Your claim '[specific claim]' is [unsupported/contradicted by evidence]. PROVE IT with specific data or retract."
+" CHALLENGE to [Analyst Name]: Your claim '[specific claim]' is [unsupported/contradicted by evidence]. PROVE IT with specific data or retract."
 
 When challenged, you MUST:
 1. Cite specific price levels, timeframes, or Pattern Memory entries
@@ -383,16 +383,16 @@ Disallowed:
 
 Select **ONE and only one**:
 
-☐ **Family A — Exhaustion / Trap**
+ **Family A — Exhaustion / Trap**
 (RSI extreme, MACD divergence, volume climax)
 
-☐ **Family B — Reversal**
+ **Family B — Reversal**
 (Confirmed BOS, EMA flip, SAR flip)
 
-☐ **Family C — Continuation**
+ **Family C — Continuation**
 (Trend aligned, healthy pullback, EMA support)
 
-☐ **Family Ω — Super Continuation**
+ **Family Ω — Super Continuation**
 (RSI 65–88, vertical MACD, wide EMA separation)
 
 **Selected Family:** Family ___
@@ -544,7 +544,7 @@ This output must integrate cleanly into an **ensemble scoring engine**.
         id: AnalystRole.RISK_EXECUTION,
         name: 'Risk & Execution Specialist',
         shortName: 'Risk',
-        emoji: '🛡️',
+        emoji: '',
         focus: 'R:R validation, stop placement, entry timing (LTF), failure scenarios, devil\'s advocate',
         promptPrefix: `
 ## **ROLE**
@@ -566,7 +566,7 @@ Before making any claim, you MUST check Pattern Memory and Recent Insights for:
 - Any past lessons or IF/THEN rules that apply
 
 Your analysis must include:
-"📚 PATTERN MEMORY CHECK: [Found/Not Found] similar setup. Historical outcome: [X wins / Y losses]."
+" PATTERN MEMORY CHECK: [Found/Not Found] similar setup. Historical outcome: [X wins / Y losses]."
 
 ---
 
@@ -579,7 +579,7 @@ If another analyst makes a claim that:
 - Ignores obvious risk factors
 
 You MUST issue a formal challenge:
-"🚨 CHALLENGE to [Analyst Name]: Your claim '[specific claim]' is [unsupported/contradicted by evidence]. PROVE IT with specific data or retract."
+" CHALLENGE to [Analyst Name]: Your claim '[specific claim]' is [unsupported/contradicted by evidence]. PROVE IT with specific data or retract."
 
 When challenged, you MUST:
 1. Cite specific price levels, timeframes, or Pattern Memory entries
@@ -686,7 +686,7 @@ If **High**, Max Grade = C.
 # SECTION C: DEVIL'S ADVOCATE — FAILURE PATH ANALYSIS (MANDATORY)
 # ─────────────────────────────
 
-⚠️ **Do NOT validate the trade. Identify failure mechanisms.** ⚠️
+ **Do NOT validate the trade. Identify failure mechanisms.** 
 
 ### **Failure Scenario 1 — Structural Invalidation**
 
@@ -760,7 +760,7 @@ If **DANGEROUS**, Max Grade = C.
 | B     | Moderate risk — full or slight reduction |
 | C     | Reduce size 25–50%                       |
 | D     | Reduce size 50–75%                       |
-| F     | 🚫 NO TRADE                              |
+| F     |  NO TRADE                              |
 
 ---
 
@@ -776,7 +776,7 @@ ___ / 10
 ### **MANDATORY STOP LOSS (ENFORCED)**
 
 $SL
-🚫 **This level must NEVER be moved. No exceptions.**
+ **This level must NEVER be moved. No exceptions.**
 
 ---
 
@@ -862,7 +862,7 @@ This output must be suitable for **capital deployment approval**.
         id: AnalystRole.UNASSIGNED,
         name: 'General Analyst',
         shortName: 'General',
-        emoji: '🤖',
+        emoji: '',
         focus: 'Full analysis across all dimensions',
         promptPrefix: '', // No special prefix, default behavior
     },
@@ -1042,9 +1042,9 @@ export function getLensConfigSummary(config: AnalystLensConfig): string {
         return 'Analyst Lenses: Disabled';
     }
 
-    const styleLabel = config.tradingStyle === 'auto' ? 'Auto 🤖' :
-        config.tradingStyle === 'position' ? 'Position 🏛️' :
-            config.tradingStyle === 'scalp' ? 'Scalp ⚡' : 'Swing 🔄';
+    const styleLabel = config.tradingStyle === 'auto' ? 'Auto ' :
+        config.tradingStyle === 'position' ? 'Position ' :
+            config.tradingStyle === 'scalp' ? 'Scalp ' : 'Swing ';
 
     const lines = config.assignments.map(a => {
         const def = ANALYST_ROLE_DEFINITIONS[a.role];
@@ -1084,7 +1084,7 @@ Before making any claim, you MUST check Pattern Memory and Recent Insights for:
 - Any past lessons or IF/THEN rules that apply
 
 Your analysis must include:
-"📚 PATTERN MEMORY CHECK: [Found/Not Found] similar setup. Historical outcome: [X wins / Y losses]."
+" PATTERN MEMORY CHECK: [Found/Not Found] similar setup. Historical outcome: [X wins / Y losses]."
 
 ---
 
@@ -1097,7 +1097,7 @@ If another analyst makes a claim that:
 - Ignores obvious risk factors
 
 You MUST issue a formal challenge:
-"🚨 CHALLENGE to [Analyst Name]: Your claim '[specific claim]' is [unsupported/contradicted by evidence]. PROVE IT with specific data or retract."
+" CHALLENGE to [Analyst Name]: Your claim '[specific claim]' is [unsupported/contradicted by evidence]. PROVE IT with specific data or retract."
 
 When challenged, you MUST:
 1. Cite specific price levels, timeframes, or Pattern Memory entries
@@ -1182,7 +1182,7 @@ Before making any claim, you MUST check Pattern Memory and Recent Insights for:
 - Any past lessons or IF/THEN rules that apply
 
 Your analysis must include:
-"📚 PATTERN MEMORY CHECK: [Found/Not Found] similar setup. Historical outcome: [X wins / Y losses]."
+" PATTERN MEMORY CHECK: [Found/Not Found] similar setup. Historical outcome: [X wins / Y losses]."
 
 ---
 
@@ -1195,7 +1195,7 @@ If another analyst makes a claim that:
 - Ignores obvious risk factors
 
 You MUST issue a formal challenge:
-"🚨 CHALLENGE to [Analyst Name]: Your claim '[specific claim]' is [unsupported/contradicted by evidence]. PROVE IT with specific data or retract."
+" CHALLENGE to [Analyst Name]: Your claim '[specific claim]' is [unsupported/contradicted by evidence]. PROVE IT with specific data or retract."
 
 When challenged, you MUST:
 1. Cite specific price levels, timeframes, or Pattern Memory entries
@@ -1228,10 +1228,10 @@ Disallowed: **1H, 4H, Daily, Weekly**
 | Status | Forming / Complete |
 
 ### MARKET FAMILY
-☐ **Family A — Exhaustion/Trap** (RSI extreme, divergence)
-☐ **Family B — Reversal** (LTF BOS, EMA flip)
-☐ **Family C — Continuation** (Pullback to EMA/OB)
-☐ **Family Ω — Momentum** (Strong impulse, ride it)
+ **Family A — Exhaustion/Trap** (RSI extreme, divergence)
+ **Family B — Reversal** (LTF BOS, EMA flip)
+ **Family C — Continuation** (Pullback to EMA/OB)
+ **Family Ω — Momentum** (Strong impulse, ride it)
 
 **Selected:** Family ___
 
@@ -1291,7 +1291,7 @@ Before making any claim, you MUST check Pattern Memory and Recent Insights for:
 - Any past lessons or IF/THEN rules that apply
 
 Your analysis must include:
-"📚 PATTERN MEMORY CHECK: [Found/Not Found] similar setup. Historical outcome: [X wins / Y losses]."
+" PATTERN MEMORY CHECK: [Found/Not Found] similar setup. Historical outcome: [X wins / Y losses]."
 
 ---
 
@@ -1304,7 +1304,7 @@ If another analyst makes a claim that:
 - Ignores obvious risk factors
 
 You MUST issue a formal challenge:
-"🚨 CHALLENGE to [Analyst Name]: Your claim '[specific claim]' is [unsupported/contradicted by evidence]. PROVE IT with specific data or retract."
+" CHALLENGE to [Analyst Name]: Your claim '[specific claim]' is [unsupported/contradicted by evidence]. PROVE IT with specific data or retract."
 
 When challenged, you MUST:
 1. Cite specific price levels, timeframes, or Pattern Memory entries
@@ -1424,7 +1424,7 @@ Before making any claim, you MUST check Pattern Memory and Recent Insights for:
 - Any past lessons or IF/THEN rules that apply
 
 Your analysis must include:
-"📚 PATTERN MEMORY CHECK: [Found/Not Found] similar setup. Historical outcome: [X wins / Y losses]."
+" PATTERN MEMORY CHECK: [Found/Not Found] similar setup. Historical outcome: [X wins / Y losses]."
 
 ---
 
@@ -1437,7 +1437,7 @@ If another analyst makes a claim that:
 - Ignores obvious risk factors
 
 You MUST issue a formal challenge:
-"🚨 CHALLENGE to [Analyst Name]: Your claim '[specific claim]' is [unsupported/contradicted by evidence]. PROVE IT with specific data or retract."
+" CHALLENGE to [Analyst Name]: Your claim '[specific claim]' is [unsupported/contradicted by evidence]. PROVE IT with specific data or retract."
 
 When challenged, you MUST:
 1. Cite specific price levels, timeframes, or Pattern Memory entries
@@ -1508,7 +1508,7 @@ Before making any claim, you MUST check Pattern Memory and Recent Insights for:
 - Any past lessons or IF/THEN rules that apply
 
 Your analysis must include:
-"📚 PATTERN MEMORY CHECK: [Found/Not Found] similar setup. Historical outcome: [X wins / Y losses]."
+" PATTERN MEMORY CHECK: [Found/Not Found] similar setup. Historical outcome: [X wins / Y losses]."
 
 ---
 
@@ -1521,7 +1521,7 @@ If another analyst makes a claim that:
 - Ignores obvious risk factors
 
 You MUST issue a formal challenge:
-"🚨 CHALLENGE to [Analyst Name]: Your claim '[specific claim]' is [unsupported/contradicted by evidence]. PROVE IT with specific data or retract."
+" CHALLENGE to [Analyst Name]: Your claim '[specific claim]' is [unsupported/contradicted by evidence]. PROVE IT with specific data or retract."
 
 When challenged, you MUST:
 1. Cite specific price levels, timeframes, or Pattern Memory entries
@@ -1585,7 +1585,7 @@ Before making any claim, you MUST check Pattern Memory and Recent Insights for:
 - Any past lessons or IF/THEN rules that apply
 
 Your analysis must include:
-"📚 PATTERN MEMORY CHECK: [Found/Not Found] similar setup. Historical outcome: [X wins / Y losses]."
+" PATTERN MEMORY CHECK: [Found/Not Found] similar setup. Historical outcome: [X wins / Y losses]."
 
 ---
 
@@ -1598,7 +1598,7 @@ If another analyst makes a claim that:
 - Ignores obvious risk factors
 
 You MUST issue a formal challenge:
-"🚨 CHALLENGE to [Analyst Name]: Your claim '[specific claim]' is [unsupported/contradicted by evidence]. PROVE IT with specific data or retract."
+" CHALLENGE to [Analyst Name]: Your claim '[specific claim]' is [unsupported/contradicted by evidence]. PROVE IT with specific data or retract."
 
 When challenged, you MUST:
 1. Cite specific price levels, timeframes, or Pattern Memory entries

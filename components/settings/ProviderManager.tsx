@@ -308,7 +308,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                                     </div>
                                                     <span className="text-xs truncate font-medium">{c.name}</span>
                                                 </div>
-                                                <span className={`w-2 h-2 rounded-full shrink-0 ${c.isEnabled ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]' : 'bg-zinc-600'}`} />
+                                                <span className={`w-2 h-2 rounded-full shrink-0 ${c.isEnabled ? 'bg-emerald-400 shadow-[0_0_6px_rgba(228,228,231,0.8)]' : 'bg-zinc-600'}`} />
                                             </button>
                                         );
                                     })}

@@ -190,17 +190,17 @@ export function calculateConfluenceScore(
 export function generateConfluencePromptInjection(score: ConfluenceScore): string {
     const parts: string[] = [];
 
-    parts.push(`📊 **TIMEFRAME CONFLUENCE SCORE: ${score.score}/100** (${score.recommendation.toUpperCase()})`);
+    parts.push(` **TIMEFRAME CONFLUENCE SCORE: ${score.score}/100** (${score.recommendation.toUpperCase()})`);
     parts.push(`• ${score.alignedTimeframes} of ${score.totalTimeframes} timeframes align with ${score.direction}`);
 
     if (score.recommendation === 'strong') {
-        parts.push(`✅ HIGH CONFLUENCE: Multiple timeframes confirm direction. Higher probability setup.`);
+        parts.push(` HIGH CONFLUENCE: Multiple timeframes confirm direction. Higher probability setup.`);
     } else if (score.recommendation === 'moderate') {
-        parts.push(`⚠️ MODERATE CONFLUENCE: Mixed signals across timeframes. Proceed with caution.`);
+        parts.push(` MODERATE CONFLUENCE: Mixed signals across timeframes. Proceed with caution.`);
     } else if (score.recommendation === 'weak') {
-        parts.push(`🔴 LOW CONFLUENCE: Few timeframes support this direction. Consider waiting for alignment.`);
+        parts.push(` LOW CONFLUENCE: Few timeframes support this direction. Consider waiting for alignment.`);
     } else {
-        parts.push(`❌ CONFLICTING SIGNALS: Timeframes are mixed. High risk of chop.`);
+        parts.push(` CONFLICTING SIGNALS: Timeframes are mixed. High risk of chop.`);
     }
 
     return parts.join('\n');
@@ -324,9 +324,9 @@ export function getConfluenceInsight(currentScore: number): string {
         parts.push(`• Optimal threshold: >${stats.optimalThreshold}/100`);
 
         if (currentScore < stats.optimalThreshold) {
-            parts.push(`⚠️ Current score (${currentScore}) is BELOW optimal threshold (${stats.optimalThreshold}).`);
+            parts.push(` Current score (${currentScore}) is BELOW optimal threshold (${stats.optimalThreshold}).`);
         } else {
-            parts.push(`✅ Current score (${currentScore}) meets optimal threshold.`);
+            parts.push(` Current score (${currentScore}) meets optimal threshold.`);
         }
     }
 

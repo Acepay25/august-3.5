@@ -93,7 +93,7 @@ class TradeShareServiceClass {
             const styleX = 32 * s + pillW + 12 * s;
             const styleW = 80 * s;
             const styleColor = tradingStyle === 'scalp' ? '#a1a1aa' : '#b8b8bf'; // Orange for scalp, purple for swing
-            const styleEmoji = tradingStyle === 'scalp' ? '⚡' : '🔄';
+            const styleEmoji = tradingStyle === 'scalp' ? '' : '';
 
             ctx.fillStyle = styleColor + '25';
             this.roundRect(ctx, styleX, headerY, styleW, pillH, 20 * s);

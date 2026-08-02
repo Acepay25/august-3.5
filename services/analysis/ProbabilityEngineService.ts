@@ -201,7 +201,7 @@ function generateReasoningText(prior: any, matches: any, multipliers: any): stri
     }
 
     if (prior.matchCount < 3) {
-        text += `\n⚠️ Low Data Warning: Baseline is mostly generic due to lack of similar history.`;
+        text += `\n Low Data Warning: Baseline is mostly generic due to lack of similar history.`;
     }
 
     return text;

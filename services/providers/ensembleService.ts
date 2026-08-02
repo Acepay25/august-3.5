@@ -57,23 +57,23 @@ import { ConfidenceCalibration } from '../../types';
  * decision transparency.
  */
 const SCENARIO_EVALUATION_PROTOCOL = `
-## ⚖️ MANDATORY DUAL SCENARIO EVALUATION PROTOCOL
+##  MANDATORY DUAL SCENARIO EVALUATION PROTOCOL
 
 **BEFORE selecting a direction, you MUST explicitly evaluate BOTH scenarios:**
 
-### 📈 BULLISH SCENARIO
+###  BULLISH SCENARIO
 - **Trigger:** What level must price break ABOVE to confirm bullish?
 - **Confirmation:** What candle close / volume spike validates this?
 - **Primary Target:** Upside price target
 - **Invalidation:** Where does this bullish thesis FAIL?
 
-### 📉 BEARISH SCENARIO  
+###  BEARISH SCENARIO  
 - **Trigger:** What level must price break BELOW to confirm bearish?
 - **Confirmation:** What candle close / volume spike validates this?
 - **Primary Target:** Downside price target
 - **Invalidation:** Where does this bearish thesis FAIL?
 
-### 🎯 DOMINANT SCENARIO SELECTION
+###  DOMINANT SCENARIO SELECTION
 After evaluating BOTH scenarios:
 1. Compare evidence: Trend alignment, volume, Pattern Memory, Family classification
 2. **Select ONE** as the trade plan with explicit reasoning
@@ -119,9 +119,9 @@ Accuracy and usefulness are ALWAYS more important than speed or verbosity.
 
 **SKILL 2: EXPLICIT UNKNOWN PROTOCOL (MANDATORY)**
 When data is insufficient or confidence is low, you MUST explicitly state:
-- "⚠️ UNKNOWN: [specific missing data]"
-- "⚠️ INSUFFICIENT DATA: Cannot determine [X] because [reason]"
-- "⚠️ LOW CONFIDENCE: [claim] is uncertain because [evidence gap]"
+- " UNKNOWN: [specific missing data]"
+- " INSUFFICIENT DATA: Cannot determine [X] because [reason]"
+- " LOW CONFIDENCE: [claim] is uncertain because [evidence gap]"
 
 Do NOT guess or hallucinate. Say "unknown" when you don't know.
 
@@ -129,11 +129,11 @@ Do NOT guess or hallucinate. Say "unknown" when you don't know.
 
 **SKILL 3: FAILURE CONDITION AWARENESS (MANDATORY)**
 Before finalizing any output, verify you are NOT doing these:
-- ❌ Confidently wrong answers (high confidence without evidence)
-- ❌ Fabricated details (invented price levels, patterns, or data)
-- ❌ Ignoring constraints (user rules, scope, mode restrictions)
-- ❌ Over-verbosity without value (filler text, repetition)
-- ❌ Providing solutions outside the requested scope
+-  Confidently wrong answers (high confidence without evidence)
+-  Fabricated details (invented price levels, patterns, or data)
+-  Ignoring constraints (user rules, scope, mode restrictions)
+-  Over-verbosity without value (filler text, repetition)
+-  Providing solutions outside the requested scope
 
 ---
 
@@ -194,7 +194,7 @@ ${penalties.htfConflict > 0 ? `- HTF/LTF Conflict: −${(penalties.htfConflict *
 ${penalties.volumeContext > 0 ? `- Volume Context: −${(penalties.volumeContext * 100).toFixed(0)}%` : ''}
 - **Total Effective Penalty:** −${(penalties.effectiveTotal * 100).toFixed(0)}%
 
-${gateResult.warnings.length > 0 ? `**GATE WARNINGS:**\n${gateResult.warnings.map(w => `⚠️ ${w}`).join('\n')}` : ''}
+${gateResult.warnings.length > 0 ? `**GATE WARNINGS:**\n${gateResult.warnings.map(w => ` ${w}`).join('\n')}` : ''}
 `;
 
     // If any analyst exceeded the cap, demand explanation
@@ -335,7 +335,7 @@ export const generateLensContext = (
     }
 
     // Style-specific context
-    const styleEmoji = tradingStyle === 'scalp' ? '⚡' : '🔄';
+    const styleEmoji = tradingStyle === 'scalp' ? '' : '';
     const styleName = tradingStyle === 'scalp' ? 'SCALP' : 'SWING';
     const styleTimeframes = tradingStyle === 'scalp' ? '1m/5m/15m' : '15m/1H/4H/Daily';
     const styleMinRR = tradingStyle === 'scalp' ? '1.5:1' : '1.2:1';
@@ -345,8 +345,8 @@ export const generateLensContext = (
     if (verbosity === 'minimal') {
         return `
 **🎭 LENS MODE** ${styleEmoji} **${styleName}** | TFs: ${styleTimeframes} | Min R:R: ${styleMinRR}
-Roles: ${macroAnalyst ? `🌊${macroAnalyst}` : ''} ${techAnalyst ? `📊${techAnalyst}` : ''} ${riskAnalyst ? `🛡️${riskAnalyst}` : ''}
-⚠️ MANDATORY: Output complete JSON_PLAN with coinName, direction, entryPoints, stopLoss, takeProfit.
+Roles: ${macroAnalyst ? `${macroAnalyst}` : ''} ${techAnalyst ? `${techAnalyst}` : ''} ${riskAnalyst ? `${riskAnalyst}` : ''}
+ MANDATORY: Output complete JSON_PLAN with coinName, direction, entryPoints, stopLoss, takeProfit.
 `;
     }
 
@@ -364,19 +364,19 @@ Roles: ${macroAnalyst ? `🌊${macroAnalyst}` : ''} ${techAnalyst ? `📊${techA
 ${roleLines.join('\n')}
 
 **EVALUATION RULES:**
-1. 🌊 ${macroAnalyst || 'Macro Analyst'}: Authoritative on TIMING, volatility regime, and session analysis
-2. 📊 ${techAnalyst || 'Technical Analyst'}: Authoritative on PATTERNS, SMC levels, and entry zones  
-3. 🛡️ ${riskAnalyst || 'Risk Analyst'}: Authoritative on R:R validation and FAILURE SCENARIOS
+1.  ${macroAnalyst || 'Macro Analyst'}: Authoritative on TIMING, volatility regime, and session analysis
+2.  ${techAnalyst || 'Technical Analyst'}: Authoritative on PATTERNS, SMC levels, and entry zones  
+3.  ${riskAnalyst || 'Risk Analyst'}: Authoritative on R:R validation and FAILURE SCENARIOS
 
 **STYLE-SPECIFIC QUESTIONS (ASK EACH ANALYST):**
 ${tradingStyle === 'scalp' ? `
-${macroAnalyst ? `- 🌊 ${macroAnalyst}: "Is this a kill zone? What's the expected move duration for a quick scalp?"` : ''}
-${techAnalyst ? `- 📊 ${techAnalyst}: "What's the LTF pattern? Is there a 1m/5m setup within the HTF structure?"` : ''}
-${riskAnalyst ? `- 🛡️ ${riskAnalyst}: "Is R:R ≥1.5? Is the SL tight enough (≤1x ATR)? What's the max hold time?"` : ''}
+${macroAnalyst ? `-  ${macroAnalyst}: "Is this a kill zone? What's the expected move duration for a quick scalp?"` : ''}
+${techAnalyst ? `-  ${techAnalyst}: "What's the LTF pattern? Is there a 1m/5m setup within the HTF structure?"` : ''}
+${riskAnalyst ? `-  ${riskAnalyst}: "Is R:R ≥1.5? Is the SL tight enough (≤1x ATR)? What's the max hold time?"` : ''}
 ` : `
-${macroAnalyst ? `- 🌊 ${macroAnalyst}: "Is NOW the right time? What's the volatility regime and trend strength?"` : ''}
-${techAnalyst ? `- 📊 ${techAnalyst}: "What pattern/Family are we trading? Where are SMC levels and invalidation?"` : ''}
-${riskAnalyst ? `- 🛡️ ${riskAnalyst}: "What's the R:R? Top 3 failure scenarios? Can this trade run for hours/days?"` : ''}
+${macroAnalyst ? `-  ${macroAnalyst}: "Is NOW the right time? What's the volatility regime and trend strength?"` : ''}
+${techAnalyst ? `-  ${techAnalyst}: "What pattern/Family are we trading? Where are SMC levels and invalidation?"` : ''}
+${riskAnalyst ? `-  ${riskAnalyst}: "What's the R:R? Top 3 failure scenarios? Can this trade run for hours/days?"` : ''}
 `}
 
 **CONFLICT RESOLUTION:**
@@ -399,7 +399,7 @@ ${styleEmoji} **TRADING STYLE: ${styleName}**
 - Stop Loss Range: ${styleSL}
 - ${tradingStyle === 'scalp' ? 'Quick execution, don\'t overstay, target immediate moves' : 'Let trades develop, target swing moves with the trend'}
 
-⚠️ **CRITICAL: You are moderating a ROLE-BASED ensemble where each analyst has a SPECIALIZED domain.**
+ **CRITICAL: You are moderating a ROLE-BASED ensemble where each analyst has a SPECIALIZED domain.**
 Each analyst's output follows a STRUCTURED FORMAT specific to their role. You MUST evaluate each analyst according to their domain expertise.
 
 **ROLE ASSIGNMENTS:**
@@ -407,7 +407,7 @@ ${roleLines.join('\n')}
 
 ---
 
-## 📊 NUMERIC CHART DATA (MANDATORY USAGE)
+##  NUMERIC CHART DATA (MANDATORY USAGE)
 You have structured chart data for 15m/1h/4h timeframes. Each analyst MUST reference this data:
 
 **🌊 Macro Analyst:** Use chart REGIME and TREND MATURITY to validate timing.
@@ -421,9 +421,9 @@ You have structured chart data for 15m/1h/4h timeframes. Each analyst MUST refer
 
 ---
 
-## 📋 ROLE-BASED EVALUATION PROTOCOL (MANDATORY)
+##  ROLE-BASED EVALUATION PROTOCOL (MANDATORY)
 
-### 🌊 MACRO ANALYST EVALUATION (${macroAnalyst || 'Assigned Analyst'})
+###  MACRO ANALYST EVALUATION (${macroAnalyst || 'Assigned Analyst'})
 Evaluate these sections from the Macro Analyst:
 - **MACRO TREND ANALYSIS** — Multi-timeframe trend assessment
 - **VOLATILITY REGIME** — ATR/volatility reflected in SL recommendations
@@ -432,7 +432,7 @@ Evaluate these sections from the Macro Analyst:
 
 **Key Question:** "Is NOW the right TIME to trade?"
 
-### 📊 TECHNICAL ANALYST EVALUATION (${techAnalyst || 'Assigned Analyst'})
+###  TECHNICAL ANALYST EVALUATION (${techAnalyst || 'Assigned Analyst'})
 Evaluate these sections from the Technical Analyst:
 - **PATTERN IDENTIFICATION** — Pattern correctly identified and classified
 - **SMART MONEY CONCEPTS** — OBs, FVGs, and BOS properly mapped
@@ -441,7 +441,7 @@ Evaluate these sections from the Technical Analyst:
 
 **Key Question:** "WHAT pattern are we trading and is it valid?"
 
-### 🛡️ RISK SPECIALIST EVALUATION (${riskAnalyst || 'Assigned Analyst'})
+###  RISK SPECIALIST EVALUATION (${riskAnalyst || 'Assigned Analyst'})
 Evaluate these sections from the Risk Specialist:
 - **RISK/REWARD CALCULATOR** — Is the R:R ≥ 1.2?
 - **ENTRY TIMING OPTIMIZATION** — LTF execution trigger identified
@@ -453,11 +453,11 @@ Evaluate these sections from the Risk Specialist:
 
 ---
 
-## 🎯 ROLE-SPECIFIC MANDATORY QUESTIONS
+##  ROLE-SPECIFIC MANDATORY QUESTIONS
 
 **You MUST ask each analyst these role-specific questions during the debate:**
 
-${macroAnalyst ? `### 🌊 Questions for ${macroAnalyst} (Macro & Volatility):
+${macroAnalyst ? `###  Questions for ${macroAnalyst} (Macro & Volatility):
 ${tradingStyle === 'scalp' ? `
 1. "Is this a KILL ZONE? What session are we in and is volatility high enough for a quick scalp?"
 2. "What's the expected DURATION of this move? Can we capture it in minutes, not hours?"
@@ -470,7 +470,7 @@ ${tradingStyle === 'scalp' ? `
 4. "What is your macro invalidation level? At what price does the macro thesis fail?"
 `}` : ''}
 
-${techAnalyst ? `### 📊 Questions for ${techAnalyst} (Technical):
+${techAnalyst ? `###  Questions for ${techAnalyst} (Technical):
 ${tradingStyle === 'scalp' ? `
 1. "What's the LTF (1m/5m) pattern WITHIN the HTF structure? Is it aligned?"
 2. "Where is the immediate OB/FVG for this scalp entry? Is there micro-structure confirmation?"
@@ -483,7 +483,7 @@ ${tradingStyle === 'scalp' ? `
 4. "What is the pattern invalidation level? Where does this pattern fail?"
 `}` : ''}
 
-${riskAnalyst ? `### 🛡️ Questions for ${riskAnalyst} (Risk & Execution):
+${riskAnalyst ? `###  Questions for ${riskAnalyst} (Risk & Execution):
 ${tradingStyle === 'scalp' ? `
 1. "Show me the R:R calculation. Is it ≥1.5:1 for this scalp? Quick trades need higher R:R."
 2. "Is the SL TIGHT enough (0.5-1x ATR)? Scalps can't afford wide stops."
@@ -498,7 +498,7 @@ ${tradingStyle === 'scalp' ? `
 
 ---
 
-## ⚖️ SYNTHESIS RULES FOR LENS MODE
+##  SYNTHESIS RULES FOR LENS MODE
 
 1. **Domain Authority:** Each analyst is authoritative ONLY in their domain
 2. **Cross-Domain Conflicts:**
@@ -514,7 +514,7 @@ ${tradingStyle === 'scalp' ? `
 
 ---
 
-## 🔴 QUALITY GATE — PERSISTENT QUESTIONING PROTOCOL
+##  QUALITY GATE — PERSISTENT QUESTIONING PROTOCOL
 
 **YOU ARE THE SMARTEST ONE IN THE ROOM. DO NOT ACCEPT WEAK SETUPS.**
 
@@ -539,17 +539,17 @@ Mark as **"AVOID"** or **"CONDITIONAL — Wait for [specific condition]"**
 
 ---
 
-## 🔒 STRICT QUALITY GATE (MODERATOR ENFORCEMENT)
+##  STRICT QUALITY GATE (MODERATOR ENFORCEMENT)
 
 You are the **FINAL GATEKEEPER**. Your job is to ensure ONLY the best possible setup is produced.
 
 **AUTOMATIC REJECTION TRIGGERS:**
-- ❌ Any analyst provides vague price levels ("around $X", "near support")
-- ❌ R:R ratio is not explicitly calculated with numbers
-- ❌ Pattern Memory was not referenced (missing "📚 PATTERN MEMORY CHECK")
-- ❌ Confidence is "High" but no Pattern Memory evidence supports it
-- ❌ Analysts agree too easily without citing evidence (Echo Chamber)
-- ❌ Key levels or invalidation points are missing
+-  Any analyst provides vague price levels ("around $X", "near support")
+-  R:R ratio is not explicitly calculated with numbers
+-  Pattern Memory was not referenced (missing " PATTERN MEMORY CHECK")
+-  Confidence is "High" but no Pattern Memory evidence supports it
+-  Analysts agree too easily without citing evidence (Echo Chamber)
+-  Key levels or invalidation points are missing
 
 **MANDATORY CHALLENGES FROM MODERATOR:**
 When you detect weak analysis, you MUST challenge:
@@ -560,7 +560,7 @@ When you detect weak analysis, you MUST challenge:
 
 ---
 
-## 🎯 ROLE-SPECIFIC MODERATOR QUESTIONS
+##  ROLE-SPECIFIC MODERATOR QUESTIONS
 
 After each analyst presents, you MUST ask their role-specific question:
 
@@ -575,7 +575,7 @@ After each analyst presents, you MUST ask their role-specific question:
 
 ---
 
-## 🔥 POST-PRESENTATION CHALLENGE PROTOCOL
+##  POST-PRESENTATION CHALLENGE PROTOCOL
 
 After EVERY analyst presentation, apply this two-part challenge:
 
@@ -586,17 +586,17 @@ After EVERY analyst presentation, apply this two-part challenge:
 
 ---
 
-## ⚔️ ANALYST INTERVENTION RULE
+##  ANALYST INTERVENTION RULE
 
 If ANY analyst believes the moderator made a flawed judgment or prematurely accepted weak evidence, that analyst MUST intervene:
 
-> "⚠️ INTERVENTION: I challenge the moderator's conclusion because [specific reason]. Evidence: [cite Pattern Memory entry or exact price level]. The moderator should reconsider before finalizing."
+> " INTERVENTION: I challenge the moderator's conclusion because [specific reason]. Evidence: [cite Pattern Memory entry or exact price level]. The moderator should reconsider before finalizing."
 
 **The moderator MUST address interventions before issuing the final verdict.**
 
 ---
 
-## 🛡️ RIGOROUS DEFENSE REQUIREMENT
+##  RIGOROUS DEFENSE REQUIREMENT
 
 All parties (moderator AND analysts) MUST defend their positions until:
 - Consensus is evidence-based (not assumption-based)
@@ -608,7 +608,7 @@ All parties (moderator AND analysts) MUST defend their positions until:
 - If still undefended → Mark as "AVOID - Insufficient Evidence"
 
 **PATTERN MEMORY ENFORCEMENT:**
-- Each analyst MUST include: "📚 PATTERN MEMORY CHECK: [Found/Not Found] similar setup"
+- Each analyst MUST include: " PATTERN MEMORY CHECK: [Found/Not Found] similar setup"
 - If found: "Historical outcome: [X wins / Y losses]"
 - If NOT referenced: **Demand it before proceeding**
 
@@ -620,7 +620,7 @@ All parties (moderator AND analysts) MUST defend their positions until:
 
 ---
 
-## 🎯 LENS MODE FINAL VERDICT FORMAT
+##  LENS MODE FINAL VERDICT FORMAT
 
 Your verdict MUST address all three domains:
 
@@ -632,7 +632,7 @@ Your verdict MUST address all three domains:
 
 ---
 
-⚠️ **CRITICAL REMINDER:** After the debate, you MUST output a complete <JSON_PLAN> block with:
+ **CRITICAL REMINDER:** After the debate, you MUST output a complete <JSON_PLAN> block with:
 coinName, direction, entryPoints, stopLoss, takeProfit, confidence, probability, strategy, marketConditions, detectedPatternFamily, keyLevels
 `;
 };
@@ -791,7 +791,7 @@ export const generateDivergenceContext = (
     let context = `
         **🔍 PRE - DEBATE DIVERGENCE ANALYSIS **
 
-            Divergence Score: ${analysis.score}/100 ${analysis.isEchoChamber ? '⚠️ LOW (Echo Chamber Risk)' : analysis.score > 50 ? '🔥 HIGH' : '➡️ MODERATE'}
+            Divergence Score: ${analysis.score}/100 ${analysis.isEchoChamber ? ' LOW (Echo Chamber Risk)' : analysis.score > 50 ? ' HIGH' : ' MODERATE'}
 
 ${analysis.details.map(d => `- ${d}`).join('\n')}
     `;
@@ -1170,7 +1170,7 @@ export const conductTwoWayDebate = async function* (
       **⚠️ CROSS-PROVIDER FACT-CHECKING (MANDATORY):**
       Every analyst MUST actively verify and challenge other analysts' claims:
       - If an analyst detects MISLEADING INFORMATION from another provider, they MUST flag it immediately
-      - Use format: "⚠️ FACT CHECK: [Analyst] claimed [X], but [my data shows Y]. Evidence: [specific proof]"
+      - Use format: " FACT CHECK: [Analyst] claimed [X], but [my data shows Y]. Evidence: [specific proof]"
       - Moderator MUST pause and demand clarification when fact-check is raised
       - The analyst who made the original claim MUST respond with evidence or retract
       - Do NOT let any unverified claim pass into the final verdict
@@ -1200,7 +1200,7 @@ export const conductTwoWayDebate = async function* (
       - **Trade Setup** - Entry zone, SL, TP, R:R, confidence grade
       - **Candle History Citation** - MANDATORY: Cite the bullish/bearish candle counts from Candle History (e.g., "The 4H shows 12 Bullish, 8 Bearish"). Use this as PROOF for directional thesis.
 
-      ⚠️ **MANDATORY PATTERN MEMORY CHECK FOR ALL ANALYSTS:**
+       **MANDATORY PATTERN MEMORY CHECK FOR ALL ANALYSTS:**
       Every analyst MUST answer: "Which of the Recent Insights is most similar to this setup, and what was the outcome?"
       ` : `
       During the debate, analysts MUST cover ALL of these analysis sections:
@@ -1385,7 +1385,7 @@ export const conductTwoWayDebate = async function* (
 
       9.  **JSON PLAN (CRITICAL - FAILURE WILL BREAK THE SYSTEM)**
           
-          ⚠️ YOU MUST OUTPUT VALID, COMPLETE JSON OR THE SYSTEM WILL FAIL ⚠️
+           YOU MUST OUTPUT VALID, COMPLETE JSON OR THE SYSTEM WILL FAIL 
           
           *   Only AFTER the complete text verdict, output the final JSON wrapped in <JSON_PLAN> and </JSON_PLAN>.
           *   **CRITICAL:** The JSON block must be the ABSOLUTE LAST THING in your response.
@@ -1728,10 +1728,10 @@ Your role is to remain COMPLETELY UNBIASED while eliminating ambiguity, extracti
 **CRITICAL: Each AI provider gets their own dedicated turn. Never combine or skip analyst responses.**
 
 ---------------------------------------------------------
-🎯 OBJECTIVE:
+ OBJECTIVE:
 Orchestrate a rigorous, multi-turn debate where EACH analyst gets their own turn in every round. If analysts disagree, they must be given additional turns to respond and defend their positions.
 
-⚠️ **CRITICAL: UNBIASED MODERATOR PROTOCOL**
+ **CRITICAL: UNBIASED MODERATOR PROTOCOL**
 - You must NOT favor any analyst over another
 - Question ALL THREE parties with EQUAL rigor
 - If disagreement persists, give EACH analyst a dedicated rebuttal turn
@@ -1741,7 +1741,7 @@ Orchestrate a rigorous, multi-turn debate where EACH analyst gets their own turn
 **⚠️ CROSS-PROVIDER FACT-CHECKING (MANDATORY):**
 Every analyst MUST actively verify and challenge other analysts' claims:
 - If an analyst detects MISLEADING INFORMATION from another provider, they MUST flag it immediately
-- Use format: "⚠️ FACT CHECK: [Analyst] claimed [X], but [my data shows Y]. Evidence: [specific proof]"
+- Use format: " FACT CHECK: [Analyst] claimed [X], but [my data shows Y]. Evidence: [specific proof]"
 - Moderator MUST pause and demand clarification when fact-check is raised
 - The analyst who made the original claim MUST respond with evidence or retract
 - Do NOT let any unverified claim pass into the final verdict
@@ -1753,7 +1753,7 @@ Every analyst MUST actively verify and challenge other analysts' claims:
 4. **Pattern Memory Mismatch** - Referencing patterns that don't exist in history
 5. **Inflated Confidence** - High confidence without supporting evidence
 
-⚠️ **CRITICAL DIRECTIVE 1: PATTERN MEMORY SUPREMACY**
+ **CRITICAL DIRECTIVE 1: PATTERN MEMORY SUPREMACY**
 The **Pattern Memory Library** (History) is the HIGHEST PRIORITY context.
 - If any analyst proposes a setup matching a known "Failure Signature", YOU MUST CHALLENGE IT.
 - If a setup matches a "Success Signature", prioritize it.
@@ -1770,7 +1770,7 @@ During the debate, analysts MUST cover ALL of these role-specific areas:
 - **Trade Setup** - Entry zone, SL, TP, R:R, confidence grade
 - **Candle History Citation** - MANDATORY: Cite the bullish/bearish candle counts from Candle History (e.g., "The 4H shows 12 Bullish, 8 Bearish"). Use this as PROOF for directional thesis.
 
-⚠️ **MANDATORY PATTERN MEMORY CHECK FOR ALL ANALYSTS:**
+ **MANDATORY PATTERN MEMORY CHECK FOR ALL ANALYSTS:**
 Every analyst MUST answer: "Which of the Recent Insights is most similar to this setup, and what was the outcome?"
 ` : `
 During the debate, analysts MUST cover ALL of these analysis sections:
@@ -1788,7 +1788,7 @@ During the debate, analysts MUST cover ALL of these analysis sections:
 
 ${recentInsightsBlock}
 
-⚠️ **CRITICAL DIRECTIVE 2: MARKET CLASSIFICATION ENFORCEMENT**
+ **CRITICAL DIRECTIVE 2: MARKET CLASSIFICATION ENFORCEMENT**
 Strictly enforce "Market Classification Families" (A, B, C, Omega).
 - Ask EACH participant: "What Family does this belong to? Prove it."
 - Require evidence from ALL analysts, not just one.
@@ -1796,11 +1796,11 @@ Strictly enforce "Market Classification Families" (A, B, C, Omega).
 **FAMILY DEFINITIONS:**
 ${TRADING_FAMILIES_PROMPT}
 
-⚠️ **MANDATORY RISK/REWARD RULE:**
+ **MANDATORY RISK/REWARD RULE:**
 Final trade MUST offer R:R of at least 1:1.2. If RR < 1.2, mark as **CONDITIONAL**.
 ---------------------------------------------------------
 
-## 📚 CONSOLIDATED 7-ROUND DEBATE PROTOCOL
+##  CONSOLIDATED 7-ROUND DEBATE PROTOCOL
 
 **TRADE SETUP GRADE SCALE → CONFIDENCE MAPPING (MANDATORY):**
 | Grade | Confidence % | Criteria |
@@ -1979,7 +1979,7 @@ If analysts STILL disagree on DIRECTION or KEY LEVELS:
 Close with:
 </DEBATE_END>
 
-## 🧨 8. MODERATOR FINAL VERDICT (REQUIRED)
+##  8. MODERATOR FINAL VERDICT (REQUIRED)
 Immediately after </DEBATE_END>, write:
 
 ### **Moderator Final Verdict:**
@@ -1999,9 +1999,9 @@ Immediately after </DEBATE_END>, write:
 
 ---
 
-## 🧩 9. JSON PLAN (CRITICAL - FAILURE WILL BREAK THE SYSTEM)
+##  9. JSON PLAN (CRITICAL - FAILURE WILL BREAK THE SYSTEM)
 
-⚠️ YOU MUST OUTPUT VALID, COMPLETE JSON OR THE SYSTEM WILL FAIL ⚠️
+ YOU MUST OUTPUT VALID, COMPLETE JSON OR THE SYSTEM WILL FAIL 
 
 Only **after** writing the complete text verdict, output the structured JSON object.
 - The JSON must be wrapped in <JSON_PLAN> and </JSON_PLAN> tags
@@ -2052,7 +2052,7 @@ Only **after** writing the complete text verdict, output the structured JSON obj
 
 ---
 
-## 📝 FORMATTING RULES
+##  FORMATTING RULES
 - Use strict **Speaker:** format (e.g., "Moderator:", "Moderator to ${analyst1Name}:", "${analyst1Name}:").
 - Do **NOT** bold speaker names.
 - Ensure EACH analyst gets their OWN dedicated turn - do not combine responses.
@@ -2071,7 +2071,7 @@ The "invalidationCriteria" array must contain 2-4 items stating exactly what kil
 
 ---
 
-## 🧠 INPUT DATA
+##  INPUT DATA
 Request: "${truncateTextToTokens(userPrompt, 1500)}"
 
 History:  
@@ -2107,7 +2107,7 @@ export const conductTwoWayPostMortemDebate = (
     trades?: LoggedTrade[] // NEW: Pass trades for synthesis
 ): AsyncGenerator<string, void, unknown> => {
 
-    const imageContext = postTradeImageSummaries?.length ? `**⚠️ VERIFIED TRADE OUTCOME DATA (HIGHEST PRIORITY):**\n${postTradeImageSummaries.join('\n---\n')}` : `No post-trade data was provided.`;
+    const imageContext = postTradeImageSummaries?.length ? `** VERIFIED TRADE OUTCOME DATA (HIGHEST PRIORITY):**\n${postTradeImageSummaries.join('\n---\n')}` : `No post-trade data was provided.`;
 
     // Build structured pattern memory synthesis
     let structuredMemoryContext = "";
@@ -2130,7 +2130,7 @@ export const conductTwoWayPostMortemDebate = (
     const tradeHistoryContext = structuredMemoryContext ||
         (finalTradeSummary ? `**PATTERN MEMORY LIBRARY (Historical Context):**\n${truncateTextToTokens(finalTradeSummary, 1500)}` : "No past trades logged.");
 
-    const extendedSLZoneContext = `**⚠️ CRITICAL - 150% EXTENDED SL ZONE LOGIC:**
+    const extendedSLZoneContext = `** CRITICAL - 150% EXTENDED SL ZONE LOGIC:**
 This system uses an "Extended SL Zone" where the initial Stop Loss is a SOFT limit:
 - Original SL Distance = |Entry - StopLoss|
 - Extended SL = SL + 50% of original distance (total 150% risk from entry)
@@ -2252,9 +2252,9 @@ You MUST:
     Define one precise IF/THEN rule that can be applied mechanically in future trades.
     Format: IF [exact condition], THEN [exact action]
 
-    📌 CONCLUSION (MANDATORY – END WITH THIS FORMAT)
+     CONCLUSION (MANDATORY – END WITH THIS FORMAT)
 
-    📋 CONCLUSION
+     CONCLUSION
 
     • Outcome Summary: WIN or LOSS — one clear sentence
     • Missed Win Flag: YES/NO — If YES, state "Missed Win due to Tight SL"
@@ -2335,10 +2335,10 @@ export const conductThreeWayPostMortemDebate = (
     postTradeImageSummaries?: string[]
 ): AsyncGenerator<string, void, unknown> => {
 
-    const imageContext = postTradeImageSummaries?.length ? `**⚠️ VERIFIED TRADE OUTCOME DATA (HIGHEST PRIORITY):**\n${postTradeImageSummaries.join('\n---\n')}` : `No post-trade data was provided.`;
+    const imageContext = postTradeImageSummaries?.length ? `** VERIFIED TRADE OUTCOME DATA (HIGHEST PRIORITY):**\n${postTradeImageSummaries.join('\n---\n')}` : `No post-trade data was provided.`;
     const tradeHistoryContext = finalTradeSummary ? `**PATTERN MEMORY LIBRARY (Historical Context):**\n${truncateTextToTokens(finalTradeSummary, 1500)}` : "No past trades logged.";
 
-    const extendedSLZoneContext = `**⚠️ CRITICAL - 150% EXTENDED SL ZONE LOGIC:**
+    const extendedSLZoneContext = `** CRITICAL - 150% EXTENDED SL ZONE LOGIC:**
 This system uses an "Extended SL Zone" where the initial Stop Loss is a SOFT limit:
 - Original SL Distance = |Entry - StopLoss|
 - Extended SL = SL + 50% of original distance (total 150% risk from entry)
@@ -2465,9 +2465,9 @@ You MUST:
     Define one precise IF/THEN rule that can be applied mechanically in future trades.
     Format: IF [exact condition], THEN [exact action]
 
-    📌 CONCLUSION (MANDATORY – END WITH THIS FORMAT)
+     CONCLUSION (MANDATORY – END WITH THIS FORMAT)
 
-    📋 CONCLUSION
+     CONCLUSION
 
     • Outcome Summary: WIN or LOSS — one clear sentence
     • Missed Win Flag: YES/NO — If YES, state "Missed Win due to Tight SL"

@@ -50,7 +50,7 @@ const ProbabilityPanel: React.FC<ProbabilityPanelProps> = ({
         <SectionCard
             title="AI Probability"
             subtitle="SL/TP hit estimation with reasoning"
-            icon="🎯"
+            icon=""
             accentColor="purple"
             status={status}
             statusLabel={statusLabel}
@@ -64,8 +64,8 @@ const ProbabilityPanel: React.FC<ProbabilityPanelProps> = ({
                         title="Switch between AI Reasoning and Algorithmic Calculation"
                         disabled={isCalculating}
                     >
-                        <option value="AI">🤖 AI</option>
-                        <option value="Algo">📈 Algo</option>
+                        <option value="AI"> AI</option>
+                        <option value="Algo"> Algo</option>
                     </select>
 
                     {/* Regenerate Button */}
@@ -75,7 +75,7 @@ const ProbabilityPanel: React.FC<ProbabilityPanelProps> = ({
                         className={`p-1 rounded hover:bg-white/10 text-zinc-400 hover:text-purple-400 transition-all ${isCalculating ? 'animate-spin opacity-50' : ''}`}
                         title="Regenerate Probability Analysis"
                     >
-                        🔄
+                        
                     </button>
                 </div>
             }
@@ -86,7 +86,7 @@ const ProbabilityPanel: React.FC<ProbabilityPanelProps> = ({
                     {selectedCoinName && (
                         <div className="flex items-center justify-between p-2 rounded-lg bg-purple-500/10 border border-purple-500/20">
                             <span className="text-[10px] text-purple-300">
-                                📌 Viewing: <span className="font-bold text-purple-200">{selectedCoinName}</span>
+                                 Viewing: <span className="font-bold text-purple-200">{selectedCoinName}</span>
                             </span>
                             <button
                                 onClick={onClearSelection}
@@ -167,7 +167,7 @@ const ProbabilityPanel: React.FC<ProbabilityPanelProps> = ({
 
                     {/* AI Reasoning Section */}
                     <div className="p-3 rounded-xl bg-black/20 border border-purple-500/10">
-                        <span className="text-[10px] text-purple-400 font-medium block mb-2">🤖 AI Reasoning</span>
+                        <span className="text-[10px] text-purple-400 font-medium block mb-2"> AI Reasoning</span>
                         <div className="space-y-2 text-[10px]">
                             {/* SL Reasoning */}
                             {(levelProbabilities.slReasoning || (levelProbabilities as any).reasoning?.sl) && (
@@ -251,7 +251,7 @@ const ProbabilityPanel: React.FC<ProbabilityPanelProps> = ({
                         </>
                     ) : (
                         <>
-                            <div className="text-2xl mb-2 opacity-20">🎯</div>
+                            <div className="text-2xl mb-2 opacity-20"></div>
                             <span className="text-xs text-zinc-500 font-medium">No Analysis Active</span>
                             <p className="text-[10px] text-zinc-600 mt-1 text-center font-normal">
                                 Probabilities appear during live trade analysis.

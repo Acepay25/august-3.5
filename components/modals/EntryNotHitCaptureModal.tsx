@@ -29,7 +29,7 @@ export const EntryNotHitCaptureModal: React.FC<EntryNotHitCaptureModalProps> = (
                 {/* Header */}
                 <div className="p-5 border-b border-white/5 bg-cyan-950/30">
                     <div className="flex items-center gap-3">
-                        <span className="text-2xl">🎯</span>
+                        <span className="text-2xl"></span>
                         <div>
                             <h3 className="text-lg font-bold text-cyan-400">
                                 Entry Not Hit - Capture Data
@@ -49,7 +49,7 @@ export const EntryNotHitCaptureModal: React.FC<EntryNotHitCaptureModalProps> = (
                 {/* Info Section */}
                 <div className="p-5 border-b border-white/5 bg-zinc-900/50">
                     <div className="flex items-start gap-3 p-3 rounded-lg bg-cyan-500/5 border border-cyan-500/10">
-                        <span className="text-lg">📊</span>
+                        <span className="text-lg"></span>
                         <div>
                             <p className="text-sm text-zinc-300">
                                 Trade recorded as <span className="text-cyan-400 font-semibold">Entry Not Hit</span>
@@ -77,7 +77,7 @@ export const EntryNotHitCaptureModal: React.FC<EntryNotHitCaptureModalProps> = (
                             <div className="absolute inset-0 bg-cyan-500/10 animate-pulse" />
                         )}
                         <div className="flex items-start gap-4 relative z-10">
-                            <div className="text-3xl">{isCapturing ? '⏳' : '⚡'}</div>
+                            <div className="text-3xl">{isCapturing ? '⏳' : ''}</div>
                             <div className="flex-1">
                                 <div className="font-bold text-cyan-300 group-hover:text-cyan-200 transition-colors flex items-center gap-2">
                                     {isCapturing ? 'Capturing...' : 'Auto-Capture'}
@@ -104,7 +104,7 @@ export const EntryNotHitCaptureModal: React.FC<EntryNotHitCaptureModalProps> = (
                         className="w-full p-4 rounded-xl border border-white/10 bg-zinc-800/50 hover:bg-zinc-800 hover:border-cyan-500/30 transition-all text-left group disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <div className="flex items-start gap-4">
-                            <div className="text-3xl">📸</div>
+                            <div className="text-3xl"></div>
                             <div className="flex-1">
                                 <div className="font-bold text-white group-hover:text-cyan-300 transition-colors">
                                     Upload Screenshot

@@ -25,7 +25,7 @@ export const SkipTradeModal: React.FC<SkipTradeModalProps> = ({
         {/* Header */}
         <div className="p-5 border-b border-white/5 bg-yellow-500/10">
           <div className="flex items-center gap-3">
-            <span className="text-2xl">⏭️</span>
+            <span className="text-2xl">⏭</span>
             <div>
               <h3 className="text-lg font-bold text-yellow-400">
                 Trade Not Executed
@@ -43,7 +43,7 @@ export const SkipTradeModal: React.FC<SkipTradeModalProps> = ({
           <label
             htmlFor="reason-entry-not-hit"
             className={`flex items-start gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${skipReason === TradeOutcome.ENTRY_NOT_HIT
-                ? 'bg-cyan-950/30 border-cyan-500/50 shadow-[0_0_15px_-3px_rgba(34,211,238,0.3)]'
+                ? 'bg-cyan-950/30 border-cyan-500/50 shadow-[0_0_15px_-3px_rgba(212,212,216,0.3)]'
                 : 'bg-zinc-800/50 border-white/10 hover:bg-zinc-800 hover:border-white/20'
               }`}
           >
@@ -58,7 +58,7 @@ export const SkipTradeModal: React.FC<SkipTradeModalProps> = ({
             />
             <div className="flex-1">
               <div className="font-bold text-white flex items-center gap-2">
-                🎯 Entry Not Hit
+                 Entry Not Hit
                 <span className="text-[9px] bg-cyan-500/20 text-cyan-400 px-1.5 py-0.5 rounded uppercase tracking-wider font-bold">
                   Logged
                 </span>
@@ -88,7 +88,7 @@ export const SkipTradeModal: React.FC<SkipTradeModalProps> = ({
             />
             <div className="flex-1">
               <div className="font-bold text-white flex items-center gap-2">
-                🚫 Skipped Trade
+                 Skipped Trade
               </div>
               <p className="text-xs text-zinc-500 mt-1 leading-relaxed">
                 You chose not to take the trade for other reasons. This will not be logged.

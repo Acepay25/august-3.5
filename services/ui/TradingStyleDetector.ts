@@ -143,7 +143,7 @@ export function getEffectiveStyle(
 export function generateStyleContextPrompt(detection: StyleDetectionResult): string {
     return `
 ═══════════════════════════════════════════════════════════════
-🎯 TRADING STYLE: ${detection.recommendedStyle.toUpperCase()} MODE (${detection.confidence.toUpperCase()} confidence)
+ TRADING STYLE: ${detection.recommendedStyle.toUpperCase()} MODE (${detection.confidence.toUpperCase()} confidence)
 ═══════════════════════════════════════════════════════════════
 
 **Auto-Detection Summary:**
@@ -177,7 +177,7 @@ ${detection.recommendedStyle === 'scalp' ? `
 export function generateMasterPromptStyleInjection(style: 'swing' | 'scalp'): string {
     if (style === 'scalp') {
         return `
-⚡ **SCALP MODE ACTIVE**
+ **SCALP MODE ACTIVE**
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 TIMEFRAMES: Focus on 1m, 5m, 15m (LTF priority)
 ENTRIES: Quick setups, immediate execution
@@ -189,7 +189,7 @@ TARGETS: Quick moves, don't overstay
     }
 
     return `
-🔄 **SWING MODE ACTIVE**
+ **SWING MODE ACTIVE**
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 TIMEFRAMES: Focus on 15m, 1H, 4H, Daily (HTF priority)
 ENTRIES: Wait for confirmation, let setup develop

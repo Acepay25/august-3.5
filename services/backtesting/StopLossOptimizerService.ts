@@ -297,10 +297,10 @@ export const generateSLOptimizationWarning = (opt: SLOptimization): string | nul
     if (opt.missedWinRate <= 15) return null;
 
     if (opt.missedWinRate > 30) {
-        return `📊 HIGH MISSED WIN RATE: ${opt.missedWinRate.toFixed(0)}% of losses could have been wins. Widen SL by ${((opt.recommendedMultiplier - 1) * 100).toFixed(0)}%.`;
+        return ` HIGH MISSED WIN RATE: ${opt.missedWinRate.toFixed(0)}% of losses could have been wins. Widen SL by ${((opt.recommendedMultiplier - 1) * 100).toFixed(0)}%.`;
     }
 
-    return `⚠️ MODERATE MISSED WINS: ${opt.missedWinRate.toFixed(0)}% of losses were missed wins. SL may be too tight.`;
+    return ` MODERATE MISSED WINS: ${opt.missedWinRate.toFixed(0)}% of losses were missed wins. SL may be too tight.`;
 };
 
 // ============================================================================
@@ -326,7 +326,7 @@ function getDefaultOptimization(currentSampleSize: number): SLOptimization {
         kellyScoreOriginal: 0,
         kellyScoreOptimized: 0,
         optimalPositionSize: 0,
-        promptInjection: `**📊 SL OPTIMIZATION: Insufficient data (${currentSampleSize}/${MIN_TRADES_FOR_RECOMMENDATION} trades needed)**\nUsing default 1x ATR stop loss. Log more trades to get personalized recommendations.`
+        promptInjection: `** SL OPTIMIZATION: Insufficient data (${currentSampleSize}/${MIN_TRADES_FOR_RECOMMENDATION} trades needed)**\nUsing default 1x ATR stop loss. Log more trades to get personalized recommendations.`
     };
 }
 
@@ -402,28 +402,28 @@ function generateSLOptimizationPrompt(data: {
     kellyImprovement?: number;
     optimalPositionSize?: number;
 }): string {
-    const emoji = data.missedWinRate > 30 ? '❌' :
-        data.missedWinRate > 15 ? '⚠️' : '✅';
+    const emoji = data.missedWinRate > 30 ? '' :
+        data.missedWinRate > 15 ? '' : '';
 
     if (data.recommendedMultiplier > 1.0) {
         return `
 ${emoji} **DYNAMIC SL OPTIMIZATION (Compounding Growth Focus)**
 Based on ${data.totalAnalyzed} trades (${data.confidence} confidence):
 
-📊 **Analysis:**
+ **Analysis:**
 - Current Missed Wins: ${data.missedWinRate.toFixed(1)}% of losses
 - Kelly Growth Improvement: +${data.kellyImprovement?.toFixed(1) || 0}% w/ wider SL
 
-🎯 **RECOMMENDATION: Use ${(data.recommendedMultiplier * 100).toFixed(0)}% of Standard SL Distance**
+ **RECOMMENDATION: Use ${(data.recommendedMultiplier * 100).toFixed(0)}% of Standard SL Distance**
 - Why: Mathematical growth rate is higher despite lower R:R.
 - **Optimal Sizing:** Risk ${(data.optimalPositionSize! * 100).toFixed(1)}% of capital (Half-Kelly).
 
-⚠️ **ACTION:** Widen SL by ${((data.recommendedMultiplier - 1) * 100).toFixed(0)}% and adjust size.
+ **ACTION:** Widen SL by ${((data.recommendedMultiplier - 1) * 100).toFixed(0)}% and adjust size.
 `;
     }
 
     return `
-✅ **DYNAMIC SL OPTIMIZATION (Based on ${data.totalAnalyzed} trades)**
+ **DYNAMIC SL OPTIMIZATION (Based on ${data.totalAnalyzed} trades)**
 Your current SL placement is effective. Missed win rate: ${data.missedWinRate.toFixed(1)}%.
 Continue using standard 1x ATR stop loss distance.
 `;

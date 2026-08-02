@@ -580,7 +580,7 @@ export const generateChartPromptInjection = (
 
     return `
 ═══════════════════════════════════════════════════════════════
-📊 NUMERIC CHART REPRESENTATION (Feature-based + State-based)
+ NUMERIC CHART REPRESENTATION (Feature-based + State-based)
 ═══════════════════════════════════════════════════════════════
 The following provides a structured view of price action across timeframes.
 Use this to understand chart structure without visual images.
@@ -595,10 +595,10 @@ ${formatTimeframe(data5m)}
 
 **MULTI-TIMEFRAME ALIGNMENT:**
 - 4H Trend: ${data4h.state.trend.replace('_', ' ')} | 1H Trend: ${data1h.state.trend.replace('_', ' ')} | 15M Trend: ${data15m.state.trend.replace('_', ' ')} | 5M Trend: ${data5m.state.trend.replace('_', ' ')}
-- HTF Alignment: ${data4h.state.trend === data1h.state.trend ? '✅ 4H-1H aligned' : '⚠️ 4H-1H divergence'}
-- LTF Alignment: ${data15m.state.trend === data5m.state.trend ? '✅ 15M-5M aligned' : '⚠️ 15M-5M divergence'}
+- HTF Alignment: ${data4h.state.trend === data1h.state.trend ? ' 4H-1H aligned' : ' 4H-1H divergence'}
+- LTF Alignment: ${data15m.state.trend === data5m.state.trend ? ' 15M-5M aligned' : ' 15M-5M divergence'}
 
-💡 **USE THIS DATA TO:**
+ **USE THIS DATA TO:**
 - Validate entry timing based on trend maturity
 - Check for momentum confirmation across timeframes
 - Identify high-probability setups (aligned trends, breakout regimes)

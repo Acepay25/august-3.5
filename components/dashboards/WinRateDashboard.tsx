@@ -380,7 +380,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                             <span className={`text-lg font-black ${streakData.currentStreak.type === 'win' ? 'text-emerald-400' : streakData.currentStreak.type === 'loss' ? 'text-rose-400' : 'text-zinc-400'}`}>
                                 {streakData.currentStreak.count > 0 ? (
                                     <>
-                                        {streakData.currentStreak.type === 'win' ? '🔥' : '❄️'} {streakData.currentStreak.count} {streakData.currentStreak.type.toUpperCase()}S
+                                        {streakData.currentStreak.type === 'win' ? '' : ''} {streakData.currentStreak.count} {streakData.currentStreak.type.toUpperCase()}S
                                     </>
                                 ) : '-'}
                             </span>

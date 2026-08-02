@@ -131,7 +131,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                     onClick={() => setLensConfig({ ...lensConfig, enabled: !lensConfig.enabled })}
                                     className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 lg:py-2 transition-all text-xs sm:text-sm border-r border-black/10 rounded-l-full ${lensConfig.enabled ? 'text-white shadow-[inset_0_0_10px_rgba(0,0,0,0.1)]' : 'text-zinc-400 hover:text-white'}`}
                                 >
-                                    <span className="text-xs sm:text-sm">🎭</span>
+                                    <span className="text-xs sm:text-sm"></span>
                                     <span className="font-medium hidden xs:inline sm:inline">Lenses</span>
                                 </button>
 
@@ -155,7 +155,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                         {/* Macro Analyst */}
                                         <div className="p-2">
                                             <div className="flex items-center gap-2 mb-1">
-                                                <span className="text-xs">🌊</span>
+                                                <span className="text-xs"></span>
                                                 <span className="text-[10px] font-medium text-zinc-400">Macro & Volatility</span>
                                             </div>
                                             <select
@@ -184,7 +184,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                         {/* Technical Analyst */}
                                         <div className="p-2">
                                             <div className="flex items-center gap-2 mb-1">
-                                                <span className="text-xs">📊</span>
+                                                <span className="text-xs"></span>
                                                 <span className="text-[10px] font-medium text-zinc-400">Technical Analyst</span>
                                             </div>
                                             <select
@@ -213,7 +213,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                         {/* Risk Manager */}
                                         <div className="p-2">
                                             <div className="flex items-center gap-2 mb-1">
-                                                <span className="text-xs">🛡️</span>
+                                                <span className="text-xs"></span>
                                                 <span className="text-[10px] font-medium text-zinc-400">Risk Manager</span>
                                             </div>
                                             <select
@@ -248,7 +248,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                     onClick={() => setIsLeverageDropdownOpen(!isLeverageDropdownOpen)}
                                     className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full transition-all text-xs sm:text-sm ${isLeverageDropdownOpen ? 'bg-zinc-700 text-white' : 'bg-zinc-800/80 text-zinc-400 hover:text-white hover:bg-zinc-700'}`}
                                 >
-                                    <span className="text-xs sm:text-sm">🌐</span>
+                                    <span className="text-xs sm:text-sm"></span>
                                     <span className="font-medium">{leverageInput}x</span>
                                 </button>
                                 {isLeverageDropdownOpen && (
@@ -394,7 +394,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             {/* Warning if no providers ready */}
                             {providers.filter(p => p.isEnabled && p.apiKey.trim().length > 0).length === 0 && (
                                 <div className="px-4 py-3 text-[11px] text-red-400 bg-red-500/10 border-t border-red-500/20">
-                                    ⚠️ Enable at least one AI provider (with an API key) to send messages
+                                     Enable at least one AI provider (with an API key) to send messages
                                 </div>
                             )}
                         </div>

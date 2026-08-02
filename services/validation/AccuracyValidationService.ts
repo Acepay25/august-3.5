@@ -138,7 +138,7 @@ export const validateMultiTimeframeConfluence = (
     const expectedDirection = proposedDirection === 'Long' ? 'bullish' : 'bearish';
 
     if (confluenceDirection !== expectedDirection && confluenceDirection !== 'neutral') {
-        errors.push(`⚠️ CONFLUENCE CONFLICT: MTF confluence is ${confluenceDirection.toUpperCase()} but trade is ${proposedDirection}`);
+        errors.push(` CONFLUENCE CONFLICT: MTF confluence is ${confluenceDirection.toUpperCase()} but trade is ${proposedDirection}`);
         adjustedConfidence = 'Avoid';
     }
 
@@ -228,7 +228,7 @@ export const validateRiskReward = (
 
     // Validate stop loss is not too tight (should be at least 1x ATR)
     if (risk < atr) {
-        warnings.push(`⚠️ TIGHT STOP: Stop loss (${risk.toFixed(2)}) is tighter than 1x ATR (${atr.toFixed(2)}). High chance of being stopped out by noise.`);
+        warnings.push(` TIGHT STOP: Stop loss (${risk.toFixed(2)}) is tighter than 1x ATR (${atr.toFixed(2)}). High chance of being stopped out by noise.`);
         isValid = false;
     }
 
@@ -284,11 +284,11 @@ export const validateVolumeConfirmation = (
     const oppositeDivergence = proposedDirection === 'Long' ? 'bearish' : 'bullish';
 
     if (advancedVolume.obvDivergence === oppositeDivergence) {
-        errors.push(`⚠️ DIVERGENCE ALERT: OBV shows ${advancedVolume.obvDivergence} divergence - contradicts ${proposedDirection} trade`);
+        errors.push(` DIVERGENCE ALERT: OBV shows ${advancedVolume.obvDivergence} divergence - contradicts ${proposedDirection} trade`);
         adjustedConfidence = 'Low';
     } else if (advancedVolume.obvDivergence === expectedDivergence) {
         // Positive confirmation
-        warnings.push(`✅ OBV ${expectedDivergence} divergence supports ${proposedDirection} direction`);
+        warnings.push(` OBV ${expectedDivergence} divergence supports ${proposedDirection} direction`);
     }
 
     // Check CVD alignment
@@ -347,12 +347,12 @@ export const validateMarketRegime = (
 
     // Check for counter-trend trades in strong trends
     if (regime.regime === 'strong_trend_up' && proposedDirection === 'Short') {
-        errors.push(`⚠️ COUNTER-TREND WARNING: Shorting in a STRONG UPTREND (ADX: ${regime.adx}). High failure rate.`);
+        errors.push(` COUNTER-TREND WARNING: Shorting in a STRONG UPTREND (ADX: ${regime.adx}). High failure rate.`);
         validationScore -= 30;
     }
 
     if (regime.regime === 'strong_trend_down' && proposedDirection === 'Long') {
-        errors.push(`⚠️ COUNTER-TREND WARNING: Going Long in a STRONG DOWNTREND (ADX: ${regime.adx}). High failure rate.`);
+        errors.push(` COUNTER-TREND WARNING: Going Long in a STRONG DOWNTREND (ADX: ${regime.adx}). High failure rate.`);
         validationScore -= 30;
     }
 
@@ -370,13 +370,13 @@ export const validateMarketRegime = (
 
     // Volatile chop warning
     if (regime.regime === 'volatile_chop') {
-        warnings.push('⚡ VOLATILE CHOP detected. Reduce position size and use wider stops.');
+        warnings.push(' VOLATILE CHOP detected. Reduce position size and use wider stops.');
         validationScore -= 20;
     }
 
     // Compression phase
     if (regime.regime === 'compression') {
-        warnings.push('🔄 Market in COMPRESSION. Breakout imminent - wait for direction confirmation or risk false breakout.');
+        warnings.push(' Market in COMPRESSION. Breakout imminent - wait for direction confirmation or risk false breakout.');
     }
 
     // Add regime recommendation
@@ -570,7 +570,7 @@ export const checkCandleConfirmation = (
     if (percentRemaining > 80) {
         return {
             isConfirmed: false,
-            warning: `⚠️ ${timeframe} candle just opened (~${Math.round(percentRemaining)}% remaining). Wait for more price action before confirming entry.`,
+            warning: ` ${timeframe} candle just opened (~${Math.round(percentRemaining)}% remaining). Wait for more price action before confirming entry.`,
             suggestedAction: 'Wait for at least 50% of candle to form'
         };
     }
@@ -746,7 +746,7 @@ export const validateTradeSetup = (
     // Devil's Advocate penalties
     if (devilsAdvocate.overallRiskScore >= 70) {
         deduct(CONFIDENCE_PENALTIES.DEVILS_ADVOCATE_HIGH, `High Devil's Advocate risk (${devilsAdvocate.overallRiskScore}/100)`);
-        allWarnings.push(`😈 Devil's Advocate risk score: ${devilsAdvocate.overallRiskScore}/100. Major penalty applied.`);
+        allWarnings.push(` Devil's Advocate risk score: ${devilsAdvocate.overallRiskScore}/100. Major penalty applied.`);
     } else if (devilsAdvocate.overallRiskScore >= 50) {
         deduct(CONFIDENCE_PENALTIES.DEVILS_ADVOCATE_MODERATE, `Moderate Devil's Advocate risk (${devilsAdvocate.overallRiskScore}/100)`);
         allWarnings.push(`Devil's Advocate risk score: ${devilsAdvocate.overallRiskScore}/100. Penalty applied.`);
@@ -765,12 +765,12 @@ export const validateTradeSetup = (
 
         if (winRate !== null && total >= MIN_TRADES_FOR_CALIBRATION) {
             const hasDecayData = decayWinRate !== null && decayWinRate !== simpleWinRate;
-            calibrationNote = `📊 Historical "${proposedConfidence}" trades: ${winRate}% win rate (n=${total})${hasDecayData ? ' [time-weighted]' : ''}`;
+            calibrationNote = ` Historical "${proposedConfidence}" trades: ${winRate}% win rate (n=${total})${hasDecayData ? ' [time-weighted]' : ''}`;
 
             // Penalize if historical accuracy is poor for High confidence
             if (proposedConfidence === 'High' && winRate < 60) {
                 deduct(CONFIDENCE_PENALTIES.POOR_HISTORICAL_ACCURACY, `Historical "High" accuracy only ${winRate}%`);
-                allWarnings.push(`⚠️ Historical "High" confidence trades only ${winRate}% accurate. Consider recalibrating.`);
+                allWarnings.push(` Historical "High" confidence trades only ${winRate}% accurate. Consider recalibrating.`);
             }
         }
     }
@@ -783,27 +783,27 @@ export const validateTradeSetup = (
 
     // Generate validation report with penalty breakdown
     const penaltyBreakdown = penalties.length > 0
-        ? `\n📉 PENALTIES APPLIED:\n${penalties.map(p => `• -${p.points} pts: ${p.reason}`).join('\n')}`
+        ? `\n PENALTIES APPLIED:\n${penalties.map(p => `• -${p.points} pts: ${p.reason}`).join('\n')}`
         : '';
 
     const validationReport = `
 ═══ ACCURACY VALIDATION REPORT ═══
 
-📊 CONFLUENCE: ${confluenceValidation.validationScore}/100
-💰 RISK/REWARD: ${rrValidation.ratio.toFixed(2)} (min: ${rrValidation.minRequired})
-📈 VOLUME: ${volumeValidation.validationScore}/100
-🎯 REGIME: ${regimeValidation.validationScore}/100
-😈 RISK SCORE: ${devilsAdvocate.overallRiskScore}/100
+ CONFLUENCE: ${confluenceValidation.validationScore}/100
+ RISK/REWARD: ${rrValidation.ratio.toFixed(2)} (min: ${rrValidation.minRequired})
+ VOLUME: ${volumeValidation.validationScore}/100
+ REGIME: ${regimeValidation.validationScore}/100
+ RISK SCORE: ${devilsAdvocate.overallRiskScore}/100
 
-🎚️ CONFIDENCE SCORE: ${confidenceScore}/100 (High≥${CONFIDENCE_THRESHOLDS.HIGH}, Med≥${CONFIDENCE_THRESHOLDS.MEDIUM}, Low≥${CONFIDENCE_THRESHOLDS.LOW})
+ CONFIDENCE SCORE: ${confidenceScore}/100 (High≥${CONFIDENCE_THRESHOLDS.HIGH}, Med≥${CONFIDENCE_THRESHOLDS.MEDIUM}, Low≥${CONFIDENCE_THRESHOLDS.LOW})
 ${penaltyBreakdown}
-${allErrors.length > 0 ? `\n❌ ERRORS:\n${allErrors.map(e => `• ${e}`).join('\n')}` : ''}
-${allWarnings.length > 0 ? `\n⚠️ WARNINGS:\n${allWarnings.map(w => `• ${w}`).join('\n')}` : ''}
+${allErrors.length > 0 ? `\n ERRORS:\n${allErrors.map(e => `• ${e}`).join('\n')}` : ''}
+${allWarnings.length > 0 ? `\n WARNINGS:\n${allWarnings.map(w => `• ${w}`).join('\n')}` : ''}
 
-🎭 DEVIL'S ADVOCATE:
+ DEVIL'S ADVOCATE:
 ${devilsAdvocate.bearCaseReasons.slice(0, 3).map(r => `• ${r}`).join('\n')}
 
-📌 FINAL CONFIDENCE: ${finalConfidence}${finalConfidence !== proposedConfidence ? ` (adjusted from ${proposedConfidence})` : ''}
+ FINAL CONFIDENCE: ${finalConfidence}${finalConfidence !== proposedConfidence ? ` (adjusted from ${proposedConfidence})` : ''}
 ${calibrationNote ? `\n${calibrationNote}` : ''}
 ═══════════════════════════════════
 `.trim();
@@ -830,7 +830,7 @@ ${calibrationNote ? `\n${calibrationNote}` : ''}
  */
 export const generateValidationPromptInjection = (): string => {
     return `
-🛡️ **ACCURACY VALIDATION PROTOCOL (MANDATORY)**
+ **ACCURACY VALIDATION PROTOCOL (MANDATORY)**
 
 Before finalizing any trade recommendation, you MUST validate against these criteria:
 
@@ -876,7 +876,7 @@ Before recommending any trade, list:
  */
 export const generateDevilsAdvocatePrompt = (direction: TradeDirection): string => {
     return `
-😈 **DEVIL'S ADVOCATE ANALYSIS (MANDATORY)**
+ **DEVIL'S ADVOCATE ANALYSIS (MANDATORY)**
 
 You MUST complete this section before giving your final recommendation:
 

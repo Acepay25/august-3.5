@@ -507,13 +507,13 @@ function simulateLimitOrder(
 // ============================================================================
 
 export const generateEntryTimingPromptInjection = (result: EntryTimingResult): string => {
-    const emoji = result.score >= 70 ? '✅' :
-        result.score >= 50 ? '⚠️' : '❌';
+    const emoji = result.score >= 70 ? '' :
+        result.score >= 50 ? '' : '';
 
     let output = `
 ${emoji} **ENTRY TIMING SCORE: ${result.score}/100 (${result.timing.toUpperCase()})**
 
-📊 Component Breakdown:
+ Component Breakdown:
 - Key Level Proximity: ${result.components.keyLevelProximity}/20
 - Candle Confirmation: ${result.components.candleConfirmation}/20
 - Momentum Alignment: ${result.components.momentumAlignment}/20
@@ -522,11 +522,11 @@ ${emoji} **ENTRY TIMING SCORE: ${result.score}/100 (${result.timing.toUpperCase(
 `;
 
     if (result.nearestKeyLevel) {
-        output += `\n📍 Nearest Key Level: ${result.nearestKeyLevel.name} at $${result.nearestKeyLevel.price} (${result.nearestKeyLevel.distance.toFixed(2)}% away)`;
+        output += `\n Nearest Key Level: ${result.nearestKeyLevel.name} at $${result.nearestKeyLevel.price} (${result.nearestKeyLevel.distance.toFixed(2)}% away)`;
     }
 
     if (result.warnings.length > 0) {
-        output += `\n\n⚠️ Warnings:\n${result.warnings.map(w => `- ${w}`).join('\n')}`;
+        output += `\n\n Warnings:\n${result.warnings.map(w => `- ${w}`).join('\n')}`;
     }
 
     // SUGGESTED BETTER ENTRY (key feature)
@@ -535,18 +535,18 @@ ${emoji} **ENTRY TIMING SCORE: ${result.score}/100 (${result.timing.toUpperCase(
         const sim = result.limitOrderSimulation;
 
         output += `
-\n💡 **BETTER ENTRY AVAILABLE:**
+\n **BETTER ENTRY AVAILABLE:**
 Consider entry at **$${result.suggestedEntry.price.toFixed(2)}** (${result.suggestedEntry.reason})
 - Improvement: ${Math.abs(result.suggestedEntry.distanceFromAI).toFixed(2)}% ${direction} than AI.
 `;
 
         if (sim) {
-            const probIcon = sim.fillProbability > 60 ? '✅' : sim.fillProbability > 30 ? '⚠️' : '❌';
+            const probIcon = sim.fillProbability > 60 ? '' : sim.fillProbability > 30 ? '' : '';
             output += `- Fill Probability: ${probIcon} ${sim.fillProbability.toFixed(0)}% (within ${sim.expectedWaitTime}h)
 - FOMO Risk: **${sim.fomoRisk}** (Chance of missing trade completely)`;
 
             if (sim.fillProbability < 30) {
-                output += `\n⚠️ **WARNING:** Low probability of fill. You might miss the trade if you wait.`;
+                output += `\n **WARNING:** Low probability of fill. You might miss the trade if you wait.`;
             }
         }
     }
@@ -554,11 +554,11 @@ Consider entry at **$${result.suggestedEntry.price.toFixed(2)}** (${result.sugge
     // Entry timing rule
     output += `\n**ENTRY TIMING RULE:**\n`;
     if (result.score < 50) {
-        output += `❌ Entry timing is POOR. ${result.suggestedEntry ? `Consider the suggested entry at $${result.suggestedEntry.price.toFixed(2)} instead.` : 'Consider waiting for better setup.'}`;
+        output += ` Entry timing is POOR. ${result.suggestedEntry ? `Consider the suggested entry at $${result.suggestedEntry.price.toFixed(2)} instead.` : 'Consider waiting for better setup.'}`;
     } else if (result.score < 70) {
-        output += '⚠️ Entry timing is ACCEPTABLE but not optimal. Proceed with caution.';
+        output += ' Entry timing is ACCEPTABLE but not optimal. Proceed with caution.';
     } else {
-        output += '✅ Entry timing is GOOD. Proceed with trade.';
+        output += ' Entry timing is GOOD. Proceed with trade.';
     }
 
     return output;
@@ -570,7 +570,7 @@ Consider entry at **$${result.suggestedEntry.price.toFixed(2)}** (${result.sugge
 export const generateEntryTimingWarning = (result: EntryTimingResult): string | null => {
     if (result.score >= 50) return null;
 
-    let warning = `📍 ENTRY TIMING: Score ${result.score}/100 (${result.timing})`;
+    let warning = ` ENTRY TIMING: Score ${result.score}/100 (${result.timing})`;
 
     if (result.suggestedEntry) {
         warning += ` - Better entry: $${result.suggestedEntry.price.toFixed(2)} (${result.suggestedEntry.levelType})`;

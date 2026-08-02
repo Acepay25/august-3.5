@@ -175,8 +175,8 @@ const TABS: TabConfig[] = [
     { id: 'performance', label: 'AI Review', shortLabel: 'Review', icon: <StarIcon className="w-5 h-5" />, color: 'text-zinc-500', activeColor: 'text-purple-400' },
     { id: 'analytics', label: 'Stats', shortLabel: 'Stats', icon: <ChartBarIcon className="w-5 h-5" />, color: 'text-zinc-500', activeColor: 'text-yellow-400' },
     { id: 'memory', label: 'Memory', shortLabel: 'Mem', icon: <BrainIcon className="w-5 h-5" />, color: 'text-zinc-500', activeColor: 'text-emerald-400' },
-    { id: 'learning', label: 'Learning', shortLabel: 'Learn', icon: <span className="text-lg">🎓</span>, color: 'text-zinc-500', activeColor: 'text-blue-400' },
-    { id: 'models', label: 'Models', shortLabel: 'AI', icon: <span className="text-lg">🤖</span>, color: 'text-zinc-500', activeColor: 'text-violet-400' },
+    { id: 'learning', label: 'Learning', shortLabel: 'Learn', icon: <span className="text-lg"></span>, color: 'text-zinc-500', activeColor: 'text-blue-400' },
+    { id: 'models', label: 'Models', shortLabel: 'AI', icon: <span className="text-lg"></span>, color: 'text-zinc-500', activeColor: 'text-violet-400' },
     { id: 'reasoning', label: 'Reasoning', shortLabel: 'Think', icon: <BrainIcon className="w-5 h-5" />, color: 'text-zinc-500', activeColor: 'text-cyan-400' },
 ];
 

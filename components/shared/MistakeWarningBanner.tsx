@@ -72,7 +72,7 @@ const MistakeWarningBanner: React.FC<MistakeWarningBannerProps> = ({
 
             {/* Header */}
             <div className="flex items-center gap-2 mb-3">
-                <span className="text-xl">⚠️</span>
+                <span className="text-xl"></span>
                 <span className="text-sm font-bold text-amber-400 uppercase tracking-wide">
                     Personal Trading Alert
                 </span>
@@ -83,7 +83,7 @@ const MistakeWarningBanner: React.FC<MistakeWarningBannerProps> = ({
                 <div className="mb-3 p-2 rounded-lg bg-rose-950/40 border border-rose-500/20">
                     <div className="flex items-center gap-2">
                         <span className="text-rose-400 font-bold text-sm">
-                            ❌ {matchingSetup.setup}
+                             {matchingSetup.setup}
                         </span>
                         <span className="text-xs text-zinc-400">
                             only {matchingSetup.winRate}% win rate ({matchingSetup.count} trades)
@@ -107,7 +107,7 @@ const MistakeWarningBanner: React.FC<MistakeWarningBannerProps> = ({
                             className={`flex items-center gap-2 text-xs ${mistake.severity === 'high' ? 'text-rose-400' : 'text-amber-400'
                                 }`}
                         >
-                            <span>{mistake.severity === 'high' ? '🔴' : '🟡'}</span>
+                            <span>{mistake.severity === 'high' ? '' : ''}</span>
                             <span>{mistake.description}</span>
                             <span className="text-zinc-600">({mistake.occurrences}x)</span>
                         </div>

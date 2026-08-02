@@ -94,9 +94,9 @@ export const FAMILY_UI_DATA = [
  * Human-readable labels for each role (used in UI and debate transcript)
  */
 export const ENSEMBLE_ROLE_LABELS: Record<string, string> = {
-   technical_structure: '📊 Technical Structure',
-   market_context: '🌐 Market Context',
-   risk_management: '⚠️ Risk Management'
+   technical_structure: ' Technical Structure',
+   market_context: ' Market Context',
+   risk_management: ' Risk Management'
 };
 
 /**

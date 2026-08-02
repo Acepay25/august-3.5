@@ -135,7 +135,7 @@ const AdvancedAnalyticsSidePanel: React.FC<AdvancedAnalyticsSidePanelProps> = ({
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
                                 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-purple-500/20 flex items-center justify-center">
-                                    <span className="text-xl">🔬</span>
+                                    <span className="text-xl"></span>
                                 </div>
                                 <div>
                                     <h2 className="text-base font-semibold text-white tracking-tight">Analytics</h2>
@@ -161,7 +161,7 @@ const AdvancedAnalyticsSidePanel: React.FC<AdvancedAnalyticsSidePanelProps> = ({
                         <SectionCard
                             title="Model Health"
                             subtitle="Underperforming AI feedback"
-                            icon="⚡"
+                            icon=""
                             accentColor={underperformerData.length > 0 ? 'red' : 'emerald'}
                             status={underperformerData.length > 0 ? 'warning' : 'success'}
                             statusLabel={underperformerData.length > 0 ? `${underperformerData.length} Issues` : 'All Good'}
@@ -229,7 +229,7 @@ const AdvancedAnalyticsSidePanel: React.FC<AdvancedAnalyticsSidePanelProps> = ({
                             <SectionCard
                                 title="Entry Timing"
                                 subtitle="Display only • Does not affect AI"
-                                icon="🎯"
+                                icon=""
                                 accentColor={entryTimingScore.score >= 70 ? 'emerald' : entryTimingScore.score >= 50 ? 'amber' : 'red'}
                                 status={entryTimingScore.score >= 70 ? 'success' : entryTimingScore.score >= 50 ? 'warning' : 'waiting'}
                                 statusLabel={entryTimingScore.timingQuality}
@@ -244,14 +244,14 @@ const AdvancedAnalyticsSidePanel: React.FC<AdvancedAnalyticsSidePanelProps> = ({
                                         />
                                         <StatPill
                                             label="Quality"
-                                            value={entryTimingScore.score >= 70 ? '✓ Good' : entryTimingScore.score >= 50 ? '⚡ Fair' : '⚠️ Poor'}
+                                            value={entryTimingScore.score >= 70 ? '✓ Good' : entryTimingScore.score >= 50 ? ' Fair' : ' Poor'}
                                             variant={entryTimingScore.score >= 70 ? 'success' : entryTimingScore.score >= 50 ? 'warning' : 'danger'}
                                         />
                                     </div>
 
                                     {entryTimingScore.suggestedEntry && (
                                         <div className="p-3 rounded-xl bg-cyan-500/[0.08] border border-cyan-500/20">
-                                            <div className="text-[10px] text-cyan-400 mb-1.5 font-medium">💡 Better Entry Available</div>
+                                            <div className="text-[10px] text-cyan-400 mb-1.5 font-medium"> Better Entry Available</div>
                                             <div className="text-lg text-cyan-100 font-mono font-bold">
                                                 ${entryTimingScore.suggestedEntry.price.toLocaleString()}
                                             </div>
@@ -269,7 +269,7 @@ const AdvancedAnalyticsSidePanel: React.FC<AdvancedAnalyticsSidePanelProps> = ({
                             <SectionCard
                                 title="SL Optimization"
                                 subtitle="Display only • Does not affect AI"
-                                icon="📈"
+                                icon=""
                                 accentColor="amber"
                                 status="active"
                                 statusLabel={`${slOptimization.missedWinRate.toFixed(0)}% missed`}
@@ -318,7 +318,7 @@ const AdvancedAnalyticsSidePanel: React.FC<AdvancedAnalyticsSidePanelProps> = ({
                         {/* Footer Tip */}
                         <div className="text-center py-3">
                             <div className="text-[10px] text-zinc-600">
-                                💡 Enable Hybrid Intelligence to see live results
+                                 Enable Hybrid Intelligence to see live results
                             </div>
                         </div>
                     </div>

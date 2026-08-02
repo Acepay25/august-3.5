@@ -257,14 +257,14 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                     id="models"
                                     activeTab={activeTab}
                                     onClick={() => setActiveTab('models')}
-                                    icon="🤖"
+                                    icon=""
                                     label="AI Models & Providers"
                                 />
                                 <NavTabButton
                                     id="journal"
                                     activeTab={activeTab}
                                     onClick={() => setActiveTab('journal')}
-                                    icon="📔"
+                                    icon=""
                                     label="Trading Journal"
                                     badge={props.loggedTrades && props.loggedTrades.length > 0 ? `${props.loggedTrades.length}` : undefined}
                                 />
@@ -272,35 +272,35 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                     id="general"
                                     activeTab={activeTab}
                                     onClick={() => setActiveTab('general')}
-                                    icon="⚡"
+                                    icon=""
                                     label="General & Analysis"
                                 />
                                 <NavTabButton
                                     id="lenses"
                                     activeTab={activeTab}
                                     onClick={() => setActiveTab('lenses')}
-                                    icon="🎭"
+                                    icon=""
                                     label="Analyst Lenses"
                                 />
                                 <NavTabButton
                                     id="instructions"
                                     activeTab={activeTab}
                                     onClick={() => setActiveTab('instructions')}
-                                    icon="✍️"
+                                    icon=""
                                     label="Custom Instructions"
                                 />
                                 <NavTabButton
                                     id="memory"
                                     activeTab={activeTab}
                                     onClick={() => setActiveTab('memory')}
-                                    icon="🧠"
+                                    icon=""
                                     label="Memory & Learning"
                                 />
                                 <NavTabButton
                                     id="actions"
                                     activeTab={activeTab}
                                     onClick={() => setActiveTab('actions')}
-                                    icon="💼"
+                                    icon=""
                                     label="Profile & Quick Actions"
                                 />
                             </div>

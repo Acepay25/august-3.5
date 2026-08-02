@@ -421,9 +421,9 @@ export const generateTASummary = (
     return `
 **${timeframe} Technical Analysis (Code-Calculated):**
 
-📊 **Price:** $${indicators.currentPrice}
-📍 **Position:** ${indicators.pricePosition}
-🎯 **Trend:** ${indicators.trendStrength.replace('_', ' ').toUpperCase()}
+ **Price:** $${indicators.currentPrice}
+ **Position:** ${indicators.pricePosition}
+ **Trend:** ${indicators.trendStrength.replace('_', ' ').toUpperCase()}
 
 **RSI:**
 - RSI(6): ${indicators.rsi.rsi6} | RSI(12): ${indicators.rsi.rsi12} | RSI(14): ${indicators.rsi.rsi14} | RSI(24): ${indicators.rsi.rsi24}

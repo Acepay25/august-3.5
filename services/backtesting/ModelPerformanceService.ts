@@ -622,7 +622,7 @@ export const generatePerformanceSummary = (): string => {
     // Summarize every tracked provider (dynamic ids, created on demand)
     const providers = Object.keys(data);
 
-    let summary = '📊 **AI MODEL PERFORMANCE:**\n';
+    let summary = ' **AI MODEL PERFORMANCE:**\n';
 
     for (const provider of providers) {
         const perf = data[provider];
@@ -682,8 +682,8 @@ Treat all analyst opinions with equal weight until more data is available.
     let rankingTable = '';
     providerStats.forEach((s, idx) => {
         const rank = idx + 1;
-        const streakWarning = s.coldStreak >= 3 ? `⚠️ COLD STREAK (${s.coldStreak})` : '';
-        const trendIcon = s.trend === 'improving' ? '📈' : s.trend === 'declining' ? '📉' : '➡️';
+        const streakWarning = s.coldStreak >= 3 ? ` COLD STREAK (${s.coldStreak})` : '';
+        const trendIcon = s.trend === 'improving' ? '' : s.trend === 'declining' ? '' : '';
         rankingTable += `${rank}. **${s.provider.toUpperCase()}**: ${s.winRate.toFixed(1)}% (${s.total} trades) ${trendIcon} ${streakWarning}\n`;
     });
 
@@ -712,7 +712,7 @@ ${rankingTable}
     // Add cold streak warnings
     const coldStreakProviders = providerStats.filter(s => s.coldStreak >= 3);
     if (coldStreakProviders.length > 0) {
-        context += `\n**⚠️ COLD STREAK WARNINGS:**\n`;
+        context += `\n** COLD STREAK WARNINGS:**\n`;
         coldStreakProviders.forEach(s => {
             context += `- ${s.provider.toUpperCase()} is on a ${s.coldStreak}-loss streak. Apply extra scrutiny to their recommendations.\n`;
         });
@@ -952,7 +952,7 @@ export const detectColdStreak = (provider: AIProvider): {
         isOnColdStreak: stats.isDemoted,
         consecutiveLosses: stats.coldStreakCount,
         message: stats.isDemoted
-            ? `⚠️ ${provider.toUpperCase()} is on a cold streak (${stats.coldStreakCount} losses)`
+            ? ` ${provider.toUpperCase()} is on a cold streak (${stats.coldStreakCount} losses)`
             : ''
     };
 };
@@ -1355,9 +1355,9 @@ export const getModelConfidenceCalibration = (provider: AIProvider): ConfidenceC
 
     let calibrationWarning: string | undefined;
     if (isOverconfident) {
-        calibrationWarning = `⚠️ ${provider.toUpperCase()} is overconfident: High confidence trades win only ${highWinRate.toFixed(1)}% vs ${overallWinRate.toFixed(1)}% overall`;
+        calibrationWarning = ` ${provider.toUpperCase()} is overconfident: High confidence trades win only ${highWinRate.toFixed(1)}% vs ${overallWinRate.toFixed(1)}% overall`;
     } else if (providerData.high.total >= 3 && highWinRate < mediumWinRate) {
-        calibrationWarning = `📊 ${provider.toUpperCase()}: "High" confidence (${highWinRate.toFixed(1)}%) underperforms "Medium" (${mediumWinRate.toFixed(1)}%)`;
+        calibrationWarning = ` ${provider.toUpperCase()}: "High" confidence (${highWinRate.toFixed(1)}%) underperforms "Medium" (${mediumWinRate.toFixed(1)}%)`;
     }
 
     return {
@@ -1558,7 +1558,7 @@ export const analyzeProviderPairs = (enabledProviders: AIProvider[]): string => 
     }
 
     if (insights.length === 0) return '';
-    return `\n🔗 **PROVIDER PAIR INSIGHTS:**\n${insights.map(i => `- ${i}`).join('\n')}\n`;
+    return `\n **PROVIDER PAIR INSIGHTS:**\n${insights.map(i => `- ${i}`).join('\n')}\n`;
 };
 
 // =============================================================================

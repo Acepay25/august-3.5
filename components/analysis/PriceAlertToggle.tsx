@@ -38,7 +38,7 @@ const PriceAlertToggle: React.FC<PriceAlertToggleProps> = ({
             className={`px-3 py-2 rounded-lg transition-all flex items-center justify-center gap-1 ${alertEnabled ? 'text-amber-400 bg-amber-500/20 border border-amber-500/30' : 'text-zinc-300 bg-zinc-700 hover:bg-zinc-600'}`}
             title={alertEnabled ? 'Alerts ON' : 'Enable Price Alerts'}
         >
-            {alertEnabled ? '🔔' : '🔕'}
+            {alertEnabled ? '' : ''}
         </button>
     );
 };
