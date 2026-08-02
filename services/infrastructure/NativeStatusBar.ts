@@ -14,7 +14,7 @@
  * on notched Android devices.
  */
 
-const APP_BG_COLOR = '#09090b'; // zinc-950, matches index.css / manifest.json
+const APP_BG_COLOR = '#100e0b'; // zinc-950, matches index.css / manifest.json
 
 export const initNativeStatusBar = async (): Promise<void> => {
     try {

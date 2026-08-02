@@ -39,18 +39,18 @@ interface ModelPerformanceDashboardProps {
 // Decorative brand hints for known provider ids — custom providers get a
 // palette color and use their id as display name.
 const PROVIDER_BRAND_HINTS: Record<string, { name: string; color: string }> = {
-    gemini: { name: 'Gemini', color: '#FAFAFA' },
-    deepseek: { name: 'DeepSeek', color: '#A1A1AA' },
-    groq: { name: 'Groq', color: '#E4E4E7' },
-    groq_new: { name: 'Groq Alt', color: '#D4D4D8' },
-    groq_alt2: { name: 'Groq Alt2', color: '#A1A1AA' },
-    openrouter: { name: 'OpenRouter', color: '#71717A' },
-    zhipu: { name: 'Zhipu', color: '#B8B8BF' },
-    openai: { name: 'OpenAI', color: '#909097' },
-    grok: { name: 'Grok', color: '#82828A' },
+    gemini: { name: 'Gemini', color: '#f6f1e7' },
+    deepseek: { name: 'DeepSeek', color: '#938b7e' },
+    groq: { name: 'Groq', color: '#d8d0c2' },
+    groq_new: { name: 'Groq Alt', color: '#b5ada0' },
+    groq_alt2: { name: 'Groq Alt2', color: '#938b7e' },
+    openrouter: { name: 'OpenRouter', color: '#6f685d' },
+    zhipu: { name: 'Zhipu', color: '#a89f92' },
+    openai: { name: 'OpenAI', color: '#8a8376' },
+    grok: { name: 'Grok', color: '#7a7368' },
 };
 
-const FALLBACK_PALETTE = ['#FAFAFA', '#E4E4E7', '#D4D4D8', '#A1A1AA', '#C9C9CF', '#909097', '#71717A', '#B8B8BF', '#DEDEE2', '#82828A'];
+const FALLBACK_PALETTE = ['#f6f1e7', '#d8d0c2', '#b5ada0', '#938b7e', '#b8b0a4', '#8a8376', '#6f685d', '#a89f92', '#d0c9bc', '#7a7368'];
 
 const resolveModelDisplay = (provider: AIProvider, index: number): { provider: AIProvider; name: string; color: string } => {
     const hint = PROVIDER_BRAND_HINTS[provider];
@@ -203,7 +203,7 @@ const ModelCard: React.FC<{ data: ModelCardData }> = ({ data }) => {
             <div className="flex justify-center mb-3">
                 <WinRateRing
                     percentage={stats.last20WinRate}
-                    color={stats.isDemoted ? '#52525B' : color}
+                    color={stats.isDemoted ? '#524c43' : color}
                 />
             </div>
 

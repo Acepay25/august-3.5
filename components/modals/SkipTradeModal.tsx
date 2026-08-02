@@ -43,7 +43,7 @@ export const SkipTradeModal: React.FC<SkipTradeModalProps> = ({
           <label
             htmlFor="reason-entry-not-hit"
             className={`flex items-start gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${skipReason === TradeOutcome.ENTRY_NOT_HIT
-                ? 'bg-cyan-950/30 border-cyan-500/50 shadow-[0_0_15px_-3px_rgba(212,212,216,0.3)]'
+                ? 'bg-cyan-950/30 border-cyan-500/50 shadow-[0_0_15px_-3px_rgba(181,173,160,0.3)]'
                 : 'bg-zinc-800/50 border-white/10 hover:bg-zinc-800 hover:border-white/20'
               }`}
           >

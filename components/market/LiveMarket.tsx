@@ -795,9 +795,9 @@ ${JSON.stringify(marketData, null, 2)}
                             <div className="absolute top-2 right-2 z-10 flex flex-col gap-2 max-w-[200px]">
                                 {/* AI Analyzing Indicator */}
                                 {isAIAnalyzing && (
-                                    <div className="flex items-center gap-2 bg-[#d4d4d8]/10 border border-[#d4d4d8]/20 rounded-lg px-3 py-1.5 backdrop-blur-sm">
-                                        <Spinner size="w-3 h-3" color="border-[#d4d4d8]" />
-                                        <span className="text-[#d4d4d8] font-bold text-xs">AI Analyzing...</span>
+                                    <div className="flex items-center gap-2 bg-[#b5ada0]/10 border border-[#b5ada0]/20 rounded-lg px-3 py-1.5 backdrop-blur-sm">
+                                        <Spinner size="w-3 h-3" color="border-[#b5ada0]" />
+                                        <span className="text-[#b5ada0] font-bold text-xs">AI Analyzing...</span>
                                     </div>
                                 )}
 
