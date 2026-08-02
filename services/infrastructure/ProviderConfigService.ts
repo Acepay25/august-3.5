@@ -8,6 +8,53 @@ import { getPreferenceObject, setPreferenceObject } from './PreferencesService';
 
 const STORAGE_KEY = 'provider_configs_v1';
 
+// ─── Secret Encryption (Electron safeStorage bridge) ─────────────────────────
+// API keys are encrypted at rest on desktop via the OS keychain. Web/Capacitor
+// builds have no bridge and keep plaintext (unchanged behavior). Encrypted
+// values are prefixed "enc:v1:" so we can distinguish them from legacy
+// plaintext and fail open (return as-is) if the bridge is unavailable.
+
+interface CryptoBridge {
+    encryptSecret: (plaintext: string) => Promise<string | null>;
+    decryptSecret: (payload: string) => Promise<string | null>;
+}
+
+function getCryptoBridge(): CryptoBridge | null {
+    if (typeof window !== 'undefined') {
+        const api = (window as any).electronAPI as CryptoBridge | undefined;
+        if (api && typeof api.encryptSecret === 'function' && typeof api.decryptSecret === 'function') {
+            return api;
+        }
+    }
+    return null;
+}
+
+const isEncrypted = (value: string): boolean => value.startsWith('enc:v1:');
+
+async function encryptKey(apiKey: string): Promise<string> {
+    if (!apiKey || isEncrypted(apiKey)) return apiKey;
+    const bridge = getCryptoBridge();
+    if (!bridge) return apiKey;
+    try {
+        return (await bridge.encryptSecret(apiKey)) || apiKey;
+    } catch (err) {
+        console.warn('[ProviderConfigService] Key encryption failed, storing plaintext:', err);
+        return apiKey;
+    }
+}
+
+async function decryptKey(stored: string): Promise<string> {
+    if (!stored || !isEncrypted(stored)) return stored;
+    const bridge = getCryptoBridge();
+    if (!bridge) return stored;
+    try {
+        return (await bridge.decryptSecret(stored)) ?? stored;
+    } catch (err) {
+        console.warn('[ProviderConfigService] Key decryption failed:', err);
+        return stored;
+    }
+}
+
 // ─── Provider Configuration Service ───────────────────────────────────────
 
 export function getDefaultConfigs(): ProviderConfig[] {
@@ -18,20 +65,22 @@ export function getDefaultConfigs(): ProviderConfig[] {
 
 /**
  * Load all provider configs. Returns empty array if none configured.
+ * API keys are decrypted transparently when the desktop bridge is available.
  */
 export async function loadProviderConfigs(): Promise<ProviderConfig[]> {
     const saved = await getPreferenceObject<ProviderConfig[]>(STORAGE_KEY);
     if (!saved) {
         return getDefaultConfigs();
     }
-    return saved;
+    return Promise.all(saved.map(async c => ({ ...c, apiKey: await decryptKey(c.apiKey || '') })));
 }
 
 /**
- * Persist all provider configs.
+ * Persist all provider configs. API keys are encrypted at rest on desktop.
  */
 export async function saveProviderConfigs(configs: ProviderConfig[]): Promise<void> {
-    await setPreferenceObject(STORAGE_KEY, configs);
+    const encrypted = await Promise.all(configs.map(async c => ({ ...c, apiKey: await encryptKey(c.apiKey || '') })));
+    await setPreferenceObject(STORAGE_KEY, encrypted);
 }
 
 /**

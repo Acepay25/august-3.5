@@ -1835,6 +1835,8 @@ const App: React.FC = () => {
                 setIsLivePostMortemVisible={setIsLivePostMortemVisible}
                 handleCancelAnalysis={handleCancelAnalysis}
                 onDeleteMessages={handleDeleteMessages}
+                hasReadyProviders={readyProviders.length > 0}
+                onOpenSettings={() => setIsSettingsMenuVisible(true)}
                 // ChatInput props
                 lensConfig={lensConfig}
                 setLensConfig={handleSetLensConfig}

@@ -17,7 +17,8 @@
     "electron": "wait-on tcp:3000 && electron .",
     "electron:dev": "concurrently -k \"cross-env BROWSER=none npm run dev\" \"npm run electron\"",
     "electron:build": "npm run build && electron-builder",
-    "electron:release": "npm run build && electron-builder --publish always"
+    "electron:release": "npm run build && electron-builder --publish always",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@capacitor-community/sqlite": "^7.0.3",
@@ -53,6 +54,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.62.1",
     "@tailwindcss/vite": "^4.3.3",
     "@testing-library/jest-dom": "^7.0.0",
     "@testing-library/react": "^16.3.2",
