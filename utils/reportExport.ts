@@ -88,17 +88,17 @@ export const exportTradesHTML = (trades: LoggedTrade[]): void => {
 <title>August 3.5 — Trade Report</title>
 <style>
   :root { color-scheme: light; }
-  body { font-family: 'Segoe UI', system-ui, sans-serif; color: #18181b; margin: 2rem auto; max-width: 1100px; padding: 0 1.5rem; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; color: #1a1712; margin: 2rem auto; max-width: 1100px; padding: 0 1.5rem; }
   h1 { font-size: 1.4rem; margin-bottom: .25rem; }
-  .sub { color: #52525b; font-size: .85rem; margin-bottom: 1.5rem; }
+  .sub { color: #524c43; font-size: .85rem; margin-bottom: 1.5rem; }
   .stats { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
-  .stat { border: 1px solid #d4d4d8; border-radius: 8px; padding: .6rem 1rem; min-width: 110px; }
+  .stat { border: 1px solid #b5ada0; border-radius: 8px; padding: .6rem 1rem; min-width: 110px; }
   .stat b { display: block; font-size: 1.2rem; }
-  .stat span { font-size: .7rem; color: #52525b; text-transform: uppercase; letter-spacing: .05em; }
+  .stat span { font-size: .7rem; color: #524c43; text-transform: uppercase; letter-spacing: .05em; }
   table { width: 100%; border-collapse: collapse; font-size: .8rem; }
-  th, td { border-bottom: 1px solid #e4e4e7; padding: .45rem .5rem; text-align: left; }
-  th { background: #f4f4f5; font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; color: #52525b; }
-  tr:nth-child(even) td { background: #fafafa; }
+  th, td { border-bottom: 1px solid #d8d0c2; padding: .45rem .5rem; text-align: left; }
+  th { background: #eae4d8; font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; color: #524c43; }
+  tr:nth-child(even) td { background: #f6f1e7; }
   @media print { body { margin: 0; } }
 </style>
 </head>

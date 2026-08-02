@@ -237,7 +237,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                     {/* Modal Top Header */}
                     <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800/80 bg-zinc-950 shrink-0">
                         <div className="flex items-center gap-3">
-                            <div className="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-[0_0_8px_#d4d4d8]" />
+                            <div className="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-[0_0_8px_#b5ada0]" />
                             <h2 className="text-lg font-bold text-white tracking-tight">Settings</h2>
                         </div>
                         <button

@@ -22,8 +22,8 @@ interface TradeLogContentProps {
 
 const OutcomeBadge: React.FC<{ outcome: TradeOutcome }> = ({ outcome }) => {
     const styles: { [key in TradeOutcome]?: string } = {
-        [TradeOutcome.WIN]: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-[0_0_10px_-3px_rgba(212,212,216,0.3)]',
-        [TradeOutcome.LOSS]: 'bg-rose-500/10 text-rose-400 border border-rose-500/20 shadow-[0_0_10px_-3px_rgba(113,113,122,0.3)]',
+        [TradeOutcome.WIN]: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-[0_0_10px_-3px_rgba(181,173,160,0.3)]',
+        [TradeOutcome.LOSS]: 'bg-rose-500/10 text-rose-400 border border-rose-500/20 shadow-[0_0_10px_-3px_rgba(111,104,93,0.3)]',
         [TradeOutcome.ENTRY_NOT_HIT]: 'bg-zinc-500/10 text-zinc-400 border border-zinc-500/20',
         [TradeOutcome.SKIPPED]: 'bg-blue-500/10 text-blue-400 border border-blue-500/20',
     };
@@ -96,7 +96,7 @@ const TradeLogRow: React.FC<{
 
     if (isAccuracyMode) {
         // All accuracy modes use cyan dark theme
-        containerClass = "bg-cyan-950/20 backdrop-blur-md border border-cyan-500/30 hover:border-cyan-500/50 shadow-[0_0_15px_-5px_rgba(212,212,216,0.1)]";
+        containerClass = "bg-cyan-950/20 backdrop-blur-md border border-cyan-500/30 hover:border-cyan-500/50 shadow-[0_0_15px_-5px_rgba(181,173,160,0.1)]";
         modeBadge = (
             <span className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded border border-cyan-500/30 bg-cyan-900/30 text-cyan-300 ml-2 animate-pulse">
                 {accuracySubMode === 'pure_ai' ? 'Pure AI' : 'Strict Mode'}
@@ -163,14 +163,14 @@ const TradeLogRow: React.FC<{
                             {/* Dollar PnL (user-entered) takes precedence; a percent-only
                                 trade (outcome autopilot) renders its leveraged % instead. */}
                             {pnlAmount !== undefined ? (
-                                <div className={`flex flex-col items-end px-3 py-1.5 rounded-lg border backdrop-blur-md min-w-[80px] ${pnlAmount >= 0 ? 'bg-emerald-500/10 border-emerald-500/20 shadow-[0_0_15px_-5px_rgba(212,212,216,0.2)]' : 'bg-rose-500/10 border-rose-500/20 shadow-[0_0_15px_-5px_rgba(113,113,122,0.2)]'}`}>
+                                <div className={`flex flex-col items-end px-3 py-1.5 rounded-lg border backdrop-blur-md min-w-[80px] ${pnlAmount >= 0 ? 'bg-emerald-500/10 border-emerald-500/20 shadow-[0_0_15px_-5px_rgba(181,173,160,0.2)]' : 'bg-rose-500/10 border-rose-500/20 shadow-[0_0_15px_-5px_rgba(111,104,93,0.2)]'}`}>
                                     <span className={`font-mono font-black text-lg leading-none ${pnlAmount >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                         {pnlAmount >= 0 ? '+' : ''}{pnlAmount.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}
                                     </span>
                                     <span className={`text-[9px] font-bold uppercase tracking-widest opacity-70 ${pnlAmount >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>PnL</span>
                                 </div>
                             ) : pnlPercent !== undefined ? (
-                                <div className={`flex flex-col items-end px-3 py-1.5 rounded-lg border backdrop-blur-md min-w-[80px] ${pnlPercent >= 0 ? 'bg-emerald-500/10 border-emerald-500/20 shadow-[0_0_15px_-5px_rgba(212,212,216,0.2)]' : 'bg-rose-500/10 border-rose-500/20 shadow-[0_0_15px_-5px_rgba(113,113,122,0.2)]'}`}>
+                                <div className={`flex flex-col items-end px-3 py-1.5 rounded-lg border backdrop-blur-md min-w-[80px] ${pnlPercent >= 0 ? 'bg-emerald-500/10 border-emerald-500/20 shadow-[0_0_15px_-5px_rgba(181,173,160,0.2)]' : 'bg-rose-500/10 border-rose-500/20 shadow-[0_0_15px_-5px_rgba(111,104,93,0.2)]'}`}>
                                     <span className={`font-mono font-black text-lg leading-none ${pnlPercent >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                         {pnlPercent >= 0 ? '+' : ''}{pnlPercent.toLocaleString('en-US', { maximumFractionDigits: 1 })}%
                                     </span>
@@ -210,7 +210,7 @@ const TradeLogRow: React.FC<{
                                             key={val}
                                             onClick={(e) => handlePresetClick(e, val)}
                                             className={`text-[9px] px-1.5 py-0.5 rounded border transition-all ${parseInt(localLeverage) === val
-                                                ? 'bg-cyan-500/20 border-cyan-500/30 text-cyan-300 font-bold shadow-[0_0_10px_-3px_rgba(212,212,216,0.3)]'
+                                                ? 'bg-cyan-500/20 border-cyan-500/30 text-cyan-300 font-bold shadow-[0_0_10px_-3px_rgba(181,173,160,0.3)]'
                                                 : 'bg-zinc-800 border-white/5 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700'
                                                 }`}
                                         >

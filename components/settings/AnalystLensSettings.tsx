@@ -273,8 +273,8 @@ export const AnalystLensSettings: React.FC<Props> = ({ config, enabledProviders,
         }
 
         .style-button.active {
-          background: linear-gradient(135deg, #a1a1aa 0%, #d4d4d8 100%);
-          border-color: #a1a1aa;
+          background: linear-gradient(135deg, #938b7e 0%, #b5ada0 100%);
+          border-color: #938b7e;
           color: #fff;
         }
 
@@ -295,7 +295,7 @@ export const AnalystLensSettings: React.FC<Props> = ({ config, enabledProviders,
         .lens-error-banner {
           background: rgba(239, 68, 68, 0.2);
           border: 1px solid rgba(239, 68, 68, 0.4);
-          color: #a1a1aa;
+          color: #938b7e;
           padding: 10px 14px;
           border-radius: 8px;
           font-size: 13px;
@@ -369,11 +369,11 @@ export const AnalystLensSettings: React.FC<Props> = ({ config, enabledProviders,
 
         .provider-select:focus {
           outline: none;
-          border-color: #a1a1aa;
+          border-color: #938b7e;
         }
 
         .provider-select option {
-          background: #18181b;
+          background: #1a1712;
           color: #fff;
         }
 
@@ -419,7 +419,7 @@ export const AnalystLensSettings: React.FC<Props> = ({ config, enabledProviders,
         }
 
         .toggle-switch input:checked + .toggle-slider {
-          background-color: #a1a1aa;
+          background-color: #938b7e;
         }
 
         .toggle-switch input:checked + .toggle-slider:before {
@@ -443,14 +443,14 @@ export const AnalystLensSettings: React.FC<Props> = ({ config, enabledProviders,
         }
 
         .info-value {
-          color: #a1a1aa;
+          color: #938b7e;
           font-weight: 500;
         }
 
         .info-warning {
           margin-top: 10px;
           font-size: 12px;
-          color: #d4d4d8;
+          color: #b5ada0;
         }
 
         @media (max-width: 768px) {
