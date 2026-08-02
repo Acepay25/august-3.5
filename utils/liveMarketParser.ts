@@ -35,7 +35,11 @@ export const parseLiveMarketData = (text: string): ParsedMarketData | null => {
                                 name: p.name,
                                 type: p.type,
                                 timeframe: tf,
-                                confidence: p.confidence ? `${(p.confidence * 100).toFixed(0)}%` : undefined,
+                                confidence: typeof p.confidence === 'number'
+                                    ? `${(p.confidence <= 1 ? p.confidence * 100 : p.confidence).toFixed(0)}%`
+                                    : typeof p.confidence === 'string' && p.confidence
+                                        ? p.confidence
+                                        : undefined,
                                 description: p.description
                             });
                         });

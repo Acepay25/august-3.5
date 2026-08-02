@@ -46,3 +46,6 @@ tsc_errors.txt
 # Test output artifacts
 services/test_mem_output.txt
 services/test_output.txt
+
+# Local agent tooling
+.zcode/

@@ -190,7 +190,7 @@ export const calculateStreakData = (trades: LoggedTrade[]): StreakData => {
     }
 
     // Current streak (most recent trades)
-    let currentType: 'win' | 'loss' = completedTrades[0].outcome === TradeOutcome.WIN ? 'win' : 'loss';
+    const currentType: 'win' | 'loss' = completedTrades[0].outcome === TradeOutcome.WIN ? 'win' : 'loss';
     let currentCount = 0;
     for (const trade of completedTrades) {
         const isWin = trade.outcome === TradeOutcome.WIN;

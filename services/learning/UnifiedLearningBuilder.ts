@@ -8,7 +8,7 @@
  * them to current analysis.
  */
 
-import { LoggedTrade, AIProvider } from '../../types';
+import { LoggedTrade, AIProvider, InsightKnowledgeBase } from '../../types';
 import { computeLearningProfile, generateLearningContext, PersonalizedLearningProfile } from './SelfLearningService';
 import { generateMistakeWarningInjection } from './MistakePatternService';
 import { generateLearningRulesPrompt, LearningRulesStorage, loadLearningRules } from './LearningRulesService';
@@ -40,7 +40,8 @@ export const buildUnifiedLearningContext = (
         pattern?: string;
         direction?: 'Long' | 'Short' | 'Neutral'
     },
-    enabledProviders: AIProvider[]
+    enabledProviders: AIProvider[],
+    knowledgeBase?: InsightKnowledgeBase
 ): UnifiedLearningContext => {
     // Need minimum trades for meaningful learning
     if (tradeLog.length < 3) {
@@ -100,7 +101,7 @@ export const buildUnifiedLearningContext = (
             currentSetup.coin,
             currentSetup.pattern,
             currentSetup.direction || 'Neutral',
-            undefined // knowledgeBase - loaded internally
+            knowledgeBase
         );
         if (insights && insights.trim()) {
             parts.push(insights);

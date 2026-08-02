@@ -36,17 +36,46 @@ interface ModelPerformanceDashboardProps {
     selectedModels?: Record<string, string>; // provider -> model name
 }
 
-const MODEL_CONFIG: { provider: AIProvider; name: string; color: string }[] = [
-    { provider: AIProvider.GEMINI, name: 'Gemini', color: '#4285F4' },
-    { provider: AIProvider.DEEPSEEK, name: 'DeepSeek', color: '#6366F1' },
-    { provider: AIProvider.GROQ, name: 'Groq', color: '#F97316' },
-    { provider: AIProvider.GROQ_NEW, name: 'Groq Alt', color: '#EAB308' },
-    { provider: AIProvider.GROQ_ALT2, name: 'Groq Alt2', color: '#A855F7' },
-    { provider: AIProvider.OPENROUTER, name: 'OpenRouter', color: '#22C55E' },
-    { provider: AIProvider.ZHIPU, name: 'Zhipu', color: '#06B6D4' },
-    { provider: AIProvider.OPENAI, name: 'OpenAI', color: '#10A37F' },
-    { provider: AIProvider.GROK, name: 'Grok', color: '#1DA1F2' },
-];
+// Decorative brand hints for known provider ids — custom providers get a
+// palette color and use their id as display name.
+const PROVIDER_BRAND_HINTS: Record<string, { name: string; color: string }> = {
+    gemini: { name: 'Gemini', color: '#4285F4' },
+    deepseek: { name: 'DeepSeek', color: '#6366F1' },
+    groq: { name: 'Groq', color: '#F97316' },
+    groq_new: { name: 'Groq Alt', color: '#EAB308' },
+    groq_alt2: { name: 'Groq Alt2', color: '#A855F7' },
+    openrouter: { name: 'OpenRouter', color: '#22C55E' },
+    zhipu: { name: 'Zhipu', color: '#06B6D4' },
+    openai: { name: 'OpenAI', color: '#10A37F' },
+    grok: { name: 'Grok', color: '#1DA1F2' },
+};
+
+const FALLBACK_PALETTE = ['#4285F4', '#6366F1', '#F97316', '#EAB308', '#A855F7', '#22C55E', '#06B6D4', '#10A37F', '#1DA1F2', '#EC4899'];
+
+const resolveModelDisplay = (provider: AIProvider, index: number): { provider: AIProvider; name: string; color: string } => {
+    const hint = PROVIDER_BRAND_HINTS[provider];
+    return {
+        provider,
+        name: hint?.name || provider,
+        color: hint?.color || FALLBACK_PALETTE[index % FALLBACK_PALETTE.length],
+    };
+};
+
+/** Provider ids that contributed to a trade (dynamic first, legacy fallback). */
+const tradeProviderIds = (trade: LoggedTrade): string[] => {
+    if (trade.modelsUsed && Object.keys(trade.modelsUsed).length > 0) {
+        return Object.keys(trade.modelsUsed);
+    }
+    const legacy: string[] = [];
+    if (trade.geminiModelUsed) legacy.push('gemini');
+    if (trade.deepseekModelUsed) legacy.push('deepseek');
+    if (trade.zhipuModelUsed) legacy.push('zhipu');
+    if (trade.groqModelUsed) legacy.push('groq');
+    if (trade.groqNewModelUsed) legacy.push('groq_new');
+    if (trade.groqAlt2ModelUsed) legacy.push('groq_alt2');
+    if (trade.openrouterModelUsed) legacy.push('openrouter');
+    return legacy;
+};
 
 const WinRateRing: React.FC<{ percentage: number; color: string; size?: number }> = ({
     percentage,
@@ -214,24 +243,10 @@ const WeightsChart: React.FC<{ weights: DynamicWeights; enabledProviders: AIProv
     weights,
     enabledProviders
 }) => {
-    const weightData = MODEL_CONFIG
-        .filter(m => enabledProviders.includes(m.provider))
-        .map(m => {
-            const key = m.provider.toLowerCase().replace('_', '') as keyof DynamicWeights;
-            let weight = 0;
-
-            // Map provider to weight key
-            switch (m.provider) {
-                case AIProvider.GEMINI: weight = weights.gemini; break;
-                case AIProvider.DEEPSEEK: weight = weights.deepseek; break;
-                case AIProvider.ZHIPU: weight = weights.zhipu; break;
-                case AIProvider.GROQ: weight = weights.groq; break;
-                case AIProvider.GROQ_NEW: weight = weights.groqNew; break;
-                case AIProvider.GROQ_ALT2: weight = weights.groqAlt2; break;
-                default: weight = 0;
-            }
-
-            return { ...m, weight: Math.round(weight * 100) };
+    const weightData = enabledProviders
+        .map((provider, idx) => {
+            const weight = weights.byProvider?.[provider] ?? 0;
+            return { ...resolveModelDisplay(provider, idx), weight: Math.round(weight * 100) };
         })
         .filter(m => m.weight > 0)
         .sort((a, b) => b.weight - a.weight);
@@ -293,7 +308,7 @@ const ColdStreakAlerts: React.FC<{ modelData: ModelCardData[] }> = ({ modelData 
 };
 
 const ModelPerformanceDashboard: React.FC<ModelPerformanceDashboardProps> = ({
-    enabledProviders = [AIProvider.GEMINI, AIProvider.DEEPSEEK, AIProvider.GROQ],
+    enabledProviders = [],
     currentRegime = 'ranging' as MarketRegime,
     currentFamily = '',
     trades = [],
@@ -314,13 +329,17 @@ const ModelPerformanceDashboard: React.FC<ModelPerformanceDashboardProps> = ({
                 syncRollingWindowFromTradeLog(trades);
             }
 
-            // Get stats for ALL models in MODEL_CONFIG, not just enabled ones
-            // This ensures models with historical trades are always visible
-            const allModelData = MODEL_CONFIG.map(m => ({
-                ...m,
-                stats: getRollingWindowStats(m.provider),
-                expertise: getSituationalExpertise(m.provider),
-                modelName: selectedModels[m.provider] || undefined
+            // Build rows for the union of enabled providers and providers found
+            // in the trade log (dynamic ids), so historical models stay visible.
+            const tradedProviders = new Set<string>();
+            trades.forEach(t => tradeProviderIds(t).forEach(id => tradedProviders.add(id)));
+            const allIds = [...new Set<string>([...enabledProviders, ...tradedProviders])];
+
+            const allModelData = allIds.map((id, idx) => ({
+                ...resolveModelDisplay(id, idx),
+                stats: getRollingWindowStats(id),
+                expertise: getSituationalExpertise(id),
+                modelName: selectedModels[id] || undefined
             }));
 
             // Filter to show only models that have at least 1 trade (stats.last20Total > 0)
@@ -338,7 +357,7 @@ const ModelPerformanceDashboard: React.FC<ModelPerformanceDashboardProps> = ({
 
     useEffect(() => {
         refreshData();
-    }, [enabledProviders, currentRegime, currentFamily]);
+    }, [enabledProviders, currentRegime, currentFamily, trades]);
 
     return (
         <div className="space-y-6">

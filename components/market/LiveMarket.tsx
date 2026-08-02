@@ -421,29 +421,31 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze }
 
             // Race strategy: Parallel execution to get the first available price
             const fetchSource = (source: { url: string, isProxy: boolean }): Promise<number> => {
-                return new Promise(async (resolve, reject) => {
-                    const controller = new AbortController();
-                    // Shorter timeout for faster failover perception in the race
-                    const timeoutId = window.setTimeout(() => controller.abort(), source.isProxy ? 4000 : 2000);
+                return new Promise((resolve, reject) => {
+                    void (async () => {
+                        const controller = new AbortController();
+                        // Shorter timeout for faster failover perception in the race
+                        const timeoutId = window.setTimeout(() => controller.abort(), source.isProxy ? 4000 : 2000);
 
-                    try {
-                        const response = await fetch(source.url, { signal: controller.signal });
-                        window.clearTimeout(timeoutId);
+                        try {
+                            const response = await fetch(source.url, { signal: controller.signal });
+                            window.clearTimeout(timeoutId);
 
-                        if (!response.ok) {
-                            reject(new Error(`Status ${response.status}`));
-                            return;
+                            if (!response.ok) {
+                                reject(new Error(`Status ${response.status}`));
+                                return;
+                            }
+
+                            const data = await response.json();
+                            if (data.price) {
+                                resolve(parseFloat(data.price));
+                            } else {
+                                reject(new Error("No price data"));
+                            }
+                        } catch (e) {
+                            reject(e);
                         }
-
-                        const data = await response.json();
-                        if (data.price) {
-                            resolve(parseFloat(data.price));
-                        } else {
-                            reject(new Error("No price data"));
-                        }
-                    } catch (e) {
-                        reject(e);
-                    }
+                    })();
                 });
             };
 
@@ -510,7 +512,7 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze }
                             // Ensure status reflects socket is the source
                             setConnectionState(prev => prev.source === 'socket' ? prev : { status: 'connected', source: 'socket' });
                         }
-                    } catch (e) { }
+                    } catch (e) { /* intentionally ignored: malformed socket message */ }
                 };
 
                 ws.onclose = () => {

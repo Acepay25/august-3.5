@@ -194,12 +194,21 @@ const createTables = async (): Promise<void> => {
     `);
 
     // VERSION 2 MIGRATION: Add userPrompt if missing
+    // ALTER TABLE ADD COLUMN has no IF NOT EXISTS in SQLite, so "duplicate
+    // column" failures are expected on re-runs — anything else is logged.
+    const isDuplicateColumnError = (e: unknown): boolean =>
+        e instanceof Error && /duplicate column/i.test(e.message);
+    const swallowDuplicateColumn = (e: unknown, migration: string): void => {
+        if (!isDuplicateColumnError(e)) {
+            console.warn(`[SqliteService] Migration "${migration}" failed:`, e);
+        }
+    };
+
     if (DB_VERSION >= 2) {
         try {
-            // Check if column exists first to avoid error, or rely on catch
             await db.execute(`ALTER TABLE saved_analyses ADD COLUMN userPrompt TEXT;`);
         } catch (e) {
-            // Ignore if column already exists
+            swallowDuplicateColumn(e, 'v2 saved_analyses.userPrompt');
         }
     }
 
@@ -208,12 +217,12 @@ const createTables = async (): Promise<void> => {
         try {
             await db.execute(`ALTER TABLE conversations ADD COLUMN settings TEXT;`);
         } catch (e) {
-            // Ignore if exists
+            swallowDuplicateColumn(e, 'v3 conversations.settings');
         }
         try {
             await db.execute(`ALTER TABLE trades ADD COLUMN meta TEXT;`);
         } catch (e) {
-            // Ignore if exists
+            swallowDuplicateColumn(e, 'v3 trades.meta');
         }
     }
 
@@ -222,12 +231,12 @@ const createTables = async (): Promise<void> => {
         try {
             await db.execute(`ALTER TABLE users ADD COLUMN lastActiveConversationId TEXT;`);
         } catch (e) {
-            // Ignore if exists
+            swallowDuplicateColumn(e, 'v4 users.lastActiveConversationId');
         }
         try {
             await db.execute(`ALTER TABLE saved_analyses ADD COLUMN meta TEXT;`);
         } catch (e) {
-            // Ignore if exists
+            swallowDuplicateColumn(e, 'v4 saved_analyses.meta');
         }
     }
 
@@ -325,27 +334,9 @@ export const sqliteGetUserProfile = async (username: string): Promise<UserProfil
             title: row.title,
             timestamp: new Date(row.createdAt).getTime(),
             messages: row.messages ? JSON.parse(row.messages) : [],
-            // Supply default values, but allow settings to override
-            geminiModel: '',
-            deepseekModel: '',
-            zhipuModel: '',
-            groqModel: '',
-            groqNewModel: '',
-            groqAlt2Model: '',
-            openrouterModel: '',
-            openaiModel: '',
-            grokNativeModel: '',
+            // Defaults for current Conversation fields; saved settings override.
             ocrModel: '',
-            isGeminiEnabled: false,
-            isDeepSeekEnabled: false,
-            isZhipuEnabled: false,
-            isGroqEnabled: false,
-            isGroqNewEnabled: false,
-            isGroqAlt2Enabled: false,
-            isOpenrouterEnabled: false,
-            isOpenaiEnabled: false,
-            isGrokNativeEnabled: false,
-            moderatorProvider: 'gemini' as any,
+            moderatorProviderId: settings.moderatorProvider || '', // legacy column name compat
             moderatorModel: '',
             leverage: 100,
             ...settings // Override defaults with saved settings

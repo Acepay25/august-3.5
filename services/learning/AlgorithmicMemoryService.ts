@@ -4,7 +4,7 @@
 
 import { GlobalMemory, LoggedTrade, TradeOutcome, TradeInsight } from '../../types';
 import { detectRecurringMistakes } from './MistakePatternService';
-import { consolidateMemory } from './MemoryConsolidationService';
+import { consolidateMemory, pruneOutdatedInsights, aggregateSimilarInsights } from './MemoryConsolidationService';
 
 /**
  * Updates Global Memory algorithmically without AI.
@@ -135,7 +135,6 @@ export const updateGlobalMemoryAlgorithmically = (
         // Looking at MemoryConsolidationService.ts, the helper functions `pruneOutdatedInsights` and `aggregateSimilarInsights` ARE synchronous.
         // So I can call them directly!
 
-        const { pruneOutdatedInsights, aggregateSimilarInsights } = require('./MemoryConsolidationService');
         const pruned = pruneOutdatedInsights(memory.insightKnowledgeBase);
         const aggregated = aggregateSimilarInsights(pruned);
 

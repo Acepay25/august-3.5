@@ -113,7 +113,17 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
     const coinStats = useMemo(() => calculatePerformanceByCoin(filteredTrades), [filteredTrades]);
     const familyStats = useMemo(() => calculatePerformanceByFamily(filteredTrades), [filteredTrades]);
     const streakData = useMemo(() => calculateStreakData(filteredTrades), [filteredTrades]);
-    const trendData = useMemo(() => calculateRecentTrends(filteredTrades, selectedPreset || 30), [filteredTrades, selectedPreset]);
+    // Number of days the trend window should look back. The "All" preset (0) and
+    // custom date ranges would otherwise be clamped to the 30-day default inside
+    // calculateRecentTrends, silently dropping older trades from the trend chart.
+    const trendDays = useMemo(() => {
+        if (isCustomRange && customStartDate && customEndDate) {
+            const diff = (new Date(customEndDate).getTime() - new Date(customStartDate).getTime()) / (1000 * 60 * 60 * 24);
+            return Math.max(1, Math.ceil(diff));
+        }
+        return selectedPreset === 0 ? 3650 : selectedPreset;
+    }, [isCustomRange, customStartDate, customEndDate, selectedPreset]);
+    const trendData = useMemo(() => calculateRecentTrends(filteredTrades, trendDays), [filteredTrades, trendDays]);
 
     // Prepare chart data
     const confidenceChartData = confidenceStats.filter(s => s.total > 0);

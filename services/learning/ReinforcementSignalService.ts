@@ -138,6 +138,16 @@ export const ReinforcementSignalService = {
     },
 
     /**
+     * Get recent signals across all providers (dynamic provider ids).
+     */
+    async getAllSignals(limit: number = 20): Promise<ReinforcementSignal[]> {
+        const store = await getPreferenceObject<ReinforcementSignalStorage>(RL_STORAGE_KEY) || { signals: [], lastUpdated: '' };
+        return store.signals
+            .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+            .slice(0, limit);
+    },
+
+    /**
      * Get average reward score (Recent Performance Indicator)
      */
     async getAverageReward(provider: AIProvider, window: number = 10): Promise<number> {

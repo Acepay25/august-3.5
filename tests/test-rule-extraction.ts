@@ -12,7 +12,7 @@ if (typeof localStorage === 'undefined' || localStorage === null) {
     (global as any).localStorage = {
         _data: {},
         setItem: function (id: string, val: string) { return this._data[id] = String(val); },
-        getItem: function (id: string) { return this._data.hasOwnProperty(id) ? this._data[id] : null; },
+        getItem: function (id: string) { return Object.prototype.hasOwnProperty.call(this._data, id) ? this._data[id] : null; },
         removeItem: function (id: string) { return delete this._data[id]; },
         clear: function () { return this._data = {}; }
     };

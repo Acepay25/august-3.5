@@ -235,7 +235,7 @@ const TimeframeSection: React.FC<{ label: string; data: TimeframeData | undefine
 const LiveMarketDataView: React.FC<{ jsonString: string }> = ({ jsonString }) => {
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({ '5m': true, '15m': true, '1h': false, '4h': false });
   
-  let data: MarketData | null = null;
+  let data: MarketData | null;
   try {
       data = JSON.parse(jsonString);
   } catch (e) {

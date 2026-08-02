@@ -1,7 +1,7 @@
 {
   "name": "august-3.5",
   "private": true,
-  "version": "1.0.5",
+  "version": "1.0.6",
   "type": "module",
   "main": "electron/main.cjs",
   "description": "Advanced AI-powered cryptocurrency trading analysis terminal",
@@ -62,6 +62,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
     "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
     "electron": "^40.0.0",
     "electron-builder": "^26.4.0",
     "eslint": "^10.7.0",

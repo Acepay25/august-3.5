@@ -161,7 +161,7 @@ export const AnalystLensSettings: React.FC<Props> = ({ config, enabledProviders,
                       value={provider}
                       disabled={isAssignedElsewhere}
                     >
-                      {PROVIDER_DISPLAY_NAMES[provider]}
+                      {PROVIDER_DISPLAY_NAMES[provider] || provider}
                       {isAssignedElsewhere ? ' (assigned)' : ''}
                     </option>
                   );

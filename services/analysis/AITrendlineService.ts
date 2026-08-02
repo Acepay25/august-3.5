@@ -1,37 +1,17 @@
 /**
  * AI Trendline Service
- * Uses Groq for fast AI-powered trendline detection on candlestick charts.
- * Falls back to Gemini if Groq fails.
+ * Uses the first ready user-configured provider for fast AI-powered trendline
+ * detection on candlestick charts, falling back to the remaining ready
+ * providers if the first one fails.
  * Identifies key support/resistance lines, trend channels, and optimal entry zones.
  *
- * API keys are read from user-configured providers (ProviderConfigService).
+ * Providers are read from user configuration (ProviderConfigService) — no
+ * hardcoded provider ids or SDKs.
  */
 
-import OpenAI from "openai";
-import { GoogleGenAI } from "@google/genai";
 import { CandlestickData, Time, LineData } from 'lightweight-charts';
-import { loadProviderConfigs } from '../infrastructure/ProviderConfigService';
-
-const getGroqClient = async (): Promise<OpenAI> => {
-    const configs = await loadProviderConfigs();
-    const groqProvider = configs.find(c => c.id === 'groq' && c.isEnabled && c.apiKey);
-    if (!groqProvider) throw new Error("No Groq provider configured. Add your API key in Settings.");
-    return new OpenAI({
-        apiKey: groqProvider.apiKey,
-        baseURL: groqProvider.baseUrl || 'https://api.groq.com/openai/v1/',
-        dangerouslyAllowBrowser: true
-    });
-};
-
-const getGeminiClient = async (): Promise<GoogleGenAI | null> => {
-    const configs = await loadProviderConfigs();
-    const geminiProvider = configs.find(c => c.id === 'gemini' && c.isEnabled && c.apiKey);
-    if (!geminiProvider) {
-        console.warn('[AITrendlineService] No Gemini provider configured for fallback');
-        return null;
-    }
-    return new GoogleGenAI({ apiKey: geminiProvider.apiKey });
-};
+import { loadProviderConfigs, getReadyProviders } from '../infrastructure/ProviderConfigService';
+import { sendChatRequest } from '../providers/GenericProviderService';
 
 export interface TrendlineResult {
     type: 'resistance' | 'support' | 'trendline';
@@ -62,16 +42,44 @@ export interface AITrendlineAnalysis {
     insights: MarketInsights; // Detailed market commentary
 }
 
+const EMPTY_RESULT: AITrendlineAnalysis = {
+    trendlines: [],
+    marketBias: 'neutral',
+    keyLevels: [],
+    summary: 'AI analysis unavailable',
+    insights: {
+        situation: 'Unable to analyze market. Please check your connection.',
+        observations: [],
+        potentialMoves: {
+            bullish: 'Analysis unavailable',
+            bearish: 'Analysis unavailable',
+        },
+        riskFactors: ['AI analysis failed - use caution'],
+    },
+};
+
+/** Extract JSON from a response that may be wrapped in markdown fences. */
+const extractJson = (responseText: string): string => {
+    const jsonMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+    return jsonMatch ? jsonMatch[1] : responseText;
+};
+
 /**
- * Analyze candlestick data using AI to identify important trendlines
+ * Analyze candlestick data using AI to identify important trendlines.
+ * Tries each ready provider in order until one returns parseable JSON.
  */
 export const analyzeWithAI = async (
     candles: CandlestickData<Time>[],
     symbol: string,
     interval: string,
-    modelName: string = 'llama-3.3-70b-versatile'
+    modelName?: string
 ): Promise<AITrendlineAnalysis> => {
-    const groq = await getGroqClient();
+    const configs = await loadProviderConfigs();
+    const ready = getReadyProviders(configs);
+    if (ready.length === 0) {
+        console.warn('[AITrendlineService] No ready providers configured for trendline analysis');
+        return EMPTY_RESULT;
+    }
 
     // Prepare summarized candle data (last 100 candles for efficiency)
     const recentCandles = candles.slice(-100);
@@ -148,30 +156,9 @@ RESPOND IN THIS EXACT JSON FORMAT:
   }
 }`;
 
-    try {
-        const completion = await groq.chat.completions.create({
-            model: modelName,
-            messages: [
-                {
-                    role: 'system',
-                    content: 'You are a technical analyst. Respond ONLY with valid JSON, no markdown or explanation.'
-                },
-                { role: 'user', content: prompt }
-            ],
-            max_tokens: 1000,
-            temperature: 0.3,
-        });
-
-        const responseText = completion.choices[0].message.content || '{}';
-
-        // Parse JSON from response (handle potential markdown wrapping)
-        let jsonStr = responseText;
-        const jsonMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-        if (jsonMatch) {
-            jsonStr = jsonMatch[1];
-        }
-
-        const parsed = JSON.parse(jsonStr);
+    // Parse a raw response into the analysis shape (shared by all providers)
+    const parseResponse = (responseText: string, providerName: string): AITrendlineAnalysis => {
+        const parsed = JSON.parse(extractJson(responseText));
 
         // Convert index-based trendlines to time/price based
         const trendlines: TrendlineResult[] = (parsed.trendlines || []).map((tl: any) => {
@@ -205,7 +192,7 @@ RESPOND IN THIS EXACT JSON FORMAT:
             riskFactors: parsed.insights?.riskFactors || ['Monitor for sudden volatility'],
         };
 
-        console.log('[AITrendlineService] Analysis complete:', parsed.summary);
+        console.log(`[AITrendlineService] Analysis complete via ${providerName}:`, parsed.summary);
 
         return {
             trendlines,
@@ -214,80 +201,27 @@ RESPOND IN THIS EXACT JSON FORMAT:
             summary: parsed.summary || 'Analysis complete',
             insights,
         };
-    } catch (groqError: any) {
-        console.warn('[AITrendlineService] Groq failed, trying Gemini fallback:', groqError.message);
+    };
 
-        // Try Gemini as fallback
-        const gemini = await getGeminiClient();
-        if (gemini) {
-            try {
-                const geminiPrompt = `You are a technical analyst. Analyze this chart data and respond with ONLY valid JSON.
-
-${prompt}`;
-
-                const response = await gemini.models.generateContent({
-                    model: 'gemini-2.0-flash',
-                    contents: { parts: [{ text: geminiPrompt }] },
-                });
-
-                let responseText = '';
-                if (response.candidates && response.candidates[0]?.content?.parts) {
-                    for (const part of response.candidates[0].content.parts) {
-                        if (part.text) responseText += part.text;
-                    }
-                }
-
-                // Parse JSON from response
-                let jsonStr = responseText;
-                const jsonMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-                if (jsonMatch) {
-                    jsonStr = jsonMatch[1];
-                }
-
-                const parsed = JSON.parse(jsonStr);
-
-                console.log('[AITrendlineService] Gemini fallback successful');
-
-                // Build result from Gemini response
-                const insights: MarketInsights = {
-                    situation: parsed.insights?.situation || 'Market analysis via Gemini.',
-                    observations: parsed.insights?.observations || ['Analysis from fallback provider'],
-                    potentialMoves: {
-                        bullish: parsed.insights?.potentialMoves?.bullish || 'Awaiting confirmation.',
-                        bearish: parsed.insights?.potentialMoves?.bearish || 'Awaiting confirmation.',
-                    },
-                    riskFactors: parsed.insights?.riskFactors || ['Using fallback AI provider'],
-                };
-
-                return {
-                    trendlines: [],
-                    marketBias: parsed.marketBias || 'neutral',
-                    keyLevels: parsed.keyLevels || [],
-                    summary: parsed.summary || 'Analysis via Gemini fallback',
-                    insights,
-                };
-            } catch (geminiError: any) {
-                console.error('[AITrendlineService] Gemini fallback also failed:', geminiError.message);
-            }
+    // Try each ready provider in order until one succeeds
+    for (const config of ready) {
+        try {
+            const responseText = await sendChatRequest(
+                { ...config, selectedModel: modelName || config.selectedModel },
+                [
+                    { role: 'system', content: 'You are a technical analyst. Respond ONLY with valid JSON, no markdown or explanation.' },
+                    { role: 'user', content: prompt },
+                ],
+                { maxTokens: 1000, temperature: 0.3 }
+            );
+            return parseResponse(responseText, config.name);
+        } catch (error: any) {
+            console.warn(`[AITrendlineService] Provider ${config.name} failed:`, error.message);
         }
-
-        // Return empty result if both fail
-        return {
-            trendlines: [],
-            marketBias: 'neutral',
-            keyLevels: [],
-            summary: 'AI analysis unavailable',
-            insights: {
-                situation: 'Unable to analyze market. Please check your connection.',
-                observations: [],
-                potentialMoves: {
-                    bullish: 'Analysis unavailable',
-                    bearish: 'Analysis unavailable',
-                },
-                riskFactors: ['AI analysis failed - use caution'],
-            },
-        };
     }
+
+    console.error('[AITrendlineService] All ready providers failed for trendline analysis');
+    return EMPTY_RESULT;
 };
 
 /**

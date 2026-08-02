@@ -312,7 +312,7 @@ export const calculateIndicators = (klines: Kline[]): TechnicalIndicators => {
     const stochJ = 3 * stochK - 2 * stochD; // J = 3K - 2D
 
     // Volume analysis
-    const avgVolume = volumes.slice(-20).reduce((a, b) => a + b, 0) / 20;
+    const avgVolume = volumes.slice(-20).reduce((a, b) => a + b, 0) / Math.min(20, volumes.length);
     const volumeTrend = currentVolume > avgVolume * 1.5 ? 'high'
         : currentVolume < avgVolume * 0.5 ? 'low'
             : 'normal';
@@ -700,6 +700,10 @@ const calculateVolumeProfile = (klines: Kline[]): { poc: number; valueAreaHigh: 
     // Create price buckets
     const minPrice = Math.min(...klines.map(k => k.low));
     const maxPrice = Math.max(...klines.map(k => k.high));
+    if (maxPrice === minPrice) {
+        // Degenerate case: every candle at the same price -> POC is that price.
+        return { poc: Math.round(minPrice * 100) / 100, valueAreaHigh: Math.round(minPrice * 100) / 100, valueAreaLow: Math.round(minPrice * 100) / 100 };
+    }
     const bucketCount = 50;
     const bucketSize = (maxPrice - minPrice) / bucketCount;
 
@@ -764,7 +768,7 @@ const calculateVolumeProfile = (klines: Kline[]): { poc: number; valueAreaHigh: 
 export const calculateAdvancedVolume = (klines: Kline[]): AdvancedVolumeAnalysis => {
     const volumes = klines.map(k => k.volume);
     const currentVolume = volumes[volumes.length - 1] || 0;
-    const avgVolume = volumes.slice(-20).reduce((a, b) => a + b, 0) / 20;
+    const avgVolume = volumes.slice(-20).reduce((a, b) => a + b, 0) / Math.min(20, volumes.length);
     const currentPrice = klines[klines.length - 1]?.close || 0;
 
     // Basic volume trend
@@ -962,7 +966,9 @@ export const calculateRegime = (klines: Kline[]): RegimeAnalysis => {
     const { adx, plusDI, minusDI } = calculateADX(klines);
     const atrValues = ATR.calculate({ high: klines.map(k => k.high), low: klines.map(k => k.low), close: klines.map(k => k.close), period: 14 });
     const currentATR = atrValues[atrValues.length - 1] || 0;
-    const avgATR = atrValues.slice(-50).reduce((a, b) => a + b, 0) / Math.min(50, atrValues.length);
+    const avgATR = atrValues.length > 0
+        ? atrValues.slice(-50).reduce((a, b) => a + b, 0) / Math.min(50, atrValues.length)
+        : 0;
 
     // Determine trend direction
     const trendDirection: 'bullish' | 'bearish' | 'neutral' =
@@ -1068,8 +1074,8 @@ export const calculatePivotPoints = (klines: Kline[]): PivotPoints => {
 export const calculateFibonacciLevels = (klines: Kline[]): FibonacciLevels => {
     // Find swing high and swing low from recent data
     const recentKlines = klines.slice(-50);
-    let swingHigh = Math.max(...recentKlines.map(k => k.high));
-    let swingLow = Math.min(...recentKlines.map(k => k.low));
+    const swingHigh = Math.max(...recentKlines.map(k => k.high));
+    const swingLow = Math.min(...recentKlines.map(k => k.low));
 
     // Determine trend direction based on recent price action
     const firstPrice = recentKlines[0].close;
@@ -1255,13 +1261,15 @@ export const calculateVWAP = (klines: Kline[]): VWAPData => {
     const currentPrice = klines[klines.length - 1].close;
 
     // Determine price position
+    // Lower bands must be checked before the "below_vwap" window, otherwise
+    // below_lower1/below_lower2 are unreachable for any price under vwap.
     let pricePosition: VWAPData['pricePosition'];
     if (currentPrice >= upperBand2) pricePosition = 'above_upper2';
     else if (currentPrice >= upperBand1) pricePosition = 'above_upper1';
+    else if (currentPrice <= lowerBand2) pricePosition = 'below_lower2';
+    else if (currentPrice <= lowerBand1) pricePosition = 'below_lower1';
     else if (currentPrice > vwap * 1.001) pricePosition = 'above_vwap';
     else if (currentPrice < vwap * 0.999) pricePosition = 'below_vwap';
-    else if (currentPrice <= lowerBand1) pricePosition = 'below_lower1';
-    else if (currentPrice <= lowerBand2) pricePosition = 'below_lower2';
     else pricePosition = 'at_vwap';
 
     // Determine bias

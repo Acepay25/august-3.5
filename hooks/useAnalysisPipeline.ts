@@ -24,7 +24,7 @@ import { saveThinkingBatch, generateThinkingId } from '../services/infrastructur
 import { ThinkingRecord } from '../types/thinking';
 import { extractLastJson } from '../utils/jsonUtils';
 import { sanitizeAIResponse } from '../utils/sanitizers';
-import { modelIdToName } from '../constants/models';
+import { buildModelIdToName } from '../utils/providerUtils';
 import {
     getCachedResponse, cacheResponse, getImageHash, clearAllCaches,
 } from '../services/infrastructure/responseCache';
@@ -140,6 +140,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         model: string,
         prompt: string,
         imageFiles: File[],
+        signal: AbortSignal | undefined,
         // The remaining args are passed through unchanged.
         ...rest: any[]
     ): Promise<{ thoughtProcess: string; analysis: any; sources?: any[] }> => {
@@ -178,6 +179,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             isFamiliesEnabledInPureAI: rest[11] as boolean,
             isMemoryEnabledInPureAI: rest[12] as boolean,
             rolePrompt: rest[13] as string | undefined,
+            signal,
         });
 
         // Only cache successful, non-empty results.
@@ -257,7 +259,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
     // ─── Helper: active custom instructions ────────────────────────────────
     const getActiveCustomInstructions = () => {
-        let instructionsList: CustomInstruction[] = [];
+        let instructionsList: CustomInstruction[];
 
         if (isAccuracyModeEnabled) {
             instructionsList = accuracySubMode === 'pure_ai' ? customInstructions.accuracyPure : customInstructions.accuracyOriginal;
@@ -439,7 +441,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     direction: effectiveInput.toLowerCase().includes('long') ? 'Long' :
                         effectiveInput.toLowerCase().includes('short') ? 'Short' : 'Neutral'
                 },
-                enabledProviders.map(p => p.config.id)
+                enabledProviders.map(p => p.config.id),
+                insightKnowledgeBase
             );
 
             if (!unifiedLearning.isEmpty) {
@@ -478,7 +481,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             }
 
             // PATTERN MEMORY: Use finalTradeSummary as the source for synthesized pattern memory
-            let enhancedFinalTradeSummary = finalTradeSummary;
+            const enhancedFinalTradeSummary = finalTradeSummary;
 
             // RECENT INSIGHTS: Construct string from individual trade summaries
             let recentInsightsString: string | null = null;
@@ -552,11 +555,20 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
             // Check if it's an update request via hiddenContext or other triggers
             const isUpdate = !!hiddenContext;
+            const upperPrompt = originalPrompt.toUpperCase();
+            const isChartAnalysisRequested =
+                imageFiles.length > 0 ||
+                upperPrompt.includes("LIVE MARKET") ||
+                upperPrompt.includes("STRATEGY") ||
+                upperPrompt.includes("ANALYZE") ||
+                upperPrompt.includes("CHART") ||
+                upperPrompt.includes("SETUP") ||
+                isUpdate;
 
-            if (imageFiles.length > 0 || originalPrompt.includes("LIVE MARKET STRATEGY EXTRACTION") || originalPrompt.includes("LIVE MARKET") || originalPrompt.includes("**LIVE MARKET DATA**") || isUpdate || hybridDataInjection || isHybridIntelligenceEnabled) {
+            if (isChartAnalysisRequested) {
                 const summaries = imagesToUse.map(meta => meta.fullAnalysisText).filter(Boolean) as string[];
                 const processNewAnalysis = (analysis: TradeAnalysis): TradeAnalysis => {
-                    let finalAnalysis = sanitizeTradeAnalysis(analysis);
+                    const finalAnalysis = sanitizeTradeAnalysis(analysis);
                     finalAnalysis.originalStopLossPercentage = finalAnalysis.stopLossPercentage;
                     finalAnalysis.takeProfit = Array.isArray(finalAnalysis.takeProfit)
                         ? finalAnalysis.takeProfit.map(tp => ({ ...tp, originalPercentage: tp.percentage }))
@@ -772,6 +784,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             provider.model,
                             enhancedPrompt,
                             imageFiles,
+                            currentAbortController.signal,
                             summaries,
                             currentMessages,
                             enhancedFinalTradeSummary, // Pattern Memory (Synthesis)
@@ -809,15 +822,15 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     setLoadingMessage(null);
                     completeStep('analysis');
 
-                    // Log analysts that failed, then keep only fulfilled results for downstream processing
+                    // Log analysts that failed; downstream consumers iterate
+                    // settledResults ALIGNED BY ORIGINAL PROVIDER INDEX so a
+                    // failed analyst can never shift another provider's data.
+                    // (The old re-indexed `results` array caused exactly that.)
                     settledResults.forEach((settled, index) => {
                         if (settled.status === 'rejected') {
                             console.warn(`[Ensemble] Analyst "${enabledProviders[index]?.name || `#${index}`}" failed:`, settled.reason);
                         }
                     });
-                    const results = settledResults
-                        .filter((s): s is PromiseFulfilledResult<any> => s.status === 'fulfilled')
-                        .map(s => s.value);
 
                     const thoughtMap: Record<string, string> = {};
                     // P1-6 (pre-existing fix): iterate settledResults, NOT the
@@ -845,9 +858,14 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                         regime: { detected: 'unknown', trendDirection: 'neutral' }
                     } as any;
 
-                    results.forEach((res, index) => {
+                    // Align per-analyst Monte Carlo by settled-result index (NOT
+                    // the re-indexed `results` array): if an analyst at index 0
+                    // fails, results[0] would be provider #1's data labeled as
+                    // provider #0. Same bug class as the P1-6 thoughtMap fix.
+                    settledResults.forEach((settled, index) => {
+                        if (settled.status !== 'fulfilled') return; // failed analyst has no analysis
                         const providerName = enabledProviders[index]?.name || `Unknown-${index}`;
-                        const analysis = res.analysis;
+                        const analysis = settled.value?.analysis;
 
                         console.log(`[PerAI-MonteCarlo] Checking ${providerName}...`);
 
@@ -920,11 +938,20 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
                     const activeModModel = moderatorModel;
 
+                    // Align analysts with their results by ticker index. The
+                    // re-indexed `results` array shifts when an analyst fails,
+                    // silently mislabeling provider #2's analysis as #1's (and
+                    // passing `undefined` when fewer analysts succeed than the
+                    // enabledProviders count — crashing the n-way debaters).
+                    const fulfilledAnalysts = settledResults
+                        .map((settled, i) => settled.status === 'fulfilled' ? { provider: enabledProviders[i], result: settled.value } : null)
+                        .filter((x): x is { provider: (typeof enabledProviders)[number]; result: { thoughtProcess: string; analysis: any } } => x !== null);
+
                     if (isAccuracyModeEnabled) {
                         // ACCURACY MODE
                         debateStream = ensembleService.conductDebate(
-                            results,
-                            enabledProviders.map(p => p.name),
+                            fulfilledAnalysts.map(a => a.result),
+                            fulfilledAnalysts.map(a => a.provider.name),
                             enhancedPrompt,
                             finalTradeSummary,
                             accuracySubMode,
@@ -933,51 +960,54 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             activeModModel,
                             isFamiliesEnabledInPureAI,
                             isMemoryEnabledInPureAI,
-                            currentGateResult, // Gate result for reconciliation
+                            capturedGateResult, // Gate result for reconciliation (local, not stale state)
                             tradeSummaries, // Recent Insights
-                            moderatorLearningContext // Unified learning context for moderator
+                            moderatorLearningContext, // Unified learning context for moderator
+                            currentAbortController.signal // Cancellation for the moderator stream
                         );
                     } else {
                         // STANDARD MODE
-                        if (enabledProviders.length === 2) {
+                        if (fulfilledAnalysts.length === 2) {
                             debateStream = ensembleService.conductTwoWayDebate(
-                                results[0], results[1],
-                                enabledProviders[0].name, enabledProviders[1].name,
+                                fulfilledAnalysts[0].result, fulfilledAnalysts[1].result,
+                                fulfilledAnalysts[0].provider.name, fulfilledAnalysts[1].provider.name,
                                 enhancedPrompt, finalTradeSummary,
                                 moderatorConfig, activeModModel, instructionsToUse, perAIMC,
                                 lensConfig.enabled ? lensConfig : undefined, // lensConfig
-                                lensConfig.enabled ? enabledProviders.map(p => p.config.id) : undefined, // analystProviders
+                                lensConfig.enabled ? fulfilledAnalysts.map(a => a.provider.config.id) : undefined, // analystProviders
                                 activeFrameworks, // playbook
                                 tradeSummaries, // recent insights for pattern matching
-                                currentGateResult, // Gate result
+                                capturedGateResult, // Gate result (current run, not stale state)
                                 moderatorLearningContext, // Unified learning context for moderator
-                                enabledProviders.map(p => p.config.id), // enabledProviders for weighted voting
-                                loggedTrades // trades for weighted voting
+                                fulfilledAnalysts.map(a => a.provider.config.id), // enabledProviders for weighted voting
+                                loggedTrades, // trades for weighted voting
+                                currentAbortController.signal // Cancellation for the moderator stream
                             );
-                        } else if (enabledProviders.length === 3) {
+                        } else if (fulfilledAnalysts.length === 3) {
                             debateStream = ensembleService.conductThreeWayDebate(
-                                results[0], results[1], results[2],
-                                enabledProviders[0].name, enabledProviders[1].name, enabledProviders[2].name,
+                                fulfilledAnalysts[0].result, fulfilledAnalysts[1].result, fulfilledAnalysts[2].result,
+                                fulfilledAnalysts[0].provider.name, fulfilledAnalysts[1].provider.name, fulfilledAnalysts[2].provider.name,
                                 enhancedPrompt, finalTradeSummary,
                                 moderatorConfig, activeModModel, instructionsToUse,
                                 loggedTrades, // trades (was undefined — fixes dead weighted voting)
-                                enabledProviders.map(p => p.config.id), // enabledProviders (was undefined)
+                                fulfilledAnalysts.map(a => a.provider.config.id), // enabledProviders (was undefined)
                                 perAIMC,   // monteCarloResults
                                 lensConfig.enabled ? lensConfig : undefined, // lensConfig
-                                lensConfig.enabled ? enabledProviders.map(p => p.config.id) : undefined, // analystProviders
+                                lensConfig.enabled ? fulfilledAnalysts.map(a => a.provider.config.id) : undefined, // analystProviders
                                 activeFrameworks, // playbook
                                 tradeSummaries, // recent insights for pattern matching
-                                currentGateResult, // Gate result
-                                moderatorLearningContext // NEW: Unified learning context for moderator
+                                capturedGateResult, // Gate result (current run, not stale state)
+                                moderatorLearningContext, // NEW: Unified learning context for moderator
+                                currentAbortController.signal // Cancellation for the moderator stream
                             );
                         } else {
-                            throw new Error("Unsupported number of debate participants for Standard Mode.");
+                            throw new Error(`Debate requires at least 2 analysts to respond (${fulfilledAnalysts.length} succeeded). Partial analyses were not used.`);
                         }
                     }
 
                     let fullResponseText = '';
                     // Updated regex to include Puter model names (Claude, GPT, Grok, etc.) and OpenRouter
-                    const turnRegex = /(?:^|\n)\s*(?:[\*_~]*)(Gemini|DeepSeek|Zhipu|Groq|Groq \(Alt\)|Groq \(Alt 2\)|OpenRouter|Moderator|Master Strategist|Claude[^:]*|GPT[^:]*|Grok[^:]*|Mistral[^:]*|Kimi[^:]*|Qwen[^:]*|LLaMA[^:]*|Puter[^:]*)[^\n]*?(?:[\*_~]*)\s*:\s*([\s\S]*?)(?=(?:^|\n)\s*(?:[\*_~]*)(?:Gemini|DeepSeek|Zhipu|Groq|Groq \(Alt\)|Groq \(Alt 2\)|OpenRouter|Moderator|Master Strategist|Claude|GPT|Grok|Mistral|Kimi|Qwen|LLaMA|Puter)[^\n]*?(?:[\*_~]*)\s*:|$)/gi;
+                    const turnRegex = /(?:^|\n)\s*(?:[*_~]*)(Gemini|DeepSeek|Zhipu|Groq|Groq \(Alt\)|Groq \(Alt 2\)|OpenRouter|Moderator|Master Strategist|Claude[^:]*|GPT[^:]*|Grok[^:]*|Mistral[^:]*|Kimi[^:]*|Qwen[^:]*|LLaMA[^:]*|Puter[^:]*)[^\n]*?(?:[*_~]*)\s*:\s*([\s\S]*?)(?=(?:^|\n)\s*(?:[*_~]*)(?:Gemini|DeepSeek|Zhipu|Groq|Groq \(Alt\)|Groq \(Alt 2\)|OpenRouter|Moderator|Master Strategist|Claude|GPT|Grok|Mistral|Kimi|Qwen|LLaMA|Puter)[^\n]*?(?:[*_~]*)\s*:|$)/gi;
 
                     for await (const chunk of debateStream) {
                         if (abortRef.current) break;
@@ -1027,7 +1057,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                         }
 
                         if (synthesisContent) {
-                            const cleanSynthesis = synthesisContent.replace(/^(?:[\*_~]*)(Moderator|Master Strategist)[^:\n]*?:\s*/i, '');
+                            const cleanSynthesis = synthesisContent.replace(/^(?:[*_~]*)(Moderator|Master Strategist)[^:\n]*?:\s*/i, '');
                             const lastTurn = currentTurns[currentTurns.length - 1];
                             if (cleanSynthesis && (!lastTurn || lastTurn.text !== cleanSynthesis)) {
                                 currentTurns.push({ speaker: 'Moderator', text: sanitizeAIResponse(cleanSynthesis) });
@@ -1069,8 +1099,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     // The Gate produces a confidenceCap based on data integrity, pattern memory,
                     // HTF/LTF conflict, and volume context. The moderator can emit any probability
                     // in its JSON, but it must never exceed the gate cap. Enforce in code.
-                    if (currentGateResult && finalAnalysis.probability != null) {
-                        const gateCap = currentGateResult.confidenceCap ?? 1.0;
+                    if (capturedGateResult && finalAnalysis.probability != null) {
+                        const gateCap = capturedGateResult.confidenceCap ?? 1.0;
                         const clampResult = clampProbabilityToGate(
                             finalAnalysis.probability,
                             gateCap,
@@ -1139,26 +1169,30 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                         const now = new Date().toISOString();
                         const thinkingRecords: ThinkingRecord[] = [];
 
-                        // Save each analyst's reasoning + analysis JSON
-                        for (const providerKey of Object.keys(thoughtMap)) {
-                            const analystResult = results.find((r: any, idx: number) => {
-                                const providerName = enabledProviders[idx]?.name?.toLowerCase() || '';
-                                return providerName.includes(providerKey) || providerKey.includes(providerName.split(' ')[0].toLowerCase());
-                            });
+                        // Save each analyst's reasoning + analysis JSON. Aligned
+                        // by settled-result index so a failed analyst doesn't shift
+                        // attribution (same bug class as the P1-6 thoughtMap fix),
+                        // and the unreliable name-vs-id string matching is removed.
+                        settledResults.forEach((settled, idx) => {
+                            if (settled.status !== 'fulfilled') return;
+                            const provider = enabledProviders[idx];
+                            if (!provider) return;
+                            const providerKey = provider.thoughtsKey;
+                            const analystResult = settled.value;
                             thinkingRecords.push({
                                 id: generateThinkingId(),
                                 tradeId,
                                 username,
                                 provider: providerKey,
                                 role: 'analyst',
-                                modelName: enabledProviders.find(p => p.name.toLowerCase().includes(providerKey) || providerKey.includes(p.name.toLowerCase().split(' ')[0]))?.model,
+                                modelName: provider.model,
                                 reasoning: thoughtMap[providerKey] || '',
-                                analysisJson: analystResult ? JSON.stringify(analystResult.analysis) : undefined,
-                                confidence: analystResult?.analysis?.confidence,
-                                probability: analystResult?.analysis?.probability,
+                                analysisJson: analystResult.analysis ? JSON.stringify(analystResult.analysis) : undefined,
+                                confidence: analystResult.analysis?.confidence,
+                                probability: analystResult.analysis?.probability,
                                 createdAt: now,
                             });
-                        }
+                        });
 
                         // Save moderator synthesis (the full debate response)
                         thinkingRecords.push({
@@ -1213,6 +1247,7 @@ const result = await cachedAnalyzeTradingView(
                             provider.model,
                             enhancedPrompt, // Fixed: was promptToSend, now uses enhancedPrompt with Hybrid data
                             imageFiles,
+                            currentAbortController.signal,
                             summaries,
                             currentMessages,
                             finalTradeSummary,
@@ -1264,10 +1299,6 @@ const result = await cachedAnalyzeTradingView(
                     updateMessages(prev => [...prev, soloAiMessage]);
                 }
             } else {
-                if (enabledProviders.length > 1) {
-                    updateMessages(prev => [...prev, { id: `err-${Date.now()}`, role: MessageRole.SYSTEM, createdAt: new Date().toISOString(), text: "Quick responses are not supported in ensemble mode. Please select a single AI provider." }]);
-                    return;
-                }
                 const provider = enabledProviders[0];
                 setLoadingMessage("Thinking...");
                 startStep('analysis');
@@ -1281,11 +1312,12 @@ const result = await cachedAnalyzeTradingView(
             updateMessages(prev => prev.filter(m => !m.isDebating));
 
             if (isQuotaError(error)) {
+                const quotaModelNames = buildModelIdToName(providerConfigs);
                 let flaggedModel = '';
                 enabledProviders.forEach(p => {
                     if (error.message.toLowerCase().includes(p.name.toLowerCase()) || error.model === p.model) {
-                        setQuotaExceededModels(prev => new Set(prev).add(modelIdToName[p.model] || p.model));
-                        flaggedModel = modelIdToName[p.model];
+                        setQuotaExceededModels(prev => new Set(prev).add(quotaModelNames[p.model] || p.model));
+                        flaggedModel = quotaModelNames[p.model] || p.model;
                     }
                 });
                 updateMessages(prev => [...prev, { id: `err-${Date.now()}`, role: MessageRole.SYSTEM, createdAt: new Date().toISOString(), text: `Model "${flaggedModel || 'an enabled AI'}" has exceeded its usage quota.` }]);

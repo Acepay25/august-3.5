@@ -257,18 +257,23 @@ You must complete the ENTIRE response including the JSON_PLAN block at the end.`
  * `config` is the moderator provider's ProviderConfig; `model` overrides config.selectedModel
  * (kept for backward-compat with the per-conversation moderator model selection).
  */
-const getModeratorAnalysisStream = async function* (config: ProviderConfig, model: string, prompt: string): AsyncGenerator<string> {
+const getModeratorAnalysisStream = async function* (config: ProviderConfig, model: string, prompt: string, signal?: AbortSignal): AsyncGenerator<string> {
     const effectiveConfig: ProviderConfig = { ...config, selectedModel: model || config.selectedModel };
     const messages: ChatMessage[] = [
         { role: 'system', content: MODERATOR_SYSTEM_MESSAGE },
         { role: 'user', content: prompt },
     ];
     try {
-        for await (const chunk of streamChatRequest(effectiveConfig, messages, { temperature: 0.1 })) {
+        for await (const chunk of streamChatRequest(effectiveConfig, messages, { temperature: 0.1, signal })) {
             if (chunk) yield chunk;
         }
     } catch (e: any) {
         console.error("Moderator stream error:", e);
+        // Aborted by the user — propagate so the caller can distinguish
+        // cancellation from a provider error instead of an error marker.
+        if (e?.name === 'AbortError' || e?.code === 'ABORT_ERR' || e?.name === 'TimeoutError') {
+            throw e;
+        }
         // For rate limit errors, throw to be handled by outer catch block
         if (e.status === 429 || e.message?.includes('429') || e.message?.includes('Rate limit')) {
             throw e;
@@ -811,7 +816,8 @@ export const conductDebate = (
     isMemoryEnabledInPureAI?: boolean,
     gateResult?: GateOutput | null, // Gate result for reconciliation
     tradeSummaries?: { id: string; summaryText: string; timestamp: string }[], // Recent Insights
-    learningContext?: string // NEW: Unified learning context from UnifiedLearningBuilder
+    learningContext?: string, // NEW: Unified learning context from UnifiedLearningBuilder
+    signal?: AbortSignal // Cancellation for the moderator stream
 ): AsyncGenerator<string, void, unknown> => {
 
     let tradeHistoryContext = finalTradeSummary ? `Pattern Memory Library (History):\n${truncateTextToTokens(finalTradeSummary, 3000)}` : "No past trades logged.";
@@ -856,7 +862,7 @@ export const conductDebate = (
         dialogueInstructions += `   - **${name}:** [Analysis based on role]\n`;
     });
 
-    let systemPrompt = "";
+    let systemPrompt: string;
     if (subMode === 'pure_ai') {
         systemPrompt = PURE_AI_MODERATOR_PROMPT;
 
@@ -921,7 +927,7 @@ ${analystsInput}
 Start the simulation now. Begin with <DEBATE_START>.
 `;
 
-    return getModeratorAnalysisStream(moderatorConfig, moderatorModel, finalPrompt);
+    return getModeratorAnalysisStream(moderatorConfig, moderatorModel, finalPrompt, signal);
 };
 
 /**
@@ -966,7 +972,8 @@ export const conductTwoWayDebate = async function* (
     gateResult?: GateOutput | null, // Gate result for reconciliation
     learningContext?: string, // NEW: Unified learning context
     enabledProviders?: string[], // NEW: for weighted voting
-    trades?: LoggedTrade[] // NEW: trade history for weighted voting
+    trades?: LoggedTrade[], // NEW: trade history for weighted voting
+    signal?: AbortSignal // Cancellation for the moderator stream
 ): AsyncGenerator<string, void, unknown> {
 
     // Format Monte Carlo context
@@ -1273,8 +1280,8 @@ export const conductTwoWayDebate = async function* (
       2.  **ROUND 1: ${lensConfig?.enabled ? 'THESIS PRESENTATION (SPECIALIZED LENS ROLES)' : 'THESIS PRESENTATION (ALL 8 SECTIONS REQUIRED)'}**
            ${lensConfig?.enabled ? `
           Each analyst presents their specialized thesis based on their ASSIGNED ROLE only:
-          *   ${analyst1Name} (${lensConfig.assignments?.find(a => a.assignedProvider === analyst1Name.toLowerCase())?.role || 'Analyst'}): [Present analysis focused strictly on your domain]
-          *   ${analyst2Name} (${lensConfig.assignments?.find(a => a.assignedProvider === analyst2Name.toLowerCase())?.role || 'Analyst'}): [Present analysis focused strictly on your domain]
+          *   ${analyst1Name} (${lensConfig.assignments?.find(a => a.assignedProvider === (analystProviders?.[0] || analyst1Name.toLowerCase()))?.role || 'Analyst'}): [Present analysis focused strictly on your domain]
+          *   ${analyst2Name} (${lensConfig.assignments?.find(a => a.assignedProvider === (analystProviders?.[1] || analyst2Name.toLowerCase()))?.role || 'Analyst'}): [Present analysis focused strictly on your domain]
           ` : `
           Each analyst presents their complete thesis covering ALL sections:
           *   ${analyst1Name}: [1. Multi-TF Structure, 2. Price Action Type, 3. Family, 4. Pattern Match, 5. Bias %, 6. Probability, 7. Chart Analysis, 8. Full Setup]
@@ -1418,7 +1425,11 @@ export const conductTwoWayDebate = async function* (
                   "selectedScenario": "bullish",
                   "selectionReasoning": "HTF trend bullish, volume supports breakout, Pattern Memory shows 70% win rate",
                   "confidenceInSelection": 75
-              }
+              },
+              "invalidationCriteria": [
+                  { "level": "94500", "condition": "4H close below this support", "category": "price", "note": "Bullish thesis dead" },
+                  { "level": "5h30m from analysis", "condition": "No breakout before validity expiry", "category": "time" }
+              ]
           }
           </JSON_PLAN>
 
@@ -1439,7 +1450,7 @@ export const conductTwoWayDebate = async function* (
       
       Start with <DEBATE_START> now.`;
 
-    yield* getModeratorAnalysisStream(moderatorConfig, moderatorModel, moderatorSystemPrompt);
+    yield* getModeratorAnalysisStream(moderatorConfig, moderatorModel, moderatorSystemPrompt, signal);
 };
 
 export const conductThreeWayDebate = async function* (
@@ -1462,7 +1473,8 @@ export const conductThreeWayDebate = async function* (
     activeFrameworks?: string[],
     tradeSummaries?: { id: string; summaryText: string; timestamp: string }[],
     gateResult?: GateOutput | null, // Gate result for reconciliation
-    learningContext?: string // NEW: Unified learning context
+    learningContext?: string, // NEW: Unified learning context
+    signal?: AbortSignal // Cancellation for the moderator stream
 ): AsyncGenerator<string, void, unknown> {
 
     // Format Monte Carlo context
@@ -1546,13 +1558,22 @@ export const conductThreeWayDebate = async function* (
             const currentCoin = analyst1Result.analysis.coinName?.toUpperCase();
             const currentPattern = analyst1Result.analysis.detectedPatternFamily;
 
+            // Map analyst display names to dynamic provider ids
+            const nameToProvider: Record<string, string> = {};
+            [analyst1Name, analyst2Name, analyst3Name].forEach((name, idx) => {
+                const id = analystProviders?.[idx];
+                if (id) nameToProvider[name] = id;
+            });
+
             const enhanced = generateEnhancedDebateContext(
                 analyses,
                 trades,
                 enabledProviders,
                 'ranging' as MarketRegime, // Default regime
                 currentCoin,
-                currentPattern
+                currentPattern,
+                null,
+                nameToProvider
             );
 
             enhancedContext = enhanced.promptInjection;
@@ -1833,9 +1854,9 @@ Begin immediately with:
 ### 2. ROUND 1 — ${lensConfig?.enabled ? 'THESIS PRESENTATION (SPECIALIZED LENS ROLES)' : 'THESIS PRESENTATION (ALL 8 SECTIONS REQUIRED)'}
 ${lensConfig?.enabled ? `
 Each analyst presents their specialized thesis based on their ASSIGNED ROLE only:
-**${analyst1Name} (${lensConfig.assignments?.find(a => a.assignedProvider === analyst1Name.toLowerCase())?.role || 'Analyst'}):** [Present analysis focused strictly on your domain]
-**${analyst2Name} (${lensConfig.assignments?.find(a => a.assignedProvider === analyst2Name.toLowerCase())?.role || 'Analyst'}):** [Present analysis focused strictly on your domain]
-**${analyst3Name} (${lensConfig.assignments?.find(a => a.assignedProvider === analyst3Name.toLowerCase())?.role || 'Analyst'}):** [Present analysis focused strictly on your domain]
+**${analyst1Name} (${lensConfig.assignments?.find(a => a.assignedProvider === (analystProviders?.[0] || analyst1Name.toLowerCase()))?.role || 'Analyst'}):** [Present analysis focused strictly on your domain]
+**${analyst2Name} (${lensConfig.assignments?.find(a => a.assignedProvider === (analystProviders?.[1] || analyst2Name.toLowerCase()))?.role || 'Analyst'}):** [Present analysis focused strictly on your domain]
+**${analyst3Name} (${lensConfig.assignments?.find(a => a.assignedProvider === (analystProviders?.[2] || analyst3Name.toLowerCase()))?.role || 'Analyst'}):** [Present analysis focused strictly on your domain]
 ` : `
 Each analyst presents their complete thesis covering ALL sections:
 **${analyst1Name}:** [1. Multi-TF Structure, 2. Price Action Type, 3. Family, 4. Pattern Match, 5. Bias %, 6. Probability, 7. Chart Analysis, 8. Full Setup]
@@ -2021,7 +2042,11 @@ Only **after** writing the complete text verdict, output the structured JSON obj
         "selectedScenario": "bullish",
         "selectionReasoning": "HTF trend bullish, volume supports breakout, Pattern Memory shows 70% win rate",
         "confidenceInSelection": 75
-    }
+    },
+    "invalidationCriteria": [
+        { "level": "94500", "condition": "4H close below this support", "category": "price", "note": "Bullish thesis dead" },
+        { "level": "5h30m from analysis", "condition": "No breakout before validity expiry", "category": "time" }
+    ]
 }
 </JSON_PLAN>
 
@@ -2038,6 +2063,11 @@ The "dualScenarioAnalysis" field in the JSON is NOT OPTIONAL. Your JSON will be 
 - Either "bullish" or "bearish" scenario is missing
 - Price levels (trigger, target, invalidation) are empty or vague
 - "selectionReasoning" doesn't explain why one scenario won
+
+**⚠️ CRITICAL: INVALIDATION CRITERIA ARE MANDATORY**
+The "invalidationCriteria" array must contain 2-4 items stating exactly what kills the selected setup. Your JSON will be REJECTED if:
+- The array is missing or empty
+- No "price" category criterion with a concrete level is present
 
 ---
 
@@ -2060,7 +2090,7 @@ Start with <DEBATE_START> now.
 `;
 
 
-    yield* getModeratorAnalysisStream(moderatorConfig, moderatorModel, moderatorSystemPrompt);
+    yield* getModeratorAnalysisStream(moderatorConfig, moderatorModel, moderatorSystemPrompt, signal);
 };
 
 export const conductTwoWayPostMortemDebate = (

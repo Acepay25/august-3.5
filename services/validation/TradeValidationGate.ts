@@ -227,16 +227,13 @@ export const matchPatternMemory = (
 
     for (const loss of losses) {
         let similarityScore = 0;
-        let totalChecks = 0;
 
         // Check direction match
-        totalChecks++;
         if (loss.analysis.direction === analysis.direction) {
             similarityScore += 15;
         }
 
         // Check pattern family match
-        totalChecks++;
         if (loss.analysis.detectedPatternFamily && analysis.detectedPatternFamily) {
             if (loss.analysis.detectedPatternFamily === analysis.detectedPatternFamily) {
                 similarityScore += 25;
@@ -244,13 +241,11 @@ export const matchPatternMemory = (
         }
 
         // Check confidence level match
-        totalChecks++;
         if (loss.analysis.confidence === analysis.confidence) {
             similarityScore += 10;
         }
 
         // Check RSI condition match
-        totalChecks++;
         const lossRsi = loss.analysis.marketConditions?.rsi?.toLowerCase() || '';
         const currentRsi = analysis.marketConditions?.rsi?.toLowerCase() || '';
         if (lossRsi && currentRsi) {
@@ -262,13 +257,11 @@ export const matchPatternMemory = (
         }
 
         // Check sentiment match
-        totalChecks++;
         if (loss.analysis.marketConditions?.sentiment === analysis.marketConditions?.sentiment) {
             similarityScore += 10;
         }
 
         // Check strategy match
-        totalChecks++;
         if (loss.analysis.strategy && analysis.strategy) {
             const lossStrat = loss.analysis.strategy.toLowerCase();
             const currentStrat = analysis.strategy.toLowerCase();
@@ -425,7 +418,7 @@ export const validateTimeframeAlignment = (
 
     if (alignedCount < required) {
         // Downgrade confidence
-        let newConfidence: ConfidenceLevel = proposedConfidence;
+        let newConfidence: ConfidenceLevel;
 
         if (alignedCount >= 3) newConfidence = 'High';
         else if (alignedCount >= 2) newConfidence = 'Medium';

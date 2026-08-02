@@ -1,13 +1,18 @@
 /**
  * Zod schemas for runtime validation at provider → pipeline boundaries.
  *
- * Usage:
- *   import { TradeAnalysisSchema } from '../schemas/tradeAnalysis';
- *   const result = TradeAnalysisSchema.safeParse(aiResponse);
- *   if (!result.success) { ... handle validation errors ... }
+ * Two layers:
+ *  - STRICT schemas (TradeAnalysisSchema & friends): exact shape, used as an
+ *    audit gate (validateTradeAnalysis).
+ *  - LENIENT pipeline (SanitizedTradeAnalysisSchema): accepts messy AI output
+ *    (synonyms, "75%", objects-where-strings-belong) and normalizes it into a
+ *    valid TradeAnalysis. This is the live boundary used by
+ *    sanitizeTradeAnalysis — safeParse + semantic fixups, defaults on failure.
  */
 
 import { z } from 'zod';
+import { cleanPriceField, sanitizeJSONString } from '../utils/sanitizers';
+import type { TradeAnalysis, MarketConditions, LevelProbabilities, ProbabilityReasoning } from '../types';
 
 // =============================================================================
 // PRIMITIVE SCHEMAS
@@ -102,6 +107,12 @@ export const LevelProbabilitiesSchema = z.object({
   tp1Probability: z.number().optional(),
   tp2Probability: z.number().optional(),
   tp3Probability: z.number().optional(),
+  reasoning: z.object({
+    sl: ProbabilityReasoningSchema.optional(),
+    tp1: ProbabilityReasoningSchema.optional(),
+    tp2: ProbabilityReasoningSchema.optional(),
+    tp3: ProbabilityReasoningSchema.optional(),
+  }).optional(),
   calculationMode: z.enum(['AI', 'Algo']).optional(),
 });
 
@@ -130,6 +141,24 @@ export const GateResultSchema = z.object({
   suggestedDirection: z.enum(['Long', 'Short', 'Neutral']).optional(),
   warnings: z.array(z.string()),
   insights: z.array(z.string()),
+});
+
+// =============================================================================
+// EVIDENCE & INVALIDATION (structured AI accountability)
+// =============================================================================
+
+export const EvidenceClaimSchema = z.object({
+  claim: z.string(),
+  sources: z.array(z.string()),
+  state: z.enum(['observed', 'partial', 'unobserved']),
+  note: z.string().optional(),
+});
+
+export const InvalidationCriterionSchema = z.object({
+  level: z.string(),
+  condition: z.string(),
+  category: z.enum(['price', 'time', 'structure', 'signal']).optional(),
+  note: z.string().optional(),
 });
 
 // =============================================================================
@@ -176,6 +205,8 @@ export const TradeAnalysisSchema = z.object({
   dualScenarioAnalysis: DualScenarioAnalysisSchema.optional(),
   levelProbabilities: LevelProbabilitiesSchema.optional(),
   marketSnapshot: z.unknown().optional(),
+  evidence: z.array(EvidenceClaimSchema).optional(),
+  invalidationCriteria: z.array(InvalidationCriterionSchema).optional(),
 });
 
 // Inferred type from schema (should match TradeAnalysis interface)
@@ -208,3 +239,450 @@ export function validateTradeAnalysis(data: unknown): {
   );
   return { success: false, errors };
 }
+
+// =============================================================================
+// LENIENT AI-BOUNDARY PIPELINE
+// Accepts messy AI output and normalizes it into a valid TradeAnalysis.
+// Shape coercion lives in the schema; cross-field business rules live in
+// applySemanticFixups (both unit-tested in tests/tradeAnalysisSchema.test.ts).
+// =============================================================================
+
+/** ensureString semantics: null→'', string→sanitized, number/boolean→String,
+ *  object→best-effort text extraction (AI often nests objects in string slots). */
+export const coerceToString = (val: unknown): string => {
+  if (val === null || val === undefined) return '';
+  if (typeof val === 'string') return sanitizeJSONString(val);
+  if (typeof val === 'number') return String(val);
+  if (typeof val === 'boolean') return String(val);
+  if (typeof val === 'object') {
+    const obj = val as Record<string, unknown>;
+    const extracted = obj.text || obj.message || obj.description || obj.value || obj.price || obj.name;
+    return typeof extracted === 'string' ? sanitizeJSONString(extracted) : JSON.stringify(val);
+  }
+  return String(val);
+};
+
+const coercedString = (fallback = ''): z.ZodType<string> =>
+  z.any().optional().transform((val) => {
+    const s = coerceToString(val);
+    return s || fallback;
+  });
+
+const coercedStringArray = (): z.ZodType<string[]> =>
+  z.any().optional().transform((val) =>
+    Array.isArray(val) ? val.map(coerceToString).filter((s) => s.length > 0) : []
+  );
+
+/** Direction synonym mapping: bull/buy→Long, bear/sell→Short, else Neutral. */
+export const CoercedDirectionSchema = z.any().optional().transform((val): 'Long' | 'Short' | 'Neutral' => {
+  const d = coerceToString(val).toLowerCase();
+  if (d.includes('bull') || d === 'long' || d.includes('buy')) return 'Long';
+  if (d.includes('bear') || d === 'short' || d.includes('sell')) return 'Short';
+  return 'Neutral';
+});
+
+const CoercedEntryPointSchema = z.any().optional().transform((ep) => {
+  if (typeof ep === 'string' || typeof ep === 'number') {
+    return { price: cleanPriceField(String(ep)), description: '' };
+  }
+  const obj = (ep ?? {}) as Record<string, unknown>;
+  return { price: cleanPriceField(obj.price), description: coerceToString(obj.description) };
+});
+
+const CoercedTakeProfitSchema = z.any().optional().transform((tp) => {
+  if (typeof tp === 'string' || typeof tp === 'number') {
+    return { price: cleanPriceField(String(tp)), percentage: '' };
+  }
+  const obj = (tp ?? {}) as Record<string, unknown>;
+  return {
+    price: cleanPriceField(obj.price),
+    percentage: coerceToString(obj.percentage),
+    originalPercentage: coerceToString(obj.originalPercentage),
+  };
+});
+
+const CoercedPatternDetailSchema = z.any().optional().transform((p) => {
+  const obj = (p ?? {}) as Record<string, unknown>;
+  return {
+    name: coerceToString(obj.name),
+    timeframe: coerceToString(obj.timeframe),
+    type: (['Bullish', 'Bearish', 'Neutral'].includes(obj.type as string) ? obj.type : 'Neutral') as 'Bullish' | 'Bearish' | 'Neutral',
+    confidence: coerceToString(obj.confidence),
+    description: coerceToString(obj.description),
+  };
+});
+
+const DEFAULT_MARKET_CONDITIONS: MarketConditions = {
+  pattern: 'N/A',
+  candleBehavior: 'N/A',
+  timeframeAlignment: 'N/A',
+  rsi: 'N/A',
+  macd: 'N/A',
+  sentiment: 'N/A',
+  prices: { '5m': 'N/A', '15m': 'N/A', '1h': 'N/A', '4h': 'N/A' },
+};
+
+const CoercedMarketConditionsSchema = z.any().optional().transform((val): MarketConditions => {
+  if (!val || typeof val !== 'object') return { ...DEFAULT_MARKET_CONDITIONS, prices: { ...DEFAULT_MARKET_CONDITIONS.prices } };
+  const mc = val as Record<string, unknown>;
+  const prices = mc.prices && typeof mc.prices === 'object'
+    ? Object.fromEntries(Object.entries(mc.prices as Record<string, unknown>).map(([k, v]) => [k, coerceToString(v)]))
+    : { ...DEFAULT_MARKET_CONDITIONS.prices };
+  return {
+    pattern: coerceToString(mc.pattern) || 'N/A',
+    candleBehavior: coerceToString(mc.candleBehavior) || 'N/A',
+    timeframeAlignment: coerceToString(mc.timeframeAlignment) || 'N/A',
+    rsi: coerceToString(mc.rsi) || 'N/A',
+    macd: coerceToString(mc.macd) || 'N/A',
+    sentiment: coerceToString(mc.sentiment) || 'N/A',
+    prices,
+  };
+});
+
+/**
+ * Lenient shape coercion for raw AI analysis output. Cross-field business
+ * rules (probability↔confidence coupling, family fallback, legacy bridging)
+ * are applied afterwards by applySemanticFixups.
+ */
+export const CoercedTradeAnalysisSchema = z.object({
+  coinName: z.any().optional().transform((v) => coerceToString(v ?? 'Unknown Asset') || 'Unknown Asset'),
+  direction: CoercedDirectionSchema,
+  tradeType: z.any().optional().transform((v) => (v === 'scalp' || v === 'swing' ? v : undefined)),
+  tradeTypeManualOverride: z.any().optional().transform((v) => (typeof v === 'boolean' ? v : undefined)),
+  confidence: coercedString(),
+  probability: z.any().optional(),
+  grade: z.any().optional().transform((v) =>
+    typeof v === 'string' && ['A', 'B', 'C', 'D', 'F'].includes(v.toUpperCase())
+      ? (v.toUpperCase() as 'A' | 'B' | 'C' | 'D' | 'F')
+      : undefined
+  ),
+  strategy: coercedString(),
+  activeStrategies: coercedStringArray(),
+  entryPoints: z.any().optional().transform((v) =>
+    Array.isArray(v)
+      ? v.map((ep) => CoercedEntryPointSchema.parse(ep)).filter((ep) => ep.price !== '')
+      : []
+  ),
+  stopLoss: z.any().optional().transform((v) => cleanPriceField(v)),
+  stopLossPercentage: coercedString(),
+  originalStopLossPercentage: coercedString(),
+  takeProfit: z.any().optional().transform((v) =>
+    Array.isArray(v)
+      ? v.map((tp) => CoercedTakeProfitSchema.parse(tp)).filter((tp) => tp.price !== '')
+      : []
+  ),
+  marketConditions: CoercedMarketConditionsSchema,
+  historicalCorrelation: coercedString(),
+  createdAt: z.any().optional().transform((v) => (typeof v === 'string' && v ? v : new Date().toISOString())),
+  rrRatio: z.any().optional().transform((v): number | undefined => {
+    if (typeof v === 'number') return v;
+    if (typeof v === 'string') {
+      const parsed = parseFloat(v);
+      return isNaN(parsed) ? undefined : parsed;
+    }
+    return undefined;
+  }),
+  detectedPatternFamily: coercedString(),
+  detectedPatterns: z.any().optional().transform((v) =>
+    Array.isArray(v) ? v.map((p) => CoercedPatternDetailSchema.parse(p)) : []
+  ),
+  keyLevels: z.any().optional().transform((v) => {
+    if (!v || typeof v !== 'object') return { support: [] as string[], resistance: [] as string[] };
+    const kl = v as Record<string, unknown>;
+    return {
+      support: Array.isArray(kl.support) ? kl.support.map(coerceToString) : [],
+      resistance: Array.isArray(kl.resistance) ? kl.resistance.map(coerceToString) : [],
+    };
+  }),
+  isUpdate: z.any().optional().transform((v) => v === true || v === 'true'),
+  updateInterval: z.any().optional().transform((v) => (v ? coerceToString(v) || undefined : undefined)),
+  validityDurationMinutes: z.any().optional().transform((v): number | undefined => {
+    if (v === undefined || v === null) return undefined;
+    const n = typeof v === 'number' ? v : parseInt(String(v), 10);
+    return !isNaN(n) && n > 0 ? Math.round(n) : undefined;
+  }),
+  // Complex sub-objects pass through raw; applySemanticFixups validates them.
+  devilsAdvocate: z.any().optional(),
+  validationWarnings: z.any().optional().transform((v) =>
+    Array.isArray(v) ? v.map(coerceToString) : undefined
+  ),
+  originalConfidence: z.any().optional().transform((v) =>
+    typeof v === 'string' && ['High', 'Medium', 'Low', 'Avoid'].includes(v)
+      ? (v as 'High' | 'Medium' | 'Low' | 'Avoid')
+      : undefined
+  ),
+  entryTimingScore: z.any().optional(),
+  gateResult: z.any().optional(),
+  dualScenarioAnalysis: z.any().optional(),
+  levelProbabilities: z.any().optional(),
+  marketSnapshot: z.any().optional(),
+  evidence: z.any().optional(),
+  invalidationCriteria: z.any().optional(),
+});
+
+export type CoercedTradeAnalysis = z.infer<typeof CoercedTradeAnalysisSchema>;
+
+/** Safe defaults returned when parsing fails entirely. */
+export const createDefaultTradeAnalysis = (): TradeAnalysis => ({
+  coinName: 'Unknown Asset',
+  direction: 'Neutral',
+  confidence: 'Medium',
+  probability: 65, // Default to Medium/65 to prevent the "always 15%" bug
+  strategy: 'Analysis unavailable',
+  activeStrategies: [],
+  entryPoints: [],
+  stopLoss: '',
+  takeProfit: [],
+  marketConditions: { ...DEFAULT_MARKET_CONDITIONS, prices: { ...DEFAULT_MARKET_CONDITIONS.prices } },
+  historicalCorrelation: 'N/A',
+  createdAt: new Date().toISOString(),
+  detectedPatternFamily: undefined,
+  detectedPatterns: [],
+  keyLevels: { support: [], resistance: [] },
+  isUpdate: false,
+  updateInterval: undefined,
+});
+
+const DEFAULT_PROBABILITY_REASONING: ProbabilityReasoning = {
+  indicatorBasis: '',
+  volatilityFactor: '',
+  patternMemoryInfluence: '',
+  aiAdjustments: '',
+};
+
+/**
+ * Validate + normalize SL/TP probability estimates, bridging the legacy
+ * tp1/tp2/tp3 fields with the tpProbabilities array in both directions.
+ * Returns undefined when the input is not a usable object.
+ */
+export const normalizeLevelProbabilities = (rawLp: unknown): LevelProbabilities | undefined => {
+  if (!rawLp || typeof rawLp !== 'object') return undefined;
+  const lp = rawLp as Record<string, any>;
+  const tpProbabilities: LevelProbabilities['tpProbabilities'] = Array.isArray(lp.tpProbabilities)
+    ? lp.tpProbabilities.map((p: any) => ({
+        level: typeof p.level === 'number' ? p.level : 0,
+        probability: typeof p.probability === 'number' ? p.probability : 0,
+        reasoning: p.reasoning || { ...DEFAULT_PROBABILITY_REASONING },
+      }))
+    : [];
+  return {
+    slProbability: typeof lp.slProbability === 'number' ? lp.slProbability : 0,
+    slReasoning: lp.slReasoning || lp.reasoning?.sl || { ...DEFAULT_PROBABILITY_REASONING },
+    tpProbabilities,
+    // Legacy fields for backward compatibility
+    tp1Probability: typeof lp.tp1Probability === 'number' ? lp.tp1Probability
+      : (typeof tpProbabilities[0]?.probability === 'number' ? tpProbabilities[0].probability : undefined),
+    tp2Probability: typeof lp.tp2Probability === 'number' ? lp.tp2Probability
+      : (typeof tpProbabilities[1]?.probability === 'number' ? tpProbabilities[1].probability : undefined),
+    tp3Probability: typeof lp.tp3Probability === 'number' ? lp.tp3Probability
+      : (typeof tpProbabilities[2]?.probability === 'number' ? tpProbabilities[2].probability : undefined),
+    reasoning: lp.reasoning && typeof lp.reasoning === 'object' ? {
+      sl: lp.reasoning.sl || lp.slReasoning || { ...DEFAULT_PROBABILITY_REASONING },
+      tp1: lp.reasoning.tp1 || tpProbabilities[0]?.reasoning || { ...DEFAULT_PROBABILITY_REASONING },
+      tp2: lp.reasoning.tp2 || tpProbabilities[1]?.reasoning || undefined,
+      tp3: lp.reasoning.tp3 || tpProbabilities[2]?.reasoning || undefined,
+    } : {
+      sl: lp.slReasoning || { ...DEFAULT_PROBABILITY_REASONING },
+      tp1: tpProbabilities[0]?.reasoning || { ...DEFAULT_PROBABILITY_REASONING },
+    },
+  };
+};
+
+/**
+ * Parse on-demand AI probability output: accepts either a wrapped
+ * `{ levelProbabilities: ... }` object or a bare probabilities object.
+ * Returns null when nothing usable was produced.
+ */
+export const parseLevelProbabilities = (raw: unknown): LevelProbabilities | null => {
+  if (!raw || typeof raw !== 'object') return null;
+  const obj = raw as Record<string, unknown>;
+  const candidate = obj.levelProbabilities && typeof obj.levelProbabilities === 'object'
+    ? obj.levelProbabilities
+    : raw;
+  const normalized = normalizeLevelProbabilities(candidate);
+  if (!normalized) return null;
+  const hasContent = typeof (candidate as Record<string, unknown>).slProbability === 'number'
+    || normalized.tpProbabilities.length > 0;
+  return hasContent ? normalized : null;
+};
+
+/**
+ * Cross-field business rules applied after shape coercion. Ported 1:1 from
+ * the legacy hand-rolled sanitizer — see tests/tradeAnalysisSchema.test.ts.
+ */
+export const applySemanticFixups = (raw: CoercedTradeAnalysis): TradeAnalysis => {
+  const analysis: TradeAnalysis = {
+    coinName: raw.coinName,
+    direction: raw.direction,
+    tradeType: raw.tradeType,
+    tradeTypeManualOverride: raw.tradeTypeManualOverride,
+    confidence: 'Medium',
+    probability: 65,
+    grade: raw.grade,
+    strategy: raw.strategy,
+    activeStrategies: raw.activeStrategies,
+    entryPoints: raw.entryPoints,
+    stopLoss: raw.stopLoss,
+    stopLossPercentage: raw.stopLossPercentage || undefined,
+    originalStopLossPercentage: raw.originalStopLossPercentage || undefined,
+    takeProfit: raw.takeProfit,
+    marketConditions: raw.marketConditions,
+    historicalCorrelation: raw.historicalCorrelation || 'N/A',
+    createdAt: raw.createdAt,
+    rrRatio: raw.rrRatio,
+    detectedPatternFamily: raw.detectedPatternFamily || undefined,
+    detectedPatterns: raw.detectedPatterns,
+    keyLevels: raw.keyLevels,
+    isUpdate: raw.isUpdate,
+    updateInterval: raw.updateInterval,
+    validationWarnings: raw.validationWarnings,
+    originalConfidence: raw.originalConfidence,
+    validityDurationMinutes: raw.validityDurationMinutes,
+  };
+
+  // ── Probability normalization + confidence derivation (coupled) ──
+  let probValue = NaN;
+  if (typeof raw.probability === 'number') {
+    probValue = raw.probability;
+  } else if (typeof raw.probability === 'string') {
+    const cleanProb = raw.probability.replace(/[^0-9.]/g, '');
+    if (cleanProb.length > 0) probValue = parseFloat(cleanProb);
+  }
+
+  // Treat 0 or negative as missing/invalid to avoid the "always 15%" bug.
+  if (!isNaN(probValue) && probValue > 0) {
+    if (probValue <= 1) probValue = probValue * 100; // Normalize decimals (0.85 → 85)
+    if (probValue > 100) probValue = 100;
+    analysis.probability = Math.round(probValue);
+
+    if (analysis.probability >= 80) analysis.confidence = 'High';
+    else if (analysis.probability >= 60) analysis.confidence = 'Medium';
+    else if (analysis.probability >= 40) analysis.confidence = 'Low';
+    else {
+      analysis.confidence = 'Avoid';
+      analysis.probability = 15; // Force 15 in the Avoid bucket
+    }
+  } else {
+    // Fallback: derive probability from the confidence string.
+    const conf = (['High', 'Medium', 'Low', 'Avoid'].includes(raw.confidence)
+      ? raw.confidence
+      : 'Medium') as 'High' | 'Medium' | 'Low' | 'Avoid';
+    analysis.confidence = conf;
+    analysis.probability = conf === 'High' ? 85 : conf === 'Low' ? 45 : conf === 'Avoid' ? 15 : 65;
+  }
+
+  // ── Pattern family fallback mined from marketConditions.pattern ──
+  if (!analysis.detectedPatternFamily && analysis.marketConditions?.pattern) {
+    const pat = analysis.marketConditions.pattern.toUpperCase();
+    if (pat.includes('FAMILY A')) analysis.detectedPatternFamily = 'Family A';
+    else if (pat.includes('FAMILY B')) analysis.detectedPatternFamily = 'Family B';
+    else if (pat.includes('FAMILY C')) analysis.detectedPatternFamily = 'Family C';
+    else if (pat.includes('OMEGA')) analysis.detectedPatternFamily = 'Family Omega';
+  }
+
+  // ── Gate result: sanitize string arrays, pass the rest through ──
+  if (raw.gateResult && typeof raw.gateResult === 'object') {
+    const gr = raw.gateResult as Record<string, unknown>;
+    analysis.gateResult = {
+      ...(gr as TradeAnalysis['gateResult']),
+      warnings: Array.isArray(gr.warnings) ? gr.warnings.map(coerceToString) : [],
+      insights: Array.isArray(gr.insights) ? gr.insights.map(coerceToString) : [],
+    } as TradeAnalysis['gateResult'];
+  }
+
+  // ── Level probabilities: validate + legacy tp1/2/3 ↔ tpProbabilities bridge ──
+  const normalizedProbs = normalizeLevelProbabilities(raw.levelProbabilities);
+  if (normalizedProbs) {
+    analysis.levelProbabilities = normalizedProbs;
+  }
+
+  // ── Dual scenario analysis (previously dropped silently by the sanitizer) ──
+  if (raw.dualScenarioAnalysis && typeof raw.dualScenarioAnalysis === 'object') {
+    const dsa = raw.dualScenarioAnalysis as Record<string, any>;
+    const cleanScenario = (s: any) => {
+      if (!s || typeof s !== 'object') return undefined;
+      return {
+        trigger: coerceToString(s.trigger),
+        confirmation: coerceToString(s.confirmation),
+        target: coerceToString(s.target),
+        invalidation: coerceToString(s.invalidation),
+      };
+    };
+    const bullish = cleanScenario(dsa.bullish);
+    const bearish = cleanScenario(dsa.bearish);
+    if (bullish && bearish) {
+      analysis.dualScenarioAnalysis = {
+        bullish,
+        bearish,
+        selectedScenario: ['bullish', 'bearish', 'neutral'].includes(dsa.selectedScenario) ? dsa.selectedScenario : 'bullish',
+        selectionReasoning: coerceToString(dsa.selectionReasoning),
+        confidenceInSelection: typeof dsa.confidenceInSelection === 'number'
+          ? Math.max(0, Math.min(100, dsa.confidenceInSelection))
+          : 50,
+      };
+    }
+  }
+
+  // ── Evidence-bound claims: caps + state coercion ──
+  if (Array.isArray(raw.evidence)) {
+    const VALID_STATES = ['observed', 'partial', 'unobserved'];
+    const claims: NonNullable<TradeAnalysis['evidence']> = [];
+    for (const item of (raw.evidence as any[]).slice(0, 8)) {
+      if (!item || typeof item !== 'object' || typeof item.claim !== 'string') continue;
+      const claim = sanitizeJSONString(item.claim).slice(0, 300);
+      if (!claim) continue;
+      const sources = Array.isArray(item.sources)
+        ? item.sources.filter((s: unknown) => typeof s === 'string').map((s: string) => sanitizeJSONString(s).slice(0, 120)).slice(0, 6)
+        : [];
+      const state = VALID_STATES.includes(item.state) ? item.state : (sources.length > 0 ? 'partial' : 'unobserved');
+      const note = typeof item.note === 'string' ? sanitizeJSONString(item.note).slice(0, 200) : undefined;
+      claims.push({ claim, sources, state, ...(note ? { note } : {}) });
+    }
+    if (claims.length > 0) analysis.evidence = claims;
+  }
+
+  // ── Invalidation contract: caps + category coercion ──
+  if (Array.isArray(raw.invalidationCriteria)) {
+    const VALID_CATEGORIES = ['price', 'time', 'structure', 'signal'];
+    const criteria: NonNullable<TradeAnalysis['invalidationCriteria']> = [];
+    for (const item of (raw.invalidationCriteria as any[]).slice(0, 5)) {
+      if (!item || typeof item !== 'object') continue;
+      const level = typeof item.level === 'string' ? sanitizeJSONString(item.level).slice(0, 60)
+        : (typeof item.level === 'number' ? String(item.level) : '');
+      const condition = typeof item.condition === 'string' ? sanitizeJSONString(item.condition).slice(0, 200) : '';
+      if (!level || !condition) continue;
+      const category = VALID_CATEGORIES.includes(item.category) ? item.category : undefined;
+      const note = typeof item.note === 'string' ? sanitizeJSONString(item.note).slice(0, 200) : undefined;
+      criteria.push({ level, condition, ...(category ? { category } : {}), ...(note ? { note } : {}) });
+    }
+    if (criteria.length > 0) analysis.invalidationCriteria = criteria;
+  }
+
+  // ── Pass-through fields (app-computed or free-form) ──
+  if (raw.devilsAdvocate && typeof raw.devilsAdvocate === 'object') {
+    analysis.devilsAdvocate = raw.devilsAdvocate as TradeAnalysis['devilsAdvocate'];
+  }
+  if (raw.entryTimingScore && typeof raw.entryTimingScore === 'object') {
+    analysis.entryTimingScore = raw.entryTimingScore as TradeAnalysis['entryTimingScore'];
+  }
+  if (raw.marketSnapshot !== undefined) {
+    analysis.marketSnapshot = raw.marketSnapshot;
+  }
+
+  return analysis;
+};
+
+/**
+ * The live AI-boundary parser: lenient coercion + semantic fixups.
+ * Total parse failure yields safe defaults instead of throwing.
+ */
+export const SanitizedTradeAnalysisSchema = CoercedTradeAnalysisSchema.transform(applySemanticFixups);
+
+export const parseTradeAnalysis = (raw: unknown): TradeAnalysis => {
+  if (!raw || typeof raw !== 'object') return createDefaultTradeAnalysis();
+  // Some providers name the asset "symbol" or "asset" instead of "coinName".
+  const obj = raw as Record<string, unknown>;
+  const withCoin = obj.coinName ? obj : { ...obj, coinName: obj.symbol ?? obj.asset ?? 'Unknown Asset' };
+  const result = SanitizedTradeAnalysisSchema.safeParse(withCoin);
+  return result.success ? result.data : createDefaultTradeAnalysis();
+};

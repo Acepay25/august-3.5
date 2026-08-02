@@ -284,7 +284,7 @@ export const verifyHistoricalOutcome = async (
         // For Short: Original SL distance = SL - entry, Extended SL = entry + (1.5 * distance) = SL + 0.5 * distance
         const firstEntryPrice = entriesToCheck[0].price;
         const slDistance = Math.abs(firstEntryPrice - stopLoss);
-        let extendedSlPrice = isLong
+        const extendedSlPrice = isLong
             ? stopLoss - (slDistance * 0.5)  // 150% of SL distance below entry for Long
             : stopLoss + (slDistance * 0.5); // 150% of SL distance above entry for Short
 

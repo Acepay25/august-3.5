@@ -258,7 +258,7 @@ const OKXChart: React.FC<OKXChartProps> = ({ symbol, interval, isVisible }) => {
                     // Remove old AI trendlines
                     aiTrendlinesRef.current.forEach(line => {
                         if (chartRef.current) {
-                            try { chartRef.current.removeSeries(line); } catch { }
+                            try { chartRef.current.removeSeries(line); } catch { /* intentionally ignored: series may already be removed */ }
                         }
                     });
                     aiTrendlinesRef.current = [];
@@ -306,11 +306,11 @@ const OKXChart: React.FC<OKXChartProps> = ({ symbol, interval, isVisible }) => {
                             // Only remove algorithmic lines if AI has trendlines to replace them
                             if (analysis.trendlines.length > 0) {
                                 if (resistanceLineRef.current) {
-                                    try { chartRef.current?.removeSeries(resistanceLineRef.current); } catch { }
+                                    try { chartRef.current?.removeSeries(resistanceLineRef.current); } catch { /* intentionally ignored: series may already be removed */ }
                                     resistanceLineRef.current = null;
                                 }
                                 if (supportLineRef.current) {
-                                    try { chartRef.current?.removeSeries(supportLineRef.current); } catch { }
+                                    try { chartRef.current?.removeSeries(supportLineRef.current); } catch { /* intentionally ignored: series may already be removed */ }
                                     supportLineRef.current = null;
                                 }
                             }

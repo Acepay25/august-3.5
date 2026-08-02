@@ -897,7 +897,7 @@ export const simulateFromAnalysisTime = async (
             outcome,
             hitTarget,
             maxDrawdown: Math.round(maxDrawdown * 100) / 100,
-            timeToOutcome: hitCandleIndex || 0,
+            timeToOutcome: hitCandleIndex !== undefined ? hitCandleIndex - entryTriggeredAtIndex : 0,
             priceAtExit: exitPrice,
             simulationDetails: details,
             analysisTime: analysisTimestamp,
@@ -926,7 +926,7 @@ export const simulateFromAnalysisTime = async (
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         const isNetworkError = errorMessage.includes('fetch') || errorMessage.includes('network') || errorMessage.includes('Failed to fetch');
 
-        let errorDetails = '';
+        let errorDetails: string;
         if (isNetworkError) {
             errorDetails = `🌐 Network Error\n\n` +
                 `Could not fetch market data from Binance.\n\n` +

@@ -730,8 +730,8 @@ export function generateMandatoryPatternCheck(
         : 0;
 
     const mandatoryQuestions: string[] = [];
-    let gateResult: PatternMemoryGate['gateResult'] = 'PASS';
-    let reason = '';
+    let gateResult: PatternMemoryGate['gateResult'];
+    let reason: string;
 
     // HALT CONDITIONS (most severe)
     if (aggregatedStats.sampleSize >= 5 && aggregatedStats.winRate < 30) {

@@ -17,14 +17,8 @@ import { Preferences } from '@capacitor/preferences';
 
 // Storage keys
 export const PREF_KEYS = {
-    // API Keys
-    OPENAI_API_KEY: 'openai_api_key',
-    GROK_API_KEY: 'grok_api_key',
-    GEMINI_API_KEY: 'gemini_api_key',
-    DEEPSEEK_API_KEY: 'deepseek_api_key',
-
     // Core AI Handling
-    MEMORY_PROVIDER: 'memory_provider', // 'gemini' | 'openai' | 'deepseek' | etc.
+    MEMORY_PROVIDER: 'memory_provider', // ProviderConfig id of the provider used for memory synthesis
 
     // Settings
     ANALYST_LENS_CONFIG: 'analyst_lens_config',
@@ -39,6 +33,7 @@ export const PREF_KEYS = {
 
     // Alerts
     PRICE_ALERTS: 'price_alerts',
+    OUTCOME_AUTOPILOT_STATE: 'outcome_autopilot_state',
 
     // Data integrity
     LAST_TRADE_COUNT: 'last_trade_count',
@@ -148,32 +143,6 @@ export const clearAllPreferences = async (): Promise<void> => {
 // ============================================================================
 // CONVENIENCE FUNCTIONS FOR COMMON OPERATIONS
 // ============================================================================
-
-/**
- * Get API key by provider
- */
-export const getApiKey = async (provider: 'openai' | 'grok' | 'gemini' | 'deepseek'): Promise<string> => {
-    const keyMap = {
-        openai: PREF_KEYS.OPENAI_API_KEY,
-        grok: PREF_KEYS.GROK_API_KEY,
-        gemini: PREF_KEYS.GEMINI_API_KEY,
-        deepseek: PREF_KEYS.DEEPSEEK_API_KEY,
-    };
-    return (await getPreference(keyMap[provider])) || '';
-};
-
-/**
- * Set API key by provider
- */
-export const setApiKey = async (provider: 'openai' | 'grok' | 'gemini' | 'deepseek', key: string): Promise<void> => {
-    const keyMap = {
-        openai: PREF_KEYS.OPENAI_API_KEY,
-        grok: PREF_KEYS.GROK_API_KEY,
-        gemini: PREF_KEYS.GEMINI_API_KEY,
-        deepseek: PREF_KEYS.DEEPSEEK_API_KEY,
-    };
-    await setPreference(keyMap[provider], key);
-};
 
 /**
  * Check if SQLite migration has been completed

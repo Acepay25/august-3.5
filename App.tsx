@@ -48,11 +48,13 @@ const ScenarioSimulator = React.lazy(() => import('./components/modals/ScenarioS
 const UpdateOverlay = React.lazy(() => import('./components/shared/UpdateOverlay'));
 const MistakeWarningBanner = React.lazy(() => import('./components/shared/MistakeWarningBanner'));
 const AnalysisProgress = React.lazy(() => import('./components/analysis/AnalysisProgress'));
-import { GEMINI_MODELS, DEEPSEEK_MODELS, ZHIPU_MODELS, GROQ_MODELS, GROQ_NEW_MODELS, GROQ_ALT2_MODELS, OPENROUTER_MODELS, OPENAI_MODELS, GROK_MODELS, OCR_MODELS, modelIdToName, ocrModelIdToName, DEFAULT_FRAMEWORKS, ACCURACY_MODE_DEFAULTS } from './constants/models';
+import { DEFAULT_FRAMEWORKS } from './constants/models';
+import { buildModelIdToName, buildProviderNameToId, getFirstReadyProvider } from './utils/providerUtils';
 import { createNewConversation } from './utils/conversationUtils';
 import { recalculateAnalysisMetrics } from './utils/analysisUtils';
 import { processImagesForSummarization } from './utils/imageProcessor';
 import { extractLastJson } from './utils/jsonUtils';
+import { parseLevelProbabilities } from './schemas/tradeAnalysis';
 import { pingBinanceAPI } from './services/analysis/MarketDataService';
 import { updateCalibration, updateGranularCalibration, initializeCalibration } from './services/validation/ConfidenceCalibrationService';
 import { ConfidenceCalibration, InsightKnowledgeBase } from './types';
@@ -77,6 +79,7 @@ import { checkDataIntegrity, createStartupBackup, updateTradeCount, logIntegrity
 import { startAutoBackup, stopAutoBackup } from './services/infrastructure/BackupService';
 import { initInvalidationRuleService, loadInvalidationRules } from './services/validation/InvalidationRuleService';
 import { PriceAlertService } from './services/ui/PriceAlertService';
+import { OutcomeAutopilotService, AutopilotResolution } from './services/ui/OutcomeAutopilotService';
 import { clearAllCaches } from './services/infrastructure/responseCache';
 import { initNativeStatusBar } from './services/infrastructure/NativeStatusBar';
 import { initConfluenceService } from './services/analysis/TimeframeConfluenceService';
@@ -126,12 +129,24 @@ const App: React.FC = () => {
     // Provider configuration (API keys, base URLs, custom providers)
     const {
         configs: providerConfigs,
+        isLoaded: providerConfigsLoaded,
         readyProviders,
         handleUpdateProvider,
         handleAddCustomProvider,
         handleRemoveProvider,
         handleToggleProvider: handleToggleProviderConfig,
+        handleAddModel,
+        handleRemoveModel,
+        handleUpdateModel,
     } = useProviderConfigs();
+
+    // Dynamic model display map built from configured providers.
+    // Replaces the legacy static modelIdToName / ocrModelIdToName constants —
+    // vision models are just provider models now, so one map serves both.
+    const modelIdToName = useMemo(() => buildModelIdToName(providerConfigs), [providerConfigs]);
+    const ocrModelIdToName = modelIdToName;
+    // Debate speaker names → provider ids (for lens roles and model tooltips)
+    const providerNameToId = useMemo(() => buildProviderNameToId(providerConfigs), [providerConfigs]);
 
     // Conversation state, derived values, and handlers (extracted to hooks/useConversations.ts)
     const {
@@ -236,6 +251,8 @@ const App: React.FC = () => {
         newlyAddedInsightIds, setNewlyAddedInsightIds,
         logTradeWithFeedback,
         autoLearnFromOutcome,
+        confirmAutopilotOutcome,
+        confirmAutopilotEntryNotHit,
         handleDataCaptureUpload,
         handleDataCaptureAuto,
         handleDataCaptureSkip,
@@ -521,8 +538,9 @@ const App: React.FC = () => {
         setIsHybridIntelligenceEnabled(false);
         setActiveFrameworks(DEFAULT_FRAMEWORKS);
         setSummaryCharLimit(4000);
-        setSummarizationProvider(AIProvider.GEMINI);
-        setSummarizationModel(GEMINI_MODELS[0].id);
+        const firstReady = getFirstReadyProvider(providerConfigs);
+        setSummarizationProvider(firstReady?.id || '');
+        setSummarizationModel(firstReady?.selectedModel || '');
         setInput('');
         setImages([]);
         setExpandedIndividualThoughts({});
@@ -538,7 +556,7 @@ const App: React.FC = () => {
                 tradeSummaries: [],
                 finalTradeSummary: null,
                 globalMemory: undefined,
-                settings: { activeFrameworks: DEFAULT_FRAMEWORKS, summaryCharLimit: 4000, summarizationProvider: AIProvider.GEMINI, summarizationModel: GEMINI_MODELS[0].id, isGlobalMemoryEnabled: true, isAccuracyModeEnabled: false, accuracySubMode: 'original', customInstructions: { general: [], accuracyOriginal: [], accuracyPure: [] }, isPlaybookEnabledInPureAI: false, isFamiliesEnabledInPureAI: false, isMemoryEnabledInPureAI: false, isHybridIntelligenceEnabled: false },
+                settings: { activeFrameworks: DEFAULT_FRAMEWORKS, summaryCharLimit: 4000, summarizationProvider: firstReady?.id || '', summarizationModel: firstReady?.selectedModel || '', isGlobalMemoryEnabled: true, isAccuracyModeEnabled: false, accuracySubMode: 'original', customInstructions: { general: [], accuracyOriginal: [], accuracyPure: [] }, isPlaybookEnabledInPureAI: false, isFamiliesEnabledInPureAI: false, isMemoryEnabledInPureAI: false, isHybridIntelligenceEnabled: false },
                 lastActiveConversationId: newConv.id
             });
         }
@@ -601,6 +619,7 @@ const App: React.FC = () => {
         await initAnalystLensService();
         await initInvalidationRuleService();
         await PriceAlertService.init();
+        await OutcomeAutopilotService.init();
         await initConfluenceService();
         await initPatternMemoryService();
         await GlobalLearningService.initialize();
@@ -628,8 +647,9 @@ const App: React.FC = () => {
             setGlobalMemory(profile.globalMemory);
             setActiveFrameworks(profile.settings?.activeFrameworks || DEFAULT_FRAMEWORKS);
             setSummaryCharLimit(profile.settings?.summaryCharLimit || 4000);
-            setSummarizationProvider(profile.settings?.summarizationProvider || AIProvider.GEMINI);
-            setSummarizationModel(profile.settings?.summarizationModel || GEMINI_MODELS[0].id);
+            const firstReadyProvider = getFirstReadyProvider(providerConfigs);
+            setSummarizationProvider(profile.settings?.summarizationProvider || firstReadyProvider?.id || '');
+            setSummarizationModel(profile.settings?.summarizationModel || firstReadyProvider?.selectedModel || '');
             setIsGlobalMemoryEnabled(profile.settings?.isGlobalMemoryEnabled ?? true);
             setIsAccuracyModeEnabled(profile.settings?.isAccuracyModeEnabled ?? false);
             setAccuracySubMode(profile.settings?.accuracySubMode || 'original');
@@ -664,8 +684,9 @@ const App: React.FC = () => {
             setIsMemoryEnabledInPureAI(profile.settings?.isMemoryEnabledInPureAI ?? false);
             setIsHybridIntelligenceEnabled(profile.settings?.isHybridIntelligenceEnabled ?? false);
             setConfidenceCalibration(profile.settings?.confidenceCalibration);
-            setMemoryConfig(providerConfigs.find(p => p.id === profile.settings?.memoryProvider) || null);
-            setMemoryModel(profile.settings?.memoryModel || 'gemini-2.5-flash');
+            const loadedMemoryConfig = providerConfigs.find(p => p.id === profile.settings?.memoryProvider) || null;
+            setMemoryConfig(loadedMemoryConfig);
+            setMemoryModel(profile.settings?.memoryModel || loadedMemoryConfig?.selectedModel || getFirstReadyProvider(providerConfigs)?.selectedModel || '');
 
             // AI Learning: Load knowledge base
             setInsightKnowledgeBase(profile.insightKnowledgeBase);
@@ -726,6 +747,11 @@ const App: React.FC = () => {
     };
 
     useEffect(() => {
+        // Wait for provider configs to load before resolving defaults like the
+        // summarization provider / memory model. getFirstReadyProvider would
+        // otherwise see an empty list on first mount (configs load async) and
+        // pin defaults to '' that never self-correct.
+        if (!providerConfigsLoaded) return;
         let isMounted = true;
         const initializeApp = async () => {
             try {
@@ -748,7 +774,7 @@ const App: React.FC = () => {
         };
         initializeApp();
         return () => { isMounted = false; };
-    }, []);
+    }, [providerConfigsLoaded]);
 
     // ─── P0-1: Save-on-unload flush ──────────────────────────────────────
     // The debounced saves below lose data if the tab closes mid-window.
@@ -801,7 +827,6 @@ const App: React.FC = () => {
         return () => {
             clearTimeout(handler);
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [conversationHistory, loggedTrades, savedAnalyses, tradeSummaries, finalTradeSummary, globalMemory, insightKnowledgeBase, activeUsername, activeConversationId, buildProfileSnapshot]);
 
     // (2) SETTINGS save — light payload, runs on settings toggles. Uses a
@@ -825,7 +850,6 @@ const App: React.FC = () => {
         return () => {
             clearTimeout(handler);
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, confidenceCalibration, memoryConfig, memoryModel, activeUsername]);
 
     // Flush pending state on tab close / hide. The hook keeps an internal
@@ -878,11 +902,13 @@ const App: React.FC = () => {
         setShowAccuracyModal(false);
 
         if (!isAccuracyModeEnabled) { // Enabling Accuracy Mode
+            // Default moderator/vision to the first ready provider instead of a hardcoded brand.
+            const firstReady = getFirstReadyProvider(providerConfigs);
             updateActiveConversation(conv => ({
                 ...conv,
-                moderatorProviderId: ACCURACY_MODE_DEFAULTS.MODERATOR_PROVIDER,
-                moderatorModel: ACCURACY_MODE_DEFAULTS.MODERATOR_MODEL,
-                ocrModel: ACCURACY_MODE_DEFAULTS.VISION
+                moderatorProviderId: firstReady?.id || conv.moderatorProviderId || '',
+                moderatorModel: firstReady?.selectedModel || conv.moderatorModel || '',
+                ocrModel: firstReady?.selectedModel || conv.ocrModel || ''
             }));
             if (!accuracySubMode) setAccuracySubMode('original');
         }
@@ -1330,12 +1356,7 @@ const App: React.FC = () => {
                 analysis: msg.analysis,
                 userPrompt,
                 timestamp: new Date().toISOString(),
-                geminiModelUsed: msg.modelsUsed?.['gemini'],
-                deepseekModelUsed: msg.modelsUsed?.['deepseek'],
-                zhipuModelUsed: msg.modelsUsed?.['zhipu'],
-                groqModelUsed: msg.modelsUsed?.['groq'],
-                groqNewModelUsed: msg.modelsUsed?.['groq_new'],
-                groqAlt2ModelUsed: msg.modelsUsed?.['groq_alt2'],
+                modelsUsed: msg.modelsUsed,
 
                 ocrModelUsed: msg.ocrModelUsed,
                 moderatorProvider: moderatorProviderId,
@@ -1388,8 +1409,8 @@ const App: React.FC = () => {
 
             const parsed = extractLastJson(fullJson);
             if (parsed) {
-                // Determine if 'parsed' is the levelProbabilities object or if it's wrapped
-                const probs = parsed.levelProbabilities || (parsed.slProbability ? parsed : null);
+                // Schema-validated normalization (accepts wrapped or bare shape)
+                const probs = parseLevelProbabilities(parsed);
 
                 if (probs) {
                     // Tag with mode
@@ -1414,6 +1435,73 @@ const App: React.FC = () => {
         }
     };
 
+    // ─── Outcome Autopilot ────────────────────────────────────────────────
+    // Register PENDING analyses for automatic SL/TP detection; resolutions
+    // surface in the chat via chatContext for inline one-click confirmation.
+    const [autopilotResolutions, setAutopilotResolutions] = useState<Record<string, AutopilotResolution>>({});
+
+    useEffect(() => {
+        const unsubscribe = OutcomeAutopilotService.subscribe((messageId, resolution) => {
+            setAutopilotResolutions(prev => ({ ...prev, [messageId]: resolution }));
+            toast.success('Autopilot: outcome detected', resolution.detail);
+        });
+        return unsubscribe;
+    }, [toast]);
+
+    useEffect(() => {
+        const leverage = activeConversation?.leverage || 100;
+        messages.forEach(m => {
+            const trackable = m.outcome === TradeOutcome.PENDING
+                && !!m.analysis
+                && m.analysis.direction !== 'Neutral'
+                && (m.analysis.entryPoints?.length ?? 0) > 0
+                && !!m.analysis.stopLoss
+                && !!m.analysis.createdAt;
+            if (trackable) {
+                OutcomeAutopilotService.register(m.id, m.analysis!, leverage);
+            } else {
+                OutcomeAutopilotService.unregister(m.id);
+            }
+        });
+    }, [messages, activeConversation?.leverage]);
+
+    // Startup catch-up: once messages load, verify pending trades once
+    // (covers outcomes that resolved while the app was closed).
+    const autopilotCaughtUp = useRef(false);
+    useEffect(() => {
+        if (!autopilotCaughtUp.current && messages.length > 0) {
+            autopilotCaughtUp.current = true;
+            void OutcomeAutopilotService.checkNow();
+        }
+    }, [messages]);
+
+    const handleConfirmAutopilot = useCallback((messageId: string) => {
+        const msg = messages.find(m => m.id === messageId);
+        const resolution = OutcomeAutopilotService.getResolution(messageId);
+        if (!msg || !resolution || resolution.expiredOpen) return;
+        if (resolution.outcome === TradeOutcome.ENTRY_NOT_HIT) {
+            confirmAutopilotEntryNotHit(msg);
+        } else {
+            confirmAutopilotOutcome(msg, resolution.outcome, resolution.pnlPercent, resolution.slOptimizationData);
+        }
+        OutcomeAutopilotService.markProcessed(messageId);
+        setAutopilotResolutions(prev => {
+            const next = { ...prev };
+            delete next[messageId];
+            return next;
+        });
+        toast.success('Trade logged', `${resolution.outcome} confirmed via autopilot`);
+    }, [messages, confirmAutopilotOutcome, confirmAutopilotEntryNotHit, toast]);
+
+    const handleDismissAutopilot = useCallback((messageId: string) => {
+        OutcomeAutopilotService.dismiss(messageId);
+        setAutopilotResolutions(prev => {
+            const next = { ...prev };
+            delete next[messageId];
+            return next;
+        });
+    }, []);
+
     const chatContext: ChatContextProps = useMemo(() => ({
         typingMessageState,
         setTypingMessageState,
@@ -1436,6 +1524,7 @@ const App: React.FC = () => {
         copiedMessageId,
         modelIdToName,
         ocrModelIdToName,
+        providerNameToId,
         handleInitiateLogTrade,
         handleInitiateSkipTrade,
         handleViewStrategyDetails,
@@ -1447,8 +1536,11 @@ const App: React.FC = () => {
         confidenceCalibration, // Confidence calibration stats
         onRetryPostMortem: handleRetryPostMortem, // Retry failed post-mortem
         lensConfig, // Analyst lens configuration for debate visualization
-        leverage: parseInt(leverageInput, 10) || 100 // Leverage for backtest P&L calculations
-    }), [typingMessageState, highlightedAnalysisId, expandedPostMortems, expandedPostMortemImages, expandedIndividualThoughts, expandedDebateTranscripts, collapsedUserMessages, savedAnalyses, loggingTradeId, activeFrameworks, activeConversation, copiedMessageId, handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy, handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, confidenceCalibration, handleRetryPostMortem, lensConfig, leverageInput]);
+        leverage: parseInt(leverageInput, 10) || 100, // Leverage for backtest P&L calculations
+        autopilotResolutions, // Outcome autopilot detected resolutions
+        onConfirmAutopilot: handleConfirmAutopilot,
+        onDismissAutopilot: handleDismissAutopilot
+    }), [typingMessageState, highlightedAnalysisId, expandedPostMortems, expandedPostMortemImages, expandedIndividualThoughts, expandedDebateTranscripts, collapsedUserMessages, savedAnalyses, loggingTradeId, activeFrameworks, activeConversation, copiedMessageId, modelIdToName, providerNameToId, handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy, handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, confidenceCalibration, handleRetryPostMortem, lensConfig, leverageInput, autopilotResolutions, handleConfirmAutopilot, handleDismissAutopilot]);
 
     // ... (Rest of component remains unchanged) ...
     return (
@@ -1475,13 +1567,7 @@ const App: React.FC = () => {
                 isVisible={isLiveAnalysisVisible}
                 onClose={() => setIsLiveAnalysisVisible(false)}
                 thoughts={liveThoughts}
-                geminiModelName={readyProviders.find(p => p.id === 'gemini')?.selectedModel}
-                deepseekModelName={readyProviders.find(p => p.id === 'deepseek')?.selectedModel}
-                zhipuModelName={isAccuracyModeEnabled ? undefined : readyProviders.find(p => p.id === 'zhipu')?.selectedModel}
-                groqModelName={readyProviders.find(p => p.id === 'groq')?.selectedModel}
-                groqNewModelName={readyProviders.find(p => p.id === 'groq_new')?.selectedModel}
-                groqAlt2ModelName={readyProviders.find(p => p.id === 'groq_alt2')?.selectedModel}
-                openrouterModelName={readyProviders.find(p => p.id === 'openrouter')?.selectedModel}
+                providers={readyProviders}
                 onAllTypingComplete={handleAllAnalysisTypingComplete}
             />
             <LiveStreamView
@@ -1489,13 +1575,7 @@ const App: React.FC = () => {
                 isVisible={isLivePostMortemVisible}
                 onClose={() => setIsLivePostMortemVisible(false)}
                 thoughts={livePostMortemThoughts}
-                geminiModelName={readyProviders.find(p => p.id === 'gemini')?.selectedModel}
-                deepseekModelName={readyProviders.find(p => p.id === 'deepseek')?.selectedModel}
-                zhipuModelName={isAccuracyModeEnabled ? undefined : readyProviders.find(p => p.id === 'zhipu')?.selectedModel}
-                groqModelName={readyProviders.find(p => p.id === 'groq')?.selectedModel}
-                groqNewModelName={readyProviders.find(p => p.id === 'groq_new')?.selectedModel}
-                groqAlt2ModelName={readyProviders.find(p => p.id === 'groq_alt2')?.selectedModel}
-                openrouterModelName={readyProviders.find(p => p.id === 'openrouter')?.selectedModel}
+                providers={readyProviders}
                 onAllTypingComplete={handleAllPostMortemTypingComplete}
             />
             <UserProfileManager isVisible={isUserModalOpen} onUserSelect={loadUserData} existingUsers={existingUsernames} onImportProfile={handleImportData} onDeleteUser={handleDeleteUser} />
@@ -1523,8 +1603,8 @@ const App: React.FC = () => {
                     isCapturing={isEntryNotHitCapturing}
                 />
             )}
-            {postMortemCandidate && <PostTradeUploadModal candidate={postMortemCandidate} onClose={() => setPostMortemCandidate(null)} onAnalyze={(summaries, urls) => startPostMortemAnalysis(postMortemCandidate, summaries, urls)} visionConfig={readyProviders.find(p => p.selectedModel === selectedOcrModel) || readyProviders[0] || moderatorConfig} onQuotaExceeded={handleQuotaExceeded} />}
-            {updateCandidate && <UpdateTradeModal message={updateCandidate} onClose={() => setUpdateCandidate(null)} onConfirm={handleConfirmUpdateTrade} onAutoCapture={handleUpdateAutoCapture} isCapturing={isUpdateAutoCapturing} visionConfig={readyProviders.find(p => p.selectedModel === selectedOcrModel) || readyProviders[0] || moderatorConfig} onQuotaExceeded={handleQuotaExceeded} />}
+            {postMortemCandidate && <PostTradeUploadModal candidate={postMortemCandidate} onClose={() => setPostMortemCandidate(null)} onAnalyze={(summaries, urls) => startPostMortemAnalysis(postMortemCandidate, summaries, urls)} visionConfig={readyProviders.find(p => p.selectedModel === selectedOcrModel || p.models.includes(selectedOcrModel)) || readyProviders[0] || moderatorConfig} onQuotaExceeded={handleQuotaExceeded} />}
+            {updateCandidate && <UpdateTradeModal message={updateCandidate} onClose={() => setUpdateCandidate(null)} onConfirm={handleConfirmUpdateTrade} onAutoCapture={handleUpdateAutoCapture} isCapturing={isUpdateAutoCapturing} visionConfig={readyProviders.find(p => p.selectedModel === selectedOcrModel || p.models.includes(selectedOcrModel)) || readyProviders[0] || moderatorConfig} onQuotaExceeded={handleQuotaExceeded} />}
             {simulatorCandidate && (
                 <ScenarioSimulator
                     message={simulatorCandidate}
@@ -1547,6 +1627,12 @@ const App: React.FC = () => {
                 setAccuracySubMode={setAccuracySubMode}
                 isHybridIntelligenceEnabled={isHybridIntelligenceEnabled}
                 setIsHybridIntelligenceEnabled={setIsHybridIntelligenceEnabled}
+                isAutoCapturing={isAutoCapturing}
+                onToggleAutoCapturing={() => setIsAutoCapturing(!isAutoCapturing)}
+                isUpdateAutoCapturing={isUpdateAutoCapturing}
+                onToggleUpdateAutoCapturing={() => setIsUpdateAutoCapturing(!isUpdateAutoCapturing)}
+                isEntryNotHitCapturing={isEntryNotHitCapturing}
+                onToggleEntryNotHitCapturing={() => setIsEntryNotHitCapturing(!isEntryNotHitCapturing)}
                 isGlobalMemoryEnabled={isGlobalMemoryEnabled}
                 setIsGlobalMemoryEnabled={setIsGlobalMemoryEnabled}
                 memoryConfig={memoryConfig}
@@ -1574,6 +1660,21 @@ const App: React.FC = () => {
                 onAddCustomProvider={handleAddCustomProvider}
                 onRemoveProvider={handleRemoveProvider}
                 onToggleProviderConfig={handleToggleProviderConfig}
+                onAddModel={handleAddModel}
+                onRemoveModel={handleRemoveModel}
+                onUpdateModel={handleUpdateModel}
+                loggedTrades={loggedTrades}
+                onDeleteTrades={handleDeleteTrades}
+                onClearAllTrades={handleClearAllTrades}
+                modelIdToName={modelIdToName}
+                ocrModelIdToName={ocrModelIdToName}
+                onUpdateInsights={handleManualInsightsUpdate}
+                isSummarizing={isSummarizing}
+                currentInsightIds={currentInsightIds}
+                onUpdateTradeLeverage={handleUpdateTradeLeverage}
+                familyWinRates={familyWinRates}
+                globalMemory={globalMemory}
+                threadSummary={activeConversation?.threadSummary}
             />
             <VisionDataViewer isVisible={isVisionDataVisible} onClose={() => setIsVisionDataVisible(false)} visionData={currentVisionData} />
 
@@ -1633,12 +1734,7 @@ const App: React.FC = () => {
                 summarizationModel={summarizationModel}
                 onSetSummarizationProvider={handleSetSummarizationProvider}
                 onSetSummarizationModel={handleSetSummarizationModel}
-                geminiModels={GEMINI_MODELS}
-                deepseekModels={DEEPSEEK_MODELS}
-                zhipuModels={ZHIPU_MODELS}
-                groqModels={GROQ_MODELS}
-                groqNewModels={GROQ_NEW_MODELS}
-                groqAlt2Models={GROQ_ALT2_MODELS}
+                providers={readyProviders}
 
                 summaryCharLimit={summaryCharLimit}
                 onUpdateSummaryCharLimit={handleUpdateSummaryCharLimit}
@@ -1761,9 +1857,9 @@ const App: React.FC = () => {
                 isAnyProviderEnabled={isAnyProviderEnabled}
                 isAccuracyModeEnabled={isAccuracyModeEnabled}
                 accuracySubMode={accuracySubMode}
-                providers={readyProviders}
+                providers={providerConfigs}
                 onToggleProvider={handleToggleProviderConfig}
-
+                onUpdateProvider={handleUpdateProvider}
 
                 selectedVisionModel={selectedOcrModel}
                 setSelectedVisionModel={handleSetVisionModel}

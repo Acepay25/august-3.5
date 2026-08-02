@@ -10,7 +10,7 @@ import { getCalibrationSummary, initializeCalibration } from '../../services/val
 import { storageService } from '../../services/infrastructure/StorageService';
 import { getAttributedInsightsSummary } from '../../services/learning/InsightExtractionService';
 import { jobQueue } from '../../services/infrastructure/JobQueueService'; // Import JobQueue
-import { AIProvider, ConfidenceCalibration, LearningRule } from '../../types';
+import { ConfidenceCalibration, LearningRule } from '../../types';
 import {
     GATE_SCAN_JSON_SCHEMA,
     MASTER_TRADE_PLAN_JSON_SCHEMA,
@@ -64,9 +64,9 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
 
     const loadData = async () => {
         try {
-            // 1. Intelligence Data
-            const geminiSignals = await ReinforcementSignalService.getSignals(AIProvider.GEMINI, 20);
-            setSignals(geminiSignals || []);
+            // 1. Intelligence Data (signals across all configured providers)
+            const recentSignals = await ReinforcementSignalService.getAllSignals(20);
+            setSignals(recentSignals || []);
 
             setCalibration(storageService.loadSetting<ConfidenceCalibration>('confidence_calibration', initializeCalibration()));
 

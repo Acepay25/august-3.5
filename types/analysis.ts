@@ -138,6 +138,49 @@ export interface TradeAnalysis {
    * Type is HybridDataPacket (from HybridIntelligenceService), but using 'unknown' to avoid strict circular dependency.
    */
   marketSnapshot?: unknown;
+  /**
+   * Evidence-bound claims (better-harness methodology): every key conclusion
+   * must cite its data sources and mark gaps explicitly instead of guessing.
+   */
+  evidence?: EvidenceClaim[];
+  /**
+   * Invalidation contract: the concrete conditions that falsify this setup.
+   * Formalizes the invalidation thesis the prompts already require, so the
+   * UI can show exactly what kills the trade (price level, time, structure).
+   */
+  invalidationCriteria?: InvalidationCriterion[];
+}
+
+/**
+ * A single evidence-bound claim attached to an analysis conclusion.
+ * `state` distinguishes verified data from partial or missing data so the UI
+ * can show provenance and the AI cannot paper over gaps with confidence.
+ */
+export interface EvidenceClaim {
+  /** The conclusion or assertion being made. */
+  claim: string;
+  /** Data sources backing the claim (e.g. "Binance 1h OHLCV", "Chart 1 OCR", "RSI(14)"). */
+  sources: string[];
+  /** observed = directly verified; partial = some data; unobserved = data gap, inferred only. */
+  state: 'observed' | 'partial' | 'unobserved';
+  /** Optional note explaining partial/unobserved state. */
+  note?: string;
+}
+
+/**
+ * A single falsification criterion from the analysis invalidation contract.
+ * `level` stays a string (prices are cleaned strings throughout the app,
+ * e.g. "94,500" or "4H close below 94,500").
+ */
+export interface InvalidationCriterion {
+  /** The price level or threshold, e.g. "94,500" or "validity window expiry". */
+  level: string;
+  /** What must happen to falsify the setup, e.g. "4H close below this support". */
+  condition: string;
+  /** price = level breach; time = expiry; structure = market structure shift; signal = indicator/counter-signal. */
+  category?: 'price' | 'time' | 'structure' | 'signal';
+  /** Optional consequence/rationale, e.g. "bullish thesis dead, flip to neutral". */
+  note?: string;
 }
 
 /**

@@ -7,6 +7,7 @@ import { ProviderConfig } from '../types/provider';
 import GlobalLearningService from '../services/learning/GlobalLearningService';
 import { storeRule, loadLearningRules, saveLearningRules } from '../services/learning/LearningRulesService';
 import { trackTradeOutcome } from '../services/backtesting/ModelPerformanceService';
+import { SLOptimizationData } from '../services/backtesting/StopLossOptimizerService';
 import { ConfidenceLevel } from '../services/validation/ConfidenceCalibrationService';
 
 // Maximum number of trade summaries (Recent Insights) to keep - enforces FIFO when limit reached
@@ -88,12 +89,15 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         const analysis = trade.analysis;
         if (!analysis) return;
 
-        // Track per-model performance
-        const providers: AIProvider[] = [];
-        if (trade.geminiModelUsed) providers.push(AIProvider.GEMINI);
-        if (trade.deepseekModelUsed) providers.push(AIProvider.DEEPSEEK);
-        if (trade.groqModelUsed) providers.push(AIProvider.GROQ);
-        // Add other providers as needed if they are tracked in LoggedTrade
+        // Track per-model performance — dynamic provider ids from modelsUsed,
+        // with legacy per-provider fields as fallback for historical trades.
+        const providers: AIProvider[] = trade.modelsUsed && Object.keys(trade.modelsUsed).length > 0
+            ? Object.keys(trade.modelsUsed)
+            : ([
+                trade.geminiModelUsed ? AIProvider.GEMINI : null,
+                trade.deepseekModelUsed ? AIProvider.DEEPSEEK : null,
+                trade.groqModelUsed ? AIProvider.GROQ : null,
+            ] as (string | null)[]).filter((p): p is string => p !== null);
 
         providers.forEach(p => {
             trackTradeOutcome(p, isWin, analysis.detectedPatternFamily || '', 'ranging', analysis.confidence || 'Medium');
@@ -127,7 +131,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
     // ─── Trade Logging ────────────────────────────────────────────────────
 
     // Helper function to log trade (called by all capture handlers)
-    const logTradeWithFeedback = useCallback(async (message: Message, outcome: TradeOutcome.WIN | TradeOutcome.LOSS, feedback: { pnlAmount: number; correctedStopLoss?: string; correctedTakeProfit?: string; selectedEntryIndices?: number[]; }) => {
+    const logTradeWithFeedback = useCallback(async (message: Message, outcome: TradeOutcome.WIN | TradeOutcome.LOSS, feedback: { pnlAmount?: number; pnlPercent?: number; correctedStopLoss?: string; correctedTakeProfit?: string; selectedEntryIndices?: number[]; slOptimizationData?: SLOptimizationData; }) => {
         const loggedTrade: LoggedTrade = {
             id: message.id,
             analysis: message.analysis!,
@@ -136,10 +140,12 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             leverage: activeConversationLeverage || 100,
             investmentAmount: undefined,
             pnlAmount: feedback.pnlAmount,
+            pnlPercent: feedback.pnlPercent,
             correctedStopLoss: feedback.correctedStopLoss,
             correctedTakeProfit: feedback.correctedTakeProfit,
             triggeredEntryIndices: feedback.selectedEntryIndices, // Store which entries were triggered
             marketSnapshot: message.analysis?.marketSnapshot, // Persist for Algo Mode
+            slOptimizationData: feedback.slOptimizationData, // Autopilot-observed SL behavior
             modelsUsed: message.modelsUsed,
             thoughtProcesses: message.thoughtProcesses,
 
@@ -454,6 +460,30 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         })();
     }, [activeConversationLeverage, memoryModel, memoryConfig, useAlgorithmicInsights, toast]);
 
+    // ─── Outcome Autopilot confirmation ───────────────────────────────────
+    // One-click logging of autopilot-detected outcomes. Funnels through the
+    // same writers as the manual modals so calibration/autoLearn/insight
+    // side-effects fire exactly once.
+
+    const confirmAutopilotOutcome = useCallback((
+        message: Message,
+        outcome: TradeOutcome.WIN | TradeOutcome.LOSS,
+        pnlPercent?: number,
+        slOptimizationData?: SLOptimizationData
+    ) => {
+        // pnlPercent is a PERCENT (e.g. +200), not dollars — it must not be
+        // written into pnlAmount, which dashboards sum as USD. It is carried
+        // on pnlPercent instead; dollar PnL stays unset (Not Captured).
+        void logTradeWithFeedback(message, outcome, {
+            pnlPercent,
+            slOptimizationData,
+        });
+    }, [logTradeWithFeedback]);
+
+    const confirmAutopilotEntryNotHit = useCallback((message: Message) => {
+        logEntryNotHitTrade({ message });
+    }, [logEntryNotHitTrade]);
+
     const handleEntryNotHitAutoCapture = useCallback(async () => {
         if (!entryNotHitCandidate || !entryNotHitCandidate.message.analysis) {
             setEntryNotHitCandidate(null);
@@ -697,6 +727,8 @@ ${result.comparisonBlock}
         // Handler functions
         logTradeWithFeedback,
         autoLearnFromOutcome,
+        confirmAutopilotOutcome,
+        confirmAutopilotEntryNotHit,
         handleDataCaptureUpload,
         handleDataCaptureAuto,
         handleDataCaptureSkip,

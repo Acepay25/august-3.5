@@ -11,6 +11,9 @@ import {
     updateProviderConfig,
     addCustomProvider,
     removeCustomProvider,
+    addModelToProvider,
+    removeModelFromProvider,
+    updateModelInProvider,
     getReadyProviders,
 } from '../services/infrastructure/ProviderConfigService';
 
@@ -67,6 +70,22 @@ export function useProviderConfigs() {
         }
     }, [configs]);
 
+    // Model management callbacks
+    const handleAddModel = useCallback(async (providerId: string, modelId: string) => {
+        const updated = await addModelToProvider(providerId, modelId);
+        setConfigs(updated);
+    }, []);
+
+    const handleRemoveModel = useCallback(async (providerId: string, modelId: string) => {
+        const updated = await removeModelFromProvider(providerId, modelId);
+        setConfigs(updated);
+    }, []);
+
+    const handleUpdateModel = useCallback(async (providerId: string, oldModelId: string, newModelId: string) => {
+        const updated = await updateModelInProvider(providerId, oldModelId, newModelId);
+        setConfigs(updated);
+    }, []);
+
     // Get providers that are enabled AND have an API key
     const readyProviders = useMemo(() => getReadyProviders(configs), [configs]);
 
@@ -83,6 +102,9 @@ export function useProviderConfigs() {
         handleAddCustomProvider,
         handleRemoveProvider,
         handleToggleProvider,
+        handleAddModel,
+        handleRemoveModel,
+        handleUpdateModel,
         getProviderById,
     };
 }

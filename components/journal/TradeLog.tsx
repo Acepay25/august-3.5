@@ -53,8 +53,8 @@ const TradeLogRow: React.FC<{
     isInsight: boolean;
     onUpdateLeverage: (id: string, leverage: number) => void;
 }> = ({ trade, onToggle, isExpanded, isSelected, onSelect, onViewImage, modelIdToName, ocrModelIdToName, isInsight, onUpdateLeverage }) => {
-    const { analysis, outcome, timestamp, postMortem, postMortemImages, correctedEntry, correctedStopLoss, correctedTakeProfit, pnlAmount, geminiModelUsed, deepseekModelUsed, zhipuModelUsed, groqModelUsed, groqNewModelUsed, moderatorModel, leverage, isAccuracyMode, accuracySubMode } = trade;
-    const { direction, stopLoss, stopLossPercentage, entryPoints, takeProfit, activeStrategies, coinName } = analysis;
+    const { analysis, outcome, timestamp, postMortem, postMortemImages, correctedEntry, correctedStopLoss, correctedTakeProfit, pnlAmount, pnlPercent, modelsUsed, geminiModelUsed, deepseekModelUsed, zhipuModelUsed, groqModelUsed, groqNewModelUsed, groqAlt2ModelUsed, openrouterModelUsed, moderatorModel, leverage, isAccuracyMode, accuracySubMode } = trade;
+    const { direction, stopLoss, stopLossPercentage, entryPoints, takeProfit, activeStrategies, coinName, invalidationCriteria } = analysis;
     const [isInsightsVisible, setIsInsightsVisible] = useState(false);
     const [isPostMortemVisible, setIsPostMortemVisible] = useState(false);
     const [isScreenshotsVisible, setIsScreenshotsVisible] = useState(false);
@@ -148,14 +148,23 @@ const TradeLogRow: React.FC<{
                             </div>
 
                             {/* Prominent PnL Display */}
-                            {pnlAmount !== undefined && (
+                            {/* Dollar PnL (user-entered) takes precedence; a percent-only
+                                trade (outcome autopilot) renders its leveraged % instead. */}
+                            {pnlAmount !== undefined ? (
                                 <div className={`flex flex-col items-end px-3 py-1.5 rounded-lg border backdrop-blur-md min-w-[80px] ${pnlAmount >= 0 ? 'bg-emerald-500/10 border-emerald-500/20 shadow-[0_0_15px_-5px_rgba(16,185,129,0.2)]' : 'bg-rose-500/10 border-rose-500/20 shadow-[0_0_15px_-5px_rgba(244,63,94,0.2)]'}`}>
                                     <span className={`font-mono font-black text-lg leading-none ${pnlAmount >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                         {pnlAmount >= 0 ? '+' : ''}{pnlAmount.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}
                                     </span>
                                     <span className={`text-[9px] font-bold uppercase tracking-widest opacity-70 ${pnlAmount >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>PnL</span>
                                 </div>
-                            )}
+                            ) : pnlPercent !== undefined ? (
+                                <div className={`flex flex-col items-end px-3 py-1.5 rounded-lg border backdrop-blur-md min-w-[80px] ${pnlPercent >= 0 ? 'bg-emerald-500/10 border-emerald-500/20 shadow-[0_0_15px_-5px_rgba(16,185,129,0.2)]' : 'bg-rose-500/10 border-rose-500/20 shadow-[0_0_15px_-5px_rgba(244,63,94,0.2)]'}`}>
+                                    <span className={`font-mono font-black text-lg leading-none ${pnlPercent >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                        {pnlPercent >= 0 ? '+' : ''}{pnlPercent.toLocaleString('en-US', { maximumFractionDigits: 1 })}%
+                                    </span>
+                                    <span className={`text-[9px] font-bold uppercase tracking-widest opacity-70 ${pnlPercent >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>PnL</span>
+                                </div>
+                            ) : null}
                         </div>
                     </div>
                 </div>
@@ -223,6 +232,20 @@ const TradeLogRow: React.FC<{
                             </div>
                         </div>
 
+                        {invalidationCriteria && invalidationCriteria.length > 0 && (
+                            <div className="col-span-2 p-2.5 bg-rose-950/20 rounded-lg border border-rose-500/15 hover:border-rose-500/30 transition-colors">
+                                <span className="text-[9px] uppercase font-bold text-rose-400/80 block mb-1">Invalidation Contract</span>
+                                <div className="space-y-1">
+                                    {invalidationCriteria.map((c, i) => (
+                                        <div key={i} className="text-[10px] text-rose-100/80 leading-snug">
+                                            <span className="font-mono font-bold text-rose-300">{c.level}</span>
+                                            <span className="text-rose-200/70"> — {c.condition}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
                         {correctedEntry && <div className="col-span-2 bg-yellow-500/10 p-2 rounded border border-yellow-500/20 text-yellow-200 font-medium">Corrected Entry: {correctedEntry}</div>}
 
                         {postMortem && (
@@ -250,7 +273,19 @@ const TradeLogRow: React.FC<{
                         )}
 
                         <div className="col-span-2 text-[9px] text-zinc-600 pt-3 mt-1 border-t border-white/5 flex justify-between uppercase tracking-wider">
-                            <span>Analyst: {(geminiModelUsed || deepseekModelUsed || zhipuModelUsed || groqModelUsed || groqNewModelUsed) ? (modelIdToName[geminiModelUsed || deepseekModelUsed || zhipuModelUsed || groqModelUsed || groqNewModelUsed || ''] || 'AI') : 'Ensemble'}</span>
+                            <span>Analyst: {(() => {
+                                // Dynamic provider record first (keyed by provider id),
+                                // legacy per-provider fields as read-only fallback for historical rows.
+                                const usedEntries = modelsUsed && Object.keys(modelsUsed).length > 0 ? Object.entries(modelsUsed) : [];
+                                if (usedEntries.length > 0) {
+                                    return usedEntries.map(([, modelId]) => modelIdToName[modelId] ?? modelId).join(' + ');
+                                }
+                                const legacyModels = [geminiModelUsed, deepseekModelUsed, zhipuModelUsed, groqModelUsed, groqNewModelUsed, groqAlt2ModelUsed, openrouterModelUsed].filter(Boolean) as string[];
+                                if (legacyModels.length > 0) {
+                                    return legacyModels.map(m => modelIdToName[m] ?? m).join(' + ');
+                                }
+                                return 'Ensemble';
+                            })()}</span>
                             {moderatorModel && <span>Mod: {modelIdToName[moderatorModel] || 'AI'}</span>}
                         </div>
 

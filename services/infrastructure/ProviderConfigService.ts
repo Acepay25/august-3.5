@@ -8,108 +8,23 @@ import { getPreferenceObject, setPreferenceObject } from './PreferencesService';
 
 const STORAGE_KEY = 'provider_configs_v1';
 
-// ─── Default Built-In Providers ─────────────────────────────────────────────
+// ─── Provider Configuration Service ───────────────────────────────────────
 
 export function getDefaultConfigs(): ProviderConfig[] {
-    return [
-        {
-            id: 'gemini',
-            name: 'Gemini',
-            apiKey: '',
-            baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
-            apiFormat: 'chat_completions',
-            isEnabled: true,
-            isBuiltIn: true,
-            models: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-3-pro-preview', 'gemini-3-flash'],
-            selectedModel: 'gemini-2.5-pro',
-        },
-        {
-            id: 'deepseek',
-            name: 'DeepSeek',
-            apiKey: '',
-            baseUrl: 'https://api.deepseek.com',
-            apiFormat: 'chat_completions',
-            isEnabled: true,
-            isBuiltIn: true,
-            models: ['deepseek-chat', 'deepseek-reasoner'],
-            selectedModel: 'deepseek-chat',
-        },
-        {
-            id: 'openai',
-            name: 'OpenAI',
-            apiKey: '',
-            baseUrl: 'https://api.openai.com/v1',
-            apiFormat: 'chat_completions',
-            isEnabled: false,
-            isBuiltIn: true,
-            models: ['gpt-5-nano', 'gpt-4.1-nano', 'gpt-4.1-mini', 'gpt-4o'],
-            selectedModel: 'gpt-4.1-nano',
-        },
-        {
-            id: 'groq',
-            name: 'Groq',
-            apiKey: '',
-            baseUrl: 'https://api.groq.com/openai/v1',
-            apiFormat: 'chat_completions',
-            isEnabled: false,
-            isBuiltIn: true,
-            models: ['llama-3.3-70b-versatile', 'meta-llama/llama-4-scout-17b-16e-instruct', 'qwen/qwen3-32b', 'moonshotai/kimi-k2-instruct'],
-            selectedModel: 'llama-3.3-70b-versatile',
-        },
-        {
-            id: 'openrouter',
-            name: 'OpenRouter',
-            apiKey: '',
-            baseUrl: 'https://openrouter.ai/api/v1',
-            apiFormat: 'chat_completions',
-            isEnabled: false,
-            isBuiltIn: true,
-            models: ['qwen/qwen3-235b-a22b:free', 'meta-llama/llama-3.3-70b-instruct:free', 'mistralai/mistral-7b-instruct:free', 'moonshotai/kimi-k2:free'],
-            selectedModel: 'qwen/qwen3-235b-a22b:free',
-        },
-        {
-            id: 'zhipu',
-            name: 'Zhipu (GLM)',
-            apiKey: '',
-            baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
-            apiFormat: 'chat_completions',
-            isEnabled: false,
-            isBuiltIn: true,
-            models: ['glm-4.5-flash', 'glm-4.6', 'glm-4.5', 'glm-4.6v-flash'],
-            selectedModel: 'glm-4.5-flash',
-        },
-        {
-            id: 'grok',
-            name: 'Grok (xAI)',
-            apiKey: '',
-            baseUrl: 'https://api.x.ai/v1',
-            apiFormat: 'chat_completions',
-            isEnabled: false,
-            isBuiltIn: true,
-            models: ['grok-3', 'grok-3-mini', 'grok-3-fast', 'grok-4-1-fast-reasoning'],
-            selectedModel: 'grok-3-mini',
-        },
-    ];
+    return [];
 }
 
 // ─── CRUD Operations ────────────────────────────────────────────────────────
 
 /**
- * Load all provider configs. Falls back to defaults if none saved.
- * Merges saved configs with any new built-in providers added in updates.
+ * Load all provider configs. Returns empty array if none configured.
  */
 export async function loadProviderConfigs(): Promise<ProviderConfig[]> {
     const saved = await getPreferenceObject<ProviderConfig[]>(STORAGE_KEY);
-    if (!saved || saved.length === 0) {
+    if (!saved) {
         return getDefaultConfigs();
     }
-
-    // Merge: ensure all built-in providers exist (in case new ones were added in updates)
-    const defaults = getDefaultConfigs();
-    const savedIds = new Set(saved.map(c => c.id));
-    const newBuiltIns = defaults.filter(d => !savedIds.has(d.id));
-
-    return [...saved, ...newBuiltIns];
+    return saved;
 }
 
 /**
@@ -163,15 +78,66 @@ export async function addCustomProvider(provider: {
 }
 
 /**
- * Remove a custom provider (built-in providers cannot be removed).
+ * Remove a provider (custom or built-in).
  */
 export async function removeCustomProvider(id: string): Promise<ProviderConfig[]> {
     const configs = await loadProviderConfigs();
-    const target = configs.find(c => c.id === id);
-    if (target?.isBuiltIn) {
-        throw new Error('Cannot remove built-in providers');
-    }
     const updated = configs.filter(c => c.id !== id);
+    await saveProviderConfigs(updated);
+    return updated;
+}
+
+/**
+ * Add a model ID to a provider's model list.
+ */
+export async function addModelToProvider(providerId: string, modelId: string): Promise<ProviderConfig[]> {
+    const trimmed = modelId.trim();
+    if (!trimmed) return await loadProviderConfigs();
+    const configs = await loadProviderConfigs();
+    const updated = configs.map(c => {
+        if (c.id === providerId) {
+            const models = c.models.includes(trimmed) ? c.models : [...c.models, trimmed];
+            const selectedModel = c.selectedModel ? c.selectedModel : trimmed;
+            return { ...c, models, selectedModel };
+        }
+        return c;
+    });
+    await saveProviderConfigs(updated);
+    return updated;
+}
+
+/**
+ * Remove a model ID from a provider's model list.
+ */
+export async function removeModelFromProvider(providerId: string, modelId: string): Promise<ProviderConfig[]> {
+    const configs = await loadProviderConfigs();
+    const updated = configs.map(c => {
+        if (c.id === providerId) {
+            const models = c.models.filter(m => m !== modelId);
+            const selectedModel = c.selectedModel === modelId ? (models[0] || '') : c.selectedModel;
+            return { ...c, models, selectedModel };
+        }
+        return c;
+    });
+    await saveProviderConfigs(updated);
+    return updated;
+}
+
+/**
+ * Update/rename a model ID in a provider's model list.
+ */
+export async function updateModelInProvider(providerId: string, oldModelId: string, newModelId: string): Promise<ProviderConfig[]> {
+    const trimmed = newModelId.trim();
+    if (!trimmed) return await loadProviderConfigs();
+    const configs = await loadProviderConfigs();
+    const updated = configs.map(c => {
+        if (c.id === providerId) {
+            const models = c.models.map(m => m === oldModelId ? trimmed : m);
+            const selectedModel = c.selectedModel === oldModelId ? trimmed : c.selectedModel;
+            return { ...c, models, selectedModel };
+        }
+        return c;
+    });
     await saveProviderConfigs(updated);
     return updated;
 }
@@ -182,3 +148,4 @@ export async function removeCustomProvider(id: string): Promise<ProviderConfig[]
 export function getReadyProviders(configs: ProviderConfig[]): ProviderConfig[] {
     return configs.filter(c => c.isEnabled && c.apiKey.trim().length > 0);
 }
+

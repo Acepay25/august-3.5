@@ -1,245 +1,174 @@
-/**
- * SettingsMenu - Modern ChatGPT/Gemini-style Settings Panel
- * 
- * Features:
- * - Drill-down navigation for Advanced settings
- * - AI Models configuration inline
- * - Analyst Lenses integration
- * - Custom Instructions editor
- */
-
 import React, { useState } from 'react';
-import { AIProvider, AccuracySubMode, CustomInstructionsMap, AnalystLensConfig, ProviderConfig, ApiFormat } from '../../types';
-import { AnalystLensSettings } from './AnalystLensSettings';
+import { APP_NAME, APP_VERSION } from '../../constants/version';
+import { AIProvider, AccuracySubMode, LoggedTrade, GlobalMemory, TradeSummary } from '../../types';
+import { AnalystLensConfig } from '../../types/lens';
+import { CustomInstructionsMap } from '../../types/user';
+import { ProviderConfig, ApiFormat } from '../../types/provider';
 import ProviderManager from './ProviderManager';
-import { ToggleSwitch } from './SettingsToggle';
+import AnalystLensSettings from './AnalystLensSettings';
 import CustomInstructionsEditor, { InstructionTab } from './CustomInstructionsEditor';
 import MemorySettings from './MemorySettings';
 import { DiagnosticsPanel } from './DiagnosticsPanel';
-import { APP_NAME, APP_VERSION } from '../../constants/version';
+import { Journal } from '../journal/Journal';
+import { CloseIcon, BookmarkIcon, UserIcon, ExportIcon, SearchIcon, SwitchUserIcon } from '../shared/Icons';
 
-// Icons
-const CloseIcon = () => (
-    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-    </svg>
-);
+export type SettingsTab = 'general' | 'models' | 'journal' | 'lenses' | 'instructions' | 'memory' | 'actions';
 
-const BackIcon = () => (
-    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-    </svg>
-);
-
-const ChevronRightIcon = () => (
-    <svg className="w-5 h-5 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-    </svg>
-);
-
-// Setting Item
-const SettingItem: React.FC<{
-    icon: React.ReactNode;
-    title: string;
-    description?: string;
-    rightElement?: React.ReactNode;
-    onClick?: () => void;
-    active?: boolean;
-}> = ({ icon, title, description, rightElement, onClick, active = false }) => {
-    const Wrapper = onClick ? 'button' : 'div';
-    return (
-        <Wrapper
-            onClick={onClick}
-            className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all ${onClick ? 'hover:bg-white/5 active:bg-white/10 cursor-pointer' : ''
-                } ${active ? 'bg-cyan-500/10 border border-cyan-500/30' : 'bg-zinc-900/50 border border-white/5'}`}
-        >
-            <div className={`flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center ${active ? 'bg-cyan-500/20 text-cyan-400' : 'bg-zinc-800 text-zinc-400'
-                }`}>
-                {icon}
-            </div>
-            <div className="flex-1 text-left min-w-0">
-                <div className={`font-semibold text-sm ${active ? 'text-cyan-100' : 'text-zinc-200'}`}>{title}</div>
-                {description && <div className="text-xs text-zinc-500 mt-0.5 truncate">{description}</div>}
-            </div>
-            {rightElement && <div className="flex-shrink-0">{rightElement}</div>}
-            {onClick && !rightElement && <ChevronRightIcon />}
-        </Wrapper>
-    );
-};
-
-// Section Header
-const SectionHeader: React.FC<{ title: string }> = ({ title }) => (
-    <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-3 px-1">{title}</h3>
-);
-
-// Color class lookup — avoids dynamic Tailwind classes that the JIT can't detect
-const COLOR_CLASSES: Record<string, { dot: string; text: string; border: string }> = {
-    cyan: { dot: 'bg-cyan-500', text: 'text-cyan-400', border: 'border-cyan-500/30' },
-    blue: { dot: 'bg-blue-500', text: 'text-blue-400', border: 'border-blue-500/30' },
-    emerald: { dot: 'bg-emerald-500', text: 'text-emerald-400', border: 'border-emerald-500/30' },
-    orange: { dot: 'bg-orange-500', text: 'text-orange-400', border: 'border-orange-500/30' },
-    yellow: { dot: 'bg-yellow-500', text: 'text-yellow-400', border: 'border-yellow-500/30' },
-    amber: { dot: 'bg-amber-500', text: 'text-amber-400', border: 'border-amber-500/30' },
-    green: { dot: 'bg-green-500', text: 'text-green-400', border: 'border-green-500/30' },
-    red: { dot: 'bg-red-500', text: 'text-red-400', border: 'border-red-500/30' },
-    purple: { dot: 'bg-purple-500', text: 'text-purple-400', border: 'border-purple-500/30' },
-    violet: { dot: 'bg-violet-500', text: 'text-violet-400', border: 'border-violet-500/30' },
-    rose: { dot: 'bg-rose-500', text: 'text-rose-400', border: 'border-rose-500/30' },
-    zinc: { dot: 'bg-zinc-500', text: 'text-zinc-400', border: 'border-zinc-500/30' },
-};
-
-const getColorClasses = (color: string) => COLOR_CLASSES[color] || COLOR_CLASSES.zinc;
-
-// Model Item
-const ModelItem: React.FC<{
-    name: string;
-    color: string;
-    models: { id: string; name: string }[];
-    selectedModel: string;
-    onSetModel: (id: string) => void;
-    isEnabled: boolean;
-    onToggle: () => void;
-}> = ({ name, color, models, selectedModel, onSetModel, isEnabled, onToggle }) => {
-    const colors = getColorClasses(color);
-    return (
-    <div className={`p-4 rounded-2xl bg-zinc-900/50 border transition-all ${isEnabled ? colors.border : 'border-white/5'}`}>
-        <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-                <span className={`w-2 h-2 rounded-full ${colors.dot}`}></span>
-                <span className={`text-sm font-bold ${isEnabled ? colors.text : 'text-zinc-500'}`}>{name}</span>
-            </div>
-            <ToggleSwitch checked={isEnabled} onChange={onToggle} />
-        </div>
-        {isEnabled && (
-            <select
-                value={selectedModel}
-                onChange={(e) => onSetModel(e.target.value)}
-                className="w-full bg-zinc-800 border border-white/10 rounded-xl text-sm p-3 text-zinc-300 focus:ring-2 focus:ring-cyan-500/50 focus:outline-none"
-            >
-                {models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-            </select>
-        )}
-    </div>
-    );
-};
-
-// View types
-type ViewType = 'main' | 'models' | 'lenses' | 'instructions';
-
-// Props interface
 interface SettingsMenuProps {
     isVisible: boolean;
     onClose: () => void;
-    isLoading: boolean;
-    // Quick Actions
-    onOpenSavedAnalyses: () => void;
-    onOpenStrategySearch: () => void;
-    onSwitchUser: () => void;
-    onExportData: () => void;
+    isLoading?: boolean;
     // Accuracy Mode
     isAccuracyModeEnabled: boolean;
     onToggleAccuracyMode: () => void;
     accuracySubMode: AccuracySubMode;
-    setAccuracySubMode: (mode: AccuracySubMode) => void;
-    // Hybrid Intelligence
+    onSelectAccuracySubMode?: (subMode: AccuracySubMode) => void;
+    setAccuracySubMode?: (subMode: AccuracySubMode) => void;
+    // Hybrid & Capturing
     isHybridIntelligenceEnabled: boolean;
-    setIsHybridIntelligenceEnabled: (enabled: boolean) => void;
+    onToggleHybridIntelligence?: () => void;
+    setIsHybridIntelligenceEnabled?: (enabled: boolean) => void;
+    isAutoCapturing?: boolean;
+    onToggleAutoCapturing?: () => void;
+    isUpdateAutoCapturing?: boolean;
+    onToggleUpdateAutoCapturing?: () => void;
+    isEntryNotHitCapturing?: boolean;
+    onToggleEntryNotHitCapturing?: () => void;
     // Memory
-    isGlobalMemoryEnabled: boolean;
-    setIsGlobalMemoryEnabled: (enabled: boolean) => void;
-    memoryConfig: ProviderConfig | null;
-    onMemoryConfigChange: (config: ProviderConfig | null) => void;
-    memoryModel: string;
-    setMemoryModel: (model: string) => void;
-    // Pure AI toggles
-    isPlaybookEnabledInPureAI: boolean;
-    setIsPlaybookEnabledInPureAI: (enabled: boolean) => void;
-    isFamiliesEnabledInPureAI: boolean;
-    setIsFamiliesEnabledInPureAI: (enabled: boolean) => void;
-    isMemoryEnabledInPureAI: boolean;
-    setIsMemoryEnabledInPureAI: (enabled: boolean) => void;
-    // Custom Instructions
+    isGlobalMemoryEnabled?: boolean;
+    setIsGlobalMemoryEnabled?: (enabled: boolean) => void;
+    memoryConfig?: ProviderConfig | null;
+    onMemoryConfigChange?: (config: ProviderConfig | null) => void;
+    memoryModel?: string;
+    setMemoryModel?: (model: string) => void;
+    // Pure AI options
+    isPlaybookEnabledInPureAI?: boolean;
+    setIsPlaybookEnabledInPureAI?: (enabled: boolean) => void;
+    isFamiliesEnabledInPureAI?: boolean;
+    setIsFamiliesEnabledInPureAI?: (enabled: boolean) => void;
+    isMemoryEnabledInPureAI?: boolean;
+    setIsMemoryEnabledInPureAI?: (enabled: boolean) => void;
+    // Instructions
     customInstructions: CustomInstructionsMap;
     setCustomInstructions: (instructions: CustomInstructionsMap) => void;
-    // Lens Config
+    // Lenses
     lensConfig: AnalystLensConfig;
     onSetLensConfig: (config: AnalystLensConfig) => void;
-    // Model Configuration - All Providers
-    geminiModels?: { id: string; name: string }[];
-    deepseekModels?: { id: string; name: string }[];
-    zhipuModels?: { id: string; name: string }[];
-    groqModels?: { id: string; name: string }[];
-    groqNewModels?: { id: string; name: string }[];
-    groqAlt2Models?: { id: string; name: string }[];
-    openrouterModels?: { id: string; name: string }[];
-    openaiModels?: { id: string; name: string }[];
-    grokNativeModels?: { id: string; name: string }[];
-
-    // Selected Models
-    selectedGeminiModel?: string;
-    selectedDeepSeekModel?: string;
-    selectedZhipuModel?: string;
-    selectedGroqModel?: string;
-    selectedGroqNewModel?: string;
-    selectedGroqAlt2Model?: string;
-    selectedOpenrouterModel?: string;
-    selectedOpenaiModel?: string;
-    selectedGrokNativeModel?: string;
-
-    // Set Model Functions
-    onSetGeminiModel?: (id: string) => void;
-    onSetDeepseekModel?: (id: string) => void;
-    onSetZhipuModel?: (id: string) => void;
-    onSetGroqModel?: (id: string) => void;
-    onSetGroqNewModel?: (id: string) => void;
-    onSetGroqAlt2Model?: (id: string) => void;
-    onSetOpenrouterModel?: (id: string) => void;
-    onSetOpenaiModel?: (id: string) => void;
-    onSetGrokNativeModel?: (id: string) => void;
-
-    // Provider Enable Flags
-    isGeminiEnabled?: boolean;
-    isDeepSeekEnabled?: boolean;
-    isZhipuEnabled?: boolean;
-    isGroqEnabled?: boolean;
-    isGroqNewEnabled?: boolean;
-    isGroqAlt2Enabled?: boolean;
-    isOpenrouterEnabled?: boolean;
-    isOpenaiEnabled?: boolean;
-    isGrokNativeEnabled?: boolean;
-
-    onToggleProvider?: (provider: 'gemini' | 'deepseek' | 'zhipu' | 'groq' | 'groqNew' | 'groqAlt2' | 'openrouter' | 'openai' | 'grokNative') => void;
-    // OCR/Vision Model
-    ocrModels?: { id: string; name: string }[];
+    // Modals & Navigation triggers from main view
+    onOpenSavedAnalyses?: () => void;
+    onOpenPlaybook?: () => void;
+    onOpenUserProfile?: () => void;
+    onOpenStrategySearch?: () => void;
+    onSwitchUser?: () => void;
+    onExportData?: () => Promise<void> | void;
+    onOpenJournal?: (tab?: string) => void;
+    // Journal Props for Embedded View
+    loggedTrades?: LoggedTrade[];
+    onDeleteTrades?: (ids: string[]) => void;
+    onClearAllTrades?: () => void;
+    modelIdToName?: Record<string, string>;
+    ocrModelIdToName?: Record<string, string>;
+    onUpdateInsights?: (ids: string[]) => void;
+    isSummarizing?: boolean;
+    currentInsightIds?: string[];
+    onUpdateTradeLeverage?: (id: string, leverage: number) => void;
+    finalSummary?: string | null;
+    individualSummaries?: TradeSummary[];
+    familyWinRates?: Record<string, { total: number; wins: number; winRate: number }>;
+    globalMemory?: GlobalMemory | null;
+    threadSummary?: string;
+    // Models
     selectedOcrModel?: string;
-    onSetOcrModel?: (id: string) => void;
-    // Moderator Configuration
+    onSetOcrModel?: (modelId: string) => void;
     moderatorProvider?: AIProvider;
     moderatorModel?: string;
-    onSetModeratorProvider?: (provider: AIProvider) => void;
-    onSetModeratorModel?: (modelId: string) => void;
-    // Provider configuration
+    onSetModeratorProvider?: (provider: string) => void;
+    onSetModeratorModel?: (model: string) => void;
+    // Dynamic Providers
     providerConfigs?: ProviderConfig[];
     onUpdateProvider?: (id: string, updates: Partial<Omit<ProviderConfig, 'id' | 'isBuiltIn'>>) => Promise<void>;
     onAddCustomProvider?: (provider: { name: string; baseUrl: string; apiKey: string; apiFormat: ApiFormat; models?: string[]; selectedModel?: string }) => Promise<void>;
     onRemoveProvider?: (id: string) => Promise<void>;
     onToggleProviderConfig?: (id: string) => Promise<void>;
+    onAddModel?: (providerId: string, modelId: string) => Promise<void>;
+    onRemoveModel?: (providerId: string, modelId: string) => Promise<void>;
+    onUpdateModel?: (providerId: string, oldModelId: string, newModelId: string) => Promise<void>;
 }
+
+// ─── Shared UI Helpers ────────────────────────────────────────────────────────
+
+const ToggleSwitch: React.FC<{ checked: boolean; onChange: () => void }> = ({ checked, onChange }) => (
+    <button
+        onClick={onChange}
+        className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors duration-200 ease-in-out ${
+            checked ? 'bg-cyan-500' : 'bg-zinc-700'
+        }`}
+    >
+        <div
+            className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${
+                checked ? 'translate-x-5' : 'translate-x-0'
+            }`}
+        />
+    </button>
+);
+
+const NavTabButton: React.FC<{
+    id: SettingsTab;
+    activeTab: SettingsTab;
+    onClick: () => void;
+    icon: React.ReactNode;
+    label: string;
+    badge?: string;
+}> = ({ activeTab, id, onClick, icon, label, badge }) => {
+    const isActive = activeTab === id;
+    return (
+        <button
+            onClick={onClick}
+            className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl transition-all font-medium text-xs ${
+                isActive
+                    ? 'bg-zinc-800/90 text-white border border-zinc-700/80 shadow-sm font-semibold'
+                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60 border border-transparent'
+            }`}
+        >
+            <div className="flex items-center gap-3 min-w-0">
+                <span className={`text-base shrink-0 ${isActive ? 'text-cyan-400' : 'text-zinc-500'}`}>{icon}</span>
+                <span className="truncate">{label}</span>
+            </div>
+            {badge && (
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                    {badge}
+                </span>
+            )}
+        </button>
+    );
+};
 
 const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
     const {
         isVisible,
         onClose,
-        onOpenSavedAnalyses,
-        onOpenStrategySearch,
-        onSwitchUser,
-        onExportData,
         isAccuracyModeEnabled,
         onToggleAccuracyMode,
         accuracySubMode,
-        setAccuracySubMode,
+        onSelectAccuracySubMode,
+        customInstructions,
+        setCustomInstructions,
+        lensConfig,
+        onSetLensConfig,
+        onOpenSavedAnalyses,
+        onOpenPlaybook,
+        onOpenUserProfile,
+        onOpenStrategySearch,
+        onSwitchUser,
+        onExportData,
         isHybridIntelligenceEnabled,
-        setIsHybridIntelligenceEnabled,
+        onToggleHybridIntelligence,
+        isAutoCapturing,
+        onToggleAutoCapturing,
+        isUpdateAutoCapturing,
+        onToggleUpdateAutoCapturing,
+        isEntryNotHitCapturing,
+        onToggleEntryNotHitCapturing,
         isGlobalMemoryEnabled,
         setIsGlobalMemoryEnabled,
         isPlaybookEnabledInPureAI,
@@ -248,425 +177,515 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
         setIsFamiliesEnabledInPureAI,
         isMemoryEnabledInPureAI,
         setIsMemoryEnabledInPureAI,
-        customInstructions,
-        setCustomInstructions,
-        lensConfig,
-        onSetLensConfig,
-        // Model arrays
-        geminiModels = [],
-        deepseekModels = [],
-        zhipuModels = [],
-        groqModels = [],
-        groqNewModels = [],
-        groqAlt2Models = [],
-        openrouterModels = [],
-        openaiModels = [],
-        grokNativeModels = [],
-
-        // Selected models
-        selectedGeminiModel = '',
-        selectedDeepSeekModel = '',
-        selectedZhipuModel = '',
-        selectedGroqModel = '',
-        selectedGroqNewModel = '',
-        selectedGroqAlt2Model = '',
-        selectedOpenrouterModel = '',
-        selectedOpenaiModel = '',
-        selectedGrokNativeModel = '',
-
-        // Set model functions
-        onSetGeminiModel,
-        onSetDeepseekModel,
-        onSetZhipuModel,
-        onSetGroqModel,
-        onSetGroqNewModel,
-        onSetGroqAlt2Model,
-        onSetOpenrouterModel,
-        onSetOpenaiModel,
-        onSetGrokNativeModel,
-
-        // Provider enable flags
-        isGeminiEnabled = false,
-        isDeepSeekEnabled = false,
-        isZhipuEnabled = false,
-        isGroqEnabled = false,
-        isGroqNewEnabled = false,
-        isGroqAlt2Enabled = false,
-        isOpenrouterEnabled = false,
-        isOpenaiEnabled = false,
-        isGrokNativeEnabled = false,
-
-        onToggleProvider,
-        // OCR
-        ocrModels = [],
-        selectedOcrModel = '',
+        selectedOcrModel,
         onSetOcrModel,
-        // Moderator
         moderatorProvider,
         moderatorModel,
         onSetModeratorProvider,
         onSetModeratorModel,
-        // Memory
-        memoryConfig,
-        onMemoryConfigChange,
-        memoryModel,
-        setMemoryModel,
+        memoryConfig = null,
+        onMemoryConfigChange = () => {},
         providerConfigs,
         onUpdateProvider,
         onAddCustomProvider,
         onRemoveProvider,
         onToggleProviderConfig,
+        onAddModel,
+        onRemoveModel,
+        onUpdateModel,
     } = props;
 
-    const [currentView, setCurrentView] = useState<ViewType>('main');
-    // Kept here (rather than inside CustomInstructionsEditor) so the selected
-    // tab persists while navigating between settings views.
+    const [activeTab, setActiveTab] = useState<SettingsTab>('models');
     const [activeInstructionTab, setActiveInstructionTab] = useState<InstructionTab>('general');
 
     if (!isVisible) return null;
 
-    // Header with back button for sub-views
-    const renderHeader = (title: string, showBack: boolean = false) => (
-        <header className="shrink-0 relative">
-            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500" />
+    // Enabled providers list for lens settings —
+    // derived from dynamic provider configs (ready = enabled + API key).
+    const readyConfigProviders = (providerConfigs ?? []).filter(c => c.isEnabled && c.apiKey.trim().length > 0);
+    const enabledProvidersList: AIProvider[] = readyConfigProviders.map(c => c.id);
 
-            <div className="flex items-center gap-3 px-5 pt-6 pb-4">
-                {showBack && (
-                    <button
-                        onClick={() => setCurrentView('main')}
-                        className="p-2 -ml-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white transition-all"
-                    >
-                        <BackIcon />
-                    </button>
-                )}
-                <div className="flex-1">
-                    <h1 className="text-xl font-bold text-white tracking-tight">{title}</h1>
-                </div>
-                <button
-                    onClick={onClose}
-                    className="p-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white transition-all"
-                >
-                    <CloseIcon />
-                </button>
-            </div>
-        </header>
-    );
-
-    // Main Settings View
-    const renderMainView = () => (
-        <>
-            {renderHeader('Settings')}
-            <div className="flex-1 overflow-y-auto px-5 pb-6 space-y-6 custom-scrollbar">
-                {/* Analysis Mode Section */}
-                <section>
-                    <SectionHeader title="Analysis Mode" />
-                    <div className="space-y-3">
-                        <SettingItem
-                            icon={<span className="text-xl">🎯</span>}
-                            title="Accuracy Mode"
-                            description={isAccuracyModeEnabled
-                                ? (accuracySubMode === 'original' ? 'Strict Protocol' : 'Pure AI')
-                                : 'Standard speed'
-                            }
-                            rightElement={<ToggleSwitch checked={isAccuracyModeEnabled} onChange={onToggleAccuracyMode} />}
-                            active={isAccuracyModeEnabled}
-                        />
-
-                        {isAccuracyModeEnabled && (
-                            <div className="ml-14 flex gap-2 animate-fade-in">
-                                <button
-                                    onClick={() => setAccuracySubMode('original')}
-                                    className={`flex-1 p-3 rounded-xl text-center transition-all ${accuracySubMode === 'original'
-                                        ? 'bg-cyan-500/20 border-2 border-cyan-500 text-cyan-100'
-                                        : 'bg-zinc-800/50 border border-white/10 text-zinc-400'
-                                        }`}
-                                >
-                                    <div className="text-xs font-bold">Strict</div>
-                                    <div className="text-[10px] opacity-60 mt-0.5">10-Layer</div>
-                                </button>
-                                <button
-                                    onClick={() => setAccuracySubMode('pure_ai')}
-                                    className={`flex-1 p-3 rounded-xl text-center transition-all ${accuracySubMode === 'pure_ai'
-                                        ? 'bg-cyan-500/20 border-2 border-cyan-500 text-cyan-100'
-                                        : 'bg-zinc-800/50 border border-white/10 text-zinc-400'
-                                        }`}
-                                >
-                                    <div className="text-xs font-bold">Pure AI</div>
-                                    <div className="text-[10px] opacity-60 mt-0.5">Free-form</div>
-                                </button>
-                            </div>
-                        )}
-
-                        <SettingItem
-                            icon={<span className="text-xl">⚡</span>}
-                            title="Hybrid Intelligence"
-                            description={isHybridIntelligenceEnabled ? 'Real-time data' : 'OCR only'}
-                            rightElement={<ToggleSwitch checked={isHybridIntelligenceEnabled} onChange={setIsHybridIntelligenceEnabled} />}
-                            active={isHybridIntelligenceEnabled}
-                        />
-                        <p className="text-[10px] text-zinc-600 leading-relaxed bg-black/20 px-3 py-2 rounded-xl border border-white/5">
-                            <strong className={`uppercase block mb-0.5 ${isHybridIntelligenceEnabled ? 'text-emerald-500' : 'text-zinc-500'}`}>When Enabled:</strong>
-                            Fetches real-time OHLCV from Binance, calculates RSI/MACD/EMAs/ATR via code, and injects verified data into AI prompts.
-                        </p>
-
-                        <SettingItem
-                            icon={<span className="text-xl">🧠</span>}
-                            title="Global Memory"
-                            description={isGlobalMemoryEnabled ? 'Learning enabled' : 'Disabled'}
-                            rightElement={<ToggleSwitch checked={isGlobalMemoryEnabled} onChange={setIsGlobalMemoryEnabled} />}
-                            active={isGlobalMemoryEnabled}
-                        />
-                        <p className="text-[10px] text-zinc-600 leading-relaxed bg-black/20 px-3 py-2 rounded-xl border border-white/5">
-                            <strong className="text-zinc-500 uppercase block mb-0.5">Layer 1 &amp; 2 (Always On):</strong> Isolated memory per chat thread.<br />
-                            <strong className={`uppercase block mb-0.5 mt-1.5 ${isGlobalMemoryEnabled ? 'text-cyan-500' : 'text-zinc-500'}`}>Layer 3 (Global):</strong> Synthesized learning from all trades.
-                        </p>
-                    </div>
-                </section>
-
-                {/* Pure AI Context */}
-                {isAccuracyModeEnabled && accuracySubMode === 'pure_ai' && (
-                    <section className="animate-fade-in">
-                        <SectionHeader title="Pure AI Context" />
-                        <div className="space-y-3">
-                            <SettingItem
-                                icon={<span className="text-lg">📖</span>}
-                                title="Strategy Playbook"
-                                rightElement={<ToggleSwitch checked={isPlaybookEnabledInPureAI} onChange={setIsPlaybookEnabledInPureAI} />}
-                            />
-                            <SettingItem
-                                icon={<span className="text-lg">👨‍👩‍👧‍👦</span>}
-                                title="Market Families"
-                                rightElement={<ToggleSwitch checked={isFamiliesEnabledInPureAI} onChange={setIsFamiliesEnabledInPureAI} />}
-                            />
-                            <SettingItem
-                                icon={<span className="text-lg">💭</span>}
-                                title="Pattern Memory"
-                                rightElement={<ToggleSwitch checked={isMemoryEnabledInPureAI} onChange={setIsMemoryEnabledInPureAI} />}
-                            />
-                        </div>
-                    </section>
-                )}
-
-                {/* Quick Actions */}
-                <section>
-                    <SectionHeader title="Quick Actions" />
-                    <div className="grid grid-cols-4 gap-3">
-                        <button onClick={onOpenSavedAnalyses} className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-zinc-900/50 border border-white/5 hover:bg-white/5 transition-all active:scale-95">
-                            <span className="text-2xl">📋</span>
-                            <span className="text-[10px] font-medium text-zinc-400">Saved</span>
-                        </button>
-                        <button onClick={onOpenStrategySearch} className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-zinc-900/50 border border-white/5 hover:bg-white/5 transition-all active:scale-95">
-                            <span className="text-2xl">📖</span>
-                            <span className="text-[10px] font-medium text-zinc-400">Playbook</span>
-                        </button>
-                        <button onClick={onSwitchUser} className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-zinc-900/50 border border-white/5 hover:bg-white/5 transition-all active:scale-95">
-                            <span className="text-2xl">👤</span>
-                            <span className="text-[10px] font-medium text-zinc-400">Profile</span>
-                        </button>
-                        <button onClick={onExportData} className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-zinc-900/50 border border-white/5 hover:bg-white/5 transition-all active:scale-95">
-                            <span className="text-2xl">💾</span>
-                            <span className="text-[10px] font-medium text-zinc-400">Export</span>
-                        </button>
-                    </div>
-                </section>
-
-                {/* Advanced Settings */}
-                <section>
-                    <SectionHeader title="Advanced" />
-                    <div className="space-y-3">
-                        <SettingItem
-                            icon={<span className="text-xl">🤖</span>}
-                            title="AI Models & Providers"
-                            description="Configure ensemble intelligence"
-                            onClick={() => setCurrentView('models')}
-                        />
-                        <SettingItem
-                            icon={<span className="text-xl">🎭</span>}
-                            title="Analyst Lenses"
-                            description="Role-based analysis personas"
-                            onClick={() => setCurrentView('lenses')}
-                        />
-                        <SettingItem
-                            icon={<span className="text-xl">📝</span>}
-                            title="Custom Instructions"
-                            description="AI behavior & personality"
-                            onClick={() => setCurrentView('instructions')}
-                        />
-                    </div>
-                </section>
-            </div>
-
-            {/* Footer Status */}
-            {isAccuracyModeEnabled && (
-                <footer className="shrink-0 px-5 py-3 border-t border-white/5 bg-cyan-500/5">
-                    <div className="flex items-center justify-center gap-2 text-xs text-cyan-400">
-                        <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
-                        <span className="font-medium">
-                            Accuracy Mode: {accuracySubMode === 'original' ? 'Strict Protocol' : 'Pure AI'}
-                        </span>
-                    </div>
-                </footer>
-            )}
-        </>
-    );
-
-    // Models View
-        const renderModelsView = () => (
-        <>
-            {renderHeader('AI Models & Providers', true)}
-            <div className="flex-1 overflow-y-auto px-5 pb-6 space-y-4 custom-scrollbar">
-                <p className="text-xs text-zinc-500 mb-4">
-                    Configure your AI providers in the API Configuration section below. Add any provider, set its API key, base URL, and model.
-                </p>
-
-                {/* Vision Model */}
-                {ocrModels.length > 0 && (
-                    <div className="p-4 rounded-2xl bg-zinc-900/50 border border-white/5">
-                        <div className="flex items-center gap-2 mb-3">
-                            <span className="text-xl">👁️</span>
-                            <span className="text-sm font-bold text-zinc-400">Vision Model</span>
-                        </div>
-                        <select
-                            value={selectedOcrModel}
-                            onChange={(e) => onSetOcrModel?.(e.target.value)}
-                            className="w-full bg-zinc-800 border border-white/10 rounded-xl text-sm p-3 text-zinc-300 focus:ring-2 focus:ring-cyan-500/50 focus:outline-none"
-                        >
-                            {ocrModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                        </select>
-                    </div>
-                )}
-
-                {/* Debate Moderator */}
-                <div className="p-4 rounded-2xl bg-zinc-900/50 border border-cyan-500/20">
-                    <div className="flex items-center gap-2 mb-3">
-                        <span className="text-xl">⚖️</span>
-                        <span className="text-sm font-bold text-cyan-400">Debate Moderator</span>
-                    </div>
-                    <p className="text-xs text-zinc-500 mb-3">The AI that synthesizes ensemble responses into final analysis</p>
-                    <div className="space-y-2">
-                        <select
-                            value={moderatorProvider || ''}
-                            onChange={(e) => onSetModeratorProvider?.(e.target.value)}
-                            className="w-full bg-zinc-800 border border-white/10 rounded-xl text-sm p-3 text-zinc-300 focus:ring-2 focus:ring-cyan-500/50 focus:outline-none"
-                        >
-                            {(providerConfigs ?? []).length > 0 ? (
-                                (providerConfigs ?? []).map(c => (
-                                    <option key={c.id} value={c.id}>{c.name}</option>
-                                ))
-                            ) : (
-                                <option value="" disabled>No providers configured</option>
-                            )}
-                        </select>
-                        <select
-                            value={moderatorModel || ''}
-                            onChange={(e) => onSetModeratorModel?.(e.target.value)}
-                            className="w-full bg-zinc-800 border border-white/10 rounded-xl text-sm p-3 text-zinc-300 focus:ring-2 focus:ring-cyan-500/50 focus:outline-none"
-                        >
-                            {(() => {
-                                const selectedCfg = (providerConfigs ?? []).find(c => c.id === moderatorProvider);
-                                if (selectedCfg && selectedCfg.models.length > 0) {
-                                    return selectedCfg.models.map(m => <option key={m} value={m}>{m}</option>);
-                                }
-                                return <option value="" disabled>Select a provider first</option>;
-                            })()}
-                        </select>
-                    </div>
-                </div>
-
-                {/* Memory Provider */}
-                <MemorySettings
-                    providerConfigs={providerConfigs ?? []}
-                    memoryConfig={memoryConfig}
-                    onMemoryConfigChange={onMemoryConfigChange}
-                />
-
-                {/* API Configuration */}
-                <div className="pt-2">
-                    <div className="flex items-center gap-2 mb-3">
-                        <span className="text-lg">🔑</span>
-                        <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">API Configuration</h3>
-                    </div>
-                    <p className="text-[10px] text-zinc-600 mb-3">Add and manage your AI providers here. Each provider needs an API key, base URL, and model.</p>
-                    {providerConfigs && onUpdateProvider && onAddCustomProvider && onRemoveProvider && onToggleProviderConfig ? (
-                        <ProviderManager
-                            configs={providerConfigs}
-                            onUpdateProvider={onUpdateProvider}
-                            onAddCustomProvider={onAddCustomProvider}
-                            onRemoveProvider={onRemoveProvider}
-                            onToggleProvider={onToggleProviderConfig}
-                        />
-                    ) : (
-                        <p className="text-xs text-zinc-500">Provider configuration not available.</p>
-                    )}
-                </div>
-            </div>
-        </>
-    );
-
-    // Lenses View    // Lenses View
-    const renderLensesView = () => {
-        // Build list of enabled providers based on component props
-        const enabledProviders: AIProvider[] = [];
-        if (isGeminiEnabled) enabledProviders.push(AIProvider.GEMINI);
-        if (isDeepSeekEnabled) enabledProviders.push(AIProvider.DEEPSEEK);
-        if (isZhipuEnabled) enabledProviders.push(AIProvider.ZHIPU);
-        if (isGroqEnabled) enabledProviders.push(AIProvider.GROQ);
-        if (isGroqNewEnabled) enabledProviders.push(AIProvider.GROQ_NEW);
-        if (isGroqAlt2Enabled) enabledProviders.push(AIProvider.GROQ_ALT2);
-        if (isOpenrouterEnabled) enabledProviders.push(AIProvider.OPENROUTER);
-        if (isOpenaiEnabled) enabledProviders.push(AIProvider.OPENAI);
-        if (isGrokNativeEnabled) enabledProviders.push(AIProvider.GROK);
-
-        return (
-            <>
-                {renderHeader('Analyst Lenses', true)}
-                <div className="flex-1 overflow-y-auto px-4 pb-6 custom-scrollbar">
-                    <AnalystLensSettings
-                        config={lensConfig}
-                        onChange={onSetLensConfig}
-                        enabledProviders={enabledProviders}
-                    />
-                </div>
-            </>
-        );
-    };
-
-    // Instructions View
-    const renderInstructionsView = () => (
-        <>
-            {renderHeader('Custom Instructions', true)}
-            <CustomInstructionsEditor
-                customInstructions={customInstructions}
-                setCustomInstructions={setCustomInstructions}
-                activeTab={activeInstructionTab}
-                onTabChange={setActiveInstructionTab}
-            />
-        </>
-    );
+    // First ready provider — used as the default summarization provider for the embedded journal
+    const firstReadyProvider = readyConfigProviders[0];
 
     return (
         <>
             {/* Backdrop */}
             <div
-                className="fixed inset-0 bg-black/70 backdrop-blur-sm z-40 animate-fade-in"
+                className="fixed inset-0 bg-black/80 backdrop-blur-md z-40 animate-fade-in"
                 onClick={onClose}
             />
 
-            {/* Panel */}
-            <aside className="fixed inset-0 sm:inset-y-0 sm:right-0 sm:left-auto sm:w-[420px] bg-zinc-950 z-50 flex flex-col animate-slide-up sm:animate-slide-left">
-                {currentView === 'main' && renderMainView()}
-                {currentView === 'models' && renderModelsView()}
-                {currentView === 'lenses' && renderLensesView()}
-                {currentView === 'instructions' && renderInstructionsView()}
+            {/* Centered Desktop Settings Modal */}
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 pointer-events-none">
+                <div className="pointer-events-auto w-[1150px] max-w-[95vw] h-[750px] max-h-[92vh] bg-zinc-950 border border-zinc-800/90 rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-fade-in">
+                    
+                    {/* Modal Top Header */}
+                    <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800/80 bg-zinc-950 shrink-0">
+                        <div className="flex items-center gap-3">
+                            <div className="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-[0_0_8px_#06b6d4]" />
+                            <h2 className="text-lg font-bold text-white tracking-tight">Settings</h2>
+                        </div>
+                        <button
+                            onClick={onClose}
+                            className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 transition-all"
+                            aria-label="Close settings"
+                        >
+                            <CloseIcon />
+                        </button>
+                    </div>
 
-                {/* Footer: Diagnostics + Version */}
-                <div className="border-t border-white/5 px-5 py-4 space-y-3">
-                    <DiagnosticsPanel />
-                    <p className="text-[10px] text-zinc-600 text-center">
-                        {APP_NAME} v{APP_VERSION}
-                    </p>
+                    {/* Main Layout: Left Tab Bar + Right Workspace */}
+                    <div className="flex-1 flex min-h-0">
+                        
+                        {/* Left Tab Navigation Sidebar */}
+                        <div className="w-64 border-r border-zinc-800/80 bg-zinc-950 p-4 space-y-1 shrink-0 flex flex-col justify-between">
+                            <div className="space-y-1">
+                                <NavTabButton
+                                    id="models"
+                                    activeTab={activeTab}
+                                    onClick={() => setActiveTab('models')}
+                                    icon="🤖"
+                                    label="AI Models & Providers"
+                                />
+                                <NavTabButton
+                                    id="journal"
+                                    activeTab={activeTab}
+                                    onClick={() => setActiveTab('journal')}
+                                    icon="📔"
+                                    label="Trading Journal"
+                                    badge={props.loggedTrades && props.loggedTrades.length > 0 ? `${props.loggedTrades.length}` : undefined}
+                                />
+                                <NavTabButton
+                                    id="general"
+                                    activeTab={activeTab}
+                                    onClick={() => setActiveTab('general')}
+                                    icon="⚡"
+                                    label="General & Analysis"
+                                />
+                                <NavTabButton
+                                    id="lenses"
+                                    activeTab={activeTab}
+                                    onClick={() => setActiveTab('lenses')}
+                                    icon="🎭"
+                                    label="Analyst Lenses"
+                                />
+                                <NavTabButton
+                                    id="instructions"
+                                    activeTab={activeTab}
+                                    onClick={() => setActiveTab('instructions')}
+                                    icon="✍️"
+                                    label="Custom Instructions"
+                                />
+                                <NavTabButton
+                                    id="memory"
+                                    activeTab={activeTab}
+                                    onClick={() => setActiveTab('memory')}
+                                    icon="🧠"
+                                    label="Memory & Learning"
+                                />
+                                <NavTabButton
+                                    id="actions"
+                                    activeTab={activeTab}
+                                    onClick={() => setActiveTab('actions')}
+                                    icon="💼"
+                                    label="Profile & Quick Actions"
+                                />
+                            </div>
+
+                            {/* Diagnostics & Version at bottom of nav */}
+                            <div className="pt-4 border-t border-zinc-800/80 space-y-2">
+                                <DiagnosticsPanel />
+                                <p className="text-[10px] text-zinc-600 text-center font-mono">
+                                    {APP_NAME} v{APP_VERSION}
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Right Content Workspace */}
+                        <div className="flex-1 overflow-y-auto p-6 bg-zinc-950/40 custom-scrollbar">
+                            
+                            {/* TAB 0: Trading Journal */}
+                            {activeTab === 'journal' && (
+                                <div className="h-full animate-fade-in">
+                                    <Journal
+                                        isVisible={true}
+                                        onClose={() => setActiveTab('models')}
+                                        initialTab="log"
+                                        isEmbedded={true}
+                                        trades={props.loggedTrades || []}
+                                        onDeleteTrades={props.onDeleteTrades || (() => {})}
+                                        onClearAllTrades={props.onClearAllTrades || (() => {})}
+                                        modelIdToName={props.modelIdToName || {}}
+                                        ocrModelIdToName={props.ocrModelIdToName || {}}
+                                        onUpdateInsights={props.onUpdateInsights || (() => {})}
+                                        isSummarizing={props.isSummarizing}
+                                        currentInsightIds={props.currentInsightIds || []}
+                                        onUpdateTradeLeverage={props.onUpdateTradeLeverage || (() => {})}
+                                        finalSummary={props.finalSummary || null}
+                                        individualSummaries={props.individualSummaries || []}
+                                        isLoading={!!props.isLoading}
+                                        summarizationProvider={firstReadyProvider?.id || ''}
+                                        summarizationModel={firstReadyProvider?.selectedModel || ''}
+                                        onSetSummarizationProvider={() => {}}
+                                        onSetSummarizationModel={() => {}}
+                                        providers={readyConfigProviders}
+                                        summaryCharLimit={1000}
+                                        onUpdateSummaryCharLimit={() => {}}
+                                        onRegenerateSummary={() => {}}
+                                        useAlgorithmicSummary={false}
+                                        onToggleAlgorithmicSummary={() => {}}
+                                        familyWinRates={props.familyWinRates || {}}
+                                        globalMemory={props.globalMemory ?? undefined}
+                                        threadSummary={props.threadSummary || ''}
+                                    />
+                                </div>
+                            )}
+
+                            {/* TAB 1: AI Models & Providers */}
+                            {activeTab === 'models' && (
+                                <div className="space-y-6 animate-fade-in">
+                                    {/* Vision & Moderator Controls Header bar */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {/* Vision Model Selector — models from ready providers */}
+                                        {readyConfigProviders.length > 0 && (
+                                            <div className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800/80">
+                                                <div className="text-xs font-bold text-zinc-400 mb-2 uppercase tracking-wider">
+                                                    Vision Model
+                                                </div>
+                                                <select
+                                                    value={selectedOcrModel}
+                                                    onChange={(e) => onSetOcrModel?.(e.target.value)}
+                                                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg text-xs p-2.5 text-zinc-200 focus:outline-none focus:border-cyan-500/60"
+                                                >
+                                                    {readyConfigProviders.flatMap(p => p.models.map(m => (
+                                                        <option key={`${p.id}-${m}`} value={m}>{p.name}: {m}</option>
+                                                    )))}
+                                                </select>
+                                            </div>
+                                        )}
+
+                                        {/* Debate Moderator Selector */}
+                                        <div className="p-4 rounded-xl bg-zinc-900/60 border border-cyan-500/20">
+                                            <div className="text-xs font-bold text-cyan-400 mb-2 uppercase tracking-wider">
+                                                Debate Moderator
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <div>
+                                                    <label className="text-[10px] text-zinc-500 font-bold uppercase mb-1 block">Provider</label>
+                                                    <select
+                                                        value={moderatorProvider || (providerConfigs && providerConfigs[0]?.id) || ''}
+                                                        onChange={(e) => {
+                                                            const newProviderId = e.target.value;
+                                                            onSetModeratorProvider?.(newProviderId);
+                                                            const selectedCfg = (providerConfigs ?? []).find(c => c.id === newProviderId);
+                                                            if (selectedCfg && selectedCfg.models.length > 0) {
+                                                                onSetModeratorModel?.(selectedCfg.selectedModel || selectedCfg.models[0]);
+                                                            }
+                                                        }}
+                                                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg text-xs p-2 text-zinc-200 focus:outline-none focus:border-cyan-500/60"
+                                                    >
+                                                        {(providerConfigs ?? []).length > 0 ? (
+                                                            (providerConfigs ?? []).map(c => (
+                                                                <option key={c.id} value={c.id}>{c.name}</option>
+                                                            ))
+                                                        ) : (
+                                                            <option value="" disabled>No providers</option>
+                                                        )}
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="text-[10px] text-zinc-500 font-bold uppercase mb-1 block">Model ID</label>
+                                                    <select
+                                                        value={moderatorModel || ''}
+                                                        onChange={(e) => onSetModeratorModel?.(e.target.value)}
+                                                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg text-xs p-2 text-zinc-200 focus:outline-none focus:border-cyan-500/60"
+                                                    >
+                                                        {(() => {
+                                                            const activeProvId = moderatorProvider || (providerConfigs && providerConfigs[0]?.id);
+                                                            const selectedCfg = (providerConfigs ?? []).find(c => c.id === activeProvId);
+                                                            if (selectedCfg && selectedCfg.models.length > 0) {
+                                                                return selectedCfg.models.map(m => <option key={m} value={m}>{m}</option>);
+                                                            }
+                                                            return <option value="" disabled>Select model</option>;
+                                                        })()}
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Main Provider Manager UI */}
+                                    {providerConfigs && onUpdateProvider && onAddCustomProvider && onRemoveProvider && onToggleProviderConfig ? (
+                                        <ProviderManager
+                                            configs={providerConfigs}
+                                            onUpdateProvider={onUpdateProvider}
+                                            onAddCustomProvider={onAddCustomProvider}
+                                            onRemoveProvider={onRemoveProvider}
+                                            onToggleProvider={onToggleProviderConfig}
+                                            onAddModel={onAddModel}
+                                            onRemoveModel={onRemoveModel}
+                                            onUpdateModel={onUpdateModel}
+                                        />
+                                    ) : (
+                                        <p className="text-xs text-zinc-500">Provider configuration loading…</p>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* TAB 2: General & Analysis */}
+                            {activeTab === 'general' && (
+                                <div className="space-y-6 max-w-3xl animate-fade-in">
+                                    <div className="border-b border-zinc-800 pb-3">
+                                        <h3 className="text-base font-bold text-white">General & Analysis Modes</h3>
+                                        <p className="text-xs text-zinc-500 mt-1">Configure accuracy protocol, real-time market feeds, and automated data capture.</p>
+                                    </div>
+
+                                    {/* Accuracy Mode */}
+                                    <div className="p-5 rounded-2xl bg-zinc-900/40 border border-zinc-800 space-y-4">
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <h4 className="text-sm font-bold text-white">Accuracy Mode</h4>
+                                                <p className="text-xs text-zinc-400 mt-0.5">
+                                                    {isAccuracyModeEnabled
+                                                        ? (accuracySubMode === 'original' ? 'Strict Protocol enabled' : 'Pure AI enabled')
+                                                        : 'Standard speed mode'}
+                                                </p>
+                                            </div>
+                                            <ToggleSwitch checked={isAccuracyModeEnabled} onChange={onToggleAccuracyMode} />
+                                        </div>
+
+                                        {isAccuracyModeEnabled && (
+                                            <div className="grid grid-cols-2 gap-3 pt-2">
+                                                <button
+                                                    onClick={() => (onSelectAccuracySubMode || props.setAccuracySubMode)?.('original')}
+                                                    className={`p-3 rounded-xl border text-left transition-all ${
+                                                        accuracySubMode === 'original'
+                                                            ? 'bg-cyan-500/10 border-cyan-500/60 text-cyan-300'
+                                                            : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-zinc-200'
+                                                    }`}
+                                                >
+                                                    <div className="text-xs font-bold">Strict Protocol</div>
+                                                    <div className="text-[11px] text-zinc-500 mt-1">Multi-stage validation and strict consensus</div>
+                                                </button>
+                                                <button
+                                                    onClick={() => (onSelectAccuracySubMode || props.setAccuracySubMode)?.('pure_ai')}
+                                                    className={`p-3 rounded-xl border text-left transition-all ${
+                                                        accuracySubMode === 'pure_ai'
+                                                            ? 'bg-cyan-500/10 border-cyan-500/60 text-cyan-300'
+                                                            : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-zinc-200'
+                                                    }`}
+                                                >
+                                                    <div className="text-xs font-bold">Pure AI</div>
+                                                    <div className="text-[11px] text-zinc-500 mt-1">Unfiltered AI reasoning without strict formatting gates</div>
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Pure AI Context — only relevant in Accuracy Mode → Pure AI */}
+                                    {isAccuracyModeEnabled && accuracySubMode === 'pure_ai' && (setIsPlaybookEnabledInPureAI || setIsFamiliesEnabledInPureAI || setIsMemoryEnabledInPureAI) && (
+                                        <div className="p-5 rounded-2xl bg-zinc-900/40 border border-zinc-800 space-y-4 animate-fade-in">
+                                            <div>
+                                                <h4 className="text-sm font-bold text-white">Pure AI Context</h4>
+                                                <p className="text-xs text-zinc-400 mt-0.5">Choose which structured context is injected during Pure AI analysis.</p>
+                                            </div>
+                                            <div className="space-y-3">
+                                                {setIsPlaybookEnabledInPureAI && (
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-xs text-zinc-300">Strategy Playbook</span>
+                                                        <ToggleSwitch checked={!!isPlaybookEnabledInPureAI} onChange={() => setIsPlaybookEnabledInPureAI(!isPlaybookEnabledInPureAI)} />
+                                                    </div>
+                                                )}
+                                                {setIsFamiliesEnabledInPureAI && (
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-xs text-zinc-300">Pattern Families</span>
+                                                        <ToggleSwitch checked={!!isFamiliesEnabledInPureAI} onChange={() => setIsFamiliesEnabledInPureAI(!isFamiliesEnabledInPureAI)} />
+                                                    </div>
+                                                )}
+                                                {setIsMemoryEnabledInPureAI && (
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-xs text-zinc-300">Historical Memory</span>
+                                                        <ToggleSwitch checked={!!isMemoryEnabledInPureAI} onChange={() => setIsMemoryEnabledInPureAI(!isMemoryEnabledInPureAI)} />
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Hybrid Intelligence */}
+                                    <div className="p-5 rounded-2xl bg-zinc-900/40 border border-zinc-800 flex items-center justify-between">
+                                        <div>
+                                            <h4 className="text-sm font-bold text-white">Hybrid Intelligence</h4>
+                                            <p className="text-xs text-zinc-400 mt-0.5">Fetches real-time Binance OHLCV data and calculates RSI, MACD, and EMAs for AI context.</p>
+                                        </div>
+                                        <ToggleSwitch checked={isHybridIntelligenceEnabled} onChange={() => {
+                                            if (onToggleHybridIntelligence) onToggleHybridIntelligence();
+                                            else if (props.setIsHybridIntelligenceEnabled) props.setIsHybridIntelligenceEnabled(!isHybridIntelligenceEnabled);
+                                        }} />
+                                    </div>
+
+                                    {/* Auto-Capture Options */}
+                                    <div className="p-5 rounded-2xl bg-zinc-900/40 border border-zinc-800 space-y-4">
+                                        <h4 className="text-sm font-bold text-white">Automated Capture Prompts</h4>
+                                        <div className="space-y-3">
+                                            {onToggleAutoCapturing && (
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-xs text-zinc-300">Prompt for post-trade result capture</span>
+                                                    <ToggleSwitch checked={!!isAutoCapturing} onChange={onToggleAutoCapturing} />
+                                                </div>
+                                            )}
+                                            {onToggleUpdateAutoCapturing && (
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-xs text-zinc-300">Prompt for active trade updates</span>
+                                                    <ToggleSwitch checked={!!isUpdateAutoCapturing} onChange={onToggleUpdateAutoCapturing} />
+                                                </div>
+                                            )}
+                                            {onToggleEntryNotHitCapturing && (
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-xs text-zinc-300">Prompt when entry price is not hit</span>
+                                                    <ToggleSwitch checked={!!isEntryNotHitCapturing} onChange={onToggleEntryNotHitCapturing} />
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* TAB 3: Analyst Lenses */}
+                            {activeTab === 'lenses' && (
+                                <div className="space-y-4 animate-fade-in">
+                                    <div className="border-b border-zinc-800 pb-3">
+                                        <h3 className="text-base font-bold text-white">Analyst Lenses</h3>
+                                        <p className="text-xs text-zinc-500 mt-1">Assign role-based personas (Technical, Risk, Macro) to AI models.</p>
+                                    </div>
+                                    <AnalystLensSettings
+                                        config={lensConfig}
+                                        onChange={onSetLensConfig}
+                                        enabledProviders={enabledProvidersList}
+                                    />
+                                </div>
+                            )}
+
+                            {/* TAB 4: Custom Instructions */}
+                            {activeTab === 'instructions' && (
+                                <div className="space-y-4 animate-fade-in h-full flex flex-col">
+                                    <div className="border-b border-zinc-800 pb-3 shrink-0">
+                                        <h3 className="text-base font-bold text-white">Custom Instructions</h3>
+                                        <p className="text-xs text-zinc-500 mt-1">Define global rules, trading strategies, and behavioral prompts for the AI ensemble.</p>
+                                    </div>
+                                    <div className="flex-1 min-h-[480px]">
+                                        <CustomInstructionsEditor
+                                            customInstructions={customInstructions}
+                                            setCustomInstructions={setCustomInstructions}
+                                            activeTab={activeInstructionTab}
+                                            onTabChange={setActiveInstructionTab}
+                                        />
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* TAB 5: Memory & Learning */}
+                            {activeTab === 'memory' && (
+                                <div className="space-y-4 max-w-3xl animate-fade-in">
+                                    <div className="border-b border-zinc-800 pb-3">
+                                        <h3 className="text-base font-bold text-white">Memory & Learning Layers</h3>
+                                        <p className="text-xs text-zinc-500 mt-1">Configure global trade learning synthesis and historical memory injection.</p>
+                                    </div>
+                                    {setIsGlobalMemoryEnabled && (
+                                        <div className="p-5 rounded-2xl bg-zinc-900/40 border border-zinc-800 space-y-3">
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <h4 className="text-sm font-bold text-white">Global Memory (Layer 3)</h4>
+                                                    <p className="text-xs text-zinc-400 mt-0.5">
+                                                        {isGlobalMemoryEnabled
+                                                            ? 'Synthesized learning from all trades is injected into analysis.'
+                                                            : 'Only per-thread memory (Layers 1 & 2) is active.'}
+                                                    </p>
+                                                </div>
+                                                <ToggleSwitch checked={!!isGlobalMemoryEnabled} onChange={() => setIsGlobalMemoryEnabled(!isGlobalMemoryEnabled)} />
+                                            </div>
+                                        </div>
+                                    )}
+                                    <MemorySettings
+                                        providerConfigs={providerConfigs ?? []}
+                                        memoryConfig={memoryConfig}
+                                        onMemoryConfigChange={onMemoryConfigChange}
+                                    />
+                                </div>
+                            )}
+
+                            {/* TAB 6: Profile & Quick Actions */}
+                            {activeTab === 'actions' && (
+                                <div className="space-y-6 max-w-3xl animate-fade-in">
+                                    <div className="border-b border-zinc-800 pb-3">
+                                        <h3 className="text-base font-bold text-white">Profile & Quick Actions</h3>
+                                        <p className="text-xs text-zinc-500 mt-1">Access saved analyses, trading playbook, user profiles, and data exports.</p>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                        {onOpenSavedAnalyses && (
+                                            <button
+                                                onClick={onOpenSavedAnalyses}
+                                                className="flex flex-col items-center justify-center p-5 rounded-2xl bg-zinc-900/60 border border-zinc-800 hover:border-cyan-500/40 hover:bg-zinc-900 transition-all text-center group"
+                                            >
+                                                <BookmarkIcon className="w-6 h-6 text-zinc-400 group-hover:text-cyan-400 mb-2 transition-colors" />
+                                                <span className="text-xs font-bold text-zinc-200">Saved Analyses</span>
+                                            </button>
+                                        )}
+                                        {onOpenStrategySearch && (
+                                            <button
+                                                onClick={onOpenStrategySearch}
+                                                className="flex flex-col items-center justify-center p-5 rounded-2xl bg-zinc-900/60 border border-zinc-800 hover:border-cyan-500/40 hover:bg-zinc-900 transition-all text-center group"
+                                            >
+                                                <SearchIcon className="w-6 h-6 text-zinc-400 group-hover:text-cyan-400 mb-2 transition-colors" />
+                                                <span className="text-xs font-bold text-zinc-200">Strategy Search</span>
+                                            </button>
+                                        )}
+                                        {onOpenPlaybook && (
+                                            <button
+                                                onClick={onOpenPlaybook}
+                                                className="flex flex-col items-center justify-center p-5 rounded-2xl bg-zinc-900/60 border border-zinc-800 hover:border-cyan-500/40 hover:bg-zinc-900 transition-all text-center group"
+                                            >
+                                                <BookmarkIcon className="w-6 h-6 text-zinc-400 group-hover:text-cyan-400 mb-2 transition-colors" />
+                                                <span className="text-xs font-bold text-zinc-200">Playbook</span>
+                                            </button>
+                                        )}
+                                        {onOpenUserProfile && (
+                                            <button
+                                                onClick={onOpenUserProfile}
+                                                className="flex flex-col items-center justify-center p-5 rounded-2xl bg-zinc-900/60 border border-zinc-800 hover:border-cyan-500/40 hover:bg-zinc-900 transition-all text-center group"
+                                            >
+                                                <UserIcon className="w-6 h-6 text-zinc-400 group-hover:text-cyan-400 mb-2 transition-colors" />
+                                                <span className="text-xs font-bold text-zinc-200">User Profile</span>
+                                            </button>
+                                        )}
+                                        {onSwitchUser && (
+                                            <button
+                                                onClick={onSwitchUser}
+                                                className="flex flex-col items-center justify-center p-5 rounded-2xl bg-zinc-900/60 border border-zinc-800 hover:border-cyan-500/40 hover:bg-zinc-900 transition-all text-center group"
+                                            >
+                                                <SwitchUserIcon className="w-6 h-6 text-zinc-400 group-hover:text-cyan-400 mb-2 transition-colors" />
+                                                <span className="text-xs font-bold text-zinc-200">Switch User</span>
+                                            </button>
+                                        )}
+                                        {onExportData && (
+                                            <button
+                                                onClick={onExportData}
+                                                className="flex flex-col items-center justify-center p-5 rounded-2xl bg-zinc-900/60 border border-zinc-800 hover:border-cyan-500/40 hover:bg-zinc-900 transition-all text-center group"
+                                            >
+                                                <ExportIcon className="w-6 h-6 text-zinc-400 group-hover:text-cyan-400 mb-2 transition-colors" />
+                                                <span className="text-xs font-bold text-zinc-200">Export / Import</span>
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                        </div>
+                    </div>
                 </div>
-            </aside>
+            </div>
         </>
     );
 };

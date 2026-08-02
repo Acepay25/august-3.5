@@ -186,13 +186,21 @@ export const calculateEntryTimingScore = (
 function collectKeyLevels(data: HybridDataPacket, direction: string | undefined): KeyLevel[] {
     const levels: KeyLevel[] = [];
 
+    // EnhancedKeyLevel.source is a level KIND ('pivot' | 'fibonacci' |
+    // 'volume_node' | 'psychological' | 'swing'), not a timeframe, so the
+    // old `source.includes('4h'|'1h')` branches never fired (everything got
+    // strength=1, collapsing findBetterEntry's "strength first" sort).
+    const sourceStrength = (source: string): number =>
+        source === 'pivot' || source === 'fibonacci' || source === 'volume_node' ? 3 :
+        source === 'psychological' ? 2 : 1;
+
     // Support/Resistance from enhanced key levels
     data.enhancedKeyLevels.support.forEach(s =>
         levels.push({
             price: s.price,
             type: 'support',
             name: `${s.source} Support`,
-            strength: s.source.includes('4h') ? 3 : s.source.includes('1h') ? 2 : 1
+            strength: sourceStrength(s.source)
         })
     );
     data.enhancedKeyLevels.resistance.forEach(r =>
@@ -200,7 +208,7 @@ function collectKeyLevels(data: HybridDataPacket, direction: string | undefined)
             price: r.price,
             type: 'resistance',
             name: `${r.source} Resistance`,
-            strength: r.source.includes('4h') ? 3 : r.source.includes('1h') ? 2 : 1
+            strength: sourceStrength(r.source)
         })
     );
 
@@ -261,7 +269,7 @@ function checkKeyLevelProximity(entryPrice: number, levels: KeyLevel[]) {
     }
 
     // Score based on distance
-    let score = 0;
+    let score: number;
     let warning: string | null = null;
 
     if (minDistance <= OPTIMAL_KEY_LEVEL_DISTANCE) {
@@ -337,10 +345,14 @@ function checkMomentumAlignment(data: HybridDataPacket, direction: string | unde
 }
 
 function checkATRDistance(entryPrice: number, currentPrice: number, atr: number) {
+    // Zero/undefined ATR → no basis for a ratio; treat as neutral.
+    if (!atr || atr <= 0) {
+        return { score: 10, warning: null };
+    }
     const distance = Math.abs(entryPrice - currentPrice);
     const atrRatio = distance / atr;
 
-    let score = 0;
+    let score: number;
     let warning: string | null = null;
 
     if (atrRatio <= OPTIMAL_ATR_DISTANCE) {

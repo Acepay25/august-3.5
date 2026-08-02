@@ -59,6 +59,7 @@ interface ChatAreaProps {
     // Ensemble Intelligence Props — dynamic provider list
     providers: ProviderConfig[];
     onToggleProvider: (id: string) => void;
+    onUpdateProvider?: (id: string, updates: Partial<Omit<ProviderConfig, 'id' | 'isBuiltIn'>>) => Promise<void>;
     selectedVisionModel: string;
     setSelectedVisionModel: (modelId: string) => void;
     // Lens Config
@@ -131,6 +132,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     accuracySubMode,
     providers,
     onToggleProvider,
+    onUpdateProvider,
     selectedVisionModel,
     setSelectedVisionModel,
     lensConfig,
@@ -393,6 +395,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                         isAnyProviderEnabled={isAnyProviderEnabled}
                         providers={providers}
                         onToggleProvider={onToggleProvider}
+                        onUpdateProvider={onUpdateProvider}
                         selectedVisionModel={selectedVisionModel}
                         setSelectedVisionModel={setSelectedVisionModel}
                         lensConfig={lensConfig}

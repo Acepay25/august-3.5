@@ -11,7 +11,7 @@ export default tseslint.config(
       'node_modules/**',
       'android/**',
       'electron/**',
-      '*.cjs',
+      '**/*.cjs',
     ],
   },
   {

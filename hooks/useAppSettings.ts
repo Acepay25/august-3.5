@@ -7,7 +7,6 @@ import { useState } from 'react';
 import { AccuracySubMode, CustomInstructionsMap, AnalystLensConfig, GlobalMemory, ConfidenceCalibration, InsightKnowledgeBase, AIProvider } from '../types';
 import { ProviderConfig } from '../types/provider';
 import { DEFAULT_FRAMEWORKS } from '../constants/models';
-import { GEMINI_MODELS } from '../constants/models';
 import { loadLensConfig } from '../services/ui/AnalystLensService';
 
 export function useAppSettings() {
@@ -16,7 +15,7 @@ export function useAppSettings() {
 
     // Memory Provider Selection
     const [memoryConfig, setMemoryConfig] = useState<ProviderConfig | null>(null);
-    const [memoryModel, setMemoryModel] = useState<string>('gemini-2.5-flash');
+    const [memoryModel, setMemoryModel] = useState<string>('');
     const [isGlobalMemoryEnabled, setIsGlobalMemoryEnabled] = useState<boolean>(true);
 
     // Accuracy Mode State
@@ -46,8 +45,9 @@ export function useAppSettings() {
     // Summarization settings
     const [activeFrameworks, setActiveFrameworks] = useState<string[]>(DEFAULT_FRAMEWORKS);
     const [summaryCharLimit, setSummaryCharLimit] = useState<number>(4000);
-    const [summarizationProvider, setSummarizationProvider] = useState<AIProvider>(AIProvider.GEMINI);
-    const [summarizationModel, setSummarizationModel] = useState<string>(GEMINI_MODELS[0].id);
+    // Defaults are empty — App resolves them to the first ready provider once configs load.
+    const [summarizationProvider, setSummarizationProvider] = useState<AIProvider>('');
+    const [summarizationModel, setSummarizationModel] = useState<string>('');
     const [useAlgorithmicSummary, setUseAlgorithmicSummary] = useState<boolean>(true);
     const [useAlgorithmicInsights, setUseAlgorithmicInsights] = useState<boolean>(true);
 

@@ -179,47 +179,24 @@ export const analyzeDisagreements = (
 };
 
 /**
- * Get calibration data for each model
+ * Get calibration data for each model.
+ * `nameToProvider` maps analyst display names to dynamic provider ids
+ * (ProviderConfig.id); without it the normalized name is used as the id.
  */
 export const getModelCalibrations = (
     modelNames: string[],
     trades: LoggedTrade[],
     currentCoin?: string,
-    currentPattern?: string
+    currentPattern?: string,
+    nameToProvider?: Record<string, string>
 ): ModelCalibration[] => {
     const profile = computeLearningProfile(trades);
 
     return modelNames.map(modelName => {
-        // Map model name to provider for lookup
-        const providerMap: Record<string, AIProvider> = {
-            'gemini': AIProvider.GEMINI,
-            'deepseek': AIProvider.DEEPSEEK,
-            'zhipu': AIProvider.ZHIPU,
-            'groq': AIProvider.GROQ,
-            'groq_new': AIProvider.GROQ_NEW
-        };
-
+        // Resolve the provider id for this analyst: explicit map first, then
+        // the normalized name itself (provider ids are dynamic strings).
         const normalizedName = modelName.toLowerCase().replace(/\s+/g, '_').replace(/[()]/g, '');
-        let provider = providerMap[normalizedName];
-
-        // Try partial match
-        if (!provider) {
-            if (normalizedName.includes('gemini')) provider = AIProvider.GEMINI;
-            else if (normalizedName.includes('deepseek')) provider = AIProvider.DEEPSEEK;
-            else if (normalizedName.includes('zhipu')) provider = AIProvider.ZHIPU;
-            else if (normalizedName.includes('groq') && normalizedName.includes('alt')) provider = AIProvider.GROQ_NEW;
-            else if (normalizedName.includes('groq')) provider = AIProvider.GROQ;
-        }
-
-        if (!provider) {
-            return {
-                model: modelName,
-                overallWinRate: 0,
-                contextWinRate: null,
-                contextDescription: 'No data',
-                calibrationNote: 'Unknown model - no calibration data'
-            };
-        }
+        const provider = nameToProvider?.[modelName] ?? normalizedName;
 
         const performance = getModelPerformance(provider);
         const overallWinRate = performance.overallStats.winRate;
@@ -239,7 +216,7 @@ export const getModelCalibrations = (
         }
 
         // Generate calibration note
-        let calibrationNote = '';
+        let calibrationNote: string;
         if (overallWinRate >= 60) {
             calibrationNote = `✅ Reliable (${overallWinRate.toFixed(0)}% overall)`;
         } else if (overallWinRate >= 50) {
@@ -361,7 +338,8 @@ export const generateEnhancedDebateContext = (
     currentRegime: MarketRegime = 'ranging',
     currentCoin?: string,
     currentPattern?: string,
-    monteCarloResult?: MonteCarloResult | null
+    monteCarloResult?: MonteCarloResult | null,
+    nameToProvider?: Record<string, string>
 ): EnhancedDebateContext => {
     // 1. Calculate model weights WITH ALL IMPROVEMENTS (recency, calibration, MC, adaptive)
     const mcForWeights = monteCarloResult ? {
@@ -384,7 +362,7 @@ export const generateEnhancedDebateContext = (
 
     // 4. Get model calibrations
     const modelNames = analyses.map(a => a.model);
-    const modelCalibrations = getModelCalibrations(modelNames, trades, currentCoin, currentPattern);
+    const modelCalibrations = getModelCalibrations(modelNames, trades, currentCoin, currentPattern, nameToProvider);
 
     // 5. Find similar trades
     const dominantDirection = analyses.find(a => a.analysis.direction)?.analysis.direction;
@@ -428,14 +406,21 @@ ${performanceSummary}
 
 `;
 
-    // Add model weights
+    // Add model weights (dynamic providers)
     if (modelWeights.confidence !== 'low') {
         promptInjection += `\n📊 **DYNAMIC MODEL WEIGHTS (Rolling Window):**\n`;
-        if (modelWeights.gemini > 0) promptInjection += `- Gemini: ${(modelWeights.gemini * 100).toFixed(0)}%\n`;
-        if (modelWeights.deepseek > 0) promptInjection += `- DeepSeek: ${(modelWeights.deepseek * 100).toFixed(0)}%\n`;
-        if (modelWeights.zhipu > 0) promptInjection += `- Zhipu: ${(modelWeights.zhipu * 100).toFixed(0)}%\n`;
-        if (modelWeights.groq > 0) promptInjection += `- Groq: ${(modelWeights.groq * 100).toFixed(0)}%\n`;
-        if (modelWeights.groqNew > 0) promptInjection += `- Groq (Alt): ${(modelWeights.groqNew * 100).toFixed(0)}%\n`;
+        const providerToName: Record<string, string> = {};
+        if (nameToProvider) {
+            for (const [name, id] of Object.entries(nameToProvider)) {
+                providerToName[id] = name;
+            }
+        }
+        for (const [providerId, weight] of Object.entries(modelWeights.byProvider ?? {})) {
+            if (weight > 0) {
+                const label = providerToName[providerId] || providerId;
+                promptInjection += `- ${label}: ${(weight * 100).toFixed(0)}%\n`;
+            }
+        }
         if (modelWeights.dominantModel) {
             promptInjection += `⭐ **Historically strongest model for this context: ${modelWeights.dominantModel.toUpperCase()}**\n`;
         }

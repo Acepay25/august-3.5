@@ -8,11 +8,13 @@ import ModelPerformanceDashboard from '../dashboards/ModelPerformanceDashboard';
 import ReasoningDashboard from '../dashboards/ReasoningDashboard';
 import { CloseIcon, HistoryIcon, StarIcon, ChartBarIcon, BrainIcon } from '../shared/Icons';
 import { AIProvider, LoggedTrade, TradeSummary, GlobalMemory } from '../../types';
+import { ProviderConfig } from '../../types/provider';
 
 interface JournalProps {
     isVisible: boolean;
     onClose: () => void;
-    initialTab: 'log' | 'performance' | 'analytics' | 'learning' | 'memory' | 'models';
+    initialTab: 'log' | 'performance' | 'analytics' | 'learning' | 'memory' | 'models' | 'reasoning';
+    isEmbedded?: boolean;
 
     // Trade Log Props
     trades: LoggedTrade[];
@@ -35,12 +37,8 @@ interface JournalProps {
     summarizationModel: string;
     onSetSummarizationProvider: (provider: AIProvider) => void;
     onSetSummarizationModel: (modelId: string) => void;
-    geminiModels: { id: string; name: string }[];
-    deepseekModels: { id: string; name: string }[];
-    zhipuModels: { id: string; name: string }[];
-    groqModels: { id: string; name: string }[];
-    groqNewModels: { id: string; name: string }[];
-    groqAlt2Models: { id: string; name: string }[];
+    /** Ready provider configs available for summarization (dynamic, user-configured). */
+    providers?: ProviderConfig[];
 
     summaryCharLimit: number;
     onUpdateSummaryCharLimit: (limit: number) => void;
@@ -48,9 +46,9 @@ interface JournalProps {
     onDeleteInsight?: (id: string) => void;
     useAlgorithmicSummary: boolean;
     onToggleAlgorithmicSummary: (use: boolean) => void;
-    useAlgorithmicInsights: boolean; // NEW
-    onToggleAlgorithmicInsights: (use: boolean) => void; // NEW
-    onRewriteInsightsWithAI: (ids?: string[]) => void; // NEW
+    useAlgorithmicInsights?: boolean;
+    onToggleAlgorithmicInsights?: (use: boolean) => void;
+    onRewriteInsightsWithAI?: (ids?: string[]) => void;
 
     // Analytics Props
     familyWinRates: Record<string, { total: number; wins: number; winRate: number }>;
@@ -79,7 +77,7 @@ const formatMemoryItem = (item: any): string => {
 // Modern Memory Content Component
 const MemoryContent: React.FC<{
     threadSummary?: string;
-    globalMemory?: GlobalMemory;
+    globalMemory?: GlobalMemory | null;
 }> = ({ threadSummary, globalMemory }) => {
     return (
         <div className="flex flex-col h-full bg-transparent p-4 sm:p-6 space-y-6 overflow-y-auto custom-scrollbar">
@@ -183,22 +181,26 @@ const TABS: TabConfig[] = [
 ];
 
 const JournalInner: React.FC<JournalProps> = ({
-    isVisible, onClose, initialTab,
+    isVisible, onClose, initialTab, isEmbedded = false,
     // Trade Log Pass-through
     trades, onDeleteTrades, onClearAllTrades, modelIdToName, ocrModelIdToName, onUpdateInsights, isSummarizing, currentInsightIds, onUpdateTradeLeverage,
     // Performance Review Pass-through
-    finalSummary, individualSummaries, isLoading, isInsightGenerating, newlyAddedInsightIds, summarizationProvider, summarizationModel, onSetSummarizationProvider, onSetSummarizationModel, geminiModels, deepseekModels, zhipuModels, groqModels, groqNewModels, groqAlt2Models, summaryCharLimit, onUpdateSummaryCharLimit, onRegenerateSummary, onDeleteInsight, useAlgorithmicSummary, onToggleAlgorithmicSummary,
+    finalSummary, individualSummaries, isLoading, isInsightGenerating, newlyAddedInsightIds, summarizationProvider, summarizationModel, onSetSummarizationProvider, onSetSummarizationModel, providers = [], summaryCharLimit = 1000, onUpdateSummaryCharLimit = () => {}, onRegenerateSummary = () => {}, onDeleteInsight, useAlgorithmicSummary = false, onToggleAlgorithmicSummary = () => {},
     // Analytics Pass-through
-    familyWinRates,
+    familyWinRates = {},
     // Memory Pass-through
-    globalMemory, threadSummary,
+    globalMemory = null, threadSummary = '',
     // Model Performance Props
-    enabledProviders = [AIProvider.GEMINI, AIProvider.DEEPSEEK, AIProvider.GROQ],
+    enabledProviders,
     selectedModels = {},
-    useAlgorithmicInsights, onToggleAlgorithmicInsights, // NEW
-    onRewriteInsightsWithAI // NEW
+    useAlgorithmicInsights = false, onToggleAlgorithmicInsights = () => {}, // NEW
+    onRewriteInsightsWithAI = () => {} // NEW
 }) => {
     const [activeTab, setActiveTab] = useState<TabId>(initialTab);
+
+    // Derive enabled providers from dynamic configs when not passed explicitly
+    const effectiveEnabledProviders: AIProvider[] = enabledProviders
+        ?? providers.filter(p => p.isEnabled && p.apiKey.trim().length > 0).map(p => p.id);
 
     useEffect(() => {
         if (isVisible) {
@@ -209,6 +211,103 @@ const JournalInner: React.FC<JournalProps> = ({
     const currentTab = TABS.find(t => t.id === activeTab) || TABS[0];
 
     if (!isVisible) return null;
+
+    const renderContent = () => (
+        activeTab === 'log' ? (
+            <TradeLogContent
+                trades={trades}
+                onDeleteTrades={onDeleteTrades}
+                onClearAllTrades={onClearAllTrades}
+                modelIdToName={modelIdToName}
+                ocrModelIdToName={ocrModelIdToName}
+                onUpdateInsights={onUpdateInsights}
+                isSummarizing={isSummarizing}
+                currentInsightIds={currentInsightIds}
+                onUpdateTradeLeverage={onUpdateTradeLeverage}
+            />
+        ) : activeTab === 'performance' ? (
+            <PerformanceReviewContent
+                finalSummary={finalSummary || null}
+                individualSummaries={individualSummaries || []}
+                isLoading={isLoading}
+                isInsightGenerating={isInsightGenerating}
+                newlyAddedInsightIds={newlyAddedInsightIds}
+                summarizationProvider={summarizationProvider}
+                summarizationModel={summarizationModel}
+                onSetSummarizationProvider={onSetSummarizationProvider}
+                onSetSummarizationModel={onSetSummarizationModel}
+                providers={providers}
+                summaryCharLimit={summaryCharLimit}
+                onUpdateSummaryCharLimit={onUpdateSummaryCharLimit}
+                onManageInsights={() => setActiveTab('log')}
+                onRegenerateSummary={onRegenerateSummary}
+                onDeleteInsight={onDeleteInsight}
+                useAlgorithmicSummary={useAlgorithmicSummary}
+                onToggleAlgorithmicSummary={onToggleAlgorithmicSummary}
+                useAlgorithmicInsights={useAlgorithmicInsights}
+                onToggleAlgorithmicInsights={onToggleAlgorithmicInsights}
+                onRewriteInsightsWithAI={onRewriteInsightsWithAI}
+            />
+        ) : activeTab === 'analytics' ? (
+            <WinRateDashboard trades={trades} />
+        ) : activeTab === 'learning' ? (
+            <div className="h-full overflow-y-auto">
+                <LearningDashboard trades={trades} />
+            </div>
+        ) : activeTab === 'models' ? (
+            <div className="p-4 sm:p-6 overflow-y-auto h-full">
+                <ModelPerformanceDashboard enabledProviders={effectiveEnabledProviders} trades={trades} selectedModels={selectedModels} />
+            </div>
+        ) : activeTab === 'reasoning' ? (
+            <div className="p-4 sm:p-6 overflow-y-auto h-full">
+                <ReasoningDashboard username={typeof localStorage !== 'undefined' ? (localStorage.getItem('last_active_user') || 'default') : 'default'} />
+            </div>
+        ) : (
+            <MemoryContent
+                threadSummary={threadSummary}
+                globalMemory={globalMemory}
+            />
+        )
+    );
+
+    if (isEmbedded) {
+        return (
+            <div className="flex flex-col h-full bg-zinc-950/60 rounded-2xl border border-zinc-800/80 overflow-hidden animate-fade-in">
+                {/* Embedded Header & Tab Navigation */}
+                <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 bg-zinc-950 shrink-0 flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-purple-400 shadow-[0_0_6px_#c084fc]" />
+                        <h3 className="text-sm font-bold text-white tracking-tight">Trading Journal & Performance</h3>
+                        <span className="text-xs text-zinc-500 font-mono">({trades.length} logged trades)</span>
+                    </div>
+                    <div className="flex items-center gap-1 overflow-x-auto custom-scrollbar max-w-full">
+                        {TABS.map((tab) => {
+                            const isActive = activeTab === tab.id;
+                            return (
+                                <button
+                                    key={tab.id}
+                                    onClick={() => setActiveTab(tab.id)}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all font-medium whitespace-nowrap ${
+                                        isActive
+                                            ? 'bg-zinc-800 text-white font-bold shadow-sm border border-zinc-700'
+                                            : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60 border border-transparent'
+                                    }`}
+                                >
+                                    <span className={isActive ? tab.activeColor : 'text-zinc-500'}>{tab.icon}</span>
+                                    <span>{tab.label}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                {/* Embedded Tab Content Area */}
+                <div className="flex-1 overflow-hidden min-h-[480px]">
+                    {renderContent()}
+                </div>
+            </div>
+        );
+    }
 
     return (
         <>
@@ -265,12 +364,7 @@ const JournalInner: React.FC<JournalProps> = ({
                             summarizationModel={summarizationModel}
                             onSetSummarizationProvider={onSetSummarizationProvider}
                             onSetSummarizationModel={onSetSummarizationModel}
-                            geminiModels={geminiModels}
-                            deepseekModels={deepseekModels}
-                            zhipuModels={zhipuModels}
-                            groqModels={groqModels}
-                            groqNewModels={groqNewModels}
-                            groqAlt2Models={groqAlt2Models}
+                            providers={providers}
 
                             summaryCharLimit={summaryCharLimit}
                             onUpdateSummaryCharLimit={onUpdateSummaryCharLimit}
@@ -291,7 +385,7 @@ const JournalInner: React.FC<JournalProps> = ({
                         </div>
                     ) : activeTab === 'models' ? (
                         <div className="p-4 sm:p-6 overflow-y-auto h-full">
-                            <ModelPerformanceDashboard enabledProviders={enabledProviders} trades={trades} selectedModels={selectedModels} />
+                            <ModelPerformanceDashboard enabledProviders={effectiveEnabledProviders} trades={trades} selectedModels={selectedModels} />
                         </div>
                     ) : activeTab === 'reasoning' ? (
                         <div className="p-4 sm:p-6 overflow-y-auto h-full">

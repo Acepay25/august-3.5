@@ -1,6 +1,6 @@
 // Trade logging, conversation, and dashboard types
 
-import { AccuracySubMode, TradeOutcome, DebateSpeaker } from './enums';
+import { AccuracySubMode, TradeOutcome } from './enums';
 import { TradeAnalysis } from './analysis';
 import { Message, DebateTurn } from './message';
 
@@ -19,6 +19,12 @@ export interface LoggedTrade {
   correctedTakeProfit?: string;
   investmentAmount?: number;
   pnlAmount?: number;
+  /**
+   * PnL expressed as a leveraged percent (e.g. +200 = +200%) when only a
+   * percent is known (outcome autopilot). Distinct from pnlAmount (dollars) —
+   * writing a percent into pnlAmount corrupts dashboard PnL math.
+   */
+  pnlPercent?: number;
   marketSnapshot?: unknown; // Stored market context for algorithmic recalculation
   // Ensemble fields — keyed by provider id (ProviderConfig.id)
   modelsUsed?: Record<string, string>;       // providerId → model id
@@ -93,6 +99,9 @@ export interface SavedAnalysis {
   analysis: TradeAnalysis;
   userPrompt: string;
   timestamp: string;
+  // Ensemble fields — keyed by provider id (ProviderConfig.id)
+  modelsUsed?: Record<string, string>; // providerId → model id
+  // Legacy per-provider fields (kept for historical data migration)
   geminiModelUsed?: string;
   deepseekModelUsed?: string;
   zhipuModelUsed?: string;
