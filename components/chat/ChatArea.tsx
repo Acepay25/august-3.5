@@ -201,25 +201,9 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         onSelectMessageForProbability
     }), [chatContext, isSelectionMode, selectedIds, handleToggleSelection, onSelectMessageForProbability]);
 
-    // Dynamic Introduction Text based on mode
-    const INTRO_TEXT_STANDARD = "Welcome! I am August. I can work as a single analyst or as a collaborative ensemble. For a full analysis, please upload your 4H, 1H, and 15M OKX charts and state your request.";
-    const INTRO_TEXT_ACCURACY_ORIGINAL = "Accuracy Mode activated. August will now apply strict rule-based logic, multi-timeframe validation, and structured confirmations. Please upload your charts or provide your market data for a precise and disciplined analysis.";
-    const INTRO_TEXT_PURE_AI = "Pure AI Mode enabled. August will analyze your request using fully autonomous reasoning, adaptive learning, and pattern synthesis. Upload your charts or input your data for an unrestricted and intuitive AI-driven analysis.";
-
-    const getIntroText = useCallback(() => {
-        if (!isAccuracyModeEnabled) return INTRO_TEXT_STANDARD;
-        return accuracySubMode === 'pure_ai' ? INTRO_TEXT_PURE_AI : INTRO_TEXT_ACCURACY_ORIGINAL;
-    }, [isAccuracyModeEnabled, accuracySubMode]);
-
-    // Process messages to dynamically replace intro text
-    const processedMessages = useMemo(() => {
-        return messages.map(msg => {
-            if (msg.id === 'init') {
-                return { ...msg, text: getIntroText() };
-            }
-            return msg;
-        });
-    }, [messages, getIntroText]);
+    // Fresh sessions start with zero messages (no hardcoded intro bubble),
+    // so no intro-text substitution is needed — messages pass through as-is.
+    const processedMessages = messages;
 
     return (
         <div
@@ -366,10 +350,11 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 </div>
             ) : (
                 <>
-                    {/* First-run onboarding: no providers configured yet */}
+                    {/* First-run onboarding: no providers configured yet — sits
+                        above the centered input on a fresh session */}
                     {!hasReadyProviders && messages.length === 0 && (
-                        <div className="absolute bottom-[230px] lg:bottom-[285px] left-0 right-0 px-3 sm:px-4 lg:px-0 z-10 lg:w-full lg:max-w-3xl lg:mx-auto pointer-events-none">
-                            <div className="pointer-events-auto glass rounded-2xl border border-white/10 p-4 sm:p-5 animate-fade-in">
+                        <div className="absolute inset-x-0 top-1/2 -translate-y-[calc(50%+9rem)] px-3 sm:px-4 lg:px-8 z-10 pointer-events-none">
+                            <div className="pointer-events-auto mx-auto w-full max-w-3xl glass rounded-2xl border border-white/10 p-4 sm:p-5 animate-fade-in">
                                 <div className="flex items-center gap-3">
                                     <div className="flex-1">
                                         <h3 className="text-sm font-bold text-zinc-100">Connect an AI provider to start analyzing</h3>
@@ -388,19 +373,23 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                             </div>
                         </div>
                     )}
-                    {/* Quick Action Chips - positioned above ChatInput */}
-                    <div className="absolute bottom-[140px] lg:bottom-[180px] left-0 right-0 px-3 sm:px-4 lg:px-0 pointer-events-none z-10 lg:w-full lg:max-w-3xl lg:mx-auto">
-                        <div className="w-full pointer-events-auto">
-                            <QuickActionChips
-                                onNewAnalysis={onNewConversation}
-                                onOpenJournal={onOpenJournal}
-                                onOpenLiveMarket={onOpenLiveMarket}
-                                onOpenAnalytics={onOpenAnalytics}
-                                isDisabled={!!loadingMessage}
-                            />
+                    {/* Quick Action Chips - only once the session has content;
+                        a fresh session shows just the centered input */}
+                    {messages.length > 0 && (
+                        <div className="absolute bottom-[140px] lg:bottom-[180px] left-0 right-0 px-3 sm:px-4 lg:px-0 pointer-events-none z-10 lg:w-full lg:max-w-3xl lg:mx-auto">
+                            <div className="w-full pointer-events-auto">
+                                <QuickActionChips
+                                    onNewAnalysis={onNewConversation}
+                                    onOpenJournal={onOpenJournal}
+                                    onOpenLiveMarket={onOpenLiveMarket}
+                                    onOpenAnalytics={onOpenAnalytics}
+                                    isDisabled={!!loadingMessage}
+                                />
+                            </div>
                         </div>
-                    </div>
+                    )}
                     <ChatInput
+                        centered={messages.length === 0}
                         images={images}
                         removeImage={removeImage}
                         leverageRef={leverageRef}

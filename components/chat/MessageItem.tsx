@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Message, MessageRole, TradeOutcome, SavedAnalysis, Conversation, DebateTurn, ConfidenceCalibration, AnalystLensConfig } from '../../types';
-import { BotIcon, ChevronDownIcon, LinkIcon, CopyIcon, CheckIcon, UserIcon } from '../shared/Icons';
+import { BotIcon, ChevronDownIcon, LinkIcon, CopyIcon, CheckIcon } from '../shared/Icons';
 import LiveMarketDataView from '../market/LiveMarketDataView';
 import DebateView from '../analysis/DebateView';
 import AnalysisResult from '../analysis/AnalysisResult';
@@ -124,7 +124,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
 
     // Determine Bubble Styling - Clean modern design like ChatGPT/Gemini
     const bubbleClass = isUserMessage
-        ? 'bg-blue-600 text-white rounded-2xl rounded-br-md'
+        ? '' // user messages render as plain text (Cursor-style, no bubble)
         : message.role === MessageRole.AI
             ? (message.isPostMortem
                 ? 'bg-zinc-800 text-zinc-100 border border-purple-500/20 rounded-2xl rounded-bl-md'
@@ -163,7 +163,10 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
 
             {message.role !== MessageRole.USER && message.role !== MessageRole.SYSTEM && <div className="flex-shrink-0 w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-zinc-700 flex items-center justify-center mt-1"><BotIcon /></div>}
 
-            <div className={`p-3 sm:p-5 rounded-2xl w-fit max-w-[85%] sm:max-w-3xl break-words shadow-sm border relative group ${bubbleClass}`}>
+            <div className={`${isUserMessage
+                ? 'py-1 pl-1 pr-6 max-w-[85%] sm:max-w-3xl break-words relative group text-zinc-100'
+                : 'p-3 sm:p-5 rounded-2xl w-fit max-w-[85%] sm:max-w-3xl break-words shadow-sm border relative group'
+                } ${isUserMessage ? '' : bubbleClass}`}>
 
                 {isUserMessage && !isSelectionMode && (
                     <button
@@ -386,7 +389,6 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                     </>
                 )}
             </div>
-            {message.role === MessageRole.USER && !isSelectionMode && (<div className="flex-shrink-0 w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-blue-600 flex items-center justify-center text-white mt-1"><UserIcon /></div>)}
         </div>
     );
 });

@@ -1,13 +1,11 @@
 @import "tailwindcss";
 
-/* ===== NEUTRAL MONOCHROME THEME =====
-   Cool-neutral charcoal neutrals + a single gold accent. The zinc base is a
-   true neutral gray ramp (near-black layered surfaces, neutral off-white body
-   text); the gold accent (cyan slot) is the only hue and reads as the brand
-   note. Semantic ramps (emerald/rose/…) are neutral grays, so wins/losses stay
-   scannable by brightness rather than by color. */
+/* ===== CHARCOAL THEME WITH BLUE ACCENT =====
+   Cool-neutral dark charcoal (near-black) ramp + a single muted steel blue
+   accent. Wins/losses are scannable by brightness (light vs dim grays);
+   no gold/yellow, no brown tint. */
 @theme {
-  /* Base neutral grays (cool-neutral charcoal ramp) */
+  /* Base — cool charcoal / near-black ramp */
   --color-zinc-50: #f5f5f6;
   --color-zinc-100: #e7e7e9;
   --color-zinc-200: #d2d2d6;
@@ -20,19 +18,19 @@
   --color-zinc-900: #161618;
   --color-zinc-950: #0c0c0e;
 
-  /* Accent / primary — gold brand note (the only hue; kept intentionally) */
-  --color-cyan-100: #faf3df;
-  --color-cyan-200: #f2e3b5;
-  --color-cyan-300: #e8d08a;
-  --color-cyan-400: #ddbc62;
-  --color-cyan-500: #c9a142;
-  --color-cyan-600: #a37f31;
-  --color-cyan-700: #7c5f26;
-  --color-cyan-800: #54401c;
-  --color-cyan-900: #332713;
-  --color-cyan-950: #1e170b;
+  /* Accent / primary — muted steel blue */
+  --color-cyan-100: #eaf1f9;
+  --color-cyan-200: #d5e2f2;
+  --color-cyan-300: #b3c9e6;
+  --color-cyan-400: #8aabd8;
+  --color-cyan-500: #648dc6;
+  --color-cyan-600: #4870a4;
+  --color-cyan-700: #39587f;
+  --color-cyan-800: #2c425f;
+  --color-cyan-900: #212f43;
+  --color-cyan-950: #151e2b;
 
-  /* Positive / wins — neutral light grays (scannable by brightness) */
+  /* Positive / wins — light cool grays */
   --color-emerald-100: #f5f5f6;
   --color-emerald-200: #e7e7e9;
   --color-emerald-300: #d2d2d6;
@@ -44,7 +42,7 @@
   --color-emerald-900: #202024;
   --color-emerald-950: #161618;
 
-  /* Negative / losses — neutral dim grays (scannable by brightness) */
+  /* Negative / losses — dim cool grays */
   --color-rose-100: #d2d2d6;
   --color-rose-200: #b0b0b6;
   --color-rose-300: #8a8a92;
@@ -56,26 +54,26 @@
   --color-rose-900: #161618;
   --color-rose-950: #0c0c0e;
 
-  /* Warnings — neutral mid grays */
-  --color-yellow-100: #f5f5f6;
-  --color-yellow-200: #e7e7e9;
-  --color-yellow-300: #d2d2d6;
-  --color-yellow-400: #b0b0b6;
-  --color-yellow-500: #8a8a92;
-  --color-yellow-600: #6b6b73;
-  --color-yellow-900: #202024;
-  --color-yellow-950: #0c0c0e;
-  --color-amber-100: #f5f5f6;
-  --color-amber-200: #e7e7e9;
-  --color-amber-300: #d2d2d6;
-  --color-amber-400: #b0b0b6;
-  --color-amber-500: #8a8a92;
-  --color-amber-600: #6b6b73;
-  --color-amber-800: #34343a;
-  --color-amber-900: #202024;
-  --color-amber-950: #0c0c0e;
+  /* Warnings — blue family (no gold/yellow) */
+  --color-yellow-100: #eaf1f9;
+  --color-yellow-200: #d5e2f2;
+  --color-yellow-300: #b3c9e6;
+  --color-yellow-400: #8aabd8;
+  --color-yellow-500: #648dc6;
+  --color-yellow-600: #4870a4;
+  --color-yellow-900: #212f43;
+  --color-yellow-950: #151e2b;
+  --color-amber-100: #eaf1f9;
+  --color-amber-200: #d5e2f2;
+  --color-amber-300: #b3c9e6;
+  --color-amber-400: #8aabd8;
+  --color-amber-500: #648dc6;
+  --color-amber-600: #4870a4;
+  --color-amber-800: #2c425f;
+  --color-amber-900: #212f43;
+  --color-amber-950: #151e2b;
 
-  /* Destructive — neutral dim grays (functional danger uses literal red elsewhere) */
+  /* Destructive — dim cool grays */
   --color-red-200: #b0b0b6;
   --color-red-300: #8a8a92;
   --color-red-400: #6b6b73;
@@ -85,7 +83,7 @@
   --color-red-950: #0c0c0e;
 
   /* All remaining families (blue, purple, violet, indigo, orange, pink,
-     lime, teal, sky, fuchsia, green) → uniform neutral grays */
+     lime, teal, sky, fuchsia, green) → uniform cool grays */
   --color-blue-100: #f5f5f6;   --color-blue-200: #e7e7e9;   --color-blue-300: #d2d2d6;
   --color-blue-400: #b0b0b6;   --color-blue-500: #8a8a92;   --color-blue-600: #6b6b73;
   --color-blue-700: #4f4f57;   --color-blue-900: #34343a;   --color-blue-950: #202024;
@@ -375,7 +373,7 @@ body,
 
 /* Focus visible styles for keyboard navigation */
 :focus-visible {
-  outline: 2px solid #c9a142;
+  outline: 2px solid #648dc6;
   outline-offset: 2px;
 }
 

@@ -36,6 +36,8 @@ interface ChatInputProps {
     // Lens Config
     lensConfig: AnalystLensConfig;
     setLensConfig: (config: AnalystLensConfig) => void;
+    // Fresh-session layout: center the input until the first message exists.
+    centered?: boolean;
 }
 
 const ChatInputInner: React.FC<ChatInputProps> = ({
@@ -64,13 +66,16 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
     selectedVisionModel,
     setSelectedVisionModel,
     lensConfig,
-    setLensConfig
+    setLensConfig,
+    // Fresh-session layout: center the input vertically until the first
+    // message exists, then glide it down to the bottom dock.
+    centered = false,
 }) => {
     const [showAISettings, setShowAISettings] = useState(false);
     const [showLensSettings, setShowLensSettings] = useState(false);
 
     return (
-        <div className="absolute bottom-0 left-0 right-0 px-3 sm:px-4 lg:px-8 pointer-events-none z-10 pb-[calc(env(safe-area-inset-bottom,16px)+0.5rem)] sm:pb-[calc(env(safe-area-inset-bottom,24px)+1rem)] lg:pb-8 transition-all duration-300">
+        <div className={`absolute bottom-0 left-0 right-0 px-3 sm:px-4 lg:px-8 pointer-events-none z-10 pb-[calc(env(safe-area-inset-bottom,16px)+0.5rem)] sm:pb-[calc(env(safe-area-inset-bottom,24px)+1rem)] lg:pb-8 transition-transform duration-500 ease-in-out ${centered ? '-translate-y-[44vh]' : 'translate-y-0'}`}>
             <div className="w-full lg:max-w-3xl lg:mx-auto pointer-events-auto">
                 {/* Main Input Container — borderless, no box; blends into the chat */}
                 <div className="p-2 sm:p-3 lg:p-4 transition-all">
