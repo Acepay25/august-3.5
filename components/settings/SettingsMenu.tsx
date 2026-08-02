@@ -198,8 +198,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
     const [activeTab, setActiveTab] = useState<SettingsTab>('models');
     const [activeInstructionTab, setActiveInstructionTab] = useState<InstructionTab>('general');
 
-    if (!isVisible) return null;
-
     // Enabled providers list for lens settings —
     // derived from dynamic provider configs (ready = enabled + API key).
     const readyConfigProviders = (providerConfigs ?? []).filter(c => c.isEnabled && c.apiKey.trim().length > 0);
@@ -212,6 +210,8 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
     // id, and if its provider was disabled/removed it appears in no dropdown
     // option (the select renders blank). Fall back to the first ready
     // provider's model so the UI and the vision path stay in sync.
+    // NOTE: this effect must stay ABOVE the `!isVisible` early return — React
+    // forbids conditional hook order.
     useEffect(() => {
         if (!selectedOcrModel || readyConfigProviders.length === 0) return;
         const known = readyConfigProviders.some(p => p.models.includes(selectedOcrModel));
@@ -219,6 +219,8 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
             onSetOcrModel?.(firstReadyProvider?.selectedModel || firstReadyProvider?.models?.[0] || '');
         }
     }, [readyConfigProviders, selectedOcrModel, firstReadyProvider, onSetOcrModel]);
+
+    if (!isVisible) return null;
 
     return (
         <>
