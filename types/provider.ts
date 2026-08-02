@@ -19,7 +19,7 @@ export type ApiFormat = 'chat_completions' | 'messages' | 'responses';
 export interface ProviderConfig {
   id: string;                    // Unique ID (e.g., 'gemini', 'custom-1720000000')
   name: string;                  // Display name (e.g., 'Gemini', 'My Local LLM')
-  apiKey: string;                // User-entered API key (stored encrypted in prefs)
+  apiKey: string;                // User-entered API key (NOTE: stored PLAINTEXT in Preferences/localStorage — no encryption yet)
   baseUrl: string;               // API base URL (e.g., 'https://api.openai.com/v1')
   apiFormat: ApiFormat;          // Which API format to use
   isEnabled: boolean;            // Whether this provider is active

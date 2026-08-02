@@ -199,7 +199,19 @@ class OutcomeAutopilotServiceClass {
         }
 
         const result = await verifyHistoricalOutcome(analysis, symbol, createdAt);
-        if (!result.verified && result.outcome === 'INSUFFICIENT_DATA') return; // try again later
+        if (!result.verified && result.outcome === 'INSUFFICIENT_DATA') {
+            // Don't watch forever: a permanently dead kline source (delisted
+            // symbol, no data yet on a fresh pair) would re-verify every 60s
+            // indefinitely. Drop once the setup's validity window has expired,
+            // or after a hard 7-day cap on observation.
+            const watchedMs = Date.now() - new Date(reg.registeredAt).getTime();
+            if (this.isExpired(analysis) || watchedMs > 7 * 24 * 60 * 60 * 1000) {
+                this.registrations.delete(messageId);
+                this.stopLoopIfEmpty();
+                console.warn(`[OutcomeAutopilot] ${messageId} dropped after insufficient data (watched ${Math.round(watchedMs / 36e5)}h).`);
+            }
+            return; // try again later
+        }
 
         const expired = this.isExpired(analysis);
 

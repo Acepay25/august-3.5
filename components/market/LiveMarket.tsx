@@ -4,7 +4,6 @@ import { CloseIcon, ActivityIcon, BellIcon, TrashIcon, LoadingIcon, CameraIcon, 
 import { Spinner } from '../ui/Spinner';
 import { Kline } from '../../types';
 import { detectChartPatterns, detectKeyZones, DetectedPattern } from '../../utils/patternDetection';
-import OKXChart from './OKXChart';
 import { analyzeWithAI, AITrendlineAnalysis, MarketInsights } from '../../services/analysis/AITrendlineService';
 import { fetchKlines } from '../../services/analysis/KlineService';
 import { CandlestickData, Time } from 'lightweight-charts';
@@ -31,8 +30,6 @@ declare global {
 
 const ASSETS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'DOGEUSDT', 'PEPEUSDT', 'TAOUSDT', 'XRPUSDT', 'BNBUSDT', 'ADAUSDT', 'AVAXUSDT'];
 const INTERVALS = ['5m', '15m', '1h', '4h'];
-const EXCHANGES = ['BINANCE', 'OKX'] as const;
-type Exchange = typeof EXCHANGES[number];
 
 // --- Data Engine ---
 
@@ -186,7 +183,6 @@ const identifyCandlePattern = (klines: Kline[]) => {
 const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze }) => {
     const [symbol, setSymbol] = useState('ETHUSDT');
     const [interval, setInterval] = useState('15m');
-    const [exchange, setExchange] = useState<Exchange>('BINANCE');
     const [alerts, setAlerts] = useState<Alert[]>([]);
     const alertsRef = useRef<Alert[]>([]);
 
@@ -247,9 +243,9 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze }
     const initWidget = () => {
         if (window.TradingView && widgetRef.current) {
             widgetRef.current.innerHTML = '';
-            const chartSymbol = exchange === 'OKX'
-                ? `OKX:${symbol}.P`
-                : `BINANCE:${symbol}`;
+            // Single data source: the price feed (WebSocket + REST polling) is
+            // Binance-only, so the chart always shows the same market.
+            const chartSymbol = `BINANCE:${symbol}`;
             tradingViewWidgetRef.current = new window.TradingView.widget({
                 autosize: true,
                 symbol: chartSymbol,
@@ -298,7 +294,7 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze }
                 widgetRef.current.innerHTML = '';
             }
         };
-    }, [isVisible, symbol, interval, exchange]);
+    }, [isVisible, symbol, interval]);
 
     // AI Analysis for chart
     useEffect(() => {
@@ -348,7 +344,7 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze }
         // Debounce to avoid rapid calls
         const timeout = setTimeout(runAIAnalysis, 500);
         return () => clearTimeout(timeout);
-    }, [isVisible, exchange, symbol, interval]);
+    }, [isVisible, symbol, interval]);
     useEffect(() => {
         if (!isVisible) {
             setConnectionState({ status: 'connecting', source: 'socket' });
@@ -739,22 +735,6 @@ ${JSON.stringify(marketData, null, 2)}
                 <div className="flex items-center justify-between px-4 py-3 gap-3">
                     {/* Selectors Group */}
                     <div className="flex items-center gap-2 flex-1 overflow-x-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
-                        {/* Exchange Toggle */}
-                        <div className="flex rounded-xl bg-zinc-800/80 p-1 shrink-0">
-                            {EXCHANGES.map((ex) => (
-                                <button
-                                    key={ex}
-                                    onClick={() => setExchange(ex)}
-                                    className={`px-4 py-2 text-xs font-bold rounded-lg transition-all ${exchange === ex
-                                        ? 'bg-gradient-to-r from-cyan-600 to-cyan-500 text-white shadow-lg shadow-cyan-900/30'
-                                        : 'text-zinc-400 hover:text-white'
-                                        }`}
-                                >
-                                    {ex}
-                                </button>
-                            ))}
-                        </div>
-
                         {/* Symbol Selector */}
                         <div className="relative shrink-0">
                             <select
@@ -808,14 +788,10 @@ ${JSON.stringify(marketData, null, 2)}
 
             {/* Chart Container */}
             <div className="flex-1 relative bg-zinc-900 overflow-hidden">
-                {exchange === 'OKX' ? (
-                    <OKXChart symbol={symbol} interval={interval} isVisible={isVisible} />
-                ) : (
-                    <>
-                        <div id="tradingview_widget" ref={widgetRef} className="w-full h-full" />
+                <div id="tradingview_widget" ref={widgetRef} className="w-full h-full" />
 
-                        {/* AI Analysis Overlay for Binance */}
-                        {exchange === 'BINANCE' && (marketBias !== 'neutral' || isAIAnalyzing || keyLevels.length > 0) && (
+                        {/* AI Analysis Overlay */}
+                        {(marketBias !== 'neutral' || isAIAnalyzing || keyLevels.length > 0) && (
                             <div className="absolute top-2 right-2 z-10 flex flex-col gap-2 max-w-[200px]">
                                 {/* AI Analyzing Indicator */}
                                 {isAIAnalyzing && (
@@ -863,8 +839,6 @@ ${JSON.stringify(marketData, null, 2)}
                                 )}
                             </div>
                         )}
-                    </>
-                )}
             </div>
 
             {/* AI Market Insights Panel */}

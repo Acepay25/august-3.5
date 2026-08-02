@@ -16,6 +16,7 @@
 
 import OpenAI from 'openai';
 import { ProviderConfig } from '../../types/provider';
+import { withRetry, ProviderName } from '../../utils/apiErrorUtils';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -83,6 +84,22 @@ function isVisionModel(modelId: string): boolean {
         || m.includes('glm-4.5v')
         || m.includes('glm-4.6v')
         || m.includes('gemini');
+}
+
+// ─── Timeout & Retry Helpers ────────────────────────────────────────────────
+
+/** Abort a request if it exceeds this wall-clock duration (per attempt). */
+const REQUEST_TIMEOUT_MS = 120_000;
+
+/**
+ * Combine the caller's AbortSignal with a strict timeout. A fresh combined
+ * signal is created per attempt so a retry gets a full timeout budget.
+ * (AbortSignal.timeout / AbortSignal.any are supported in Chromium 103+,
+ * Node 20+, and Electron 25+.)
+ */
+function withTimeoutSignal(signal?: AbortSignal): AbortSignal {
+    const timeoutSignal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+    return signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
 }
 
 // ─── Chat Completions Format ────────────────────────────────────────────────
@@ -330,16 +347,25 @@ export async function sendChatRequest(
         apiKey: config.apiKey?.trim() || 'not-needed'
     };
     try {
-        switch (effectiveConfig.apiFormat) {
-            case 'chat_completions':
-                return await chatCompletionsCall(effectiveConfig, messages, options);
-            case 'messages':
-                return await messagesCall(effectiveConfig, messages, options);
-            case 'responses':
-                return await responsesCall(effectiveConfig, messages, options);
-            default:
-                throw new Error(`Unknown API format: ${effectiveConfig.apiFormat}`);
-        }
+        // Retry transient failures (rate limit / network / 5xx) with
+        // exponential backoff; each attempt is hard-capped by REQUEST_TIMEOUT_MS.
+        return await withRetry(
+            () => {
+                switch (effectiveConfig.apiFormat) {
+                    case 'chat_completions':
+                        return chatCompletionsCall(effectiveConfig, messages, { ...options, signal: withTimeoutSignal(options?.signal) });
+                    case 'messages':
+                        return messagesCall(effectiveConfig, messages, { ...options, signal: withTimeoutSignal(options?.signal) });
+                    case 'responses':
+                        return responsesCall(effectiveConfig, messages, { ...options, signal: withTimeoutSignal(options?.signal) });
+                    default:
+                        throw new Error(`Unknown API format: ${effectiveConfig.apiFormat}`);
+                }
+            },
+            (effectiveConfig.name as ProviderName) || 'Provider',
+            3,
+            options?.signal
+        );
     } catch (error) {
         throw toFriendlyProviderError(error, effectiveConfig.name);
     }
@@ -349,6 +375,7 @@ export async function sendChatRequest(
  * Stream a chat response from any provider as an async generator.
  * Currently supports chat_completions (the dominant format). For messages/responses
  * formats, falls back to non-streaming and yields the full result once.
+ * Streaming applies the same hard timeout as non-streaming calls.
  */
 export async function* streamChatRequest(
     config: ProviderConfig,
@@ -362,7 +389,7 @@ export async function* streamChatRequest(
     };
     try {
         if (effectiveConfig.apiFormat === 'chat_completions') {
-            yield* chatCompletionsStream(effectiveConfig, messages, options);
+            yield* chatCompletionsStream(effectiveConfig, messages, { ...options, signal: withTimeoutSignal(options?.signal) });
             return;
         }
     } catch (error) {
