@@ -150,15 +150,15 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                                     <AreaChart data={signals.length ? signals : [{ timestamp: 0, rewardScore: 0 }]}>
                                         <defs>
                                             <linearGradient id="colorReward" x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset="5%" stopColor="#b5ada0" stopOpacity={0.3} />
-                                                <stop offset="95%" stopColor="#b5ada0" stopOpacity={0} />
+                                                <stop offset="5%" stopColor="#b0b0b6" stopOpacity={0.3} />
+                                                <stop offset="95%" stopColor="#b0b0b6" stopOpacity={0} />
                                             </linearGradient>
                                         </defs>
                                         <Tooltip
-                                            contentStyle={{ backgroundColor: '#1a1712', border: '1px solid #27231d', borderRadius: '12px' }}
-                                            itemStyle={{ color: '#b5ada0' }}
+                                            contentStyle={{ backgroundColor: '#161618', border: '1px solid #202024', borderRadius: '12px' }}
+                                            itemStyle={{ color: '#b0b0b6' }}
                                         />
-                                        <Area type="monotone" dataKey="rewardScore" stroke="#b5ada0" strokeWidth={2} fillOpacity={1} fill="url(#colorReward)" />
+                                        <Area type="monotone" dataKey="rewardScore" stroke="#b0b0b6" strokeWidth={2} fillOpacity={1} fill="url(#colorReward)" />
                                     </AreaChart>
                                 </ResponsiveContainer>
                             </div>
@@ -361,7 +361,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                         <div>
                             <h1 className="text-xl font-medium text-white tracking-tight">System Intelligence</h1>
                             <div className="flex items-center gap-2 text-xs text-zinc-500 font-mono mt-0.5">
-                                <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(181,173,160,0.5)]"></span>
+                                <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(176, 176, 182,0.5)]"></span>
                                 v6.0.0 Live
                             </div>
                         </div>

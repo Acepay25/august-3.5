@@ -106,7 +106,7 @@ const ConversationHistory: React.FC<ConversationHistoryProps> = ({
                 {(conversations || []).map((conv) => (
                   <li 
                     key={conv.id} 
-                    className={`group relative rounded-xl border transition-all duration-200 ${activeConversationId === conv.id ? 'bg-cyan-900/20 border-cyan-500/50 shadow-[0_0_15px_-5px_rgba(181,173,160,0.2)]' : selectedIds.includes(conv.id) ? 'bg-blue-900/20 border-blue-500/50' : 'bg-zinc-800/30 border-white/5 hover:bg-zinc-800/60 hover:border-white/10'}`}
+                    className={`group relative rounded-xl border transition-all duration-200 ${activeConversationId === conv.id ? 'bg-cyan-900/20 border-cyan-500/50 shadow-[0_0_15px_-5px_rgba(176, 176, 182,0.2)]' : selectedIds.includes(conv.id) ? 'bg-blue-900/20 border-blue-500/50' : 'bg-zinc-800/30 border-white/5 hover:bg-zinc-800/60 hover:border-white/10'}`}
                   >
                     <div className="flex justify-between items-start p-4">
                       <div className="flex-1 min-w-0 flex items-start gap-3">

@@ -32,14 +32,14 @@ interface WinRateDashboardProps {
 
 // Color constants
 const COLORS = {
-    cyan: '#b5ada0',
-    emerald: '#d8d0c2',
-    rose: '#6f685d',
-    yellow: '#938b7e',
-    orange: '#7a7368',
-    purple: '#a89f92',
-    blue: '#8a8376',
-    zinc: '#6f685d'
+    cyan: '#b0b0b6',
+    emerald: '#d2d2d6',
+    rose: '#6b6b73',
+    yellow: '#8a8a92',
+    orange: '#6b6b73',
+    purple: '#8a8a92',
+    blue: '#6b6b73',
+    zinc: '#6b6b73'
 };
 
 const FAMILY_COLORS: Record<string, string> = {
@@ -156,7 +156,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
             <div className="flex flex-col gap-2 sm:gap-3 border-b border-white/5 pb-3 sm:pb-4">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 sm:gap-3">
-                        <div className="w-1 h-6 sm:h-8 bg-cyan-500 rounded-full shadow-[0_0_10px_#b5ada0]"></div>
+                        <div className="w-1 h-6 sm:h-8 bg-cyan-500 rounded-full shadow-[0_0_10px_#b0b0b6]"></div>
                         <h2 className="text-base sm:text-xl font-black text-white uppercase tracking-wide">Analytics</h2>
                     </div>
                     <span className="text-[10px] text-zinc-500 font-mono">
@@ -256,8 +256,8 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                                         <stop offset="95%" stopColor={COLORS.cyan} stopOpacity={0} />
                                     </linearGradient>
                                 </defs>
-                                <XAxis dataKey="date" tick={{ fontSize: 9, fill: '#6f685d' }} axisLine={false} tickLine={false} />
-                                <YAxis domain={[0, 100]} tick={{ fontSize: 9, fill: '#6f685d' }} axisLine={false} tickLine={false} width={25} />
+                                <XAxis dataKey="date" tick={{ fontSize: 9, fill: '#6b6b73' }} axisLine={false} tickLine={false} />
+                                <YAxis domain={[0, 100]} tick={{ fontSize: 9, fill: '#6b6b73' }} axisLine={false} tickLine={false} width={25} />
                                 <Tooltip content={<CustomTooltip />} />
                                 <Area
                                     type="monotone"
@@ -283,8 +283,8 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                     <div className="h-40">
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={confidenceChartData} layout="vertical">
-                                <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 9, fill: '#6f685d' }} axisLine={false} tickLine={false} />
-                                <YAxis type="category" dataKey="level" tick={{ fontSize: 11, fill: '#938b7e', fontWeight: 'bold' }} axisLine={false} tickLine={false} width={60} />
+                                <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 9, fill: '#6b6b73' }} axisLine={false} tickLine={false} />
+                                <YAxis type="category" dataKey="level" tick={{ fontSize: 11, fill: '#8a8a92', fontWeight: 'bold' }} axisLine={false} tickLine={false} width={60} />
                                 <Tooltip content={<CustomTooltip />} />
                                 <Bar dataKey="winRate" radius={[0, 6, 6, 0]} barSize={20}>
                                     {confidenceChartData.map((entry, index) => (
