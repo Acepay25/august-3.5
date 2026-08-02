@@ -15,6 +15,7 @@ import { Message, GroundingChunk, TradeAnalysis, GlobalMemory, AccuracySubMode, 
 import { extractAndParseJson } from '../../utils/jsonUtils';
 import { sanitizeAIResponse, sanitizeJSONString } from '../../utils/sanitizers';
 import { sanitizeTradeAnalysis, truncateTextToTokens } from '../../utils/analysisUtils';
+import { parseGlobalMemory, parseStrategySearchResults } from '../../schemas/learning';
 import {
     MASTER_ANALYSIS_PROMPT, DEVILS_ADVOCATE_PROMPT, INVALIDATION_THESIS_PROMPT, CORRELATION_AWARENESS_PROMPT,
     LENS_MODE_BASE_PROMPT, COMPACT_ANALYSIS_PROMPT, ACCURACY_MODE_PROMPT, PURE_AI_MODE_PROMPT,
@@ -375,9 +376,27 @@ export async function analyzeTradingView(
             },
             "detectedPatternFamily": "Family A | Family B | Family C | Family Omega",
             "detectedPatterns": [{ "name": "...", "timeframe": "...", "type": "Bullish | Bearish | Neutral", "confidence": "...", "description": "..." }],
-            "keyLevels": { "support": ["..."], "resistance": ["..."] }
+            "keyLevels": { "support": ["..."], "resistance": ["..."] },
+            "evidence": [
+                { "claim": "Trend is bullish on 1h", "sources": ["Binance 1h OHLCV", "EMA 20/50 cross"], "state": "observed" },
+                { "claim": "Volume confirms breakout", "sources": ["volume bars"], "state": "partial", "note": "Only 2h of volume data available" }
+            ],
+            "invalidationCriteria": [
+                { "level": "94,500", "condition": "4H close below this support", "category": "price", "note": "Bullish thesis dead — exit or flip neutral" },
+                { "level": "6h from analysis", "condition": "No breakout above entry zone before expiry", "category": "time" }
+            ]
         }
       }
+
+      **EVIDENCE DISCIPLINE (MANDATORY):** The "evidence" array must back your 2-4 most important conclusions. For each claim:
+      - "sources": the concrete data you used (indicator names, timeframe, OCR/chart references, injected market data).
+      - "state": "observed" = directly verified in the data; "partial" = some supporting data; "unobserved" = inference without direct data.
+      - Never fabricate data to fill gaps — mark the claim "unobserved" and explain in "note" instead.
+
+      **INVALIDATION CONTRACT (MANDATORY):** The "invalidationCriteria" array must state exactly what kills this setup — 2-4 criteria:
+      - At least one "price" criterion with a CONCRETE level (number, not prose) that breaks the thesis.
+      - Add "time" (validity expiry), "structure" (market structure shift), or "signal" (indicator/counter-signal) criteria where relevant.
+      - "condition" = the observable trigger; "note" = the consequence. Never leave this array empty — a setup with no invalidation is not a setup.
     `;
     }
 
@@ -442,7 +461,7 @@ export async function analyzeTradingView(
     try {
         const responseJson = extractAndParseJson(responseText);
         const thoughtProcess = sanitizeAIResponse(responseJson.thoughtProcess || "No thought process provided.");
-        let analysis: TradeAnalysis = sanitizeTradeAnalysis(responseJson.analysis);
+        const analysis: TradeAnalysis = sanitizeTradeAnalysis(responseJson.analysis);
         if (!analysis) throw new Error("AI response JSON did not contain the 'analysis' object.");
 
         analysis.activeStrategies = Array.isArray(analysis.activeStrategies) ? analysis.activeStrategies : [];
@@ -458,7 +477,7 @@ export async function analyzeTradingView(
         return { analysis, thoughtProcess, sources: [] };
     } catch (error) {
         console.error(`${config.name} analysis JSON parsing failed:`, error, "Response:", responseText);
-        throw new Error("Failed to parse the trading analysis from the AI response.");
+        throw new Error("Failed to parse the trading analysis from the AI response.", { cause: error });
     }
 }
 
@@ -730,11 +749,14 @@ export async function getQuickResponse(
     signal?: AbortSignal
 ): Promise<string> {
     const messages: ChatMessage[] = (history || []).map(m => ({
-        role: m.role === MessageRole.AI ? 'assistant' : 'user',
+        role: m.role === MessageRole.AI ? 'assistant' : m.role === MessageRole.SYSTEM ? 'system' : 'user',
         content: m.text,
     }));
     messages.unshift({ role: 'system', content: systemInstruction || 'You are a helpful and concise AI assistant specializing in futures trading concepts. Answer user questions clearly.' });
-    messages.push({ role: 'user', content: prompt });
+    // Callers pass the current user message as part of `history`; avoid sending the same prompt twice.
+    if (messages[messages.length - 1]?.content !== prompt) {
+        messages.push({ role: 'user', content: prompt });
+    }
 
     const result = await sendChatRequest(config, messages, { maxTokens: 1024, signal });
     return sanitizeAIResponse(result || "I am sorry, I could not generate a response.");
@@ -898,10 +920,8 @@ export async function searchStrategies(
     const result = await sendChatRequest(config, [{ role: 'user', content: prompt }], { jsonMode: true, signal });
     if (!result) return [];
     try {
-        const parsed = JSON.parse(result);
-        const results = Array.isArray(parsed) ? parsed : (parsed.results || parsed.strategies || []);
-        return results.filter((r: any) =>
-            r.name && typeof r.name === 'string' &&
+        const parsed = extractAndParseJson(result);
+        return parseStrategySearchResults(parsed).filter((r) =>
             activeFrameworks.some(fw => fw.toLowerCase() === r.name.toLowerCase())
         );
     } catch (e) {
@@ -1110,16 +1130,20 @@ Generate the updated Global Memory JSON object.
 
     const result = await sendChatRequest(config, [{ role: 'user', content: prompt }], { jsonMode: true, maxTokens: 2048, signal });
     try {
-        return JSON.parse(result || "{}");
+        const parsed = parseGlobalMemory(JSON.parse(result || "{}"));
+        if (parsed) return parsed;
+        console.error(`${config.name} updateGlobalMemory produced invalid memory shape:`, result);
     } catch {
         console.error(`${config.name} updateGlobalMemory JSON parse failed:`, result);
-        return currentMemory || {
-            totalTradesAnalyzed: 0,
-            familyPerformance: {},
-            aiPatternMemory: [],
-            userPreferences: { leverageDefault: 10, favoriteAssets: [], preferredSetup: '' },
-            globalCorrections: [],
-            lastUpdated: new Date().toISOString()
-        };
     }
+    return currentMemory || {
+        totalTradesAnalyzed: 0,
+        familyPerformance: {},
+        aiPatternMemory: [],
+        // Default leverage matches the app-wide default (Conversation.leverage,
+        // useTradeLogging, and the zod GlobalMemorySchema default) — was 10.
+        userPreferences: { leverageDefault: 100, favoriteAssets: [], preferredSetup: '' },
+        globalCorrections: [],
+        lastUpdated: new Date().toISOString()
+    };
 }

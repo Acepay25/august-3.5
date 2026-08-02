@@ -375,7 +375,7 @@ export const fetchOHLCVFromTime = async (
     console.log(`[MarketDataService] Fetching historical klines for ${normalizedSymbol} from ${new Date(startTime).toISOString()} to ${new Date(actualEndTime).toISOString()}`);
 
     try {
-        let url = `/api/v3/klines?symbol=${normalizedSymbol}&interval=${timeframe}&startTime=${startTime}&endTime=${actualEndTime}&limit=1000`;
+        const url = `/api/v3/klines?symbol=${normalizedSymbol}&interval=${timeframe}&startTime=${startTime}&endTime=${actualEndTime}&limit=1000`;
         const response = await robustBinanceFetch(url);
         const data = await response.json();
 

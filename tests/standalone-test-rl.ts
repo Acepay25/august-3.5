@@ -9,7 +9,7 @@ if (typeof localStorage === 'undefined' || localStorage === null) {
     (global as any).localStorage = {
         _data: {},
         setItem: function (id: string, val: string) { return this._data[id] = String(val); },
-        getItem: function (id: string) { return this._data.hasOwnProperty(id) ? this._data[id] : null; },
+        getItem: function (id: string) { return Object.prototype.hasOwnProperty.call(this._data, id) ? this._data[id] : null; },
         removeItem: function (id: string) { return delete this._data[id]; },
         clear: function () { return this._data = {}; }
     };
@@ -163,7 +163,7 @@ async function testRLSignals() {
     console.log('\n--- Test Case 1: WIN + High Confidence ---');
     await ReinforcementSignalService.recordSignal('t1', testProvider, 'WIN', { direction: 'Long', confidence: 'High', entryPrice: 0 });
     let signals = await ReinforcementSignalService.getSignals(testProvider);
-    let s1 = signals.find(s => s.tradeId === 't1');
+    const s1 = signals.find(s => s.tradeId === 't1');
 
     if (s1?.rewardScore === 1.0) console.log('✅ REWARD CALCULATION CORRECT (1.0)');
     else console.error('❌ REWARD CALCULATION FAILED: ' + s1?.rewardScore);
@@ -172,7 +172,7 @@ async function testRLSignals() {
     console.log('\n--- Test Case 2: LOSS + High Confidence ---');
     await ReinforcementSignalService.recordSignal('t2', testProvider, 'LOSS', { direction: 'Long', confidence: 'High', entryPrice: 0 });
     signals = await ReinforcementSignalService.getSignals(testProvider);
-    let s2 = signals.find(s => s.tradeId === 't2');
+    const s2 = signals.find(s => s.tradeId === 't2');
 
     if (s2?.rewardScore === -1.0) console.log('✅ REWARD CALCULATION CORRECT (-1.0)');
     else console.error('❌ REWARD CALCULATION FAILED: ' + s2?.rewardScore);
@@ -181,7 +181,7 @@ async function testRLSignals() {
     console.log('\n--- Test Case 3: LOSS + Low Confidence ---');
     await ReinforcementSignalService.recordSignal('t3', testProvider, 'LOSS', { direction: 'Long', confidence: 'Low', entryPrice: 0 });
     signals = await ReinforcementSignalService.getSignals(testProvider);
-    let s3 = signals.find(s => s.tradeId === 't3');
+    const s3 = signals.find(s => s.tradeId === 't3');
 
     if (s3?.rewardScore === -0.2) console.log('✅ REWARD CALCULATION CORRECT (-0.2)');
     else console.error('❌ REWARD CALCULATION FAILED: ' + s3?.rewardScore);

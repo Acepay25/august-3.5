@@ -2,18 +2,14 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useTypingEffect } from '../../hooks/useTypingEffect';
 import { CloseIcon, LoadingIcon, BotIcon } from '../shared/Icons';
 import { LiveThoughts } from '../../types';
+import { ProviderConfig } from '../../types/provider';
 
 interface LiveStreamViewProps {
   isVisible: boolean;
   onClose: () => void;
   thoughts: LiveThoughts;
-  geminiModelName?: string;
-  deepseekModelName?: string;
-  zhipuModelName?: string;
-  groqModelName?: string;
-  groqNewModelName?: string;
-  groqAlt2ModelName?: string;
-  openrouterModelName?: string;
+  /** Ready provider configs — one panel per participating provider. */
+  providers: ProviderConfig[];
   onAllTypingComplete: () => void;
   /** 'analysis' for live analysis, 'postmortem' for post-trade forensics */
   variant: 'analysis' | 'postmortem';
@@ -37,6 +33,14 @@ const VARIANT_CONFIG = {
     loadingStreaming: 'Rendering Report...',
   },
 } as const;
+
+const COLOR_PALETTE = [
+  { bg: 'bg-blue-950/10', border: 'border-blue-500/20', text: 'text-blue-100/90', title: 'text-blue-400', accent: 'bg-blue-500' },
+  { bg: 'bg-purple-950/10', border: 'border-purple-500/20', text: 'text-purple-100/90', title: 'text-purple-400', accent: 'bg-purple-500' },
+  { bg: 'bg-emerald-950/10', border: 'border-emerald-500/20', text: 'text-emerald-100/90', title: 'text-emerald-400', accent: 'bg-emerald-500' },
+  { bg: 'bg-amber-950/10', border: 'border-amber-500/20', text: 'text-amber-100/90', title: 'text-amber-400', accent: 'bg-amber-500' },
+  { bg: 'bg-cyan-950/10', border: 'border-cyan-500/20', text: 'text-cyan-100/90', title: 'text-cyan-400', accent: 'bg-cyan-500' },
+];
 
 const AnalystPanel: React.FC<{
   title: string;
@@ -97,39 +101,23 @@ const AnalystPanel: React.FC<{
   );
 };
 
-const ANALYST_DEFS = [
-  { key: 'gemini', title: 'Gemini', colors: { bg: 'bg-blue-950/10', border: 'border-blue-500/20', text: 'text-blue-100/90', title: 'text-blue-400', accent: 'bg-blue-500' } },
-  { key: 'deepseek', title: 'DeepSeek', colors: { bg: 'bg-emerald-950/10', border: 'border-emerald-500/20', text: 'text-emerald-100/90', title: 'text-emerald-400', accent: 'bg-emerald-500' } },
-  { key: 'zhipu', title: 'Zhipu AI', colors: { bg: 'bg-orange-950/10', border: 'border-orange-500/20', text: 'text-orange-100/90', title: 'text-orange-400', accent: 'bg-orange-500' } },
-  { key: 'groq', title: 'Groq', colors: { bg: 'bg-yellow-950/10', border: 'border-yellow-500/20', text: 'text-yellow-100/90', title: 'text-yellow-400', accent: 'bg-yellow-500' } },
-  { key: 'groqNew', title: 'Groq (Alt)', colors: { bg: 'bg-yellow-900/10', border: 'border-yellow-300/20', text: 'text-yellow-100/90', title: 'text-yellow-200', accent: 'bg-yellow-300' } },
-  { key: 'groqAlt2', title: 'Groq (Alt 2)', colors: { bg: 'bg-amber-950/10', border: 'border-amber-500/20', text: 'text-amber-100/90', title: 'text-amber-400', accent: 'bg-amber-500' } },
-  { key: 'openrouter', title: 'OpenRouter', colors: { bg: 'bg-emerald-950/10', border: 'border-emerald-500/20', text: 'text-emerald-100/90', title: 'text-emerald-400', accent: 'bg-emerald-500' } },
-] as const;
-
 const LiveStreamView: React.FC<LiveStreamViewProps> = ({
-  isVisible, onClose, thoughts,
-  geminiModelName, deepseekModelName, zhipuModelName,
-  groqModelName, groqNewModelName, groqAlt2ModelName, openrouterModelName,
+  isVisible, onClose, thoughts, providers,
   onAllTypingComplete, variant,
 }) => {
   const [completedTyping, setCompletedTyping] = useState<Set<string>>(new Set());
   const config = VARIANT_CONFIG[variant];
 
-  const modelNames: Record<string, string | undefined> = useMemo(() => ({
-    gemini: geminiModelName,
-    deepseek: deepseekModelName,
-    zhipu: zhipuModelName,
-    groq: groqModelName,
-    groqNew: groqNewModelName,
-    groqAlt2: groqAlt2ModelName,
-    openrouter: openrouterModelName,
-  }), [geminiModelName, deepseekModelName, zhipuModelName, groqModelName, groqNewModelName, groqAlt2ModelName, openrouterModelName]);
+  const activePanels = useMemo(() => (
+    providers.filter(p => p.isEnabled && p.apiKey.trim().length > 0).map((p, idx) => ({
+      key: p.id,
+      title: p.name,
+      modelName: p.selectedModel,
+      colors: COLOR_PALETTE[idx % COLOR_PALETTE.length],
+    }))
+  ), [providers]);
 
-  const activeAnalysts = useMemo(
-    () => ANALYST_DEFS.filter(a => modelNames[a.key]).map(a => a.key),
-    [modelNames]
-  );
+  const activeAnalysts = useMemo(() => activePanels.map(p => p.key), [activePanels]);
 
   useEffect(() => {
     if (isVisible) {
@@ -155,7 +143,7 @@ const LiveStreamView: React.FC<LiveStreamViewProps> = ({
 
   if (!isVisible) return null;
 
-  const count = activeAnalysts.length;
+  const count = activePanels.length;
   const gridCols = count === 1 ? 'grid-cols-1' : count === 2 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
 
   return (
@@ -175,22 +163,18 @@ const LiveStreamView: React.FC<LiveStreamViewProps> = ({
         </header>
 
         <main className={`flex-1 grid ${gridCols} gap-4 sm:gap-6 min-h-0`}>
-          {ANALYST_DEFS.map(def => {
-            const modelName = modelNames[def.key];
-            if (!modelName) return null;
-            return (
-              <AnalystPanel
-                key={def.key}
-                title={def.title}
-                modelName={modelName}
-                text={thoughts[def.key as keyof LiveThoughts]}
-                colorClasses={def.colors}
-                loadingIdle={config.loadingIdle}
-                loadingStreaming={config.loadingStreaming}
-                onTypingComplete={() => handleTypingComplete(def.key)}
-              />
-            );
-          })}
+          {activePanels.map(panel => (
+            <AnalystPanel
+              key={panel.key}
+              title={panel.title}
+              modelName={panel.modelName}
+              text={thoughts[panel.key as keyof LiveThoughts] || null}
+              colorClasses={panel.colors}
+              loadingIdle={config.loadingIdle}
+              loadingStreaming={config.loadingStreaming}
+              onTypingComplete={() => handleTypingComplete(panel.key)}
+            />
+          ))}
         </main>
       </div>
     </div>

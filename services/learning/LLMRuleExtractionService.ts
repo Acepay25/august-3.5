@@ -8,6 +8,7 @@
 import { getQuickResponse } from '../providers/GenericProviderService';
 import { ProviderConfig } from '../../types/provider';
 import { extractAndParseJson } from '../../utils/jsonUtils';
+import { parseExtractedRules } from '../../schemas/learning';
 
 export interface ExtractedRule {
     condition: string;
@@ -83,20 +84,8 @@ export const extractRulesWithLLM = async (
         const responseText = await getLLMResponse(config, prompt);
         const parsed = extractAndParseJson(responseText);
 
-        if (Array.isArray(parsed)) {
-            // Validate structure
-            return parsed.filter((r: any) =>
-                r.condition && typeof r.condition === 'string' &&
-                r.action && typeof r.action === 'string'
-            ).map((r: any) => ({
-                condition: r.condition,
-                action: r.action,
-                category: r.category || 'general',
-                confidence: typeof r.confidence === 'number' ? r.confidence : 80
-            }));
-        }
-
-        return [];
+        // Schema-validated: malformed items are dropped, category/confidence defaulted.
+        return parseExtractedRules(parsed);
     } catch (error) {
         console.error('[LLMRuleExtraction] Failed to extract rules:', error);
         return [];

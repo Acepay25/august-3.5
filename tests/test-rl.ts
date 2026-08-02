@@ -9,7 +9,7 @@ if (typeof localStorage === 'undefined' || localStorage === null) {
     (global as any).localStorage = {
         _data: {},
         setItem: function (id: string, val: string) { return this._data[id] = String(val); },
-        getItem: function (id: string) { return this._data.hasOwnProperty(id) ? this._data[id] : null; },
+        getItem: function (id: string) { return Object.prototype.hasOwnProperty.call(this._data, id) ? this._data[id] : null; },
         removeItem: function (id: string) { return delete this._data[id]; },
         clear: function () { return this._data = {}; }
     };
@@ -49,7 +49,7 @@ async function testRLSignals() {
     );
 
     let signals = await ReinforcementSignalService.getSignals(testProvider);
-    let s1 = signals.find(s => s.tradeId === 'test-trade-1');
+    const s1 = signals.find(s => s.tradeId === 'test-trade-1');
     console.log(`Signal Recorded: ${s1 ? '✅' : '❌'}`);
     console.log(`Expected Reward: 1.0, Actual: ${s1?.rewardScore}`);
 
@@ -70,7 +70,7 @@ async function testRLSignals() {
     );
 
     signals = await ReinforcementSignalService.getSignals(testProvider);
-    let s2 = signals.find(s => s.tradeId === 'test-trade-2');
+    const s2 = signals.find(s => s.tradeId === 'test-trade-2');
     console.log(`Expected Reward: -1.0, Actual: ${s2?.rewardScore}`);
 
     if (s2?.rewardScore === -1.0) console.log('✅ REWARD CALCULATION CORRECT');
@@ -90,7 +90,7 @@ async function testRLSignals() {
     );
 
     signals = await ReinforcementSignalService.getSignals(testProvider);
-    let s3 = signals.find(s => s.tradeId === 'test-trade-3');
+    const s3 = signals.find(s => s.tradeId === 'test-trade-3');
     console.log(`Expected Reward: -0.2, Actual: ${s3?.rewardScore}`);
 
     if (s3?.rewardScore === -0.2) console.log('✅ REWARD CALCULATION CORRECT');

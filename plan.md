@@ -350,3 +350,41 @@ Week 6+: Phase 3.6–3.7 (token estimation, caching)
          Phase 5.2/5.3/5.5 (bundle, Groq, README)
 Ongoing: Phase 4 (testing, linting)
 ```
+
+---
+
+## Appendix A — Dynamic provider migration (completed 2026-08-01)
+
+Phase 3.3/3.5 is done: every hardcoded provider dependency now routes through
+`ProviderConfigService` + `utils/providerUtils.ts`.
+
+- Defaults (summarization, moderator, vision, memory, accuracy mode) resolve to the first ready provider instead of `AIProvider.GEMINI`/`ACCURACY_MODE_DEFAULTS`.
+- Journal/PerformanceReview summarization UI, debate view, live stream panels, model-performance weights/attribution, lens role lookup and trendline analysis all key off dynamic provider ids (`modelsUsed`, `byProvider`, `providerNameToId`).
+- Legacy per-provider fields (`geminiModelUsed`, weight keys, etc.) remain as read-only fallbacks for historical rows; new data writes `modelsUsed`.
+- `OCR_MODELS`/`modelIdToName` constants removed; vision + display maps are built from configured providers.
+- Evidence-bound claims (Appendix B item 1) implemented: `TradeAnalysis.evidence`, prompt discipline, sanitizer validation, provenance badges in `AnalysisResult`.
+- ESLint at 0 errors (warnings remain), vitest 40/40, `tsc --noEmit` clean.
+
+## Appendix B — better-harness feature recommendations
+
+Source: https://github.com/QoderAI/better-harness (QoderAI, MIT, v0.4.0).
+It is a ~10-day-old methodology tool for coding-agent workflows — no reusable
+React code; the value is its contracts. Borrow methodology, not components.
+
+Ranked shortlist for August 3.5:
+
+1. **Evidence-bound claim schema** — DONE (see Appendix A). (S)
+2. **Isolated-envelope ensemble protocol** — each analyst lens receives only its
+   scoped data envelope (its timeframe/indicators/OCR crops) with no cross-talk;
+   a lead agent unifies with a visible merge rationale. Reduces anchoring bias
+   in debates. Touches the debate orchestrator + provider dispatch; watch token
+   costs from parallelism. (M)
+3. **Recommendation contracts with invalidation checks** — every conclusion emits
+   scoped action + risk boundary + falsification criteria ("thesis wrong if price
+   crosses X"); becomes first-class journal fields feeding calibration. (S)
+4. **Self-contained report trio (HTML + MD + JSON)** — one-file shareable analysis
+   reports with a JSON sidecar for programmatic reuse; offline via existing
+   Electron/Capacitor file-save paths. (M)
+5. **Longitudinal analysis-quality history** — track evidence coverage and
+   confidence-vs-outcome per analysis over time, framed honestly as "recorded
+   trends, not causal proof". Needs item 1's schema persisted per journal entry. (M)

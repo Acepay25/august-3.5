@@ -366,7 +366,8 @@ function inferRegime(indicators: GateInput['indicators']): 'trending' | 'ranging
     // Check for compression (low ATR + tight Bollinger)
     if (ind1h.atr && ind1h.bollingerBands) {
         const bbWidth = ind1h.bollingerBands.bandwidth;
-        if (bbWidth && bbWidth < 0.02) return 'compression';
+        // bandwidth is percent-scaled (e.g., 5 = 5%), so a <2% band is compression.
+        if (bbWidth && bbWidth < 2) return 'compression';
     }
 
     // Check for trending (strong RSI + EMA alignment)

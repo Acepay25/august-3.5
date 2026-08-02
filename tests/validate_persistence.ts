@@ -19,18 +19,20 @@ const mockFilesystem = {
 };
 
 // Intercept require calls to inject mock
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- need the runtime Module builtin to patch require
 const Module = require('module');
 const originalRequire = Module.prototype.require;
-Module.prototype.require = function (path: string) {
+Module.prototype.require = function (path: string, ...rest: unknown[]) {
     if (path === '@capacitor/filesystem') {
         return mockFilesystem;
     }
-    return originalRequire.apply(this, arguments);
+    return originalRequire.apply(this, [path, ...rest]);
 };
 
 // Import dependencies
 // We use require to ensure the mock is picked up
-const GlobalLearningService = require('../services/GlobalLearningService').default;
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- require (not import) so the mock above is installed before this module loads
+const GlobalLearningService = require('../services/learning/GlobalLearningService').default;
 // Import types for type checking (only used as values if needed, otherwise just for structure)
 
 async function validatePersistence() {

@@ -79,7 +79,8 @@ const BIAS_STRENGTH = 0.001;          // How much trend bias affects drift
  * Generate a random number from standard normal distribution (Box-Muller transform)
  */
 const randomNormal = (): number => {
-    const u1 = Math.random();
+    // Guard against Math.random() === 0 → log(0) = -Infinity → infinite paths.
+    const u1 = Math.max(Math.random(), 1e-300);
     const u2 = Math.random();
     return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
 };
@@ -165,7 +166,7 @@ const evaluatePath = (
     stepsToOutcome: number;
 } => {
     let maxDrawdown = 0;
-    let currentDrawdown = 0;
+    let currentDrawdown: number;
     let outcome: 'TP1' | 'TP2' | 'TP3' | 'SL' | 'TIMEOUT' = 'TIMEOUT';
     let stepsToOutcome = path.length - 1;
     let exitPrice = path[path.length - 1];

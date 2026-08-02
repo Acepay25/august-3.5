@@ -212,7 +212,7 @@ export const validateSwingTrade = (
     analysis: TradeAnalysis
 ): ScalpValidationResult => {
     const warnings: string[] = [];
-    let shouldDowngrade = false;
+    const shouldDowngrade = false;
 
     // Parse prices
     const entryPrice = parseFloat(

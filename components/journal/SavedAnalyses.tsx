@@ -3,7 +3,6 @@ import React, { useState, useEffect } from 'react';
 import { Bookmark } from 'lucide-react';
 import { SavedAnalysis } from '../../types';
 import { CloseIcon, ChevronDownIcon, TrashIcon } from '../shared/Icons';
-import { modelIdToName, ocrModelIdToName } from '../../constants/models';
 import { EmptyState } from '../ui/EmptyState';
 
 interface SavedAnalysesProps {
@@ -25,7 +24,7 @@ const SavedAnalysisRow: React.FC<{
   modelIdToName: Record<string, string>;
   ocrModelIdToName: Record<string, string>;
 }> = ({ item, onToggle, isExpanded, isSelected, onSelect, modelIdToName, ocrModelIdToName }) => {
-  const { analysis, timestamp, userPrompt, geminiModelUsed, deepseekModelUsed, zhipuModelUsed, ocrModelUsed, moderatorProvider, moderatorModel } = item;
+  const { analysis, timestamp, userPrompt, modelsUsed, geminiModelUsed, deepseekModelUsed, zhipuModelUsed, ocrModelUsed, moderatorProvider, moderatorModel } = item;
   const { direction, entryPoints, stopLoss, takeProfit, activeStrategies, coinName } = analysis;
   const safeDirection = direction || 'Neutral';
 
@@ -79,9 +78,17 @@ const SavedAnalysisRow: React.FC<{
               <p className="italic text-zinc-300">"{userPrompt}"</p>
             </div>
             <div className="md:col-span-2 mt-2 pt-3 border-t border-white/5 text-xs text-zinc-500 flex flex-col sm:flex-row sm:items-center sm:flex-wrap sm:gap-x-4 sm:gap-y-1">
-              {geminiModelUsed && <span><strong className="font-semibold">Gemini Analyst:</strong> {modelIdToName[geminiModelUsed] || geminiModelUsed}</span>}
-              {deepseekModelUsed && <span className="mt-1 sm:mt-0"><strong className="font-semibold">DeepSeek Analyst:</strong> {modelIdToName[deepseekModelUsed] || deepseekModelUsed}</span>}
-              {zhipuModelUsed && <span className="mt-1 sm:mt-0"><strong className="font-semibold">Zhipu Analyst:</strong> {modelIdToName[zhipuModelUsed] || zhipuModelUsed}</span>}
+              {modelsUsed && Object.keys(modelsUsed).length > 0 ? (
+                Object.entries(modelsUsed).map(([providerId, modelId]) => (
+                  <span key={providerId} className="mt-1 sm:mt-0"><strong className="font-semibold">{providerId}:</strong> {modelIdToName[modelId] || modelId}</span>
+                ))
+              ) : (
+                <>
+                  {geminiModelUsed && <span><strong className="font-semibold">Gemini Analyst:</strong> {modelIdToName[geminiModelUsed] || geminiModelUsed}</span>}
+                  {deepseekModelUsed && <span className="mt-1 sm:mt-0"><strong className="font-semibold">DeepSeek Analyst:</strong> {modelIdToName[deepseekModelUsed] || deepseekModelUsed}</span>}
+                  {zhipuModelUsed && <span className="mt-1 sm:mt-0"><strong className="font-semibold">Zhipu Analyst:</strong> {modelIdToName[zhipuModelUsed] || zhipuModelUsed}</span>}
+                </>
+              )}
               {ocrModelUsed && <span className="mt-1 sm:mt-0"><strong className="font-semibold">Vision:</strong> {ocrModelIdToName[ocrModelUsed] || ocrModelUsed}</span>}
               {moderatorModel && (
                 <span className="mt-1 sm:mt-0">

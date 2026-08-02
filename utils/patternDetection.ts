@@ -73,8 +73,10 @@ export const detectKeyZones = (klines: Kline[]): KeyZones => {
     const supportRaw = lows.map(l => l.price).filter(p => p <= currentPrice * 1.01); // Relevant support
 
     return {
-        resistance: clusterLevels(resistanceRaw).slice(-5), // Top 5
-        support: clusterLevels(supportRaw).slice(-5) // Top 5
+        // Resistance cluster values are ascending; slice(0,5) = nearest 5 above price.
+        // (slice(-5) would select the 5 farthest levels.)
+        resistance: clusterLevels(resistanceRaw).slice(0, 5), // Top 5 nearest
+        support: clusterLevels(supportRaw).slice(-5) // Top 5 nearest (ascending -> last 5 are closest)
     };
 };
 

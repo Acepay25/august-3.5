@@ -82,7 +82,7 @@ const StrategySearch: React.FC<StrategySearchProps> = ({
     } catch (err: any) {
         if (isQuotaError(err)) {
             onQuotaExceeded(providerConfig.selectedModel);
-            setError("Quota exceeded for the selected Gemini model.");
+            setError(`Quota exceeded for the selected ${providerConfig.name} model.`);
         } else {
             setError(err instanceof Error ? err.message : 'An unknown error occurred.');
         }
@@ -128,7 +128,7 @@ const StrategySearch: React.FC<StrategySearchProps> = ({
     } catch (err: any) {
         if (isQuotaError(err)) {
             onQuotaExceeded(providerConfig.selectedModel);
-            setFrameworkDescription("Quota exceeded for the selected Gemini model. Please select a different model from the main view and try again.");
+            setFrameworkDescription(`Quota exceeded for the selected ${providerConfig.name} model. Please select a different model from the main view and try again.`);
         } else if (err.status === 429 || (err.message && err.message.includes('Too Many Requests'))) {
             setFrameworkDescription("Rate limit exceeded. Please try again later.");
         } else {

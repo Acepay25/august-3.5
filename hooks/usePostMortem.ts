@@ -11,7 +11,7 @@ import { jobQueue, JobType } from '../services/infrastructure/JobQueueService';
 import { MAX_TRADE_SUMMARIES } from './useTradeLogging';
 import { saveThinkingBatch, generateThinkingId } from '../services/infrastructure/ThinkingStoreService';
 import { ProviderConfig } from '../types/provider';
-import { conductPostMortem, summarizeTrade, getQuickResponse } from '../services/providers/GenericAnalysisService';
+import { conductPostMortem, summarizeTrade } from '../services/providers/GenericAnalysisService';
 
 export interface UsePostMortemParams {
     // Conversation state
@@ -148,8 +148,10 @@ export const usePostMortem = (params: UsePostMortemParams) => {
                 .filter(config => config.isEnabled && config.apiKey)
                 .map(config => ({ config, name: config.name, model: config.selectedModel }));
 
-            // Guard: Accuracy Mode has no fallback provider
-            if (isAccuracyModeEnabled && enabledProviders.length === 0) {
+            // Guard: no providers → nothing can run (accurate for ALL modes,
+            // not just Accuracy Mode — previously Standard Mode underflowed
+            // `results[0]` when `enabledProviders` was empty).
+            if (enabledProviders.length === 0) {
                 updateMessages(prev => [
                     ...prev.filter(m => m.id !== postMortemMessageId),
                     { id: `err-${Date.now()}`, role: MessageRole.SYSTEM, createdAt: new Date().toISOString(), text: "Post-Mortem analysis requires at least one enabled AI provider. Please enable a provider and try again." }
@@ -277,7 +279,7 @@ Please investigate this discrepancy in your analysis.
                 }
 
                 let fullDebateText = "";
-                const turnRegex = /(?:^|\n)\s*(?:[\*_~]*)(Gemini|DeepSeek|Zhipu|Groq|Groq \(Alt\)|Groq \(Alt 2\)|OpenRouter|Claude[^\n:]*|GPT[^\n:]*|Grok[^\n:]*|O1|O3|O4|Puter|Moderator)[^\n:]*?(?:[\*_~]*)\s*:\s*([\s\S]*?)(?=(?:^|\n)\s*(?:[\*_~]*)(?:Gemini|DeepSeek|Zhipu|Groq|Groq \(Alt\)|Groq \(Alt 2\)|OpenRouter|Claude[^\n:]*|GPT[^\n:]*|Grok[^\n:]*|O1|O3|O4|Puter|Moderator)[^\n:]*?(?:[\*_~]*)\s*:|$)/gi;
+                const turnRegex = /(?:^|\n)\s*(?:[*_~]*)(Gemini|DeepSeek|Zhipu|Groq|Groq \(Alt\)|Groq \(Alt 2\)|OpenRouter|Claude[^\n:]*|GPT[^\n:]*|Grok[^\n:]*|O1|O3|O4|Puter|Moderator)[^\n:]*?(?:[*_~]*)\s*:\s*([\s\S]*?)(?=(?:^|\n)\s*(?:[*_~]*)(?:Gemini|DeepSeek|Zhipu|Groq|Groq \(Alt\)|Groq \(Alt 2\)|OpenRouter|Claude[^\n:]*|GPT[^\n:]*|Grok[^\n:]*|O1|O3|O4|Puter|Moderator)[^\n:]*?(?:[*_~]*)\s*:|$)/gi;
 
                 for await (const chunk of debateStream) {
                     // P0-2: abort the stream if the user switched accounts
@@ -321,10 +323,10 @@ Please investigate this discrepancy in your analysis.
                     const reportEnd = fullDebateText.match(/<\/FINAL_REPORT_END>/i);
                     finalPostMortemReport = fullDebateText.slice(reportStart.index! + reportStart[0].length, reportEnd ? reportEnd.index : undefined).trim();
                 } else if (debateEnd) {
-                    let contentAfterDebate = fullDebateText.slice(debateEnd.index! + debateEnd[0].length).trim();
+                    const contentAfterDebate = fullDebateText.slice(debateEnd.index! + debateEnd[0].length).trim();
                     if (!contentAfterDebate) {
                         const lastPart = fullDebateText.slice(-2000);
-                        const headingMatch = lastPart.match(/(?:^|\n)\s*(?:[\*_#]*)\s*FINAL REPORT\s*(?:[\*_#]*)/i);
+                        const headingMatch = lastPart.match(/(?:^|\n)\s*(?:[*_#]*)\s*FINAL REPORT\s*(?:[*_#]*)/i);
                         if (headingMatch) {
                             finalPostMortemReport = lastPart.slice(headingMatch.index! + headingMatch[0].length).trim();
                         }
@@ -335,7 +337,7 @@ Please investigate this discrepancy in your analysis.
                         finalPostMortemReport = finalPostMortemReport.replace(/^(?:[-=_*]*\s*)?(?:2\.\s*)?FINAL REPORT(?:[-=_*]*\s*)?/i, '').trim();
                     }
                 } else {
-                    const headingMatch = fullDebateText.match(/(?:^|\n)\s*(?:[\*_#]*)\s*FINAL REPORT\s*(?:[\*_#]*)/i);
+                    const headingMatch = fullDebateText.match(/(?:^|\n)\s*(?:[*_#]*)\s*FINAL REPORT\s*(?:[*_#]*)/i);
                     if (headingMatch) {
                         finalPostMortemReport = fullDebateText.slice(headingMatch.index! + headingMatch[0].length).trim();
                     }

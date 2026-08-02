@@ -1,69 +1,55 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { DebateTurn, AnalystLensConfig, AnalystRole, AIProvider } from '../../types';
+import { DebateTurn, AnalystLensConfig, AnalystRole } from '../../types';
 import { BotIcon, ChevronDownIcon } from '../shared/Icons';
 import { ANALYST_ROLE_DEFINITIONS, getRoleForProvider } from '../../services/ui/AnalystLensService';
 
 interface DebateViewProps {
     debateTurns: DebateTurn[];
-    geminiModelName: string;
-    deepseekModelName: string;
-    zhipuModelName: string;
-    groqModelName?: string;
-    groqNewModelName?: string;
-    groqAlt2ModelName?: string;
-    openrouterModelName?: string;
+    /** provider id → model id, from the message that produced this debate. */
+    modelsUsed?: Record<string, string>;
+    /** model id → display label (built dynamically from provider configs). */
+    modelIdToName?: Record<string, string>;
+    /** provider display name → provider id (speaker names map to config ids). */
+    providerNameToId?: Record<string, string>;
 
     lensConfig?: AnalystLensConfig;  // Optional lens configuration
     isDebating?: boolean;  // Whether the debate is still live (gates the "Syncing Protocol..." indicator)
 }
 
-// Map speaker names to AIProvider enum for role lookup
-const speakerToProvider: Record<string, AIProvider> = {
-    'Gemini': AIProvider.GEMINI,
-    'DeepSeek': AIProvider.DEEPSEEK,
-    'Zhipu': AIProvider.ZHIPU,
-    'Groq': AIProvider.GROQ,
-    'Groq (Alt)': AIProvider.GROQ_NEW,
-    'Groq (Alt 2)': AIProvider.GROQ_ALT2,
-    'OpenRouter': AIProvider.OPENROUTER,
-    'OpenAI': AIProvider.OPENAI,
-    'Grok': AIProvider.GROK,
+// Decorative brand hints for avatar colors — unknown providers get a neutral
+// default derived from the speaker name, so custom providers render fine.
+const BRAND_AVATAR_HINTS: Record<string, { bg: string; border: string; initials: string }> = {
+    'Gemini': { bg: 'bg-blue-600', border: 'border-blue-400', initials: 'G' },
+    'Zhipu': { bg: 'bg-orange-600', border: 'border-orange-400', initials: 'Z' },
+    'Groq': { bg: 'bg-yellow-600', border: 'border-yellow-400', initials: 'G' },
+    'Groq (Alt)': { bg: 'bg-lime-600', border: 'border-lime-400', initials: 'GA' },
+    'Groq (Alt 2)': { bg: 'bg-rose-600', border: 'border-rose-400', initials: 'G2' },
+    'OpenRouter': { bg: 'bg-emerald-600', border: 'border-emerald-400', initials: 'OR' },
 };
 
 const SpeakerAvatar: React.FC<{ speaker: DebateTurn['speaker'], modelName?: string }> = ({ speaker, modelName }) => {
-    let bgColor = 'bg-zinc-600';
-    let initials = '?';
-    let borderColor = 'border-zinc-500';
+    if (speaker === 'Moderator') {
+        return (
+            <div className="flex-shrink-0 w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-cyan-600 to-blue-700 flex items-center justify-center shadow-lg border border-cyan-400/30 z-10" title="Master Strategist">
+                <BotIcon />
+            </div>
+        );
+    }
 
-    if (speaker === 'Gemini') {
-        bgColor = 'bg-blue-600';
-        borderColor = 'border-blue-400';
-        initials = 'G';
+    const hint = BRAND_AVATAR_HINTS[speaker];
+    let bgColor = 'bg-zinc-600';
+    let borderColor = 'border-zinc-500';
+    let initials = speaker.trim().charAt(0).toUpperCase() || '?';
+
+    if (hint) {
+        bgColor = hint.bg;
+        borderColor = hint.border;
+        initials = hint.initials;
     } else if (speaker.includes('DeepSeek')) {
         bgColor = 'bg-emerald-600';
         borderColor = 'border-emerald-400';
         initials = 'D';
-    } else if (speaker === 'Zhipu') {
-        bgColor = 'bg-orange-600';
-        borderColor = 'border-orange-400';
-        initials = 'Z';
-    } else if (speaker === 'Groq') {
-        bgColor = 'bg-yellow-600';
-        borderColor = 'border-yellow-400';
-        initials = 'G';
-    } else if (speaker === 'Groq (Alt)') {
-        bgColor = 'bg-lime-600';
-        borderColor = 'border-lime-400';
-        initials = 'GA';
-    } else if (speaker === 'Groq (Alt 2)') {
-        bgColor = 'bg-rose-600';
-        borderColor = 'border-rose-400';
-        initials = 'G2';
-    } else if (speaker === 'OpenRouter') {
-        bgColor = 'bg-emerald-600';
-        borderColor = 'border-emerald-400';
-        initials = 'OR';
     } else if (speaker.includes('Claude') || speaker.includes('Anthropic')) {
         bgColor = 'bg-purple-600';
         borderColor = 'border-purple-400';
@@ -73,19 +59,13 @@ const SpeakerAvatar: React.FC<{ speaker: DebateTurn['speaker'], modelName?: stri
         borderColor = 'border-violet-400';
         initials = 'O';
     } else if (speaker.includes('Grok') || speaker.includes('xAI')) {
-        bgColor = 'bg-zinc-600'; // Or specific Grok color
+        bgColor = 'bg-zinc-600';
         borderColor = 'border-white/40';
         initials = 'X';
-    } else if (speaker === 'Moderator') {
-        return (
-            <div className="flex-shrink-0 w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-cyan-600 to-blue-700 flex items-center justify-center shadow-lg border border-cyan-400/30 z-10" title="Master Strategist">
-                <BotIcon />
-            </div>
-        )
     }
 
     return (
-        <div className={`flex-shrink-0 w-6 h-6 sm:w-8 sm:h-8 rounded-full ${bgColor} flex items-center justify-center font-bold text-white text-[10px] sm:text-xs border ${borderColor} shadow-md`} title={`${speaker} (${modelName})`}>
+        <div className={`flex-shrink-0 w-6 h-6 sm:w-8 sm:h-8 rounded-full ${bgColor} flex items-center justify-center font-bold text-white text-[10px] sm:text-xs border ${borderColor} shadow-md`} title={`${speaker}${modelName ? ` (${modelName})` : ''}`}>
             {initials}
         </div>
     );
@@ -101,7 +81,7 @@ const RoundHeader: React.FC<{ title: string, isOpen: boolean, onToggle: () => vo
     </button>
 );
 
-const DebateView: React.FC<DebateViewProps> = ({ debateTurns, geminiModelName, deepseekModelName, zhipuModelName, groqModelName, groqNewModelName, groqAlt2ModelName, openrouterModelName, lensConfig, isDebating }) => {
+const DebateView: React.FC<DebateViewProps> = ({ debateTurns, modelsUsed, modelIdToName, providerNameToId, lensConfig, isDebating }) => {
     const [expandedRounds, setExpandedRounds] = useState<Record<number, boolean>>({});
     const lastRoundCountRef = useRef(0);
 
@@ -109,11 +89,8 @@ const DebateView: React.FC<DebateViewProps> = ({ debateTurns, geminiModelName, d
     const getRoleEmoji = (speaker: string): string | null => {
         if (!lensConfig?.enabled) return null;
 
-        // Find provider for this speaker
-        const provider = speakerToProvider[speaker] ||
-            (speaker.includes('DeepSeek') ? AIProvider.DEEPSEEK :
-                speaker.includes('Grok') ? AIProvider.GROK : null);
-
+        // Map the speaker display name to its provider id (dynamic configs)
+        const provider = providerNameToId?.[speaker];
         if (!provider) return null;
 
         const role = getRoleForProvider(provider, lensConfig.assignments);
@@ -172,16 +149,12 @@ const DebateView: React.FC<DebateViewProps> = ({ debateTurns, geminiModelName, d
         setExpandedRounds(prev => ({ ...prev, [index]: !prev[index] }));
     };
 
-    const getSpeakerModelName = (speaker: string) => {
-        if (speaker === 'Gemini') return geminiModelName;
-        if (speaker.includes('DeepSeek')) return deepseekModelName || '';
-        if (speaker === 'Zhipu') return zhipuModelName;
-        if (speaker === 'Groq') return groqModelName;
-        if (speaker === 'Groq (Alt)') return groqNewModelName;
-        if (speaker === 'Groq (Alt 2)') return groqAlt2ModelName;
-        if (speaker === 'OpenRouter') return openrouterModelName;
-
-        return '';
+    const getSpeakerModelName = (speaker: string): string => {
+        const providerId = providerNameToId?.[speaker];
+        if (!providerId) return '';
+        const modelId = modelsUsed?.[providerId];
+        if (!modelId) return '';
+        return modelIdToName?.[modelId] ?? modelId;
     };
 
     return (

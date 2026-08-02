@@ -286,19 +286,68 @@ const initModelPerformance = (provider: AIProvider): ModelPerformance => ({
  */
 type AllModelPerformances = Record<string, ModelPerformance>;
 
-/** Legacy built-in provider ids, for seeding default/empty data. */
-const KNOWN_PROVIDER_IDS = [
-    AIProvider.GEMINI, AIProvider.DEEPSEEK, AIProvider.ZHIPU, AIProvider.GROQ,
-    AIProvider.GROQ_NEW, AIProvider.GROQ_ALT2, AIProvider.OPENROUTER,
-    AIProvider.OPENAI, AIProvider.GROK,
-];
-
 /** Ensure a provider has a performance entry; create one if missing. */
 const ensureProviderEntry = (data: AllModelPerformances, provider: string): ModelPerformance => {
     if (!data[provider]) {
         data[provider] = initModelPerformance(provider);
     }
     return data[provider];
+};
+
+/**
+ * Providers that contributed to a trade — dynamic `modelsUsed` keys first,
+ * legacy per-provider fields as fallback for historical trades.
+ */
+const getTradeProviders = (trade: LoggedTrade): string[] => {
+    if (trade.modelsUsed && Object.keys(trade.modelsUsed).length > 0) {
+        return Object.keys(trade.modelsUsed);
+    }
+    const legacy: string[] = [];
+    if (trade.geminiModelUsed) legacy.push(AIProvider.GEMINI);
+    if (trade.deepseekModelUsed) legacy.push(AIProvider.DEEPSEEK);
+    if (trade.zhipuModelUsed) legacy.push(AIProvider.ZHIPU);
+    if (trade.groqModelUsed) legacy.push(AIProvider.GROQ);
+    if (trade.groqNewModelUsed) legacy.push(AIProvider.GROQ_NEW);
+    if (trade.groqAlt2ModelUsed) legacy.push(AIProvider.GROQ_ALT2);
+    if (trade.openrouterModelUsed) legacy.push(AIProvider.OPENROUTER);
+    return legacy;
+};
+
+/** Weight record seeded for the enabled providers (dynamic ids). */
+const createWeightRecord = (enabledProviders: AIProvider[]): Record<string, number> => {
+    const weights: Record<string, number> = {};
+    for (const provider of enabledProviders) {
+        weights[provider] = 0;
+    }
+    return weights;
+};
+
+/**
+ * Build a DynamicWeights result. Legacy brand fields are kept populated for
+ * backward compatibility; `byProvider` is the canonical dynamic record.
+ */
+const buildDynamicWeightsOutput = (
+    weights: Record<string, number>,
+    dominantModel: string | null,
+    confidence: 'high' | 'medium' | 'low'
+): DynamicWeights => {
+    const round = (id: string): number => Math.round((weights[id] ?? 0) * 100) / 100;
+    const byProvider: Record<string, number> = {};
+    for (const [id, value] of Object.entries(weights)) {
+        byProvider[id] = Math.round(value * 100) / 100;
+    }
+    return {
+        gemini: round(AIProvider.GEMINI),
+        deepseek: round(AIProvider.DEEPSEEK),
+        zhipu: round(AIProvider.ZHIPU),
+        groq: round(AIProvider.GROQ),
+        groqNew: round(AIProvider.GROQ_NEW),
+        groqAlt2: round(AIProvider.GROQ_ALT2),
+        totalWeight: 1,
+        dominantModel,
+        confidence,
+        byProvider,
+    };
 };
 
 /**
@@ -323,11 +372,8 @@ export const loadPerformanceData = (): AllModelPerformances => {
         // Ignore
     }
 
-    // Return default empty performances
+    // Return default empty performances (entries are created on demand)
     const empty: AllModelPerformances = {};
-    for (const id of KNOWN_PROVIDER_IDS) {
-        empty[id] = initModelPerformance(id);
-    }
 
     _performanceCache = empty;
     return empty;
@@ -477,17 +523,7 @@ export const calculateDynamicWeights = (
     const regimeKey = mapRegimeToKey(currentRegime);
     const familyKey = mapFamilyToKey(currentFamily);
 
-    const weights: Record<AIProvider, number> = {
-        [AIProvider.GEMINI]: 0,
-        [AIProvider.DEEPSEEK]: 0,
-        [AIProvider.ZHIPU]: 0,
-        [AIProvider.GROQ]: 0,
-        [AIProvider.GROQ_NEW]: 0,
-        [AIProvider.GROQ_ALT2]: 0,
-        [AIProvider.OPENROUTER]: 0,
-        [AIProvider.OPENAI]: 0,
-        [AIProvider.GROK]: 0
-    };
+    const weights: Record<string, number> = createWeightRecord(enabledProviders);
 
     let hasEnoughData = false;
     const minTradesRequired = 5;
@@ -575,17 +611,7 @@ export const calculateDynamicWeights = (
         }
     }
 
-    return {
-        gemini: Math.round(weights[AIProvider.GEMINI] * 100) / 100,
-        deepseek: Math.round(weights[AIProvider.DEEPSEEK] * 100) / 100,
-        zhipu: Math.round(weights[AIProvider.ZHIPU] * 100) / 100,
-        groq: Math.round(weights[AIProvider.GROQ] * 100) / 100,
-        groqNew: Math.round(weights[AIProvider.GROQ_NEW] * 100) / 100,
-        groqAlt2: Math.round(weights[AIProvider.GROQ_ALT2] * 100) / 100,
-        totalWeight: 1,
-        dominantModel,
-        confidence
-    };
+    return buildDynamicWeightsOutput(weights, dominantModel, confidence);
 };
 
 /**
@@ -593,15 +619,8 @@ export const calculateDynamicWeights = (
  */
 export const generatePerformanceSummary = (): string => {
     const data = loadPerformanceData();
-    const providers = [
-        AIProvider.GEMINI,
-        AIProvider.DEEPSEEK,
-        AIProvider.ZHIPU,
-        AIProvider.GROQ,
-        AIProvider.GROQ_NEW,
-        AIProvider.GROQ_ALT2,
-        AIProvider.OPENROUTER,
-    ];
+    // Summarize every tracked provider (dynamic ids, created on demand)
+    const providers = Object.keys(data);
 
     let summary = '📊 **AI MODEL PERFORMANCE:**\n';
 
@@ -724,11 +743,8 @@ ${rankingTable}
  * Call this when loading app or after trade outcomes are recorded
  */
 export const syncFromTradeLog = (trades: LoggedTrade[]): void => {
-    // Reset data
+    // Reset data (entries are created on demand per provider id)
     const data: AllModelPerformances = {};
-    for (const id of KNOWN_PROVIDER_IDS) {
-        data[id] = initModelPerformance(id);
-    }
 
     // Process each trade
     for (const trade of trades) {
@@ -740,15 +756,8 @@ export const syncFromTradeLog = (trades: LoggedTrade[]): void => {
             // Default regime (in real implementation, this would be stored with the trade)
             const regime: MarketRegime = 'ranging';
 
-            // Track for each model that was used
-            const usedProviders: AIProvider[] = [];
-            if (trade.geminiModelUsed) usedProviders.push(AIProvider.GEMINI);
-            if (trade.deepseekModelUsed) usedProviders.push(AIProvider.DEEPSEEK);
-            if (trade.zhipuModelUsed) usedProviders.push(AIProvider.ZHIPU);
-            if (trade.groqModelUsed) usedProviders.push(AIProvider.GROQ);
-            if (trade.groqNewModelUsed) usedProviders.push(AIProvider.GROQ_NEW);
-            if (trade.groqAlt2ModelUsed) usedProviders.push(AIProvider.GROQ_ALT2);
-            if (trade.openrouterModelUsed) usedProviders.push(AIProvider.OPENROUTER);
+            // Track for each model that was used (dynamic provider ids)
+            const usedProviders = getTradeProviders(trade);
 
             for (const provider of usedProviders) {
                 const modelData = ensureProviderEntry(data, provider);
@@ -805,7 +814,7 @@ export const loadRollingWindowData = (): RollingWindowData => {
             _rollingWindowCache = JSON.parse(stored);
             return _rollingWindowCache!;
         }
-    } catch (e) { }
+    } catch (e) { /* intentionally ignored: cache parse failure */ }
 
     const empty = { entries: [], lastUpdated: new Date().toISOString() };
     _rollingWindowCache = empty;
@@ -1048,17 +1057,7 @@ export const calculateDynamicWeightsEnhanced = (
     const familyKey = mapFamilyToKey(currentFamily);
     const tradeType = mapFamilyToTradeType(currentFamily);
 
-    const weights: Record<AIProvider, number> = {
-        [AIProvider.GEMINI]: 0,
-        [AIProvider.DEEPSEEK]: 0,
-        [AIProvider.ZHIPU]: 0,
-        [AIProvider.GROQ]: 0,
-        [AIProvider.GROQ_NEW]: 0,
-        [AIProvider.GROQ_ALT2]: 0,
-        [AIProvider.OPENROUTER]: 0,
-        [AIProvider.OPENAI]: 0,
-        [AIProvider.GROK]: 0
-    };
+    const weights: Record<string, number> = createWeightRecord(enabledProviders);
 
     let hasEnoughData = false;
     const minTradesRequired = 3;
@@ -1144,17 +1143,7 @@ export const calculateDynamicWeightsEnhanced = (
         else if (variance > 0.02) confidence = 'medium';
     }
 
-    return {
-        gemini: Math.round(weights[AIProvider.GEMINI] * 100) / 100,
-        deepseek: Math.round(weights[AIProvider.DEEPSEEK] * 100) / 100,
-        zhipu: Math.round(weights[AIProvider.ZHIPU] * 100) / 100,
-        groq: Math.round(weights[AIProvider.GROQ] * 100) / 100,
-        groqNew: Math.round(weights[AIProvider.GROQ_NEW] * 100) / 100,
-        groqAlt2: Math.round(weights[AIProvider.GROQ_ALT2] * 100) / 100,
-        totalWeight: 1,
-        dominantModel,
-        confidence
-    };
+    return buildDynamicWeightsOutput(weights, dominantModel, confidence);
 };
 
 /**
@@ -1175,15 +1164,8 @@ export const syncRollingWindowFromTradeLog = (trades: LoggedTrade[]): void => {
         const family = trade.analysis?.detectedPatternFamily || '';
         const tradeType = mapFamilyToTradeType(family);
 
-        // Determine which providers were used
-        const usedProviders: AIProvider[] = [];
-        if (trade.geminiModelUsed) usedProviders.push(AIProvider.GEMINI);
-        if (trade.deepseekModelUsed) usedProviders.push(AIProvider.DEEPSEEK);
-        if (trade.zhipuModelUsed) usedProviders.push(AIProvider.ZHIPU);
-        if (trade.groqModelUsed) usedProviders.push(AIProvider.GROQ);
-        if (trade.groqNewModelUsed) usedProviders.push(AIProvider.GROQ_NEW);
-        if (trade.groqAlt2ModelUsed) usedProviders.push(AIProvider.GROQ_ALT2);
-        if (trade.openrouterModelUsed) usedProviders.push(AIProvider.OPENROUTER);
+        // Determine which providers were used (dynamic provider ids)
+        const usedProviders = getTradeProviders(trade);
 
         for (const provider of usedProviders) {
             data.entries.push({
@@ -1294,7 +1276,7 @@ const loadConfidenceCalibrationData = (): ModelConfidenceCalibrationData => {
             _confidenceCalibrationCache = JSON.parse(stored);
             return _confidenceCalibrationCache!;
         }
-    } catch (e) { }
+    } catch (e) { /* intentionally ignored: cache parse failure */ }
 
     const empty = { providers: {}, lastUpdated: new Date().toISOString() };
     _confidenceCalibrationCache = empty;
@@ -1402,15 +1384,8 @@ export const syncConfidenceCalibrationFromTradeLog = (trades: LoggedTrade[]): vo
 
         if (confKey !== 'high' && confKey !== 'medium' && confKey !== 'low') continue;
 
-        // Determine which providers were used
-        const usedProviders: AIProvider[] = [];
-        if (trade.geminiModelUsed) usedProviders.push(AIProvider.GEMINI);
-        if (trade.deepseekModelUsed) usedProviders.push(AIProvider.DEEPSEEK);
-        if (trade.zhipuModelUsed) usedProviders.push(AIProvider.ZHIPU);
-        if (trade.groqModelUsed) usedProviders.push(AIProvider.GROQ);
-        if (trade.groqNewModelUsed) usedProviders.push(AIProvider.GROQ_NEW);
-        if (trade.groqAlt2ModelUsed) usedProviders.push(AIProvider.GROQ_ALT2);
-        if (trade.openrouterModelUsed) usedProviders.push(AIProvider.OPENROUTER);
+        // Determine which providers were used (dynamic provider ids)
+        const usedProviders = getTradeProviders(trade);
 
         for (const provider of usedProviders) {
             if (!data.providers[provider]) {
@@ -1453,7 +1428,7 @@ const loadProviderPairStats = (): AllProviderPairStats => {
             _providerPairStatsCache = JSON.parse(stored);
             return _providerPairStatsCache!;
         }
-    } catch (e) { }
+    } catch (e) { /* intentionally ignored: cache parse failure */ }
 
     const empty = { pairs: {}, lastUpdated: new Date().toISOString() };
     _providerPairStatsCache = empty;
@@ -1779,8 +1754,8 @@ export const getAllProviderInsightScores = (): Record<string, { avgScore: number
     const data = loadPostMortemInsightData();
     const result: Record<string, { avgScore: number; count: number }> = {};
 
-    // Include all known legacy provider ids plus any tracked providers.
-    const allIds = new Set<string>([...KNOWN_PROVIDER_IDS, ...Object.keys(data.providers)]);
+    // Include all tracked providers (dynamic ids).
+    const allIds = new Set<string>(Object.keys(data.providers));
     for (const provider of allIds) {
         result[provider] = getProviderInsightScore(provider);
     }
@@ -1810,17 +1785,7 @@ export const calculateDynamicWeightsWithAllImprovements = (
     const regimeKey = mapRegimeToKey(currentRegime);
     const tradeType = mapFamilyToTradeType(currentFamily);
 
-    const weights: Record<AIProvider, number> = {
-        [AIProvider.GEMINI]: 0,
-        [AIProvider.DEEPSEEK]: 0,
-        [AIProvider.ZHIPU]: 0,
-        [AIProvider.GROQ]: 0,
-        [AIProvider.GROQ_NEW]: 0,
-        [AIProvider.GROQ_ALT2]: 0,
-        [AIProvider.OPENROUTER]: 0,
-        [AIProvider.OPENAI]: 0,
-        [AIProvider.GROK]: 0
-    };
+    const weights: Record<string, number> = createWeightRecord(enabledProviders);
 
     let hasEnoughData = false;
     const minTradesRequired = 3;
@@ -1835,7 +1800,10 @@ export const calculateDynamicWeightsWithAllImprovements = (
         let score = 50; // Base score
 
         // PRIORITY 1: Recency-weighted win rate (up to ±25 points)
-        if (recencyStats.tradesAnalyzed >= minTradesRequired) {
+        // getRecencyWeightedWinRate returns zeros below MIN_TRADES_FOR_RECENCY,
+        // so gate on that constant (not minTradesRequired) to avoid a bogus
+        // -25 point penalty on 3-4 trade samples.
+        if (recencyStats.tradesAnalyzed >= MIN_TRADES_FOR_RECENCY) {
             hasEnoughData = true;
             score += (recencyStats.recencyWeightedWinRate - 50) * 0.5;
         }
@@ -1892,7 +1860,7 @@ export const calculateDynamicWeightsWithAllImprovements = (
     }
 
     // Normalize weights
-    let totalWeight = Object.values(weights).reduce((a, b) => a + b, 0);
+    const totalWeight = Object.values(weights).reduce((a, b) => a + b, 0);
     if (totalWeight > 0) {
         for (const provider of Object.keys(weights) as AIProvider[]) {
             weights[provider] = weights[provider] / totalWeight;
@@ -1924,15 +1892,5 @@ export const calculateDynamicWeightsWithAllImprovements = (
         else if (variance > 0.02) confidence = 'medium';
     }
 
-    return {
-        gemini: Math.round(mcAdjustedWeights[AIProvider.GEMINI] * 100) / 100,
-        deepseek: Math.round(mcAdjustedWeights[AIProvider.DEEPSEEK] * 100) / 100,
-        zhipu: Math.round(mcAdjustedWeights[AIProvider.ZHIPU] * 100) / 100,
-        groq: Math.round(mcAdjustedWeights[AIProvider.GROQ] * 100) / 100,
-        groqNew: Math.round(mcAdjustedWeights[AIProvider.GROQ_NEW] * 100) / 100,
-        groqAlt2: Math.round(mcAdjustedWeights[AIProvider.GROQ_ALT2] * 100) / 100,
-        totalWeight: 1,
-        dominantModel,
-        confidence
-    };
+    return buildDynamicWeightsOutput(mcAdjustedWeights, dominantModel, confidence);
 };

@@ -65,7 +65,7 @@ const migrateRulesStorage = (data: any): LearningRulesStorage => {
  */
 export const loadLearningRules = (): LearningRulesStorage => {
     // 1. Try loading from Unified Storage (Phase 2)
-    let data = storageService.loadLearningRules();
+    const data = storageService.loadLearningRules();
 
     // 2. Migration Check: If Unified Storage is empty, check legacy LocalStorage key
     // This handles the transition from "learning_rules" (V1) to Unified Storage (V2)

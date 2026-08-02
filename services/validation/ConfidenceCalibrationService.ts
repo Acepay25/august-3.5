@@ -279,7 +279,7 @@ Continue logging trades to build historical accuracy data.
     if (summary.high.winRate !== null && summary.high.winRate < 60) {
         warnings.push(`⚠️ "High" confidence trades are only ${summary.high.winRate}% accurate. Consider being more selective.`);
     }
-    if (summary.medium.winRate !== null && summary.medium.winRate > summary.high.winRate!) {
+    if (summary.medium.winRate !== null && summary.high.winRate !== null && summary.medium.winRate > summary.high.winRate) {
         warnings.push(`📈 "Medium" confidence (${summary.medium.winRate}%) outperforms "High" (${summary.high.winRate}%). Your high-confidence filter may be too loose.`);
     }
     if (summary.avoid.total > 0 && summary.avoid.winRate !== null && summary.avoid.winRate > 30) {

@@ -22,6 +22,7 @@ describe('tokenUtils', () => {
       // JSON should have more tokens due to structural characters
       expect(jsonCount).toBeGreaterThan(0);
       expect(plainCount).toBeGreaterThan(0);
+      expect(jsonCount).toBeGreaterThan(plainCount);
     });
   });
 

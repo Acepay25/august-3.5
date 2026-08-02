@@ -39,6 +39,26 @@ export interface ChatRequestOptions {
     signal?: AbortSignal;
 }
 
+// ─── URL Normalization Helper ───────────────────────────────────────────────
+
+/**
+ * Normalizes base URLs by stripping trailing slashes and format-specific endpoint suffixes.
+ * This ensures that pasting full endpoint URLs (e.g. ending in /chat/completions) works properly.
+ */
+export function normalizeBaseUrl(url: string, format: string): string {
+    let clean = (url || '').trim().replace(/\/+$/, '');
+    if (!clean) return '';
+
+    if (format === 'chat_completions' && clean.endsWith('/chat/completions')) {
+        clean = clean.substring(0, clean.length - '/chat/completions'.length);
+    } else if (format === 'messages' && clean.endsWith('/messages')) {
+        clean = clean.substring(0, clean.length - '/messages'.length);
+    } else if (format === 'responses' && clean.endsWith('/responses')) {
+        clean = clean.substring(0, clean.length - '/responses'.length);
+    }
+    return clean;
+}
+
 // ─── Client Factory ─────────────────────────────────────────────────────────
 
 /**
@@ -46,8 +66,8 @@ export interface ChatRequestOptions {
  */
 function createOpenAIClient(config: ProviderConfig): OpenAI {
     return new OpenAI({
-        apiKey: config.apiKey,
-        baseURL: config.baseUrl,
+        apiKey: config.apiKey?.trim() || 'not-needed',
+        baseURL: normalizeBaseUrl(config.baseUrl, config.apiFormat),
         dangerouslyAllowBrowser: true,
     });
 }
@@ -141,7 +161,7 @@ async function messagesCall(
         body.temperature = options.temperature;
     }
 
-    const url = `${config.baseUrl.replace(/\/$/, '')}/messages`;
+    const url = `${normalizeBaseUrl(config.baseUrl, 'messages')}/messages`;
     const response = await fetch(url, {
         method: 'POST',
         headers: {
@@ -162,7 +182,9 @@ async function messagesCall(
             status === 429 ? 'Rate limit reached. Please wait and try again.' :
             status >= 500 ? `${config.name || 'Provider'} server error. Try again later.` :
             `${config.name || 'Provider'} request failed (${status}).`;
-        throw new Error(friendlyMessage);
+        const err = new Error(friendlyMessage);
+        (err as any).status = status; // Preserve for retry/quota classification
+        throw err;
     }
 
     const data = await response.json();
@@ -191,7 +213,7 @@ async function responsesCall(
     messages: ChatMessage[],
     options?: ChatRequestOptions
 ): Promise<string> {
-    const url = `${config.baseUrl.replace(/\/$/, '')}/responses`;
+    const url = `${normalizeBaseUrl(config.baseUrl, 'responses')}/responses`;
     const response = await fetch(url, {
         method: 'POST',
         headers: {
@@ -215,7 +237,9 @@ async function responsesCall(
             status === 429 ? 'Rate limit reached. Please wait and try again.' :
             status >= 500 ? `${config.name || 'Provider'} server error. Try again later.` :
             `${config.name || 'Provider'} request failed (${status}).`;
-        throw new Error(friendlyMessage);
+        const err = new Error(friendlyMessage);
+        (err as any).status = status; // Preserve for retry/quota classification
+        throw err;
     }
 
     const data = await response.json();
@@ -239,9 +263,57 @@ async function responsesCall(
 // ─── Universal Dispatchers ──────────────────────────────────────────────────
 
 function assertHasKey(config: ProviderConfig): void {
-    if (!config.apiKey || config.apiKey.trim().length === 0) {
-        throw new Error(`No API key configured for ${config.name}`);
+    if (!config.baseUrl || config.baseUrl.trim().length === 0) {
+        throw new Error(`No Base URL configured for ${config.name}`);
     }
+}
+
+/**
+ * Convert low-level provider/SDK errors into user-safe messages.
+ * Raw API error bodies can leak internals (URLs, request dumps), so they are
+ * logged for debugging but never surfaced verbatim. The `status` property is
+ * preserved so callers can still detect rate limits / quota errors, and abort
+ * errors pass through untouched so cancellation keeps working.
+ */
+function toFriendlyProviderError(error: unknown, providerName: string): unknown {
+    const err = error as { name?: string; code?: string; status?: number; message?: string };
+
+    // Cancellation — must propagate as-is
+    if (err?.name === 'AbortError' || err?.code === 'ABORT_ERR' || err?.name === 'TimeoutError') {
+        return error;
+    }
+
+    const name = providerName || 'Provider';
+    const status = typeof err?.status === 'number' ? err.status : undefined;
+
+    let friendly: string;
+    if (status === 401) {
+        friendly = `${name}: invalid API key. Check your provider settings.`;
+    } else if (status === 403) {
+        friendly = `${name}: access denied. Your API key may lack permissions or credits.`;
+    } else if (status === 429) {
+        friendly = `${name}: rate limit or quota reached. Please wait and try again.`;
+    } else if (status === 404) {
+        friendly = `${name}: model or endpoint not found. Check the base URL and model id.`;
+    } else if (status && status >= 500) {
+        friendly = `${name}: server error (${status}). Try again later.`;
+    } else if (status) {
+        friendly = `${name}: request failed (${status}).`;
+    } else {
+        const raw = (err?.message || '').toLowerCase();
+        if (raw.includes('fetch') || raw.includes('network') || raw.includes('econnrefused') || raw.includes('enotfound') || raw.includes('failed to connect')) {
+            friendly = `${name}: could not reach the server. Check the base URL and your connection.`;
+        } else {
+            friendly = `${name}: request failed.`;
+        }
+    }
+
+    console.warn(`[GenericProviderService] ${name} error:`, err?.message || error);
+    const wrapped = new Error(friendly);
+    if (status !== undefined) {
+        (wrapped as any).status = status;
+    }
+    return wrapped;
 }
 
 /**
@@ -253,15 +325,23 @@ export async function sendChatRequest(
     options?: ChatRequestOptions
 ): Promise<string> {
     assertHasKey(config);
-    switch (config.apiFormat) {
-        case 'chat_completions':
-            return chatCompletionsCall(config, messages, options);
-        case 'messages':
-            return messagesCall(config, messages, options);
-        case 'responses':
-            return responsesCall(config, messages, options);
-        default:
-            throw new Error(`Unknown API format: ${config.apiFormat}`);
+    const effectiveConfig = {
+        ...config,
+        apiKey: config.apiKey?.trim() || 'not-needed'
+    };
+    try {
+        switch (effectiveConfig.apiFormat) {
+            case 'chat_completions':
+                return await chatCompletionsCall(effectiveConfig, messages, options);
+            case 'messages':
+                return await messagesCall(effectiveConfig, messages, options);
+            case 'responses':
+                return await responsesCall(effectiveConfig, messages, options);
+            default:
+                throw new Error(`Unknown API format: ${effectiveConfig.apiFormat}`);
+        }
+    } catch (error) {
+        throw toFriendlyProviderError(error, effectiveConfig.name);
     }
 }
 
@@ -276,12 +356,20 @@ export async function* streamChatRequest(
     options?: ChatRequestOptions
 ): AsyncGenerator<string, void, unknown> {
     assertHasKey(config);
-    if (config.apiFormat === 'chat_completions') {
-        yield* chatCompletionsStream(config, messages, options);
-        return;
+    const effectiveConfig = {
+        ...config,
+        apiKey: config.apiKey?.trim() || 'not-needed'
+    };
+    try {
+        if (effectiveConfig.apiFormat === 'chat_completions') {
+            yield* chatCompletionsStream(effectiveConfig, messages, options);
+            return;
+        }
+    } catch (error) {
+        throw toFriendlyProviderError(error, effectiveConfig.name);
     }
     // Fallback for non-OpenAI-compat formats: fetch then yield once.
-    const full = await sendChatRequest(config, messages, options);
+    const full = await sendChatRequest(effectiveConfig, messages, options);
     yield full;
 }
 
@@ -291,14 +379,38 @@ export async function* streamChatRequest(
 export async function getQuickResponse(
     config: ProviderConfig,
     prompt: string,
-    systemPrompt?: string
+    historyOrSystem?: string | any[]
 ): Promise<string> {
-    const messages: ChatMessage[] = [];
-    if (systemPrompt) {
-        messages.push({ role: 'system', content: systemPrompt });
+    const chatMessages: ChatMessage[] = [];
+
+    if (Array.isArray(historyOrSystem)) {
+        historyOrSystem.forEach(msg => {
+            if (msg && typeof msg === 'object') {
+                if ('role' in msg && 'text' in msg) {
+                    const r = msg.role;
+                    const role = r === 'user' || r === 'USER'
+                        ? 'user'
+                        : r === 'system' || r === 'SYSTEM'
+                            ? 'system'
+                            : 'assistant';
+                    chatMessages.push({
+                        role,
+                        content: msg.text || ''
+                    });
+                } else if ('role' in msg && 'content' in msg) {
+                    chatMessages.push(msg as ChatMessage);
+                }
+            }
+        });
+    } else if (typeof historyOrSystem === 'string' && historyOrSystem.trim()) {
+        chatMessages.push({ role: 'system', content: historyOrSystem });
     }
-    messages.push({ role: 'user', content: prompt });
-    return sendChatRequest(config, messages, { maxTokens: 2048 });
+
+    if (!chatMessages.some(m => m.content === prompt)) {
+        chatMessages.push({ role: 'user', content: prompt });
+    }
+
+    return sendChatRequest(config, chatMessages, { maxTokens: 2048 });
 }
 
 /**
@@ -306,8 +418,12 @@ export async function getQuickResponse(
  */
 export async function testConnection(config: ProviderConfig): Promise<{ success: boolean; message: string }> {
     try {
+        const testConfig = {
+            ...config,
+            apiKey: config.apiKey?.trim() || 'not-needed'
+        };
         const result = await sendChatRequest(
-            config,
+            testConfig,
             [{ role: 'user', content: 'Reply with exactly: OK' }],
             { maxTokens: 10, temperature: 0 }
         );

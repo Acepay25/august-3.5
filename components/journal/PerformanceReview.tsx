@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { AIProvider, TradeSummary } from '../../types';
+import { ProviderConfig } from '../../types/provider';
 import { LoadingIcon, EditIcon, ChevronDownIcon, RefreshIcon, TrashIcon } from '../shared/Icons';
 
 interface PerformanceReviewContentProps {
@@ -13,12 +14,8 @@ interface PerformanceReviewContentProps {
     summarizationModel: string;
     onSetSummarizationProvider: (provider: AIProvider) => void;
     onSetSummarizationModel: (modelId: string) => void;
-    geminiModels: { id: string; name: string }[];
-    deepseekModels: { id: string; name: string }[];
-    zhipuModels: { id: string; name: string }[];
-    groqModels: { id: string; name: string }[];
-    groqNewModels: { id: string; name: string }[];
-    groqAlt2Models: { id: string; name: string }[];
+    /** Ready provider configs available for summarization (dynamic, user-configured). */
+    providers: ProviderConfig[];
 
     onUpdateSummaryCharLimit: (limit: number) => void;
     onManageInsights: () => void;
@@ -42,12 +39,7 @@ const PerformanceReviewContent: React.FC<PerformanceReviewContentProps> = ({
     summarizationModel,
     onSetSummarizationProvider,
     onSetSummarizationModel,
-    geminiModels,
-    deepseekModels,
-    zhipuModels,
-    groqModels,
-    groqNewModels,
-    groqAlt2Models,
+    providers,
 
     summaryCharLimit,
     onUpdateSummaryCharLimit,
@@ -85,27 +77,26 @@ const PerformanceReviewContent: React.FC<PerformanceReviewContentProps> = ({
         setLocalLimit(summaryCharLimit);
     }, [summaryCharLimit]);
 
-    const getProviderModels = (provider: AIProvider) => {
-        switch (provider) {
-            case AIProvider.GEMINI: return geminiModels || [];
-            case AIProvider.DEEPSEEK: return deepseekModels || [];
-            case AIProvider.ZHIPU: return zhipuModels || [];
-            case AIProvider.GROQ: return groqModels || [];
-            case AIProvider.GROQ_NEW: return groqNewModels || [];
-            case AIProvider.GROQ_ALT2: return groqAlt2Models || [];
-
-            default: return [];
-        }
+    const getProviderModels = (provider: AIProvider): { id: string; name: string }[] => {
+        const config = providers.find(p => p.id === provider);
+        if (!config) return [];
+        return config.models.map(m => ({ id: m, name: m }));
     };
 
     const handleProviderChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const newProvider = e.target.value as AIProvider;
         onSetSummarizationProvider(newProvider);
-        const models = getProviderModels(newProvider);
-        if (models.length > 0) {
-            onSetSummarizationModel(models[0].id);
+        const config = providers.find(p => p.id === newProvider);
+        const preferred = config?.selectedModel || config?.models[0];
+        if (preferred) {
+            onSetSummarizationModel(preferred);
         }
     };
+
+    // Fall back to the first available provider/model until the user picks one
+    const effectiveProvider = summarizationProvider || providers[0]?.id || '';
+    const effectiveProviderModels = getProviderModels(effectiveProvider);
+    const effectiveModel = summarizationModel || effectiveProviderModels[0]?.id || '';
 
     const handleLimitChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setLocalLimit(e.target.value);
@@ -150,27 +141,27 @@ const PerformanceReviewContent: React.FC<PerformanceReviewContentProps> = ({
                                 <div>
                                     <select
                                         id="summarization-provider"
-                                        value={summarizationProvider}
+                                        value={effectiveProvider}
                                         onChange={handleProviderChange}
                                         className="w-full bg-zinc-950 border border-white/10 text-zinc-300 text-sm rounded-lg focus:ring-cyan-500/50 focus:border-cyan-500/50 p-2.5 transition-all focus:outline-none"
                                     >
-                                        <option value={AIProvider.GEMINI}>Gemini</option>
-                                        <option value={AIProvider.DEEPSEEK}>DeepSeek</option>
-                                        <option value={AIProvider.ZHIPU}>Zhipu AI</option>
-                                        <option value={AIProvider.GROQ}>Groq</option>
-                                        <option value={AIProvider.GROQ_NEW}>Groq (Alt)</option>
-                                        <option value={AIProvider.GROQ_ALT2}>Groq (Alt 2)</option>
-
+                                        {providers.length > 0 ? (
+                                            providers.map(p => (
+                                                <option key={p.id} value={p.id}>{p.name}</option>
+                                            ))
+                                        ) : (
+                                            <option value="" disabled>No providers configured</option>
+                                        )}
                                     </select>
                                 </div>
                                 <div>
                                     <select
                                         id="summarization-model"
-                                        value={summarizationModel}
+                                        value={effectiveModel}
                                         onChange={(e) => onSetSummarizationModel(e.target.value)}
                                         className="w-full bg-zinc-950 border border-white/10 text-zinc-300 text-sm rounded-lg focus:ring-cyan-500/50 focus:border-cyan-500/50 p-2.5 transition-all focus:outline-none"
                                     >
-                                        {getProviderModels(summarizationProvider).map(model => (
+                                        {effectiveProviderModels.map(model => (
                                             <option key={model.id} value={model.id}>{model.name}</option>
                                         ))}
                                     </select>

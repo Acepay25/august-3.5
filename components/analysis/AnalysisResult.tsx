@@ -5,6 +5,7 @@ import { ChevronDownIcon, BookmarkIcon, BookmarkSolidIcon, BrainIcon, UpdateIcon
 import { FAMILY_UI_DATA } from '../../constants/models';
 import { ConfidenceLevel } from '../../services/validation/ConfidenceCalibrationService';
 import { simulateFromAnalysisTime } from '../../services/backtesting/BacktestingService';
+import { AutopilotResolution } from '../../services/ui/OutcomeAutopilotService';
 import ConfluenceScoreIndicator from './ConfluenceScoreIndicator';
 import ProbabilityWidget from '../market/ProbabilityWidget';
 import CalibrationWidget from './CalibrationWidget';
@@ -36,6 +37,10 @@ interface AnalysisResultProps {
     isLensMode?: boolean; // Was this trade analyzed with Analyst Lenses enabled?
     tradingStyle?: Exclude<TradingStyle, 'auto'>; // Trading style used for this analysis
     onSelectForProbability?: (messageId: string) => void; // Select this trade for probability display
+    // Outcome Autopilot — detected resolution for this message + handlers
+    autopilotResolution?: AutopilotResolution;
+    onConfirmAutopilot?: (messageId: string) => void;
+    onDismissAutopilot?: (messageId: string) => void;
 }
 
 const AnalysisResult: React.FC<AnalysisResultProps> = ({
@@ -60,7 +65,10 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
     leverage = 100, // Default to 100x leverage for futures
     isLensMode,
     tradingStyle,
-    onSelectForProbability
+    onSelectForProbability,
+    autopilotResolution,
+    onConfirmAutopilot,
+    onDismissAutopilot
 }) => {
     // Defensive destructuring
     const {
@@ -93,7 +101,9 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
         tradeType,
         tradeTypeManualOverride,
         originalStopLossPercentage,
-        levelProbabilities
+        levelProbabilities,
+        evidence = [],
+        invalidationCriteria = []
     } = analysis || {};
 
     const [isConditionsVisible, setIsConditionsVisible] = useState(false);
@@ -244,7 +254,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                     'text-zinc-400 bg-zinc-900/50 border-white/5';
 
     // Mode Badge Logic - All accuracy modes use cyan dark theme
-    let modeBadge = null;
+    let modeBadge;
     if (isAccuracyMode) {
         modeBadge = (
             <span className="px-2 py-1 rounded text-[9px] font-black bg-cyan-950/80 border border-cyan-500/50 text-cyan-400 uppercase tracking-widest shadow-[0_0_10px_-3px_rgba(34,211,238,0.4)] animate-pulse">
@@ -302,6 +312,70 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                     </div>
                 )}
             </div>
+
+            {/* Outcome Autopilot — detected SL/TP hit, one-click confirmation */}
+            {autopilotResolution && outcome === TradeOutcome.PENDING && (() => {
+                const r = autopilotResolution;
+                const isWin = r.outcome === TradeOutcome.WIN;
+                const isLoss = r.outcome === TradeOutcome.LOSS;
+                const theme = r.expiredOpen
+                    ? 'from-amber-900/40 to-amber-800/20 border-amber-400/40 text-amber-200'
+                    : isWin
+                        ? 'from-emerald-900/40 to-emerald-800/20 border-emerald-400/40 text-emerald-200'
+                        : isLoss
+                            ? 'from-rose-900/40 to-rose-800/20 border-rose-400/40 text-rose-200'
+                            : 'from-amber-900/40 to-amber-800/20 border-amber-400/40 text-amber-200';
+                const confirmLabel = r.expiredOpen
+                    ? null
+                    : r.outcome === TradeOutcome.ENTRY_NOT_HIT
+                        ? 'Confirm Entry Not Hit'
+                        : isWin
+                            ? `Confirm WIN${r.pnlPercent !== undefined ? ` (+${r.pnlPercent}%)` : ''}`
+                            : `Confirm LOSS${r.pnlPercent !== undefined ? ` (${r.pnlPercent}%)` : ''}`;
+                return (
+                    <div className={`mb-4 px-4 py-3 rounded-2xl bg-gradient-to-r ${theme} border shadow-lg backdrop-blur-sm animate-fade-in`}>
+                        <div className="flex items-start justify-between gap-3 flex-wrap">
+                            <div className="min-w-0">
+                                <div className="text-[10px] font-black uppercase tracking-widest opacity-80">🎯 Autopilot Detection</div>
+                                <div className="text-xs sm:text-sm font-semibold mt-1">{r.detail}</div>
+                                {r.timeToOutcome && <div className="text-[10px] opacity-60 mt-0.5">Resolved {r.timeToOutcome} after analysis</div>}
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                                {confirmLabel && onConfirmAutopilot && (
+                                    <button
+                                        onClick={() => onConfirmAutopilot(messageId)}
+                                        className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${isWin
+                                            ? 'bg-emerald-500 hover:bg-emerald-400 text-emerald-950'
+                                            : isLoss
+                                                ? 'bg-rose-500 hover:bg-rose-400 text-rose-950'
+                                                : 'bg-amber-500 hover:bg-amber-400 text-amber-950'
+                                            }`}
+                                    >
+                                        {confirmLabel}
+                                    </button>
+                                )}
+                                {!r.expiredOpen && (isWin || isLoss) && (
+                                    <button
+                                        onClick={() => onLogTrade(messageId, r.outcome as TradeOutcome.WIN | TradeOutcome.LOSS)}
+                                        className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-white/10 hover:bg-white/20 border border-white/20 transition-all"
+                                        title="Open the capture flow to attach a chart screenshot"
+                                    >
+                                        📷 Attach Screenshot
+                                    </button>
+                                )}
+                                {onDismissAutopilot && (
+                                    <button
+                                        onClick={() => onDismissAutopilot(messageId)}
+                                        className="px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-white/5 hover:bg-white/15 border border-white/10 transition-all opacity-70 hover:opacity-100"
+                                    >
+                                        Dismiss
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
 
             {/* Live Probability Widget */}
             {confidenceCalibration && confidence && (
@@ -925,6 +999,66 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                                     <span className="text-amber-200/50 text-[10px] ml-2">(by validation gate)</span>
                                 </p>
                             </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Invalidation Contract — what kills this setup */}
+                {invalidationCriteria && invalidationCriteria.length > 0 && (
+                    <div className="px-4 py-3 sm:px-6 sm:py-4 border-t border-white/10 bg-gradient-to-b from-rose-950/20 to-transparent">
+                        <h4 className="text-[10px] uppercase font-bold text-rose-400 mb-2 flex items-center gap-2 tracking-widest">
+                            <div className="w-1.5 h-1.5 bg-rose-500 rounded-full"></div> Invalidation Contract ({invalidationCriteria.length})
+                        </h4>
+                        <div className="space-y-2">
+                            {invalidationCriteria.map((item, idx) => (
+                                <div key={idx} className="text-[10px] sm:text-xs border border-rose-500/25 bg-rose-950/30 px-3 py-2 rounded-lg text-rose-100/90">
+                                    <div className="flex items-start justify-between gap-2">
+                                        <span className="font-mono font-bold text-rose-300">{item.level}</span>
+                                        {item.category && (
+                                            <span className="shrink-0 uppercase tracking-wider text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-500/15 border border-rose-500/25 text-rose-300">
+                                                {item.category}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="mt-1 leading-snug">{item.condition}</div>
+                                    {item.note && (
+                                        <div className="mt-0.5 italic opacity-60">{item.note}</div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Evidence Provenance — which claims are verified vs inferred */}
+                {evidence && evidence.length > 0 && (
+                    <div className="px-4 py-3 sm:px-6 sm:py-4 border-t border-white/10 bg-gradient-to-b from-cyan-950/20 to-transparent">
+                        <h4 className="text-[10px] uppercase font-bold text-cyan-500 mb-2 flex items-center gap-2 tracking-widest">
+                            <div className="w-1.5 h-1.5 bg-cyan-500 rounded-full"></div> Evidence Basis ({evidence.length})
+                        </h4>
+                        <div className="space-y-2">
+                            {evidence.map((item, idx) => {
+                                const stateStyle = item.state === 'observed'
+                                    ? 'text-emerald-300 bg-emerald-950/40 border-emerald-500/30'
+                                    : item.state === 'partial'
+                                        ? 'text-amber-300 bg-amber-950/40 border-amber-500/30'
+                                        : 'text-red-300 bg-red-950/40 border-red-500/30';
+                                const stateLabel = item.state === 'observed' ? '✓ Observed' : item.state === 'partial' ? '◐ Partial' : '✕ Unobserved';
+                                return (
+                                    <div key={idx} className={`text-[10px] sm:text-xs border px-3 py-2 rounded-lg ${stateStyle}`}>
+                                        <div className="flex items-start justify-between gap-2">
+                                            <span className="font-medium leading-snug">{item.claim}</span>
+                                            <span className="shrink-0 font-bold uppercase tracking-wider text-[9px]">{stateLabel}</span>
+                                        </div>
+                                        {item.sources.length > 0 && (
+                                            <div className="mt-1 opacity-70">Sources: {item.sources.join(' · ')}</div>
+                                        )}
+                                        {item.note && (
+                                            <div className="mt-0.5 italic opacity-60">{item.note}</div>
+                                        )}
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
                 )}

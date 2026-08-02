@@ -534,7 +534,7 @@ class PriceAlertServiceClass {
                         // Migrate to new storage
                         this.saveAlerts();
                         return;
-                    } catch (e) { }
+                    } catch (e) { /* intentionally ignored: alert parse failure */ }
                 }
                 return;
             }

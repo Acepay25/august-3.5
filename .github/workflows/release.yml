@@ -34,6 +34,9 @@ jobs:
       - name: Type check
         run: npx tsc --noEmit
 
+      - name: Tests
+        run: npx vitest run
+
       - name: Build renderer (Vite)
         run: npm run build
 

@@ -645,6 +645,7 @@ export const COMPACT_ANALYSIS_PROMPT = `You are a CRYPTO FUTURES analysis engine
 - Crypto futures ONLY (no stocks/options terms)
 - R:R must be >= 1.2
 - Reference Pattern Memory if provided
+- invalidationCriteria: 2-3 items, at least one concrete price level that kills the setup
 
 **ANALYSIS STRUCTURE (Keep brief):**
 1. Multi-TF Bias (5m/15m/1h/4h) - One line each
@@ -674,6 +675,10 @@ export const COMPACT_ANALYSIS_PROMPT = `You are a CRYPTO FUTURES analysis engine
       "support": ["94500 (4h)", "94000 (1h)"],
       "resistance": ["96000 (4h)", "97000 (1h)"]
     },
+    "invalidationCriteria": [
+      { "level": "94500", "condition": "4H close below support", "category": "price" },
+      { "level": "6h", "condition": "No breakout before expiry", "category": "time" }
+    ],
     "levelProbabilities": {
       "slProbability": 25,
       "slReasoning": { "indicatorBasis": "RSI/MACD alignment", "volatilityFactor": "ATR within normal range", "patternMemoryInfluence": "Similar setups had 25% SL hit rate", "aiAdjustments": "None" },

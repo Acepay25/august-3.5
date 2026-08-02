@@ -3,7 +3,6 @@ import React, { useState } from 'react';
 import ImagePreview from '../shared/ImagePreview';
 import { PlusIcon, LoadingIcon, SendIcon, ChevronDownIcon, ChevronUpIcon, BotIcon } from '../shared/Icons';
 import { ImageMetadata, AnalystLensConfig } from '../../types';
-import { OCR_MODELS } from '../../constants/models';
 
 import { ProviderConfig } from '../../types/provider';
 
@@ -30,6 +29,7 @@ interface ChatInputProps {
     // Ensemble Intelligence Configuration — dynamic provider list
     providers: ProviderConfig[];
     onToggleProvider: (id: string) => void;
+    onUpdateProvider?: (id: string, updates: Partial<Omit<ProviderConfig, 'id' | 'isBuiltIn'>>) => Promise<void>;
     // Vision Model Selection
     selectedVisionModel: string;
     setSelectedVisionModel: (modelId: string) => void;
@@ -60,6 +60,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
     isAnyProviderEnabled,
     providers,
     onToggleProvider,
+    onUpdateProvider,
     selectedVisionModel,
     setSelectedVisionModel,
     lensConfig,
@@ -67,31 +68,6 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
 }) => {
     const [showAISettings, setShowAISettings] = useState(false);
     const [showLensSettings, setShowLensSettings] = useState(false);
-
-    // Count enabled providers
-    const enabledCount = providers.filter(p => p.isEnabled).length;
-    // Global limit reached if 3 providers are enabled
-    const globalLimitReached = enabledCount >= 3;
-
-    // Map provider ID to enabled state
-    const providerStates: Record<string, { enabled: boolean }> = {};
-    providers.forEach(p => { providerStates[p.id] = { enabled: p.isEnabled }; });// Get color classes for a provider
-    const getColorClasses = (color: string, enabled: boolean): string => {
-        if (!enabled) return 'text-zinc-500';
-        const colorMap: Record<string, string> = {
-            blue: 'text-blue-400',
-            purple: 'text-purple-400',
-            emerald: 'text-emerald-400',
-            orange: 'text-orange-400',
-            amber: 'text-amber-400',
-            yellow: 'text-yellow-400',
-            green: 'text-green-400',
-            violet: 'text-violet-400',
-            teal: 'text-teal-400',
-            sky: 'text-sky-400',
-        };
-        return colorMap[color] || 'text-cyan-400';
-    };
 
     return (
         <div className="absolute bottom-0 left-0 right-0 px-3 sm:px-4 lg:px-8 pointer-events-none z-10 pb-[calc(env(safe-area-inset-bottom,16px)+0.5rem)] sm:pb-[calc(env(safe-area-inset-bottom,24px)+1rem)] lg:pb-8 transition-all duration-300">
@@ -191,7 +167,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                                     if (idx >= 0) {
                                                         newConfig.assignments[idx].assignedProvider = e.target.value;
                                                     } else {
-                                                        // @ts-ignore
+                                                        // @ts-expect-error -- role literal not in LensAssignment union
                                                         newConfig.assignments.push({ role: 'macro_volatility', assignedProvider: e.target.value });
                                                     }
                                                     setLensConfig(newConfig);
@@ -220,7 +196,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                                     if (idx >= 0) {
                                                         newConfig.assignments[idx].assignedProvider = e.target.value;
                                                     } else {
-                                                        // @ts-ignore
+                                                        // @ts-expect-error -- role literal not in LensAssignment union
                                                         newConfig.assignments.push({ role: 'technical_analyst', assignedProvider: e.target.value });
                                                     }
                                                     setLensConfig(newConfig);
@@ -249,7 +225,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                                     if (idx >= 0) {
                                                         newConfig.assignments[idx].assignedProvider = e.target.value;
                                                     } else {
-                                                        // @ts-ignore
+                                                        // @ts-expect-error -- role literal not in LensAssignment union
                                                         newConfig.assignments.push({ role: 'risk_execution', assignedProvider: e.target.value });
                                                     }
                                                     setLensConfig(newConfig);
@@ -328,50 +304,76 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                         <div className="mt-4 bg-zinc-900/80 rounded-2xl border border-white/10 overflow-hidden animate-fade-in">
                             {/* AI Providers List */}
                             <div className="max-h-[300px] overflow-y-auto">
-                                {providers.filter(p => p.isEnabled).map((provider, index) => {
-                                    const state = providerStates[provider.id];
-                                    const isEnabled = state?.enabled || false;
-                                    const isDisabled = !isEnabled && globalLimitReached;
+                                {providers.length > 0 ? (
+                                    providers.map((provider, index) => {
+                                        const isConfigured = provider.apiKey.trim().length > 0;
+                                        const isEnabled = provider.isEnabled && isConfigured;
 
-                                    return (
-                                        <button
-                                            key={provider.id}
-                                            onClick={() => onToggleProvider(provider.id)}
-                                            disabled={isDisabled}
-                                            className={`w-full flex items-center justify-between px-4 py-3 transition-all ${index !== 0 ? 'border-t border-white/5' : ''
-                                                } ${isEnabled
-                                                    ? 'bg-cyan-500/10'
-                                                    : isDisabled
-                                                        ? 'opacity-40 cursor-not-allowed'
-                                                        : 'hover:bg-white/5'
-                                                }`}
-                                        >
-                                            <div className="flex items-center gap-3">
-                                                <span className={`text-lg ${getColorClasses(provider.id === 'gemini' ? 'blue' : provider.id === 'deepseek' ? 'purple' : provider.id === 'zhipu' ? 'emerald' : provider.id === 'groq' ? 'orange' : 'cyan', isEnabled)}`}>
-                                                    {'✦'}
-                                                </span>
-                                                <div className="text-left">
-                                                    <div className={`text-sm font-medium ${isEnabled ? 'text-white' : 'text-zinc-300'}`}>
-                                                        {provider.name}
-                                                    </div>
-                                                    <div className="text-[11px] text-zinc-500">
-                                                        {isDisabled ? 'Limit reached' : provider.name}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            {isEnabled && (
-                                                <div className="w-5 h-5 rounded-full bg-cyan-500 flex items-center justify-center">
-                                                    <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                        return (
+                                            <div
+                                                key={provider.id}
+                                                className={`w-full flex items-center justify-between px-4 py-3 transition-all ${index !== 0 ? 'border-t border-white/5' : ''
+                                                    } ${isEnabled
+                                                        ? 'bg-cyan-500/10'
+                                                        : 'hover:bg-white/5 opacity-60'
+                                                    }`}
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <svg className={`w-4 h-4 ${isEnabled ? 'text-cyan-400' : 'text-zinc-500'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                                                        <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+                                                        <line x1="12" y1="22.08" x2="12" y2="12" />
                                                     </svg>
+                                                    <div className="text-left">
+                                                        <div className={`text-sm font-medium ${isEnabled ? 'text-white' : 'text-zinc-400'}`}>
+                                                            {provider.name}
+                                                        </div>
+                                                        <div className="mt-1 flex items-center gap-1.5">
+                                                            <select
+                                                                value={provider.selectedModel || provider.models[0] || ''}
+                                                                onChange={(e) => {
+                                                                    const selected = e.target.value;
+                                                                    if (onUpdateProvider) onUpdateProvider(provider.id, { selectedModel: selected });
+                                                                }}
+                                                                disabled={!isConfigured || provider.models.length === 0}
+                                                                className="bg-zinc-950 border border-zinc-800 rounded px-2 py-0.5 text-xs text-zinc-200 font-mono focus:outline-none focus:border-cyan-500/60 disabled:opacity-50"
+                                                            >
+                                                                {provider.models.length > 0 ? (
+                                                                    provider.models.map(m => (
+                                                                        <option key={m} value={m}>{m}</option>
+                                                                    ))
+                                                                ) : (
+                                                                    <option value="" disabled>No models</option>
+                                                                )}
+                                                            </select>
+                                                            {!isConfigured && <span className="text-[10px] text-red-400 font-mono">(No API key)</span>}
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                            )}
-                                        </button>
-                                    );
-                                })}
+                                                <button
+                                                    onClick={() => onToggleProvider(provider.id)}
+                                                    className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
+                                                        isEnabled
+                                                            ? 'bg-cyan-500 text-white shadow-sm'
+                                                            : 'bg-zinc-800 text-zinc-500 hover:text-zinc-300 border border-zinc-700'
+                                                    }`}
+                                                    title={isEnabled ? 'Enabled for debate' : 'Disabled'}
+                                                >
+                                                    {isEnabled && (
+                                                        <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                                        </svg>
+                                                    )}
+                                                </button>
+                                            </div>
+                                        );
+                                    })
+                                ) : (
+                                    <div className="px-4 py-6 text-center text-xs text-zinc-500">
+                                        No providers configured. Configure your providers in Settings → AI Models.
+                                    </div>
+                                )}
                             </div>
-
-
 
                             {/* Vision Model Selector */}
                             <div className="px-4 py-3 border-t border-white/10 bg-white/[0.02]">
@@ -381,18 +383,18 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                     onChange={(e) => setSelectedVisionModel(e.target.value)}
                                     className="w-full bg-zinc-800/80 border border-white/10 rounded-lg px-3 py-2 text-sm text-zinc-300 focus:outline-none focus:border-cyan-500/50"
                                 >
-                                    {OCR_MODELS.map(model => (
-                                        <option key={model.id} value={model.id} className="bg-zinc-900">
-                                            {model.name}
+                                    {providers.filter(p => p.isEnabled && p.apiKey.trim().length > 0).flatMap(p => p.models.map(m => ({ providerName: p.name, modelId: m }))).map(item => (
+                                        <option key={`${item.providerName}-${item.modelId}`} value={item.modelId} className="bg-zinc-900">
+                                            {item.providerName}: {item.modelId}
                                         </option>
                                     ))}
                                 </select>
                             </div>
 
-                            {/* Warning if no providers enabled */}
-                            {enabledCount === 0 && (
+                            {/* Warning if no providers ready */}
+                            {providers.filter(p => p.isEnabled && p.apiKey.trim().length > 0).length === 0 && (
                                 <div className="px-4 py-3 text-[11px] text-red-400 bg-red-500/10 border-t border-red-500/20">
-                                    ⚠️ Enable at least one AI provider to send messages
+                                    ⚠️ Enable at least one AI provider (with an API key) to send messages
                                 </div>
                             )}
                         </div>

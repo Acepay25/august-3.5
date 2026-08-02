@@ -64,7 +64,7 @@ export const robustJsonParse = (jsonString: string): any => {
         return JSON.parse(cleanedString);
     } catch (finalError: any) {
         console.error("All JSON parsing and repair attempts failed.", { finalError, originalString: jsonString, repairedString: cleanedString });
-        throw new Error(`Failed to parse JSON even after cleaning and repairs. Original error: ${finalError.message}`);
+        throw new Error(`Failed to parse JSON even after cleaning and repairs. Original error: ${finalError.message}`, { cause: finalError });
     }
 };
 

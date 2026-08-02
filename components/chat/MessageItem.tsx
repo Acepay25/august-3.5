@@ -5,6 +5,7 @@ import { BotIcon, ChevronDownIcon, LinkIcon, CopyIcon, CheckIcon, UserIcon } fro
 import LiveMarketDataView from '../market/LiveMarketDataView';
 import DebateView from '../analysis/DebateView';
 import AnalysisResult from '../analysis/AnalysisResult';
+import { AutopilotResolution } from '../../services/ui/OutcomeAutopilotService';
 
 // Helper to validate URLs (XSS prevention)
 const isSafeUrl = (url: string): boolean => {
@@ -12,15 +13,16 @@ const isSafeUrl = (url: string): boolean => {
 };
 
 // Per-provider display metadata for thought-process insights, keyed by provider id.
+// Legacy brand hints — unknown/custom provider ids fall back to DEFAULT_INSIGHT_STYLE.
 const PROVIDER_INSIGHT_STYLES: Record<string, { name: string; bgClass: string; borderClass: string; titleClass: string; textClass: string }> = {
     gemini: { name: 'Gemini', bgClass: 'bg-blue-950/20', borderClass: 'border-blue-500/20', titleClass: 'text-blue-400', textClass: 'text-blue-100/90' },
     deepseek: { name: 'DeepSeek', bgClass: 'bg-emerald-950/20', borderClass: 'border-emerald-500/20', titleClass: 'text-emerald-400', textClass: 'text-emerald-100/90' },
     zhipu: { name: 'Zhipu AI', bgClass: 'bg-orange-950/20', borderClass: 'border-orange-500/20', titleClass: 'text-orange-400', textClass: 'text-orange-100/90' },
     groq: { name: 'Groq', bgClass: 'bg-yellow-950/20', borderClass: 'border-yellow-500/20', titleClass: 'text-yellow-400', textClass: 'text-yellow-100/90' },
-    groqNew: { name: 'Groq (Alt)', bgClass: 'bg-lime-950/20', borderClass: 'border-lime-500/20', titleClass: 'text-lime-400', textClass: 'text-lime-100/90' },
-    groqAlt2: { name: 'Groq (Alt 2)', bgClass: 'bg-rose-950/20', borderClass: 'border-rose-500/20', titleClass: 'text-rose-400', textClass: 'text-rose-100/90' },
+    groq_new: { name: 'Groq (Alt)', bgClass: 'bg-lime-950/20', borderClass: 'border-lime-500/20', titleClass: 'text-lime-400', textClass: 'text-lime-100/90' },
+    groq_alt2: { name: 'Groq (Alt 2)', bgClass: 'bg-rose-950/20', borderClass: 'border-rose-500/20', titleClass: 'text-rose-400', textClass: 'text-rose-100/90' },
     openrouter: { name: 'OpenRouter', bgClass: 'bg-emerald-950/20', borderClass: 'border-emerald-500/20', titleClass: 'text-emerald-400', textClass: 'text-emerald-100/90' },
-    grokNative: { name: 'Grok (xAI)', bgClass: 'bg-sky-950/20', borderClass: 'border-sky-500/20', titleClass: 'text-sky-400', textClass: 'text-sky-100/90' },
+    grok: { name: 'Grok (xAI)', bgClass: 'bg-sky-950/20', borderClass: 'border-sky-500/20', titleClass: 'text-sky-400', textClass: 'text-sky-100/90' },
 };
 const DEFAULT_INSIGHT_STYLE = { name: 'AI', bgClass: 'bg-zinc-950/20', borderClass: 'border-zinc-500/20', titleClass: 'text-zinc-400', textClass: 'text-zinc-100/90' };
 
@@ -46,6 +48,7 @@ export interface ChatContextProps {
     copiedMessageId: string | null;
     modelIdToName: Record<string, string>;
     ocrModelIdToName: Record<string, string>;
+    providerNameToId: Record<string, string>;
     handleInitiateLogTrade: (messageId: string, outcome: TradeOutcome.WIN | TradeOutcome.LOSS) => void;
     handleInitiateSkipTrade: (messageId: string) => void;
     handleViewStrategyDetails: (strategyName: string) => void;
@@ -70,6 +73,10 @@ export interface ChatContextProps {
     leverage?: number;
     // Image viewer callback (for Android WebView compatibility)
     onViewImage?: (url: string) => void;
+    // Outcome Autopilot — detected resolutions + confirm/dismiss handlers
+    autopilotResolutions?: Record<string, AutopilotResolution>;
+    onConfirmAutopilot?: (messageId: string) => void;
+    onDismissAutopilot?: (messageId: string) => void;
 }
 
 const MessageItem = React.memo(({ message, context }: { message: Message, context: ChatContextProps }) => {
@@ -78,11 +85,12 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
         expandedPostMortemImages, setExpandedPostMortemImages, expandedIndividualThoughts, setExpandedIndividualThoughts,
         expandedDebateTranscripts, setExpandedDebateTranscripts, collapsedUserMessages, setCollapsedUserMessages,
         savedAnalyses, loggingTradeId,
-        activeFrameworks, activeConversation, copiedMessageId, modelIdToName, ocrModelIdToName,
+        activeFrameworks, activeConversation, copiedMessageId, modelIdToName, ocrModelIdToName, providerNameToId,
         handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy,
         handleSaveAnalysis, handleCopy, handleInitiateUpdateTrade, handleInitiateSimulator,
         isSelectionMode, selectedMessageIds, onToggleMessageSelection,
         confidenceCalibration, onRetryPostMortem, lensConfig, leverage, onViewImage,
+        autopilotResolutions, onConfirmAutopilot, onDismissAutopilot,
         onSelectMessageForProbability
     } = context;
 
@@ -96,14 +104,6 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
         if (!modelId) return "Unknown";
         return modelIdToName[modelId] ?? modelId;
     };
-
-    const safeGeminiModelName = resolveModelName('gemini');
-    const safeDeepSeekModelName = resolveModelName('deepseek');
-    const safeZhipuModelName = resolveModelName('zhipu');
-    const safeGroqModelName = resolveModelName('groq');
-    const safeGroqNewModelName = resolveModelName('groqNew');
-    const safeGroqAlt2ModelName = resolveModelName('groqAlt2');
-    const safeOpenrouterModelName = resolveModelName('openrouter');
 
     // Extract embedded Live Market JSON if present
     const liveMarketMatch = message.text.match(/\*\*LIVE MARKET DATA\*\*\s*```json\s*([\s\S]*?)\s*```/);
@@ -256,7 +256,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                             )}
 
                             {/* Main Analysis Result */}
-                            {message.analysis && <AnalysisResult analysis={message.analysis} messageId={message.id} onLogTrade={handleInitiateLogTrade} onInitiateSkip={handleInitiateSkipTrade} onViewStrategy={handleViewStrategyDetails} onSaveAnalysis={handleSaveAnalysis} onUpdateTrade={handleInitiateUpdateTrade} onSimulate={handleInitiateSimulator} isSaved={savedAnalyses.some(sa => sa.id === message.id)} outcome={message.outcome} isLogging={loggingTradeId === message.id} activeFrameworks={activeFrameworks} onApplyStrategy={handleApplyStrategy} imageSummaries={message.imageSummaries} isAccuracyMode={message.isAccuracyMode} accuracySubMode={message.accuracySubMode} confidenceCalibration={confidenceCalibration} confluenceData={message.confluenceData} leverage={leverage} isLensMode={message.isLensMode} tradingStyle={message.tradingStyle} onSelectForProbability={onSelectMessageForProbability} />}
+                            {message.analysis && <AnalysisResult analysis={message.analysis} messageId={message.id} onLogTrade={handleInitiateLogTrade} onInitiateSkip={handleInitiateSkipTrade} onViewStrategy={handleViewStrategyDetails} onSaveAnalysis={handleSaveAnalysis} onUpdateTrade={handleInitiateUpdateTrade} onSimulate={handleInitiateSimulator} isSaved={savedAnalyses.some(sa => sa.id === message.id)} outcome={message.outcome} isLogging={loggingTradeId === message.id} activeFrameworks={activeFrameworks} onApplyStrategy={handleApplyStrategy} imageSummaries={message.imageSummaries} isAccuracyMode={message.isAccuracyMode} accuracySubMode={message.accuracySubMode} confidenceCalibration={confidenceCalibration} confluenceData={message.confluenceData} leverage={leverage} isLensMode={message.isLensMode} tradingStyle={message.tradingStyle} onSelectForProbability={onSelectMessageForProbability} autopilotResolution={autopilotResolutions?.[message.id]} onConfirmAutopilot={onConfirmAutopilot} onDismissAutopilot={onDismissAutopilot} />}
 
                             {Array.isArray(message.postMortemImages) && message.postMortemImages.length > 0 && (
                                 <div className="mt-4 sm:mt-6 pt-3 sm:pt-5 border-t border-white/10">
@@ -345,7 +345,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                             )}
 
                             {/* Main Analysis Debate (Initial) */}
-                            {message.isDebating && message.debateTurns && <DebateView debateTurns={message.debateTurns} geminiModelName={safeGeminiModelName} deepseekModelName={safeDeepSeekModelName} zhipuModelName={safeZhipuModelName} groqModelName={safeGroqModelName} groqNewModelName={safeGroqNewModelName} groqAlt2ModelName={safeGroqAlt2ModelName} openrouterModelName={safeOpenrouterModelName} lensConfig={lensConfig} isDebating={true} />}
+                            {message.isDebating && message.debateTurns && <DebateView debateTurns={message.debateTurns} modelsUsed={message.modelsUsed} modelIdToName={modelIdToName} providerNameToId={providerNameToId} lensConfig={lensConfig} isDebating={true} />}
 
                             {message.role === MessageRole.AI && !message.isDebating && Array.isArray(message.debateTurns) && message.debateTurns.length > 0 && (
                                 <div className="mt-4 sm:mt-6 pt-3 sm:pt-5 border-t border-white/10">
@@ -359,7 +359,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     >
                                         <strong className="text-xs sm:text-sm uppercase tracking-wider font-bold opacity-80">Debate Transcript</strong><ChevronDownIcon className={`w-5 h-5 sm:w-6 sm:h-6 transform transition-transform duration-300 ${expandedDebateTranscripts[message.id] ? 'rotate-180' : ''}`} />
                                     </button>
-                                    <div className={`collapsible-content ${expandedDebateTranscripts[message.id] ? 'expanded' : ''}`}><DebateView debateTurns={message.debateTurns} geminiModelName={safeGeminiModelName} deepseekModelName={safeDeepSeekModelName} zhipuModelName={safeZhipuModelName} groqModelName={safeGroqModelName} groqNewModelName={safeGroqNewModelName} groqAlt2ModelName={safeGroqAlt2ModelName} openrouterModelName={safeOpenrouterModelName} lensConfig={lensConfig} /></div>
+                                    <div className={`collapsible-content ${expandedDebateTranscripts[message.id] ? 'expanded' : ''}`}><DebateView debateTurns={message.debateTurns} modelsUsed={message.modelsUsed} modelIdToName={modelIdToName} providerNameToId={providerNameToId} lensConfig={lensConfig} /></div>
                                 </div>
                             )}
 

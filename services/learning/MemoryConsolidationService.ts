@@ -108,7 +108,7 @@ export const aggregateSimilarInsights = (insights: TradeInsight[]): TradeInsight
     for (let i = 0; i < sorted.length; i++) {
         if (mergedIds.has(sorted[i].id)) continue;
 
-        let master = { ...sorted[i] };
+        const master = { ...sorted[i] };
 
         for (let j = i + 1; j < sorted.length; j++) {
             if (mergedIds.has(sorted[j].id)) continue;
