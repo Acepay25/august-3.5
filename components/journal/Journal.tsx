@@ -277,7 +277,7 @@ const JournalInner: React.FC<JournalProps> = ({
                 {/* Embedded Header & Tab Navigation */}
                 <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 bg-zinc-950 shrink-0 flex-wrap gap-2">
                     <div className="flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-purple-400 shadow-[0_0_6px_#938b7e]" />
+                        <span className="w-2 h-2 rounded-full bg-purple-400 shadow-[0_0_6px_#8a8a92]" />
                         <h3 className="text-sm font-bold text-white tracking-tight">Trading Journal & Performance</h3>
                         <span className="text-xs text-zinc-500 font-mono">({trades.length} logged trades)</span>
                     </div>

@@ -257,7 +257,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
     let modeBadge;
     if (isAccuracyMode) {
         modeBadge = (
-            <span className="px-2 py-1 rounded text-[9px] font-black bg-cyan-950/80 border border-cyan-500/50 text-cyan-400 uppercase tracking-widest shadow-[0_0_10px_-3px_rgba(181,173,160,0.4)] animate-pulse">
+            <span className="px-2 py-1 rounded text-[9px] font-black bg-cyan-950/80 border border-cyan-500/50 text-cyan-400 uppercase tracking-widest shadow-[0_0_10px_-3px_rgba(176, 176, 182,0.4)] animate-pulse">
                 {accuracySubMode === 'pure_ai' ? 'PURE AI REASONING' : 'STRICT ACCURACY MODE'}
             </span>
         );
@@ -285,7 +285,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
             {/* Coin Name Header */}
             <div className="mb-4 sm:mb-6 flex items-center px-1 justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-3 sm:gap-4 overflow-hidden min-w-0">
-                    <div className={`w-1.5 h-10 sm:w-2 sm:h-14 rounded-full shrink-0 ${isLong ? 'bg-gradient-to-b from-emerald-400 to-emerald-600 shadow-[0_0_20px_rgba(228,228,231,0.5)]' : isShort ? 'bg-gradient-to-b from-rose-400 to-rose-600 shadow-[0_0_20px_rgba(111,104,93,0.5)]' : 'bg-gradient-to-b from-cyan-400 to-cyan-600 shadow-[0_0_20px_rgba(181,173,160,0.5)]'}`}></div>
+                    <div className={`w-1.5 h-10 sm:w-2 sm:h-14 rounded-full shrink-0 ${isLong ? 'bg-gradient-to-b from-emerald-400 to-emerald-600 shadow-[0_0_20px_rgba(228,228,231,0.5)]' : isShort ? 'bg-gradient-to-b from-rose-400 to-rose-600 shadow-[0_0_20px_rgba(107, 107, 115,0.5)]' : 'bg-gradient-to-b from-cyan-400 to-cyan-600 shadow-[0_0_20px_rgba(176, 176, 182,0.5)]'}`}></div>
                     <h3 className="text-2xl sm:text-4xl font-black text-white tracking-tight uppercase truncate min-w-0 drop-shadow-lg">{coinName}</h3>
                     <span className="px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-[10px] sm:text-xs font-bold bg-white/5 backdrop-blur-sm text-zinc-300 border border-white/10 uppercase tracking-wider shrink-0 shadow-lg">FUTURES</span>
                 </div>
@@ -304,7 +304,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                 </div>
 
                 {isUpdate && (
-                    <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-900/50 to-cyan-800/30 border border-cyan-400/40 text-cyan-300 shadow-[0_0_25px_-5px_rgba(181,173,160,0.4)] animate-pulse backdrop-blur-sm">
+                    <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-900/50 to-cyan-800/30 border border-cyan-400/40 text-cyan-300 shadow-[0_0_25px_-5px_rgba(176, 176, 182,0.4)] animate-pulse backdrop-blur-sm">
                         <UpdateIcon className="w-4 h-4" />
                         <span className="text-[10px] font-black uppercase tracking-widest">
                             Updated Setup {updateInterval ? `(+${updateInterval})` : ''}
@@ -418,7 +418,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                                     <span>{tradingStyle === 'scalp' ? '' : ''}</span>
                                     <span>{tradingStyle.toUpperCase()}</span>
                                     {tradeTypeManualOverride && (
-                                        <span className="absolute -top-1 -right-1 w-2 h-2 bg-cyan-500 rounded-full animate-pulse shadow-[0_0_5px_rgba(181,173,160,0.8)]" title="Manually overridden by user"></span>
+                                        <span className="absolute -top-1 -right-1 w-2 h-2 bg-cyan-500 rounded-full animate-pulse shadow-[0_0_5px_rgba(176, 176, 182,0.8)]" title="Manually overridden by user"></span>
                                     )}
                                 </div>
                             )}
@@ -502,7 +502,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                     <div className="p-4 sm:p-6 space-y-3">
                         <div className="text-[10px] uppercase font-bold text-zinc-500 tracking-widest flex items-center gap-2 flex-wrap">
                             <div className="flex items-center gap-2">
-                                <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_#938b7e]"></div>
+                                <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_#8a8a92]"></div>
                                 <span>Entry Zone</span>
                             </div>
                             {/* Entry Timing Score Badge */}
@@ -539,7 +539,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                     {/* Stop Loss */}
                     <div className="p-4 sm:p-6 space-y-3 bg-rose-500/[0.02]">
                         <div className="text-[10px] uppercase font-bold text-zinc-500 tracking-widest flex items-center gap-2">
-                            <div className="w-2 h-2 rounded-full bg-rose-500 shadow-[0_0_8px_#6f685d]"></div> Stop Loss
+                            <div className="w-2 h-2 rounded-full bg-rose-500 shadow-[0_0_8px_#6b6b73]"></div> Stop Loss
                         </div>
                         <div className="bg-gradient-to-br from-rose-500/15 to-rose-600/5 border border-rose-400/25 rounded-2xl sm:rounded-2xl p-4 backdrop-blur-sm shadow-lg hover:shadow-rose-500/10 transition-all duration-300 hover:scale-[1.02]">
                             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-baseline gap-2 sm:gap-3">
@@ -635,7 +635,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                     {/* Take Profit */}
                     <div className="p-4 sm:p-6 space-y-3 bg-emerald-500/[0.03]">
                         <div className="text-[10px] uppercase font-bold text-zinc-500 tracking-widest flex items-center gap-2">
-                            <div className="w-2.5 h-2.5 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-[0_0_12px_#b5ada0]"></div> Targets
+                            <div className="w-2.5 h-2.5 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-[0_0_12px_#b0b0b6]"></div> Targets
                         </div>
                         <div className="space-y-2.5">
                             {(takeProfit && takeProfit.length > 0) ? (takeProfit || []).map((tp, i) => (
@@ -666,7 +666,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                             {/* Grade Badge */}
                             {grade && (
                                 <span className={`px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wide border ml-auto
-                                    ${grade === 'A' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30 shadow-[0_0_10px_-3px_rgba(181,173,160,0.4)]' :
+                                    ${grade === 'A' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30 shadow-[0_0_10px_-3px_rgba(176, 176, 182,0.4)]' :
                                         grade === 'B' ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' :
                                             grade === 'C' ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30' :
                                                 grade === 'D' ? 'bg-orange-500/20 text-orange-300 border-orange-500/30' :

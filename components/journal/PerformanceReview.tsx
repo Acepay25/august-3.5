@@ -340,7 +340,7 @@ const PerformanceReviewContent: React.FC<PerformanceReviewContentProps> = ({
                                             className={`p-3 sm:p-4 bg-zinc-800/30 hover:bg-zinc-800/50 rounded-xl border transition-all group relative cursor-pointer ${isSelected
                                                 ? 'border-purple-500/50 bg-purple-500/10 ring-1 ring-purple-500/30'
                                                 : isNewlyAdded
-                                                    ? 'border-cyan-500/50 bg-cyan-500/10 animate-slide-in-right shadow-[0_0_15px_-3px_rgba(181,173,160,0.3)]'
+                                                    ? 'border-cyan-500/50 bg-cyan-500/10 animate-slide-in-right shadow-[0_0_15px_-3px_rgba(176, 176, 182,0.3)]'
                                                     : 'border-white/5'
                                                 }`}
                                         >

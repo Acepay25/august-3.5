@@ -1,25 +1,26 @@
 @import "tailwindcss";
 
-/* ===== WARM MONOCHROME THEME (Codex-style) =====
-   Warm dark neutrals + gold accent instead of dead neutral grays. The zinc
-   base is warmed (near-black backgrounds with a subtle warm cast, off-white
-   body text); accent/positive land on gold/cream, negative on darker warm
-   grays — so wins/losses stay scannable by brightness. */
+/* ===== NEUTRAL MONOCHROME THEME =====
+   Cool-neutral charcoal neutrals + a single gold accent. The zinc base is a
+   true neutral gray ramp (near-black layered surfaces, neutral off-white body
+   text); the gold accent (cyan slot) is the only hue and reads as the brand
+   note. Semantic ramps (emerald/rose/…) are neutral grays, so wins/losses stay
+   scannable by brightness rather than by color. */
 @theme {
-  /* Base warm neutrals (was zinc) */
-  --color-zinc-50: #f6f1e7;
-  --color-zinc-100: #eae4d8;
-  --color-zinc-200: #d8d0c2;
-  --color-zinc-300: #b5ada0;
-  --color-zinc-400: #938b7e;
-  --color-zinc-500: #6f685d;
-  --color-zinc-600: #524c43;
-  --color-zinc-700: #3a352e;
-  --color-zinc-800: #27231d;
-  --color-zinc-900: #1a1712;
-  --color-zinc-950: #100e0b;
+  /* Base neutral grays (cool-neutral charcoal ramp) */
+  --color-zinc-50: #f5f5f6;
+  --color-zinc-100: #e7e7e9;
+  --color-zinc-200: #d2d2d6;
+  --color-zinc-300: #b0b0b6;
+  --color-zinc-400: #8a8a92;
+  --color-zinc-500: #6b6b73;
+  --color-zinc-600: #4f4f57;
+  --color-zinc-700: #34343a;
+  --color-zinc-800: #202024;
+  --color-zinc-900: #161618;
+  --color-zinc-950: #0c0c0e;
 
-  /* Accent / primary (was cyan) — Codex gold */
+  /* Accent / primary — gold brand note (the only hue; kept intentionally) */
   --color-cyan-100: #faf3df;
   --color-cyan-200: #f2e3b5;
   --color-cyan-300: #e8d08a;
@@ -31,81 +32,81 @@
   --color-cyan-900: #332713;
   --color-cyan-950: #1e170b;
 
-  /* Positive / wins (was emerald) — warm cream, brightest */
-  --color-emerald-100: #faf6ea;
-  --color-emerald-200: #f2ead4;
-  --color-emerald-300: #e9dcb8;
-  --color-emerald-400: #ddca94;
-  --color-emerald-500: #c0a86c;
-  --color-emerald-600: #967f4e;
-  --color-emerald-700: #6b5a38;
-  --color-emerald-800: #453a25;
-  --color-emerald-900: #2a2317;
-  --color-emerald-950: #1a150d;
+  /* Positive / wins — neutral light grays (scannable by brightness) */
+  --color-emerald-100: #f5f5f6;
+  --color-emerald-200: #e7e7e9;
+  --color-emerald-300: #d2d2d6;
+  --color-emerald-400: #b0b0b6;
+  --color-emerald-500: #8a8a92;
+  --color-emerald-600: #6b6b73;
+  --color-emerald-700: #4f4f57;
+  --color-emerald-800: #34343a;
+  --color-emerald-900: #202024;
+  --color-emerald-950: #161618;
 
-  /* Negative / losses (was rose) — darker warm brown-gray */
-  --color-rose-100: #f3ede2;
-  --color-rose-200: #e7dccb;
-  --color-rose-300: #cfc0a8;
-  --color-rose-400: #a9997f;
-  --color-rose-500: #82735b;
-  --color-rose-600: #5f5340;
-  --color-rose-700: #433a2c;
-  --color-rose-800: #2d271e;
-  --color-rose-900: #1d1913;
-  --color-rose-950: #12100c;
+  /* Negative / losses — neutral dim grays (scannable by brightness) */
+  --color-rose-100: #d2d2d6;
+  --color-rose-200: #b0b0b6;
+  --color-rose-300: #8a8a92;
+  --color-rose-400: #6b6b73;
+  --color-rose-500: #4f4f57;
+  --color-rose-600: #3a3a40;
+  --color-rose-700: #2a2a2f;
+  --color-rose-800: #1e1e22;
+  --color-rose-900: #161618;
+  --color-rose-950: #0c0c0e;
 
-  /* Warnings (was yellow/amber) — golds */
-  --color-yellow-100: #faf6e6;
-  --color-yellow-200: #f3e8c4;
-  --color-yellow-300: #e9d79b;
-  --color-yellow-400: #ddc270;
-  --color-yellow-500: #c6a54b;
-  --color-yellow-600: #a08037;
-  --color-yellow-900: #332713;
-  --color-yellow-950: #1e170b;
-  --color-amber-100: #faf3df;
-  --color-amber-200: #f2e3b5;
-  --color-amber-300: #e8d08a;
-  --color-amber-400: #ddbc62;
-  --color-amber-500: #c9a142;
-  --color-amber-600: #a37f31;
-  --color-amber-800: #54401c;
-  --color-amber-900: #332713;
-  --color-amber-950: #1e170b;
+  /* Warnings — neutral mid grays */
+  --color-yellow-100: #f5f5f6;
+  --color-yellow-200: #e7e7e9;
+  --color-yellow-300: #d2d2d6;
+  --color-yellow-400: #b0b0b6;
+  --color-yellow-500: #8a8a92;
+  --color-yellow-600: #6b6b73;
+  --color-yellow-900: #202024;
+  --color-yellow-950: #0c0c0e;
+  --color-amber-100: #f5f5f6;
+  --color-amber-200: #e7e7e9;
+  --color-amber-300: #d2d2d6;
+  --color-amber-400: #b0b0b6;
+  --color-amber-500: #8a8a92;
+  --color-amber-600: #6b6b73;
+  --color-amber-800: #34343a;
+  --color-amber-900: #202024;
+  --color-amber-950: #0c0c0e;
 
-  /* Destructive (was red) — warm dark */
-  --color-red-200: #e7dccb;
-  --color-red-300: #cfc0a8;
-  --color-red-400: #a9997f;
-  --color-red-500: #82735b;
-  --color-red-600: #5f5340;
-  --color-red-700: #433a2c;
-  --color-red-950: #12100c;
+  /* Destructive — neutral dim grays (functional danger uses literal red elsewhere) */
+  --color-red-200: #b0b0b6;
+  --color-red-300: #8a8a92;
+  --color-red-400: #6b6b73;
+  --color-red-500: #4f4f57;
+  --color-red-600: #3a3a40;
+  --color-red-700: #2a2a2f;
+  --color-red-950: #0c0c0e;
 
   /* All remaining families (blue, purple, violet, indigo, orange, pink,
-     lime, teal, sky, fuchsia, green) → uniform warm grays */
-  --color-blue-100: #f6f1e7;   --color-blue-200: #eae4d8;   --color-blue-300: #d8d0c2;
-  --color-blue-400: #b5ada0;   --color-blue-500: #938b7e;   --color-blue-600: #6f685d;
-  --color-blue-700: #524c43;   --color-blue-900: #3a352e;   --color-blue-950: #27231d;
-  --color-purple-100: #f6f1e7; --color-purple-200: #eae4d8; --color-purple-300: #d8d0c2;
-  --color-purple-400: #b5ada0; --color-purple-500: #938b7e; --color-purple-600: #6f685d;
-  --color-purple-900: #3a352e; --color-purple-950: #27231d;
-  --color-violet-100: #f6f1e7; --color-violet-400: #b5ada0; --color-violet-500: #938b7e;
-  --color-violet-600: #6f685d; --color-violet-950: #27231d;
-  --color-indigo-200: #eae4d8; --color-indigo-300: #d8d0c2; --color-indigo-400: #b5ada0;
-  --color-indigo-500: #938b7e; --color-indigo-600: #6f685d; --color-indigo-700: #524c43;
-  --color-indigo-950: #27231d;
-  --color-orange-100: #f6f1e7; --color-orange-200: #eae4d8; --color-orange-300: #d8d0c2;
-  --color-orange-400: #b5ada0; --color-orange-500: #938b7e; --color-orange-600: #6f685d;
-  --color-orange-950: #27231d;
-  --color-pink-500: #938b7e;
-  --color-lime-100: #f6f1e7; --color-lime-400: #b5ada0; --color-lime-500: #938b7e;
-  --color-lime-600: #6f685d; --color-lime-950: #27231d;
-  --color-teal-500: #938b7e;
-  --color-sky-100: #f6f1e7; --color-sky-400: #b5ada0; --color-sky-500: #938b7e; --color-sky-950: #27231d;
-  --color-fuchsia-500: #938b7e;
-  --color-green-400: #b5ada0; --color-green-500: #938b7e;
+     lime, teal, sky, fuchsia, green) → uniform neutral grays */
+  --color-blue-100: #f5f5f6;   --color-blue-200: #e7e7e9;   --color-blue-300: #d2d2d6;
+  --color-blue-400: #b0b0b6;   --color-blue-500: #8a8a92;   --color-blue-600: #6b6b73;
+  --color-blue-700: #4f4f57;   --color-blue-900: #34343a;   --color-blue-950: #202024;
+  --color-purple-100: #f5f5f6; --color-purple-200: #e7e7e9; --color-purple-300: #d2d2d6;
+  --color-purple-400: #b0b0b6; --color-purple-500: #8a8a92; --color-purple-600: #6b6b73;
+  --color-purple-900: #34343a; --color-purple-950: #202024;
+  --color-violet-100: #f5f5f6; --color-violet-400: #b0b0b6; --color-violet-500: #8a8a92;
+  --color-violet-600: #6b6b73; --color-violet-950: #202024;
+  --color-indigo-200: #e7e7e9; --color-indigo-300: #d2d2d6; --color-indigo-400: #b0b0b6;
+  --color-indigo-500: #8a8a92; --color-indigo-600: #6b6b73; --color-indigo-700: #4f4f57;
+  --color-indigo-950: #202024;
+  --color-orange-100: #f5f5f6; --color-orange-200: #e7e7e9; --color-orange-300: #d2d2d6;
+  --color-orange-400: #b0b0b6; --color-orange-500: #8a8a92; --color-orange-600: #6b6b73;
+  --color-orange-950: #202024;
+  --color-pink-500: #8a8a92;
+  --color-lime-100: #f5f5f6; --color-lime-400: #b0b0b6; --color-lime-500: #8a8a92;
+  --color-lime-600: #6b6b73; --color-lime-950: #202024;
+  --color-teal-500: #8a8a92;
+  --color-sky-100: #f5f5f6; --color-sky-400: #b0b0b6; --color-sky-500: #8a8a92; --color-sky-950: #202024;
+  --color-fuchsia-500: #8a8a92;
+  --color-green-400: #b0b0b6; --color-green-500: #8a8a92;
 }
 
 /* ===== BASE STYLES ===== */
@@ -148,13 +149,13 @@ code,
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #3a352e;
+  background: #34343a;
   /* zinc-700 */
   border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #524c43;
+  background: #4f4f57;
   /* zinc-600 */
 }
 
@@ -310,7 +311,7 @@ code,
 
 /* Glassmorphism utilities - Optimized for Mobile Performance */
 .glass {
-  background: rgba(26, 22, 17, 0.95);
+  background: rgba(22, 22, 24, 0.95);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -319,11 +320,11 @@ code,
 /* Reduce blur on mobile to save GPU */
 @media (max-width: 640px) {
   .glass {
-    background: #1a1712;
+    background: #161618;
     /* zinc-900 fallback */
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
-    border-bottom: 1px solid #27231d;
+    border-bottom: 1px solid #202024;
   }
 
   /* Globally disable backdrop-filter on mobile for performance */
@@ -333,8 +334,8 @@ code,
   }
 
   .glass-panel {
-    background: #1a1712 !important;
-    border: 1px solid #27231d !important;
+    background: #161618 !important;
+    border: 1px solid #202024 !important;
   }
 
   /* Disable heavy box-shadows on mobile */
@@ -342,12 +343,12 @@ code,
   .shadow-xl,
   .shadow-lg {
     box-shadow: none !important;
-    border: 1px solid #27231d;
+    border: 1px solid #202024;
   }
 }
 
 .glass-panel {
-  background: rgba(16, 14, 11, 0.8);
+  background: rgba(12, 12, 14, 0.8);
   backdrop-filter: blur(6px);
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
@@ -366,7 +367,7 @@ body,
   height: 100%;
   width: 100%;
   overflow: hidden;
-  background-color: #100e0b;
+  background-color: #0c0c0e;
   /* zinc-950 matches app theme to prevent white flashes */
 }
 
@@ -469,7 +470,7 @@ body,
 /* Custom thin scrollbar for content areas */
 .custom-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: #3a352e transparent;
+  scrollbar-color: #34343a transparent;
 }
 
 .custom-scrollbar::-webkit-scrollbar {
@@ -482,7 +483,7 @@ body,
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #3a352e;
+  background: #34343a;
   border-radius: 4px;
 }
 

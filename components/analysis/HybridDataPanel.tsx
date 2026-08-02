@@ -596,9 +596,9 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
                             }`}>
                             <div className="flex items-center justify-between mb-2">
                                 <div className="text-[10px] font-bold uppercase tracking-wider" style={{
-                                    color: entryTimingScore.score >= 70 ? '#d8d0c2' :
-                                        entryTimingScore.score >= 50 ? '#b5ada0' :
-                                            entryTimingScore.score >= 35 ? '#938b7e' : '#6f685d'
+                                    color: entryTimingScore.score >= 70 ? '#d2d2d6' :
+                                        entryTimingScore.score >= 50 ? '#b0b0b6' :
+                                            entryTimingScore.score >= 35 ? '#8a8a92' : '#6b6b73'
                                 }}> Entry Timing</div>
                                 <div className={`text-[9px] px-1.5 py-0.5 rounded-full ${entryTimingScore.score >= 70 ? 'bg-emerald-500/20 text-emerald-300' :
                                     entryTimingScore.score >= 50 ? 'bg-yellow-500/20 text-yellow-300' :
