@@ -6,6 +6,10 @@
   "main": "electron/main.cjs",
   "description": "Advanced AI-powered cryptocurrency trading analysis terminal",
   "author": "August 3.5",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Acepay25/august-3.5.git"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
@@ -102,7 +106,8 @@
     "publish": {
       "provider": "github",
       "owner": "Acepay25",
-      "repo": "august-3.5"
+      "repo": "august-3.5",
+      "releaseType": "release"
     }
   }
 }
