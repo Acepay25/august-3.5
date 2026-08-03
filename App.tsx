@@ -20,6 +20,7 @@ import { useProviderConfigs } from './hooks/useProviderConfigs';
 import { useAppSettings } from './hooks/useAppSettings';
 import { useJournalUI } from './hooks/useJournalUI';
 import { PostMortemCandidate } from './components/modals/PostTradeUploadModal';
+import { ChevronLeftIcon, ChevronRightIcon } from './components/shared/Icons';
 
 // P1-6: Lazy-load heavy, conditionally-rendered components so the initial
 // bundle is much smaller. Previously the entire app was one ~1.73 MB chunk.
@@ -28,7 +29,6 @@ import { PostMortemCandidate } from './components/modals/PostTradeUploadModal';
 // eager (always-rendered, critical path).
 const Journal = React.lazy(() => import('./components/journal/Journal').then(m => ({ default: m.Journal })));
 const StrategySearch = React.lazy(() => import('./components/shared/StrategySearch'));
-const ConversationHistory = React.lazy(() => import('./components/chat/ConversationHistory'));
 const UserProfileManager = React.lazy(() => import('./components/settings/UserProfileManager'));
 const SavedAnalyses = React.lazy(() => import('./components/journal/SavedAnalyses'));
 const SettingsMenu = React.lazy(() => import('./components/settings/SettingsMenu'));
@@ -69,6 +69,7 @@ import { usePostMortem } from './hooks/usePostMortem';
 import { useUserProfiles } from './hooks/useUserProfiles';
 import { useSaveOnUnload } from './hooks/useSaveOnUnload';
 import { offlineQueue, QueuedRequest } from './services/infrastructure/OfflineQueueService';
+import { jobQueue, JobType } from './services/infrastructure/JobQueueService';
 import { getPreference, setPreference, removePreference, PREF_KEYS } from './services/infrastructure/PreferencesService';
 // AI Learning Services - Adaptive Learning, Mistake Patterns, Insight Extraction
 import { extractInsightsFromPostMortem, storeInsights, initializeKnowledgeBase } from './services/learning/InsightExtractionService';
@@ -84,7 +85,7 @@ import { PriceAlertService } from './services/ui/PriceAlertService';
 import { OutcomeAutopilotService, AutopilotResolution } from './services/ui/OutcomeAutopilotService';
 import { clearAllCaches } from './services/infrastructure/responseCache';
 import { initNativeStatusBar } from './services/infrastructure/NativeStatusBar';
-import { initConfluenceService } from './services/analysis/TimeframeConfluenceService';
+import { initConfluenceService, syncConfluenceFromTradeLog } from './services/analysis/TimeframeConfluenceService';
 import { initPatternMemoryService } from './services/learning/PatternMemorySynthesisService';
 import GlobalLearningService from './services/learning/GlobalLearningService';
 const VersionHistoryDashboard = React.lazy(() => import('./components/dashboards/VersionHistoryDashboard').then(m => ({ default: m.VersionHistoryDashboard })));
@@ -96,7 +97,6 @@ const App: React.FC = () => {
     // UI visibility and progress state (extracted to hooks/useUIState.ts)
     const {
         isUserModalOpen, setIsUserModalOpen,
-        isHistoryVisible, setIsHistoryVisible,
         isStrategySearchVisible, setIsStrategySearchVisible,
         isSavedAnalysesVisible, setIsSavedAnalysesVisible,
         isSettingsMenuVisible, setIsSettingsMenuVisible,
@@ -196,8 +196,36 @@ const App: React.FC = () => {
         },
     [readyProviders, moderatorProviderId]);
 
+    // Ensemble mode: off = casual chat with the selected model (no chart
+    // analysis); on = full analysis/debate pipeline. Initialized once from
+    // the loaded provider count so existing multi-provider setups keep
+    // their current behavior. Declared early so useMarketData can gate its
+    // polling on it.
+    const [isEnsembleEnabled, setIsEnsembleEnabled] = useState(false);
+    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+        try {
+            return window.localStorage.getItem('august_sidebar_collapsed') === 'true';
+        } catch {
+            return false;
+        }
+    });
+    useEffect(() => {
+        try {
+            window.localStorage.setItem('august_sidebar_collapsed', String(isSidebarCollapsed));
+        } catch {
+            // Preferences are optional in restricted browser contexts.
+        }
+    }, [isSidebarCollapsed]);
+    const ensembleInitializedRef = useRef(false);
+    useEffect(() => {
+        if (!ensembleInitializedRef.current && readyProviders.length > 0) {
+            ensembleInitializedRef.current = true;
+            setIsEnsembleEnabled(readyProviders.length > 1);
+        }
+    }, [readyProviders.length]);
+
     // Market data state and effects (extracted to hooks/useMarketData.ts)
-    const marketData = useMarketData(isHybridIntelligenceEnabled);
+    const marketData = useMarketData(isHybridIntelligenceEnabled, isEnsembleEnabled);
     const {
         currentHybridData, setCurrentHybridData,
         hybridConnectionStatus, setHybridConnectionStatus,
@@ -297,19 +325,6 @@ const App: React.FC = () => {
     const mobileMenuRef = useRef<HTMLDivElement>(null);
     const leverageRef = useRef<HTMLDivElement>(null);
 
-    // Ensemble mode: off = casual chat with the selected model (no chart
-    // analysis); on = full analysis/debate pipeline. Initialized once from
-    // the loaded provider count so existing multi-provider setups keep
-    // their current behavior.
-    const [isEnsembleEnabled, setIsEnsembleEnabled] = useState(false);
-    const ensembleInitializedRef = useRef(false);
-    useEffect(() => {
-        if (!ensembleInitializedRef.current && readyProviders.length > 0) {
-            ensembleInitializedRef.current = true;
-            setIsEnsembleEnabled(readyProviders.length > 1);
-        }
-    }, [readyProviders.length]);
-
     // Casual-chat model (used when ensemble is off): app-wide preference,
     // persisted in Preferences. Empty until loaded or chosen — the pipeline
     // falls back to the first ready provider's model.
@@ -328,6 +343,19 @@ const App: React.FC = () => {
             removePreference(PREF_KEYS.CASUAL_CHAT_MODEL);
         }
     }, [selectedChatModel]);
+
+    // Knowledge base: post-mortem insight-extraction jobs complete in the
+    // background queue — fold their results into the per-profile KB so the
+    // "Lessons from your past trades" injection actually has data.
+    useEffect(() => {
+        const unsubscribe = jobQueue.onJobComplete(job => {
+            const insights = job.result?.data;
+            if (job.type === JobType.EXTRACT_INSIGHTS && job.result?.success && Array.isArray(insights) && insights.length > 0) {
+                setInsightKnowledgeBase(prev => storeInsights(insights, prev));
+            }
+        });
+        return unsubscribe;
+    }, [setInsightKnowledgeBase]);
 
     // Analysis pipeline state, refs, and handlers (extracted to hooks/useAnalysisPipeline.ts)
     const {
@@ -412,6 +440,7 @@ const App: React.FC = () => {
     // watches it for changes. We ALSO update it via the effect below once
     // activeUsername is destructured, so both paths agree.
     const activeUsernameRef = useRef<string | null>(sessionStorage.getItem('activeUsername'));
+    activeUsernameRef.current = sessionStorage.getItem('activeUsername') || null;
 
     // Post-mortem analysis state and handlers (extracted to hooks/usePostMortem.ts)
     const {
@@ -419,11 +448,13 @@ const App: React.FC = () => {
         typingMessageState, setTypingMessageState,
         livePostMortemThoughts, setLivePostMortemThoughts,
         startPostMortemAnalysis,
+        invalidatePostMortemRuns,
         handleRetryPostMortem,
         handleAllPostMortemTypingComplete,
         handleMismatchResolution,
     } = usePostMortem({
         messages,
+        activeConversationId,
         messagesRef,
         updateMessages,
         isAccuracyModeEnabled,
@@ -582,6 +613,7 @@ const App: React.FC = () => {
 
     // ... (resetAppState, loadUserData) ...
     const resetAppState = async () => {
+        handleCancelAnalysis();
         const newConv = createNewConversation();
         setConversationHistory([newConv]);
         setActiveConversationId(newConv.id);
@@ -598,6 +630,9 @@ const App: React.FC = () => {
         setIsFamiliesEnabledInPureAI(false);
         setIsMemoryEnabledInPureAI(false);
         setIsHybridIntelligenceEnabled(false);
+        setIsAutoCapturing(false);
+        setIsUpdateAutoCapturing(false);
+        setIsEntryNotHitCapturing(false);
         setActiveFrameworks(DEFAULT_FRAMEWORKS);
         setSummaryCharLimit(4000);
         const firstReady = getFirstReadyProvider(providerConfigs);
@@ -617,7 +652,7 @@ const App: React.FC = () => {
                 tradeSummaries: [],
                 finalTradeSummary: null,
                 globalMemory: undefined,
-                settings: { activeFrameworks: DEFAULT_FRAMEWORKS, summaryCharLimit: 4000, summarizationProvider: firstReady?.id || '', summarizationModel: firstReady?.selectedModel || '', isGlobalMemoryEnabled: true, isAccuracyModeEnabled: false, accuracySubMode: 'original', customInstructions: { general: [], accuracyOriginal: [], accuracyPure: [] }, isPlaybookEnabledInPureAI: false, isFamiliesEnabledInPureAI: false, isMemoryEnabledInPureAI: false, isHybridIntelligenceEnabled: false },
+                settings: { activeFrameworks: DEFAULT_FRAMEWORKS, summaryCharLimit: 4000, summarizationProvider: firstReady?.id || '', summarizationModel: firstReady?.selectedModel || '', isGlobalMemoryEnabled: true, isAccuracyModeEnabled: false, accuracySubMode: 'original', customInstructions: { general: [], accuracyOriginal: [], accuracyPure: [] }, isPlaybookEnabledInPureAI: false, isFamiliesEnabledInPureAI: false, isMemoryEnabledInPureAI: false, isHybridIntelligenceEnabled: false, isAutoCapturing: false, isUpdateAutoCapturing: false, isEntryNotHitCapturing: false },
                 lastActiveConversationId: newConv.id
             });
         }
@@ -640,12 +675,12 @@ const App: React.FC = () => {
     });
 
     // Keep the activeUsernameRef (read by usePostMortem above) in sync with
-    // the canonical activeUsername state. The ref is initialized from
-    // sessionStorage so the very first render has a sensible value; this
-    // effect keeps it accurate as the user switches accounts.
+    // the canonical activeUsername state before dependent hooks render.
+    const previousActiveUsername = activeUsernameRef.current;
+    activeUsernameRef.current = activeUsername ?? null;
     useEffect(() => {
-        const previous = activeUsernameRef.current;
-        activeUsernameRef.current = activeUsername ?? null;
+        const previous = previousActiveUsername;
+
         // P1-4: Clear the AI response cache on user switch so one user's
         // cached analyses are never served to another user.
         if (previous !== null && previous !== activeUsername) {
@@ -668,7 +703,15 @@ const App: React.FC = () => {
     }, []);
 
     const loadUserData = async (username: string) => {
+        handleCancelAnalysis();
+        invalidatePostMortemRuns();
         setIsLoading(true);
+
+        // Profile switch: clear the previous user's autopilot registrations
+        // and resolutions so the 60s loop can't verify/notify for the wrong
+        // profile (the service is a singleton and init() is guarded).
+        OutcomeAutopilotService.reset();
+        setAutopilotResolutions({});
 
         try {
         // Initialize database (SQLite on native, IndexedDB on web)
@@ -683,7 +726,7 @@ const App: React.FC = () => {
         await OutcomeAutopilotService.init();
         await initConfluenceService();
         await initPatternMemoryService();
-        await GlobalLearningService.initialize();
+        await GlobalLearningService.setActiveUser(username);
 
         const profile = await dbService.getUserProfile(username);
         if (profile) {
@@ -701,7 +744,11 @@ const App: React.FC = () => {
             const convs = correctedConvs.length > 0 ? correctedConvs : [createNewConversation()];
 
             setConversationHistory(convs);
-            setLoggedTrades((profile.tradeLog || []).map(t => ({ ...t, leverage: t.leverage || 100 })));
+            const loadedTrades = (profile.tradeLog || []).map(t => ({ ...t, leverage: t.leverage || 100 }));
+            setLoggedTrades(loadedTrades);
+            // Rebuild confluence historical stats from the loaded log (was
+            // never wired — getConfluenceInsight always returned empty).
+            syncConfluenceFromTradeLog(loadedTrades);
             setSavedAnalyses(profile.savedAnalyses || []);
             setTradeSummaries((profile.tradeSummaries || []).slice(-MAX_TRADE_SUMMARIES));  // Keep most recent entries
             setFinalTradeSummary(profile.finalTradeSummary || null);
@@ -744,6 +791,9 @@ const App: React.FC = () => {
             setIsFamiliesEnabledInPureAI(profile.settings?.isFamiliesEnabledInPureAI ?? false);
             setIsMemoryEnabledInPureAI(profile.settings?.isMemoryEnabledInPureAI ?? false);
             setIsHybridIntelligenceEnabled(profile.settings?.isHybridIntelligenceEnabled ?? false);
+            setIsAutoCapturing(profile.settings?.isAutoCapturing ?? false);
+            setIsUpdateAutoCapturing(profile.settings?.isUpdateAutoCapturing ?? false);
+            setIsEntryNotHitCapturing(profile.settings?.isEntryNotHitCapturing ?? false);
             setConfidenceCalibration(profile.settings?.confidenceCalibration);
             const loadedMemoryConfig = providerConfigs.find(p => p.id === profile.settings?.memoryProvider) || null;
             setMemoryConfig(loadedMemoryConfig);
@@ -793,6 +843,10 @@ const App: React.FC = () => {
         }
         setActiveUsername(username);
         sessionStorage.setItem('activeUsername', username);
+        // Tag thinking records with the active user — the writers read
+        // 'last_active_user' but nothing ever wrote it (all records landed
+        // in the 'default' bucket).
+        localStorage.setItem('last_active_user', username);
         setIsUserModalOpen(false);
         setHighlightedAnalysisId(null);
         setIsLoading(false);
@@ -848,11 +902,11 @@ const App: React.FC = () => {
         tradeSummaries: tradeSummaries,
         finalTradeSummary: finalTradeSummary,
         globalMemory: globalMemory,
-        settings: { activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, confidenceCalibration, memoryProvider: memoryConfig?.id || '', memoryModel },
+        settings: { activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, confidenceCalibration, memoryProvider: memoryConfig?.id || '', memoryModel },
         lastActiveConversationId: activeConversationId || undefined,
         // AI Learning data
         insightKnowledgeBase: insightKnowledgeBase,
-    }), [conversationHistory, loggedTrades, activeFrameworks, activeConversationId, savedAnalyses, tradeSummaries, finalTradeSummary, globalMemory, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, confidenceCalibration, insightKnowledgeBase, memoryConfig, memoryModel]);
+    }), [conversationHistory, loggedTrades, activeFrameworks, activeConversationId, savedAnalyses, tradeSummaries, finalTradeSummary, globalMemory, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, confidenceCalibration, insightKnowledgeBase, memoryConfig, memoryModel]);
 
     // ─── P1-6: Split save into DATA (heavy) + SETTINGS (light) ───────────
     // Previously a single effect re-serialized ALL conversations (with base64
@@ -900,7 +954,7 @@ const App: React.FC = () => {
                 // Only the settings sub-object — no conversations, no trades,
                 // no base64 images. This is a cheap write.
                 await dbService.saveUserProfile(activeUsername, {
-                    settings: { activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, confidenceCalibration, memoryProvider: memoryConfig?.id || '', memoryModel },
+                    settings: { activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, confidenceCalibration, memoryProvider: memoryConfig?.id || '', memoryModel },
                 });
             } catch (err) {
                 console.error("Failed to save user profile (settings):", err);
@@ -910,7 +964,7 @@ const App: React.FC = () => {
         return () => {
             clearTimeout(handler);
         };
-    }, [activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, confidenceCalibration, memoryConfig, memoryModel, activeUsername]);
+    }, [activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, confidenceCalibration, memoryConfig, memoryModel, activeUsername]);
 
     // Flush pending state on tab close / hide. The hook keeps an internal
     // ref to the freshest snapshot (updated every render via getSnapshot)
@@ -1225,6 +1279,7 @@ const App: React.FC = () => {
             },
         });
         if (ok) {
+            handleCancelAnalysis();
             const newConv = createNewConversation();
             setConversationHistory([newConv]);
             setActiveConversationId(newConv.id);
@@ -1233,15 +1288,20 @@ const App: React.FC = () => {
 
     const handleLoadConversation = (id: string) => {
         if (id !== activeConversationId) {
+            handleCancelAnalysis();
+            invalidatePostMortemRuns();
             setActiveConversationId(id);
-            setIsHistoryVisible(false);
         }
     };
 
     const handleDeleteConversations = (ids: string[]) => {
-        setConversationHistory(prev => prev.filter(c => !ids.includes(c.id)));
+        // Single source of truth: filter from the same list we store, so the
+        // active-conversation fallback can't reference a stale snapshot.
+        const remaining = conversationHistory.filter(c => !ids.includes(c.id));
+        setConversationHistory(remaining);
         if (activeConversationId && ids.includes(activeConversationId)) {
-            const remaining = conversationHistory.filter(c => !ids.includes(c.id));
+            handleCancelAnalysis();
+            invalidatePostMortemRuns();
             if (remaining.length > 0) {
                 setActiveConversationId(remaining[0].id);
             } else {
@@ -1250,7 +1310,19 @@ const App: React.FC = () => {
         }
     };
 
+    // Sidebar delete: confirm + undo (5s grace) before removing a session.
+    const handleDeleteConversationFromSidebar = async (id: string) => {
+        const ok = await confirmDialog({
+            title: 'Delete session?',
+            message: 'This conversation and its messages will be removed. Logged trades are kept.',
+            confirmLabel: 'Delete',
+        });
+        if (ok) handleDeleteConversations([id]);
+    };
+
     const handleStartNewConversation = () => {
+        handleCancelAnalysis();
+        invalidatePostMortemRuns();
         const newConv = createNewConversation();
         if (activeConversation) {
             newConv.ocrModel = activeConversation.ocrModel;
@@ -1260,7 +1332,6 @@ const App: React.FC = () => {
         }
         setConversationHistory(prev => [newConv, ...prev]);
         setActiveConversationId(newConv.id);
-        setIsHistoryVisible(false);
     };
 
     const handleApplyStrategy = (strategyName: string) => {
@@ -1364,8 +1435,14 @@ const App: React.FC = () => {
             const filesToProcess = newFiles.slice(0, remainingSlots);
             const placeholderMetadata: ImageMetadata[] = filesToProcess.map(file => ({ file, dataURL: '', isLoading: true }));
             setImages(prev => [...prev, ...placeholderMetadata]);
-            const visionConfig = readyProviders.find(p => p.selectedModel === selectedOcrModel) || readyProviders[0] || moderatorConfig;
-            processImagesForSummarization(filesToProcess, images.length, visionConfig, setImages, handleQuotaExceeded);
+            // OCR burns a vision API call — only run it in ensemble mode
+            // (the upload button is already hidden/disabled otherwise).
+            if (isEnsembleEnabled) {
+                const visionConfig = readyProviders.find(p => p.selectedModel === selectedOcrModel || p.models.includes(selectedOcrModel)) || readyProviders[0] || moderatorConfig;
+                processImagesForSummarization(filesToProcess, images.length, visionConfig, setImages, handleQuotaExceeded);
+            } else {
+                setImages(prev => prev.filter(img => !img.isLoading));
+            }
             if (event.target) event.target.value = '';
         }
     };
@@ -1670,6 +1747,17 @@ const App: React.FC = () => {
                 isLoading={isLoading}
                 onOpenSavedAnalyses={() => { setIsSavedAnalysesVisible(true); setIsSettingsMenuVisible(false); }}
                 onOpenStrategySearch={() => { setIsStrategySearchVisible(true); setIsSettingsMenuVisible(false); }}
+                summarizationProvider={summarizationProvider}
+                summarizationModel={summarizationModel}
+                onSetSummarizationProvider={handleSetSummarizationProvider}
+                onSetSummarizationModel={setSummarizationModel}
+                summaryCharLimit={summaryCharLimit}
+                onUpdateSummaryCharLimit={handleUpdateSummaryCharLimit}
+                onRegenerateSummary={handleRegenerateFinalSummary}
+                useAlgorithmicSummary={useAlgorithmicSummary}
+                onToggleAlgorithmicSummary={setUseAlgorithmicSummary}
+                useAlgorithmicInsights={useAlgorithmicInsights}
+                onToggleAlgorithmicInsights={setUseAlgorithmicInsights}
                 onSwitchUser={handleSwitchUser}
                 onExportData={handleExportData}
                 isAccuracyModeEnabled={isAccuracyModeEnabled}
@@ -1743,13 +1831,13 @@ const App: React.FC = () => {
                 setIsMobileMenuOpen={setIsMobileMenuOpen}
                 setIsVisionDataVisible={setIsVisionDataVisible}
                 setJournalState={setJournalState}
-                setIsHistoryVisible={setIsHistoryVisible}
                 setIsSettingsVisible={setIsSettingsMenuVisible}
                 setIsLiveAnalysisVisible={setIsLiveAnalysisVisible}
                 setIsLivePostMortemVisible={setIsLivePostMortemVisible}
                 isLoading={isLoading}
                 isRateLimited={isRateLimited}
                 onOpenLiveMarket={() => setIsLiveMarketVisible(true)}
+                onDeleteConversation={handleDeleteConversationFromSidebar}
                 isOnline={isOnline}
                 pendingQueueCount={pendingQueueCount}
                 liveMarketConditions={liveMarketConditions}
@@ -1813,7 +1901,6 @@ const App: React.FC = () => {
                 />
             )}
 
-            <ConversationHistory conversations={conversationHistory} activeConversationId={activeConversationId} isVisible={isHistoryVisible} onClose={() => setIsHistoryVisible(false)} onLoadConversation={handleLoadConversation} onDelete={handleDeleteConversations} onClearAll={handleClearAllConversations} onStartNew={handleStartNewConversation} />
 
             {/* Advanced Analytics Side Panel - Fixed on right edge */}
             <AdvancedAnalyticsSidePanel
@@ -1845,7 +1932,16 @@ const App: React.FC = () => {
 
             {/* Main row: persistent desktop sidebar + chat column */}
             <div className="flex-1 flex flex-row min-h-0">
-                <aside className="hidden lg:flex flex-col w-60 shrink-0 min-h-0 border-r border-white/5 bg-[#151515]">
+                <aside className={`hidden lg:flex flex-col ${isSidebarCollapsed ? 'w-16' : 'w-60'} shrink-0 min-h-0 border-r border-white/5 bg-[#151515] transition-[width] duration-200 relative`}>
+                    <button
+                        type="button"
+                        onClick={() => setIsSidebarCollapsed(prev => !prev)}
+                        className="absolute -right-3 top-4 z-30 h-6 w-6 rounded-full border border-white/10 bg-zinc-800 text-zinc-400 shadow-lg hover:bg-zinc-700 hover:text-white transition-colors flex items-center justify-center focus-visible:ring-2 focus-visible:ring-cyan-400"
+                        title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                        aria-label={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                    >
+                        {isSidebarCollapsed ? <ChevronRightIcon className="h-3.5 w-3.5" /> : <ChevronLeftIcon className="h-3.5 w-3.5" />}
+                    </button>
                     <SidebarContent
                         activeUsername={activeUsername}
                         conversations={conversationHistory}
@@ -1854,11 +1950,12 @@ const App: React.FC = () => {
                         isFreshSession={messages.length === 0}
                         onNewConversation={handleStartNewConversation}
                         onLoadConversation={handleLoadConversation}
+                        onDeleteConversation={handleDeleteConversationFromSidebar}
                         onOpenLiveMarket={() => setIsLiveMarketVisible(true)}
                         onOpenVisionData={() => setIsVisionDataVisible(true)}
                         onOpenJournal={() => setJournalState({ isOpen: true, tab: 'log' })}
-                        onOpenHistory={() => setIsHistoryVisible(true)}
                         onOpenSettings={() => setIsSettingsMenuVisible(true)}
+                        collapsed={isSidebarCollapsed}
                     />
                 </aside>
 
@@ -1935,7 +2032,6 @@ const App: React.FC = () => {
                 isAccuracyModeEnabled={isAccuracyModeEnabled}
                 accuracySubMode={accuracySubMode}
                 providers={providerConfigs}
-                onToggleProvider={handleToggleProviderConfig}
                 onUpdateProvider={handleUpdateProvider}
 
                 selectedVisionModel={selectedOcrModel}
@@ -1943,6 +2039,7 @@ const App: React.FC = () => {
                 hybridData={currentHybridData}
                 isHybridLoading={isHybridLoading}
                 hybridConnectionStatus={hybridConnectionStatus}
+                hideHybridPanel={isSettingsMenuVisible}
                 slOptimization={currentSlOptimization}
                 suggestedEntryPrice={currentSuggestedEntryPrice}
                 entryTimingScore={currentEntryTimingScore}
@@ -1962,6 +2059,3 @@ const App: React.FC = () => {
 };
 
 export default App;
-
-
-

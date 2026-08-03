@@ -7,9 +7,9 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
+node_modules/
+dist/
+dist-ssr/
 *.local
 
 # Editor directories and files
@@ -26,8 +26,8 @@ dist-ssr
 # Environment variables (API keys)
 .env*
 !.env.example
-dist
-dist_electron
+dist/
+dist_electron/
 android/app/src/main/assets
 android/app/build
 ios/App/App/build
@@ -46,6 +46,8 @@ tsc_errors.txt
 # Test output artifacts
 services/test_mem_output.txt
 services/test_output.txt
+tests/test_mem_output.txt
+tests/test_output.txt
 
 # Local agent tooling
 .zcode/
@@ -54,5 +56,8 @@ services/test_output.txt
 .commandcode
 
 # Test artifacts
-playwright-report
-test-results
+playwright-report/
+test-results/
+blob-report/
+coverage/
+.nyc_output/

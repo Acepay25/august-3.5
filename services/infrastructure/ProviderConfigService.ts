@@ -5,6 +5,7 @@
 
 import { ProviderConfig, ApiFormat } from '../../types/provider';
 import { getPreferenceObject, setPreferenceObject } from './PreferencesService';
+import { assertValidProviderUrl } from '../../utils/providerUrlValidation';
 
 const STORAGE_KEY = 'provider_configs_v1';
 
@@ -35,24 +36,17 @@ async function encryptKey(apiKey: string): Promise<string> {
     if (!apiKey || isEncrypted(apiKey)) return apiKey;
     const bridge = getCryptoBridge();
     if (!bridge) return apiKey;
-    try {
-        return (await bridge.encryptSecret(apiKey)) || apiKey;
-    } catch (err) {
-        console.warn('[ProviderConfigService] Key encryption failed, storing plaintext:', err);
-        return apiKey;
-    }
+    const encrypted = await bridge.encryptSecret(apiKey);
+    if (!encrypted) throw new Error('Desktop key encryption is unavailable. Provider settings were not saved.');
+    return encrypted;
 }
 
 async function decryptKey(stored: string): Promise<string> {
     if (!stored || !isEncrypted(stored)) return stored;
     const bridge = getCryptoBridge();
-    if (!bridge) return stored;
-    try {
-        return (await bridge.decryptSecret(stored)) ?? stored;
-    } catch (err) {
-        console.warn('[ProviderConfigService] Key decryption failed:', err);
-        return stored;
-    }
+    if (!bridge) return '';
+    const decrypted = await bridge.decryptSecret(stored);
+    return decrypted || '';
 }
 
 // ─── Provider Configuration Service ───────────────────────────────────────
@@ -69,10 +63,36 @@ export function getDefaultConfigs(): ProviderConfig[] {
  */
 export async function loadProviderConfigs(): Promise<ProviderConfig[]> {
     const saved = await getPreferenceObject<ProviderConfig[]>(STORAGE_KEY);
-    if (!saved) {
-        return getDefaultConfigs();
-    }
-    return Promise.all(saved.map(async c => ({ ...c, apiKey: await decryptKey(c.apiKey || '') })));
+    if (!Array.isArray(saved)) return getDefaultConfigs();
+
+    return Promise.all(saved.map(async (raw) => {
+        const config = raw as Partial<ProviderConfig>;
+        const apiFormat: ApiFormat = config.apiFormat === 'messages' || config.apiFormat === 'responses'
+            ? config.apiFormat
+            : 'chat_completions';
+        const models = Array.isArray(config.models) && config.models.length > 0
+            ? config.models.filter((model): model is string => typeof model === 'string' && model.trim().length > 0)
+            : ['default'];
+        const selectedModel = typeof config.selectedModel === 'string' && models.includes(config.selectedModel)
+            ? config.selectedModel
+            : models[0];
+        const ensembleModels = Array.isArray(config.ensembleModels)
+            ? config.ensembleModels.filter((model): model is string => typeof model === 'string' && models.includes(model)).slice(0, 3)
+            : undefined;
+
+        return {
+            id: typeof config.id === 'string' ? config.id : `legacy-${Date.now()}`,
+            name: typeof config.name === 'string' ? config.name : 'Unnamed provider',
+            apiKey: await decryptKey(typeof config.apiKey === 'string' ? config.apiKey : ''),
+            baseUrl: typeof config.baseUrl === 'string' ? config.baseUrl : '',
+            apiFormat,
+            isEnabled: config.isEnabled === true,
+            isBuiltIn: config.isBuiltIn === true,
+            models,
+            selectedModel,
+            ...(ensembleModels ? { ensembleModels: ensembleModels.length > 0 ? ensembleModels : [selectedModel] } : {}),
+        } satisfies ProviderConfig;
+    }));
 }
 
 /**
@@ -91,9 +111,14 @@ export async function updateProviderConfig(
     updates: Partial<Omit<ProviderConfig, 'id' | 'isBuiltIn'>>
 ): Promise<ProviderConfig[]> {
     const configs = await loadProviderConfigs();
-    const updated = configs.map(c =>
-        c.id === id ? { ...c, ...updates } : c
-    );
+    const updated = configs.map(c => {
+        if (c.id !== id) return c;
+        const next = { ...c, ...updates };
+        if (updates.baseUrl !== undefined) {
+            next.baseUrl = assertValidProviderUrl(updates.baseUrl);
+        }
+        return next;
+    });
     await saveProviderConfigs(updated);
     return updated;
 }
@@ -114,12 +139,13 @@ export async function addCustomProvider(provider: {
         id: `custom-${Date.now()}`,
         name: provider.name,
         apiKey: provider.apiKey,
-        baseUrl: provider.baseUrl,
+        baseUrl: assertValidProviderUrl(provider.baseUrl),
         apiFormat: provider.apiFormat,
         isEnabled: true,
         isBuiltIn: false,
         models: provider.models || ['default'],
         selectedModel: provider.selectedModel || provider.models?.[0] || 'default',
+        ensembleModels: [provider.selectedModel || provider.models?.[0] || 'default'],
     };
     const updated = [...configs, newConfig];
     await saveProviderConfigs(updated);
@@ -164,7 +190,8 @@ export async function removeModelFromProvider(providerId: string, modelId: strin
         if (c.id === providerId) {
             const models = c.models.filter(m => m !== modelId);
             const selectedModel = c.selectedModel === modelId ? (models[0] || '') : c.selectedModel;
-            return { ...c, models, selectedModel };
+            const ensembleModels = (c.ensembleModels || [c.selectedModel]).filter(m => m !== modelId);
+            return { ...c, models, selectedModel, ensembleModels: ensembleModels.length > 0 ? ensembleModels : [selectedModel].filter(Boolean) };
         }
         return c;
     });
@@ -183,7 +210,8 @@ export async function updateModelInProvider(providerId: string, oldModelId: stri
         if (c.id === providerId) {
             const models = c.models.map(m => m === oldModelId ? trimmed : m);
             const selectedModel = c.selectedModel === oldModelId ? trimmed : c.selectedModel;
-            return { ...c, models, selectedModel };
+            const ensembleModels = (c.ensembleModels || [c.selectedModel]).map(m => m === oldModelId ? trimmed : m);
+            return { ...c, models, selectedModel, ensembleModels: [...new Set(ensembleModels)].slice(0, 3) };
         }
         return c;
     });
@@ -197,4 +225,3 @@ export async function updateModelInProvider(providerId: string, oldModelId: stri
 export function getReadyProviders(configs: ProviderConfig[]): ProviderConfig[] {
     return configs.filter(c => c.isEnabled && c.apiKey.trim().length > 0);
 }
-

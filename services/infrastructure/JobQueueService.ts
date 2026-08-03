@@ -13,6 +13,7 @@ import {
     loadLearningRules,
     saveLearningRules
 } from '../learning/LearningRulesService';
+import { addRulesFromPostMortem } from '../validation/InvalidationRuleService';
 
 export enum JobType {
     EXTRACT_INSIGHTS = 'EXTRACT_INSIGHTS',
@@ -162,6 +163,18 @@ class JobQueueService {
             updatedStorage.lastUpdated !== storage.lastUpdated) {
             saveLearningRules(updatedStorage);
             console.log(`[JobQueue] Saved new learning rules.`);
+        }
+
+        // Invalidation rules: previously the LLM extraction path
+        // (addRulesFromPostMortem) was never called in production, so
+        // checkTradeAgainstRules always ran against an empty store. Wire it
+        // into the post-mortem rule job now (regex + LLM extraction).
+        if (trade.postMortem) {
+            try {
+                await addRulesFromPostMortem(trade.postMortem, trade);
+            } catch (e) {
+                console.warn('[JobQueue] Invalidation rule extraction failed:', e);
+            }
         }
 
         return { rulesCount: updatedStorage.rules.length };

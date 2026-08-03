@@ -33,10 +33,10 @@ export function useConversations() {
     const moderatorProviderId = activeConversation?.moderatorProviderId || '';
     const moderatorModel = activeConversation?.moderatorModel || '';
 
-    const updateMessages = useCallback((updater: (prevMessages: Message[]) => Message[]) => {
+    const updateMessages = useCallback((updater: (prevMessages: Message[]) => Message[], conversationId: string | null = activeConversationId) => {
         setConversationHistory(prevHistory => {
             return prevHistory.map(conv => {
-                if (conv.id === activeConversationId) {
+                if (conv.id === conversationId) {
                     const next = updater(conv.messages);
                     // P2-16: Enforce the message cap. Drop the OLDEST messages
                     // (FIFO) so recent context is preserved. This runs on every

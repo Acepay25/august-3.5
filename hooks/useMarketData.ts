@@ -5,7 +5,7 @@ import { LiveBacktestResult } from '../services/backtesting/LiveBacktestService'
 import { SLOptimization } from '../services/backtesting/StopLossOptimizerService';
 import { fetchRecentLiquidations, fetchOHLCV, pingBinanceAPI } from '../services/analysis/MarketDataService';
 
-export function useMarketData(isHybridIntelligenceEnabled: boolean) {
+export function useMarketData(isHybridIntelligenceEnabled: boolean, isEnsembleEnabled: boolean) {
     const [currentHybridData, setCurrentHybridData] = useState<HybridDataPacket | null>(null);
     const [hybridConnectionStatus, setHybridConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
     const [latestMonteCarloResult, setLatestMonteCarloResult] = useState<MonteCarloResult | null>(null);
@@ -26,8 +26,13 @@ export function useMarketData(isHybridIntelligenceEnabled: boolean) {
         lastUpdated: string;
     } | null>(null);
 
-    // Fetch live market conditions periodically for Global Sessions display
+    // Fetch live market conditions periodically for Global Sessions display.
+    // Market data is only fetched while ensemble mode is on.
     useEffect(() => {
+        if (!isEnsembleEnabled) {
+            setLiveMarketConditions(null);
+            return;
+        }
         const fetchLiveMarketConditions = async () => {
             try {
                 // Fetch liquidation data
@@ -99,7 +104,7 @@ export function useMarketData(isHybridIntelligenceEnabled: boolean) {
             stopInterval();
             document.removeEventListener('visibilitychange', handleVisibilityChange);
         };
-    }, []);
+    }, [isEnsembleEnabled]);
 
     // Check Binance API connection when Hybrid Intelligence is enabled
     useEffect(() => {
@@ -107,7 +112,7 @@ export function useMarketData(isHybridIntelligenceEnabled: boolean) {
         let retryCount = 0;
 
         const checkConnection = async () => {
-            if (isHybridIntelligenceEnabled) {
+            if (isHybridIntelligenceEnabled && isEnsembleEnabled) {
                 // Only show "connecting" if we are currently disconnected or in error state
                 // This prevents flickering "connecting..." when we are already connected
                 setHybridConnectionStatus(prev => (prev === 'connected' ? 'connected' : 'connecting'));
@@ -136,7 +141,7 @@ export function useMarketData(isHybridIntelligenceEnabled: boolean) {
             }
         };
 
-        if (isHybridIntelligenceEnabled) {
+        if (isHybridIntelligenceEnabled && isEnsembleEnabled) {
             checkConnection();
             // Re-check connection every 60 seconds (less aggressive than 30s)
             intervalId = setInterval(checkConnection, 60000);
@@ -164,7 +169,7 @@ export function useMarketData(isHybridIntelligenceEnabled: boolean) {
         } else {
             setHybridConnectionStatus('disconnected');
         }
-    }, [isHybridIntelligenceEnabled]);
+    }, [isHybridIntelligenceEnabled, isEnsembleEnabled]);
 
     return {
         currentHybridData,

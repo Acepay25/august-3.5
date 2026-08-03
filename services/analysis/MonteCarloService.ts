@@ -362,6 +362,30 @@ export const runSimulation = (config: SimulationConfig): MonteCarloResult => {
 /**
  * Calculate ruin risk given position sizing
  */
+/**
+ * Kelly criterion fraction: f* = (bp - q) / b, with b = avgWin/avgLoss.
+ * Guarded against the degenerate cases (winRate 0, zero avg loss, zero b)
+ * that previously produced Infinity/NaN, and clamped to [0, 1] (never size
+ * more than 100% of the account).
+ */
+export const computeKellyFraction = (
+    winRatePct: number,
+    expectedValuePct: number,
+    slHitPct: number,
+    ciLowerPct: number
+): number => {
+    const winRate = winRatePct / 100;
+    const lossRate = 1 - winRate;
+    const avgWinPercent = winRate > 0 && expectedValuePct > 0
+        ? expectedValuePct / winRate
+        : 2; // Default 2% if unknown
+    const avgLossPercent = slHitPct > 0 && Math.abs(ciLowerPct) > 0
+        ? Math.abs(ciLowerPct)
+        : 1; // Default 1% if unknown
+    const b = avgLossPercent > 0 ? avgWinPercent / avgLossPercent : 0;
+    return b > 0 ? Math.max(0, Math.min(1, (b * winRate - lossRate) / b)) : 0;
+};
+
 export const calculateRuinRisk = (
     accountBalance: number,
     positionSize: number,
@@ -372,11 +396,11 @@ export const calculateRuinRisk = (
     const lossRate = 1 - winRate;
 
     // Calculate average win and loss based on probabilities
-    const avgWinPercent = monteCarloResult.expectedValue > 0
+    const avgWinPercent = winRate > 0 && monteCarloResult.expectedValue > 0
         ? monteCarloResult.expectedValue / winRate
         : 2; // Default 2% if unknown
 
-    const avgLossPercent = monteCarloResult.probabilities.slHit > 0
+    const avgLossPercent = monteCarloResult.probabilities.slHit > 0 && Math.abs(monteCarloResult.confidenceInterval.lower) > 0
         ? Math.abs(monteCarloResult.confidenceInterval.lower)
         : 1; // Default 1% if unknown
 
@@ -419,10 +443,13 @@ export const calculateRuinRisk = (
 
     const expectedEquity = finalEquities.reduce((a, b) => a + b, 0) / sequenceCount;
 
-    // Kelly Criterion: f* = (bp - q) / b
-    // where b = odds (avgWin/avgLoss), p = win prob, q = loss prob
-    const b = avgWinPercent / avgLossPercent;
-    const kellyFraction = Math.max(0, (b * winRate - lossRate) / b);
+    // Kelly Criterion: f* = (bp - q) / b (guarded helper)
+    const kellyFraction = computeKellyFraction(
+        monteCarloResult.winRate,
+        monteCarloResult.expectedValue,
+        monteCarloResult.probabilities.slHit,
+        monteCarloResult.confidenceInterval.lower
+    );
 
     return {
         prob25pctDrawdown: Math.round((count25pct / sequenceCount) * 1000) / 10,

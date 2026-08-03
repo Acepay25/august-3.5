@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import ImagePreview from '../shared/ImagePreview';
-import { PlusIcon, LoadingIcon, SendIcon, ChevronDownIcon, ChevronUpIcon, BotIcon } from '../shared/Icons';
+import { PlusIcon, LoadingIcon, SendIcon, StopIcon, ChevronDownIcon, ChevronUpIcon, BotIcon } from '../shared/Icons';
 import { ImageMetadata, AnalystLensConfig } from '../../types';
 
 import { ProviderConfig } from '../../types/provider';
@@ -22,13 +22,13 @@ interface ChatInputProps {
     input: string;
     setInput: (value: string) => void;
     handleSendMessage: () => void;
+    handleCancelAnalysis: () => void;
     loadingMessage: string | null;
     isSummarizing: boolean;
     isRateLimited: boolean;
     isAnyProviderEnabled: boolean;
     // Ensemble Intelligence Configuration — dynamic provider list
     providers: ProviderConfig[];
-    onToggleProvider: (id: string) => void;
     onUpdateProvider?: (id: string, updates: Partial<Omit<ProviderConfig, 'id' | 'isBuiltIn'>>) => Promise<void>;
     // Vision Model Selection
     selectedVisionModel: string;
@@ -64,12 +64,12 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
     input,
     setInput,
     handleSendMessage,
+    handleCancelAnalysis,
     loadingMessage,
     isSummarizing,
     isRateLimited,
     isAnyProviderEnabled,
     providers,
-    onToggleProvider,
     onUpdateProvider,
     selectedVisionModel,
     setSelectedVisionModel,
@@ -86,6 +86,17 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
     const [showAISettings, setShowAISettings] = useState(false);
     const [showLensSettings, setShowLensSettings] = useState(false);
 
+    React.useEffect(() => {
+        const handleEscape = (event: KeyboardEvent) => {
+            if (event.key !== 'Escape') return;
+            setShowAISettings(false);
+            setShowLensSettings(false);
+            setIsLeverageDropdownOpen(false);
+        };
+        document.addEventListener('keydown', handleEscape);
+        return () => document.removeEventListener('keydown', handleEscape);
+    }, [setIsLeverageDropdownOpen]);
+
     // Charts can only be analyzed in ensemble mode.
     const uploadDisabled = isImageUploadDisabled || !isEnsembleEnabled;
 
@@ -97,11 +108,16 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
     const effectiveChatModel = selectedChatModel && chatModelOptions.some(o => o.modelId === selectedChatModel)
         ? selectedChatModel
         : (chatProviders[0]?.selectedModel || chatProviders[0]?.models[0] || '');
+    const ensembleSelectionCount = providers.reduce((total, provider) => {
+        const selected = provider.ensembleModels?.filter(model => provider.models.includes(model))
+            ?? (provider.selectedModel ? [provider.selectedModel] : []);
+        return total + selected.length;
+    }, 0);
 
     return (
         <div className={centered
             ? 'w-full'
-            : 'absolute bottom-0 left-0 right-0 px-3 sm:px-4 lg:px-8 pointer-events-none z-10 pb-[calc(env(safe-area-inset-bottom,16px)+0.5rem)] sm:pb-[calc(env(safe-area-inset-bottom,24px)+1rem)] lg:pb-8'}>
+                            : 'absolute bottom-0 left-0 right-0 px-3 sm:px-4 lg:px-8 pointer-events-none z-10 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:pb-[calc(env(safe-area-inset-bottom)+1rem)] lg:pb-8'}>
             <div className={centered ? 'w-full' : 'w-full lg:max-w-3xl lg:mx-auto pointer-events-auto'}>
                 {/* Main Input Container — carded composer surface */}
                 <div className="rounded-2xl border border-white/10 bg-[#202020]/95 shadow-[0_8px_32px_rgba(0,0,0,0.24)] p-2 sm:p-3 lg:p-4 transition-all">
@@ -116,7 +132,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             onChange={(e) => setInput(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey ? (e.preventDefault(), handleSendMessage()) : null}
                             placeholder={images.length > 0 ? "Analyze charts..." : "Write a message..."}
-                            className="flex-1 bg-transparent px-2 py-2 text-sm lg:text-base text-white placeholder-zinc-500 focus:outline-none transition-all min-h-[44px] lg:min-h-[48px] max-h-32 resize-none leading-relaxed"
+                            className="flex-1 min-w-0 bg-transparent px-2 py-2 text-base text-white placeholder-zinc-500 focus:outline-none focus-visible:outline-none focus-visible:ring-0 transition-all min-h-[44px] lg:min-h-[48px] max-h-32 resize-none leading-relaxed"
                             rows={1}
                             // Always typeable — sending (not typing) is what
                             // requires a ready provider.
@@ -127,9 +143,9 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                     <input type="file" multiple accept="image/*" ref={fileInputRef} onChange={handleImageUpload} className="hidden" disabled={uploadDisabled} />
 
                     {/* Bottom Toolbar — unified control row for all breakpoints */}
-                    <div className="flex items-center justify-between gap-2 pt-2 sm:pt-3 mt-2 border-t border-white/5 lg:border-none lg:mt-3 lg:pt-0">
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 sm:pt-3 mt-2 border-t border-white/5 lg:flex-nowrap lg:border-none lg:mt-3 lg:pt-0">
                         {/* Left Side: upload + action pills */}
-                        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-wrap">
+                        <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2 flex-wrap">
                             <button
                                 onClick={() => fileInputRef.current?.click()}
                                 className={`h-9 w-9 rounded-full transition-all shrink-0 flex items-center justify-center ${uploadDisabled ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-400 hover:text-white'}`}
@@ -144,13 +160,13 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                 <select
                                     value={effectiveChatModel}
                                     onChange={(e) => setSelectedChatModel(e.target.value)}
-                                    className="max-w-[150px] sm:max-w-[190px] bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1.5 text-xs text-zinc-200 font-mono focus:outline-none focus:border-zinc-600 cursor-pointer"
+                                    className="max-w-[150px] sm:max-w-[190px] bg-zinc-800 border border-zinc-700 rounded-lg pl-2 pr-6 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-cyan-500/60 focus:ring-1 focus:ring-cyan-500/20 cursor-pointer appearance-none bg-no-repeat bg-[right_0.4rem_center] bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2371717a%22%20stroke-width%3D%222.5%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22/%3E%3C/svg%3E')]"
                                     title="Casual chat model (ensemble off)"
                                     aria-label="Casual chat model"
                                 >
                                     {chatModelOptions.map(opt => (
                                         <option key={`${opt.providerName}-${opt.modelId}`} value={opt.modelId}>
-                                            {opt.providerName}: {opt.modelId}
+                                            {opt.modelId}
                                         </option>
                                     ))}
                                 </select>
@@ -168,6 +184,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                     }}
                                     className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 lg:px-4 py-1 sm:py-1.5 lg:py-2 transition-all text-xs sm:text-sm border-r border-black/10 rounded-l-full ${isEnsembleEnabled ? 'text-white shadow-[inset_0_0_10px_rgba(0,0,0,0.1)]' : 'text-zinc-400 hover:text-white'}`}
                                     title={isEnsembleEnabled ? 'Ensemble on — chart analysis enabled' : 'Enable ensemble mode for chart analysis'}
+                                    aria-pressed={isEnsembleEnabled}
                                 >
                                     <span className="font-medium hidden xs:inline sm:inline">Ensemble</span>
                                 </button>
@@ -178,6 +195,9 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                     }}
                                     className={`px-1.5 sm:px-2 py-1 sm:py-1.5 lg:py-2 transition-colors flex items-center justify-center rounded-r-full ${isEnsembleEnabled ? 'text-white hover:bg-cyan-700' : 'text-zinc-400 hover:text-white hover:bg-zinc-700'}`}
                                     title="Configure providers"
+                                    aria-label="Configure providers"
+                                    aria-expanded={showAISettings}
+                                    aria-haspopup="dialog"
                                 >
                                     <ChevronDownIcon className={`w-3 h-3 sm:w-3.5 sm:h-3.5 transition-transform duration-200 ${showAISettings ? 'rotate-180' : ''}`} />
                                 </button>
@@ -189,6 +209,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                 <button
                                     onClick={() => setLensConfig({ ...lensConfig, enabled: !lensConfig.enabled })}
                                     className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 lg:py-2 transition-all text-xs sm:text-sm border-r border-black/10 rounded-l-full ${lensConfig.enabled ? 'text-white shadow-[inset_0_0_10px_rgba(0,0,0,0.1)]' : 'text-zinc-400 hover:text-white'}`}
+                                    aria-pressed={lensConfig.enabled}
                                 >
                                     <span className="text-xs sm:text-sm"></span>
                                     <span className="font-medium hidden xs:inline sm:inline">Lenses</span>
@@ -200,14 +221,17 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                         e.stopPropagation();
                                         setShowLensSettings(!showLensSettings);
                                     }}
-                                    className={`px-1.5 sm:px-2 py-1 sm:py-1.5 lg:py-2 transition-colors flex items-center justify-center rounded-r-full ${lensConfig.enabled ? 'text-white hover:bg-zinc-600' : 'text-zinc-400 hover:text-white hover:bg-zinc-700'}`}
+                                    className={`px-1.5 sm:px-2 py-1 sm:py-1.5 lg:py-2 transition-colors flex items-center justify-center rounded-r-full focus-visible:ring-2 focus-visible:ring-cyan-400 ${lensConfig.enabled ? 'text-white hover:bg-zinc-600' : 'text-zinc-400 hover:text-white hover:bg-zinc-700'}`}
+                                    aria-label="Configure analyst lenses"
+                                    aria-expanded={showLensSettings}
+                                    aria-haspopup="dialog"
                                 >
                                     <ChevronDownIcon className={`w-3 h-3 sm:w-3.5 sm:h-3.5 transition-transform duration-200 ${showLensSettings ? 'rotate-180' : ''}`} />
                                 </button>
 
                                 {/* Role Assignment Dropdown */}
                                 {showLensSettings && (
-                                    <div className="absolute bottom-full left-0 mb-2 w-64 bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden animate-fade-in divide-y divide-white/5">
+                                    <div role="dialog" aria-label="Assign analysts" className="absolute bottom-full left-0 mb-2 w-64 bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden animate-fade-in divide-y divide-white/5">
                                         <div className="px-3 py-2 bg-zinc-800 text-[10px] uppercase font-bold text-zinc-500 tracking-wider">
                                             Assign Analysts
                                         </div>
@@ -309,13 +333,16 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             <div className="relative" ref={leverageRef}>
                                 <button
                                     onClick={() => setIsLeverageDropdownOpen(!isLeverageDropdownOpen)}
-                                    className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full transition-all text-xs sm:text-sm ${isLeverageDropdownOpen ? 'bg-zinc-700 text-white' : 'bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700'}`}
+                                    className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full transition-all text-xs sm:text-sm focus-visible:ring-2 focus-visible:ring-cyan-400 ${isLeverageDropdownOpen ? 'bg-zinc-700 text-white' : 'bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700'}`}
+                                    aria-label={`Select leverage, currently ${leverageInput}x`}
+                                    aria-expanded={isLeverageDropdownOpen}
+                                    aria-haspopup="menu"
                                 >
                                     <span className="text-xs sm:text-sm"></span>
                                     <span className="font-medium">{leverageInput}x</span>
                                 </button>
                                 {isLeverageDropdownOpen && (
-                                    <div className="absolute bottom-full right-0 mb-2 w-28 bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden animate-fade-in">
+                                    <div role="menu" aria-label="Leverage presets" className="absolute bottom-full right-0 mb-2 w-28 bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden animate-fade-in">
                                         {[25, 50, 75, 100, 125].map(preset => (
                                             <button
                                                 key={preset}
@@ -331,7 +358,8 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                                 value={leverageInput}
                                                 onChange={handleLeverageChange}
                                                 onBlur={handleLeverageBlur}
-                                                className="w-full bg-zinc-800 border border-white/10 rounded-lg px-2 py-1.5 text-sm font-mono text-cyan-300 focus:outline-none focus:border-cyan-500/50"
+                                                className="w-full bg-zinc-800 border border-white/10 rounded-lg px-2 py-1.5 text-sm font-mono text-cyan-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus:border-cyan-500/50"
+                                                aria-label="Custom leverage"
                                                 min="1"
                                                 max="125"
                                                 placeholder="Custom"
@@ -341,91 +369,84 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                 )}
                             </div>
                             <button
-                                onClick={handleSendMessage}
-                                disabled={!!loadingMessage || isSummarizing || (!input.trim() && images.length === 0) || isRateLimited || !isAnyProviderEnabled}
-                                className="h-9 w-9 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-white disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-zinc-800 transition-all flex items-center justify-center shrink-0"
-                                title="Send"
-                                aria-label="Send message"
+                                onClick={loadingMessage ? handleCancelAnalysis : handleSendMessage}
+                                disabled={isSummarizing || (!loadingMessage && ((!input.trim() && images.length === 0) || isRateLimited || !isAnyProviderEnabled))}
+                                className={`h-9 w-9 rounded-xl text-white transition-all flex items-center justify-center shrink-0 ${loadingMessage ? 'bg-rose-500/80 hover:bg-rose-500' : 'bg-cyan-500 hover:bg-cyan-400'} disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-zinc-800`}
+                                title={loadingMessage ? 'Stop generating' : 'Send'}
+                                aria-label={loadingMessage ? 'Stop generating' : 'Send message'}
                             >
-                                {isSummarizing ? <LoadingIcon className="h-5 w-5" /> : <SendIcon />}
+                                {isSummarizing ? <LoadingIcon className="h-5 w-5" /> : loadingMessage ? <StopIcon className="h-4 w-4" fill="currentColor" /> : <SendIcon />}
                             </button>
                         </div>
                     </div>
 
                     {/* Ensemble Intelligence Panel - List Style */}
                     {showAISettings && (
-                        <div className="mt-4 bg-zinc-900 rounded-2xl border border-white/10 overflow-hidden animate-fade-in">
-                            {/* AI Providers List */}
+                        <div role="dialog" aria-label="Provider settings" className="mt-4 bg-zinc-900 rounded-2xl border border-white/10 overflow-hidden animate-fade-in">
+                            {/* AI Providers List — only providers ENABLED in
+                                Settings participate in ensemble; enable/disable
+                                happens in Settings → AI Models. */}
                             <div className="max-h-[300px] overflow-y-auto">
-                                {providers.length > 0 ? (
-                                    providers.map((provider, index) => {
-                                        const isConfigured = provider.apiKey.trim().length > 0;
-                                        const isEnabled = provider.isEnabled && isConfigured;
-
-                                        return (
-                                            <div
-                                                key={provider.id}
-                                                className={`w-full flex items-center justify-between px-4 py-3 transition-all ${index !== 0 ? 'border-t border-white/5' : ''
-                                                    } ${isEnabled
-                                                        ? 'bg-cyan-500/10'
-                                                        : 'hover:bg-zinc-800 opacity-60'
-                                                    }`}
-                                            >
-                                                <div className="flex items-center gap-3">
-                                                    <svg className={`w-4 h-4 ${isEnabled ? 'text-cyan-400' : 'text-zinc-500'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                                                        <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-                                                        <line x1="12" y1="22.08" x2="12" y2="12" />
-                                                    </svg>
-                                                    <div className="text-left">
-                                                        <div className={`text-sm font-medium ${isEnabled ? 'text-white' : 'text-zinc-400'}`}>
-                                                            {provider.name}
-                                                        </div>
-                                                        <div className="mt-1 flex items-center gap-1.5">
-                                                            <select
-                                                                value={provider.selectedModel || provider.models[0] || ''}
-                                                                onChange={(e) => {
-                                                                    const selected = e.target.value;
-                                                                    if (onUpdateProvider) onUpdateProvider(provider.id, { selectedModel: selected });
-                                                                }}
-                                                                disabled={!isConfigured || provider.models.length === 0}
-                                                                className="bg-zinc-950 border border-zinc-800 rounded px-2 py-0.5 text-xs text-zinc-200 font-mono focus:outline-none focus:border-cyan-500/60 disabled:opacity-50"
-                                                            >
-                                                                {provider.models.length > 0 ? (
-                                                                    provider.models.map(m => (
-                                                                        <option key={m} value={m}>{m}</option>
-                                                                    ))
-                                                                ) : (
-                                                                    <option value="" disabled>No models</option>
-                                                                )}
-                                                            </select>
-                                                            {!isConfigured && <span className="text-[10px] text-red-400 font-mono">(No API key)</span>}
-                                                        </div>
+                                {providers.filter(p => p.isEnabled).length > 0 ? (
+                                    providers.filter(p => p.isEnabled).map((provider, index) => (
+                                        <div
+                                            key={provider.id}
+                                            className={`w-full flex items-center justify-between px-4 py-3 transition-all bg-cyan-500/10 ${index !== 0 ? 'border-t border-white/5' : ''
+                                                }`}
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <svg className="w-4 h-4 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                                                    <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+                                                    <line x1="12" y1="22.08" x2="12" y2="12" />
+                                                </svg>
+                                                <div className="text-left">
+                                                    <div className="text-sm font-medium text-white">
+                                                        {provider.name}
+                                                    </div>
+                                                    <div className="mt-2 space-y-1.5">
+                                                        <div className="text-[10px] uppercase tracking-wider text-zinc-500">Ensemble models</div>
+                                                        {provider.models.length > 0 ? provider.models.map(model => {
+                                                            const selectedModels = provider.ensembleModels?.filter(item => provider.models.includes(item))
+                                                                ?? (provider.selectedModel ? [provider.selectedModel] : []);
+                                                            const checked = selectedModels.includes(model);
+                                                            const atLimit = ensembleSelectionCount >= 3;
+                                                            return (
+                                                                <label key={model} className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={checked}
+                                                                        disabled={provider.apiKey.trim().length === 0 || (!checked && atLimit)}
+                                                                        onChange={() => {
+                                                                            if (!onUpdateProvider) return;
+                                                                            const next = checked
+                                                                                ? selectedModels.filter(item => item !== model)
+                                                                                : [...selectedModels, model];
+                                                                            if (next.length === 0 || next.length > 3) return;
+                                                                            void onUpdateProvider(provider.id, { ensembleModels: next });
+                                                                        }}
+                                                                        className="h-3.5 w-3.5 accent-cyan-500"
+                                                                        aria-label={`${provider.name} ${model} ensemble model`}
+                                                                    />
+                                                                    <span className="truncate font-mono">{model}</span>
+                                                                </label>
+                                                            );
+                                                        }) : <span className="text-[10px] text-zinc-600">No models configured</span>}
+                                                        {provider.apiKey.trim().length === 0 && <span className="block text-[10px] text-red-400 font-mono">No API key</span>}
                                                     </div>
                                                 </div>
-                                                <button
-                                                    onClick={() => onToggleProvider(provider.id)}
-                                                    className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
-                                                        isEnabled
-                                                            ? 'bg-cyan-500 text-white shadow-sm'
-                                                            : 'bg-zinc-800 text-zinc-500 hover:text-zinc-300 border border-zinc-700'
-                                                    }`}
-                                                    title={isEnabled ? 'Enabled for debate' : 'Disabled'}
-                                                >
-                                                    {isEnabled && (
-                                                        <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                                        </svg>
-                                                    )}
-                                                </button>
                                             </div>
-                                        );
-                                    })
+                                        </div>
+                                    ))
                                 ) : (
                                     <div className="px-4 py-6 text-center text-xs text-zinc-500">
-                                        No providers configured. Configure your providers in Settings → AI Models.
+                                        No enabled providers. Enable providers in Settings → AI Models.
                                     </div>
                                 )}
+                            </div>
+
+                            <div className="px-4 py-2 border-t border-white/10 text-[11px] text-zinc-500">
+                                Select up to <span className="text-zinc-300 font-medium">3 models total</span> for the ensemble ({ensembleSelectionCount}/3 selected).
                             </div>
 
                             {/* Vision Model Selector */}
@@ -434,7 +455,8 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                 <select
                                     value={selectedVisionModel}
                                     onChange={(e) => setSelectedVisionModel(e.target.value)}
-                                    className="w-full bg-zinc-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-zinc-300 focus:outline-none focus:border-cyan-500/50"
+                                    className="w-full bg-zinc-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-zinc-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus:border-cyan-500/50"
+                                    aria-label="Vision model"
                                 >
                                     {providers.filter(p => p.isEnabled && p.apiKey.trim().length > 0).flatMap(p => p.models.map(m => ({ providerName: p.name, modelId: m }))).map(item => (
                                         <option key={`${item.providerName}-${item.modelId}`} value={item.modelId} className="bg-zinc-900">

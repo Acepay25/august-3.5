@@ -84,10 +84,11 @@ export const parseAPIError = (error: any, provider: ProviderName): ParsedAPIErro
         };
     }
 
-    // Unknown error
+    // Unknown error — do not expose raw SDK/network text, which may contain
+    // URLs, request payloads, or provider response bodies.
     return {
         type: 'unknown',
-        message: `${provider} error: ${error?.message || 'Unknown error occurred'}`,
+        message: `${provider} request failed. Check the provider settings and try again.`,
         provider
     };
 };

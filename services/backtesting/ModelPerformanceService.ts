@@ -413,21 +413,27 @@ const updateStats = (stats: PerformanceStats, isWin: boolean): PerformanceStats 
  */
 const mapFamilyToKey = (family: string): 'familyA' | 'familyB' | 'familyC' | 'familyOmega' | null => {
     const f = family?.toLowerCase() || '';
-    if (f.includes('a') || f.includes('exhaustion') || f.includes('trap')) return 'familyA';
-    if (f.includes('b') || f.includes('reversal')) return 'familyB';
-    if (f.includes('c') || f.includes('continuation')) return 'familyC';
-    if (f.includes('omega') || f.includes('momentum')) return 'familyOmega';
+    // "Family X" strings all contain the letter 'a' (inside "Family") — match
+    // the family IDENTIFIER, not bare letters, so stats don't collapse into
+    // familyA. Omega is checked first (it also contains 'a').
+    if (/\bfamily\s*omega\b/.test(f) || f.includes('omega') || f.includes('momentum')) return 'familyOmega';
+    if (/\bfamily\s*a\b/.test(f) || f.includes('exhaustion') || f.includes('trap')) return 'familyA';
+    if (/\bfamily\s*b\b/.test(f) || f.includes('reversal')) return 'familyB';
+    if (/\bfamily\s*c\b/.test(f) || f.includes('continuation')) return 'familyC';
     return null;
 };
 
 /**
  * Map regime to key
  */
-const mapRegimeToKey = (regime: MarketRegime): 'trending' | 'ranging' | 'volatile' | 'compression' => {
-    if (regime.includes('trend')) return 'trending';
-    if (regime === 'ranging') return 'ranging';
-    if (regime === 'volatile_chop') return 'volatile';
-    if (regime === 'compression') return 'compression';
+export const mapRegimeToKey = (regime: string): 'trending' | 'ranging' | 'volatile' | 'compression' => {
+    const r = (regime || '').toLowerCase();
+    // Accepts both the 7-value TechnicalAnalysisService regime
+    // (strong_trend_up, volatile_chop, ...) and the normalized 4-key set.
+    if (r.includes('trend')) return 'trending';
+    if (r === 'ranging' || r.includes('range') || r.includes('consolidat')) return 'ranging';
+    if (r === 'volatile' || r.includes('volatile') || r.includes('chop')) return 'volatile';
+    if (r === 'compression' || r.includes('compression')) return 'compression';
     return 'ranging';
 };
 
@@ -448,7 +454,7 @@ export const trackTradeOutcome = (
     provider: AIProvider,
     isWin: boolean,
     family: string,
-    regime: MarketRegime,
+    regime: string,
     confidence: string
 ): void => {
     const data = loadPerformanceData();

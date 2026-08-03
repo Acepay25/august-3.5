@@ -7,6 +7,9 @@ interface QuickActionChipsProps {
     onOpenLiveMarket: () => void;
     onOpenAnalytics: () => void;
     isDisabled?: boolean;
+    // Fresh sessions already ARE a new conversation — no point starting
+    // another one from the hero/docked chips.
+    disableNewAnalysis?: boolean;
     // 'docked' = vertical grid above the input (active sessions);
     // 'centered' = horizontal outlined row under the hero composer.
     layout?: 'docked' | 'centered';
@@ -18,6 +21,7 @@ export const QuickActionChips: React.FC<QuickActionChipsProps> = ({
     onOpenLiveMarket,
     onOpenAnalytics,
     isDisabled = false,
+    disableNewAnalysis = false,
     layout = 'docked'
 }) => {
     const [isHidden, setIsHidden] = useState(false);
@@ -35,7 +39,7 @@ export const QuickActionChips: React.FC<QuickActionChipsProps> = ({
                 </button>
                 {!isHidden && (
                     <>
-                        <button onClick={onNewAnalysis} disabled={isDisabled} className={chipClass}>
+                        <button onClick={onNewAnalysis} disabled={isDisabled || disableNewAnalysis} className={chipClass}>
                             <span className="text-zinc-400"><PlusIcon className="w-4 h-4" /></span>
                             <span>New Analysis</span>
                         </button>

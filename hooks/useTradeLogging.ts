@@ -6,7 +6,8 @@ import * as MemoryService from '../services/learning/MemoryService';
 import { ProviderConfig } from '../types/provider';
 import GlobalLearningService from '../services/learning/GlobalLearningService';
 import { storeRule, loadLearningRules, saveLearningRules } from '../services/learning/LearningRulesService';
-import { trackTradeOutcome } from '../services/backtesting/ModelPerformanceService';
+import { trackTradeOutcome, mapRegimeToKey } from '../services/backtesting/ModelPerformanceService';
+import { trackConfluenceOutcome, calculateConfluenceScore } from '../services/analysis/TimeframeConfluenceService';
 import { SLOptimizationData } from '../services/backtesting/StopLossOptimizerService';
 import { ConfidenceLevel } from '../services/validation/ConfidenceCalibrationService';
 
@@ -100,7 +101,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             ] as (string | null)[]).filter((p): p is string => p !== null);
 
         providers.forEach(p => {
-            trackTradeOutcome(p, isWin, analysis.detectedPatternFamily || '', 'ranging', analysis.confidence || 'Medium');
+            trackTradeOutcome(p, isWin, analysis.detectedPatternFamily || '', trade.marketRegime || 'ranging', analysis.confidence || 'Medium');
         });
 
         // Auto-create learning rule from LOSS
@@ -132,6 +133,13 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
 
     // Helper function to log trade (called by all capture handlers)
     const logTradeWithFeedback = useCallback(async (message: Message, outcome: TradeOutcome.WIN | TradeOutcome.LOSS, feedback: { pnlAmount?: number; pnlPercent?: number; correctedStopLoss?: string; correctedTakeProfit?: string; selectedEntryIndices?: number[]; slOptimizationData?: SLOptimizationData; }) => {
+        // Persist the market regime captured at analysis time (7-value
+        // hybrid regime normalized to the 4-key trade regime). Falls back to
+        // undefined when no snapshot exists.
+        const marketRegime = (message.analysis?.marketSnapshot as any)?.regime?.regime
+            ? mapRegimeToKey((message.analysis?.marketSnapshot as any).regime.regime as any)
+            : undefined;
+
         const loggedTrade: LoggedTrade = {
             id: message.id,
             analysis: message.analysis!,
@@ -145,6 +153,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             correctedTakeProfit: feedback.correctedTakeProfit,
             triggeredEntryIndices: feedback.selectedEntryIndices, // Store which entries were triggered
             marketSnapshot: message.analysis?.marketSnapshot, // Persist for Algo Mode
+            marketRegime,
             slOptimizationData: feedback.slOptimizationData, // Autopilot-observed SL behavior
             modelsUsed: message.modelsUsed,
             thoughtProcesses: message.thoughtProcesses,
@@ -182,6 +191,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
                 (message.text?.match(/\b([A-Z]{2,10}USDT?)\b/)?.[1]) || undefined;
             const pattern = message.analysis.detectedPatternFamily || undefined;
 
+            const provider = Object.keys(message.modelsUsed || {})[0];
             if (coin || pattern) {
                 await GlobalLearningService.updateCalibration({
                     timestamp: new Date().toISOString(),
@@ -190,15 +200,30 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
                     coin: coin?.toUpperCase(),
                     pattern: typeof pattern === 'string' ? pattern : undefined,
                     timeframe: '4h',
-                    regime: message.analysis?.detectedPatternFamily?.toLowerCase().includes('trend') ? 'trending' :
-                        message.analysis?.detectedPatternFamily?.toLowerCase().includes('range') ? 'ranging' : undefined
+                    // Use the regime captured at analysis time (was derived
+                    // from the pattern family — wrong dimension).
+                    regime: marketRegime,
+                    provider
                 });
             } else {
                 await GlobalLearningService.updateCalibration({
                     timestamp: new Date().toISOString(),
                     confidence,
-                    outcome: outcome === TradeOutcome.WIN ? 'WIN' : 'LOSS'
+                    outcome: outcome === TradeOutcome.WIN ? 'WIN' : 'LOSS',
+                    provider
                 });
+            }
+
+            // Confluence historical stats (was never tracked — the debate's
+            // "historical confluence insight" always showed empty).
+            try {
+                const direction = message.analysis?.direction as 'Long' | 'Short' | 'Neutral' | undefined;
+                if (direction && direction !== 'Neutral') {
+                    const score = calculateConfluenceScore(message.analysis, direction);
+                    trackConfluenceOutcome(score.score, outcome === TradeOutcome.WIN ? 'WIN' : 'LOSS');
+                }
+            } catch (e) {
+                console.warn('[Confluence] Failed to track outcome:', e);
             }
             // Sync React state for UI
             setConfidenceCalibration(GlobalLearningService.getCalibration());

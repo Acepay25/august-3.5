@@ -17,6 +17,26 @@
 import OpenAI from 'openai';
 import { ProviderConfig } from '../../types/provider';
 import { withRetry, ProviderName } from '../../utils/apiErrorUtils';
+import { assertValidProviderUrl } from '../../utils/providerUrlValidation';
+
+interface ElectronProviderBridge {
+    isElectron?: boolean;
+    providerChat?: (request: {
+        config: ProviderConfig;
+        messages: ChatMessage[];
+        requestId?: string;
+        maxTokens?: number;
+        temperature?: number;
+        jsonMode?: boolean;
+    }) => Promise<{ ok: boolean; text?: string; reasoning?: string; status?: number; code?: string; message?: string }>;
+    cancelProviderChat?: (requestId: string) => Promise<boolean>;
+}
+
+declare global {
+    interface Window {
+        electronAPI?: ElectronProviderBridge;
+    }
+}
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -38,6 +58,7 @@ export interface ChatRequestOptions {
     jsonMode?: boolean;
     /** Abort signal for cancellation. */
     signal?: AbortSignal;
+    onReasoning?: (reasoning: string) => void;
 }
 
 // ─── URL Normalization Helper ───────────────────────────────────────────────
@@ -50,12 +71,11 @@ export function normalizeBaseUrl(url: string, format: string): string {
     let clean = (url || '').trim().replace(/\/+$/, '');
     if (!clean) return '';
 
-    if (format === 'chat_completions' && clean.endsWith('/chat/completions')) {
-        clean = clean.substring(0, clean.length - '/chat/completions'.length);
-    } else if (format === 'messages' && clean.endsWith('/messages')) {
-        clean = clean.substring(0, clean.length - '/messages'.length);
-    } else if (format === 'responses' && clean.endsWith('/responses')) {
-        clean = clean.substring(0, clean.length - '/responses'.length);
+    for (const suffix of ['/chat/completions', '/messages', '/responses']) {
+        if (clean.endsWith(suffix)) {
+            clean = clean.substring(0, clean.length - suffix.length);
+            break;
+        }
     }
     return clean;
 }
@@ -120,7 +140,10 @@ async function chatCompletionsCall(
         (params as any).response_format = { type: 'json_object' };
     }
     const response = await client.chat.completions.create(params, options?.signal ? { signal: options.signal } : undefined);
-    return response.choices[0]?.message?.content || '';
+    const message = response.choices[0]?.message as any;
+    const reasoning = message?.reasoning_content || message?.reasoning;
+    if (typeof reasoning === 'string' && reasoning.trim()) options?.onReasoning?.(reasoning.trim());
+    return message?.content || '';
 }
 
 async function* chatCompletionsStream(
@@ -280,9 +303,7 @@ async function responsesCall(
 // ─── Universal Dispatchers ──────────────────────────────────────────────────
 
 function assertHasKey(config: ProviderConfig): void {
-    if (!config.baseUrl || config.baseUrl.trim().length === 0) {
-        throw new Error(`No Base URL configured for ${config.name}`);
-    }
+    assertValidProviderUrl(config.baseUrl);
 }
 
 /**
@@ -318,14 +339,16 @@ function toFriendlyProviderError(error: unknown, providerName: string): unknown 
         friendly = `${name}: request failed (${status}).`;
     } else {
         const raw = (err?.message || '').toLowerCase();
-        if (raw.includes('fetch') || raw.includes('network') || raw.includes('econnrefused') || raw.includes('enotfound') || raw.includes('failed to connect')) {
+        if (raw.includes('desktop provider bridge')) {
+            friendly = 'Desktop provider bridge is not loaded. Fully quit and restart the Electron app.';
+        } else if (raw.includes('fetch') || raw.includes('network') || raw.includes('econnrefused') || raw.includes('enotfound') || raw.includes('failed to connect') || raw.includes('certificate') || raw.includes('tls') || raw.includes('timeout') || raw.includes('timed out')) {
             friendly = `${name}: could not reach the server. Check the base URL and your connection.`;
         } else {
             friendly = `${name}: request failed.`;
         }
     }
 
-    console.warn(`[GenericProviderService] ${name} error:`, err?.message || error);
+    console.warn(`[GenericProviderService] ${name} request failed with status ${status ?? 'unknown'}`);
     const wrapped = new Error(friendly);
     if (status !== undefined) {
         (wrapped as any).status = status;
@@ -351,6 +374,66 @@ export async function sendChatRequest(
         // exponential backoff; each attempt is hard-capped by REQUEST_TIMEOUT_MS.
         return await withRetry(
             () => {
+                const electronAPI = typeof window !== 'undefined' ? window.electronAPI : undefined;
+                if (electronAPI?.isElectron && !electronAPI.providerChat) {
+                    throw new Error('Desktop provider bridge is not loaded. Fully quit and restart the Electron app.');
+                }
+                if (electronAPI?.isElectron && electronAPI.providerChat) {
+                    const requestId = `provider-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+                    const cancelRequest = () => {
+                        void electronAPI.cancelProviderChat?.(requestId);
+                    };
+                    options?.signal?.addEventListener('abort', cancelRequest, { once: true });
+                    return electronAPI.providerChat({
+                        config: effectiveConfig,
+                        messages,
+                        requestId,
+                        maxTokens: options?.maxTokens,
+                        temperature: options?.temperature,
+                        jsonMode: options?.jsonMode,
+                    }).then(result => {
+                        if (!result.ok) {
+                            const error = new Error(result.message || 'Provider request failed.');
+                            if (result.status !== undefined) (error as any).status = result.status;
+                            if (result.code !== undefined) (error as any).code = result.code;
+                            throw error;
+                        }
+                        if (result.reasoning) options?.onReasoning?.(result.reasoning);
+                        return result.text || '';
+                    }).finally(() => {
+                        options?.signal?.removeEventListener('abort', cancelRequest);
+                    });
+                }
+                if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+                    return fetch('/__provider_proxy', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            config: effectiveConfig,
+                            messages,
+                            maxTokens: options?.maxTokens,
+                            temperature: options?.temperature,
+                            jsonMode: options?.jsonMode,
+                        }),
+                    }).then(async response => {
+                        const result = await response.json() as { ok?: boolean; status?: number; body?: string; reasoning?: string; message?: string };
+                        if (!response.ok || !result.ok) {
+                            const error = new Error(result.message || `Provider request failed (${result.status || response.status}).`);
+                            if (result.status !== undefined) (error as any).status = result.status;
+                            throw error;
+                        }
+                        const data = result.body ? JSON.parse(result.body) : {};
+                        const reasoning = result.reasoning || data.choices?.[0]?.message?.reasoning_content || data.choices?.[0]?.message?.reasoning;
+                        if (typeof reasoning === 'string' && reasoning.trim()) options?.onReasoning?.(reasoning.trim());
+                        if (effectiveConfig.apiFormat === 'messages') {
+                            return Array.isArray(data.content) ? data.content.filter((block: any) => block?.type === 'text').map((block: any) => block.text).join('\n') : data.text || '';
+                        }
+                        if (effectiveConfig.apiFormat === 'responses') {
+                            return data.output_text || '';
+                        }
+                        return data.choices?.[0]?.message?.content || '';
+                    });
+                }
                 switch (effectiveConfig.apiFormat) {
                     case 'chat_completions':
                         return chatCompletionsCall(effectiveConfig, messages, { ...options, signal: withTimeoutSignal(options?.signal) });
@@ -388,6 +471,11 @@ export async function* streamChatRequest(
         apiKey: config.apiKey?.trim() || 'not-needed'
     };
     try {
+        const electronAPI = typeof window !== 'undefined' ? window.electronAPI : undefined;
+        if (electronAPI?.isElectron && electronAPI.providerChat) {
+            yield await sendChatRequest(effectiveConfig, messages, options);
+            return;
+        }
         if (effectiveConfig.apiFormat === 'chat_completions') {
             yield* chatCompletionsStream(effectiveConfig, messages, { ...options, signal: withTimeoutSignal(options?.signal) });
             return;
@@ -406,7 +494,8 @@ export async function* streamChatRequest(
 export async function getQuickResponse(
     config: ProviderConfig,
     prompt: string,
-    historyOrSystem?: string | any[]
+    historyOrSystem?: string | any[],
+    options?: ChatRequestOptions
 ): Promise<string> {
     const chatMessages: ChatMessage[] = [];
 
@@ -437,22 +526,28 @@ export async function getQuickResponse(
         chatMessages.push({ role: 'user', content: prompt });
     }
 
-    return sendChatRequest(config, chatMessages, { maxTokens: 2048 });
+    return sendChatRequest(config, chatMessages, { maxTokens: 2048, ...options });
 }
 
 /**
  * Test a provider connection with a minimal request.
  */
 export async function testConnection(config: ProviderConfig): Promise<{ success: boolean; message: string }> {
+    const model = config.selectedModel?.trim();
+    if (!model) {
+        return { success: false, message: 'Choose a model before testing the connection.' };
+    }
+
     try {
         const testConfig = {
             ...config,
-            apiKey: config.apiKey?.trim() || 'not-needed'
+            apiKey: config.apiKey?.trim() || 'not-needed',
+            selectedModel: model,
         };
         const result = await sendChatRequest(
             testConfig,
             [{ role: 'user', content: 'Reply with exactly: OK' }],
-            { maxTokens: 10, temperature: 0 }
+            { maxTokens: 10, temperature: 0, signal: AbortSignal.timeout(30_000) }
         );
         return { success: true, message: `Connected to ${config.name} successfully` };
     } catch (error: any) {

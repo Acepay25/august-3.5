@@ -141,13 +141,22 @@ const LiveStreamView: React.FC<LiveStreamViewProps> = ({
     }
   }, [completedTyping, activeAnalysts, isVisible, onAllTypingComplete]);
 
+  useEffect(() => {
+    if (!isVisible) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [isVisible, onClose]);
+
   if (!isVisible) return null;
 
   const count = activePanels.length;
   const gridCols = count === 1 ? 'grid-cols-1' : count === 2 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
 
   return (
-    <div className="fixed inset-0 bg-zinc-950 z-50 flex items-center justify-center p-4 sm:p-8 animate-fade-in" style={{ transition: 'opacity 0.2s ease-in-out' }}>
+      <div role="dialog" aria-modal="true" aria-label={config.title} className="fixed inset-0 bg-zinc-950 z-50 flex items-center justify-center p-4 sm:p-8 animate-fade-in" style={{ transition: 'opacity 0.2s ease-in-out' }}>
       <div className="flex flex-col w-full h-full max-w-7xl mx-auto">
         <header className="flex items-center justify-between mb-4 sm:mb-6 flex-shrink-0">
           <div>

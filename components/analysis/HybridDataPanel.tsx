@@ -1,13 +1,17 @@
 import React from 'react';
-import { CloseIcon } from '../shared/Icons';
+import { BrainIcon, CloseIcon } from '../shared/Icons';
 import { HybridDataPacket } from '../../services/analysis/HybridIntelligenceService';
 import { SLOptimization } from '../../services/backtesting/StopLossOptimizerService';
+import { getPreferenceObject, setPreferenceObject, PREF_KEYS } from '../../services/infrastructure/PreferencesService';
 
 interface HybridDataPanelProps {
     data: HybridDataPacket | null;
     isLoading?: boolean;
     onClose?: () => void;
     connectionStatus?: 'disconnected' | 'connecting' | 'connected' | 'error';
+    // Hide entirely (e.g. while Settings is open so the panel doesn't float
+    // above the modal backdrop).
+    hidden?: boolean;
     slOptimization?: SLOptimization | null; // Display-only, doesn't affect AI
     suggestedEntryPrice?: number | null; // Entry Timing suggested entry price
     entryTimingScore?: {
@@ -131,7 +135,7 @@ const TimeframeBadge: React.FC<{ tf: string; indicators: any; expanded?: boolean
     );
 };
 
-const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onClose, connectionStatus, slOptimization, suggestedEntryPrice, entryTimingScore }) => {
+const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onClose, connectionStatus, hidden, slOptimization, suggestedEntryPrice, entryTimingScore }) => {
     const [isExpanded, setIsExpanded] = React.useState(false);
     const [showDetailedView, setShowDetailedView] = React.useState(false);
     const [loadingStep, setLoadingStep] = React.useState(0);
@@ -146,6 +150,21 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
     const [hasDragged, setHasDragged] = React.useState(false); // Track if we actually moved
     const [dragOffset, setDragOffset] = React.useState({ x: 0, y: 0 });
     const panelRef = React.useRef<HTMLDivElement>(null);
+    // Latest position mirrored into a ref so drag-end can persist it without
+    // a stale-closure read of `position`.
+    const positionRef = React.useRef(position);
+    positionRef.current = position;
+
+    // Restore the user's last dragged position (app-wide preference).
+    React.useEffect(() => {
+        let cancelled = false;
+        getPreferenceObject<{ x: number; y: number }>(PREF_KEYS.HYBRID_PANEL_POSITION).then(saved => {
+            if (!cancelled && saved && typeof saved.x === 'number' && typeof saved.y === 'number') {
+                setPosition({ x: saved.x, y: saved.y });
+            }
+        });
+        return () => { cancelled = true; };
+    }, []);
 
     // Drag handlers
     const handleDragStart = (e: React.MouseEvent | React.TouchEvent) => {
@@ -186,6 +205,8 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
 
         const handleEnd = () => {
             setIsDragging(false);
+            // Persist the position for next session
+            setPreferenceObject(PREF_KEYS.HYBRID_PANEL_POSITION, positionRef.current).catch(() => {});
             // Reset hasDragged after a short delay to allow click event to check it
             setTimeout(() => setHasDragged(false), 100);
         };
@@ -216,16 +237,25 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
         }
     }, [isLoading]);
 
+    // Hidden while Settings (or another full-screen modal) is open.
+    if (hidden) return null;
+
     // Show disconnected or error status when not connected
     if (!data && !isLoading && (connectionStatus === 'disconnected' || connectionStatus === 'error' || !connectionStatus)) {
         return (
-            <div className="fixed left-4 lg:left-[18.5rem] top-1/2 -translate-y-1/2 z-50">
-                <div className="group relative">
+            <div
+                ref={panelRef}
+                className={`fixed z-50 ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+                style={{ left: position.x, top: position.y }}
+                onMouseDown={handleDragStart}
+                onTouchStart={handleDragStart}
+            >
+                <div className="group relative select-none">
                     <div className={`w-12 h-12 rounded-full flex items-center justify-center shadow-lg transition-all duration-300 ${connectionStatus === 'error'
-                        ? 'bg-gradient-to-br from-rose-900/90 to-rose-900/90 border-2 border-rose-500/50 shadow-rose-500/20'
-                        : 'bg-gradient-to-br from-zinc-800/90 to-zinc-900/90 border-2 border-zinc-600/50 shadow-zinc-500/10'
+                        ? 'bg-gradient-to-br from-rose-900 to-rose-900 border-2 border-rose-500/50 shadow-rose-500/20'
+                        : 'bg-gradient-to-br from-zinc-800 to-zinc-900 border-2 border-zinc-600/50 shadow-zinc-500/10'
                         }`}>
-                        <span className="text-lg opacity-60"></span>
+                        <BrainIcon className="w-5 h-5 text-zinc-300 opacity-80" aria-hidden="true" />
                         {/* Status dot */}
                         <div className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-zinc-900 ${connectionStatus === 'error' ? 'bg-rose-500' : 'bg-zinc-500'
                             }`}></div>
@@ -242,7 +272,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
                             {connectionStatus === 'error' ? 'Connection Error' : 'Disconnected'}
                         </div>
                         <div className="text-[10px] text-zinc-500 mt-1">
-                            Enable Hybrid Mode in Settings
+                            Drag to move • Enable Hybrid Mode in Settings
                         </div>
                     </div>
                 </div>
@@ -253,11 +283,17 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
     // Show persistent connection status when hybrid mode is on but no data yet
     if (!data && !isLoading && (connectionStatus === 'connected' || connectionStatus === 'connecting')) {
         return (
-            <div className="fixed left-4 lg:left-[18.5rem] top-1/2 -translate-y-1/2 z-50">
-                <div className="group relative">
+            <div
+                ref={panelRef}
+                className={`fixed z-50 ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+                style={{ left: position.x, top: position.y }}
+                onMouseDown={handleDragStart}
+                onTouchStart={handleDragStart}
+            >
+                <div className="group relative select-none">
                     <div className={`w-12 h-12 rounded-full flex items-center justify-center shadow-lg transition-all duration-300 ${connectionStatus === 'connecting'
-                        ? 'bg-gradient-to-br from-yellow-900/90 to-amber-900/90 border-2 border-yellow-500/50 shadow-yellow-500/20'
-                        : 'bg-gradient-to-br from-emerald-900/90 to-cyan-900/90 border-2 border-emerald-500/50 shadow-emerald-500/20'
+                        ? 'bg-gradient-to-br from-yellow-900 to-amber-900 border-2 border-yellow-500/50 shadow-yellow-500/20'
+                        : 'bg-gradient-to-br from-emerald-900 to-cyan-900 border-2 border-emerald-500/50 shadow-emerald-500/20'
                         }`}>
                         {connectionStatus === 'connecting' && (
                             <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-yellow-400 animate-spin"></div>
@@ -279,7 +315,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
                             {connectionStatus === 'connecting' ? 'Connecting to Binance...' : 'Connected to Binance API'}
                         </div>
                         <div className="text-[10px] text-zinc-500 mt-1">
-                            Send an analysis request to fetch data
+                            Drag to move • Send an analysis request to fetch data
                         </div>
                     </div>
                 </div>
@@ -292,17 +328,23 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
         return (
             <>
                 {/* Floating button with loading animation */}
-                <div className="fixed left-4 lg:left-[18.5rem] top-1/2 -translate-y-1/2 z-50">
-                    <div className="relative w-14 h-14 bg-gradient-to-br from-emerald-900/90 to-cyan-900/90 border-2 border-emerald-500/70 rounded-full flex items-center justify-center shadow-lg shadow-emerald-500/30">
+                <div
+                    ref={panelRef}
+                    className={`fixed z-50 ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+                    style={{ left: position.x, top: position.y }}
+                    onMouseDown={handleDragStart}
+                    onTouchStart={handleDragStart}
+                >
+                    <div className="relative w-14 h-14 bg-gradient-to-br from-emerald-900 to-cyan-900 border-2 border-emerald-500/70 rounded-full flex items-center justify-center shadow-lg shadow-emerald-500/30 select-none">
                         {/* Rotating ring */}
                         <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-emerald-400 animate-spin"></div>
-                        <span className="text-2xl animate-pulse"></span>
+                        <BrainIcon className="w-6 h-6 text-emerald-300 animate-pulse" aria-hidden="true" />
                     </div>
                 </div>
 
                 {/* Top banner notification */}
-                <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 animate-slide-down">
-                    <div className="bg-gradient-to-r from-emerald-950/95 to-cyan-950/95 border border-emerald-500/50 rounded-xl px-6 py-3 shadow-2xl shadow-emerald-500/20">
+                <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 animate-slide-down pointer-events-none">
+                    <div className="bg-gradient-to-r from-emerald-950 to-cyan-950 border border-emerald-500/50 rounded-xl px-6 py-3 shadow-2xl shadow-emerald-500/20">
                         <div className="flex items-center gap-4">
                             {/* Animated icon */}
                             <div className="relative">
@@ -359,7 +401,9 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
                 className={`fixed z-50 ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
                 style={{ left: position.x, top: position.y }}
             >
-                <div
+                <button
+                    type="button"
+                    aria-label={`View Hybrid Intelligence data for ${data.symbol}`}
                     onMouseDown={handleDragStart}
                     onTouchStart={handleDragStart}
                     onClick={(e) => {
@@ -370,7 +414,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
                     title={`Drag to move • Click to view ${data.symbol}`}
                     style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
                 >
-                    <span className="text-xl pointer-events-none"></span>
+                    <BrainIcon className="w-5 h-5 text-cyan-300 pointer-events-none" aria-hidden="true" />
                     <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full ${data.marketData.priceChangePercent24h >= 0 ? 'bg-emerald-500' : 'bg-rose-500'} border border-black animate-pulse pointer-events-none`}></div>
                     <div className="absolute left-14 opacity-0 group-hover:opacity-100 transition-opacity bg-zinc-900 border border-white/10 rounded-lg px-3 py-2 whitespace-nowrap pointer-events-none">
                         <div className="text-[10px] text-zinc-300 font-bold">{data.symbol}</div>
@@ -379,7 +423,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
                             {data.marketData.priceChangePercent24h >= 0 ? '+' : ''}{data.marketData.priceChangePercent24h.toFixed(2)}%
                         </div>
                     </div>
-                </div>
+                </button>
             </div>
         );
     }

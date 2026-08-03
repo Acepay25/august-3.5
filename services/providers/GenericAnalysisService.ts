@@ -746,7 +746,8 @@ export async function getQuickResponse(
     prompt: string,
     history: Message[],
     systemInstruction?: string,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    onReasoning?: (reasoning: string) => void
 ): Promise<string> {
     const messages: ChatMessage[] = (history || []).map(m => ({
         role: m.role === MessageRole.AI ? 'assistant' : m.role === MessageRole.SYSTEM ? 'system' : 'user',
@@ -758,7 +759,7 @@ export async function getQuickResponse(
         messages.push({ role: 'user', content: prompt });
     }
 
-    const result = await sendChatRequest(config, messages, { maxTokens: 1024, signal });
+    const result = await sendChatRequest(config, messages, { maxTokens: 1024, signal, onReasoning });
     return sanitizeAIResponse(result || "I am sorry, I could not generate a response.");
 }
 

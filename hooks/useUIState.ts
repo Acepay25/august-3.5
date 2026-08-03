@@ -7,7 +7,6 @@ import { useReducer, useCallback } from 'react';
 interface UIStateShape {
     // Modal / Panel Visibility
     isUserModalOpen: boolean;
-    isHistoryVisible: boolean;
     isStrategySearchVisible: boolean;
     isSavedAnalysesVisible: boolean;
     isSettingsMenuVisible: boolean;
@@ -44,7 +43,6 @@ interface UIStateShape {
 
 const initialState: UIStateShape = {
     isUserModalOpen: false,
-    isHistoryVisible: false,
     isStrategySearchVisible: false,
     isSavedAnalysesVisible: false,
     isSettingsMenuVisible: false,
@@ -89,7 +87,6 @@ type UIAction =
 
 /** Keys that are overlays (modals, drawers, panels) — closed by CLOSE_ALL_OVERLAYS */
 const OVERLAY_KEYS: (keyof UIStateShape)[] = [
-    'isHistoryVisible',
     'isStrategySearchVisible',
     'isSavedAnalysesVisible',
     'isSettingsMenuVisible',

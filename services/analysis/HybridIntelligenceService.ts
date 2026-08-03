@@ -784,7 +784,8 @@ ${accuracyEnhancements}
  */
 export const tryFetchHybridDataFromPromptWithCalibration = async (
     prompt: string,
-    calibration?: ConfidenceCalibration
+    calibration?: ConfidenceCalibration,
+    learningRules?: LearningRulesStorage
 ): Promise<{
     data: HybridDataPacket;
     promptInjection: string;
@@ -831,7 +832,8 @@ export const tryFetchHybridDataFromPromptWithCalibration = async (
             calibration,
             correlationRiskPrompt,
             granularContext,
-            'High' // Default proposed confidence, will be adjusted by calibration
+            'High', // Default proposed confidence, will be adjusted by calibration
+            learningRules
         );
 
         return {

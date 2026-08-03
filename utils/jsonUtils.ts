@@ -63,8 +63,8 @@ export const robustJsonParse = (jsonString: string): any => {
     try {
         return JSON.parse(cleanedString);
     } catch (finalError: any) {
-        console.error("All JSON parsing and repair attempts failed.", { finalError, originalString: jsonString, repairedString: cleanedString });
-        throw new Error(`Failed to parse JSON even after cleaning and repairs. Original error: ${finalError.message}`, { cause: finalError });
+        console.error("All JSON parsing and repair attempts failed.", { inputLength: jsonString.length, repairedLength: cleanedString.length });
+        throw new Error('Failed to parse JSON even after cleaning and repairs.', { cause: finalError });
     }
 };
 
@@ -79,7 +79,7 @@ export const extractAndParseJson = (text: string): any => {
         try {
             return robustJsonParse(markdownMatch[1]);
         } catch (e: any) {
-            console.warn("Found markdown JSON block, but it failed to parse. Falling back to deep scan.", { error: e, block: markdownMatch[1] });
+            console.warn("Found markdown JSON block, but it failed to parse. Falling back to deep scan.", { blockLength: markdownMatch[1].length });
         }
     }
 
@@ -124,7 +124,7 @@ export const extractAndParseJson = (text: string): any => {
         }
     }
 
-    console.error("Could not find any valid JSON structure in the response text.", text);
+    console.error("Could not find any valid JSON structure in the response text.", { inputLength: text.length });
     throw new Error("No valid JSON found in the response.");
 };
 

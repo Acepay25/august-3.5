@@ -46,6 +46,7 @@ const DEFAULTS: Required<Omit<ConfirmOptions, 'onUndo' | 'message'>> = {
 export function useConfirmDialog() {
     const [state, setState] = useState<ConfirmState>({ ...DEFAULTS, open: false });
     const [undoVisible, setUndoVisible] = useState(false);
+    const dialogRef = useRef<HTMLDivElement>(null);
     const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const onUndoRef = useRef<(() => void | Promise<void>) | undefined>(undefined);
 
@@ -103,6 +104,32 @@ export function useConfirmDialog() {
         }
     }, []);
 
+    useEffect(() => {
+        if (!state.open) return;
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                handleCancel();
+                return;
+            }
+            if (event.key !== 'Tab' || !dialogRef.current) return;
+            const focusable = dialogRef.current.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+            if (focusable.length === 0) return;
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            if (event.shiftKey && document.activeElement === first) {
+                event.preventDefault();
+                last.focus();
+            } else if (!event.shiftKey && document.activeElement === last) {
+                event.preventDefault();
+                first.focus();
+            }
+        };
+        document.addEventListener('keydown', handleKeyDown);
+        requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>('button')?.focus());
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, [state.open, handleCancel]);
+
     // Cleanup any pending undo timer on unmount.
     useEffect(() => {
         return () => {
@@ -118,7 +145,7 @@ export function useConfirmDialog() {
                         className="absolute inset-0 bg-black/60"
                         onClick={handleCancel}
                     />
-                    <div className="relative w-full max-w-md bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                    <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title" className="relative w-full max-w-md bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
                         <div className="p-6">
                             <div className="flex items-start gap-4">
                                 {state.destructive && (
@@ -127,7 +154,7 @@ export function useConfirmDialog() {
                                     </div>
                                 )}
                                 <div className="flex-1 min-w-0">
-                                    <h3 className="text-lg font-semibold text-zinc-100">{state.title}</h3>
+                                     <h3 id="confirm-dialog-title" className="text-lg font-semibold text-zinc-100">{state.title}</h3>
                                     {state.message && (
                                         <p className="mt-1.5 text-sm text-zinc-400 leading-relaxed">{state.message}</p>
                                     )}

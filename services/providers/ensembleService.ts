@@ -43,7 +43,7 @@ import {
 } from '../ui/AnalystLensService';
 import { generateWeightedVotingContext } from '../backtesting/ModelPerformanceService';
 import type { GateOutput } from '../validation/GateKeeperService';
-import { getPreferenceObject, PREF_KEYS } from '../infrastructure/PreferencesService';
+import GlobalLearningService from '../learning/GlobalLearningService';
 import { getBayesianCalibratedConfidence, ConfidenceLevel } from '../validation/ConfidenceCalibrationService';
 import { ConfidenceCalibration } from '../../types';
 
@@ -996,12 +996,11 @@ export const conductTwoWayDebate = async function* (
 
     // --- BAYESIAN CONFIDENCE CALIBRATION ---
     // Fetch historical calibration data to adjust confidence scores
-    let calibrationData: ConfidenceCalibration | null = null;
-    try {
-        calibrationData = await getPreferenceObject<ConfidenceCalibration>(PREF_KEYS.CONFIDENCE_CALIBRATION);
-    } catch (e) {
-        console.warn('Failed to load calibration data:', e);
-    }
+    // Live calibration (GlobalLearningService) — the raw
+    // PREF_KEYS.CONFIDENCE_CALIBRATION preference is written by
+    // ModelPerformanceService with a different shape, so reading it here
+    // produced garbage. The singleton is the persisted source of truth.
+    const calibrationData = GlobalLearningService.getCalibration();
 
     // Apply calibration to analyst results
     const calibratedAnalysts = [
@@ -1493,12 +1492,11 @@ export const conductThreeWayDebate = async function* (
     const tradeHistoryContext = finalTradeSummary ? `This is your Pattern Memory Library (a pre-processed summary of recent trades)...\n${truncateTextToTokens(finalTradeSummary, 3000)}` : "No past trades logged.";
 
     // --- BAYESIAN CONFIDENCE CALIBRATION ---
-    let calibrationData: ConfidenceCalibration | null = null;
-    try {
-        calibrationData = await getPreferenceObject<ConfidenceCalibration>(PREF_KEYS.CONFIDENCE_CALIBRATION);
-    } catch (e) {
-        console.warn('Failed to load calibration data for 3-way:', e);
-    }
+    // Live calibration (GlobalLearningService) — the raw
+    // PREF_KEYS.CONFIDENCE_CALIBRATION preference is written by
+    // ModelPerformanceService with a different shape, so reading it here
+    // produced garbage. The singleton is the persisted source of truth.
+    const calibrationData = GlobalLearningService.getCalibration();
 
     const calibratedAnalysts = [
         { name: analyst1Name, result: analyst1Result },
