@@ -96,6 +96,9 @@ export interface UseAnalysisPipelineParams {
     isHybridIntelligenceEnabled: boolean;
     lensConfig: AnalystLensConfig;
     activeFrameworks: string[];
+    // Ensemble mode: when off, messages are casual chat with the selected
+    // model and the chart-analysis pipeline never runs.
+    isEnsembleEnabled: boolean;
 
     // Toast:
     toast: { warning: (t: string, m?: string) => void; error: (t: string, m?: string) => void };
@@ -126,6 +129,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         isGlobalMemoryEnabled, customInstructions,
         isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI,
         isHybridIntelligenceEnabled, lensConfig, activeFrameworks,
+        isEnsembleEnabled,
         toast,
     } = params;
 
@@ -565,7 +569,9 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 upperPrompt.includes("SETUP") ||
                 isUpdate;
 
-            if (isChartAnalysisRequested) {
+            // Chart analysis only runs in ensemble mode; otherwise the
+            // message is handled as casual chat with the selected model.
+            if (isChartAnalysisRequested && isEnsembleEnabled) {
                 const summaries = imagesToUse.map(meta => meta.fullAnalysisText).filter(Boolean) as string[];
                 const processNewAnalysis = (analysis: TradeAnalysis): TradeAnalysis => {
                     const finalAnalysis = sanitizeTradeAnalysis(analysis);
@@ -1343,7 +1349,7 @@ const result = await cachedAnalyzeTradingView(
                 setIsAnalysisInProgress(false);
             }
         }
-    }, [input, images, loadingMessage, finalTradeSummary, activeFrameworks, isRateLimited, providerConfigs, isDeepAnalysis, selectedOcrModel, updateMessages, moderatorConfig, moderatorModel, activeConversationId, activeConversation, isAnalysisInProgress, globalMemory, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, lensConfig, isHybridIntelligenceEnabled, loggedTrades, confidenceCalibration, insightKnowledgeBase, currentHybridData]);
+    }, [input, images, loadingMessage, finalTradeSummary, activeFrameworks, isRateLimited, providerConfigs, isDeepAnalysis, selectedOcrModel, updateMessages, moderatorConfig, moderatorModel, activeConversationId, activeConversation, isAnalysisInProgress, globalMemory, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, lensConfig, isHybridIntelligenceEnabled, isEnsembleEnabled, loggedTrades, confidenceCalibration, insightKnowledgeBase, currentHybridData]);
 
     // ─── Cancel Analysis ───────────────────────────────────────────────────
     const handleCancelAnalysis = () => {

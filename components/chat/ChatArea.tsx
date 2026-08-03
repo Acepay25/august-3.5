@@ -4,7 +4,7 @@ import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
 import MessageItem, { ChatContextProps } from './MessageItem';
 import { ChatInput } from './ChatInput';
 import { QuickActionChips } from './QuickActionChips';
-import { ArrowUpIcon, ArrowDownIcon, CloseIcon, LoadingIcon, EyeIcon, EditIcon, CheckIcon, TrashIcon } from '../shared/Icons';
+import { ArrowUpIcon, ArrowDownIcon, CloseIcon, LoadingIcon, EyeIcon, EditIcon, CheckIcon, TrashIcon, BotIcon } from '../shared/Icons';
 import HybridDataPanel from '../analysis/HybridDataPanel';
 import ImageViewerModal from '../modals/ImageViewerModal';
 import AnalysisProgress from '../analysis/AnalysisProgress';
@@ -68,6 +68,9 @@ interface ChatAreaProps {
     // Lens Config
     lensConfig: AnalystLensConfig;
     setLensConfig: (config: AnalystLensConfig) => void;
+    // Ensemble mode toggle (casual chat vs chart analysis)
+    isEnsembleEnabled: boolean;
+    setIsEnsembleEnabled: (v: boolean) => void;
     // Hybrid Intelligence Props
     hybridData?: any;
     isHybridLoading?: boolean;
@@ -142,6 +145,8 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     setSelectedVisionModel,
     lensConfig,
     setLensConfig,
+    isEnsembleEnabled,
+    setIsEnsembleEnabled,
     hybridData,
     isHybridLoading,
     hybridConnectionStatus,
@@ -204,6 +209,39 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     // Fresh sessions start with zero messages (no hardcoded intro bubble),
     // so no intro-text substitution is needed — messages pass through as-is.
     const processedMessages = messages;
+
+    // Shared ChatInput props — the composer renders either inside the
+    // fresh-session hero canvas (centered) or docked at the bottom.
+    const chatInputProps = {
+        images,
+        removeImage,
+        leverageRef,
+        setIsLeverageDropdownOpen,
+        leverageInput,
+        handleLeverageChange,
+        handleLeverageBlur,
+        isLeverageDropdownOpen,
+        handlePresetLeverage,
+        fileInputRef,
+        isImageUploadDisabled,
+        handleImageUpload,
+        input,
+        setInput,
+        handleSendMessage,
+        loadingMessage,
+        isSummarizing,
+        isRateLimited,
+        isAnyProviderEnabled,
+        providers,
+        onToggleProvider,
+        onUpdateProvider,
+        selectedVisionModel,
+        setSelectedVisionModel,
+        lensConfig,
+        setLensConfig,
+        isEnsembleEnabled,
+        setIsEnsembleEnabled,
+    };
 
     return (
         <div
@@ -273,7 +311,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
 
             {/* Accuracy Mode Banner Overlay - Positioned Fixed/Absolute at top of chat area */}
             {isAccuracyModeEnabled && !isSelectionMode && (
-                <div className="absolute top-0 left-0 right-0 pointer-events-none flex justify-center pt-2 z-10">
+                <div className="absolute top-0 left-0 right-0 pointer-events-none flex justify-center pt-2 z-20">
                     <div className="border px-4 py-1 rounded-full backdrop-blur-md shadow-lg bg-cyan-900/40 border-cyan-500/30">
                         <span className="text-[10px] font-bold uppercase tracking-widest animate-pulse text-cyan-300">
                             {accuracySubMode === 'pure_ai' ? 'Accuracy Mode: Pure AI Reasoning' : 'Accuracy Mode: Strict Protocol'}
@@ -282,7 +320,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 </div>
             )}
 
-            {isRateLimited && <div className="absolute top-16 left-4 right-4 z-10 bg-red-500/10 border border-red-500/20 text-red-200 p-4 rounded-xl flex items-center justify-between mb-6 animate-fade-in" role="alert"><span><strong>Rate Limit Exceeded:</strong> Please wait a moment.</span><button onClick={() => setIsRateLimited(false)} className="text-red-200 hover:text-white ml-4"><CloseIcon /></button></div>}
+            {isRateLimited && <div className="absolute top-16 left-4 right-4 z-20 bg-red-500/10 border border-red-500/20 text-red-200 p-4 rounded-xl flex items-center justify-between mb-6 animate-fade-in" role="alert"><span><strong>Rate Limit Exceeded:</strong> Please wait a moment.</span><button onClick={() => setIsRateLimited(false)} className="text-red-200 hover:text-white ml-4"><CloseIcon /></button></div>}
 
             <div className="fixed bottom-40 right-6 z-30 flex flex-col gap-2">
                 {showScrollUp && !isSelectionMode && (
@@ -348,13 +386,14 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                         )}
                     </div>
                 </div>
-            ) : (
-                <>
-                    {/* First-run onboarding: no providers configured yet — sits
-                        above the centered input on a fresh session */}
-                    {!hasReadyProviders && messages.length === 0 && (
-                        <div className="absolute inset-x-0 top-1/2 -translate-y-[calc(50%+9rem)] px-3 sm:px-4 lg:px-8 z-10 pointer-events-none">
-                            <div className="pointer-events-auto mx-auto w-full max-w-3xl glass rounded-2xl border border-white/10 p-4 sm:p-5 animate-fade-in">
+            ) : messages.length === 0 ? (
+                /* Fresh session: hero canvas — grid background, logo tile,
+                    tagline, carded composer and centered quick actions */
+                <div className="absolute inset-0 z-10 bg-zinc-950 bg-grid overflow-y-auto">
+                    <div className="min-h-full flex flex-col items-center justify-center px-3 sm:px-4 lg:px-8 py-10">
+                        {/* First-run onboarding: no providers configured yet */}
+                        {!hasReadyProviders && (
+                            <div className="w-full max-w-3xl glass rounded-2xl border border-white/10 p-4 sm:p-5 mb-8 animate-fade-in">
                                 <div className="flex items-center gap-3">
                                     <div className="flex-1">
                                         <h3 className="text-sm font-bold text-zinc-100">Connect an AI provider to start analyzing</h3>
@@ -371,52 +410,44 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                                     </button>
                                 </div>
                             </div>
+                        )}
+                        <div className="w-14 h-14 rounded-2xl border border-white/10 bg-zinc-900/60 flex items-center justify-center text-zinc-300">
+                            <BotIcon className="w-7 h-7" />
                         </div>
-                    )}
-                    {/* Quick Action Chips - only once the session has content;
-                        a fresh session shows just the centered input */}
-                    {messages.length > 0 && (
-                        <div className="absolute bottom-[140px] lg:bottom-[180px] left-0 right-0 px-3 sm:px-4 lg:px-0 pointer-events-none z-10 lg:w-full lg:max-w-3xl lg:mx-auto">
-                            <div className="w-full pointer-events-auto">
-                                <QuickActionChips
-                                    onNewAnalysis={onNewConversation}
-                                    onOpenJournal={onOpenJournal}
-                                    onOpenLiveMarket={onOpenLiveMarket}
-                                    onOpenAnalytics={onOpenAnalytics}
-                                    isDisabled={!!loadingMessage}
-                                />
-                            </div>
+                        <h1 className="mt-5 text-3xl sm:text-4xl font-bold tracking-tight text-zinc-100 text-center">
+                            August 3.5 makes your trading easier.
+                        </h1>
+                        <div className="w-full max-w-3xl mt-8">
+                            <ChatInput centered {...chatInputProps} />
                         </div>
-                    )}
-                    <ChatInput
-                        centered={messages.length === 0}
-                        images={images}
-                        removeImage={removeImage}
-                        leverageRef={leverageRef}
-                        setIsLeverageDropdownOpen={setIsLeverageDropdownOpen}
-                        leverageInput={leverageInput}
-                        handleLeverageChange={handleLeverageChange}
-                        handleLeverageBlur={handleLeverageBlur}
-                        isLeverageDropdownOpen={isLeverageDropdownOpen}
-                        handlePresetLeverage={handlePresetLeverage}
-                        fileInputRef={fileInputRef}
-                        isImageUploadDisabled={isImageUploadDisabled}
-                        handleImageUpload={handleImageUpload}
-                        input={input}
-                        setInput={setInput}
-                        handleSendMessage={handleSendMessage}
-                        loadingMessage={loadingMessage}
-                        isSummarizing={isSummarizing}
-                        isRateLimited={isRateLimited}
-                        isAnyProviderEnabled={isAnyProviderEnabled}
-                        providers={providers}
-                        onToggleProvider={onToggleProvider}
-                        onUpdateProvider={onUpdateProvider}
-                        selectedVisionModel={selectedVisionModel}
-                        setSelectedVisionModel={setSelectedVisionModel}
-                        lensConfig={lensConfig}
-                        setLensConfig={setLensConfig}
-                    />
+                        <div className="w-full max-w-3xl mt-4">
+                            <QuickActionChips
+                                layout="centered"
+                                onNewAnalysis={onNewConversation}
+                                onOpenJournal={onOpenJournal}
+                                onOpenLiveMarket={onOpenLiveMarket}
+                                onOpenAnalytics={onOpenAnalytics}
+                                isDisabled={!!loadingMessage}
+                            />
+                        </div>
+                    </div>
+                </div>
+            ) : (
+                <>
+                    {/* Quick Action Chips - docked above the input once the
+                        session has content */}
+                    <div className="absolute bottom-[140px] lg:bottom-[180px] left-0 right-0 px-3 sm:px-4 lg:px-0 pointer-events-none z-10 lg:w-full lg:max-w-3xl lg:mx-auto">
+                        <div className="w-full pointer-events-auto">
+                            <QuickActionChips
+                                onNewAnalysis={onNewConversation}
+                                onOpenJournal={onOpenJournal}
+                                onOpenLiveMarket={onOpenLiveMarket}
+                                onOpenAnalytics={onOpenAnalytics}
+                                isDisabled={!!loadingMessage}
+                            />
+                        </div>
+                    </div>
+                    <ChatInput {...chatInputProps} />
                 </>
             )}
 

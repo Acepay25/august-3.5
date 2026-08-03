@@ -137,7 +137,11 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
     const [loadingStep, setLoadingStep] = React.useState(0);
 
     // Drag state for movable panel
-    const [position, setPosition] = React.useState({ x: 16, y: 64 }); // Default: left-4, top-16
+    // Default: left-4, top-16 — right of the persistent sidebar on desktop
+    const [position, setPosition] = React.useState(() => ({
+        x: typeof window !== 'undefined' && window.innerWidth >= 1024 ? 296 : 16,
+        y: 64
+    }));
     const [isDragging, setIsDragging] = React.useState(false);
     const [hasDragged, setHasDragged] = React.useState(false); // Track if we actually moved
     const [dragOffset, setDragOffset] = React.useState({ x: 0, y: 0 });
@@ -215,7 +219,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
     // Show disconnected or error status when not connected
     if (!data && !isLoading && (connectionStatus === 'disconnected' || connectionStatus === 'error' || !connectionStatus)) {
         return (
-            <div className="fixed left-4 top-1/2 -translate-y-1/2 z-50">
+            <div className="fixed left-4 lg:left-[18.5rem] top-1/2 -translate-y-1/2 z-50">
                 <div className="group relative">
                     <div className={`w-12 h-12 rounded-full flex items-center justify-center shadow-lg transition-all duration-300 ${connectionStatus === 'error'
                         ? 'bg-gradient-to-br from-rose-900/90 to-rose-900/90 border-2 border-rose-500/50 shadow-rose-500/20'
@@ -249,7 +253,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
     // Show persistent connection status when hybrid mode is on but no data yet
     if (!data && !isLoading && (connectionStatus === 'connected' || connectionStatus === 'connecting')) {
         return (
-            <div className="fixed left-4 top-1/2 -translate-y-1/2 z-50">
+            <div className="fixed left-4 lg:left-[18.5rem] top-1/2 -translate-y-1/2 z-50">
                 <div className="group relative">
                     <div className={`w-12 h-12 rounded-full flex items-center justify-center shadow-lg transition-all duration-300 ${connectionStatus === 'connecting'
                         ? 'bg-gradient-to-br from-yellow-900/90 to-amber-900/90 border-2 border-yellow-500/50 shadow-yellow-500/20'
@@ -288,7 +292,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
         return (
             <>
                 {/* Floating button with loading animation */}
-                <div className="fixed left-4 top-1/2 -translate-y-1/2 z-50">
+                <div className="fixed left-4 lg:left-[18.5rem] top-1/2 -translate-y-1/2 z-50">
                     <div className="relative w-14 h-14 bg-gradient-to-br from-emerald-900/90 to-cyan-900/90 border-2 border-emerald-500/70 rounded-full flex items-center justify-center shadow-lg shadow-emerald-500/30">
                         {/* Rotating ring */}
                         <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-emerald-400 animate-spin"></div>

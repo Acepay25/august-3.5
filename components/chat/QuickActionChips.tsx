@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { PlusIcon, BookmarkIcon, ActivityIcon, ChevronRightIcon, ChevronLeftIcon } from '../shared/Icons';
+import { PlusIcon, BookmarkIcon, ActivityIcon, ChartBarIcon, ChevronRightIcon, ChevronLeftIcon } from '../shared/Icons';
 
 interface QuickActionChipsProps {
     onNewAnalysis: () => void;
@@ -7,6 +7,9 @@ interface QuickActionChipsProps {
     onOpenLiveMarket: () => void;
     onOpenAnalytics: () => void;
     isDisabled?: boolean;
+    // 'docked' = vertical grid above the input (active sessions);
+    // 'centered' = horizontal outlined row under the hero composer.
+    layout?: 'docked' | 'centered';
 }
 
 export const QuickActionChips: React.FC<QuickActionChipsProps> = ({
@@ -14,9 +17,45 @@ export const QuickActionChips: React.FC<QuickActionChipsProps> = ({
     onOpenJournal,
     onOpenLiveMarket,
     onOpenAnalytics,
-    isDisabled = false
+    isDisabled = false,
+    layout = 'docked'
 }) => {
     const [isHidden, setIsHidden] = useState(false);
+
+    if (layout === 'centered') {
+        const chipClass = "flex items-center gap-2 px-4 py-2 bg-transparent border border-white/10 hover:border-white/25 hover:bg-white/5 rounded-full text-sm font-medium text-zinc-300 hover:text-zinc-100 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed";
+        return (
+            <div className="flex items-center justify-center gap-2 flex-wrap">
+                <button
+                    onClick={() => setIsHidden(!isHidden)}
+                    className="flex items-center justify-center w-7 h-7 bg-transparent border border-white/10 hover:border-white/25 rounded-full text-zinc-500 hover:text-zinc-200 transition-all duration-300 shrink-0"
+                    title={isHidden ? "Show quick actions" : "Hide quick actions"}
+                >
+                    {isHidden ? <ChevronRightIcon className="w-3.5 h-3.5" /> : <ChevronLeftIcon className="w-3.5 h-3.5" />}
+                </button>
+                {!isHidden && (
+                    <>
+                        <button onClick={onNewAnalysis} disabled={isDisabled} className={chipClass}>
+                            <span className="text-zinc-400"><PlusIcon className="w-4 h-4" /></span>
+                            <span>New Analysis</span>
+                        </button>
+                        <button onClick={onOpenJournal} disabled={isDisabled} className={chipClass}>
+                            <span className="text-zinc-400"><BookmarkIcon className="w-4 h-4" /></span>
+                            <span>Trade Journal</span>
+                        </button>
+                        <button onClick={onOpenAnalytics} disabled={isDisabled} className={chipClass}>
+                            <span className="text-zinc-400"><ChartBarIcon className="w-4 h-4" /></span>
+                            <span>Analytics</span>
+                        </button>
+                        <button onClick={onOpenLiveMarket} disabled={isDisabled} className={chipClass}>
+                            <span className="text-zinc-400"><ActivityIcon className="w-4 h-4" /></span>
+                            <span>Live Market</span>
+                        </button>
+                    </>
+                )}
+            </div>
+        );
+    }
 
     return (
         <div className="flex lg:flex-col items-center lg:items-start gap-2 pb-2 lg:pb-0 lg:w-full lg:max-w-3xl lg:mx-auto transition-all duration-300">

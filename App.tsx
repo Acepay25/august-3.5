@@ -14,6 +14,7 @@ import { useToastActions } from './components/shared/Toast';
 import { useConfirmDialog } from './components/shared/ConfirmDialog';
 import { OnboardingCard } from './components/shared/OnboardingCard';
 import { Header } from './components/shared/Header';
+import { SidebarContent } from './components/shared/Sidebar';
 import { ChatArea } from './components/chat/ChatArea';
 import { useProviderConfigs } from './hooks/useProviderConfigs';
 import { useAppSettings } from './hooks/useAppSettings';
@@ -297,6 +298,19 @@ const App: React.FC = () => {
     const mobileMenuRef = useRef<HTMLDivElement>(null);
     const leverageRef = useRef<HTMLDivElement>(null);
 
+    // Ensemble mode: off = casual chat with the selected model (no chart
+    // analysis); on = full analysis/debate pipeline. Initialized once from
+    // the loaded provider count so existing multi-provider setups keep
+    // their current behavior.
+    const [isEnsembleEnabled, setIsEnsembleEnabled] = useState(false);
+    const ensembleInitializedRef = useRef(false);
+    useEffect(() => {
+        if (!ensembleInitializedRef.current && readyProviders.length > 0) {
+            ensembleInitializedRef.current = true;
+            setIsEnsembleEnabled(readyProviders.length > 1);
+        }
+    }, [readyProviders.length]);
+
     // Analysis pipeline state, refs, and handlers (extracted to hooks/useAnalysisPipeline.ts)
     const {
         input, setInput,
@@ -337,6 +351,7 @@ const App: React.FC = () => {
         isGlobalMemoryEnabled, customInstructions,
         isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI,
         isHybridIntelligenceEnabled, lensConfig, activeFrameworks,
+        isEnsembleEnabled,
         toast,
     });
 
@@ -1691,7 +1706,6 @@ const App: React.FC = () => {
                 mobileMenuRef={mobileMenuRef}
                 setIsMobileMenuOpen={setIsMobileMenuOpen}
                 setIsVisionDataVisible={setIsVisionDataVisible}
-                handleClearChat={handleClearChat}
                 setJournalState={setJournalState}
                 setIsHistoryVisible={setIsHistoryVisible}
                 handleToggleFullscreen={handleToggleFullscreen}
@@ -1704,6 +1718,10 @@ const App: React.FC = () => {
                 isOnline={isOnline}
                 pendingQueueCount={pendingQueueCount}
                 liveMarketConditions={liveMarketConditions}
+                conversations={conversationHistory}
+                activeConversationId={activeConversationId}
+                onNewConversation={handleStartNewConversation}
+                onLoadConversation={handleLoadConversation}
             />
 
             <Journal
@@ -1790,21 +1808,42 @@ const App: React.FC = () => {
                 onClose={() => setIsAdvancedAnalyticsOpen(false)}
             />
 
-            {/* Mistake Warning Banner - Global Risk Reminder */}
-            {loggedTrades.length > 0 && (
-                <React.Suspense fallback={null}>
-                <MistakeWarningBanner
-                    tradeLog={loggedTrades}
-                />
-                </React.Suspense>
-            )}
+            {/* Main row: persistent desktop sidebar + chat column */}
+            <div className="flex-1 flex flex-row min-h-0">
+                <aside className="hidden lg:flex flex-col w-72 shrink-0 min-h-0 border-r border-white/5 bg-zinc-900/30">
+                    <SidebarContent
+                        activeUsername={activeUsername}
+                        conversations={conversationHistory}
+                        activeConversationId={activeConversationId}
+                        hasVisionData={currentVisionData.length > 0}
+                        isFullscreen={isFullscreen}
+                        onNewConversation={handleStartNewConversation}
+                        onLoadConversation={handleLoadConversation}
+                        onOpenLiveMarket={() => setIsLiveMarketVisible(true)}
+                        onOpenVisionData={() => setIsVisionDataVisible(true)}
+                        onOpenJournal={() => setJournalState({ isOpen: true, tab: 'log' })}
+                        onOpenHistory={() => setIsHistoryVisible(true)}
+                        onToggleFullscreen={handleToggleFullscreen}
+                        onOpenSettings={() => setIsSettingsMenuVisible(true)}
+                    />
+                </aside>
 
-            {/* P2-12: First-run onboarding card. Shows when no providers are
-                configured and the user hasn't dismissed it. */}
-            <OnboardingCard
-                hasAnyApiKey={readyProviders.length > 0}
-                onOpenSettings={() => setIsSettingsMenuVisible(true)}
-            />
+                <main className="flex-1 flex flex-col min-h-0 min-w-0 relative">
+                    {/* Mistake Warning Banner - Global Risk Reminder */}
+                    {loggedTrades.length > 0 && (
+                        <React.Suspense fallback={null}>
+                        <MistakeWarningBanner
+                            tradeLog={loggedTrades}
+                        />
+                        </React.Suspense>
+                    )}
+
+                    {/* P2-12: First-run onboarding card. Shows when no providers are
+                        configured and the user hasn't dismissed it. */}
+                    <OnboardingCard
+                        hasAnyApiKey={readyProviders.length > 0}
+                        onOpenSettings={() => setIsSettingsMenuVisible(true)}
+                    />
 
             <ChatArea
                 messages={messages}
@@ -1840,6 +1879,8 @@ const App: React.FC = () => {
                 // ChatInput props
                 lensConfig={lensConfig}
                 setLensConfig={handleSetLensConfig}
+                isEnsembleEnabled={isEnsembleEnabled}
+                setIsEnsembleEnabled={setIsEnsembleEnabled}
                 images={images}
                 removeImage={removeImage}
                 leverageRef={leverageRef}
@@ -1879,6 +1920,8 @@ const App: React.FC = () => {
                     if (isAdvancedAnalyticsOpen) setIsAdvancedAnalyticsOpen(false);
                 }}
             />
+                </main>
+            </div>
         </div>
         </React.Suspense>
     );
