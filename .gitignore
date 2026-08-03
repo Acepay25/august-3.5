@@ -49,3 +49,6 @@ services/test_output.txt
 
 # Local agent tooling
 .zcode/
+
+# Tool artifacts
+.commandcode
