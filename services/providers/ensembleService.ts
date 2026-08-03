@@ -257,14 +257,14 @@ You must complete the ENTIRE response including the JSON_PLAN block at the end.`
  * `config` is the moderator provider's ProviderConfig; `model` overrides config.selectedModel
  * (kept for backward-compat with the per-conversation moderator model selection).
  */
-const getModeratorAnalysisStream = async function* (config: ProviderConfig, model: string, prompt: string, signal?: AbortSignal): AsyncGenerator<string> {
+const getModeratorAnalysisStream = async function* (config: ProviderConfig, model: string, prompt: string, signal?: AbortSignal, onReasoning?: (reasoning: string) => void): AsyncGenerator<string> {
     const effectiveConfig: ProviderConfig = { ...config, selectedModel: model || config.selectedModel };
     const messages: ChatMessage[] = [
         { role: 'system', content: MODERATOR_SYSTEM_MESSAGE },
         { role: 'user', content: prompt },
     ];
     try {
-        for await (const chunk of streamChatRequest(effectiveConfig, messages, { temperature: 0.1, signal })) {
+        for await (const chunk of streamChatRequest(effectiveConfig, messages, { temperature: 0.1, signal, onReasoning })) {
             if (chunk) yield chunk;
         }
     } catch (e: any) {
@@ -817,7 +817,8 @@ export const conductDebate = (
     gateResult?: GateOutput | null, // Gate result for reconciliation
     tradeSummaries?: { id: string; summaryText: string; timestamp: string }[], // Recent Insights
     learningContext?: string, // NEW: Unified learning context from UnifiedLearningBuilder
-    signal?: AbortSignal // Cancellation for the moderator stream
+    signal?: AbortSignal, // Cancellation for the moderator stream
+    onReasoning?: (reasoning: string) => void
 ): AsyncGenerator<string, void, unknown> => {
 
     let tradeHistoryContext = finalTradeSummary ? `Pattern Memory Library (History):\n${truncateTextToTokens(finalTradeSummary, 3000)}` : "No past trades logged.";
@@ -927,7 +928,7 @@ ${analystsInput}
 Start the simulation now. Begin with <DEBATE_START>.
 `;
 
-    return getModeratorAnalysisStream(moderatorConfig, moderatorModel, finalPrompt, signal);
+    return getModeratorAnalysisStream(moderatorConfig, moderatorModel, finalPrompt, signal, onReasoning);
 };
 
 /**
@@ -973,7 +974,8 @@ export const conductTwoWayDebate = async function* (
     learningContext?: string, // NEW: Unified learning context
     enabledProviders?: string[], // NEW: for weighted voting
     trades?: LoggedTrade[], // NEW: trade history for weighted voting
-    signal?: AbortSignal // Cancellation for the moderator stream
+    signal?: AbortSignal, // Cancellation for the moderator stream
+    onReasoning?: (reasoning: string) => void
 ): AsyncGenerator<string, void, unknown> {
 
     // Format Monte Carlo context
@@ -1449,7 +1451,7 @@ export const conductTwoWayDebate = async function* (
       
       Start with <DEBATE_START> now.`;
 
-    yield* getModeratorAnalysisStream(moderatorConfig, moderatorModel, moderatorSystemPrompt, signal);
+    yield* getModeratorAnalysisStream(moderatorConfig, moderatorModel, moderatorSystemPrompt, signal, onReasoning);
 };
 
 export const conductThreeWayDebate = async function* (
@@ -1473,7 +1475,8 @@ export const conductThreeWayDebate = async function* (
     tradeSummaries?: { id: string; summaryText: string; timestamp: string }[],
     gateResult?: GateOutput | null, // Gate result for reconciliation
     learningContext?: string, // NEW: Unified learning context
-    signal?: AbortSignal // Cancellation for the moderator stream
+    signal?: AbortSignal, // Cancellation for the moderator stream
+    onReasoning?: (reasoning: string) => void
 ): AsyncGenerator<string, void, unknown> {
 
     // Format Monte Carlo context
@@ -2088,7 +2091,7 @@ Start with <DEBATE_START> now.
 `;
 
 
-    yield* getModeratorAnalysisStream(moderatorConfig, moderatorModel, moderatorSystemPrompt, signal);
+    yield* getModeratorAnalysisStream(moderatorConfig, moderatorModel, moderatorSystemPrompt, signal, onReasoning);
 };
 
 export const conductTwoWayPostMortemDebate = (

@@ -377,7 +377,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
 
             {loadingMessage ? (
                 <>
-                <div className="absolute bottom-[calc(env(safe-area-inset-bottom)+6rem)] sm:bottom-[calc(env(safe-area-inset-bottom)+7rem)] left-0 right-0 p-2 sm:p-4 pointer-events-none z-10">
+                <div className="absolute bottom-[calc(env(safe-area-inset-bottom)+11rem)] sm:bottom-[calc(env(safe-area-inset-bottom)+12rem)] lg:bottom-[calc(env(safe-area-inset-bottom)+13rem)] left-0 right-0 p-2 sm:p-4 pointer-events-none z-10">
                     <div className="max-w-4xl mx-auto pointer-events-auto">
                         {analysisSteps && analysisSteps.length > 0 ? (
                             <AnalysisProgress

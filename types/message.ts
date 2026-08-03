@@ -7,6 +7,8 @@ import { TradeAnalysis } from './analysis';
 export interface DebateTurn {
   speaker: DebateSpeaker;
   text: string;
+  /** Public reasoning summary emitted by the model, when the provider supports it. */
+  reasoning?: string;
 }
 
 export interface Kline {
@@ -56,6 +58,7 @@ export interface Message {
   // Ensemble fields — keyed by provider id (ProviderConfig.id)
   modelsUsed?: Record<string, string>;       // providerId → model id used
   thoughtProcesses?: Record<string, string>; // providerId → thought process text
+  reasoningProcesses?: Record<string, string>; // provider/model → provider reasoning content
 
   isDebating?: boolean; // Flag for showing the debate UI
   debateTurns?: DebateTurn[]; // Holds the live debate conversation

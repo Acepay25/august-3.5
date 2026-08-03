@@ -8,6 +8,8 @@ interface DebateViewProps {
     debateTurns: DebateTurn[];
     /** provider id → model id, from the message that produced this debate. */
     modelsUsed?: Record<string, string>;
+    reasoningProcesses?: Record<string, string>;
+    thoughtProcesses?: Record<string, string>;
     /** model id → display label (built dynamically from provider configs). */
     modelIdToName?: Record<string, string>;
     /** provider display name → provider id (speaker names map to config ids). */
@@ -49,7 +51,7 @@ const RoundHeader: React.FC<{ title: string, isOpen: boolean, onToggle: () => vo
     </button>
 );
 
-const DebateView: React.FC<DebateViewProps> = ({ debateTurns, modelsUsed, modelIdToName, providerNameToId, lensConfig, isDebating }) => {
+const DebateView: React.FC<DebateViewProps> = ({ debateTurns, modelsUsed, reasoningProcesses = {}, thoughtProcesses = {}, modelIdToName, providerNameToId, lensConfig, isDebating }) => {
     const [expandedRounds, setExpandedRounds] = useState<Record<number, boolean>>({});
     const lastRoundCountRef = useRef(0);
 
@@ -125,6 +127,11 @@ const DebateView: React.FC<DebateViewProps> = ({ debateTurns, modelsUsed, modelI
         return modelIdToName?.[modelId] ?? modelId;
     };
 
+    const getSpeakerThinking = (speaker: string): string => {
+        if (speaker === 'Moderator') return reasoningProcesses.moderator || thoughtProcesses.moderator || '';
+        return reasoningProcesses[speaker] || thoughtProcesses[speaker] || '';
+    };
+
     return (
         <div className="mt-4 bg-zinc-950 rounded-xl border border-white/10 overflow-hidden shadow-inner flex flex-col">
             <div className="bg-gradient-to-r from-zinc-900 to-black px-3 py-2 sm:px-4 sm:py-3 border-b border-white/10 flex justify-between items-center">
@@ -158,6 +165,12 @@ const DebateView: React.FC<DebateViewProps> = ({ debateTurns, modelsUsed, modelI
                                                 <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-cyan-400">Master Strategist</span>
                                                 {isVerdict && <span className="text-[9px] bg-cyan-500/20 text-cyan-300 px-1.5 py-0.5 rounded border border-cyan-500/20">DECISION</span>}
                                             </div>
+                                            {isDebating || getSpeakerThinking('Moderator') ? (
+                                                <details className="mb-3 rounded-lg border border-cyan-500/15 bg-black/20">
+                                                    <summary className="cursor-pointer list-none px-2.5 py-2 text-[10px] font-semibold uppercase tracking-wider text-cyan-300/70">Moderator is thinking <span className="normal-case tracking-normal text-zinc-600">(expand)</span></summary>
+                                                    <div className="border-t border-white/5 px-2.5 py-2 text-xs leading-relaxed text-zinc-400 whitespace-pre-wrap">{getSpeakerThinking('Moderator') || 'Waiting for moderator reasoning content…'}</div>
+                                                </details>
+                                            ) : null}
                                             <p className="text-xs sm:text-sm text-zinc-200 leading-relaxed whitespace-pre-wrap">{round.moderator.text}</p>
                                         </div>
                                     )}
@@ -182,8 +195,12 @@ const DebateView: React.FC<DebateViewProps> = ({ debateTurns, modelsUsed, modelI
                                                                                                 'bg-zinc-800 border-white/5 text-zinc-300'}`}>
                                                         <div className="absolute top-1 right-2 opacity-0 group-hover:opacity-100 transition-opacity text-[8px] uppercase font-bold tracking-widest text-white/30 flex items-center gap-1">
                                                             {getRoleEmoji(turn.speaker) && <span className="text-[10px]">{getRoleEmoji(turn.speaker)}</span>}
-                                                            {turn.speaker}
+                                                    {turn.speaker}
                                                         </div>
+                                                        <details className="mb-2 rounded border border-white/10 bg-black/15">
+                                                            <summary className="cursor-pointer list-none px-2 py-1.5 text-[10px] uppercase tracking-wider text-zinc-400">{turn.speaker} is thinking <span className="normal-case tracking-normal text-zinc-600">(expand)</span></summary>
+                                                            <div className="border-t border-white/5 px-2 py-2 text-xs leading-relaxed text-zinc-500 whitespace-pre-wrap">{getSpeakerThinking(turn.speaker) || 'This analyst did not return separate reasoning content.'}</div>
+                                                        </details>
                                                         {turn.text}
                                                     </div>
                                                 </div>

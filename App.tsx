@@ -5,6 +5,8 @@ import { Message, MessageRole, TradeOutcome, ImageMetadata, AIProvider, Conversa
 import * as ensembleService from './services/providers/ensembleService';
 import { generateFinalSummary } from './services/providers/GenericAnalysisService';
 import * as dbService from './services/infrastructure/dbService';
+import { ANALYST_ROLE_DEFINITIONS, getRoleForProvider } from './services/ui/AnalystLensService';
+import { AnalystRole } from './types/enums';
 import { ProbabilityEngineService } from './services/analysis/ProbabilityEngineService';
 
 
@@ -202,6 +204,11 @@ const App: React.FC = () => {
     // their current behavior. Declared early so useMarketData can gate its
     // polling on it.
     const [isEnsembleEnabled, setIsEnsembleEnabled] = useState(false);
+    const ensembleModelCount = useMemo(() => readyProviders.reduce((total, provider) => {
+        const selected = provider.ensembleModels?.filter(model => provider.models.includes(model))
+            ?? (provider.selectedModel ? [provider.selectedModel] : []);
+        return total + selected.length;
+    }, 0), [readyProviders]);
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
         try {
             return window.localStorage.getItem('august_sidebar_collapsed') === 'true';
@@ -220,9 +227,38 @@ const App: React.FC = () => {
     useEffect(() => {
         if (!ensembleInitializedRef.current && readyProviders.length > 0) {
             ensembleInitializedRef.current = true;
-            setIsEnsembleEnabled(readyProviders.length > 1);
+            setIsEnsembleEnabled(ensembleModelCount > 1);
         }
-    }, [readyProviders.length]);
+    }, [ensembleModelCount]);
+
+    // Keep the live analysis cards aligned with the exact model-level
+    // participants used by useAnalysisPipeline. A provider can contribute
+    // multiple selected models to one ensemble.
+    const liveAnalysisProviders = useMemo(() => readyProviders
+        .flatMap(provider => {
+            const assignedModels = lensConfig?.enabled
+                ? lensConfig.assignments
+                    .filter(assignment => assignment.assignedProvider === provider.id && assignment.assignedModel && provider.models.includes(assignment.assignedModel))
+                    .map(assignment => assignment.assignedModel as string)
+                : [];
+            const configuredModels = provider.ensembleModels?.filter(model => provider.models.includes(model)).slice(0, 3) || [];
+            if (configuredModels.length === 0 && provider.selectedModel) configuredModels.push(provider.selectedModel);
+            const models = isEnsembleEnabled
+                ? [...new Set([...assignedModels, ...configuredModels])].slice(0, 3)
+                : (provider.selectedModel ? [provider.selectedModel] : []);
+            return models.map(model => ({
+                id: `${provider.id}:${model}`,
+                name: (() => {
+                    if (!isEnsembleEnabled || !lensConfig?.enabled) return isEnsembleEnabled && models.length > 1 ? `${provider.name} · ${model}` : provider.name;
+                    const role = getRoleForProvider(`${provider.id}::${model}`, lensConfig.assignments);
+                    return role !== AnalystRole.UNASSIGNED ? ANALYST_ROLE_DEFINITIONS[role].name : provider.name;
+                })(),
+                modelName: model,
+                isEnabled: provider.isEnabled,
+                apiKey: provider.apiKey,
+            }));
+        })
+        .slice(0, 3), [readyProviders, isEnsembleEnabled, lensConfig]);
 
     // Market data state and effects (extracted to hooks/useMarketData.ts)
     const marketData = useMarketData(isHybridIntelligenceEnabled, isEnsembleEnabled);
@@ -364,6 +400,7 @@ const App: React.FC = () => {
         loadingMessage, setLoadingMessage,
         analysisSteps, setAnalysisSteps,
         liveThoughts, setLiveThoughts,
+        liveReasoning,
         currentGateResult, setCurrentGateResult,
         currentVisionData, setCurrentVisionData,
         isDeepAnalysis, setIsDeepAnalysis,
@@ -416,10 +453,10 @@ const App: React.FC = () => {
             return;
         }
         const issues: string[] = [];
-        if (readyProviders.length < 2) {
-            const missing = 2 - readyProviders.length;
+        if (ensembleModelCount < 2) {
+            const missing = 2 - ensembleModelCount;
             issues.push(`enable ${missing} more AI model${missing === 1 ? '' : 's'} (ensemble needs 2–3 enabled models)`);
-        } else if (!isAccuracyModeEnabled && readyProviders.length > 3) {
+        } else if (!isAccuracyModeEnabled && ensembleModelCount > 3) {
             issues.push('disable extra models (maximum 3 for ensemble)');
         }
         if (!moderatorProviderId || !readyProviders.some(p => p.id === moderatorProviderId)) {
@@ -428,7 +465,7 @@ const App: React.FC = () => {
         if (issues.length > 0) {
             toast.warning('Ensemble needs more setup', `To use ensemble: ${issues.join(' and ')}.`);
         }
-    }, [readyProviders, moderatorProviderId, isAccuracyModeEnabled, toast, setImages]);
+    }, [readyProviders, ensembleModelCount, moderatorProviderId, isAccuracyModeEnabled, toast, setImages]);
 
     // P0-2: Mirror the (later-declared) activeUsername into a ref so the
     // usePostMortem hook — which is instantiated BEFORE useUserProfiles
@@ -1695,7 +1732,8 @@ const App: React.FC = () => {
                 isVisible={isLiveAnalysisVisible}
                 onClose={() => setIsLiveAnalysisVisible(false)}
                 thoughts={liveThoughts}
-                providers={readyProviders}
+                reasoning={liveReasoning}
+                providers={liveAnalysisProviders}
                 onAllTypingComplete={handleAllAnalysisTypingComplete}
             />
             <LiveStreamView
