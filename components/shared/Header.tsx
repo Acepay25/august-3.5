@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BotIcon, UserIcon, LoadingIcon, CheckIcon, EyeIcon, CodeIcon, TrashIcon, HistoryIcon, StarIcon, ArchiveIcon, FullscreenExitIcon, FullscreenEnterIcon, SettingsIcon, HamburgerIcon, ActivityIcon, CloudOffIcon, PlusIcon, BookmarkIcon, BellIcon } from './Icons';
+import { BotIcon, LoadingIcon, CheckIcon, EyeIcon, SettingsIcon, HamburgerIcon, ActivityIcon, CloudOffIcon } from './Icons';
 import { getSessionContext, getAllSessionsStatus, SessionContext, SessionStatus } from '../../services/infrastructure/SessionService';
 import { UpdateButton } from './UpdateButton';
+import { SidebarContent } from './Sidebar';
+import { Conversation } from '../../types';
 
 interface HeaderProps {
     activeUsername: string | null;
@@ -14,7 +16,6 @@ interface HeaderProps {
     mobileMenuRef: React.RefObject<HTMLDivElement | null>;
     setIsMobileMenuOpen: React.Dispatch<React.SetStateAction<boolean>>;
     setIsVisionDataVisible: (visible: boolean) => void;
-    handleClearChat: () => void;
     setJournalState: (state: { isOpen: boolean; tab: 'log' | 'performance' | 'analytics' }) => void;
     setIsHistoryVisible: (visible: boolean) => void;
     handleToggleFullscreen: () => void;
@@ -34,6 +35,11 @@ interface HeaderProps {
         liquidation: 'High' | 'Medium' | 'Low';
         lastUpdated: string;
     } | null;
+    // Sidebar (shared with the persistent desktop column)
+    conversations: Conversation[];
+    activeConversationId: string | null;
+    onNewConversation: () => void;
+    onLoadConversation: (id: string) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -47,7 +53,6 @@ export const Header: React.FC<HeaderProps> = ({
     mobileMenuRef,
     setIsMobileMenuOpen,
     setIsVisionDataVisible,
-    handleClearChat,
     setJournalState,
     setIsHistoryVisible,
     handleToggleFullscreen,
@@ -60,7 +65,11 @@ export const Header: React.FC<HeaderProps> = ({
     onOpenVersionHistory,
     isOnline = true,
     pendingQueueCount = 0,
-    liveMarketConditions
+    liveMarketConditions,
+    conversations,
+    activeConversationId,
+    onNewConversation,
+    onLoadConversation
 }) => {
     const [sessionContext, setSessionContext] = useState<SessionContext | null>(null);
     const [allSessions, setAllSessions] = useState<SessionStatus[]>([]);
@@ -127,25 +136,25 @@ export const Header: React.FC<HeaderProps> = ({
     };
 
     return (
-        <header className="glass sticky top-0 z-20 px-4 py-2 sm:px-6 sm:py-4 border-b border-transparent shadow-sm flex-shrink-0 transition-all duration-300 pt-[calc(env(safe-area-inset-top,0px)+0.5rem)] sm:pt-[calc(env(safe-area-inset-top,0px)+1rem)]">
+        <header className="glass sticky top-0 z-20 px-4 py-1.5 sm:px-6 sm:py-2 border-b border-transparent shadow-sm flex-shrink-0 pt-[calc(env(safe-area-inset-top,0px)+0.375rem)] sm:pt-[calc(env(safe-area-inset-top,0px)+0.5rem)]">
             <div className="max-w-7xl mx-auto flex items-center justify-between">
                 <div className="flex-1 min-w-0 flex items-center gap-3 sm:gap-4 relative">
                     {/* Hamburger Menu Button */}
                     <button
                         onClick={() => setIsMobileMenuOpen(prev => !prev)}
-                        className="p-2.5 text-zinc-400 hover:text-cyan-400 rounded-xl hover:bg-white/5 transition-colors"
+                        className="p-2.5 text-zinc-400 hover:text-cyan-400 rounded-xl hover:bg-white/5 transition-colors lg:hidden"
                         title="Menu"
                         aria-label="Toggle navigation menu"
                     >
                         <HamburgerIcon className="h-5 w-5" />
                     </button>
 
-                    <div className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400">
+                    <div className="flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400">
                         <BotIcon />
                     </div>
                     <div className="flex flex-col justify-center">
                         <div className="flex items-center gap-3">
-                            <h1 className="text-lg sm:text-xl font-bold tracking-tight text-zinc-100 leading-none">August <span className="text-cyan-500">3.5</span></h1>
+                            <h1 className="text-base sm:text-lg font-bold tracking-tight text-zinc-100 leading-none">August <span className="text-cyan-500">3.5</span></h1>
 
                             {/* Session Display */}
                             {sessionContext && (
@@ -293,7 +302,7 @@ export const Header: React.FC<HeaderProps> = ({
 
                 {/* Slide-out Menu Panel */}
                 {isMobileMenuOpen && (
-                    <div className="fixed inset-0 z-50">
+                    <div className="fixed inset-0 z-50 lg:hidden">
                         {/* Backdrop */}
                         <div
                             className="absolute inset-0 bg-black/50 backdrop-blur-sm"
@@ -301,7 +310,7 @@ export const Header: React.FC<HeaderProps> = ({
                         />
 
                         {/* Menu Panel */}
-                        <div ref={mobileMenuRef} className="absolute left-0 top-0 h-full w-72 bg-zinc-900/95 lg:bg-zinc-950 border-r border-white/10 shadow-2xl animate-slide-in-left">
+                        <div ref={mobileMenuRef} className="absolute left-0 top-0 h-full w-72 bg-zinc-900/95 border-r border-white/10 shadow-2xl animate-slide-in-left flex flex-col">
                             <div className="p-5 border-b border-white/10 flex items-center justify-between">
                                 <div className="flex items-center gap-3">
                                     <div className="w-10 h-10 rounded-full bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
@@ -314,44 +323,28 @@ export const Header: React.FC<HeaderProps> = ({
                                 </div>
                             </div>
 
-                            <nav className="py-4 max-h-[calc(100vh-100px)] overflow-y-auto">
-                                <div className="px-4 mb-2">
-                                    <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Quick Actions</span>
-                                </div>
-                                <button onClick={() => { onOpenLiveMarket(); setIsMobileMenuOpen(false); }} className="w-full flex items-center gap-4 px-5 py-3 text-cyan-400 hover:bg-white/5 transition-colors">
-                                    <ActivityIcon className="h-5 w-5" /> Live Market
-                                </button>
-                                {currentVisionData.length > 0 && (
-                                    <button onClick={() => { setIsVisionDataVisible(true); setIsMobileMenuOpen(false); }} className="w-full flex items-center gap-4 px-5 py-3 text-zinc-300 hover:bg-white/5 transition-colors">
-                                        <CodeIcon /> View Vision Data
-                                    </button>
-                                )}
+                            <div className="flex-1 min-h-0 overflow-y-auto py-3">
+                                <SidebarContent
+                                    activeUsername={activeUsername}
+                                    conversations={conversations}
+                                    activeConversationId={activeConversationId}
+                                    hasVisionData={currentVisionData.length > 0}
+                                    isFullscreen={isFullscreen}
+                                    onNewConversation={onNewConversation}
+                                    onLoadConversation={onLoadConversation}
+                                    onOpenLiveMarket={onOpenLiveMarket}
+                                    onOpenVisionData={() => setIsVisionDataVisible(true)}
+                                    onOpenJournal={() => setJournalState({ isOpen: true, tab: 'log' })}
+                                    onOpenHistory={() => setIsHistoryVisible(true)}
+                                    onToggleFullscreen={handleToggleFullscreen}
+                                    onOpenSettings={() => setIsSettingsVisible(true)}
+                                    onNavigate={() => setIsMobileMenuOpen(false)}
+                                />
+                            </div>
 
-                                <div className="h-px bg-white/10 my-3 mx-4" />
-
-                                <button onClick={() => { handleClearChat(); setIsMobileMenuOpen(false); }} className="w-full flex items-center gap-4 px-5 py-3 text-emerald-400 hover:bg-emerald-500/10 transition-colors">
-                                    <PlusIcon className="h-5 w-5" /> New Conversation
-                                </button>
-                                <button onClick={() => { setJournalState({ isOpen: true, tab: 'log' }); setIsMobileMenuOpen(false); }} className="w-full flex items-center gap-4 px-5 py-3 text-violet-400 hover:bg-violet-500/10 transition-colors">
-                                    <BookmarkIcon className="h-5 w-5" /> Trading Journal
-                                </button>
-                                <button onClick={() => { setIsHistoryVisible(true); setIsMobileMenuOpen(false); }} className="w-full flex items-center gap-4 px-5 py-3 text-amber-400 hover:bg-amber-500/10 transition-colors">
-                                    <ArchiveIcon /> Conversation History
-                                </button>
-
-                                <div className="h-px bg-white/10 my-3 mx-4" />
-
-                                <button onClick={() => { handleToggleFullscreen(); setIsMobileMenuOpen(false); }} className="w-full flex items-center gap-4 px-5 py-3 text-zinc-300 hover:bg-white/5 transition-colors">
-                                    {isFullscreen ? <FullscreenExitIcon /> : <FullscreenEnterIcon />}
-                                    {isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
-                                </button>
-                                <div className="px-5 py-2">
-                                    <UpdateButton />
-                                </div>
-                                <button onClick={() => { setIsSettingsVisible(true); setIsMobileMenuOpen(false); }} className="w-full flex items-center gap-4 px-5 py-3 text-zinc-300 hover:bg-white/5 transition-colors">
-                                    <SettingsIcon /> Settings
-                                </button>
-                            </nav>
+                            <div className="px-5 py-3 border-t border-white/5">
+                                <UpdateButton />
+                            </div>
                         </div>
                     </div>
                 )}

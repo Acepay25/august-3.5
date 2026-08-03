@@ -36,6 +36,10 @@ interface ChatInputProps {
     // Lens Config
     lensConfig: AnalystLensConfig;
     setLensConfig: (config: AnalystLensConfig) => void;
+    // Ensemble mode: off = casual chat with the selected model (chart
+    // upload/analysis disabled); on = full analysis pipeline.
+    isEnsembleEnabled: boolean;
+    setIsEnsembleEnabled: (v: boolean) => void;
     // Fresh-session layout: center the input until the first message exists.
     centered?: boolean;
 }
@@ -67,23 +71,30 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
     setSelectedVisionModel,
     lensConfig,
     setLensConfig,
-    // Fresh-session layout: center the input vertically until the first
-    // message exists, then glide it down to the bottom dock.
+    isEnsembleEnabled,
+    setIsEnsembleEnabled,
+    // Fresh-session layout: static centered input until the first message
+    // exists, then it docks at the bottom.
     centered = false,
 }) => {
     const [showAISettings, setShowAISettings] = useState(false);
     const [showLensSettings, setShowLensSettings] = useState(false);
 
+    // Charts can only be analyzed in ensemble mode.
+    const uploadDisabled = isImageUploadDisabled || !isEnsembleEnabled;
+
     return (
-        <div className={`absolute bottom-0 left-0 right-0 px-3 sm:px-4 lg:px-8 pointer-events-none z-10 pb-[calc(env(safe-area-inset-bottom,16px)+0.5rem)] sm:pb-[calc(env(safe-area-inset-bottom,24px)+1rem)] lg:pb-8 transition-transform duration-500 ease-in-out ${centered ? '-translate-y-[44vh]' : 'translate-y-0'}`}>
-            <div className="w-full lg:max-w-3xl lg:mx-auto pointer-events-auto">
-                {/* Main Input Container — borderless, no box; blends into the chat */}
-                <div className="p-2 sm:p-3 lg:p-4 transition-all">
+        <div className={centered
+            ? 'w-full'
+            : 'absolute bottom-0 left-0 right-0 px-3 sm:px-4 lg:px-8 pointer-events-none z-10 pb-[calc(env(safe-area-inset-bottom,16px)+0.5rem)] sm:pb-[calc(env(safe-area-inset-bottom,24px)+1rem)] lg:pb-8'}>
+            <div className={centered ? 'w-full' : 'w-full lg:max-w-3xl lg:mx-auto pointer-events-auto'}>
+                {/* Main Input Container — carded composer surface */}
+                <div className="rounded-2xl border border-white/10 bg-zinc-900/60 backdrop-blur-sm shadow-xl p-2 sm:p-3 lg:p-4 transition-all">
 
                     {/* Image Preview */}
                     <ImagePreview images={images} onRemoveImage={removeImage} />
 
-                    {/* Main Input Row - Desktop: with inline upload/send */}
+                    {/* Main Input Row */}
                     <div className="flex items-end gap-2">
                         <textarea
                             value={input}
@@ -95,39 +106,42 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             disabled={!!loadingMessage || isRateLimited || !isAnyProviderEnabled}
                             style={{ overflow: 'hidden' }}
                         />
+                    </div>
+                    <input type="file" multiple accept="image/*" ref={fileInputRef} onChange={handleImageUpload} className="hidden" disabled={uploadDisabled} />
 
-                        {/* Desktop only: inline upload and send buttons */}
-                        <div className="hidden lg:flex items-center gap-2">
+                    {/* Bottom Toolbar — unified control row for all breakpoints */}
+                    <div className="flex items-center justify-between gap-2 pt-2 sm:pt-3 mt-2 border-t border-white/5 lg:border-none lg:mt-3 lg:pt-0">
+                        {/* Left Side: upload + action pills */}
+                        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-wrap">
                             <button
                                 onClick={() => fileInputRef.current?.click()}
-                                className={`h-9 w-9 rounded-full transition-all shrink-0 flex items-center justify-center ${isImageUploadDisabled ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-400 hover:text-white'}`}
-                                disabled={isImageUploadDisabled}
-                                title="Upload charts"
+                                className={`h-9 w-9 rounded-full transition-all shrink-0 flex items-center justify-center ${uploadDisabled ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-400 hover:text-white'}`}
+                                disabled={uploadDisabled}
+                                title={isEnsembleEnabled ? "Upload charts" : "Enable Ensemble to analyze charts"}
                             >
                                 <PlusIcon className="h-5 w-5" />
                             </button>
-                            <button
-                                onClick={handleSendMessage}
-                                disabled={!!loadingMessage || isSummarizing || (!input.trim() && images.length === 0) || isRateLimited || !isAnyProviderEnabled}
-                                className="h-9 w-9 rounded-full bg-cyan-500 hover:bg-cyan-400 text-white disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-zinc-600 transition-all flex items-center justify-center shrink-0"
-                            >
-                                {isSummarizing ? <LoadingIcon className="h-5 w-5" /> : <SendIcon />}
-                            </button>
-                        </div>
-                    </div>
-                    <input type="file" multiple accept="image/*" ref={fileInputRef} onChange={handleImageUpload} className="hidden" disabled={isImageUploadDisabled} />
-
-                    {/* Bottom Toolbar - Different layouts for mobile vs desktop */}
-                    <div className="flex items-center justify-between pt-2 sm:pt-3 mt-2 border-t border-white/5 lg:border-none lg:mt-3 lg:pt-0">
-                        {/* Left Side: Action Pills */}
-                        <div className="flex items-center gap-1.5 sm:gap-2">
-                            {/* Ensemble Button */}
-                            <button
-                                onClick={() => setShowAISettings(!showAISettings)}
-                                className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 lg:px-4 py-1 sm:py-1.5 lg:py-2 rounded-full transition-all text-xs sm:text-sm ${showAISettings ? 'bg-cyan-600 text-white' : 'bg-zinc-700/80 lg:bg-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-600'}`}
-                            >
-                                <span className="font-medium hidden xs:inline sm:inline">Ensemble</span>
-                            </button>
+                            {/* Ensemble split button: toggle ensemble mode /
+                                configure providers */}
+                            <div className={`relative flex items-center shadow-sm rounded-full transition-all ${isEnsembleEnabled ? 'bg-cyan-600' : 'bg-zinc-700/80 lg:bg-zinc-700 hover:bg-zinc-600'}`}>
+                                <button
+                                    onClick={() => setIsEnsembleEnabled(!isEnsembleEnabled)}
+                                    className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 lg:px-4 py-1 sm:py-1.5 lg:py-2 transition-all text-xs sm:text-sm border-r border-black/10 rounded-l-full ${isEnsembleEnabled ? 'text-white shadow-[inset_0_0_10px_rgba(0,0,0,0.1)]' : 'text-zinc-400 hover:text-white'}`}
+                                    title={isEnsembleEnabled ? 'Ensemble on — chart analysis enabled' : 'Enable ensemble mode for chart analysis'}
+                                >
+                                    <span className="font-medium hidden xs:inline sm:inline">Ensemble</span>
+                                </button>
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setShowAISettings(!showAISettings);
+                                    }}
+                                    className={`px-1.5 sm:px-2 py-1 sm:py-1.5 lg:py-2 transition-colors flex items-center justify-center rounded-r-full ${isEnsembleEnabled ? 'text-white hover:bg-cyan-700' : 'text-zinc-400 hover:text-white hover:bg-zinc-500'}`}
+                                    title="Configure providers"
+                                >
+                                    <ChevronDownIcon className={`w-3 h-3 sm:w-3.5 sm:h-3.5 transition-transform duration-200 ${showAISettings ? 'rotate-180' : ''}`} />
+                                </button>
+                            </div>
 
                             {/* Lens Mode Split Button */}
                             <div className={`relative group flex items-center shadow-sm rounded-full transition-all ${lensConfig.enabled ? 'bg-indigo-600' : 'bg-zinc-700/80 lg:bg-zinc-700 hover:bg-zinc-600'}`}>
@@ -247,7 +261,11 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                 )}
                             </div>
 
-                            {/* Leverage Button - Visible on all screens */}
+                        </div>
+
+                        {/* Right Side: leverage + send */}
+                        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                            {/* Leverage Button */}
                             <div className="relative" ref={leverageRef}>
                                 <button
                                     onClick={() => setIsLeverageDropdownOpen(!isLeverageDropdownOpen)}
@@ -257,7 +275,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                     <span className="font-medium">{leverageInput}x</span>
                                 </button>
                                 {isLeverageDropdownOpen && (
-                                    <div className="absolute bottom-full left-0 mb-2 w-28 bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden animate-fade-in">
+                                    <div className="absolute bottom-full right-0 mb-2 w-28 bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden animate-fade-in">
                                         {[25, 50, 75, 100, 125].map(preset => (
                                             <button
                                                 key={preset}
@@ -282,24 +300,14 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                     </div>
                                 )}
                             </div>
-                        </div>
-
-                        {/* Right Side: Upload + Send - Mobile only */}
-                        <div className="flex lg:hidden items-center gap-1.5 sm:gap-2">
-                            <button
-                                onClick={() => fileInputRef.current?.click()}
-                                className={`h-8 w-8 sm:h-10 sm:w-10 rounded-full transition-all shrink-0 flex items-center justify-center ${isImageUploadDisabled ? 'text-zinc-600 bg-zinc-800/50 cursor-not-allowed' : 'text-zinc-400 bg-zinc-800/80 hover:text-white hover:bg-zinc-700'}`}
-                                disabled={isImageUploadDisabled}
-                                title="Upload charts"
-                            >
-                                <PlusIcon className="h-4 w-4 sm:h-5 sm:w-5" />
-                            </button>
                             <button
                                 onClick={handleSendMessage}
                                 disabled={!!loadingMessage || isSummarizing || (!input.trim() && images.length === 0) || isRateLimited || !isAnyProviderEnabled}
-                                className="h-8 w-8 sm:h-10 sm:w-10 rounded-full bg-zinc-800/80 text-zinc-400 hover:text-white hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center shrink-0"
+                                className="h-9 w-9 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-white disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-zinc-600 transition-all flex items-center justify-center shrink-0"
+                                title="Send"
+                                aria-label="Send message"
                             >
-                                {isSummarizing ? <LoadingIcon className="h-4 w-4 sm:h-5 sm:w-5" /> : <SendIcon />}
+                                {isSummarizing ? <LoadingIcon className="h-5 w-5" /> : <SendIcon />}
                             </button>
                         </div>
                     </div>
