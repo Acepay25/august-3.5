@@ -163,6 +163,7 @@ describe('ensemble debate generators (mocked transport)', () => {
   });
 
   it('rethrows rate-limit (429) errors instead of emitting a marker', async () => {
+    // eslint-disable-next-line require-yield -- mocked stream fails before yielding any chunk
     streamMock.mockImplementation(async function* () {
       throw Object.assign(new Error('Rate limit reached. Please wait and try again.'), { status: 429 });
     });
@@ -175,6 +176,7 @@ describe('ensemble debate generators (mocked transport)', () => {
   });
 
   it('yields an <MODERATOR_ERROR> marker for non-rate-limit provider failures', async () => {
+    // eslint-disable-next-line require-yield -- mocked stream fails before yielding any chunk
     streamMock.mockImplementation(async function* () {
       throw new Error('boom: provider exploded');
     });
