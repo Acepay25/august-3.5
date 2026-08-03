@@ -11,19 +11,17 @@ describe('conversationUtils', () => {
       expect(a.id).not.toEqual(b.id);
     });
 
-    it('initializes messages with a single AI welcome message', () => {
-      // Note: the factory seeds one assistant welcome message rather than
-      // starting with an empty array.
+    it('starts with an empty message list (no welcome bubble)', () => {
+      // Fresh sessions start empty — the chat shows a centered input and
+      // fills as messages are sent (welcome bubble removed in f849353).
       const conv = createNewConversation();
       expect(Array.isArray(conv.messages)).toBe(true);
-      expect(conv.messages).toHaveLength(1);
-      expect(conv.messages[0].role).toBe('ai');
-      expect(conv.messages[0].text.length).toBeGreaterThan(0);
+      expect(conv.messages).toHaveLength(0);
     });
 
-    it('has a default leverage of 10', () => {
+    it('has a default leverage of 100 (app-wide default)', () => {
       const conv = createNewConversation();
-      expect(conv.leverage).toBe(10);
+      expect(conv.leverage).toBe(100);
     });
 
     it('has a createdAt-style timestamp set to now', () => {
