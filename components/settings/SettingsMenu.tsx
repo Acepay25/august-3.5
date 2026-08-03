@@ -126,8 +126,8 @@ const NavTabButton: React.FC<{
             onClick={onClick}
             className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl transition-all font-medium text-xs ${
                 isActive
-                    ? 'bg-zinc-800/90 text-white border border-zinc-700/80 shadow-sm font-semibold'
-                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60 border border-transparent'
+                    ? 'bg-zinc-800 text-white border border-zinc-700/80 shadow-sm font-semibold'
+                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 border border-transparent'
             }`}
         >
             <div className="flex items-center gap-3 min-w-0">
@@ -226,7 +226,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
         <>
             {/* Backdrop */}
             <div
-                className="fixed inset-0 bg-black/80 backdrop-blur-md z-40 animate-fade-in"
+                className="fixed inset-0 bg-black/80 z-40 animate-fade-in"
                 onClick={onClose}
             />
 
@@ -317,7 +317,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                         </div>
 
                         {/* Right Content Workspace */}
-                        <div className="flex-1 overflow-y-auto p-6 bg-zinc-950/40 custom-scrollbar">
+                        <div className="flex-1 overflow-y-auto p-6 bg-zinc-950 custom-scrollbar">
                             
                             {/* TAB 0: Trading Journal */}
                             {activeTab === 'journal' && (
@@ -363,7 +363,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         {/* Vision Model Selector — models from ready providers */}
                                         {readyConfigProviders.length > 0 && (
-                                            <div className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800/80">
+                                            <div className="p-4 rounded-xl bg-zinc-900 border border-zinc-800/80">
                                                 <div className="text-xs font-bold text-zinc-400 mb-2 uppercase tracking-wider">
                                                     Vision Model
                                                 </div>
@@ -380,7 +380,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         )}
 
                                         {/* Debate Moderator Selector */}
-                                        <div className="p-4 rounded-xl bg-zinc-900/60 border border-cyan-500/20">
+                                        <div className="p-4 rounded-xl bg-zinc-900 border border-cyan-500/20">
                                             <div className="text-xs font-bold text-cyan-400 mb-2 uppercase tracking-wider">
                                                 Debate Moderator
                                             </div>
@@ -456,7 +456,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                     </div>
 
                                     {/* Accuracy Mode */}
-                                    <div className="p-5 rounded-2xl bg-zinc-900/40 border border-zinc-800 space-y-4">
+                                    <div className="p-5 rounded-2xl bg-zinc-800 border border-zinc-800 space-y-4">
                                         <div className="flex items-center justify-between">
                                             <div>
                                                 <h4 className="text-sm font-bold text-white">Accuracy Mode</h4>
@@ -499,7 +499,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
 
                                     {/* Pure AI Context — only relevant in Accuracy Mode → Pure AI */}
                                     {isAccuracyModeEnabled && accuracySubMode === 'pure_ai' && (setIsPlaybookEnabledInPureAI || setIsFamiliesEnabledInPureAI || setIsMemoryEnabledInPureAI) && (
-                                        <div className="p-5 rounded-2xl bg-zinc-900/40 border border-zinc-800 space-y-4 animate-fade-in">
+                                        <div className="p-5 rounded-2xl bg-zinc-800 border border-zinc-800 space-y-4 animate-fade-in">
                                             <div>
                                                 <h4 className="text-sm font-bold text-white">Pure AI Context</h4>
                                                 <p className="text-xs text-zinc-400 mt-0.5">Choose which structured context is injected during Pure AI analysis.</p>
@@ -528,7 +528,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                     )}
 
                                     {/* Hybrid Intelligence */}
-                                    <div className="p-5 rounded-2xl bg-zinc-900/40 border border-zinc-800 flex items-center justify-between">
+                                    <div className="p-5 rounded-2xl bg-zinc-800 border border-zinc-800 flex items-center justify-between">
                                         <div>
                                             <h4 className="text-sm font-bold text-white">Hybrid Intelligence</h4>
                                             <p className="text-xs text-zinc-400 mt-0.5">Fetches real-time Binance OHLCV data and calculates RSI, MACD, and EMAs for AI context.</p>
@@ -540,7 +540,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                     </div>
 
                                     {/* Auto-Capture Options */}
-                                    <div className="p-5 rounded-2xl bg-zinc-900/40 border border-zinc-800 space-y-4">
+                                    <div className="p-5 rounded-2xl bg-zinc-800 border border-zinc-800 space-y-4">
                                         <h4 className="text-sm font-bold text-white">Automated Capture Prompts</h4>
                                         <div className="space-y-3">
                                             {onToggleAutoCapturing && (
@@ -607,7 +607,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         <p className="text-xs text-zinc-500 mt-1">Configure global trade learning synthesis and historical memory injection.</p>
                                     </div>
                                     {setIsGlobalMemoryEnabled && (
-                                        <div className="p-5 rounded-2xl bg-zinc-900/40 border border-zinc-800 space-y-3">
+                                        <div className="p-5 rounded-2xl bg-zinc-800 border border-zinc-800 space-y-3">
                                             <div className="flex items-center justify-between">
                                                 <div>
                                                     <h4 className="text-sm font-bold text-white">Global Memory (Layer 3)</h4>
@@ -641,7 +641,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         {onOpenSavedAnalyses && (
                                             <button
                                                 onClick={onOpenSavedAnalyses}
-                                                className="flex flex-col items-center justify-center p-5 rounded-2xl bg-zinc-900/60 border border-zinc-800 hover:border-cyan-500/40 hover:bg-zinc-900 transition-all text-center group"
+                                                className="flex flex-col items-center justify-center p-5 rounded-2xl bg-zinc-900 border border-zinc-800 hover:border-cyan-500/40 hover:bg-zinc-900 transition-all text-center group"
                                             >
                                                 <BookmarkIcon className="w-6 h-6 text-zinc-400 group-hover:text-cyan-400 mb-2 transition-colors" />
                                                 <span className="text-xs font-bold text-zinc-200">Saved Analyses</span>
@@ -650,7 +650,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         {onOpenStrategySearch && (
                                             <button
                                                 onClick={onOpenStrategySearch}
-                                                className="flex flex-col items-center justify-center p-5 rounded-2xl bg-zinc-900/60 border border-zinc-800 hover:border-cyan-500/40 hover:bg-zinc-900 transition-all text-center group"
+                                                className="flex flex-col items-center justify-center p-5 rounded-2xl bg-zinc-900 border border-zinc-800 hover:border-cyan-500/40 hover:bg-zinc-900 transition-all text-center group"
                                             >
                                                 <SearchIcon className="w-6 h-6 text-zinc-400 group-hover:text-cyan-400 mb-2 transition-colors" />
                                                 <span className="text-xs font-bold text-zinc-200">Strategy Search</span>
@@ -659,7 +659,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         {onOpenPlaybook && (
                                             <button
                                                 onClick={onOpenPlaybook}
-                                                className="flex flex-col items-center justify-center p-5 rounded-2xl bg-zinc-900/60 border border-zinc-800 hover:border-cyan-500/40 hover:bg-zinc-900 transition-all text-center group"
+                                                className="flex flex-col items-center justify-center p-5 rounded-2xl bg-zinc-900 border border-zinc-800 hover:border-cyan-500/40 hover:bg-zinc-900 transition-all text-center group"
                                             >
                                                 <BookmarkIcon className="w-6 h-6 text-zinc-400 group-hover:text-cyan-400 mb-2 transition-colors" />
                                                 <span className="text-xs font-bold text-zinc-200">Playbook</span>
@@ -668,7 +668,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         {onOpenUserProfile && (
                                             <button
                                                 onClick={onOpenUserProfile}
-                                                className="flex flex-col items-center justify-center p-5 rounded-2xl bg-zinc-900/60 border border-zinc-800 hover:border-cyan-500/40 hover:bg-zinc-900 transition-all text-center group"
+                                                className="flex flex-col items-center justify-center p-5 rounded-2xl bg-zinc-900 border border-zinc-800 hover:border-cyan-500/40 hover:bg-zinc-900 transition-all text-center group"
                                             >
                                                 <UserIcon className="w-6 h-6 text-zinc-400 group-hover:text-cyan-400 mb-2 transition-colors" />
                                                 <span className="text-xs font-bold text-zinc-200">User Profile</span>
@@ -677,7 +677,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         {onSwitchUser && (
                                             <button
                                                 onClick={onSwitchUser}
-                                                className="flex flex-col items-center justify-center p-5 rounded-2xl bg-zinc-900/60 border border-zinc-800 hover:border-cyan-500/40 hover:bg-zinc-900 transition-all text-center group"
+                                                className="flex flex-col items-center justify-center p-5 rounded-2xl bg-zinc-900 border border-zinc-800 hover:border-cyan-500/40 hover:bg-zinc-900 transition-all text-center group"
                                             >
                                                 <SwitchUserIcon className="w-6 h-6 text-zinc-400 group-hover:text-cyan-400 mb-2 transition-colors" />
                                                 <span className="text-xs font-bold text-zinc-200">Switch User</span>
@@ -686,7 +686,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         {onExportData && (
                                             <button
                                                 onClick={onExportData}
-                                                className="flex flex-col items-center justify-center p-5 rounded-2xl bg-zinc-900/60 border border-zinc-800 hover:border-cyan-500/40 hover:bg-zinc-900 transition-all text-center group"
+                                                className="flex flex-col items-center justify-center p-5 rounded-2xl bg-zinc-900 border border-zinc-800 hover:border-cyan-500/40 hover:bg-zinc-900 transition-all text-center group"
                                             >
                                                 <ExportIcon className="w-6 h-6 text-zinc-400 group-hover:text-cyan-400 mb-2 transition-colors" />
                                                 <span className="text-xs font-bold text-zinc-200">Export / Import</span>

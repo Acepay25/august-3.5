@@ -103,10 +103,10 @@ const ToastItem: React.FC<{ toast: Toast; onDismiss: () => void }> = ({ toast, o
     }, [duration, onDismiss]);
 
     const typeStyles = {
-        success: 'bg-emerald-900/90 border-emerald-500/50 text-emerald-100',
-        error: 'bg-rose-900/90 border-rose-500/50 text-rose-100',
-        warning: 'bg-amber-900/90 border-amber-500/50 text-amber-100',
-        info: 'bg-cyan-900/90 border-cyan-500/50 text-cyan-100',
+        success: 'bg-emerald-900 border-emerald-500/50 text-emerald-100',
+        error: 'bg-rose-900 border-rose-500/50 text-rose-100',
+        warning: 'bg-amber-900 border-amber-500/50 text-amber-100',
+        info: 'bg-cyan-900 border-cyan-500/50 text-cyan-100',
     };
 
     const iconStyles = {
@@ -118,7 +118,7 @@ const ToastItem: React.FC<{ toast: Toast; onDismiss: () => void }> = ({ toast, o
 
     return (
         <div
-            className={`pointer-events-auto p-4 rounded-xl border backdrop-blur-md shadow-xl animate-slide-in-right ${typeStyles[toast.type]}`}
+            className={`pointer-events-auto p-4 rounded-xl border shadow-xl animate-slide-in-right ${typeStyles[toast.type]}`}
             role="alert"
             aria-live="polite"
         >
@@ -135,7 +135,7 @@ const ToastItem: React.FC<{ toast: Toast; onDismiss: () => void }> = ({ toast, o
                                 toast.action!.onClick();
                                 onDismiss();
                             }}
-                            className="mt-2 text-xs font-bold px-3 py-1 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
+                            className="mt-2 text-xs font-bold px-3 py-1 rounded-lg bg-zinc-700 hover:bg-zinc-600 transition-colors"
                         >
                             {toast.action.label}
                         </button>
@@ -143,7 +143,7 @@ const ToastItem: React.FC<{ toast: Toast; onDismiss: () => void }> = ({ toast, o
                 </div>
                 <button
                     onClick={onDismiss}
-                    className="p-1.5 rounded-lg hover:bg-white/10 transition-colors flex-shrink-0"
+                    className="p-1.5 rounded-lg hover:bg-zinc-700 transition-colors flex-shrink-0"
                     aria-label="Dismiss"
                 >
                     ✕

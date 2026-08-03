@@ -99,7 +99,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
     };
 
     return (
-        <div role="dialog" aria-modal="true" aria-label="Capture trade data" className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+        <div role="dialog" aria-modal="true" aria-label="Capture trade data" className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
             <div className={`bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-lg border ${colors.border} animate-fade-in`}>
                 {/* Header */}
                 <div className={`p-5 border-b border-white/5 ${colors.bg}`}>
@@ -256,7 +256,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                     <button
                         onClick={handleUpload}
                         disabled={isCapturing || !isPnlValid}
-                        className="w-full p-4 rounded-xl border border-white/10 bg-zinc-800/50 hover:bg-zinc-800 hover:border-cyan-500/30 transition-all text-left group disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full p-4 rounded-xl border border-white/10 bg-zinc-800 hover:bg-zinc-800 hover:border-cyan-500/30 transition-all text-left group disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <div className="flex items-start gap-4">
                             <div className="text-3xl"></div>
@@ -275,7 +275,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                     <button
                         onClick={handleSkip}
                         disabled={isCapturing || !isPnlValid}
-                        className="w-full p-3 rounded-xl border border-white/5 bg-zinc-900/50 hover:bg-zinc-800/50 hover:border-white/10 transition-all text-center disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full p-3 rounded-xl border border-white/5 bg-zinc-800 hover:bg-zinc-800 hover:border-white/10 transition-all text-center disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <span className="text-sm text-zinc-500 hover:text-zinc-400 transition-colors">
                             Log without data capture →
@@ -284,7 +284,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                 </div>
 
                 {/* Footer */}
-                <div className="px-5 py-4 border-t border-white/5 bg-zinc-950/50">
+                <div className="px-5 py-4 border-t border-white/5 bg-zinc-950">
                     <div className="flex items-center justify-between">
                         <p className="text-[10px] text-zinc-600 max-w-[200px]">
                             Trade will only be finalized after you confirm the capture method
@@ -292,7 +292,7 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                         <button
                             onClick={onClose}
                             disabled={isCapturing}
-                            className="py-2 px-4 rounded-lg text-zinc-400 hover:text-white hover:bg-white/5 transition-colors text-sm disabled:opacity-50"
+                            className="py-2 px-4 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors text-sm disabled:opacity-50"
                         >
                             Cancel
                         </button>

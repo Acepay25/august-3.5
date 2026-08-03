@@ -39,7 +39,7 @@ export const OnboardingCard: React.FC<OnboardingCardProps> = ({ hasAnyApiKey, on
     };
 
     return (
-        <div className="mx-auto w-full max-w-2xl my-6 rounded-2xl border border-cyan-500/30 bg-cyan-500/5 p-5 sm:p-6">
+        <div className="mx-auto w-full max-w-2xl my-6 rounded-2xl border border-cyan-500/30 bg-zinc-900 p-5 sm:p-6">
             <div className="flex items-start gap-4">
                 <div className="flex-shrink-0 w-10 h-10 rounded-full bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
                     <SettingsIcon className="h-5 w-5" />
@@ -60,7 +60,7 @@ export const OnboardingCard: React.FC<OnboardingCardProps> = ({ hasAnyApiKey, on
                         </button>
                         <button
                             onClick={handleDismiss}
-                            className="px-4 py-2 text-sm font-medium text-zinc-400 hover:text-zinc-200 rounded-lg hover:bg-white/5 transition-colors"
+                            className="px-4 py-2 text-sm font-medium text-zinc-400 hover:text-zinc-200 rounded-lg hover:bg-zinc-800 transition-colors"
                         >
                             Maybe later
                         </button>

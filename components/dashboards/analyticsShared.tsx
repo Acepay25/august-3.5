@@ -98,7 +98,7 @@ export const SectionCard: React.FC<{
     };
 
     return (
-        <div className={`group relative rounded-2xl bg-gradient-to-b ${accentStyles[accentColor]} border backdrop-blur-sm transition-all duration-300`}>
+        <div className={`group relative rounded-2xl bg-gradient-to-b ${accentStyles[accentColor]} border transition-all duration-300`}>
             {/* Header */}
             <div className="flex items-center gap-3 p-4 pb-3">
                 <div className={`w-9 h-9 rounded-xl ${iconBgStyles[accentColor]} flex items-center justify-center text-base transition-transform duration-300 group-hover:scale-110`}>
@@ -151,7 +151,7 @@ export const StatPill: React.FC<{
     };
 
     return (
-        <div className="flex flex-col items-center p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.05] transition-colors">
+        <div className="flex flex-col items-center p-3 rounded-xl bg-zinc-800 border border-white/10 hover:bg-zinc-700 transition-colors">
             <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-medium mb-1">{label}</span>
             <span className={`${sizeStyles[size]} font-bold ${variantStyles[variant]} tracking-tight`}>{value}</span>
         </div>
@@ -165,7 +165,7 @@ export const ProgressBar: React.FC<{
     dangerColor?: string;
 }> = ({ value, successColor = 'from-emerald-500 to-emerald-400', dangerColor = 'from-rose-500 to-rose-400' }) => {
     return (
-        <div className="relative h-2 rounded-full overflow-hidden bg-zinc-800/50">
+        <div className="relative h-2 rounded-full overflow-hidden bg-zinc-800">
             <div
                 className={`absolute left-0 top-0 h-full bg-gradient-to-r ${successColor} transition-all duration-700 ease-out`}
                 style={{ width: `${value}%` }}

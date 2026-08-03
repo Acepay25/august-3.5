@@ -42,7 +42,7 @@ export const UpdateTradeModal: React.FC<{
     const coinName = message.analysis?.coinName || 'this trade';
 
     return (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Update trade setup">
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Update trade setup">
             <div className="bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-lg border border-cyan-500/30 animate-fade-in max-h-[90vh] overflow-y-auto">
                 {/* Header */}
                 <div className="p-5 border-b border-white/5 bg-cyan-500/10">
@@ -98,9 +98,9 @@ export const UpdateTradeModal: React.FC<{
                     {/* Divider with OR */}
                     {onAutoCapture && (
                         <div className="flex items-center gap-3">
-                            <div className="flex-1 h-px bg-white/5"></div>
+                            <div className="flex-1 h-px bg-zinc-800"></div>
                             <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Or Manual Input</span>
-                            <div className="flex-1 h-px bg-white/5"></div>
+                            <div className="flex-1 h-px bg-zinc-800"></div>
                         </div>
                     )}
 
@@ -116,7 +116,7 @@ export const UpdateTradeModal: React.FC<{
                     </div>
 
                     {/* Image Upload Section */}
-                    <div className="bg-zinc-800/50 p-3 rounded-xl border border-white/5">
+                    <div className="bg-zinc-800 p-3 rounded-xl border border-white/5">
                         <ImagePreview images={images} onRemoveImage={removeImage} />
                         <button
                             onClick={() => fileInputRef.current?.click()}
@@ -130,11 +130,11 @@ export const UpdateTradeModal: React.FC<{
                 </div>
 
                 {/* Footer */}
-                <div className="px-5 py-4 border-t border-white/5 bg-zinc-950/50 flex flex-col sm:flex-row justify-end gap-3">
+                <div className="px-5 py-4 border-t border-white/5 bg-zinc-950 flex flex-col sm:flex-row justify-end gap-3">
                     <button
                         onClick={onClose}
                         disabled={isCapturing}
-                        className="py-2 px-4 rounded-lg text-zinc-400 hover:text-white hover:bg-white/5 transition-colors text-sm disabled:opacity-50"
+                        className="py-2 px-4 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors text-sm disabled:opacity-50"
                     >
                         Cancel
                     </button>

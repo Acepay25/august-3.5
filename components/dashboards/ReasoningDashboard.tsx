@@ -105,15 +105,15 @@ export const ReasoningDashboard: React.FC<ReasoningDashboardProps> = ({ username
       {/* Overall stats */}
       {totalRecords > 0 && (
         <div className="grid grid-cols-3 gap-3">
-          <div className="bg-zinc-900/50 border border-white/5 rounded-xl p-3 text-center">
+          <div className="bg-zinc-800 border border-white/5 rounded-xl p-3 text-center">
             <p className="text-2xl font-bold text-white">{totalRecords}</p>
             <p className="text-[10px] text-zinc-500 uppercase tracking-wider mt-1">Total Records</p>
           </div>
-          <div className="bg-zinc-900/50 border border-white/5 rounded-xl p-3 text-center">
+          <div className="bg-zinc-800 border border-white/5 rounded-xl p-3 text-center">
             <p className="text-2xl font-bold text-emerald-400">{totalWins}</p>
             <p className="text-[10px] text-zinc-500 uppercase tracking-wider mt-1">Wins</p>
           </div>
-          <div className="bg-zinc-900/50 border border-white/5 rounded-xl p-3 text-center">
+          <div className="bg-zinc-800 border border-white/5 rounded-xl p-3 text-center">
             <p className="text-2xl font-bold text-rose-400">{totalLosses}</p>
             <p className="text-[10px] text-zinc-500 uppercase tracking-wider mt-1">Losses</p>
           </div>
@@ -134,7 +134,7 @@ export const ReasoningDashboard: React.FC<ReasoningDashboardProps> = ({ username
       ) : (
         <div className="space-y-2">
           {stats.map(stat => (
-            <div key={stat.provider} className="bg-zinc-900/50 border border-white/5 rounded-xl p-4">
+            <div key={stat.provider} className="bg-zinc-800 border border-white/5 rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-bold text-white capitalize">{stat.provider}</span>
                 <span className="text-xs text-zinc-500">{stat.total} analyses</span>

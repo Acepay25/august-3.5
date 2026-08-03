@@ -174,7 +174,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
 
     if (!originalConfig) {
         return (
-            <div role="dialog" aria-modal="true" aria-label="Scenario simulator" className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+            <div role="dialog" aria-modal="true" aria-label="Scenario simulator" className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
                 <div className="bg-zinc-900 rounded-2xl p-8 border border-white/10 text-center">
                     <p className="text-zinc-400">Unable to load scenario data</p>
                     <button onClick={onClose} className="mt-4 px-4 py-2 bg-zinc-800 rounded-lg text-zinc-300 hover:bg-zinc-700">
@@ -186,7 +186,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
     }
 
     return (
-        <div role="dialog" aria-modal="true" aria-label="Scenario simulator" className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md">
+        <div role="dialog" aria-modal="true" aria-label="Scenario simulator" className="fixed inset-0 z-50 flex items-center justify-center bg-black/90">
             {/* Modal Container */}
             <div className="relative w-full max-w-5xl h-[90vh] mx-4 bg-zinc-950 rounded-2xl border border-purple-500/30 shadow-2xl shadow-purple-500/10 overflow-hidden flex flex-col">
 
@@ -216,7 +216,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                         <button
                             onClick={onClose}
                             aria-label="Close"
-                            className="p-2 text-zinc-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                            className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-700 rounded-lg transition-colors"
                         >
                             <CloseIcon className="w-5 h-5" />
                         </button>
@@ -252,7 +252,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                 };
 
                                 return (
-                                    <div className="bg-zinc-900/50 rounded-xl border border-white/10 p-5">
+                                    <div className="bg-zinc-800 rounded-xl border border-white/10 p-5">
                                         <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-500 mb-4">
                                             Adjust Parameters
                                         </h3>
@@ -398,14 +398,14 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                         <div className="space-y-5">
 
                             {/* R:R Comparison Card */}
-                            <div className="bg-zinc-900/50 rounded-xl border border-white/10 p-5">
+                            <div className="bg-zinc-800 rounded-xl border border-white/10 p-5">
                                 <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-500 mb-4">
                                     Impact Analysis
                                 </h3>
 
                                 <div className="grid grid-cols-2 gap-4">
                                     {/* Original */}
-                                    <div className="bg-zinc-800/50 rounded-lg p-4 border border-white/5">
+                                    <div className="bg-zinc-800 rounded-lg p-4 border border-white/5">
                                         <span className="text-[9px] uppercase font-bold text-zinc-500 tracking-widest">Original</span>
                                         <div className="text-3xl font-black text-zinc-400 mt-1">
                                             1:{comparison?.original.rrRatio || '—'}
@@ -420,7 +420,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                         ? 'bg-emerald-950/30 border-emerald-500/30'
                                         : comparison && comparison.rrChange < 0
                                             ? 'bg-rose-950/30 border-rose-500/30'
-                                            : 'bg-zinc-800/50 border-white/5'
+                                            : 'bg-zinc-800 border-white/5'
                                         }`}>
                                         <span className="text-[9px] uppercase font-bold text-zinc-500 tracking-widest">Scenario</span>
                                         <div className={`text-3xl font-black mt-1 ${comparison && comparison.rrChange > 0 ? 'text-emerald-400' :
@@ -450,7 +450,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
 
                             {/* Monte Carlo Results */}
                             {scenarioResult?.monteCarlo && (
-                                <div className="bg-zinc-900/50 rounded-xl border border-white/10 p-5">
+                                <div className="bg-zinc-800 rounded-xl border border-white/10 p-5">
                                     <div className="flex items-center justify-between mb-4">
                                         <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-500">
                                             Monte Carlo Simulation
@@ -511,7 +511,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
 
                             {/* Historical Matches */}
                             {scenarioResult?.historicalMatches && scenarioResult.historicalMatches.length > 0 && (
-                                <div className="bg-zinc-900/50 rounded-xl border border-white/10 p-5">
+                                <div className="bg-zinc-800 rounded-xl border border-white/10 p-5">
                                     <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-500 mb-4">
                                         Historical Matches
                                     </h3>
@@ -557,7 +557,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
 
                             {/* USD Risk/Reward Display */}
                             {currentMetrics && (
-                                <div className="bg-zinc-900/50 rounded-xl border border-white/10 p-5">
+                                <div className="bg-zinc-800 rounded-xl border border-white/10 p-5">
                                     <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-500 mb-4">
                                         Dollar Impact
                                     </h3>

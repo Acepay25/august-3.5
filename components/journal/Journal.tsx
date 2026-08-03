@@ -96,14 +96,14 @@ const MemoryContent: React.FC<{
             {globalMemory ? (
                 <div className="space-y-4">
                     {/* Stats Card */}
-                    <div className="p-4 bg-zinc-900/50 rounded-2xl border border-white/5">
+                    <div className="p-4 bg-zinc-800 rounded-2xl border border-white/5">
                         <div className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-3">Statistics</div>
                         <div className="grid grid-cols-2 gap-4">
-                            <div className="p-3 bg-black/20 rounded-xl">
+                            <div className="p-3 bg-zinc-800 rounded-xl">
                                 <div className="text-2xl font-bold text-white">{globalMemory.totalTradesAnalyzed ?? 0}</div>
                                 <div className="text-xs text-zinc-500">Trades Analyzed</div>
                             </div>
-                            <div className="p-3 bg-black/20 rounded-xl">
+                            <div className="p-3 bg-zinc-800 rounded-xl">
                                 <div className="text-sm font-medium text-zinc-400 truncate">
                                     {globalMemory.lastUpdated ? new Date(globalMemory.lastUpdated).toLocaleDateString() : 'N/A'}
                                 </div>
@@ -113,12 +113,12 @@ const MemoryContent: React.FC<{
                     </div>
 
                     {/* Pattern Recognition Card */}
-                    <div className="p-4 bg-zinc-900/50 rounded-2xl border border-white/5">
+                    <div className="p-4 bg-zinc-800 rounded-2xl border border-white/5">
                         <div className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-3">Pattern Recognition</div>
                         <div className="space-y-2">
                             {(globalMemory.aiPatternMemory ?? []).length > 0 ? (
                                 globalMemory.aiPatternMemory.slice(0, 5).map((pat, i) => (
-                                    <div key={i} className="p-3 bg-black/20 rounded-xl text-xs text-zinc-300 leading-relaxed">
+                                    <div key={i} className="p-3 bg-zinc-800 rounded-xl text-xs text-zinc-300 leading-relaxed">
                                         {formatMemoryItem(pat)}
                                     </div>
                                 ))
@@ -136,7 +136,7 @@ const MemoryContent: React.FC<{
                             <div className="text-xs font-bold text-red-400 uppercase tracking-wider mb-3">Corrections</div>
                             <div className="space-y-2">
                                 {globalMemory.globalCorrections.slice(0, 3).map((cor, i) => (
-                                    <div key={i} className="p-3 bg-black/20 rounded-xl text-xs text-red-200/80 leading-relaxed">
+                                    <div key={i} className="p-3 bg-zinc-800 rounded-xl text-xs text-red-200/80 leading-relaxed">
                                         {formatMemoryItem(cor)}
                                     </div>
                                 ))}
@@ -273,7 +273,7 @@ const JournalInner: React.FC<JournalProps> = ({
 
     if (isEmbedded) {
         return (
-            <div className="flex flex-col h-full bg-zinc-950/60 rounded-2xl border border-zinc-800/80 overflow-hidden animate-fade-in">
+            <div className="flex flex-col h-full bg-zinc-950 rounded-2xl border border-zinc-800/80 overflow-hidden animate-fade-in">
                 {/* Embedded Header & Tab Navigation */}
                 <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 bg-zinc-950 shrink-0 flex-wrap gap-2">
                     <div className="flex items-center gap-2">
@@ -291,7 +291,7 @@ const JournalInner: React.FC<JournalProps> = ({
                                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all font-medium whitespace-nowrap ${
                                         isActive
                                             ? 'bg-zinc-800 text-white font-bold shadow-sm border border-zinc-700'
-                                            : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60 border border-transparent'
+                                            : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 border border-transparent'
                                     }`}
                                 >
                                     <span className={isActive ? tab.activeColor : 'text-zinc-500'}>{tab.icon}</span>
@@ -314,7 +314,7 @@ const JournalInner: React.FC<JournalProps> = ({
         <>
             {/* Backdrop */}
             <div
-                className="fixed inset-0 bg-black/70 backdrop-blur-sm z-40 animate-fade-in"
+                className="fixed inset-0 bg-black/70 z-40 animate-fade-in"
                 onClick={onClose}
             />
 
@@ -419,7 +419,7 @@ const JournalInner: React.FC<JournalProps> = ({
                 </div>
 
                 {/* Bottom Navigation Bar - Mobile Optimized */}
-                <nav className="shrink-0 bg-zinc-900/95 backdrop-blur-xl border-t border-white/5 px-2 pb-safe">
+                <nav className="shrink-0 bg-zinc-900 border-t border-white/5 px-2 pb-safe">
                     <div className="flex items-center justify-around py-2">
                         {TABS.map((tab) => {
                             const isActive = activeTab === tab.id;
@@ -429,7 +429,7 @@ const JournalInner: React.FC<JournalProps> = ({
                                     onClick={() => setActiveTab(tab.id)}
                                     className={`flex flex-col items-center gap-1 px-4 py-2.5 rounded-xl transition-all min-w-[56px] ${isActive
                                         ? 'bg-gradient-to-b from-white/15 to-white/5 ring-1 ring-white/10'
-                                        : 'hover:bg-white/5'
+                                        : 'hover:bg-zinc-800'
                                         }`}
                                 >
                                     <div className={`transition-colors ${isActive ? tab.activeColor : tab.color}`}>

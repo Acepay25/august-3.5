@@ -59,16 +59,16 @@ const ConversationHistory: React.FC<ConversationHistoryProps> = ({
         onClick={onClose}
       ></div>
 
-      <aside className={`fixed top-0 right-0 h-full w-full sm:max-w-md bg-zinc-900/95 backdrop-blur-xl border-l border-white/10 shadow-2xl z-50 transform transition-transform duration-300 cubic-bezier(0.16, 1, 0.3, 1) flex flex-col ${isVisible ? 'translate-x-0' : 'translate-x-full'}`}>
+      <aside className={`fixed top-0 right-0 h-full w-full sm:max-w-md bg-zinc-900 border-l border-white/10 shadow-2xl z-50 transform transition-transform duration-300 cubic-bezier(0.16, 1, 0.3, 1) flex flex-col ${isVisible ? 'translate-x-0' : 'translate-x-full'}`}>
         <div className="flex flex-col h-full">
-          <header className="flex items-center justify-between p-5 border-b border-white/5 bg-black/20">
+          <header className="flex items-center justify-between p-5 border-b border-white/5 bg-zinc-800">
             <h2 className="text-lg font-bold text-zinc-100 tracking-tight">History</h2>
-            <button onClick={onClose} className="p-2 rounded-lg text-zinc-400 hover:bg-white/5 hover:text-white transition-colors">
+            <button onClick={onClose} className="p-2 rounded-lg text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors">
               <CloseIcon />
             </button>
           </header>
 
-          <div className="p-4 border-b border-white/5 space-y-3 bg-zinc-900/50">
+          <div className="p-4 border-b border-white/5 space-y-3 bg-zinc-800">
             <button 
                 onClick={onStartNew}
                 className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:shadow-lg hover:scale-[1.02] transition-all shadow-cyan-900/20"
@@ -106,7 +106,7 @@ const ConversationHistory: React.FC<ConversationHistoryProps> = ({
                 {(conversations || []).map((conv) => (
                   <li 
                     key={conv.id} 
-                    className={`group relative rounded-xl border transition-all duration-200 ${activeConversationId === conv.id ? 'bg-cyan-900/20 border-cyan-500/50 shadow-[0_0_15px_-5px_rgba(176, 176, 182,0.2)]' : selectedIds.includes(conv.id) ? 'bg-blue-900/20 border-blue-500/50' : 'bg-zinc-800/30 border-white/5 hover:bg-zinc-800/60 hover:border-white/10'}`}
+                    className={`group relative rounded-xl border transition-all duration-200 ${activeConversationId === conv.id ? 'bg-cyan-900 border-cyan-500/50 shadow-[0_0_15px_-5px_rgba(176, 176, 182,0.2)]' : selectedIds.includes(conv.id) ? 'bg-zinc-800 border-zinc-500/50' : 'bg-zinc-800 border-white/5 hover:bg-zinc-700 hover:border-white/10'}`}
                   >
                     <div className="flex justify-between items-start p-4">
                       <div className="flex-1 min-w-0 flex items-start gap-3">

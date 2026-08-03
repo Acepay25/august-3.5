@@ -58,11 +58,11 @@ const MistakeWarningBanner: React.FC<MistakeWarningBannerProps> = ({
     if (!isVisible) return null;
 
     return (
-        <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-amber-900/30 to-rose-900/20 border border-amber-500/30 p-4 mb-4 shadow-lg animate-fade-in">
+        <div className="relative overflow-hidden rounded-xl bg-zinc-900 border border-amber-500/30 p-4 mb-4 shadow-lg animate-fade-in">
             {/* Dismiss Button */}
             <button
                 onClick={handleDismiss}
-                className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/20 hover:bg-black/40 text-zinc-400 hover:text-white transition-colors"
+                className="absolute top-2 right-2 p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
                 aria-label="Dismiss warning"
             >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -80,7 +80,7 @@ const MistakeWarningBanner: React.FC<MistakeWarningBannerProps> = ({
 
             {/* Setup Warning */}
             {matchingSetup && (
-                <div className="mb-3 p-2 rounded-lg bg-rose-950/40 border border-rose-500/20">
+                <div className="mb-3 p-2 rounded-lg bg-zinc-800 border border-rose-500/20">
                     <div className="flex items-center gap-2">
                         <span className="text-rose-400 font-bold text-sm">
                              {matchingSetup.setup}

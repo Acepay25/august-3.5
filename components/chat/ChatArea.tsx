@@ -4,7 +4,7 @@ import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
 import MessageItem, { ChatContextProps } from './MessageItem';
 import { ChatInput } from './ChatInput';
 import { QuickActionChips } from './QuickActionChips';
-import { ArrowUpIcon, ArrowDownIcon, CloseIcon, LoadingIcon, EyeIcon, EditIcon, CheckIcon, TrashIcon, BotIcon } from '../shared/Icons';
+import { ArrowUpIcon, ArrowDownIcon, CloseIcon, LoadingIcon, EyeIcon, EditIcon, CheckIcon, TrashIcon } from '../shared/Icons';
 import HybridDataPanel from '../analysis/HybridDataPanel';
 import ImageViewerModal from '../modals/ImageViewerModal';
 import AnalysisProgress from '../analysis/AnalysisProgress';
@@ -67,6 +67,9 @@ interface ChatAreaProps {
     // Ensemble mode toggle (casual chat vs chart analysis)
     isEnsembleEnabled: boolean;
     setIsEnsembleEnabled: (v: boolean) => void;
+    // Casual-chat model (ensemble off)
+    selectedChatModel: string;
+    setSelectedChatModel: (modelId: string) => void;
     // Hybrid Intelligence Props
     hybridData?: any;
     isHybridLoading?: boolean;
@@ -141,6 +144,8 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     setLensConfig,
     isEnsembleEnabled,
     setIsEnsembleEnabled,
+    selectedChatModel,
+    setSelectedChatModel,
     hybridData,
     isHybridLoading,
     hybridConnectionStatus,
@@ -235,6 +240,8 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         setLensConfig,
         isEnsembleEnabled,
         setIsEnsembleEnabled,
+        selectedChatModel,
+        setSelectedChatModel,
     };
 
     return (
@@ -245,7 +252,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         >
             {/* Selection Toolbar */}
             {isSelectionMode ? (
-                <div className="absolute top-4 left-4 right-4 z-40 bg-zinc-900/90 backdrop-blur-md border border-white/10 rounded-xl p-3 flex items-center justify-between shadow-2xl animate-fade-in">
+                <div className="absolute top-4 left-4 right-4 z-40 bg-zinc-900 border border-white/10 rounded-xl p-3 flex items-center justify-between shadow-2xl animate-fade-in">
                     <div className="flex items-center gap-3">
                         <button
                             onClick={handleSelectAll}
@@ -269,7 +276,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                         </button>
                         <button
                             onClick={handleCancelSelection}
-                            className="p-2 text-zinc-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+                            className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
                         >
                             <CloseIcon className="w-5 h-5" />
                         </button>
@@ -279,7 +286,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 messages.length > 0 && (
                     <button
                         onClick={() => setIsSelectionMode(true)}
-                        className="absolute top-4 right-6 z-30 p-2 bg-zinc-800/80 backdrop-blur-md text-zinc-400 border border-white/10 rounded-xl shadow-lg hover:bg-white/10 hover:text-cyan-400 hover:scale-105 transition-all"
+                        className="absolute top-4 right-6 z-30 p-2 bg-zinc-800 text-zinc-400 border border-white/10 rounded-xl shadow-lg hover:bg-zinc-700 hover:text-cyan-400 hover:scale-105 transition-all"
                         title="Manage Messages"
                     >
                         <EditIcon className="w-4 h-4" />
@@ -306,7 +313,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
             {/* Accuracy Mode Banner Overlay - Positioned Fixed/Absolute at top of chat area */}
             {isAccuracyModeEnabled && !isSelectionMode && (
                 <div className="absolute top-0 left-0 right-0 pointer-events-none flex justify-center pt-2 z-20">
-                    <div className="border px-4 py-1 rounded-full backdrop-blur-md shadow-lg bg-cyan-900/40 border-cyan-500/30">
+                    <div className="border px-4 py-1 rounded-full shadow-lg bg-cyan-900 border-cyan-500/30">
                         <span className="text-[10px] font-bold uppercase tracking-widest animate-pulse text-cyan-300">
                             {accuracySubMode === 'pure_ai' ? 'Accuracy Mode: Pure AI Reasoning' : 'Accuracy Mode: Strict Protocol'}
                         </span>
@@ -320,7 +327,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 {showScrollUp && !isSelectionMode && (
                     <button
                         onClick={handleCycleAnalysisUp}
-                        className="w-9 h-9 bg-zinc-800/80 hover:bg-zinc-700 backdrop-blur-md text-zinc-400 hover:text-white border border-zinc-700/50 rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-105"
+                        className="w-9 h-9 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white border border-zinc-700/50 rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-105"
                         aria-label="Cycle to previous analysis"
                         title={highlightedAnalysisId ? "Jump to previous analysis" : "Jump to latest analysis"}
                     >
@@ -330,7 +337,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 {showScrollDown && !isSelectionMode && (
                     <button
                         onClick={handleScrollToBottom}
-                        className="w-9 h-9 bg-zinc-800/80 hover:bg-zinc-700 backdrop-blur-md text-zinc-400 hover:text-white border border-zinc-700/50 rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-105"
+                        className="w-9 h-9 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white border border-zinc-700/50 rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-105"
                         aria-label="Scroll to bottom"
                         title="Scroll to bottom"
                     >
@@ -381,17 +388,14 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                     </div>
                 </div>
             ) : messages.length === 0 ? (
-                /* Fresh session: hero canvas — grid background, logo tile,
-                    tagline, carded composer and centered quick actions */
+                /* Fresh session: hero canvas — grid background, tagline,
+                    carded composer and centered quick actions */
                 <div className="absolute inset-0 z-10 bg-zinc-950 bg-grid overflow-y-auto">
                     <div className="min-h-full flex flex-col items-center justify-center px-3 sm:px-4 lg:px-8 py-10">
                         {/* First-run guidance lives in the app-level
                             OnboardingCard (dismissible, persisted) — no
                             duplicate card here. */}
-                        <div className="w-14 h-14 rounded-2xl border border-white/10 bg-zinc-900/60 flex items-center justify-center text-zinc-300">
-                            <BotIcon className="w-7 h-7" />
-                        </div>
-                        <h1 className="mt-5 text-3xl sm:text-4xl font-bold tracking-tight text-zinc-100 text-center">
+                        <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-zinc-100 text-center">
                             August 3.5 makes your trading easier.
                         </h1>
                         <div className="w-full max-w-3xl mt-8">

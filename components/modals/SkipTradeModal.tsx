@@ -20,7 +20,7 @@ export const SkipTradeModal: React.FC<SkipTradeModalProps> = ({
   setCorrectedEntry,
 }) => {
   return (
-    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Trade not executed">
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Trade not executed">
       <div className="bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-md border border-yellow-500/30 animate-fade-in max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="p-5 border-b border-white/5 bg-yellow-500/10">
@@ -44,7 +44,7 @@ export const SkipTradeModal: React.FC<SkipTradeModalProps> = ({
             htmlFor="reason-entry-not-hit"
             className={`flex items-start gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${skipReason === TradeOutcome.ENTRY_NOT_HIT
                 ? 'bg-cyan-950/30 border-cyan-500/50 shadow-[0_0_15px_-3px_rgba(176, 176, 182,0.3)]'
-                : 'bg-zinc-800/50 border-white/10 hover:bg-zinc-800 hover:border-white/20'
+                : 'bg-zinc-800 border-white/10 hover:bg-zinc-800 hover:border-white/20'
               }`}
           >
             <input
@@ -74,7 +74,7 @@ export const SkipTradeModal: React.FC<SkipTradeModalProps> = ({
             htmlFor="reason-skipped"
             className={`flex items-start gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${skipReason === TradeOutcome.SKIPPED
                 ? 'bg-zinc-800 border-zinc-500/50'
-                : 'bg-zinc-800/50 border-white/10 hover:bg-zinc-800 hover:border-white/20'
+                : 'bg-zinc-800 border-white/10 hover:bg-zinc-800 hover:border-white/20'
               }`}
           >
             <input
@@ -118,10 +118,10 @@ export const SkipTradeModal: React.FC<SkipTradeModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-4 border-t border-white/5 bg-zinc-950/50 flex justify-end gap-3">
+        <div className="px-5 py-4 border-t border-white/5 bg-zinc-950 flex justify-end gap-3">
           <button
             onClick={onClose}
-            className="py-2 px-4 rounded-lg text-zinc-400 hover:text-white hover:bg-white/5 transition-colors text-sm"
+            className="py-2 px-4 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors text-sm"
           >
             Cancel
           </button>

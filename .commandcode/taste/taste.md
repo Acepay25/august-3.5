@@ -1,0 +1,1 @@
+- Prefers narrowly scoped UI changes that update only the chat presentation—message/text display, conversation history/sidebar, and message input—to match a provided visual reference, without redesigning unrelated parts of the app. Confidence: 0.95

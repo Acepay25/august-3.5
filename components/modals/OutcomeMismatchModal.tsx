@@ -23,7 +23,7 @@ const OutcomeMismatchModal: React.FC<OutcomeMismatchModalProps> = ({
     const slTouchTime = priceValidation.slTouched ? priceValidation.slTouchTime : null;
 
     return (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in" role="dialog" aria-modal="true" aria-label="Outcome mismatch warning">
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 animate-fade-in" role="dialog" aria-modal="true" aria-label="Outcome mismatch warning">
             <div className="bg-zinc-900 border border-yellow-500/30 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl transform transition-all scale-100 max-h-[90vh] overflow-y-auto">
 
                 {/* Header */}
@@ -45,13 +45,13 @@ const OutcomeMismatchModal: React.FC<OutcomeMismatchModalProps> = ({
                 {/* Content */}
                 <div className="p-6 space-y-6">
                     <div className="grid grid-cols-2 gap-4">
-                        <div className="p-4 rounded-xl bg-zinc-950/50 border border-zinc-800 text-center">
+                        <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 text-center">
                             <div className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">You Logged</div>
                             <div className={`text-xl font-black mt-1 ${userOutcome === 'WIN' ? 'text-green-400' : 'text-red-400'}`}>
                                 {userOutcome}
                             </div>
                         </div>
-                        <div className="p-4 rounded-xl bg-zinc-950/50 border border-zinc-800 text-center">
+                        <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 text-center">
                             <div className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">Price Shows</div>
                             <div className={`text-xl font-black mt-1 ${priceValidation.outcome === 'WIN' ? 'text-green-400' : 'text-red-400'}`}>
                                 {priceValidation.outcome}
@@ -59,7 +59,7 @@ const OutcomeMismatchModal: React.FC<OutcomeMismatchModalProps> = ({
                         </div>
                     </div>
 
-                    <div className="p-4 rounded-xl bg-zinc-800/50 border border-white/10 text-sm text-zinc-300 space-y-2">
+                    <div className="p-4 rounded-xl bg-zinc-800 border border-white/10 text-sm text-zinc-300 space-y-2">
                         <p className="font-semibold text-white">Analysis:</p>
                         <ul className="list-disc pl-4 space-y-1 text-xs sm:text-sm">
                             {tpFirstTime && (

@@ -14,11 +14,11 @@ const ImagePreview: React.FC<ImagePreviewProps> = ({ images, onRemoveImage }) =>
   }
 
   return (
-    <div className="flex overflow-x-auto gap-2 p-2 sm:gap-3 sm:p-3 bg-gray-900/50 rounded-t-lg border-b border-gray-700">
+    <div className="flex overflow-x-auto gap-2 p-2 sm:gap-3 sm:p-3 bg-zinc-900 rounded-t-lg border-b border-gray-700">
       {(images || []).map((meta, index) => (
         <div key={`${meta.file.name}-${index}-${meta.file.size}`} className="flex-shrink-0 flex flex-col items-center w-16 sm:w-24 text-center">
           {/* Image and close button container */}
-          <div className="relative h-14 w-14 sm:h-20 sm:w-20 mb-2 bg-black/40 rounded-md border border-white/5 flex items-center justify-center overflow-hidden">
+          <div className="relative h-14 w-14 sm:h-20 sm:w-20 mb-2 bg-zinc-800 rounded-md border border-white/5 flex items-center justify-center overflow-hidden">
             <img
               src={meta.dataURL}
               alt={`preview ${index}`}

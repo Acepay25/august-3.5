@@ -123,7 +123,7 @@ const AdvancedAnalyticsSidePanel: React.FC<AdvancedAnalyticsSidePanelProps> = ({
                     }`}
             >
                 {/* Glassmorphic Background */}
-                <div className="absolute inset-0 bg-zinc-900/95 backdrop-blur-2xl border-l border-white/[0.08]" />
+                <div className="absolute inset-0 bg-zinc-900 border-l border-white/[0.08]" />
 
                 {/* Subtle gradient overlay */}
                 <div className="absolute inset-0 bg-gradient-to-b from-purple-500/[0.02] via-transparent to-cyan-500/[0.02]" />
@@ -294,7 +294,7 @@ const AdvancedAnalyticsSidePanel: React.FC<AdvancedAnalyticsSidePanelProps> = ({
                                         <div className="space-y-1.5">
                                             <span className="text-[10px] text-zinc-500">Context-Specific:</span>
                                             {slOptimization.contextRecommendations.slice(0, 2).map((rec, i) => (
-                                                <div key={i} className="text-[10px] text-amber-200/80 bg-black/20 px-3 py-2 rounded-lg flex justify-between">
+                                                <div key={i} className="text-[10px] text-amber-200/80 bg-zinc-800 px-3 py-2 rounded-lg flex justify-between">
                                                     <span>{rec.context}</span>
                                                     <span className="font-semibold text-amber-300">{(rec.recommendedMultiplier * 100).toFixed(0)}%</span>
                                                 </div>
@@ -328,7 +328,7 @@ const AdvancedAnalyticsSidePanel: React.FC<AdvancedAnalyticsSidePanelProps> = ({
             {/* Backdrop for mobile */}
             {isOpen && (
                 <div
-                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-20 md:hidden transition-opacity duration-300"
+                    className="fixed inset-0 bg-black/60 z-20 md:hidden transition-opacity duration-300"
                     onClick={handleClose}
                 />
             )}

@@ -58,7 +58,7 @@ const MonteCarloPanel: React.FC<MonteCarloPanelProps> = ({
                             key={idx}
                             className={`p-3 rounded-xl border transition-all duration-200 hover:scale-[1.01] ${labeled.isModeratorFinal
                                 ? 'bg-gradient-to-br from-amber-500/10 to-amber-500/5 border-amber-500/30'
-                                : 'bg-white/[0.02] border-white/[0.06] hover:border-cyan-500/30'
+                                : 'bg-zinc-800 border-white/[0.06] hover:border-cyan-500/30'
                                 }`}
                         >
                             {/* Provider Label */}
@@ -73,7 +73,7 @@ const MonteCarloPanel: React.FC<MonteCarloPanelProps> = ({
 
                             {/* Stats Grid */}
                             <div className="grid grid-cols-2 gap-2 mb-3">
-                                <div className="text-center p-2 rounded-lg bg-black/20">
+                                <div className="text-center p-2 rounded-lg bg-zinc-800">
                                     <span className="text-[9px] text-zinc-500 block mb-0.5">Win Rate</span>
                                     <span className={`text-lg font-bold ${labeled.result.winRate >= 50 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                         {labeled.result.winRate}%
@@ -82,7 +82,7 @@ const MonteCarloPanel: React.FC<MonteCarloPanelProps> = ({
                                         {labeled.result.winCount}/{labeled.result.simulations}
                                     </span>
                                 </div>
-                                <div className="text-center p-2 rounded-lg bg-black/20">
+                                <div className="text-center p-2 rounded-lg bg-zinc-800">
                                     <span className="text-[9px] text-zinc-500 block mb-0.5">Expected Value</span>
                                     <span className={`text-lg font-bold ${labeled.result.expectedValue >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                         {labeled.result.expectedValue >= 0 ? '+' : ''}{labeled.result.expectedValue}%
@@ -121,7 +121,7 @@ const MonteCarloPanel: React.FC<MonteCarloPanelProps> = ({
                     </div>
 
                     {/* Probabilities */}
-                    <div className="p-3 rounded-xl bg-black/20 border border-white/[0.04]">
+                    <div className="p-3 rounded-xl bg-zinc-800 border border-white/[0.04]">
                         <span className="text-[10px] text-zinc-500 block mb-2">Target Probabilities</span>
                         <div className="flex gap-1.5">
                             <span className="flex-1 text-center text-[10px] px-2 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 font-medium">

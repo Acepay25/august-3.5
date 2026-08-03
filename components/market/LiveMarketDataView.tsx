@@ -70,10 +70,10 @@ const TimeframeSection: React.FC<{ label: string; data: TimeframeData | undefine
   };
 
   return (
-    <div className="border border-white/5 rounded-lg bg-zinc-900/50 overflow-hidden mb-2">
+    <div className="border border-white/5 rounded-lg bg-zinc-800 overflow-hidden mb-2">
       <button 
         onClick={onToggle}
-        className="w-full flex items-center justify-between p-3 bg-white/5 hover:bg-white/10 transition-colors"
+        className="w-full flex items-center justify-between p-3 bg-zinc-800 hover:bg-zinc-700 transition-colors"
       >
         <div className="flex items-center gap-3">
             <span className="text-sm font-bold text-cyan-400 uppercase tracking-wider w-8">{label}</span>
@@ -95,13 +95,13 @@ const TimeframeSection: React.FC<{ label: string; data: TimeframeData | undefine
         <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-mono animate-fade-in">
            {/* Pattern Scanner */}
            {patterns.length > 0 && (
-               <div className="col-span-1 sm:col-span-2 bg-zinc-800/30 rounded-lg p-3 border border-white/5 mb-2">
+               <div className="col-span-1 sm:col-span-2 bg-zinc-800 rounded-lg p-3 border border-white/5 mb-2">
                    <h4 className="text-[10px] font-bold text-purple-400 uppercase tracking-widest mb-2 flex items-center gap-2">
                        <BrainIcon className="w-3 h-3" /> Algorithmic Pattern Scanner
                    </h4>
                    <div className="space-y-2">
                        {patterns.map((p, idx) => (
-                           <div key={idx} className="flex items-start justify-between bg-black/20 p-2 rounded border border-white/5">
+                           <div key={idx} className="flex items-start justify-between bg-zinc-800 p-2 rounded border border-white/5">
                                <div>
                                    <div className="flex items-center gap-2">
                                        <span className="font-bold text-zinc-200">{p.name}</span>
@@ -144,7 +144,7 @@ const TimeframeSection: React.FC<{ label: string; data: TimeframeData | undefine
                   <div className="flex justify-between text-zinc-500 text-[10px] mb-0.5">
                       <span>KDJ (9,3,3)</span>
                   </div>
-                  <div className="flex justify-between bg-black/20 px-2 py-1 rounded border border-white/5">
+                  <div className="flex justify-between bg-zinc-800 px-2 py-1 rounded border border-white/5">
                       <span>K: <span className="text-zinc-300">{formatNum(kdj?.k)}</span></span>
                       <span>D: <span className="text-zinc-300">{formatNum(kdj?.d)}</span></span>
                       <span>J: <span className="text-zinc-300">{formatNum(kdj?.j)}</span></span>
@@ -156,7 +156,7 @@ const TimeframeSection: React.FC<{ label: string; data: TimeframeData | undefine
                       <span>MACD (12,26,9)</span>
                       <span className={`${(macd?.hist || 0) > 0 ? 'text-emerald-400' : 'text-red-400'}`}>Hist: {formatNum(macd?.hist)}</span>
                   </div>
-                  <div className="flex justify-between bg-black/20 px-2 py-1 rounded border border-white/5">
+                  <div className="flex justify-between bg-zinc-800 px-2 py-1 rounded border border-white/5">
                       <span>DIF: <span className="text-zinc-300">{formatNum(macd?.dif)}</span></span>
                       <span>DEA: <span className="text-zinc-300">{formatNum(macd?.dea)}</span></span>
                   </div>
@@ -166,7 +166,7 @@ const TimeframeSection: React.FC<{ label: string; data: TimeframeData | undefine
                   <div className="flex justify-between text-zinc-500 text-[10px] mb-0.5">
                       <span>Bollinger Bands (20, 2)</span>
                   </div>
-                  <div className="grid grid-cols-3 gap-1 text-center bg-black/20 p-1 rounded border border-white/5 text-[10px]">
+                  <div className="grid grid-cols-3 gap-1 text-center bg-zinc-800 p-1 rounded border border-white/5 text-[10px]">
                       <span className="text-zinc-400" title="Upper">{formatNum(bb?.upper)}</span>
                       <span className="text-cyan-600" title="Mid">{formatNum(bb?.mid)}</span>
                       <span className="text-zinc-400" title="Lower">{formatNum(bb?.lower)}</span>
@@ -180,27 +180,27 @@ const TimeframeSection: React.FC<{ label: string; data: TimeframeData | undefine
               
               {/* MA Table */}
               <div className="grid grid-cols-3 gap-2 text-[10px]">
-                  <div className="bg-zinc-800/30 p-1.5 rounded border border-white/5">
+                  <div className="bg-zinc-800 p-1.5 rounded border border-white/5">
                       <span className="block text-zinc-500 text-[9px]">MA5</span>
                       <span className="text-zinc-200">{formatNum(ma?.['5'])}</span>
                   </div>
-                  <div className="bg-zinc-800/30 p-1.5 rounded border border-white/5">
+                  <div className="bg-zinc-800 p-1.5 rounded border border-white/5">
                       <span className="block text-zinc-500 text-[9px]">MA10</span>
                       <span className="text-zinc-200">{formatNum(ma?.['10'])}</span>
                   </div>
-                  <div className="bg-zinc-800/30 p-1.5 rounded border border-white/5">
+                  <div className="bg-zinc-800 p-1.5 rounded border border-white/5">
                       <span className="block text-zinc-500 text-[9px]">MA20</span>
                       <span className="text-cyan-300 font-bold">{formatNum(ma?.['20'])}</span>
                   </div>
-                  <div className="bg-zinc-800/30 p-1.5 rounded border border-white/5">
+                  <div className="bg-zinc-800 p-1.5 rounded border border-white/5">
                       <span className="block text-zinc-500 text-[9px]">MA30</span>
                       <span className="text-zinc-200">{formatNum(ma?.['30'])}</span>
                   </div>
-                  <div className="bg-zinc-800/30 p-1.5 rounded border border-white/5">
+                  <div className="bg-zinc-800 p-1.5 rounded border border-white/5">
                       <span className="block text-zinc-500 text-[9px]">MA60</span>
                       <span className="text-zinc-200">{formatNum(ma?.['60'])}</span>
                   </div>
-                  <div className="bg-zinc-800/30 p-1.5 rounded border border-white/5">
+                  <div className="bg-zinc-800 p-1.5 rounded border border-white/5">
                       <span className="block text-zinc-500 text-[9px]">MA200</span>
                       <span className="text-purple-300 font-bold">{formatNum(ma?.['200'])}</span>
                   </div>
@@ -208,19 +208,19 @@ const TimeframeSection: React.FC<{ label: string; data: TimeframeData | undefine
 
               {/* EMA Table */}
               <div className="grid grid-cols-4 gap-2 text-[10px] mt-2">
-                  <div className="bg-zinc-800/30 p-1.5 rounded border border-white/5">
+                  <div className="bg-zinc-800 p-1.5 rounded border border-white/5">
                       <span className="block text-zinc-500 text-[9px]">EMA5</span>
                       <span className="text-zinc-200">{formatNum(ema?.['5'])}</span>
                   </div>
-                  <div className="bg-zinc-800/30 p-1.5 rounded border border-white/5">
+                  <div className="bg-zinc-800 p-1.5 rounded border border-white/5">
                       <span className="block text-zinc-500 text-[9px]">EMA13</span>
                       <span className="text-zinc-200">{formatNum(ema?.['13'])}</span>
                   </div>
-                  <div className="bg-zinc-800/30 p-1.5 rounded border border-white/5">
+                  <div className="bg-zinc-800 p-1.5 rounded border border-white/5">
                       <span className="block text-zinc-500 text-[9px]">EMA20</span>
                       <span className="text-cyan-300">{formatNum(ema?.['20'])}</span>
                   </div>
-                  <div className="bg-zinc-800/30 p-1.5 rounded border border-white/5">
+                  <div className="bg-zinc-800 p-1.5 rounded border border-white/5">
                       <span className="block text-zinc-500 text-[9px]">EMA200</span>
                       <span className="text-purple-300">{formatNum(ema?.['200'])}</span>
                   </div>
@@ -250,7 +250,7 @@ const LiveMarketDataView: React.FC<{ jsonString: string }> = ({ jsonString }) =>
   };
 
   return (
-    <div className="my-4 border border-white/10 rounded-xl bg-zinc-950/30 overflow-hidden">
+    <div className="my-4 border border-white/10 rounded-xl bg-zinc-900 overflow-hidden">
         <div className="p-3 bg-gradient-to-r from-cyan-900/20 to-zinc-900/20 border-b border-white/5 flex justify-between items-center">
             <div className="flex items-center gap-2">
                 <ActivityIcon className="text-cyan-400 w-4 h-4" />

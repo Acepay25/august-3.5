@@ -74,7 +74,7 @@ const SpeakerAvatar: React.FC<{ speaker: DebateTurn['speaker'], modelName?: stri
 const RoundHeader: React.FC<{ title: string, isOpen: boolean, onToggle: () => void }> = ({ title, isOpen, onToggle }) => (
     <button
         onClick={onToggle}
-        className="w-full flex items-center justify-between px-3 py-2 bg-white/5 hover:bg-white/10 border-y border-white/5 transition-colors group sticky top-0 z-10 backdrop-blur-sm"
+        className="w-full flex items-center justify-between px-3 py-2 bg-zinc-800 hover:bg-zinc-700 border-y border-white/5 transition-colors group sticky top-0 z-10"
     >
         <span className="text-[10px] sm:text-xs font-bold uppercase tracking-widest text-zinc-500 group-hover:text-zinc-300">{title}</span>
         <ChevronDownIcon className={`w-3 h-3 sm:w-4 sm:h-4 text-zinc-600 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} />
@@ -158,7 +158,7 @@ const DebateView: React.FC<DebateViewProps> = ({ debateTurns, modelsUsed, modelI
     };
 
     return (
-        <div className="mt-4 bg-zinc-950/50 rounded-xl border border-white/10 overflow-hidden shadow-inner flex flex-col">
+        <div className="mt-4 bg-zinc-950 rounded-xl border border-white/10 overflow-hidden shadow-inner flex flex-col">
             <div className="bg-gradient-to-r from-zinc-900 to-black px-3 py-2 sm:px-4 sm:py-3 border-b border-white/10 flex justify-between items-center">
                 <h3 className="text-xs sm:text-sm font-bold text-cyan-400 flex items-center gap-2">
                     <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-cyan-500 animate-pulse"></span>
@@ -182,7 +182,7 @@ const DebateView: React.FC<DebateViewProps> = ({ debateTurns, modelsUsed, modelI
                                 <div className="p-3 sm:p-4 space-y-4 sm:space-y-6">
                                     {/* Moderator Message */}
                                     {round.moderator && (
-                                        <div className={`relative ${isVerdict ? 'bg-gradient-to-b from-cyan-950/40 to-zinc-900/40 border-cyan-500/30' : 'bg-zinc-900/50 border-white/5'} border rounded-xl sm:rounded-2xl p-3 sm:p-4 ml-6 sm:ml-8`}>
+                                        <div className={`relative ${isVerdict ? 'bg-gradient-to-b from-cyan-950/40 to-zinc-900/40 border-cyan-500/30' : 'bg-zinc-800 border-white/5'} border rounded-xl sm:rounded-2xl p-3 sm:p-4 ml-6 sm:ml-8`}>
                                             <div className="absolute -left-9 sm:-left-12 top-0">
                                                 <SpeakerAvatar speaker="Moderator" />
                                             </div>
@@ -210,8 +210,8 @@ const DebateView: React.FC<DebateViewProps> = ({ debateTurns, modelsUsed, modelI
                                                                                 turn.speaker === 'OpenRouter' ? 'bg-emerald-950/20 border-emerald-500/20 text-emerald-100/90' :
                                                                                     (turn.speaker.includes('Claude') || turn.speaker.includes('Anthropic')) ? 'bg-purple-950/20 border-purple-500/20 text-purple-100/90' :
                                                                                         (turn.speaker.includes('GPT') || turn.speaker.includes('OpenAI')) ? 'bg-violet-950/20 border-violet-500/20 text-violet-100/90' :
-                                                                                            (turn.speaker.includes('Grok') || turn.speaker.includes('xAI')) ? 'bg-zinc-900/50 border-white/10 text-zinc-300' :
-                                                                                                'bg-zinc-800/50 border-white/5 text-zinc-300'}`}>
+                                                                                            (turn.speaker.includes('Grok') || turn.speaker.includes('xAI')) ? 'bg-zinc-800 border-white/10 text-zinc-300' :
+                                                                                                'bg-zinc-800 border-white/5 text-zinc-300'}`}>
                                                         <div className="absolute top-1 right-2 opacity-0 group-hover:opacity-100 transition-opacity text-[8px] uppercase font-bold tracking-widest text-white/30 flex items-center gap-1">
                                                             {getRoleEmoji(turn.speaker) && <span className="text-[10px]">{getRoleEmoji(turn.speaker)}</span>}
                                                             {turn.speaker}

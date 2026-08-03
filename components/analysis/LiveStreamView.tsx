@@ -70,12 +70,12 @@ const AnalystPanel: React.FC<{
   return (
     <div className={`flex flex-col h-full rounded-2xl border ${colorClasses.border} ${colorClasses.bg} shadow-xl transition-all duration-300 overflow-hidden relative group will-change-transform`}>
       <div className={`absolute top-0 left-0 w-full h-1 ${colorClasses.accent} opacity-50`}></div>
-      <div className="p-4 sm:p-5 flex justify-between items-start border-b border-white/5 bg-black/20">
+      <div className="p-4 sm:p-5 flex justify-between items-start border-b border-white/5 bg-zinc-800">
         <div>
           <h4 className={`font-bold text-base sm:text-lg tracking-tight ${colorClasses.title}`}>{title}</h4>
           {modelName && <div className="text-[10px] font-mono text-zinc-500 mt-1 uppercase tracking-wider">{modelName}</div>}
         </div>
-        <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center border border-white/10 bg-black/40 ${colorClasses.title}`}>
+        <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center border border-white/10 bg-zinc-800 ${colorClasses.title}`}>
           <BotIcon />
         </div>
       </div>
@@ -147,7 +147,7 @@ const LiveStreamView: React.FC<LiveStreamViewProps> = ({
   const gridCols = count === 1 ? 'grid-cols-1' : count === 2 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
 
   return (
-    <div className="fixed inset-0 bg-zinc-950/95 z-50 flex items-center justify-center p-4 sm:p-8 backdrop-blur-sm animate-fade-in" style={{ transition: 'opacity 0.2s ease-in-out' }}>
+    <div className="fixed inset-0 bg-zinc-950 z-50 flex items-center justify-center p-4 sm:p-8 animate-fade-in" style={{ transition: 'opacity 0.2s ease-in-out' }}>
       <div className="flex flex-col w-full h-full max-w-7xl mx-auto">
         <header className="flex items-center justify-between mb-4 sm:mb-6 flex-shrink-0">
           <div>

@@ -115,7 +115,7 @@ export function useConfirmDialog() {
             {state.open && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
                     <div
-                        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                        className="absolute inset-0 bg-black/60"
                         onClick={handleCancel}
                     />
                     <div className="relative w-full max-w-md bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
@@ -134,17 +134,17 @@ export function useConfirmDialog() {
                                 </div>
                                 <button
                                     onClick={handleCancel}
-                                    className="flex-shrink-0 p-1.5 text-zinc-500 hover:text-zinc-300 rounded-lg hover:bg-white/5 transition-colors"
+                                    className="flex-shrink-0 p-1.5 text-zinc-500 hover:text-zinc-300 rounded-lg hover:bg-zinc-800 transition-colors"
                                     aria-label="Close"
                                 >
                                     <CloseIcon className="h-4 w-4" />
                                 </button>
                             </div>
                         </div>
-                        <div className="px-6 py-4 bg-zinc-950/50 border-t border-white/5 flex items-center justify-end gap-3">
+                        <div className="px-6 py-4 bg-zinc-900 border-t border-white/5 flex items-center justify-end gap-3">
                             <button
                                 onClick={handleCancel}
-                                className="px-4 py-2 text-sm font-medium text-zinc-300 hover:text-white rounded-lg hover:bg-white/5 transition-colors"
+                                className="px-4 py-2 text-sm font-medium text-zinc-300 hover:text-white rounded-lg hover:bg-zinc-800 transition-colors"
                             >
                                 {state.cancelLabel}
                             </button>

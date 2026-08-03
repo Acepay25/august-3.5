@@ -69,6 +69,7 @@ import { usePostMortem } from './hooks/usePostMortem';
 import { useUserProfiles } from './hooks/useUserProfiles';
 import { useSaveOnUnload } from './hooks/useSaveOnUnload';
 import { offlineQueue, QueuedRequest } from './services/infrastructure/OfflineQueueService';
+import { getPreference, setPreference, removePreference, PREF_KEYS } from './services/infrastructure/PreferencesService';
 // AI Learning Services - Adaptive Learning, Mistake Patterns, Insight Extraction
 import { extractInsightsFromPostMortem, storeInsights, initializeKnowledgeBase } from './services/learning/InsightExtractionService';
 import * as MemoryService from './services/learning/MemoryService';
@@ -106,7 +107,6 @@ const App: React.FC = () => {
         isLivePostMortemVisible, setIsLivePostMortemVisible,
         isMobileMenuOpen, setIsMobileMenuOpen,
         showMismatchModal, setShowMismatchModal,
-        isFullscreen, setIsFullscreen,
         isLeverageDropdownOpen, setIsLeverageDropdownOpen,
         isVisionDataVisible, setIsVisionDataVisible,
         showAccuracyModal, setShowAccuracyModal,
@@ -225,7 +225,6 @@ const App: React.FC = () => {
         expandedDebateTranscripts, setExpandedDebateTranscripts,
         expandedPostMortemImages, setExpandedPostMortemImages,
         expandedPostMortems, setExpandedPostMortems,
-        collapsedUserMessages, setCollapsedUserMessages,
         postMortemCandidate, setPostMortemCandidate,
     } = useJournalUI();
 
@@ -311,6 +310,25 @@ const App: React.FC = () => {
         }
     }, [readyProviders.length]);
 
+    // Casual-chat model (used when ensemble is off): app-wide preference,
+    // persisted in Preferences. Empty until loaded or chosen — the pipeline
+    // falls back to the first ready provider's model.
+    const [selectedChatModel, setSelectedChatModel] = useState('');
+    useEffect(() => {
+        let cancelled = false;
+        getPreference(PREF_KEYS.CASUAL_CHAT_MODEL).then(v => {
+            if (!cancelled && v) setSelectedChatModel(v);
+        });
+        return () => { cancelled = true; };
+    }, []);
+    useEffect(() => {
+        if (selectedChatModel) {
+            setPreference(PREF_KEYS.CASUAL_CHAT_MODEL, selectedChatModel);
+        } else {
+            removePreference(PREF_KEYS.CASUAL_CHAT_MODEL);
+        }
+    }, [selectedChatModel]);
+
     // Analysis pipeline state, refs, and handlers (extracted to hooks/useAnalysisPipeline.ts)
     const {
         input, setInput,
@@ -352,6 +370,7 @@ const App: React.FC = () => {
         isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI,
         isHybridIntelligenceEnabled, lensConfig, activeFrameworks,
         isEnsembleEnabled,
+        selectedChatModel,
         toast,
     });
 
@@ -589,7 +608,6 @@ const App: React.FC = () => {
         setExpandedIndividualThoughts({});
         setExpandedDebateTranscripts({});
         setExpandedPostMortems({});
-        setCollapsedUserMessages({});
 
         if (activeUsername) {
             await dbService.saveUserProfile(activeUsername, {
@@ -777,7 +795,6 @@ const App: React.FC = () => {
         sessionStorage.setItem('activeUsername', username);
         setIsUserModalOpen(false);
         setHighlightedAnalysisId(null);
-        setCollapsedUserMessages({});
         setIsLoading(false);
         } catch (error) {
             console.error('App: failed to load user data', error);
@@ -987,13 +1004,6 @@ const App: React.FC = () => {
     const handleSetSummarizationModel = (id: string) => setSummarizationModel(id);
     const handleUpdateSummaryCharLimit = (limit: number) => setSummaryCharLimit(limit);
 
-    const handleToggleFullscreen = () => {
-        if (!document.fullscreenElement) {
-            document.documentElement.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => { });
-        } else {
-            document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => { });
-        }
-    };
 
     const handleDeleteTrades = (ids: string[]) => {
         setLoggedTrades(prev => prev.filter(t => !ids.includes(t.id)));
@@ -1558,8 +1568,6 @@ const App: React.FC = () => {
         setExpandedIndividualThoughts,
         expandedDebateTranscripts,
         setExpandedDebateTranscripts,
-        collapsedUserMessages,
-        setCollapsedUserMessages,
         savedAnalyses,
         loggingTradeId,
         activeFrameworks,
@@ -1583,7 +1591,7 @@ const App: React.FC = () => {
         autopilotResolutions, // Outcome autopilot detected resolutions
         onConfirmAutopilot: handleConfirmAutopilot,
         onDismissAutopilot: handleDismissAutopilot
-    }), [typingMessageState, highlightedAnalysisId, expandedPostMortems, expandedPostMortemImages, expandedIndividualThoughts, expandedDebateTranscripts, collapsedUserMessages, savedAnalyses, loggingTradeId, activeFrameworks, activeConversation, copiedMessageId, modelIdToName, providerNameToId, handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy, handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, confidenceCalibration, handleRetryPostMortem, lensConfig, leverageInput, autopilotResolutions, handleConfirmAutopilot, handleDismissAutopilot]);
+    }), [typingMessageState, highlightedAnalysisId, expandedPostMortems, expandedPostMortemImages, expandedIndividualThoughts, expandedDebateTranscripts, savedAnalyses, loggingTradeId, activeFrameworks, activeConversation, copiedMessageId, modelIdToName, providerNameToId, handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy, handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, confidenceCalibration, handleRetryPostMortem, lensConfig, leverageInput, autopilotResolutions, handleConfirmAutopilot, handleDismissAutopilot]);
 
     // ... (Rest of component remains unchanged) ...
     return (
@@ -1728,7 +1736,7 @@ const App: React.FC = () => {
                 isAnalysisInProgress={isAnalysisInProgress}
                 isPostMortemInProgress={isPostMortemInProgress}
                 currentVisionData={currentVisionData}
-                isFullscreen={isFullscreen}
+                isFreshSession={messages.length === 0}
                 onOpenVersionHistory={() => setIsVersionHistoryVisible(true)}
                 isMobileMenuOpen={isMobileMenuOpen}
                 mobileMenuRef={mobileMenuRef}
@@ -1736,7 +1744,6 @@ const App: React.FC = () => {
                 setIsVisionDataVisible={setIsVisionDataVisible}
                 setJournalState={setJournalState}
                 setIsHistoryVisible={setIsHistoryVisible}
-                handleToggleFullscreen={handleToggleFullscreen}
                 setIsSettingsVisible={setIsSettingsMenuVisible}
                 setIsLiveAnalysisVisible={setIsLiveAnalysisVisible}
                 setIsLivePostMortemVisible={setIsLivePostMortemVisible}
@@ -1838,20 +1845,19 @@ const App: React.FC = () => {
 
             {/* Main row: persistent desktop sidebar + chat column */}
             <div className="flex-1 flex flex-row min-h-0">
-                <aside className="hidden lg:flex flex-col w-72 shrink-0 min-h-0 border-r border-white/5 bg-zinc-900/30">
+                <aside className="hidden lg:flex flex-col w-72 shrink-0 min-h-0 border-r border-white/5 bg-zinc-900">
                     <SidebarContent
                         activeUsername={activeUsername}
                         conversations={conversationHistory}
                         activeConversationId={activeConversationId}
                         hasVisionData={currentVisionData.length > 0}
-                        isFullscreen={isFullscreen}
+                        isFreshSession={messages.length === 0}
                         onNewConversation={handleStartNewConversation}
                         onLoadConversation={handleLoadConversation}
                         onOpenLiveMarket={() => setIsLiveMarketVisible(true)}
                         onOpenVisionData={() => setIsVisionDataVisible(true)}
                         onOpenJournal={() => setJournalState({ isOpen: true, tab: 'log' })}
                         onOpenHistory={() => setIsHistoryVisible(true)}
-                        onToggleFullscreen={handleToggleFullscreen}
                         onOpenSettings={() => setIsSettingsMenuVisible(true)}
                     />
                 </aside>
@@ -1907,6 +1913,8 @@ const App: React.FC = () => {
                 setLensConfig={handleSetLensConfig}
                 isEnsembleEnabled={isEnsembleEnabled}
                 setIsEnsembleEnabled={handleSetEnsembleEnabled}
+                selectedChatModel={selectedChatModel}
+                setSelectedChatModel={setSelectedChatModel}
                 images={images}
                 removeImage={removeImage}
                 leverageRef={leverageRef}

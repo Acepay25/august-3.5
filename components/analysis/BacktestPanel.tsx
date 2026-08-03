@@ -188,7 +188,7 @@ const BacktestPanel: React.FC<BacktestPanelProps> = ({
                 <div className={`mb-3 p-3 rounded-xl border text-xs ${backtestResult?.outcome === 'WIN' ? 'bg-emerald-950/30 border-emerald-500/30 text-emerald-300' :
                     backtestResult?.outcome === 'LOSS' ? 'bg-rose-950/30 border-rose-500/30 text-rose-300' :
                         backtestError ? 'bg-rose-950/30 border-rose-500/30 text-rose-300' :
-                            'bg-zinc-800/50 border-zinc-700 text-zinc-300'
+                            'bg-zinc-800 border-zinc-700 text-zinc-300'
                     }`}>
                     <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -238,7 +238,7 @@ const BacktestPanel: React.FC<BacktestPanelProps> = ({
 
                     {/* Price Display for ALL outcomes */}
                     {backtestResult && (backtestResult.currentPrice || backtestResult.priceAtExit) && (
-                        <div className="mt-2 flex flex-wrap items-center gap-2 sm:gap-3 text-[10px] bg-black/20 rounded-lg px-2 py-1.5">
+                        <div className="mt-2 flex flex-wrap items-center gap-2 sm:gap-3 text-[10px] bg-zinc-800 rounded-lg px-2 py-1.5">
                             {backtestResult.outcome === 'NOT_TRIGGERED' ? (
                                 // Open trade - show current price
                                 <>
@@ -360,7 +360,7 @@ const BacktestPanel: React.FC<BacktestPanelProps> = ({
                     </div>
                     {/* Entry Selector for Backtest - shown when multiple entries exist */}
                     {hasMultipleEntries && (
-                        <div className="mb-2 p-2 bg-zinc-800/50 rounded-lg border border-white/5">
+                        <div className="mb-2 p-2 bg-zinc-800 rounded-lg border border-white/5">
                             <div className="text-[9px] uppercase font-bold text-zinc-500 mb-1.5 flex items-center gap-1">
                                 <span></span> Select entries to backtest
                             </div>
@@ -380,7 +380,7 @@ const BacktestPanel: React.FC<BacktestPanelProps> = ({
                                         }}
                                         className={`px-2 py-1 rounded text-[10px] font-mono transition-all ${selectedBacktestEntries.includes(idx)
                                             ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
-                                            : 'bg-zinc-700/50 text-zinc-500 border border-white/5 hover:text-zinc-300'
+                                            : 'bg-zinc-700 text-zinc-500 border border-white/5 hover:text-zinc-300'
                                             }`}
                                     >
                                         E{idx + 1}: ${typeof ep.price === 'object' ? '?' : ep.price}
@@ -406,7 +406,7 @@ const BacktestPanel: React.FC<BacktestPanelProps> = ({
                 <div className="flex items-center justify-center gap-3 py-1 sm:py-2">
                     <span className={`inline-block px-3 py-1.5 sm:px-5 sm:py-2 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest border ${outcome === TradeOutcome.WIN ? 'border-emerald-500/30 text-emerald-400 bg-emerald-500/10' :
                         outcome === TradeOutcome.LOSS ? 'border-rose-500/30 text-rose-400 bg-rose-500/10' :
-                            'border-zinc-700 text-zinc-500 bg-zinc-800/50'
+                            'border-zinc-700 text-zinc-500 bg-zinc-800'
                         }`}>
                         Outcome: {outcome}
                     </span>

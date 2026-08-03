@@ -87,12 +87,12 @@ const FieldLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 );
 
 const inputBase =
-    'w-full px-3.5 py-2.5 rounded-xl bg-zinc-950/80 border border-zinc-800 text-sm text-zinc-100 ' +
+    'w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-sm text-zinc-100 ' +
     'placeholder-zinc-600 font-mono focus:outline-none focus:border-cyan-500/60 focus:ring-1 focus:ring-cyan-500/20 ' +
     'transition-all duration-200';
 
 const selectBase =
-    'w-full px-3.5 py-2.5 rounded-xl bg-zinc-950/80 border border-zinc-800 text-sm text-zinc-100 ' +
+    'w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-sm text-zinc-100 ' +
     'focus:outline-none focus:border-cyan-500/60 focus:ring-1 focus:ring-cyan-500/20 transition-all duration-200 ' +
     'appearance-none cursor-pointer bg-no-repeat bg-[right_0.9rem_center] ' +
     "bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2371717a%22%20stroke-width%3D%222.5%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22/%3E%3C/svg%3E')]";
@@ -298,8 +298,8 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                                 onClick={() => { setSelectedId(c.id); setShowAddProvider(false); }}
                                                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all ${
                                                     isSelected && !showAddProvider
-                                                        ? 'bg-zinc-800/90 border border-zinc-700/80 text-zinc-100 shadow-sm font-semibold'
-                                                        : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60 border border-transparent'
+                                                        ? 'bg-zinc-800 border border-zinc-700/80 text-zinc-100 shadow-sm font-semibold'
+                                                        : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 border border-transparent'
                                                 }`}
                                             >
                                                 <div className="flex items-center gap-2.5 min-w-0">
@@ -332,7 +332,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                 </div>
 
                 {/* Right Configuration Detail Panel */}
-                <div className="md:col-span-8 bg-zinc-900/40 border border-zinc-800/80 rounded-2xl p-4.5 space-y-4">
+                <div className="md:col-span-8 bg-zinc-800 border border-zinc-800/80 rounded-2xl p-4.5 space-y-4">
                     {showAddProvider ? (
                         /* New Custom Provider Form */
                         <div className="space-y-4 animate-fade-in">
@@ -452,7 +452,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                     )}
 
                                     {/* Enabled / Disable Toggle Pills */}
-                                    <div className="flex items-center bg-zinc-950/80 border border-zinc-800/80 p-0.5 rounded-lg text-xs font-semibold ml-2">
+                                    <div className="flex items-center bg-zinc-950 border border-zinc-800/80 p-0.5 rounded-lg text-xs font-semibold ml-2">
                                         <button
                                             onClick={() => { if (!selected.isEnabled) onToggleProvider(selected.id); }}
                                             className={`px-3 py-1 rounded-md transition-all text-xs ${
@@ -541,7 +541,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                             {/* Model List Section */}
                             <div className="space-y-2 pt-1">
                                 <FieldLabel>Model list</FieldLabel>
-                                <div className="space-y-2 bg-zinc-950/60 border border-zinc-800/80 rounded-xl p-2.5">
+                                <div className="space-y-2 bg-zinc-950 border border-zinc-800/80 rounded-xl p-2.5">
                                     {selected.models.map((m) => {
                                         const isSelectedModel = draftModel === m;
                                         const isEditingThis = editingModelId === m;
@@ -553,7 +553,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                                 className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl border transition-all ${
                                                     isSelectedModel
                                                         ? 'bg-zinc-900 border-zinc-700/90 text-zinc-100 shadow-sm'
-                                                        : 'bg-zinc-900/50 border-zinc-800/70 text-zinc-300 hover:border-zinc-700'
+                                                        : 'bg-zinc-800 border-zinc-800/70 text-zinc-300 hover:border-zinc-700'
                                                 }`}
                                             >
                                                 {isEditingThis ? (
@@ -584,7 +584,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
 
                                                 <div className="flex items-center gap-2.5 shrink-0">
                                                     {/* Context Badge */}
-                                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-800/90 text-zinc-400 border border-zinc-700/60 font-mono">
+                                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700/60 font-mono">
                                                         {badgeText}
                                                     </span>
 
@@ -673,7 +673,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                             ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
                                             : isDirty
                                                 ? 'bg-cyan-400 text-zinc-950 hover:bg-cyan-300 active:scale-[0.98] shadow-md'
-                                                : 'bg-zinc-800/60 text-zinc-600 border border-zinc-700/40 cursor-not-allowed'
+                                                : 'bg-zinc-800 text-zinc-600 border border-zinc-700/40 cursor-not-allowed'
                                     }`}
                                 >
                                     {saveState === 'saving' ? 'Saving…' : saveState === 'saved' ? '✓ Saved' : 'Save'}

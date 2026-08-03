@@ -147,7 +147,7 @@ const StatusBadge: React.FC<{ stats: RollingWindowStats }> = ({ stats }) => {
     }
 
     return (
-        <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-700/50 border border-zinc-600/50">
+        <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-700 border border-zinc-600/50">
             <span className="text-zinc-400 text-xs font-medium">STABLE</span>
         </div>
     );
@@ -185,7 +185,7 @@ const ModelCard: React.FC<{ data: ModelCardData }> = ({ data }) => {
     const { name, color, stats, expertise, modelName } = data;
 
     return (
-        <div className="relative p-4 rounded-xl bg-zinc-800/50 border border-zinc-700/50 backdrop-blur-sm hover:border-zinc-600/70 transition-all">
+        <div className="relative p-4 rounded-xl bg-zinc-800 border border-zinc-700/50 hover:border-zinc-600/70 transition-all">
             {/* Header */}
             <div className="flex items-center justify-between mb-3">
                 <div className="flex-1 min-w-0">
@@ -403,7 +403,7 @@ const ModelPerformanceDashboard: React.FC<ModelPerformanceDashboardProps> = ({
 
             {/* Dynamic Weights */}
             {weights && modelData.length > 0 && (
-                <div className="p-4 rounded-xl bg-zinc-800/50 border border-zinc-700/50">
+                <div className="p-4 rounded-xl bg-zinc-800 border border-zinc-700/50">
                     <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
                          Dynamic Weights
                         <span className="text-xs font-normal text-zinc-500">

@@ -44,11 +44,11 @@ const ConfluenceScoreIndicator: React.FC<ConfluenceScoreIndicatorProps> = ({ dat
     const alignedCount = Math.round((score / 100) * timeframeCount);
 
     return (
-        <div className={`rounded-xl border ${colors.border} bg-black/30 backdrop-blur-sm overflow-hidden transition-all`}>
+        <div className={`rounded-xl border ${colors.border} bg-black/30 overflow-hidden transition-all`}>
             {/* Header - Always Visible */}
             <button
                 onClick={() => setIsExpanded(!isExpanded)}
-                className="w-full flex items-center justify-between p-3 hover:bg-white/5 transition-colors"
+                className="w-full flex items-center justify-between p-3 hover:bg-zinc-800 transition-colors"
             >
                 <div className="flex items-center gap-3">
                     {/* Score Circle */}
@@ -86,7 +86,7 @@ const ConfluenceScoreIndicator: React.FC<ConfluenceScoreIndicatorProps> = ({ dat
                     <div className="text-left">
                         <div className="flex items-center gap-2">
                             <span className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold">Confluence</span>
-                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wide ${colors.text} bg-white/5`}>
+                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wide ${colors.text} bg-zinc-800`}>
                                 {direction}
                             </span>
                         </div>

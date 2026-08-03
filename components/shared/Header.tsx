@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BotIcon, LoadingIcon, CheckIcon, EyeIcon, SettingsIcon, HamburgerIcon, ActivityIcon, CloudOffIcon } from './Icons';
+import { BotIcon, LoadingIcon, CheckIcon, EyeIcon, HamburgerIcon, ActivityIcon, CloudOffIcon } from './Icons';
 import { getSessionContext, getAllSessionsStatus, SessionContext, SessionStatus } from '../../services/infrastructure/SessionService';
 import { UpdateButton } from './UpdateButton';
 import { SidebarContent } from './Sidebar';
@@ -11,14 +11,15 @@ interface HeaderProps {
     isAnalysisInProgress: boolean;
     isPostMortemInProgress: boolean;
     currentVisionData: string[];
-    isFullscreen: boolean;
+    // Fresh session = active conversation has no messages (Sidebar gates
+    // New Conversation on this).
+    isFreshSession: boolean;
     isMobileMenuOpen: boolean;
     mobileMenuRef: React.RefObject<HTMLDivElement | null>;
     setIsMobileMenuOpen: React.Dispatch<React.SetStateAction<boolean>>;
     setIsVisionDataVisible: (visible: boolean) => void;
     setJournalState: (state: { isOpen: boolean; tab: 'log' | 'performance' | 'analytics' }) => void;
     setIsHistoryVisible: (visible: boolean) => void;
-    handleToggleFullscreen: () => void;
     setIsSettingsVisible: (visible: boolean) => void;
     setIsLiveAnalysisVisible: (visible: boolean) => void;
     setIsLivePostMortemVisible: (visible: boolean) => void;
@@ -48,14 +49,13 @@ export const Header: React.FC<HeaderProps> = ({
     isAnalysisInProgress,
     isPostMortemInProgress,
     currentVisionData,
-    isFullscreen,
+    isFreshSession,
     isMobileMenuOpen,
     mobileMenuRef,
     setIsMobileMenuOpen,
     setIsVisionDataVisible,
     setJournalState,
     setIsHistoryVisible,
-    handleToggleFullscreen,
     setIsSettingsVisible,
     setIsLiveAnalysisVisible,
     setIsLivePostMortemVisible,
@@ -142,7 +142,7 @@ export const Header: React.FC<HeaderProps> = ({
                     {/* Hamburger Menu Button */}
                     <button
                         onClick={() => setIsMobileMenuOpen(prev => !prev)}
-                        className="p-2.5 text-zinc-400 hover:text-cyan-400 rounded-xl hover:bg-white/5 transition-colors lg:hidden"
+                        className="p-2.5 text-zinc-400 hover:text-cyan-400 rounded-xl hover:bg-zinc-800 transition-colors lg:hidden"
                         title="Menu"
                         aria-label="Toggle navigation menu"
                     >
@@ -158,7 +158,7 @@ export const Header: React.FC<HeaderProps> = ({
                                 <div className="static sm:relative" ref={sessionModalRef}>
                                     <button
                                         onClick={() => setIsSessionModalOpen(!isSessionModalOpen)}
-                                        className="flex items-center gap-1.5 px-2 py-0.5 bg-zinc-800/50 hover:bg-zinc-800 rounded-full border border-white/5 hover:border-white/10 text-[10px] font-medium text-zinc-400 whitespace-nowrap transition-all"
+                                        className="flex items-center gap-1.5 px-2 py-0.5 bg-zinc-800 hover:bg-zinc-700 rounded-full border border-white/5 hover:border-white/10 text-[10px] font-medium text-zinc-400 whitespace-nowrap transition-all"
                                     >
                                         <span className={`w-1.5 h-1.5 rounded-full ${sessionContext.isKillZone ? 'bg-red-500 animate-pulse' :
                                             sessionContext.currentSession === 'off_hours' ? 'bg-zinc-500' : 'bg-emerald-500'
@@ -174,10 +174,10 @@ export const Header: React.FC<HeaderProps> = ({
                                     {/* Session Details Modal */}
                                     {isSessionModalOpen && (
                                         <div className="absolute top-full left-0 sm:left-auto sm:right-0 mt-4 sm:mt-2 w-80 bg-zinc-900 border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-200">
-                                            <div className="p-3 bg-zinc-900/90 backdrop-blur-sm">
+                                            <div className="p-3 bg-zinc-900">
                                                 {/* Live Market Conditions Section */}
                                                 {liveMarketConditions && (
-                                                    <div className="mb-3 p-2 bg-zinc-800/50 rounded-lg border border-white/5">
+                                                    <div className="mb-3 p-2 bg-zinc-800 rounded-lg border border-white/5">
                                                         <div className="flex items-center justify-between mb-1.5">
                                                             <div className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-1">
                                                                 <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
@@ -263,27 +263,12 @@ export const Header: React.FC<HeaderProps> = ({
                     {/* Changelog / Version History Button */}
                     <button
                         onClick={onOpenVersionHistory}
-                        className="p-2 text-zinc-400 hover:text-cyan-400 hover:bg-white/5 rounded-lg transition-colors"
+                        className="p-2 text-zinc-400 hover:text-cyan-400 hover:bg-zinc-800 rounded-lg transition-colors"
                         title="Changelog & Features"
                         aria-label="Changelog and features"
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></svg>
                     </button>
-
-                    {/* P2-12: Desktop Settings shortcut. Previously Settings was
-                        only reachable via the hamburger slide-out menu, which
-                        is awkward on desktop. This adds a dedicated toolbar
-                        button on sm+ screens. */}
-                    <div className="hidden sm:block">
-                        <button
-                            onClick={() => setIsSettingsVisible(true)}
-                            className="p-2 text-zinc-400 hover:text-cyan-400 hover:bg-white/5 rounded-lg transition-colors"
-                            title="Settings"
-                            aria-label="Open settings"
-                        >
-                            <SettingsIcon className="h-5 w-5" />
-                        </button>
-                    </div>
 
                     {(isAnalysisInProgress || isPostMortemInProgress) && (
                         <button
@@ -302,12 +287,12 @@ export const Header: React.FC<HeaderProps> = ({
                     <div className="fixed inset-0 z-50 lg:hidden">
                         {/* Backdrop */}
                         <div
-                            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+                            className="absolute inset-0 bg-black/50"
                             onClick={() => setIsMobileMenuOpen(false)}
                         />
 
                         {/* Menu Panel */}
-                        <div ref={mobileMenuRef} className="absolute left-0 top-0 h-full w-72 bg-zinc-900/95 border-r border-white/10 shadow-2xl animate-slide-in-left flex flex-col">
+                        <div ref={mobileMenuRef} className="absolute left-0 top-0 h-full w-72 bg-zinc-900 border-r border-white/10 shadow-2xl animate-slide-in-left flex flex-col">
                             <div className="p-5 border-b border-white/10 flex items-center justify-between">
                                 <div className="flex items-center gap-3">
                                     <div className="w-10 h-10 rounded-full bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
@@ -326,14 +311,13 @@ export const Header: React.FC<HeaderProps> = ({
                                     conversations={conversations}
                                     activeConversationId={activeConversationId}
                                     hasVisionData={currentVisionData.length > 0}
-                                    isFullscreen={isFullscreen}
+                                    isFreshSession={isFreshSession}
                                     onNewConversation={onNewConversation}
                                     onLoadConversation={onLoadConversation}
                                     onOpenLiveMarket={onOpenLiveMarket}
                                     onOpenVisionData={() => setIsVisionDataVisible(true)}
                                     onOpenJournal={() => setJournalState({ isOpen: true, tab: 'log' })}
                                     onOpenHistory={() => setIsHistoryVisible(true)}
-                                    onToggleFullscreen={handleToggleFullscreen}
                                     onOpenSettings={() => setIsSettingsVisible(true)}
                                     onNavigate={() => setIsMobileMenuOpen(false)}
                                 />

@@ -123,7 +123,7 @@ const PerformanceReviewContent: React.FC<PerformanceReviewContentProps> = ({
 
     return (
         <div className="flex flex-col h-full bg-transparent">
-            <div className="p-3 sm:p-5 border-b border-white/5 bg-zinc-900/50 shrink-0">
+            <div className="p-3 sm:p-5 border-b border-white/5 bg-zinc-800 shrink-0">
                 <div className="flex flex-col gap-3 sm:gap-4">
                     <div>
                         <button
@@ -194,7 +194,7 @@ const PerformanceReviewContent: React.FC<PerformanceReviewContentProps> = ({
                                             onClick={() => onToggleAlgorithmicSummary(true)}
                                             className={`flex-1 px-3 py-2 text-xs font-bold uppercase tracking-wider rounded-lg border transition-all ${useAlgorithmicSummary
                                                 ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50'
-                                                : 'bg-zinc-800/50 text-zinc-500 border-white/10 hover:border-white/20'
+                                                : 'bg-zinc-800 text-zinc-500 border-white/10 hover:border-white/20'
                                                 }`}
                                         >
                                              Algorithmic (Free)
@@ -203,7 +203,7 @@ const PerformanceReviewContent: React.FC<PerformanceReviewContentProps> = ({
                                             onClick={() => onToggleAlgorithmicSummary(false)}
                                             className={`flex-1 px-3 py-2 text-xs font-bold uppercase tracking-wider rounded-lg border transition-all ${!useAlgorithmicSummary
                                                 ? 'bg-purple-500/20 text-purple-400 border-purple-500/50'
-                                                : 'bg-zinc-800/50 text-zinc-500 border-white/10 hover:border-white/20'
+                                                : 'bg-zinc-800 text-zinc-500 border-white/10 hover:border-white/20'
                                                 }`}
                                         >
                                              AI (Tokens)
@@ -219,7 +219,7 @@ const PerformanceReviewContent: React.FC<PerformanceReviewContentProps> = ({
                                             onClick={() => onToggleAlgorithmicInsights(true)}
                                             className={`flex-1 px-3 py-2 text-xs font-bold uppercase tracking-wider rounded-lg border transition-all ${useAlgorithmicInsights
                                                 ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/50'
-                                                : 'bg-zinc-800/50 text-zinc-500 border-white/10 hover:border-white/20'
+                                                : 'bg-zinc-800 text-zinc-500 border-white/10 hover:border-white/20'
                                                 }`}
                                         >
                                              Algo (Free)
@@ -228,7 +228,7 @@ const PerformanceReviewContent: React.FC<PerformanceReviewContentProps> = ({
                                             onClick={() => onToggleAlgorithmicInsights(false)}
                                             className={`flex-1 px-3 py-2 text-xs font-bold uppercase tracking-wider rounded-lg border transition-all ${!useAlgorithmicInsights
                                                 ? 'bg-rose-500/20 text-rose-400 border-rose-500/50'
-                                                : 'bg-zinc-800/50 text-zinc-500 border-white/10 hover:border-white/20'
+                                                : 'bg-zinc-800 text-zinc-500 border-white/10 hover:border-white/20'
                                                 }`}
                                         >
                                              AI (Tokens)
@@ -291,13 +291,13 @@ const PerformanceReviewContent: React.FC<PerformanceReviewContentProps> = ({
                             </h3>
                             <ChevronDownIcon className={`w-3 h-3 sm:w-4 sm:h-4 text-zinc-600 transition-transform duration-200 ${isRecentInsightsVisible ? 'rotate-180' : ''}`} />
                         </button>
-                        <button onClick={onManageInsights} className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] uppercase font-bold tracking-widest bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white transition-colors border border-white/5" title="Manually select trades from Log to include here">
+                        <button onClick={onManageInsights} className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] uppercase font-bold tracking-widest bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors border border-white/5" title="Manually select trades from Log to include here">
                             <EditIcon className="w-3 h-3" /> Edit Source
                         </button>
                         {selectedInsightIds.size > 0 && (
                             <button
                                 onClick={clearSelection}
-                                className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] uppercase font-bold tracking-widest bg-zinc-700/50 hover:bg-zinc-600/50 text-zinc-300 hover:text-white transition-colors border border-white/10"
+                                className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] uppercase font-bold tracking-widest bg-zinc-700 hover:bg-zinc-600 text-zinc-300 hover:text-white transition-colors border border-white/10"
                                 title="Clear selection"
                             >
                                 ✕ Clear ({selectedInsightIds.size})
@@ -337,7 +337,7 @@ const PerformanceReviewContent: React.FC<PerformanceReviewContentProps> = ({
                                         <div
                                             key={summary.id}
                                             onClick={() => toggleInsightSelection(summary.id)}
-                                            className={`p-3 sm:p-4 bg-zinc-800/30 hover:bg-zinc-800/50 rounded-xl border transition-all group relative cursor-pointer ${isSelected
+                                            className={`p-3 sm:p-4 bg-zinc-800 hover:bg-zinc-800 rounded-xl border transition-all group relative cursor-pointer ${isSelected
                                                 ? 'border-purple-500/50 bg-purple-500/10 ring-1 ring-purple-500/30'
                                                 : isNewlyAdded
                                                     ? 'border-cyan-500/50 bg-cyan-500/10 animate-slide-in-right shadow-[0_0_15px_-3px_rgba(176, 176, 182,0.3)]'

@@ -156,16 +156,16 @@ const StrategySearch: React.FC<StrategySearchProps> = ({
         onClick={onClose}
       ></div>
 
-      <aside className={`fixed top-0 right-0 h-full w-full sm:w-[480px] bg-zinc-900/95 backdrop-blur-xl border-l border-white/10 shadow-2xl z-50 transform transition-transform duration-300 cubic-bezier(0.16, 1, 0.3, 1) flex flex-col ${isVisible ? 'translate-x-0' : 'translate-x-full'}`}>
+      <aside className={`fixed top-0 right-0 h-full w-full sm:w-[480px] bg-zinc-900 border-l border-white/10 shadow-2xl z-50 transform transition-transform duration-300 cubic-bezier(0.16, 1, 0.3, 1) flex flex-col ${isVisible ? 'translate-x-0' : 'translate-x-full'}`}>
         <div className="flex flex-col h-full">
-          <header className="flex items-center justify-between p-4 sm:p-6 border-b border-white/5 bg-black/20">
+          <header className="flex items-center justify-between p-4 sm:p-6 border-b border-white/5 bg-zinc-800">
             <h2 className="text-lg sm:text-xl font-bold text-cyan-400 tracking-tight">Playbook & Discovery</h2>
-            <button onClick={onClose} className="p-2 sm:p-3 rounded-xl text-zinc-400 hover:bg-white/5 hover:text-white transition-colors">
+            <button onClick={onClose} className="p-2 sm:p-3 rounded-xl text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors">
               <CloseIcon className="w-5 h-5 sm:w-6 sm:h-6" />
             </button>
           </header>
           
-          <div className="p-4 sm:p-6 border-b border-white/5 bg-zinc-900/50">
+          <div className="p-4 sm:p-6 border-b border-white/5 bg-zinc-800">
              <form onSubmit={handleSearch} className="flex gap-2 sm:gap-3 mb-3 sm:mb-5">
                 <div className="relative flex-1">
                     <input
@@ -177,7 +177,7 @@ const StrategySearch: React.FC<StrategySearchProps> = ({
                     />
                     <button
                         type="submit"
-                        className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-lg text-zinc-400 hover:text-cyan-400 hover:bg-white/5 transition-colors"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-lg text-zinc-400 hover:text-cyan-400 hover:bg-zinc-800 transition-colors"
                         disabled={isLoading || !searchQuery.trim()}
                     >
                         <SearchIcon className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -204,7 +204,7 @@ const StrategySearch: React.FC<StrategySearchProps> = ({
                 <div className="space-y-3 sm:space-y-5">
                     <h3 className="text-xs sm:text-sm font-bold text-zinc-500 uppercase tracking-widest pl-1">Discovery Results</h3>
                     {(searchResults || []).map((result) => (
-                        <div key={result.name} className="p-4 sm:p-6 bg-zinc-800/50 rounded-xl sm:rounded-2xl border border-white/5 hover:border-cyan-500/30 transition-colors animate-fade-in">
+                        <div key={result.name} className="p-4 sm:p-6 bg-zinc-800 rounded-xl sm:rounded-2xl border border-white/5 hover:border-cyan-500/30 transition-colors animate-fade-in">
                            <div className="flex justify-between items-start mb-3 sm:mb-4">
                                 <h4 className="font-bold text-cyan-400 text-lg sm:text-xl">{result.name}</h4>
                                 <button 
@@ -255,7 +255,7 @@ const StrategySearch: React.FC<StrategySearchProps> = ({
                                                         {stats.winRate}% Win
                                                     </span>
                                                 ) : (
-                                                    <span className="text-[10px] sm:text-xs px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg font-bold bg-white/10 text-zinc-400">N/A</span>
+                                                    <span className="text-[10px] sm:text-xs px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg font-bold bg-zinc-700 text-zinc-400">N/A</span>
                                                 )}
                                             </h4>
                                             <span className={`text-[8px] sm:text-[10px] font-bold uppercase px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg bg-black/30 border border-white/10`}>{family.tag}</span>
@@ -302,7 +302,7 @@ const StrategySearch: React.FC<StrategySearchProps> = ({
                             const isViewing = viewingFramework === framework;
                             
                             return (
-                                <div key={index} className={`rounded-lg sm:rounded-xl overflow-hidden border transition-all duration-300 ${isViewing ? 'bg-zinc-800 border-cyan-500/30 shadow-lg' : 'bg-zinc-900/50 border-white/5 hover:border-white/10'}`}>
+                                <div key={index} className={`rounded-lg sm:rounded-xl overflow-hidden border transition-all duration-300 ${isViewing ? 'bg-zinc-800 border-cyan-500/30 shadow-lg' : 'bg-zinc-800 border-white/5 hover:border-white/10'}`}>
                                     <div 
                                         className="p-3 sm:p-5 flex items-center justify-between cursor-pointer"
                                         onClick={() => handleViewFrameworkDetails(framework)}

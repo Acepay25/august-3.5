@@ -251,7 +251,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
         familyData?.color === 'emerald' ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' :
             familyData?.color === 'blue' ? 'text-blue-400 bg-blue-500/10 border-blue-500/20' :
                 familyData?.color === 'purple' ? 'text-purple-400 bg-purple-500/10 border-purple-500/20' :
-                    'text-zinc-400 bg-zinc-900/50 border-white/5';
+                    'text-zinc-400 bg-zinc-800 border-white/5';
 
     // Mode Badge Logic - All accuracy modes use cyan dark theme
     let modeBadge;
@@ -287,7 +287,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                 <div className="flex items-center gap-3 sm:gap-4 overflow-hidden min-w-0">
                     <div className={`w-1.5 h-10 sm:w-2 sm:h-14 rounded-full shrink-0 ${isLong ? 'bg-gradient-to-b from-emerald-400 to-emerald-600 shadow-[0_0_20px_rgba(228,228,231,0.5)]' : isShort ? 'bg-gradient-to-b from-rose-400 to-rose-600 shadow-[0_0_20px_rgba(107, 107, 115,0.5)]' : 'bg-gradient-to-b from-cyan-400 to-cyan-600 shadow-[0_0_20px_rgba(176, 176, 182,0.5)]'}`}></div>
                     <h3 className="text-2xl sm:text-4xl font-black text-white tracking-tight uppercase truncate min-w-0 drop-shadow-lg">{coinName}</h3>
-                    <span className="px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-[10px] sm:text-xs font-bold bg-white/5 backdrop-blur-sm text-zinc-300 border border-white/10 uppercase tracking-wider shrink-0 shadow-lg">FUTURES</span>
+                    <span className="px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-[10px] sm:text-xs font-bold bg-zinc-800 text-zinc-300 border border-white/10 uppercase tracking-wider shrink-0 shadow-lg">FUTURES</span>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap mt-1 sm:mt-0">
                     {modeBadge}
@@ -304,7 +304,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                 </div>
 
                 {isUpdate && (
-                    <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-900/50 to-cyan-800/30 border border-cyan-400/40 text-cyan-300 shadow-[0_0_25px_-5px_rgba(176, 176, 182,0.4)] animate-pulse backdrop-blur-sm">
+                    <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-900/50 to-cyan-800/30 border border-cyan-400/40 text-cyan-300 shadow-[0_0_25px_-5px_rgba(176, 176, 182,0.4)] animate-pulse">
                         <UpdateIcon className="w-4 h-4" />
                         <span className="text-[10px] font-black uppercase tracking-widest">
                             Updated Setup {updateInterval ? `(+${updateInterval})` : ''}
@@ -333,7 +333,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                             ? `Confirm WIN${r.pnlPercent !== undefined ? ` (+${r.pnlPercent}%)` : ''}`
                             : `Confirm LOSS${r.pnlPercent !== undefined ? ` (${r.pnlPercent}%)` : ''}`;
                 return (
-                    <div className={`mb-4 px-4 py-3 rounded-2xl bg-gradient-to-r ${theme} border shadow-lg backdrop-blur-sm animate-fade-in`}>
+                    <div className={`mb-4 px-4 py-3 rounded-2xl bg-gradient-to-r ${theme} border shadow-lg animate-fade-in`}>
                         <div className="flex items-start justify-between gap-3 flex-wrap">
                             <div className="min-w-0">
                                 <div className="text-[10px] font-black uppercase tracking-widest opacity-80"> Autopilot Detection</div>
@@ -357,7 +357,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                                 {!r.expiredOpen && (isWin || isLoss) && (
                                     <button
                                         onClick={() => onLogTrade(messageId, r.outcome as TradeOutcome.WIN | TradeOutcome.LOSS)}
-                                        className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-white/10 hover:bg-white/20 border border-white/20 transition-all"
+                                        className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-zinc-700 hover:bg-zinc-600 border border-white/20 transition-all"
                                         title="Open the capture flow to attach a chart screenshot"
                                     >
                                          Attach Screenshot
@@ -366,7 +366,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                                 {onDismissAutopilot && (
                                     <button
                                         onClick={() => onDismissAutopilot(messageId)}
-                                        className="px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-white/5 hover:bg-white/15 border border-white/10 transition-all opacity-70 hover:opacity-100"
+                                        className="px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-zinc-800 hover:bg-zinc-700 border border-white/10 transition-all opacity-70 hover:opacity-100"
                                     >
                                         Dismiss
                                     </button>
@@ -391,7 +391,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
 
             {/* Header Card (Collapsible Trigger) - Modern Glassmorphism */}
             <div
-                className={`relative overflow-hidden ${isDetailsVisible ? 'rounded-t-3xl sm:rounded-t-[2rem] border-b-0' : 'rounded-3xl sm:rounded-[2rem] hover:scale-[1.01] cursor-pointer'} border-2 ${isLong ? 'border-emerald-400/40' : isShort ? 'border-rose-400/40' : 'border-gray-400/40'} bg-zinc-900/80 backdrop-blur-xl transition-all duration-500 group shadow-2xl hover:shadow-3xl`}
+                className={`relative overflow-hidden ${isDetailsVisible ? 'rounded-t-3xl sm:rounded-t-[2rem] border-b-0' : 'rounded-3xl sm:rounded-[2rem] hover:scale-[1.01] cursor-pointer'} border-2 ${isLong ? 'border-emerald-400/40' : isShort ? 'border-rose-400/40' : 'border-gray-400/40'} bg-zinc-900 transition-all duration-500 group shadow-2xl hover:shadow-3xl`}
                 onClick={() => setIsDetailsVisible(!isDetailsVisible)}
             >
                 {/* Premium Gradient Overlay */}
@@ -443,7 +443,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
 
                     <div className="flex items-center gap-4 self-start sm:self-auto">
                         {createdAt && (
-                            <div className="flex items-center gap-2 text-[10px] font-mono text-zinc-400/80 bg-black/20 px-3 py-2 rounded-lg sm:rounded-xl border border-white/5">
+                            <div className="flex items-center gap-2 text-[10px] font-mono text-zinc-400/80 bg-zinc-800 px-3 py-2 rounded-lg sm:rounded-xl border border-white/5">
                                 <span className="uppercase tracking-wider opacity-60">Analyzed</span>
                                 <span className="text-zinc-300">{new Date(createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                             </div>
@@ -468,7 +468,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                                 <span>ACTIVE</span>
                             </div>
                         )}
-                        <div className={`p-2 rounded-full border border-white/10 bg-black/20 text-zinc-400 transition-transform duration-300 ${isDetailsVisible ? 'rotate-180' : 'group-hover:text-white group-hover:border-white/20'}`}>
+                        <div className={`p-2 rounded-full border border-white/10 bg-zinc-800 text-zinc-400 transition-transform duration-300 ${isDetailsVisible ? 'rotate-180' : 'group-hover:text-white group-hover:border-white/20'}`}>
                             <ChevronDownIcon className="w-4 h-4" />
                         </div>
                     </div>
@@ -476,11 +476,11 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
             </div>
 
             {/* Main Data Grid (Collapsible) - Modern Glassmorphism */}
-            <div className={`collapsible-content ${isDetailsVisible ? 'expanded' : ''} bg-zinc-900/70 backdrop-blur-xl border-2 ${isLong ? 'border-emerald-400/30' : isShort ? 'border-rose-400/30' : 'border-gray-400/30'} border-t-0 rounded-b-3xl sm:rounded-b-[2rem] shadow-inner`}>
+            <div className={`collapsible-content ${isDetailsVisible ? 'expanded' : ''} bg-zinc-900 border-2 ${isLong ? 'border-emerald-400/30' : isShort ? 'border-rose-400/30' : 'border-gray-400/30'} border-t-0 rounded-b-3xl sm:rounded-b-[2rem] shadow-inner`}>
 
                 {/* Strategy Chips */}
                 {activeStrategies && Array.isArray(activeStrategies) && activeStrategies.length > 0 && (
-                    <div className="px-4 py-3 sm:px-6 sm:py-4 border-b border-white/5 bg-white/5 flex flex-wrap gap-2 sm:gap-3">
+                    <div className="px-4 py-3 sm:px-6 sm:py-4 border-b border-white/5 bg-zinc-800 flex flex-wrap gap-2 sm:gap-3">
                         {(activeStrategies || []).map((s, i) => (
                             <button
                                 key={i}
@@ -518,7 +518,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                         </div>
                         <div className="space-y-2">
                             {(entryPoints && entryPoints.length > 0) ? (entryPoints || []).map((ep, i) => (
-                                <div key={i} className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 border border-blue-400/20 rounded-2xl sm:rounded-2xl p-4 backdrop-blur-sm shadow-lg hover:shadow-blue-500/10 transition-all duration-300 hover:scale-[1.02]">
+                                <div key={i} className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 border border-blue-400/20 rounded-2xl sm:rounded-2xl p-4 shadow-lg hover:shadow-blue-500/10 transition-all duration-300 hover:scale-[1.02]">
                                     <div className="text-xl sm:text-3xl font-mono font-black text-blue-200 tracking-tight break-words drop-shadow-lg">{typeof ep.price === 'object' ? 'Invalid Price' : ep.price}</div>
                                     <div className="text-xs sm:text-sm text-blue-300/80 leading-tight mt-2 font-medium">{typeof ep.description === 'object' ? '' : ep.description}</div>
                                 </div>
@@ -541,7 +541,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                         <div className="text-[10px] uppercase font-bold text-zinc-500 tracking-widest flex items-center gap-2">
                             <div className="w-2 h-2 rounded-full bg-rose-500 shadow-[0_0_8px_#6b6b73]"></div> Stop Loss
                         </div>
-                        <div className="bg-gradient-to-br from-rose-500/15 to-rose-600/5 border border-rose-400/25 rounded-2xl sm:rounded-2xl p-4 backdrop-blur-sm shadow-lg hover:shadow-rose-500/10 transition-all duration-300 hover:scale-[1.02]">
+                        <div className="bg-gradient-to-br from-rose-500/15 to-rose-600/5 border border-rose-400/25 rounded-2xl sm:rounded-2xl p-4 shadow-lg hover:shadow-rose-500/10 transition-all duration-300 hover:scale-[1.02]">
                             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-baseline gap-2 sm:gap-3">
                                 <span className="text-xl sm:text-3xl font-mono font-black text-rose-300 tracking-tight break-words drop-shadow-lg">{stopLoss || 'N/A'}</span>
                                 <div className="flex flex-col items-end gap-1">
@@ -567,7 +567,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                                     {showRRTooltip && (
                                         <div className="absolute bottom-full right-0 mb-2 w-48 p-3 bg-zinc-900 border border-white/10 rounded-xl shadow-xl z-50 animate-fade-in text-[10px] text-zinc-300">
                                             <div className="font-bold text-zinc-200 mb-1 border-b border-white/5 pb-1">Calculation Formula</div>
-                                            <div className="font-mono text-cyan-300 mb-2 text-center bg-black/20 p-1 rounded">Reward / Risk</div>
+                                            <div className="font-mono text-cyan-300 mb-2 text-center bg-zinc-800 p-1 rounded">Reward / Risk</div>
                                             <div className="space-y-1.5 opacity-90">
                                                 <div className="flex justify-between"><span>Reward:</span> <span className="font-mono text-emerald-400">|TP - Entry|</span></div>
                                                 <div className="flex justify-between"><span>Risk:</span> <span className="font-mono text-rose-400">|Entry - SL|</span></div>
@@ -639,7 +639,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                         </div>
                         <div className="space-y-2.5">
                             {(takeProfit && takeProfit.length > 0) ? (takeProfit || []).map((tp, i) => (
-                                <div key={i} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 border border-emerald-400/20 px-4 py-3 rounded-2xl sm:rounded-2xl group hover:scale-[1.02] hover:shadow-emerald-500/10 transition-all duration-300 backdrop-blur-sm shadow-lg">
+                                <div key={i} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 border border-emerald-400/20 px-4 py-3 rounded-2xl sm:rounded-2xl group hover:scale-[1.02] hover:shadow-emerald-500/10 transition-all duration-300 shadow-lg">
                                     <span className="font-mono font-black text-xl sm:text-2xl text-emerald-300 break-words drop-shadow-lg">{typeof tp.price === 'object' ? 'Invalid' : tp.price}</span>
                                     {tp.percentage && <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-950/40 px-3 py-1.5 rounded-xl sm:rounded-xl self-start sm:self-auto border border-emerald-400/20 shadow-inner">{typeof tp.percentage === 'object' ? '' : tp.percentage}</span>}
                                 </div>
@@ -686,7 +686,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                         </h4>
                         <div className="flex flex-wrap gap-2">
                             {detectedPatterns.map((pattern, idx) => (
-                                <div key={idx} className={`px-3 py-2 rounded-lg text-xs border backdrop-blur-sm
+                                <div key={idx} className={`px-3 py-2 rounded-lg text-xs border
                                     ${pattern.type === 'Bullish' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300' :
                                         pattern.type === 'Bearish' ? 'bg-rose-500/10 border-rose-500/20 text-rose-300' :
                                             'bg-zinc-500/10 border-zinc-500/20 text-zinc-300'}`}>
@@ -819,7 +819,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                         </div>
 
                         {/* Selection Reasoning */}
-                        <div className="bg-black/20 border border-indigo-500/20 rounded-lg p-3">
+                        <div className="bg-zinc-800 border border-indigo-500/20 rounded-lg p-3">
                             <div className="flex items-center justify-between mb-2">
                                 <span className="text-[9px] uppercase font-bold text-indigo-400 tracking-wider">Selection Reasoning</span>
                                 <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded ${dualScenarioAnalysis.confidenceInSelection >= 70
@@ -879,7 +879,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
 
                         {/* Penalty Breakdown */}
                         {analysis.gateResult.penalties.effectiveTotal > 0 && (
-                            <div className="mb-3 p-2 bg-black/20 rounded-lg border border-white/5">
+                            <div className="mb-3 p-2 bg-zinc-800 rounded-lg border border-white/5">
                                 <span className="text-[8px] uppercase font-bold text-zinc-600 tracking-wider block mb-1.5">Penalty Breakdown:</span>
                                 <div className="flex flex-wrap gap-2">
                                     {analysis.gateResult.penalties.dataIntegrity > 0 && (
@@ -1150,19 +1150,19 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                     <div className="border-t border-white/10">
                         <button
                             onClick={() => setIsConditionsVisible(!isConditionsVisible)}
-                            className="w-full px-4 py-3 sm:px-6 sm:py-4 flex justify-between items-center hover:bg-white/5 transition-colors group"
+                            className="w-full px-4 py-3 sm:px-6 sm:py-4 flex justify-between items-center hover:bg-zinc-800 transition-colors group"
                         >
                             <span className="uppercase tracking-widest font-bold text-[10px] sm:text-xs text-zinc-500 group-hover:text-cyan-400 transition-colors">Market Conditions Telemetry</span>
                             <ChevronDownIcon className={`w-4 h-4 transition-transform duration-300 ${isConditionsVisible ? 'rotate-180' : ''}`} />
                         </button>
-                        <div className={`collapsible-content ${isConditionsVisible ? 'expanded' : ''} bg-zinc-950/50`}>
+                        <div className={`collapsible-content ${isConditionsVisible ? 'expanded' : ''} bg-zinc-950`}>
 
                             {/* Chart Telemetry Chips */}
                             {imageSummaries && imageSummaries.length > 0 && (
-                                <div className="w-full border-b border-white/5 bg-black/20">
+                                <div className="w-full border-b border-white/5 bg-zinc-800">
                                     <div className="px-4 py-3 sm:px-6 sm:py-4 flex flex-wrap gap-2 justify-start">
                                         {imageSummaries.map((summary, idx) => (
-                                            <div key={idx} className="flex items-center gap-2 text-[10px] sm:text-xs font-mono text-cyan-100/90 bg-zinc-900/80 px-2 py-1.5 sm:px-3 sm:py-2 rounded-lg border border-cyan-900/30 shadow-sm">
+                                            <div key={idx} className="flex items-center gap-2 text-[10px] sm:text-xs font-mono text-cyan-100/90 bg-zinc-900 px-2 py-1.5 sm:px-3 sm:py-2 rounded-lg border border-cyan-900/30 shadow-sm">
                                                 <div className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-cyan-500"></div>
                                                 {summary}
                                             </div>
@@ -1179,7 +1179,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                                         <span className="text-[9px] uppercase font-bold text-zinc-600 tracking-widest">Timeframe Prices</span>
                                         <div className="flex flex-wrap gap-3">
                                             {Object.entries(marketConditions.prices).map(([tf, price]) => (
-                                                <div key={tf} className="flex gap-2 items-center bg-black/20 px-2 py-1 rounded">
+                                                <div key={tf} className="flex gap-2 items-center bg-zinc-800 px-2 py-1 rounded">
                                                     <span className="text-[9px] text-zinc-500 uppercase font-bold">{tf}</span>
                                                     <span className="text-zinc-300 font-mono text-[10px]">{price}</span>
                                                 </div>
@@ -1196,7 +1196,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                                         {detectedPatterns.length > 0 ? (
                                             <div className="space-y-1.5">
                                                 {detectedPatterns.map((p, i) => (
-                                                    <div key={i} className="bg-white/5 p-2 rounded-lg border border-white/5">
+                                                    <div key={i} className="bg-zinc-800 p-2 rounded-lg border border-white/5">
                                                         <div className="flex justify-between items-start mb-0.5">
                                                             <div className="flex items-center gap-1.5">
                                                                 <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider ${p.type === 'Bullish' ? 'bg-emerald-500/20 text-emerald-400' : p.type === 'Bearish' ? 'bg-rose-500/20 text-rose-400' : 'bg-zinc-700 text-zinc-300'}`}>
@@ -1283,7 +1283,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                                                         key={idx}
                                                         className={`text-[8px] px-1.5 py-0.5 rounded font-medium ${isUsed
                                                             ? 'bg-cyan-900/40 text-cyan-300 border border-cyan-500/40'
-                                                            : 'bg-zinc-800/50 text-zinc-500 border border-zinc-700/30'
+                                                            : 'bg-zinc-800 text-zinc-500 border border-zinc-700/30'
                                                             }`}
                                                     >
                                                         {isUsed && <span className="mr-1">✓</span>}
@@ -1327,7 +1327,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                 )}
 
                 {/* Action Bar */}
-                <div className="p-3 sm:p-4 border-t border-white/10 bg-zinc-900/80 backdrop-blur-md">
+                <div className="p-3 sm:p-4 border-t border-white/10 bg-zinc-900">
                     <BacktestPanel
                         analysis={analysis}
                         coinName={coinName}
