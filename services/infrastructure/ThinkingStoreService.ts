@@ -59,6 +59,10 @@ export const saveThinkingRecord = async (record: ThinkingRecord): Promise<void> 
     }
 };
 
+// Retention cap: beyond this many records the oldest are pruned so the
+// store doesn't grow unboundedly (every analysis appends ~3-5 records).
+const MAX_THINKING_RECORDS = 5000;
+
 /**
  * Save multiple thinking records in a single transaction.
  */
@@ -99,6 +103,15 @@ export const saveThinkingBatch = async (records: ThinkingRecord[]): Promise<void
                 ]);
             }
             await db.execute('COMMIT');
+            // Prune the oldest records beyond the cap (best-effort).
+            try {
+                await db.run(
+                    `DELETE FROM thinking_records WHERE id NOT IN (SELECT id FROM thinking_records ORDER BY createdAt DESC LIMIT ?)`,
+                    [MAX_THINKING_RECORDS]
+                );
+            } catch (e) {
+                console.warn('[ThinkingStore] Prune failed:', e);
+            }
         } catch (error) {
             await db.execute('ROLLBACK');
             throw error;
@@ -110,6 +123,19 @@ export const saveThinkingBatch = async (records: ThinkingRecord[]): Promise<void
             await tx.store.put(record);
         }
         await tx.done;
+
+        // Prune the oldest records beyond the cap (best-effort).
+        try {
+            const cleanupTx = db.transaction(STORE_NAME, 'readwrite');
+            const all = await cleanupTx.store.getAll();
+            const sorted = all.sort((a: ThinkingRecord, b: ThinkingRecord) => (a.createdAt < b.createdAt ? 1 : -1));
+            for (const rec of sorted.slice(MAX_THINKING_RECORDS)) {
+                await cleanupTx.store.delete(rec.id);
+            }
+            await cleanupTx.done;
+        } catch (e) {
+            console.warn('[ThinkingStore] Prune failed:', e);
+        }
     }
 };
 

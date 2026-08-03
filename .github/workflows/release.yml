@@ -5,18 +5,16 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Tag to build (e.g. v1.0.4)'
-        required: false
-        type: string
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: windows-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout repository
@@ -32,13 +30,36 @@ jobs:
         run: npm ci
 
       - name: Type check
-        run: npx tsc --noEmit
+        run: npm run typecheck
+
+      - name: Type check scripts
+        run: npm run typecheck:scripts
 
       - name: Tests
-        run: npx vitest run
+        run: npm run test
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: End-to-end tests
+        run: npm run e2e
+
+      - name: Validate release tag
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          if ($env:GITHUB_REF_NAME -ne "v$version") { throw "Release tag $env:GITHUB_REF_NAME does not match package version v$version" }
 
       - name: Build renderer (Vite)
         run: npm run build
+
+      - name: Reject public source maps
+        shell: pwsh
+        run: |
+          if (Get-ChildItem -Recurse dist -Filter *.map -ErrorAction SilentlyContinue) { throw 'Source maps must not be included in release output' }
 
       - name: Build & publish Electron app
         run: npx electron-builder --win --publish always

@@ -132,8 +132,14 @@ export const calculateOptimalSL = (
     // Baseline metrics (Current Performance)
     const totalWins = tradesWithData.filter(t => t.outcome === TradeOutcome.WIN).length;
     const currentWinRate = totalWins / tradesWithData.length;
-    // Estimate current R:R (defaulting to 2.0 if unknown, ideally tracked)
-    const currentRR = 2.0;
+    // Derive the realized R:R from the trade log (avg win / avg |loss| PnL),
+    // falling back to 2.0 when there's no PnL data to measure.
+    const pnlVals = tradesWithData
+        .map(t => typeof t.pnlPercent === 'number' ? t.pnlPercent : (typeof t.pnlAmount === 'number' ? t.pnlAmount : NaN))
+        .filter((v): v is number => !Number.isNaN(v));
+    const avgWinPnl = pnlVals.filter(v => v > 0).reduce((a, b) => a + b, 0) / Math.max(1, pnlVals.filter(v => v > 0).length);
+    const avgLossPnl = Math.abs(pnlVals.filter(v => v < 0).reduce((a, b) => a + b, 0)) / Math.max(1, pnlVals.filter(v => v < 0).length);
+    const currentRR = avgLossPnl > 0 ? avgWinPnl / avgLossPnl : 2.0;
 
     // Optimized metrics (If we used wider SL)
     // New wins = Current Wins + Missed Wins
@@ -212,7 +218,7 @@ export const calculateOptimalSL = (
             avgMissedWinExtraDistance: avgExtraDistance,
             totalAnalyzed: tradesWithData.length,
             confidence,
-            kellyImprovement: kellyOptimized > kellyOriginal ? ((kellyOptimized / kellyOriginal - 1) * 100) : 0,
+            kellyImprovement: kellyOptimized > kellyOriginal && kellyOriginal > 0 ? ((kellyOptimized / kellyOriginal - 1) * 100) : 0,
             optimalPositionSize: safePositionSize
         })
     };

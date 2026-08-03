@@ -31,6 +31,9 @@ export interface UserSettings {
   isFamiliesEnabledInPureAI?: boolean; // Toggle Market Families in Pure AI mode
   isMemoryEnabledInPureAI?: boolean; // Toggle trade log in Pure AI mode
   isHybridIntelligenceEnabled?: boolean; // Hybrid Intelligence: Real-time data + programmatic TA
+  isAutoCapturing?: boolean; // Prompt for post-trade result capture
+  isUpdateAutoCapturing?: boolean; // Prompt for active trade updates
+  isEntryNotHitCapturing?: boolean; // Prompt when entry price is not hit
   confidenceCalibration?: ConfidenceCalibration; // Tracks AI confidence vs actual outcomes
   memoryProvider?: string; // Memory core AI provider (e.g., 'gemini', 'groq')
   memoryModel?: string; // Model for memory operations

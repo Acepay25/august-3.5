@@ -6,6 +6,7 @@ import {
     updateGranularCalibration,
     updateCalibration
 } from '../validation/ConfidenceCalibrationService';
+import { getPreferenceObject, setPreferenceObject } from '../infrastructure/PreferencesService';
 
 const LEARNING_STATE_FILE = 'learning_state.json';
 
@@ -13,6 +14,17 @@ class GlobalLearningService {
     private static instance: GlobalLearningService;
     private _calibration: ConfidenceCalibration;
     private _isInitialized: boolean = false;
+    // Per-user state: calibration is keyed by the active profile so switching
+    // users doesn't leak one user's calibration into another's analysis.
+    private _activeUser: string | null = null;
+
+    private get stateFile(): string {
+        return this._activeUser ? `learning_state_${this._activeUser}.json` : LEARNING_STATE_FILE;
+    }
+
+    private get prefKey(): string {
+        return this._activeUser ? `global_learning_state_${this._activeUser}` : 'global_learning_state';
+    }
 
     private constructor() {
         this._calibration = initializeCalibration();
@@ -43,6 +55,16 @@ class GlobalLearningService {
     }
 
     /**
+     * Switch the active profile: reloads calibration from that user's state
+     * file (and re-arms the guarded init so a profile switch reloads).
+     */
+    public async setActiveUser(username: string | null): Promise<void> {
+        this._activeUser = username;
+        this._isInitialized = false;
+        await this.initialize();
+    }
+
+    /**
      * Get the current calibration state
      */
     public getCalibration(): ConfidenceCalibration {
@@ -66,17 +88,27 @@ class GlobalLearningService {
      * Save the current learning state to the filesystem
      */
     public async saveLearningState(): Promise<void> {
+        const data = JSON.stringify(this._calibration, null, 2);
+        let saved = false;
         try {
-            const data = JSON.stringify(this._calibration, null, 2);
             await Filesystem.writeFile({
-                path: LEARNING_STATE_FILE,
+                path: this.stateFile,
                 data: data,
                 directory: Directory.Data,
                 encoding: Encoding.UTF8
             });
-            // console.log('[GlobalLearningService] State saved.'); // Uncomment for debug
+            saved = true;
         } catch (error) {
-            console.error('[GlobalLearningService] Failed to save state:', error);
+            // Web builds can't write to the Capacitor filesystem — fall back
+            // to Preferences so calibration survives reloads there too.
+            console.warn('[GlobalLearningService] Filesystem save failed (web?), falling back to Preferences:', error);
+        }
+        if (!saved) {
+            try {
+                await setPreferenceObject(this.prefKey, this._calibration);
+            } catch (e) {
+                console.error('[GlobalLearningService] Preferences fallback save failed:', e);
+            }
         }
     }
 
@@ -84,29 +116,35 @@ class GlobalLearningService {
      * Load the learning state from the filesystem
      */
     public async loadLearningState(): Promise<void> {
+        let parsed: ConfidenceCalibration | null = null;
         try {
-            // Check if file exists first (optional, readFile might throw if not found)
             const file = await Filesystem.readFile({
-                path: LEARNING_STATE_FILE,
+                path: this.stateFile,
                 directory: Directory.Data,
                 encoding: Encoding.UTF8
             });
-
             if (file.data) {
-                const parsed = JSON.parse(
+                parsed = JSON.parse(
                     typeof file.data === 'string' ? file.data : JSON.stringify(file.data)
                 );
-                // Basic validation could go here
-                this._calibration = parsed;
-                console.log('[GlobalLearningService] State loaded successfully.');
             }
         } catch (error: any) {
-            // Check if error is "File does not exist" - if so, it's fine, we start fresh
-            if (error?.message?.includes('does not exist') || error?.code === 'ENOENT') {
-                console.log('[GlobalLearningService] No existing state file found. Starting fresh.');
-            } else {
-                console.error('[GlobalLearningService] Failed to load state:', error);
+            // File does not exist is fine (fresh start); other errors fall
+            // back to Preferences (web builds).
+            if (!(error?.message?.includes('does not exist') || error?.code === 'ENOENT')) {
+                console.warn('[GlobalLearningService] Filesystem load failed (web?), falling back to Preferences:', error);
             }
+        }
+        if (!parsed) {
+            try {
+                parsed = await getPreferenceObject<ConfidenceCalibration>(this.prefKey);
+            } catch (e) {
+                console.warn('[GlobalLearningService] Preferences load failed:', e);
+            }
+        }
+        if (parsed) {
+            this._calibration = parsed;
+            console.log('[GlobalLearningService] State loaded successfully.');
         }
     }
 

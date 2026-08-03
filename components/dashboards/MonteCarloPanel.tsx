@@ -9,6 +9,7 @@
 
 import React from 'react';
 import { SectionCard, StatPill, MonteCarloResult, LabeledMonteCarloResult } from './analyticsShared';
+import { computeKellyFraction } from '../../services/analysis/MonteCarloService';
 
 interface MonteCarloPanelProps {
     monteCarloResult?: MonteCarloResult | null;
@@ -117,6 +118,16 @@ const MonteCarloPanel: React.FC<MonteCarloPanelProps> = ({
                             label="Expected Value"
                             value={`${monteCarloResult!.expectedValue >= 0 ? '+' : ''}${monteCarloResult!.expectedValue}%`}
                             variant={monteCarloResult!.expectedValue >= 0 ? 'success' : 'danger'}
+                        />
+                        <StatPill
+                            label="Kelly (position)"
+                            value={`${(computeKellyFraction(
+                                monteCarloResult!.winRate,
+                                monteCarloResult!.expectedValue,
+                                monteCarloResult!.probabilities.slHit,
+                                monteCarloResult!.confidenceInterval.lower
+                            ) * 100).toFixed(0)}%`}
+                            variant="neutral"
                         />
                     </div>
 

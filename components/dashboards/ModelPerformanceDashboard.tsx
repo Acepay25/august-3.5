@@ -36,30 +36,15 @@ interface ModelPerformanceDashboardProps {
     selectedModels?: Record<string, string>; // provider -> model name
 }
 
-// Decorative brand hints for known provider ids — custom providers get a
-// palette color and use their id as display name.
-const PROVIDER_BRAND_HINTS: Record<string, { name: string; color: string }> = {
-    gemini: { name: 'Gemini', color: '#f5f5f6' },
-    deepseek: { name: 'DeepSeek', color: '#8a8a92' },
-    groq: { name: 'Groq', color: '#d2d2d6' },
-    groq_new: { name: 'Groq Alt', color: '#b0b0b6' },
-    groq_alt2: { name: 'Groq Alt2', color: '#8a8a92' },
-    openrouter: { name: 'OpenRouter', color: '#6b6b73' },
-    zhipu: { name: 'Zhipu', color: '#8a8a92' },
-    openai: { name: 'OpenAI', color: '#6b6b73' },
-    grok: { name: 'Grok', color: '#6b6b73' },
-};
-
+// Neutral monochrome palette — no provider brand hints (providers are
+// user-configured, so ids render as their display name).
 const FALLBACK_PALETTE = ['#f5f5f6', '#d2d2d6', '#b0b0b6', '#8a8a92', '#b0b0b6', '#6b6b73', '#6b6b73', '#8a8a92', '#dedee2', '#6b6b73'];
 
-const resolveModelDisplay = (provider: AIProvider, index: number): { provider: AIProvider; name: string; color: string } => {
-    const hint = PROVIDER_BRAND_HINTS[provider];
-    return {
-        provider,
-        name: hint?.name || provider,
-        color: hint?.color || FALLBACK_PALETTE[index % FALLBACK_PALETTE.length],
-    };
-};
+const resolveModelDisplay = (provider: AIProvider, index: number): { provider: AIProvider; name: string; color: string } => ({
+    provider,
+    name: provider,
+    color: FALLBACK_PALETTE[index % FALLBACK_PALETTE.length],
+});
 
 /** Provider ids that contributed to a trade (dynamic first, legacy fallback). */
 const tradeProviderIds = (trade: LoggedTrade): string[] => {

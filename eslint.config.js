@@ -10,9 +10,34 @@ export default tseslint.config(
       'dist_electron/**',
       'node_modules/**',
       'android/**',
-      'electron/**',
-      '**/*.cjs',
+      'coverage/**',
+      'test-results/**',
+      'playwright-report/**',
+      'tests/test-rl.cjs',
+      'tests/test-rule-extraction.cjs',
+      'scripts/*.cjs',
     ],
+  },
+  {
+    files: ['electron/**/*.cjs'],
+    languageOptions: {
+      sourceType: 'commonjs',
+      globals: {
+        Buffer: 'readonly',
+        __dirname: 'readonly',
+        console: 'readonly',
+        process: 'readonly',
+        require: 'readonly',
+        setImmediate: 'readonly',
+        Response: 'readonly',
+        URL: 'readonly',
+        setTimeout: 'readonly',
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+      'no-undef': 'off',
+    },
   },
   {
     rules: {

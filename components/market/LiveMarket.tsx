@@ -204,6 +204,7 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze }
     const [keyLevels, setKeyLevels] = useState<{ price: number; type: 'support' | 'resistance' }[]>([]);
     const [marketInsights, setMarketInsights] = useState<MarketInsights | null>(null);
     const [isInsightsPanelExpanded, setIsInsightsPanelExpanded] = useState(true);
+    const aiAnalysisRequestRef = useRef(0);
 
     const widgetRef = useRef<HTMLDivElement>(null);
     const tradingViewWidgetRef = useRef<any>(null);
@@ -298,7 +299,9 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze }
 
     // AI Analysis for chart
     useEffect(() => {
+        const requestId = ++aiAnalysisRequestRef.current;
         if (!isVisible) {
+            setIsAIAnalyzing(false);
             setMarketBias('neutral');
             setAiSummary('');
             setKeyLevels([]);
@@ -327,7 +330,7 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze }
 
                 const analysis = await analyzeWithAI(candles, symbol, interval);
 
-                if (isMountedRef.current) {
+                if (isMountedRef.current && requestId === aiAnalysisRequestRef.current) {
                     setMarketBias(analysis.marketBias);
                     setAiSummary(analysis.summary);
                     setKeyLevels(analysis.keyLevels);
@@ -337,7 +340,7 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze }
             } catch (error) {
                 console.warn('[Binance AI] Analysis failed:', error);
             } finally {
-                if (isMountedRef.current) setIsAIAnalyzing(false);
+                if (isMountedRef.current && requestId === aiAnalysisRequestRef.current) setIsAIAnalyzing(false);
             }
         };
 
@@ -685,9 +688,9 @@ ${JSON.stringify(marketData, null, 2)}
     return (
         <div className="fixed inset-0 bg-zinc-950 z-50 flex flex-col animate-fade-in pb-[env(safe-area-inset-bottom)]">
             {/* Header - 2 rows on mobile for spacious feel */}
-            <div className="bg-zinc-900 border-b border-white/10 flex-shrink-0">
+            <div className="bg-zinc-900 border-b border-white/10 flex-shrink-0 shadow-lg shadow-black/20">
                 {/* Top Row - Title, Price & Close */}
-                <div className="flex items-center justify-between px-3 sm:px-4 py-3 border-b border-white/5">
+                <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-white/5">
                     <div className="flex items-center gap-2 sm:gap-3">
                         <div className="flex items-center gap-1.5 sm:gap-2 text-cyan-400">
                             <ActivityIcon className="w-5 h-5 sm:w-6 sm:h-6" />
@@ -732,7 +735,7 @@ ${JSON.stringify(marketData, null, 2)}
                 </div>
 
                 {/* Bottom Row - Controls */}
-                <div className="flex items-center justify-between px-4 py-3 gap-3">
+                <div className="flex items-center justify-between px-4 sm:px-6 py-4 gap-4 bg-zinc-950/30">
                     {/* Selectors Group */}
                     <div className="flex items-center gap-2 flex-1 overflow-x-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
                         {/* Symbol Selector */}
@@ -740,7 +743,8 @@ ${JSON.stringify(marketData, null, 2)}
                             <select
                                 value={symbol}
                                 onChange={(e) => setSymbol(e.target.value)}
-                                className="appearance-none bg-zinc-800 text-white text-sm font-bold h-10 pl-4 pr-10 rounded-xl border border-white/10 focus:outline-none focus:border-cyan-500 cursor-pointer hover:bg-zinc-700 transition-colors min-w-[100px]"
+                                aria-label="Market symbol"
+                                className="appearance-none bg-zinc-800 text-white text-sm font-bold h-12 pl-4 pr-10 rounded-xl border border-white/10 focus:outline-none focus:border-cyan-500 cursor-pointer hover:bg-zinc-700 transition-colors min-w-[112px]"
                             >
                                 {ASSETS.map(a => <option key={a} value={a}>{a.replace('USDT', '')}</option>)}
                             </select>
@@ -754,7 +758,8 @@ ${JSON.stringify(marketData, null, 2)}
                             <select
                                 value={interval}
                                 onChange={(e) => setInterval(e.target.value)}
-                                className="appearance-none bg-zinc-800 text-white text-sm font-bold h-10 pl-4 pr-10 rounded-xl border border-white/10 focus:outline-none focus:border-cyan-500 cursor-pointer hover:bg-zinc-700 transition-colors min-w-[70px]"
+                                aria-label="Chart interval"
+                                className="appearance-none bg-zinc-800 text-white text-sm font-bold h-12 pl-4 pr-10 rounded-xl border border-white/10 focus:outline-none focus:border-cyan-500 cursor-pointer hover:bg-zinc-700 transition-colors min-w-[78px]"
                             >
                                 {INTERVALS.map(i => <option key={i} value={i}>{i}</option>)}
                             </select>
@@ -768,7 +773,7 @@ ${JSON.stringify(marketData, null, 2)}
                     <div className="flex items-center gap-2 shrink-0">
                         <button
                             onClick={() => setIsAlertModalOpen(true)}
-                            className="h-10 w-10 flex items-center justify-center text-zinc-400 hover:text-yellow-400 bg-zinc-800 hover:bg-yellow-500/10 border border-white/5 hover:border-yellow-500/30 rounded-xl transition-all active:scale-95"
+                            className="h-12 w-12 flex items-center justify-center text-zinc-400 hover:text-yellow-400 bg-zinc-800 hover:bg-yellow-500/10 border border-white/5 hover:border-yellow-500/30 rounded-xl transition-all active:scale-95"
                             aria-label="Price Alerts"
                         >
                             <BellIcon className="w-5 h-5" />
@@ -777,7 +782,7 @@ ${JSON.stringify(marketData, null, 2)}
                         <button
                             onClick={handleExtractAndAnalyze}
                             disabled={!!analysisProgress}
-                            className="flex items-center justify-center gap-2 h-10 bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-white text-sm font-bold px-5 rounded-xl shadow-lg shadow-cyan-900/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap active:scale-95"
+                            className="flex items-center justify-center gap-2 h-12 bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-white text-sm font-bold px-6 rounded-xl shadow-lg shadow-cyan-900/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap active:scale-95"
                         >
                             {analysisProgress ? <LoadingIcon className="w-4 h-4" /> : <CameraIcon className="w-4 h-4" />}
                             <span>{analysisProgress || 'Analyze'}</span>
@@ -787,7 +792,7 @@ ${JSON.stringify(marketData, null, 2)}
             </div>
 
             {/* Chart Container */}
-            <div className="flex-1 relative bg-zinc-900 overflow-hidden">
+            <div className="flex-1 min-h-[360px] lg:min-h-[500px] relative bg-zinc-900 overflow-hidden">
                 <div id="tradingview_widget" ref={widgetRef} className="w-full h-full" />
 
                         {/* AI Analysis Overlay */}
@@ -846,6 +851,9 @@ ${JSON.stringify(marketData, null, 2)}
                 <div className="flex-shrink-0 bg-zinc-900 border-t border-white/10">
                     {/* Panel Header */}
                     <button
+                        type="button"
+                        aria-expanded={isInsightsPanelExpanded}
+                        aria-controls="live-market-insights"
                         onClick={() => setIsInsightsPanelExpanded(!isInsightsPanelExpanded)}
                         className="w-full flex items-center justify-between px-4 py-3 hover:bg-zinc-800 transition-colors"
                     >
@@ -869,7 +877,7 @@ ${JSON.stringify(marketData, null, 2)}
 
                     {/* Panel Content */}
                     {isInsightsPanelExpanded && marketInsights && !isAIAnalyzing && (
-                        <div className="px-4 pb-4 space-y-4 max-h-[40vh] overflow-y-auto custom-scrollbar">
+                        <div id="live-market-insights" className="px-4 sm:px-6 pb-6 space-y-4 max-h-[45vh] overflow-y-auto custom-scrollbar">
                             {/* Current Situation */}
                             <div className="bg-zinc-800 rounded-xl p-3 border border-white/5">
                                 <div className="flex items-center gap-2 mb-2">
@@ -940,7 +948,7 @@ ${JSON.stringify(marketData, null, 2)}
 
                     {/* Loading State */}
                     {isInsightsPanelExpanded && isAIAnalyzing && (
-                        <div className="px-4 pb-4">
+                        <div id="live-market-insights" className="px-4 sm:px-6 pb-6">
                             <div className="bg-zinc-800 rounded-xl p-6 border border-white/5 flex flex-col items-center justify-center gap-3">
                                 <Spinner size="w-8 h-8" color="border-cyan-400" />
                                 <span className="text-sm text-zinc-400">Analyzing market conditions...</span>
@@ -971,13 +979,17 @@ ${JSON.stringify(marketData, null, 2)}
                             className="flex-1 bg-zinc-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-cyan-500 outline-none"
                         />
                         <button
+                            type="button"
                             onClick={() => {
-                                if (newAlertPrice && lastPriceRef.current) {
-                                    setAlerts(p => [...p, { id: Date.now().toString(), price: parseFloat(newAlertPrice), symbol, condition: parseFloat(newAlertPrice) > lastPriceRef.current! ? 'above' : 'below', active: true }]);
+                                const targetPrice = Number(newAlertPrice);
+                                if (Number.isFinite(targetPrice) && targetPrice > 0 && lastPriceRef.current !== null) {
+                                    setAlerts(p => [...p, { id: Date.now().toString(), price: targetPrice, symbol, condition: targetPrice > lastPriceRef.current! ? 'above' : 'below', active: true }]);
                                     setNewAlertPrice('');
                                     setIsAlertModalOpen(false);
                                 }
                             }}
+                            disabled={!Number.isFinite(Number(newAlertPrice)) || Number(newAlertPrice) <= 0 || lastPriceRef.current === null}
+                            aria-label="Add price alert"
                             className="h-12 w-12 flex items-center justify-center bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-lg font-bold active:scale-95 transition-transform"
                         >
                             +
@@ -990,7 +1002,9 @@ ${JSON.stringify(marketData, null, 2)}
                                     {alert.condition === 'above' ? '≥' : '≤'} ${alert.price.toLocaleString()}
                                 </span>
                                 <button
+                                    type="button"
                                     onClick={() => setAlerts(p => p.filter(a => a.id !== alert.id))}
+                                    aria-label={`Delete ${alert.symbol} price alert`}
                                     className="p-2 text-zinc-600 hover:text-rose-400 transition-colors"
                                 >
                                     <TrashIcon />

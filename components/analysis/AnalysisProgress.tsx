@@ -233,7 +233,7 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 transition-colors ml-auto"
             >
               <BanIcon className="size-3.5" />
-              Cancel
+              Stop generating
             </button>
           </div>
         </>

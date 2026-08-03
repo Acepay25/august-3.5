@@ -17,17 +17,8 @@ interface DebateViewProps {
     isDebating?: boolean;  // Whether the debate is still live (gates the "Syncing Protocol..." indicator)
 }
 
-// Decorative brand hints for avatar colors — unknown providers get a neutral
-// default derived from the speaker name, so custom providers render fine.
-const BRAND_AVATAR_HINTS: Record<string, { bg: string; border: string; initials: string }> = {
-    'Gemini': { bg: 'bg-blue-600', border: 'border-blue-400', initials: 'G' },
-    'Zhipu': { bg: 'bg-orange-600', border: 'border-orange-400', initials: 'Z' },
-    'Groq': { bg: 'bg-yellow-600', border: 'border-yellow-400', initials: 'G' },
-    'Groq (Alt)': { bg: 'bg-lime-600', border: 'border-lime-400', initials: 'GA' },
-    'Groq (Alt 2)': { bg: 'bg-rose-600', border: 'border-rose-400', initials: 'G2' },
-    'OpenRouter': { bg: 'bg-emerald-600', border: 'border-emerald-400', initials: 'OR' },
-};
-
+// Neutral avatar — no provider brand hints; initials derive from the
+// speaker name so user-configured providers render fine.
 const SpeakerAvatar: React.FC<{ speaker: DebateTurn['speaker'], modelName?: string }> = ({ speaker, modelName }) => {
     if (speaker === 'Moderator') {
         return (
@@ -37,32 +28,9 @@ const SpeakerAvatar: React.FC<{ speaker: DebateTurn['speaker'], modelName?: stri
         );
     }
 
-    const hint = BRAND_AVATAR_HINTS[speaker];
-    let bgColor = 'bg-zinc-600';
-    let borderColor = 'border-zinc-500';
-    let initials = speaker.trim().charAt(0).toUpperCase() || '?';
-
-    if (hint) {
-        bgColor = hint.bg;
-        borderColor = hint.border;
-        initials = hint.initials;
-    } else if (speaker.includes('DeepSeek')) {
-        bgColor = 'bg-emerald-600';
-        borderColor = 'border-emerald-400';
-        initials = 'D';
-    } else if (speaker.includes('Claude') || speaker.includes('Anthropic')) {
-        bgColor = 'bg-purple-600';
-        borderColor = 'border-purple-400';
-        initials = 'C';
-    } else if (speaker.includes('GPT') || speaker.includes('OpenAI')) {
-        bgColor = 'bg-violet-600';
-        borderColor = 'border-violet-400';
-        initials = 'O';
-    } else if (speaker.includes('Grok') || speaker.includes('xAI')) {
-        bgColor = 'bg-zinc-600';
-        borderColor = 'border-white/40';
-        initials = 'X';
-    }
+    const bgColor = 'bg-zinc-600';
+    const borderColor = 'border-zinc-500';
+    const initials = speaker.trim().charAt(0).toUpperCase() || '?';
 
     return (
         <div className={`flex-shrink-0 w-6 h-6 sm:w-8 sm:h-8 rounded-full ${bgColor} flex items-center justify-center font-bold text-white text-[10px] sm:text-xs border ${borderColor} shadow-md`} title={`${speaker}${modelName ? ` (${modelName})` : ''}`}>

@@ -86,21 +86,31 @@ const MIN_MATCHES_FOR_CONFIDENCE = 5;
 /**
  * Extract regime from trade (fallback to 'unknown' if not stored)
  */
-const extractRegime = (trade: LoggedTrade): string => {
-    // Try to extract from analysis or use default
-    const pattern = trade.analysis?.marketConditions?.pattern?.toLowerCase() || '';
-
-    if (pattern.includes('trend') || pattern.includes('continuation')) {
-        return 'trending';
-    }
-    if (pattern.includes('range') || pattern.includes('consolidat')) {
-        return 'ranging';
-    }
-    if (pattern.includes('volatile') || pattern.includes('chop')) {
-        return 'volatile';
-    }
-
+const normalizeRegime = (regime: string): string => {
+    const r = (regime || '').toLowerCase();
+    if (r.includes('trend')) return 'trending';
+    if (r.includes('range') || r.includes('consolidat')) return 'ranging';
+    if (r === 'volatile' || r.includes('volatile') || r.includes('chop')) return 'volatile';
+    if (r === 'compression' || r.includes('compression')) return 'compression';
     return 'unknown';
+};
+
+const familyKey = (family: string): string | null => {
+    const f = (family || '').toLowerCase();
+    if (/\bfamily\s*omega\b/.test(f) || f.includes('omega')) return 'omega';
+    if (/\bfamily\s*a\b/.test(f) || f.includes('exhaustion') || f.includes('trap')) return 'a';
+    if (/\bfamily\s*b\b/.test(f) || f.includes('reversal')) return 'b';
+    if (/\bfamily\s*c\b/.test(f) || f.includes('continuation')) return 'c';
+    return null;
+};
+
+const extractRegime = (trade: LoggedTrade): string => {
+    // Prefer the persisted normalized regime (now written at log time).
+    if (trade.marketRegime) return trade.marketRegime;
+
+    // Fallback: try to extract from analysis text
+    const pattern = trade.analysis?.marketConditions?.pattern?.toLowerCase() || '';
+    return normalizeRegime(pattern);
 };
 
 /**
@@ -163,20 +173,19 @@ const calculateSimilarity = (
 
         if (currentFamily === historicalFamily) {
             score += 20;
-        } else if (
-            (currentFamily.includes('a') && historicalFamily.includes('a')) ||
-            (currentFamily.includes('b') && historicalFamily.includes('b')) ||
-            (currentFamily.includes('c') && historicalFamily.includes('c')) ||
-            (currentFamily.includes('omega') && historicalFamily.includes('omega'))
-        ) {
-            score += 15;
+        } else {
+            const cf = familyKey(currentFamily);
+            const hf = familyKey(historicalFamily);
+            if (cf && cf === hf) {
+                score += 15;
+            }
         }
     }
 
     // Same regime: +10 points
     if (currentRegime) {
         const historicalRegime = extractRegime(historical);
-        if (currentRegime.includes(historicalRegime) || historicalRegime.includes(currentRegime)) {
+        if (normalizeRegime(currentRegime) === normalizeRegime(historicalRegime) && normalizeRegime(currentRegime) !== 'unknown') {
             score += 10;
         }
     }

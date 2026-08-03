@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Message, MessageRole, TradeOutcome, SavedAnalysis, Conversation, DebateTurn, ConfidenceCalibration, AnalystLensConfig } from '../../types';
-import { ChevronDownIcon, LinkIcon, CopyIcon, CheckIcon } from '../shared/Icons';
+import { ChevronDownIcon, LinkIcon, CheckIcon, BrainIcon } from '../shared/Icons';
 import LiveMarketDataView from '../market/LiveMarketDataView';
 import DebateView from '../analysis/DebateView';
 import AnalysisResult from '../analysis/AnalysisResult';
@@ -12,18 +12,8 @@ const isSafeUrl = (url: string): boolean => {
     return url.startsWith('http://') || url.startsWith('https://');
 };
 
-// Per-provider display metadata for thought-process insights, keyed by provider id.
-// Legacy brand hints — unknown/custom provider ids fall back to DEFAULT_INSIGHT_STYLE.
-const PROVIDER_INSIGHT_STYLES: Record<string, { name: string; bgClass: string; borderClass: string; titleClass: string; textClass: string }> = {
-    gemini: { name: 'Gemini', bgClass: 'bg-zinc-800', borderClass: 'border-blue-500/20', titleClass: 'text-blue-400', textClass: 'text-blue-100/90' },
-    deepseek: { name: 'DeepSeek', bgClass: 'bg-zinc-800', borderClass: 'border-emerald-500/20', titleClass: 'text-emerald-400', textClass: 'text-emerald-100/90' },
-    zhipu: { name: 'Zhipu AI', bgClass: 'bg-zinc-800', borderClass: 'border-orange-500/20', titleClass: 'text-orange-400', textClass: 'text-orange-100/90' },
-    groq: { name: 'Groq', bgClass: 'bg-zinc-800', borderClass: 'border-yellow-500/20', titleClass: 'text-yellow-400', textClass: 'text-yellow-100/90' },
-    groq_new: { name: 'Groq (Alt)', bgClass: 'bg-zinc-800', borderClass: 'border-lime-500/20', titleClass: 'text-lime-400', textClass: 'text-lime-100/90' },
-    groq_alt2: { name: 'Groq (Alt 2)', bgClass: 'bg-zinc-800', borderClass: 'border-rose-500/20', titleClass: 'text-rose-400', textClass: 'text-rose-100/90' },
-    openrouter: { name: 'OpenRouter', bgClass: 'bg-zinc-800', borderClass: 'border-emerald-500/20', titleClass: 'text-emerald-400', textClass: 'text-emerald-100/90' },
-    grok: { name: 'Grok (xAI)', bgClass: 'bg-zinc-800', borderClass: 'border-sky-500/20', titleClass: 'text-sky-400', textClass: 'text-sky-100/90' },
-};
+// Neutral insight card style — no provider brand hints (providers are
+// user-configured, so names render as-is).
 const DEFAULT_INSIGHT_STYLE = { name: 'AI', bgClass: 'bg-zinc-800', borderClass: 'border-zinc-500/20', titleClass: 'text-zinc-400', textClass: 'text-zinc-100/90' };
 
 export interface ChatContextProps {
@@ -75,7 +65,38 @@ export interface ChatContextProps {
     autopilotResolutions?: Record<string, AutopilotResolution>;
     onConfirmAutopilot?: (messageId: string) => void;
     onDismissAutopilot?: (messageId: string) => void;
+    latestMessageId?: string | null;
 }
+
+const SmoothText: React.FC<{ text: string; animate: boolean }> = ({ text, animate }) => {
+    const [visibleText, setVisibleText] = React.useState(animate ? '' : text);
+
+    React.useEffect(() => {
+        if (!animate) {
+            setVisibleText(text);
+            return;
+        }
+        let frame = 0;
+        let cancelled = false;
+        let currentLength = 0;
+        const step = () => {
+            if (cancelled) return;
+            const nextLength = Math.min(text.length, currentLength + Math.max(4, Math.ceil(text.length / 180)));
+            currentLength = nextLength;
+            setVisibleText(text.slice(0, nextLength));
+            if (nextLength < text.length) frame = window.setTimeout(step, 16);
+        };
+        setVisibleText('');
+        frame = window.setTimeout(step, 16);
+        return () => {
+            cancelled = true;
+            window.clearTimeout(frame);
+        };
+    // The animation is intentionally tied to the message text and animate flag.
+    }, [text, animate]);
+
+    return <>{visibleText}</>;
+};
 
 const MessageItem = React.memo(({ message, context }: { message: Message, context: ChatContextProps }) => {
     const {
@@ -83,9 +104,9 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
         expandedPostMortemImages, setExpandedPostMortemImages, expandedIndividualThoughts, setExpandedIndividualThoughts,
         expandedDebateTranscripts, setExpandedDebateTranscripts,
         savedAnalyses, loggingTradeId,
-        activeFrameworks, activeConversation, copiedMessageId, modelIdToName, ocrModelIdToName, providerNameToId,
+        activeFrameworks, activeConversation, modelIdToName, providerNameToId,
         handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy,
-        handleSaveAnalysis, handleCopy, handleInitiateUpdateTrade, handleInitiateSimulator,
+        handleSaveAnalysis, handleInitiateUpdateTrade, handleInitiateSimulator,
         isSelectionMode, selectedMessageIds, onToggleMessageSelection,
         confidenceCalibration, onRetryPostMortem, lensConfig, leverage, onViewImage,
         autopilotResolutions, onConfirmAutopilot, onDismissAutopilot,
@@ -94,6 +115,13 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
 
     const isHighlighted = highlightedAnalysisId === message.id;
     const isUserMessage = message.role === MessageRole.USER;
+    const [isThinkingExpanded, setIsThinkingExpanded] = React.useState(false);
+    const thinkingEntries = Object.entries(message.thoughtProcesses ?? {}).filter(([, content]) => Boolean(content));
+    const isCasualReply = message.role === MessageRole.AI && !message.analysis && !message.isDebating;
+
+    React.useEffect(() => {
+        if (thinkingEntries.length > 0) setIsThinkingExpanded(true);
+    }, [message.id, thinkingEntries.length]);
 
     // Resolve a human-readable model name for a given provider id from message.modelsUsed.
     const resolveModelName = (providerId: string): string => {
@@ -152,9 +180,18 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
         >
             {isSelectionMode && (
                 <div className="flex items-center justify-center self-center pr-2">
-                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-cyan-500 border-cyan-500' : 'border-zinc-500 bg-transparent'}`}>
+                    <button
+                        type="button"
+                        onClick={(event) => {
+                            event.stopPropagation();
+                            handleSelectionClick(event);
+                        }}
+                        className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all focus-visible:ring-2 focus-visible:ring-cyan-400 ${isSelected ? 'bg-cyan-500 border-cyan-500' : 'border-zinc-500 bg-transparent'}`}
+                        aria-label={`${isSelected ? 'Deselect' : 'Select'} message`}
+                        aria-pressed={isSelected}
+                    >
                         {isSelected && <CheckIcon className="w-3 h-3 text-white" />}
-                    </div>
+                    </button>
                 </div>
             )}
 
@@ -171,7 +208,9 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     if (isSelectionMode) return;
                                     setExpandedPostMortems(prev => ({ ...prev, [message.id]: !prev[message.id] }))
                                 }}
-                                className="flex items-center justify-between w-full mb-3 group select-none border-b border-purple-500/20 pb-2"
+                                className="flex items-center justify-between w-full mb-3 group select-none border-b border-purple-500/20 pb-2 focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+                                aria-expanded={!!expandedPostMortems[message.id]}
+                                aria-controls={`post-mortem-content-${message.id}`}
                             >
                                 <span className="text-xs font-black tracking-widest text-purple-400 uppercase group-hover:text-purple-300 transition-colors flex items-center gap-2">
                                     <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse"></span>
@@ -182,7 +221,39 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                         )}
 
                         {/* Main Content Container - Collapsible if Post-Mortem */}
-                        <div className={`${message.isPostMortem ? `collapsible-content ${expandedPostMortems[message.id] ? 'expanded' : ''} w-full` : ''}`}>
+                        <div id={message.isPostMortem ? `post-mortem-content-${message.id}` : undefined} className={`${message.isPostMortem ? `collapsible-content ${expandedPostMortems[message.id] ? 'expanded' : ''} w-full` : ''}`}>
+
+                            {isCasualReply && (
+                                <div className="mb-4 border-b border-white/10 pb-3">
+                                    <button type="button" onClick={() => setIsThinkingExpanded(prev => !prev)} className="flex w-full items-center gap-2 text-left text-sm text-zinc-500 hover:text-zinc-300 transition-colors" aria-expanded={isThinkingExpanded}>
+                                        <BrainIcon className="h-4 w-4" />
+                                        <span className="font-medium">Thinking</span>
+                                        <span className="text-zinc-600">for a few seconds</span>
+                                        <ChevronDownIcon className={`ml-auto h-4 w-4 transition-transform ${isThinkingExpanded ? 'rotate-180' : ''}`} />
+                                    </button>
+                                    {isThinkingExpanded && (
+                                        <div className="mt-3 rounded-lg bg-zinc-900/60 px-3 py-2 text-xs leading-relaxed text-zinc-500">
+                                            {thinkingEntries.length > 0
+                                                ? thinkingEntries.map(([providerId, content]) => (
+                                                    <p key={providerId} className="whitespace-pre-wrap text-zinc-400">{content}</p>
+                                                ))
+                                                : 'This model did not return a separate reasoning trace. Only the generated answer is available.'}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {message.role === MessageRole.AI && !isCasualReply && thinkingEntries.length > 0 && (
+                                <div className="mb-4 border-b border-white/10 pb-3">
+                                    <button type="button" onClick={() => setIsThinkingExpanded(prev => !prev)} className="flex w-full items-center gap-2 text-left text-sm text-zinc-500 hover:text-zinc-300 transition-colors" aria-expanded={isThinkingExpanded}>
+                                        <BrainIcon className="h-4 w-4" />
+                                        <span className="font-medium">Thinking</span>
+                                        <span className="text-zinc-600">for a few seconds</span>
+                                        <ChevronDownIcon className={`ml-auto h-4 w-4 transition-transform ${isThinkingExpanded ? 'rotate-180' : ''}`} />
+                                    </button>
+                                    {isThinkingExpanded && <div className="mt-3 space-y-2 rounded-lg bg-zinc-900/60 px-3 py-2 text-xs leading-relaxed text-zinc-400">{thinkingEntries.map(([providerId, content]) => <p key={providerId} className="whitespace-pre-wrap">{content}</p>)}</div>}
+                                </div>
+                            )}
 
                             {/* Live Market Data Component */}
                             {liveMarketJson && (
@@ -192,8 +263,9 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                             )}
 
                             <div className={`prose prose-invert prose-sm max-w-none whitespace-pre-wrap leading-[1.65] overflow-x-auto min-w-0 ${message.isPostMortem ? 'text-zinc-100' : 'text-zinc-200'}`}>
-                                {displayContent}
+                                <SmoothText text={displayContent} animate={message.role === MessageRole.AI && context.latestMessageId === message.id && !message.analysis} />
                             </div>
+
 
                             {/* Retry button for failed post-mortem analysis */}
                             {message.role === MessageRole.SYSTEM && message.postMortemFailedCandidate && onRetryPostMortem && (
@@ -212,14 +284,17 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 <div className="mt-4 sm:mt-6">
                                     <div className={`grid gap-2 sm:gap-3 ${message.images.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
                                         {message.images.map((img, i) => (
-                                            <div
-                                                key={`${message.id}-img-${i}`}
-                                                className="group relative aspect-video rounded-xl sm:rounded-2xl overflow-hidden border border-white/10 shadow-md bg-zinc-900 cursor-zoom-in"
-                                                onClick={(e) => {
-                                                    if (isSelectionMode) return;
-                                                    if (onViewImage) onViewImage(img);
-                                                }}
-                                            >
+                                            <button
+                                                 type="button"
+                                                 key={`${message.id}-img-${i}`}
+                                                 className="group relative aspect-video rounded-xl sm:rounded-2xl overflow-hidden border border-white/10 shadow-md bg-zinc-900 cursor-zoom-in focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+                                                 onClick={() => {
+                                                     if (isSelectionMode) return;
+                                                     if (onViewImage) onViewImage(img);
+                                                 }}
+                                                 aria-label={`View trade screenshot ${i + 1}`}
+                                                 disabled={isSelectionMode}
+                                             >
                                                 <img
                                                     src={img}
                                                     className="w-full h-full object-cover hover:scale-105 transition-transform duration-500"
@@ -232,7 +307,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                                         </p>
                                                     </div>
                                                 )}
-                                            </div>
+                                            </button>
                                         ))}
                                     </div>
                                 </div>
@@ -250,23 +325,27 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                         }}
                                         className="flex justify-between items-center w-full text-left text-zinc-400 hover:text-white transition-colors py-2 sm:py-3"
                                         aria-expanded={expandedPostMortemImages[message.id]}
+                                        aria-controls={`post-mortem-images-${message.id}`}
                                     >
                                         <strong className="text-xs sm:text-sm uppercase tracking-wider font-bold opacity-80">Post-Trade Evidence</strong><ChevronDownIcon className={`w-5 h-5 sm:w-6 sm:h-6 transform transition-transform duration-300 ${expandedPostMortemImages[message.id] ? 'rotate-180' : ''}`} />
                                     </button>
-                                    <div className={`collapsible-content ${expandedPostMortemImages[message.id] ? 'expanded' : ''}`}>
+                                    <div id={`post-mortem-images-${message.id}`} className={`collapsible-content ${expandedPostMortemImages[message.id] ? 'expanded' : ''}`}>
                                         <div className="pt-3 sm:pt-5">
                                             <div className={`grid gap-2 sm:gap-3 ${message.postMortemImages.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
                                                 {message.postMortemImages.map((img, i) => (
-                                                    <div
-                                                        key={`${message.id}-pm-img-${i}`}
-                                                        className="group aspect-video rounded-xl overflow-hidden border border-white/10 bg-zinc-900 cursor-zoom-in"
-                                                        onClick={(e) => {
-                                                            if (isSelectionMode) return;
-                                                            if (onViewImage) onViewImage(img);
-                                                        }}
-                                                    >
+                                                    <button
+                                                         type="button"
+                                                         key={`${message.id}-pm-img-${i}`}
+                                                         className="group aspect-video rounded-xl overflow-hidden border border-white/10 bg-zinc-900 cursor-zoom-in focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+                                                         onClick={() => {
+                                                             if (isSelectionMode) return;
+                                                             if (onViewImage) onViewImage(img);
+                                                         }}
+                                                         aria-label={`View post-mortem screenshot ${i + 1}`}
+                                                         disabled={isSelectionMode}
+                                                     >
                                                         <img src={img} className="w-full h-full object-cover hover:scale-105 transition-transform duration-500" alt={`post-mortem screenshot ${i + 1}`} />
-                                                    </div>
+                                                    </button>
                                                 ))}
                                             </div>
                                         </div>
@@ -274,7 +353,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 </div>
                             )}
 
-                            {message.role === MessageRole.AI && message.thoughtProcesses && Object.values(message.thoughtProcesses).some(c => c) && (
+                            {false && message.role === MessageRole.AI && (message.analysis || message.isDebating || (message.debateTurns?.length ?? 0) > 0) && message.thoughtProcesses && Object.values(message.thoughtProcesses ?? {}).some(c => c) && (
                                 <div className="mt-4 sm:mt-6 pt-3 sm:pt-5 border-t border-white/10">
                                     <button
                                         onClick={(e) => {
@@ -283,17 +362,18 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                         }}
                                         className="flex justify-between items-center w-full text-left text-zinc-400 hover:text-white transition-colors py-2 sm:py-3"
                                         aria-expanded={expandedIndividualThoughts[message.id]}
+                                        aria-controls={`individual-insights-${message.id}`}
                                     >
                                         <strong className="text-xs sm:text-sm uppercase tracking-wider font-bold opacity-80">Individual AI Insights</strong><ChevronDownIcon className={`w-5 h-5 sm:w-6 sm:h-6 transform transition-transform duration-300 ${expandedIndividualThoughts[message.id] ? 'rotate-180' : ''}`} />
                                     </button>
-                                    <div className={`collapsible-content ${expandedIndividualThoughts[message.id] ? 'expanded' : ''}`}>
+                                    <div id={`individual-insights-${message.id}`} className={`collapsible-content ${expandedIndividualThoughts[message.id] ? 'expanded' : ''}`}>
                                         <div className="pt-3 sm:pt-5 space-y-3 sm:space-y-4 text-xs sm:text-sm md:text-base">
                                             {/* Collapsible Insight Helper */}
                                             {(() => {
                                                 const insights = Object.entries(message.thoughtProcesses ?? {})
                                                     .filter(([, content]) => content)
                                                     .map(([providerId, content]) => {
-                                                        const style = PROVIDER_INSIGHT_STYLES[providerId] ?? DEFAULT_INSIGHT_STYLE;
+                                                        const style = DEFAULT_INSIGHT_STYLE;
                                                         return { providerId, provider: style.name, model: resolveModelName(providerId), content, bgClass: style.bgClass, borderClass: style.borderClass, titleClass: style.titleClass, textClass: style.textClass };
                                                     });
 
@@ -339,32 +419,16 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                         }}
                                         className="flex justify-between items-center w-full text-left text-zinc-400 hover:text-white transition-colors py-2 sm:py-3"
                                         aria-expanded={expandedDebateTranscripts[message.id]}
+                                        aria-controls={`debate-transcript-${message.id}`}
                                     >
                                         <strong className="text-xs sm:text-sm uppercase tracking-wider font-bold opacity-80">Debate Transcript</strong><ChevronDownIcon className={`w-5 h-5 sm:w-6 sm:h-6 transform transition-transform duration-300 ${expandedDebateTranscripts[message.id] ? 'rotate-180' : ''}`} />
                                     </button>
-                                    <div className={`collapsible-content ${expandedDebateTranscripts[message.id] ? 'expanded' : ''}`}><DebateView debateTurns={message.debateTurns} modelsUsed={message.modelsUsed} modelIdToName={modelIdToName} providerNameToId={providerNameToId} lensConfig={lensConfig} /></div>
+                                    <div id={`debate-transcript-${message.id}`} className={`collapsible-content ${expandedDebateTranscripts[message.id] ? 'expanded' : ''}`}><DebateView debateTurns={message.debateTurns} modelsUsed={message.modelsUsed} modelIdToName={modelIdToName} providerNameToId={providerNameToId} lensConfig={lensConfig} /></div>
                                 </div>
                             )}
 
                             {Array.isArray(message.sources) && message.sources.length > 0 && <div className="mt-4 sm:mt-6 pt-4 border-t border-white/10"><h4 className="text-xs uppercase font-bold text-zinc-500 mb-2 sm:mb-3 tracking-widest">Reference Sources</h4><ul className="text-xs sm:text-sm space-y-2 sm:space-y-3">{message.sources.map((source, index) => (<li key={`${message.id}-src-${index}`}>{isSafeUrl(source.web.uri) ? (<a href={source.web.uri} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:text-cyan-300 hover:underline break-all flex items-center gap-2"><LinkIcon /> {source.web.title}</a>) : (<span className="text-cyan-400 break-all flex items-center gap-2"><LinkIcon /> {source.web.title}</span>)}</li>))}</ul></div>}
 
-                            {message.role === MessageRole.AI && !message.isDebating && !isSelectionMode && (
-                                <div className="mt-4 sm:mt-6 pt-3 sm:pt-5 border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-[10px] sm:text-sm text-zinc-500">
-                                    <div className="flex flex-col gap-1.5 sm:gap-2">
-                                        <div className="flex flex-wrap gap-x-4 sm:gap-x-6 gap-y-1">
-                                            {Object.entries(message.modelsUsed ?? {}).map(([providerId, modelId]) => {
-                                                const style = PROVIDER_INSIGHT_STYLES[providerId] ?? DEFAULT_INSIGHT_STYLE;
-                                                const displayName = modelIdToName[modelId] ?? modelId;
-                                                return (
-                                                    <span key={providerId}>{style.name}: <span className="text-zinc-300">{displayName}</span></span>
-                                                );
-                                            })}
-                                        </div>
-                                        {message.ocrModelUsed && <span className="block">Vision: <span className="text-zinc-300">{(message.ocrModelUsed || '').split(',').map(id => id.trim()).map(id => ocrModelIdToName[id] || id).join(' & ')}</span></span>}
-                                    </div>
-                                    <button onClick={() => handleCopy(message)} className="self-start sm:self-auto flex items-center gap-2 text-zinc-400 hover:text-white transition-colors bg-zinc-800 hover:bg-zinc-700 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg font-medium">{copiedMessageId === message.id ? (<><CheckIcon className="h-3 w-3 sm:h-4 sm:w-4 text-emerald-400" />Copied</>) : (<><CopyIcon />Copy Text</>)}</button>
-                                </div>
-                            )}
                         </div>
                 </>
             </div>

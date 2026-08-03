@@ -57,6 +57,7 @@ export {
   TrendingUp as TrendUpIcon,
   TrendingDown as TrendDownIcon,
   AlertTriangle as AlertTriangleIcon,
+  Square as StopIcon,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------

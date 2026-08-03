@@ -19,7 +19,6 @@ interface HeaderProps {
     setIsMobileMenuOpen: React.Dispatch<React.SetStateAction<boolean>>;
     setIsVisionDataVisible: (visible: boolean) => void;
     setJournalState: (state: { isOpen: boolean; tab: 'log' | 'performance' | 'analytics' }) => void;
-    setIsHistoryVisible: (visible: boolean) => void;
     setIsSettingsVisible: (visible: boolean) => void;
     setIsLiveAnalysisVisible: (visible: boolean) => void;
     setIsLivePostMortemVisible: (visible: boolean) => void;
@@ -41,6 +40,7 @@ interface HeaderProps {
     activeConversationId: string | null;
     onNewConversation: () => void;
     onLoadConversation: (id: string) => void;
+    onDeleteConversation: (id: string) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -55,7 +55,6 @@ export const Header: React.FC<HeaderProps> = ({
     setIsMobileMenuOpen,
     setIsVisionDataVisible,
     setJournalState,
-    setIsHistoryVisible,
     setIsSettingsVisible,
     setIsLiveAnalysisVisible,
     setIsLivePostMortemVisible,
@@ -68,6 +67,7 @@ export const Header: React.FC<HeaderProps> = ({
     liveMarketConditions,
     conversations,
     activeConversationId,
+    onDeleteConversation,
     onNewConversation,
     onLoadConversation
 }) => {
@@ -113,6 +113,27 @@ export const Header: React.FC<HeaderProps> = ({
         };
     }, []);
 
+    useEffect(() => {
+        if (!isMobileMenuOpen) return;
+        const handleEscape = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                setIsSessionModalOpen(false);
+                setIsMobileMenuOpen(false);
+                return;
+            }
+            if (event.key !== 'Tab' || !mobileMenuRef.current) return;
+            const focusable = mobileMenuRef.current.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+            if (!focusable.length) return;
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+            else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+        };
+        document.addEventListener('keydown', handleEscape);
+        requestAnimationFrame(() => mobileMenuRef.current?.querySelector<HTMLElement>('button')?.focus());
+        return () => document.removeEventListener('keydown', handleEscape);
+    }, [isMobileMenuOpen, setIsMobileMenuOpen]);
+
     // Close session modal when clicking outside
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -142,9 +163,11 @@ export const Header: React.FC<HeaderProps> = ({
                     {/* Hamburger Menu Button */}
                     <button
                         onClick={() => setIsMobileMenuOpen(prev => !prev)}
-                        className="p-2.5 text-zinc-400 hover:text-cyan-400 rounded-xl hover:bg-zinc-800 transition-colors lg:hidden"
+                        className="p-2.5 text-zinc-400 hover:text-cyan-400 rounded-xl hover:bg-zinc-800 transition-colors lg:hidden focus-visible:ring-2 focus-visible:ring-cyan-400"
                         title="Menu"
                         aria-label="Toggle navigation menu"
+                        aria-expanded={isMobileMenuOpen}
+                        aria-controls="mobile-navigation-menu"
                     >
                         <HamburgerIcon className="h-5 w-5" />
                     </button>
@@ -158,7 +181,9 @@ export const Header: React.FC<HeaderProps> = ({
                                 <div className="static sm:relative" ref={sessionModalRef}>
                                     <button
                                         onClick={() => setIsSessionModalOpen(!isSessionModalOpen)}
-                                        className="flex items-center gap-1.5 px-2 py-0.5 bg-zinc-800 hover:bg-zinc-700 rounded-full border border-white/5 hover:border-white/10 text-[10px] font-medium text-zinc-400 whitespace-nowrap transition-all"
+                                        className="flex items-center gap-1.5 px-2 py-0.5 bg-zinc-800 hover:bg-zinc-700 rounded-full border border-white/5 hover:border-white/10 text-[10px] font-medium text-zinc-400 whitespace-nowrap transition-all focus-visible:ring-2 focus-visible:ring-cyan-400"
+                                        aria-expanded={isSessionModalOpen}
+                                        aria-haspopup="dialog"
                                     >
                                         <span className={`w-1.5 h-1.5 rounded-full ${sessionContext.isKillZone ? 'bg-red-500 animate-pulse' :
                                             sessionContext.currentSession === 'off_hours' ? 'bg-zinc-500' : 'bg-emerald-500'
@@ -173,7 +198,7 @@ export const Header: React.FC<HeaderProps> = ({
 
                                     {/* Session Details Modal */}
                                     {isSessionModalOpen && (
-                                        <div className="absolute top-full left-0 sm:left-auto sm:right-0 mt-4 sm:mt-2 w-80 bg-zinc-900 border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-200">
+                                             <div role="dialog" aria-label="Session details" className="absolute top-full left-0 sm:left-auto sm:right-0 mt-4 sm:mt-2 w-80 bg-zinc-900 border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-200">
                                             <div className="p-3 bg-zinc-900">
                                                 {/* Live Market Conditions Section */}
                                                 {liveMarketConditions && (
@@ -237,7 +262,7 @@ export const Header: React.FC<HeaderProps> = ({
                                                             <span className="text-[10px] font-bold">Market Condition</span>
                                                         </div>
                                                         <div className="text-[10px] text-zinc-400 leading-tight">
-                                                            {sessionContext.warnings[0].replace(' ', '')}
+                                                            {sessionContext.warnings[0]}
                                                         </div>
                                                     </div>
                                                 )}
@@ -292,7 +317,7 @@ export const Header: React.FC<HeaderProps> = ({
                         />
 
                         {/* Menu Panel */}
-                        <div ref={mobileMenuRef} className="absolute left-0 top-0 h-full w-72 bg-zinc-900 border-r border-white/10 shadow-2xl animate-slide-in-left flex flex-col">
+                         <div id="mobile-navigation-menu" ref={mobileMenuRef} className="absolute left-0 top-0 h-full w-72 bg-zinc-900 border-r border-white/10 shadow-2xl animate-slide-in-left flex flex-col pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]" role="dialog" aria-modal="true" aria-label="Navigation menu">
                             <div className="p-5 border-b border-white/10 flex items-center justify-between">
                                 <div className="flex items-center gap-3">
                                     <div className="w-10 h-10 rounded-full bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
@@ -314,10 +339,10 @@ export const Header: React.FC<HeaderProps> = ({
                                     isFreshSession={isFreshSession}
                                     onNewConversation={onNewConversation}
                                     onLoadConversation={onLoadConversation}
+                                    onDeleteConversation={onDeleteConversation}
                                     onOpenLiveMarket={onOpenLiveMarket}
                                     onOpenVisionData={() => setIsVisionDataVisible(true)}
                                     onOpenJournal={() => setJournalState({ isOpen: true, tab: 'log' })}
-                                    onOpenHistory={() => setIsHistoryVisible(true)}
                                     onOpenSettings={() => setIsSettingsVisible(true)}
                                     onNavigate={() => setIsMobileMenuOpen(false)}
                                 />

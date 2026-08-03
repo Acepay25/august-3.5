@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 
 interface ImageViewerModalProps {
     imageUrl: string | null;
@@ -10,12 +10,20 @@ interface ImageViewerModalProps {
  * Replaces window.open() which doesn't work in Android WebView
  */
 const ImageViewerModal: React.FC<ImageViewerModalProps> = ({ imageUrl, onClose }) => {
+    const closeButtonRef = useRef<HTMLButtonElement>(null);
+    useEffect(() => {
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') onClose();
+        };
+        document.addEventListener('keydown', handleKeyDown);
+        closeButtonRef.current?.focus();
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, [onClose, imageUrl]);
+
     if (!imageUrl) return null;
 
     const handleBackdropClick = (e: React.MouseEvent) => {
-        if (e.target === e.currentTarget) {
-            onClose();
-        }
+        if (e.target === e.currentTarget) onClose();
     };
 
     return (
@@ -28,6 +36,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({ imageUrl, onClose }
         >
             {/* Close button */}
             <button
+                ref={closeButtonRef}
                 onClick={onClose}
                 className="absolute top-4 right-4 p-3 bg-zinc-800 hover:bg-zinc-700 text-white rounded-full transition-colors z-10"
                 aria-label="Close image"

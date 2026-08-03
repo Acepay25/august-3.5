@@ -10,6 +10,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { ProviderConfig, ApiFormat, API_FORMAT_LABELS } from '../../types/provider';
 import { testConnection } from '../../services/providers/GenericProviderService';
+import { validateProviderUrl } from '../../utils/providerUrlValidation';
 
 interface ProviderManagerProps {
     configs: ProviderConfig[];
@@ -165,6 +166,9 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
         }
     }, [selected?.id, selected?.apiKey, selected?.baseUrl, selected?.apiFormat, selected?.selectedModel, selected?.name]);
 
+    const draftUrlValidation = useMemo(() => validateProviderUrl(draftUrl), [draftUrl]);
+    const newUrlValidation = useMemo(() => validateProviderUrl(newUrl), [newUrl]);
+
     const isDirty = useMemo(() => {
         if (!selected) return false;
         return (
@@ -177,7 +181,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
     }, [selected, draftKey, draftUrl, draftFormat, draftModel, nameDraft]);
 
     const handleSave = useCallback(async () => {
-        if (!selected) return;
+        if (!selected || !draftUrlValidation.valid) return;
         setSaveState('saving');
         const updates: Partial<Omit<ProviderConfig, 'id' | 'isBuiltIn'>> = {
             apiKey: draftKey,
@@ -188,29 +192,46 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
         if (nameDraft.trim() && nameDraft.trim() !== selected.name) {
             updates.name = nameDraft.trim();
         }
-        await onUpdateProvider(selected.id, updates);
-        setIsEditingName(false);
-        setSaveState('saved');
+        try {
+            await onUpdateProvider(selected.id, updates);
+            setIsEditingName(false);
+            setSaveState('saved');
+        } catch (error) {
+            setSaveState('idle');
+            setTestResult({ success: false, message: error instanceof Error ? error.message : 'Provider settings could not be saved.' });
+            return;
+        }
         setTimeout(() => setSaveState('idle'), 1800);
-    }, [selected, draftKey, draftUrl, draftFormat, draftModel, nameDraft, onUpdateProvider]);
+    }, [selected, draftKey, draftUrl, draftFormat, draftModel, nameDraft, draftUrlValidation, onUpdateProvider]);
 
     const handleTest = useCallback(async () => {
-        if (!selected) return;
+        if (!selected || !draftUrlValidation.valid || !draftModel.trim()) {
+            setTestResult({ success: false, message: 'Choose a model before testing the connection.' });
+            return;
+        }
         setIsTesting(true);
         setTestResult(null);
-        const result = await testConnection({
-            ...selected,
-            apiKey: draftKey,
-            baseUrl: draftUrl.trim(),
-            apiFormat: draftFormat,
-            selectedModel: draftModel
-        });
-        setTestResult(result);
-        setIsTesting(false);
-    }, [selected, draftKey, draftUrl, draftFormat, draftModel]);
+        try {
+            const result = await testConnection({
+                ...selected,
+                apiKey: draftKey.trim(),
+                baseUrl: draftUrlValidation.normalizedUrl,
+                apiFormat: draftFormat,
+                selectedModel: draftModel.trim()
+            });
+            setTestResult(result);
+        } catch (error) {
+            setTestResult({
+                success: false,
+                message: error instanceof Error ? error.message : 'Connection test failed.'
+            });
+        } finally {
+            setIsTesting(false);
+        }
+    }, [selected, draftKey, draftUrl, draftFormat, draftModel, draftUrlValidation]);
 
     const handleAddProvider = useCallback(async () => {
-        if (!newName.trim() || !newUrl.trim()) return;
+        if (!newName.trim() || !newUrlValidation.valid) return;
         const models = newModels.split(',').map(m => m.trim()).filter(Boolean);
         await onAddCustomProvider({
             name: newName.trim(),
@@ -222,7 +243,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
         });
         setNewName(''); setNewUrl(''); setNewKey(''); setNewFormat('chat_completions'); setNewModels('');
         setShowAddProvider(false);
-    }, [newName, newUrl, newKey, newFormat, newModels, onAddCustomProvider]);
+    }, [newName, newUrl, newUrlValidation, newKey, newFormat, newModels, onAddCustomProvider]);
 
     const handleAddModelSubmit = useCallback(async () => {
         if (!selected || !newModelInput.trim()) return;
@@ -364,8 +385,9 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                     value={newUrl}
                                     onChange={(e) => setNewUrl(e.target.value)}
                                     placeholder="https://opencode.ai/zen/v1"
-                                    className={inputBase}
+                                     className={inputBase}
                                 />
+                                {!newUrlValidation.valid && newUrl.trim() && <p className="mt-1 text-xs text-red-300">{newUrlValidation.message}</p>}
                             </div>
 
                             <div>
@@ -407,7 +429,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                             <div className="flex gap-2 pt-2">
                                 <button
                                     onClick={handleAddProvider}
-                                    disabled={!newName.trim() || !newUrl.trim()}
+                                    disabled={!newName.trim() || !newUrlValidation.valid}
                                     className="flex-1 py-2 rounded-xl text-xs font-bold bg-cyan-500 hover:bg-cyan-400 text-zinc-950 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                                 >
                                     Create Provider
@@ -500,6 +522,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                     placeholder="https://opencode.ai/zen/v1"
                                     className={inputBase}
                                 />
+                                {!draftUrlValidation.valid && draftUrl.trim() && <p className="mt-1 text-xs text-red-300">{draftUrlValidation.message}</p>}
                             </div>
 
                             {/* API Format */}
@@ -681,7 +704,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
 
                                 <button
                                     onClick={handleTest}
-                                    disabled={isTesting || !draftUrl.trim()}
+                                    disabled={isTesting || !draftUrlValidation.valid || !draftModel.trim()}
                                     className="px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/25 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                                 >
                                     {isTesting ? 'Testing…' : 'Test'}

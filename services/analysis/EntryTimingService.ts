@@ -103,7 +103,7 @@ export const calculateEntryTimingScore = (
         analysis.entryPoints?.[0]?.price?.replace(/[^0-9.-]/g, '') || '0'
     );
     const currentPrice = hybridData.marketData.currentPrice;
-    const atr = hybridData.indicators['1h'].atr;
+    const atr = hybridData.indicators?.['1h']?.atr ?? 0;
     const direction = analysis.direction;
 
     if (!entryPrice || entryPrice <= 0) {

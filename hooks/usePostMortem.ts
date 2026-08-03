@@ -16,8 +16,9 @@ import { conductPostMortem, summarizeTrade } from '../services/providers/Generic
 export interface UsePostMortemParams {
     // Conversation state
     messages: Message[];
+    activeConversationId: string | null;
     messagesRef: MutableRefObject<Message[]>;
-    updateMessages: (updater: (prev: Message[]) => Message[]) => void;
+    updateMessages: (updater: (prev: Message[]) => Message[], conversationId?: string | null) => void;
     isAccuracyModeEnabled: boolean;
     accuracySubMode: string;
     // P0-2: activeUsername is used to cancel in-flight post-mortem work
@@ -61,7 +62,7 @@ export interface UsePostMortemParams {
 
 export const usePostMortem = (params: UsePostMortemParams) => {
     const {
-        messages, messagesRef, updateMessages,
+        messages, activeConversationId, messagesRef, updateMessages,
         isAccuracyModeEnabled,
         activeUsernameRef,
         providerConfigs,
@@ -89,13 +90,17 @@ export const usePostMortem = (params: UsePostMortemParams) => {
     // user's data. Each run captures the current runId; if the user changes,
     // runId is bumped and stale runs early-return before mutating state.
     const postMortemRunIdRef = useRef<number>(0);
+    const postMortemAbortControllerRef = useRef<AbortController | null>(null);
     const lastSeenUsernameRef = useRef<string | null>(activeUsernameRef.current);
+    const lastSeenConversationIdRef = useRef<string | null>(activeConversationId);
     useEffect(() => {
-        // Bump the run id whenever the active username changes. We read from
-        // the ref (synced by App.tsx) rather than a prop so this hook can be
-        // instantiated before activeUsername is destructured in App.
-        if (activeUsernameRef.current !== lastSeenUsernameRef.current) {
+        // Bump the run id whenever the active account or conversation changes.
+        if (
+            activeUsernameRef.current !== lastSeenUsernameRef.current
+            || activeConversationId !== lastSeenConversationIdRef.current
+        ) {
             lastSeenUsernameRef.current = activeUsernameRef.current;
+            lastSeenConversationIdRef.current = activeConversationId;
             postMortemRunIdRef.current += 1;
         }
     });
@@ -109,12 +114,21 @@ export const usePostMortem = (params: UsePostMortemParams) => {
         return runId !== postMortemRunIdRef.current;
     }, []);
 
+    const invalidatePostMortemRuns = useCallback((): void => {
+        postMortemRunIdRef.current += 1;
+        postMortemAbortControllerRef.current?.abort();
+        postMortemAbortControllerRef.current = null;
+    }, []);
+
     // ─── Main Analysis Function ───────────────────────────────────────────
     const startPostMortemAnalysis = async (candidate: PostMortemCandidate, summaries?: string[], imageUrls?: string[], resolvedValidation?: TradeOutcomeValidation) => {
         // Capture the run id at the start. If the user switches accounts while
         // this async function is in flight, the ref will be bumped and our
         // subsequent state writes will be skipped (see isRunStale checks).
         const myRunId = postMortemRunIdRef.current;
+        postMortemAbortControllerRef.current?.abort();
+        const currentAbortController = new AbortController();
+        postMortemAbortControllerRef.current = currentAbortController;
 
         setPostMortemCandidate(null);
         setIsPostMortemInProgress(true);
@@ -130,6 +144,10 @@ export const usePostMortem = (params: UsePostMortemParams) => {
         setIsPostMortemTypingComplete(false);
 
         const postMortemMessageId = `pm-${Date.now()}`;
+        const requestConversationId = activeConversationId;
+        const updatePostMortemMessages = (updater: (prev: Message[]) => Message[]): void => {
+            updateMessages(updater, requestConversationId);
+        };
         const placeholderMsg: Message = {
             id: postMortemMessageId,
             role: MessageRole.AI,
@@ -140,10 +158,10 @@ export const usePostMortem = (params: UsePostMortemParams) => {
         };
 
         setExpandedPostMortems(prev => ({ ...prev, [postMortemMessageId]: true }));
-        updateMessages(prev => [...prev, placeholderMsg]);
+        updatePostMortemMessages(prev => [...prev, placeholderMsg]);
 
         try {
-            const history: Message[] = [];
+            const history: Message[] = [...messagesRef.current];
             const enabledProviders = providerConfigs
                 .filter(config => config.isEnabled && config.apiKey)
                 .map(config => ({ config, name: config.name, model: config.selectedModel }));
@@ -152,7 +170,7 @@ export const usePostMortem = (params: UsePostMortemParams) => {
             // not just Accuracy Mode — previously Standard Mode underflowed
             // `results[0]` when `enabledProviders` was empty).
             if (enabledProviders.length === 0) {
-                updateMessages(prev => [
+                updatePostMortemMessages(prev => [
                     ...prev.filter(m => m.id !== postMortemMessageId),
                     { id: `err-${Date.now()}`, role: MessageRole.SYSTEM, createdAt: new Date().toISOString(), text: "Post-Mortem analysis requires at least one enabled AI provider. Please enable a provider and try again." }
                 ]);
@@ -265,7 +283,7 @@ Please investigate this discrepancy in your analysis.
             if (results.length > 1) {
                 setLoadingMessage("Ensemble Debate in progress...");
                 completeStep('analysis'); startStep('debate');
-                updateMessages(prev => prev.map(m => m.id === postMortemMessageId ? { ...m, isDebating: true, text: 'Ensemble is analyzing trade outcome...' } : m));
+                updatePostMortemMessages(prev => prev.map(m => m.id === postMortemMessageId ? { ...m, isDebating: true, text: 'Ensemble is analyzing trade outcome...' } : m));
 
                 let debateStream;
 
@@ -303,7 +321,7 @@ Please investigate this discrepancy in your analysis.
                             currentTurns.push({ speaker: m[1] as any, text: sanitizeAIResponse(m[2].trim()) });
                         }
 
-                        updateMessages(prev => prev.map(m => m.id === postMortemMessageId ? { ...m, debateTurns: currentTurns } : m));
+                        updatePostMortemMessages(prev => prev.map(m => m.id === postMortemMessageId ? { ...m, debateTurns: currentTurns, postMortemDebateTurns: currentTurns } : m));
                     }
 
                     const reportStart = fullDebateText.match(/<FINAL_REPORT_START>/i);
@@ -352,6 +370,7 @@ Please investigate this discrepancy in your analysis.
             }
 
             // Finalize Message Text
+            if (isRunStale(myRunId)) return;
             // Persist post-mortem debate turns to ThinkingStore before clearing from message
             const postMortemTradeId = candidate.message.analysis?.createdAt || candidate.message.id;
             const postMortemTurns = messagesRef.current.find(m => m.id === postMortemMessageId)?.postMortemDebateTurns;
@@ -381,7 +400,7 @@ Please investigate this discrepancy in your analysis.
                 }
             }
 
-            updateMessages(prev => prev.map(m => m.id === postMortemMessageId ? {
+            updatePostMortemMessages(prev => prev.map(m => m.id === postMortemMessageId ? {
                 ...m,
                 text: finalPostMortemReport,
                 isDebating: false,
@@ -420,7 +439,7 @@ Please investigate this discrepancy in your analysis.
                     return updated.slice(-MAX_TRADE_SUMMARIES);
                 });
 
-                const newMemory = await MemoryService.updateGlobalMemory([tradeToUpdate], globalMemory, memoryConfig!);
+                const newMemory = await MemoryService.updateGlobalMemory([{ ...tradeToUpdate, postMortem: finalPostMortemReport }], globalMemory, memoryConfig!);
                 // Re-check after the await
                 if (isRunStale(myRunId)) {
                     console.log('[PostMortem] Discarding global memory update — user switched');
@@ -447,6 +466,7 @@ Please investigate this discrepancy in your analysis.
             }
 
         } catch (e: any) {
+            if (isRunStale(myRunId)) return;
             console.error("Post Mortem Failed", e);
             // P2-15: Keep the role as AI (not SYSTEM) so the message renders
             // consistently and the persisted record isn't a data-shape
@@ -454,7 +474,7 @@ Please investigate this discrepancy in your analysis.
             // postMortemFailedCandidate payload drives the retry button,
             // which handleRetryPostMortem wires up — so a failed post-mortem
             // now renders as an AI message with the error text + a retry CTA.
-            updateMessages(prev => prev.map(m => m.id === postMortemMessageId ? {
+            updatePostMortemMessages(prev => prev.map(m => m.id === postMortemMessageId ? {
                 ...m,
                 text: `Post-Mortem Failed: ${e.message}`,
                 role: MessageRole.AI,
@@ -467,11 +487,13 @@ Please investigate this discrepancy in your analysis.
                 }
             } : m));
         } finally {
-            setIsPostMortemInProgress(false);
-            setLoadingMessage(null);
-            completeStep('debate');
-            setAnalysisSteps(prev => prev.map(s => s.status === 'running' ? { ...s, status: 'complete' as const, endTime: Date.now() } : s));
-            setTypingMessageState(null);
+            if (!isRunStale(myRunId)) {
+                setIsPostMortemInProgress(false);
+                setLoadingMessage(null);
+                completeStep('debate');
+                setAnalysisSteps(prev => prev.map(s => s.status === 'running' ? { ...s, status: 'complete' as const, endTime: Date.now() } : s));
+                setTypingMessageState(null);
+            }
         }
     };
 
@@ -537,6 +559,7 @@ Please investigate this discrepancy in your analysis.
 
         // Functions
         startPostMortemAnalysis,
+        invalidatePostMortemRuns,
         handleRetryPostMortem,
         handleAllPostMortemTypingComplete,
         handleMismatchResolution,

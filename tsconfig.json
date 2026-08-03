@@ -29,5 +29,5 @@
     "noUnusedParameters": false
   },
   "include": ["**/*.ts", "**/*.tsx"],
-  "exclude": ["node_modules", "dist", "dist_electron", "android"]
+  "exclude": ["node_modules", "dist", "dist_electron", "android", "scripts"]
 }

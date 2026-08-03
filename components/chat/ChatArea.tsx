@@ -1,17 +1,19 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Message, ImageMetadata, AccuracySubMode, AnalysisStep, AnalystLensConfig, LiveThoughts, ProviderConfig } from '../../types';
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
 import MessageItem, { ChatContextProps } from './MessageItem';
 import { ChatInput } from './ChatInput';
 import { QuickActionChips } from './QuickActionChips';
-import { ArrowUpIcon, ArrowDownIcon, CloseIcon, LoadingIcon, EyeIcon, EditIcon, CheckIcon, TrashIcon } from '../shared/Icons';
+import { ArrowUpIcon, ArrowDownIcon, CloseIcon, LoadingIcon, EyeIcon, BrainIcon, EditIcon, CheckIcon, TrashIcon } from '../shared/Icons';
 import HybridDataPanel from '../analysis/HybridDataPanel';
 import ImageViewerModal from '../modals/ImageViewerModal';
 import AnalysisProgress from '../analysis/AnalysisProgress';
 
 // Hoisted list components to prevent re-creation on each render
 const ListHeader = () => <div className="h-16"></div>;
-const ListFooter = () => <div className="h-32"></div>;
+// Reserve the full vertical footprint of the fixed composer so the final
+// message can always scroll above it instead of being hidden underneath it.
+const ListFooter = () => <div className="h-48 sm:h-56 lg:h-64" aria-hidden="true" />;
 
 interface ChatAreaProps {
     messages: Message[];
@@ -57,7 +59,6 @@ interface ChatAreaProps {
     accuracySubMode?: AccuracySubMode;
     // Ensemble Intelligence Props — dynamic provider list
     providers: ProviderConfig[];
-    onToggleProvider: (id: string) => void;
     onUpdateProvider?: (id: string, updates: Partial<Omit<ProviderConfig, 'id' | 'isBuiltIn'>>) => Promise<void>;
     selectedVisionModel: string;
     setSelectedVisionModel: (modelId: string) => void;
@@ -74,6 +75,8 @@ interface ChatAreaProps {
     hybridData?: any;
     isHybridLoading?: boolean;
     hybridConnectionStatus?: 'disconnected' | 'connecting' | 'connected' | 'error';
+    // Hide the floating hybrid panel (e.g. while Settings is open).
+    hideHybridPanel?: boolean;
     slOptimization?: any; // SL Optimization data for display
     suggestedEntryPrice?: number | null; // Entry Timing suggested entry price
     entryTimingScore?: {
@@ -136,7 +139,6 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     isAccuracyModeEnabled,
     accuracySubMode,
     providers,
-    onToggleProvider,
     onUpdateProvider,
     selectedVisionModel,
     setSelectedVisionModel,
@@ -149,6 +151,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     hybridData,
     isHybridLoading,
     hybridConnectionStatus,
+    hideHybridPanel,
     slOptimization,
     suggestedEntryPrice,
     entryTimingScore,
@@ -164,6 +167,15 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     const [isSelectionMode, setIsSelectionMode] = useState(false);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [viewerImageUrl, setViewerImageUrl] = useState<string | null>(null);
+    const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+
+    useEffect(() => {
+        const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+        const updateMotionPreference = () => setPrefersReducedMotion(mediaQuery.matches);
+        updateMotionPreference();
+        mediaQuery.addEventListener('change', updateMotionPreference);
+        return () => mediaQuery.removeEventListener('change', updateMotionPreference);
+    }, []);
 
     const handleToggleSelection = useCallback((id: string) => {
         setSelectedIds(prev => {
@@ -198,12 +210,13 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
 
     const enhancedContext = useMemo(() => ({
         ...chatContext,
+        latestMessageId: messages[messages.length - 1]?.id ?? null,
         isSelectionMode,
         selectedMessageIds: selectedIds,
         onToggleMessageSelection: handleToggleSelection,
         onViewImage: (url: string) => setViewerImageUrl(url),
         onSelectMessageForProbability
-    }), [chatContext, isSelectionMode, selectedIds, handleToggleSelection, onSelectMessageForProbability]);
+    }), [chatContext, messages, isSelectionMode, selectedIds, handleToggleSelection, onSelectMessageForProbability]);
 
     // Fresh sessions start with zero messages (no hardcoded intro bubble),
     // so no intro-text substitution is needed — messages pass through as-is.
@@ -227,13 +240,13 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         input,
         setInput,
         handleSendMessage,
+        handleCancelAnalysis,
         loadingMessage,
         isSummarizing,
         isRateLimited,
         isAnyProviderEnabled,
         providers,
-        onToggleProvider,
-        onUpdateProvider,
+            onUpdateProvider,
         selectedVisionModel,
         setSelectedVisionModel,
         lensConfig,
@@ -276,7 +289,8 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                         </button>
                         <button
                             onClick={handleCancelSelection}
-                            className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+                            className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-cyan-400"
+                            aria-label="Close message selection"
                         >
                             <CloseIcon className="w-5 h-5" />
                         </button>
@@ -294,12 +308,16 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 )
             )}
 
+            <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+                {loadingMessage || (messages.length > 0 ? `${messages.length} messages in conversation` : 'New conversation')}
+            </div>
+
             <Virtuoso
                 ref={virtuosoRef}
                 data={processedMessages}
                 context={enhancedContext}
                 itemContent={(index, message, context) => <MessageItem message={message} context={context} />}
-                followOutput="smooth"
+                followOutput={prefersReducedMotion ? false : 'smooth'}
                 atBottomStateChange={(atBottom) => setShowScrollDown(!atBottom)}
                 atTopStateChange={(atTop) => setShowScrollUp(!atTop && analysisMessages.length > 0)}
                 style={{ height: '100%', width: '100%' }}
@@ -351,13 +369,15 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 data={hybridData}
                 isLoading={isHybridLoading}
                 connectionStatus={hybridConnectionStatus}
+                hidden={hideHybridPanel}
                 slOptimization={slOptimization}
                 suggestedEntryPrice={suggestedEntryPrice}
                 entryTimingScore={entryTimingScore}
             />
 
             {loadingMessage ? (
-                <div className="absolute bottom-0 left-0 right-0 p-2 sm:p-4 pointer-events-none z-10">
+                <>
+                <div className="absolute bottom-[calc(env(safe-area-inset-bottom)+6rem)] sm:bottom-[calc(env(safe-area-inset-bottom)+7rem)] left-0 right-0 p-2 sm:p-4 pointer-events-none z-10">
                     <div className="max-w-4xl mx-auto pointer-events-auto">
                         {analysisSteps && analysisSteps.length > 0 ? (
                             <AnalysisProgress
@@ -372,25 +392,34 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                             />
                         ) : (
                             /* Fallback: original spinner overlay when no step data */
-                            <div className="flex flex-col items-center justify-center p-6 glass rounded-2xl shadow-[0_0_50px_-12px_rgba(176, 176, 182,0.2)] animate-fade-in border-t border-cyan-500/20">
-                                <div className="relative">
-                                    <div className="absolute inset-0 blur-xl opacity-20 animate-pulse bg-cyan-500"></div>
-                                    <LoadingIcon className="h-8 w-8 relative z-10 text-cyan-400" />
+                                <div className="flex flex-col items-center justify-center p-6 glass rounded-2xl shadow-[0_0_50px_-12px_rgba(176, 176, 182,0.2)] animate-fade-in border-t border-cyan-500/20">
+                                    <div className="relative">
+                                        <div className="absolute inset-0 blur-xl opacity-20 animate-pulse bg-cyan-500"></div>
+                                        <LoadingIcon className="h-8 w-8 relative z-10 text-cyan-400" />
+                                    </div>
+                                <div className="mt-3 flex items-center gap-2 text-cyan-300" aria-live="polite">
+                                    <BrainIcon className="h-4 w-4" />
+                                    <span className="text-sm font-medium">Thinking</span>
+                                    <span className="flex gap-1" aria-hidden="true"><i className="h-1.5 w-1.5 rounded-full bg-cyan-300 animate-bounce [animation-delay:-0.2s]" /><i className="h-1.5 w-1.5 rounded-full bg-cyan-300 animate-bounce [animation-delay:-0.1s]" /><i className="h-1.5 w-1.5 rounded-full bg-cyan-300 animate-bounce" /></span>
                                 </div>
-                                <p className="mt-3 font-mono text-sm animate-pulse text-cyan-300">{loadingMessage}</p>
+                                <p className="mt-1 text-xs text-zinc-500">{loadingMessage}</p>
                                 <div className="flex items-center gap-4 mt-4">
                                     {isAnalysisInProgress && <button onClick={() => setIsLiveAnalysisVisible(true)} className="flex items-center gap-2 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 font-medium py-1.5 px-4 rounded-full text-xs transition-all uppercase tracking-wide"><EyeIcon />Live View</button>}
                                     {isPostMortemInProgress && <button onClick={() => setIsLivePostMortemVisible(true)} className="flex items-center gap-2 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 font-medium py-1.5 px-4 rounded-full text-xs transition-all uppercase tracking-wide"><EyeIcon />View Post-Mortem</button>}
-                                    <button onClick={handleCancelAnalysis} className="bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-300 font-medium py-1.5 px-4 rounded-full text-xs transition-all uppercase tracking-wide">Cancel</button>
+                                    <button onClick={handleCancelAnalysis} className="bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 font-medium py-1.5 px-4 rounded-full text-xs transition-all uppercase tracking-wide">Stop generating</button>
                                 </div>
                             </div>
                         )}
                     </div>
                 </div>
+                {/* Keep the composer mounted during generation so its send
+                    control changes into the active Stop control. */}
+                <ChatInput {...chatInputProps} />
+                </>
             ) : messages.length === 0 ? (
-                /* Fresh session: hero canvas — grid background, tagline,
-                    carded composer and centered quick actions */
-                <div className="absolute inset-0 z-10 bg-zinc-950 overflow-y-auto">
+                /* Fresh session: open canvas, tagline, centered composer,
+                    and quick actions */
+                <div className="chat-hero-grid absolute inset-0 z-10 bg-zinc-950 overflow-y-auto">
                     <div className="min-h-full flex flex-col items-center justify-center px-3 sm:px-4 lg:px-8 py-10">
                         {/* First-run guidance lives in the app-level
                             OnboardingCard (dismissible, persisted) — no
@@ -409,6 +438,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                                 onOpenLiveMarket={onOpenLiveMarket}
                                 onOpenAnalytics={onOpenAnalytics}
                                 isDisabled={!!loadingMessage}
+                                disableNewAnalysis={messages.length === 0}
                             />
                         </div>
                     </div>
@@ -425,6 +455,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                                 onOpenLiveMarket={onOpenLiveMarket}
                                 onOpenAnalytics={onOpenAnalytics}
                                 isDisabled={!!loadingMessage}
+                                disableNewAnalysis={messages.length === 0}
                             />
                         </div>
                     </div>

@@ -23,6 +23,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     encryptSecret: (plaintext) => ipcRenderer.invoke('crypto:encrypt', plaintext),
     decryptSecret: (payload) => ipcRenderer.invoke('crypto:decrypt', payload),
 
+    // Provider requests run in the Electron main process so APIs that do not
+    // expose browser CORS headers can still be used by the desktop app.
+    providerChat: (request) => ipcRenderer.invoke('provider:chat', request),
+    cancelProviderChat: (requestId) => ipcRenderer.invoke('provider:cancel', requestId),
+
     // Listen for real-time status updates pushed from main process
     onUpdateStatus: (callback) => {
         const handler = (_event, status) => callback(status);

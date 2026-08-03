@@ -19,19 +19,6 @@ interface Props {
   onChange: (config: AnalystLensConfig) => void;
 }
 
-// Provider display names for the dropdown
-const PROVIDER_DISPLAY_NAMES: Record<AIProvider, string> = {
-  [AIProvider.GEMINI]: 'Gemini',
-  [AIProvider.DEEPSEEK]: 'DeepSeek',
-  [AIProvider.ZHIPU]: 'Zhipu',
-  [AIProvider.GROQ]: 'Groq',
-  [AIProvider.GROQ_NEW]: 'Groq (Alt)',
-  [AIProvider.GROQ_ALT2]: 'Groq (Alt 2)',
-  [AIProvider.OPENROUTER]: 'OpenRouter',
-  [AIProvider.OPENAI]: 'OpenAI',
-  [AIProvider.GROK]: 'Grok',
-};
-
 // Trading style options
 const TRADING_STYLES: { value: TradingStyle; label: string; emoji: string; description: string }[] = [
   { value: 'position', label: 'Position', emoji: '', description: 'Daily/Weekly focus' },
@@ -161,7 +148,7 @@ export const AnalystLensSettings: React.FC<Props> = ({ config, enabledProviders,
                       value={provider}
                       disabled={isAssignedElsewhere}
                     >
-                      {PROVIDER_DISPLAY_NAMES[provider] || provider}
+                      {provider}
                       {isAssignedElsewhere ? ' (assigned)' : ''}
                     </option>
                   );

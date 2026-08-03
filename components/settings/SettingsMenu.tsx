@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { APP_NAME, APP_VERSION } from '../../constants/version';
 import { AIProvider, AccuracySubMode, LoggedTrade, GlobalMemory, TradeSummary } from '../../types';
 import { AnalystLensConfig } from '../../types/lens';
@@ -10,7 +10,7 @@ import CustomInstructionsEditor, { InstructionTab } from './CustomInstructionsEd
 import MemorySettings from './MemorySettings';
 import { DiagnosticsPanel } from './DiagnosticsPanel';
 import { Journal } from '../journal/Journal';
-import { CloseIcon, BookmarkIcon, UserIcon, ExportIcon, SearchIcon, SwitchUserIcon } from '../shared/Icons';
+import { ActivityIcon, AISettingsIcon, BrainIcon, CloseIcon, EditIcon, HistoryIcon, BookmarkIcon, SettingsIcon, UserIcon, ExportIcon, SearchIcon, SwitchUserIcon } from '../shared/Icons';
 
 export type SettingsTab = 'general' | 'models' | 'journal' | 'lenses' | 'instructions' | 'memory' | 'actions';
 
@@ -62,6 +62,17 @@ interface SettingsMenuProps {
     onSwitchUser?: () => void;
     onExportData?: () => Promise<void> | void;
     onOpenJournal?: (tab?: string) => void;
+    summarizationProvider?: AIProvider;
+    summarizationModel?: string;
+    onSetSummarizationProvider?: (provider: AIProvider) => void;
+    onSetSummarizationModel?: (model: string) => void;
+    summaryCharLimit?: number;
+    onUpdateSummaryCharLimit?: (limit: number) => void;
+    onRegenerateSummary?: () => Promise<void> | void;
+    useAlgorithmicSummary?: boolean;
+    onToggleAlgorithmicSummary?: (enabled: boolean) => void;
+    useAlgorithmicInsights?: boolean;
+    onToggleAlgorithmicInsights?: (enabled: boolean) => void;
     // Journal Props for Embedded View
     loggedTrades?: LoggedTrade[];
     onDeleteTrades?: (ids: string[]) => void;
@@ -97,9 +108,12 @@ interface SettingsMenuProps {
 
 // ─── Shared UI Helpers ────────────────────────────────────────────────────────
 
-const ToggleSwitch: React.FC<{ checked: boolean; onChange: () => void }> = ({ checked, onChange }) => (
+const ToggleSwitch: React.FC<{ checked: boolean; onChange: () => void; label?: string }> = ({ checked, onChange, label = 'Toggle setting' }) => (
     <button
+        type="button"
         onClick={onChange}
+        aria-label={label}
+        aria-pressed={checked}
         className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors duration-200 ease-in-out ${
             checked ? 'bg-cyan-500' : 'bg-zinc-700'
         }`}
@@ -197,6 +211,26 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
 
     const [activeTab, setActiveTab] = useState<SettingsTab>('models');
     const [activeInstructionTab, setActiveInstructionTab] = useState<InstructionTab>('general');
+    const dialogRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        if (!isVisible) return;
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                onClose();
+                return;
+            }
+            if (event.key !== 'Tab' || !dialogRef.current) return;
+            const focusable = dialogRef.current.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+            if (!focusable.length) return;
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+            else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+        };
+        document.addEventListener('keydown', handleKeyDown);
+        requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>('button')?.focus());
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, [isVisible, onClose]);
 
     // Enabled providers list for lens settings —
     // derived from dynamic provider configs (ready = enabled + API key).
@@ -232,13 +266,13 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
 
             {/* Centered Desktop Settings Modal */}
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 pointer-events-none">
-                <div className="pointer-events-auto w-[1150px] max-w-[95vw] h-[750px] max-h-[92vh] bg-zinc-950 border border-zinc-800/90 rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-fade-in">
+                <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="settings-title" className="pointer-events-auto w-[1150px] max-w-[95vw] h-[750px] max-h-[92vh] bg-zinc-950 border border-zinc-800/90 rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-fade-in">
                     
                     {/* Modal Top Header */}
                     <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800/80 bg-zinc-950 shrink-0">
                         <div className="flex items-center gap-3">
                             <div className="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-[0_0_8px_#b0b0b6]" />
-                            <h2 className="text-lg font-bold text-white tracking-tight">Settings</h2>
+                            <h2 id="settings-title" className="text-lg font-bold text-white tracking-tight">Settings</h2>
                         </div>
                         <button
                             onClick={onClose}
@@ -250,23 +284,23 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                     </div>
 
                     {/* Main Layout: Left Tab Bar + Right Workspace */}
-                    <div className="flex-1 flex min-h-0">
+                    <div className="flex-1 flex min-h-0 flex-col md:flex-row">
                         
                         {/* Left Tab Navigation Sidebar */}
-                        <div className="w-64 border-r border-zinc-800/80 bg-zinc-950 p-4 space-y-1 shrink-0 flex flex-col justify-between">
+                        <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-zinc-800/80 bg-zinc-950 p-4 space-y-1 shrink-0 flex flex-col justify-between">
                             <div className="space-y-1">
                                 <NavTabButton
                                     id="models"
                                     activeTab={activeTab}
                                     onClick={() => setActiveTab('models')}
-                                    icon=""
+                                    icon={<AISettingsIcon className="w-4 h-4" />}
                                     label="AI Models & Providers"
                                 />
                                 <NavTabButton
                                     id="journal"
                                     activeTab={activeTab}
                                     onClick={() => setActiveTab('journal')}
-                                    icon=""
+                                    icon={<HistoryIcon className="w-4 h-4" />}
                                     label="Trading Journal"
                                     badge={props.loggedTrades && props.loggedTrades.length > 0 ? `${props.loggedTrades.length}` : undefined}
                                 />
@@ -274,35 +308,35 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                     id="general"
                                     activeTab={activeTab}
                                     onClick={() => setActiveTab('general')}
-                                    icon=""
+                                    icon={<SettingsIcon className="w-4 h-4" />}
                                     label="General & Analysis"
                                 />
                                 <NavTabButton
                                     id="lenses"
                                     activeTab={activeTab}
                                     onClick={() => setActiveTab('lenses')}
-                                    icon=""
+                                    icon={<BrainIcon className="w-4 h-4" />}
                                     label="Analyst Lenses"
                                 />
                                 <NavTabButton
                                     id="instructions"
                                     activeTab={activeTab}
                                     onClick={() => setActiveTab('instructions')}
-                                    icon=""
+                                    icon={<EditIcon className="w-4 h-4" />}
                                     label="Custom Instructions"
                                 />
                                 <NavTabButton
                                     id="memory"
                                     activeTab={activeTab}
                                     onClick={() => setActiveTab('memory')}
-                                    icon=""
+                                    icon={<ActivityIcon className="w-4 h-4" />}
                                     label="Memory & Learning"
                                 />
                                 <NavTabButton
                                     id="actions"
                                     activeTab={activeTab}
                                     onClick={() => setActiveTab('actions')}
-                                    icon=""
+                                    icon={<SwitchUserIcon className="w-4 h-4" />}
                                     label="Profile & Quick Actions"
                                 />
                             </div>
@@ -339,16 +373,18 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         finalSummary={props.finalSummary || null}
                                         individualSummaries={props.individualSummaries || []}
                                         isLoading={!!props.isLoading}
-                                        summarizationProvider={firstReadyProvider?.id || ''}
-                                        summarizationModel={firstReadyProvider?.selectedModel || ''}
-                                        onSetSummarizationProvider={() => {}}
-                                        onSetSummarizationModel={() => {}}
+                                        summarizationProvider={props.summarizationProvider || firstReadyProvider?.id || ''}
+                                        summarizationModel={props.summarizationModel || firstReadyProvider?.selectedModel || ''}
+                                        onSetSummarizationProvider={props.onSetSummarizationProvider || (() => {})}
+                                        onSetSummarizationModel={props.onSetSummarizationModel || (() => {})}
                                         providers={readyConfigProviders}
-                                        summaryCharLimit={1000}
-                                        onUpdateSummaryCharLimit={() => {}}
-                                        onRegenerateSummary={() => {}}
-                                        useAlgorithmicSummary={false}
-                                        onToggleAlgorithmicSummary={() => {}}
+                                        summaryCharLimit={props.summaryCharLimit || 1000}
+                                        onUpdateSummaryCharLimit={props.onUpdateSummaryCharLimit || (() => {})}
+                                        onRegenerateSummary={props.onRegenerateSummary || (() => {})}
+                                        useAlgorithmicSummary={props.useAlgorithmicSummary ?? false}
+                                        onToggleAlgorithmicSummary={props.onToggleAlgorithmicSummary || (() => {})}
+                                        useAlgorithmicInsights={props.useAlgorithmicInsights ?? false}
+                                        onToggleAlgorithmicInsights={props.onToggleAlgorithmicInsights || (() => {})}
                                         familyWinRates={props.familyWinRates || {}}
                                         globalMemory={props.globalMemory ?? undefined}
                                         threadSummary={props.threadSummary || ''}
@@ -370,7 +406,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                                 <select
                                                     value={selectedOcrModel}
                                                     onChange={(e) => onSetOcrModel?.(e.target.value)}
-                                                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg text-xs p-2.5 text-zinc-200 focus:outline-none focus:border-cyan-500/60"
+                                                    className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 text-sm text-zinc-100 focus:outline-none focus:border-cyan-500/60 focus:ring-1 focus:ring-cyan-500/20 transition-all duration-200 appearance-none cursor-pointer bg-no-repeat bg-[right_0.9rem_center] bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2371717a%22%20stroke-width%3D%222.5%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22/%3E%3C/svg%3E')] text-xs"
                                                 >
                                                     {readyConfigProviders.flatMap(p => p.models.map(m => (
                                                         <option key={`${p.id}-${m}`} value={m}>{p.name}: {m}</option>
@@ -397,7 +433,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                                                 onSetModeratorModel?.(selectedCfg.selectedModel || selectedCfg.models[0]);
                                                             }
                                                         }}
-                                                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg text-xs p-2 text-zinc-200 focus:outline-none focus:border-cyan-500/60"
+                                                        className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 text-sm text-zinc-100 focus:outline-none focus:border-cyan-500/60 focus:ring-1 focus:ring-cyan-500/20 transition-all duration-200 appearance-none cursor-pointer bg-no-repeat bg-[right_0.9rem_center] bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2371717a%22%20stroke-width%3D%222.5%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22/%3E%3C/svg%3E')] text-xs"
                                                     >
                                                         {(providerConfigs ?? []).length > 0 ? (
                                                             (providerConfigs ?? []).map(c => (
@@ -413,7 +449,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                                     <select
                                                         value={moderatorModel || ''}
                                                         onChange={(e) => onSetModeratorModel?.(e.target.value)}
-                                                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg text-xs p-2 text-zinc-200 focus:outline-none focus:border-cyan-500/60"
+                                                        className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 text-sm text-zinc-100 focus:outline-none focus:border-cyan-500/60 focus:ring-1 focus:ring-cyan-500/20 transition-all duration-200 appearance-none cursor-pointer bg-no-repeat bg-[right_0.9rem_center] bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2371717a%22%20stroke-width%3D%222.5%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22/%3E%3C/svg%3E')] text-xs"
                                                     >
                                                         {(() => {
                                                             const activeProvId = moderatorProvider || (providerConfigs && providerConfigs[0]?.id);
@@ -466,7 +502,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                                         : 'Standard speed mode'}
                                                 </p>
                                             </div>
-                                            <ToggleSwitch checked={isAccuracyModeEnabled} onChange={onToggleAccuracyMode} />
+                                            <ToggleSwitch checked={isAccuracyModeEnabled} onChange={onToggleAccuracyMode} label="Toggle Accuracy Mode" />
                                         </div>
 
                                         {isAccuracyModeEnabled && (
@@ -508,19 +544,19 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                                 {setIsPlaybookEnabledInPureAI && (
                                                     <div className="flex items-center justify-between">
                                                         <span className="text-xs text-zinc-300">Strategy Playbook</span>
-                                                        <ToggleSwitch checked={!!isPlaybookEnabledInPureAI} onChange={() => setIsPlaybookEnabledInPureAI(!isPlaybookEnabledInPureAI)} />
+                                                    <ToggleSwitch checked={!!isPlaybookEnabledInPureAI} onChange={() => setIsPlaybookEnabledInPureAI(!isPlaybookEnabledInPureAI)} label="Toggle Strategy Playbook in Pure AI" />
                                                     </div>
                                                 )}
                                                 {setIsFamiliesEnabledInPureAI && (
                                                     <div className="flex items-center justify-between">
                                                         <span className="text-xs text-zinc-300">Pattern Families</span>
-                                                        <ToggleSwitch checked={!!isFamiliesEnabledInPureAI} onChange={() => setIsFamiliesEnabledInPureAI(!isFamiliesEnabledInPureAI)} />
+                                                    <ToggleSwitch checked={!!isFamiliesEnabledInPureAI} onChange={() => setIsFamiliesEnabledInPureAI(!isFamiliesEnabledInPureAI)} label="Toggle Pattern Families in Pure AI" />
                                                     </div>
                                                 )}
                                                 {setIsMemoryEnabledInPureAI && (
                                                     <div className="flex items-center justify-between">
                                                         <span className="text-xs text-zinc-300">Historical Memory</span>
-                                                        <ToggleSwitch checked={!!isMemoryEnabledInPureAI} onChange={() => setIsMemoryEnabledInPureAI(!isMemoryEnabledInPureAI)} />
+                                                    <ToggleSwitch checked={!!isMemoryEnabledInPureAI} onChange={() => setIsMemoryEnabledInPureAI(!isMemoryEnabledInPureAI)} label="Toggle Historical Memory in Pure AI" />
                                                     </div>
                                                 )}
                                             </div>
@@ -536,7 +572,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         <ToggleSwitch checked={isHybridIntelligenceEnabled} onChange={() => {
                                             if (onToggleHybridIntelligence) onToggleHybridIntelligence();
                                             else if (props.setIsHybridIntelligenceEnabled) props.setIsHybridIntelligenceEnabled(!isHybridIntelligenceEnabled);
-                                        }} />
+                                        }} label="Toggle Hybrid Intelligence" />
                                     </div>
 
                                     {/* Auto-Capture Options */}
@@ -546,19 +582,19 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                             {onToggleAutoCapturing && (
                                                 <div className="flex items-center justify-between">
                                                     <span className="text-xs text-zinc-300">Prompt for post-trade result capture</span>
-                                                    <ToggleSwitch checked={!!isAutoCapturing} onChange={onToggleAutoCapturing} />
+                                                    <ToggleSwitch checked={!!isAutoCapturing} onChange={onToggleAutoCapturing} label="Toggle post-trade result capture" />
                                                 </div>
                                             )}
                                             {onToggleUpdateAutoCapturing && (
                                                 <div className="flex items-center justify-between">
                                                     <span className="text-xs text-zinc-300">Prompt for active trade updates</span>
-                                                    <ToggleSwitch checked={!!isUpdateAutoCapturing} onChange={onToggleUpdateAutoCapturing} />
+                                                    <ToggleSwitch checked={!!isUpdateAutoCapturing} onChange={onToggleUpdateAutoCapturing} label="Toggle active trade update capture" />
                                                 </div>
                                             )}
                                             {onToggleEntryNotHitCapturing && (
                                                 <div className="flex items-center justify-between">
                                                     <span className="text-xs text-zinc-300">Prompt when entry price is not hit</span>
-                                                    <ToggleSwitch checked={!!isEntryNotHitCapturing} onChange={onToggleEntryNotHitCapturing} />
+                                                    <ToggleSwitch checked={!!isEntryNotHitCapturing} onChange={onToggleEntryNotHitCapturing} label="Toggle entry not hit capture" />
                                                 </div>
                                             )}
                                         </div>
@@ -617,7 +653,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                                             : 'Only per-thread memory (Layers 1 & 2) is active.'}
                                                     </p>
                                                 </div>
-                                                <ToggleSwitch checked={!!isGlobalMemoryEnabled} onChange={() => setIsGlobalMemoryEnabled(!isGlobalMemoryEnabled)} />
+                                                <ToggleSwitch checked={!!isGlobalMemoryEnabled} onChange={() => setIsGlobalMemoryEnabled(!isGlobalMemoryEnabled)} label="Toggle Global Memory" />
                                             </div>
                                         </div>
                                     )}

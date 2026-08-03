@@ -536,7 +536,7 @@ ${patternMatch.warning ? `\n PATTERN MEMORY:\n${patternMatch.warning}` : ''}
     const entryPrice = parseFloat(analysis.entryPoints[0]?.price?.replace(/[^0-9.-]/g, '') || '0');
     const stopLoss = parseFloat(analysis.stopLoss?.replace(/[^0-9.-]/g, '') || '0');
     const takeProfit1 = parseFloat(analysis.takeProfit[0]?.price?.replace(/[^0-9.-]/g, '') || '0');
-    const atr = hybridData.indicators['1h'].atr;
+    const atr = hybridData.indicators?.['1h']?.atr ?? 0;
 
     // Determine trade type from strategy
     let tradeType: 'continuation' | 'reversal' | 'breakout' | 'range' = 'continuation';

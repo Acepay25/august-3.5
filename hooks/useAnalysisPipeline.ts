@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
     Message, MessageRole, TradeOutcome, LoggedTrade, ImageMetadata,
     DebateTurn, Conversation, LiveThoughts, TradeAnalysis, TradeSummary,
@@ -25,6 +25,8 @@ import { ThinkingRecord } from '../types/thinking';
 import { extractLastJson } from '../utils/jsonUtils';
 import { sanitizeAIResponse } from '../utils/sanitizers';
 import { buildModelIdToName, isProviderReady } from '../utils/providerUtils';
+import { loadLearningRules } from '../services/learning/LearningRulesService';
+import { StructuredRule } from '../types';
 import {
     getCachedResponse, cacheResponse, getImageHash, clearAllCaches,
 } from '../services/infrastructure/responseCache';
@@ -43,7 +45,7 @@ export interface UseAnalysisPipelineParams {
     // From conversations:
     messages: Message[];
     messagesRef: React.MutableRefObject<Message[]>;
-    updateMessages: (updater: (prev: Message[]) => Message[]) => void;
+    updateMessages: (updater: (prev: Message[]) => Message[], conversationId?: string | null) => void;
     activeConversation: Conversation | undefined;
     activeConversationId: string | null;
 
@@ -106,6 +108,19 @@ export interface UseAnalysisPipelineParams {
     // Toast:
     toast: { warning: (t: string, m?: string) => void; error: (t: string, m?: string) => void };
 }
+
+// Best-effort pattern-family detection from the user prompt, so the
+// unified learning context can match insights/mistakes to the current setup
+// before the AI analysis completes (there is no analysis yet at send time).
+// Falls back to undefined when no keyword matches.
+const minePatternFromPrompt = (prompt: string): string | undefined => {
+    const p = prompt.toUpperCase();
+    if (p.includes('FAMILY A') || p.includes('EXHAUSTION') || p.includes('TRAP') || p.includes('FAKEOUT')) return 'Family A';
+    if (p.includes('FAMILY B') || p.includes('REVERSAL')) return 'Family B';
+    if (p.includes('FAMILY C') || p.includes('CONTINUATION')) return 'Family C';
+    if (p.includes('OMEGA') || p.includes('MOMENTUM')) return 'Family Omega';
+    return undefined;
+};
 
 // ─── Hook ──────────────────────────────────────────────────────────────────────
 
@@ -211,6 +226,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     // can paint anyway. The final flush() at the end of the loop guarantees
     // the last chunk's state is committed synchronously.
     const throttledDebateUpdate = useRafThrottle((
+        conversationId: string | null,
         debateMessageId: string,
         currentTurns: DebateTurn[],
         thoughtMap: Record<string, string>
@@ -226,7 +242,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             const newMessages = [...prev];
             newMessages[messageIndex] = updatedMessage;
             return newMessages;
-        });
+        }, conversationId);
     });
 
     // ─── State ─────────────────────────────────────────────────────────────
@@ -242,7 +258,34 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
     // ─── Refs ──────────────────────────────────────────────────────────────
     const analysisAbortController = useRef<AbortController | null>(null);
+    const analysisConversationIdRef = useRef<string | null>(null);
     const abortRef = useRef<boolean>(false);
+
+    useEffect(() => {
+        const requestConversationId = analysisConversationIdRef.current;
+        if (requestConversationId === null || requestConversationId === activeConversationId) return;
+
+        analysisAbortController.current?.abort();
+        analysisAbortController.current = null;
+        analysisConversationIdRef.current = null;
+        abortRef.current = true;
+        setLoadingMessage(null);
+        setIsAnalysisInProgress(false);
+        setIsPostMortemInProgress(false);
+        setIsLiveAnalysisVisible(false);
+        setIsLivePostMortemVisible(false);
+        setAnalysisSteps([]);
+    }, [activeConversationId, setIsLiveAnalysisVisible, setIsLivePostMortemVisible, setIsPostMortemInProgress]);
+
+    // Hybrid data and pipeline steps are ensemble-only. Clear any stale visual
+    // state immediately when the user switches back to casual chat mode.
+    useEffect(() => {
+        if (isEnsembleEnabled) return;
+        if (isHybridLoading) setIsHybridLoading(false);
+        if (currentHybridData !== null) setCurrentHybridData(null);
+        if (loadingMessage !== null) setLoadingMessage(null);
+        if (analysisSteps.length > 0) setAnalysisSteps([]);
+    }, [isEnsembleEnabled, isHybridLoading, currentHybridData, loadingMessage, analysisSteps.length]);
 
     // ─── Analysis Pipeline Step Tracking ───────────────────────────────────
     const initAnalysisSteps = (steps: AnalysisStep[]) => {
@@ -288,7 +331,25 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         if (isAnalysisInProgress) return;
 
         // --- ROUTING LOGIC: Standard vs Accuracy Mode ---
-        const enabledProviders = providerConfigs.filter(c => c.isEnabled && c.apiKey.trim().length > 0).map(c => ({ config: c, name: c.name, model: c.selectedModel, useImages: false, thoughtsKey: c.id }));
+        // Ensemble participants are model-level entries, not just provider
+        // entries. This allows several models from one provider while keeping
+        // each result and reasoning trace separate.
+        const enabledProviders = providerConfigs
+            .filter(c => c.isEnabled && c.apiKey.trim().length > 0)
+            .flatMap(c => {
+                const models = isEnsembleEnabled
+                    ? (c.ensembleModels?.filter(model => c.models.includes(model)).slice(0, 3)
+                        ?? (c.selectedModel ? [c.selectedModel] : []))
+                    : (c.selectedModel ? [c.selectedModel] : []);
+                return models.map(model => ({
+                    config: { ...c, selectedModel: model },
+                    name: isEnsembleEnabled && models.length > 1 ? `${c.name} · ${model}` : c.name,
+                    model,
+                    useImages: false,
+                    thoughtsKey: `${c.id}:${model}`,
+                }));
+            })
+            .slice(0, 3);
 
         let effectiveInput = '';
         if (typeof customPrompt === 'string') {
@@ -322,7 +383,17 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         analysisAbortController.current?.abort();
         const currentAbortController = new AbortController();
         analysisAbortController.current = currentAbortController;
+        analysisConversationIdRef.current = activeConversationId;
+        // Bind every async message write to the conversation that started the
+        // request. This remains correct even if the user switches conversations
+        // before a provider response or stream chunk arrives.
+        const requestConversationId = activeConversationId;
+        const updateRequestMessages = (updater: (prevMessages: Message[]) => Message[]): void => {
+            updateMessages(updater, requestConversationId);
+        };
         abortRef.current = false;
+        const isCurrentRequest = (): boolean =>
+            analysisAbortController.current === currentAbortController && !currentAbortController.signal.aborted;
 
         if (imagesToUse.length > 0) {
             const visionData = imagesToUse.map(img => img.fullAnalysisText || `Chart ${imagesToUse.indexOf(img) + 1}: No analysis text available.`);
@@ -339,7 +410,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
         // IMMEDIATELY show hybrid loading indicator if enabled (before message appears)
         // BUT skip if preset hybrid data was passed (from auto-capture)
-        if (isHybridIntelligenceEnabled && !currentHybridData && !options?.presetHybridData) {
+        if (isEnsembleEnabled && isHybridIntelligenceEnabled && !currentHybridData && !options?.presetHybridData) {
             // Only show loading and clear data if we are currently disconnected or in error state
             // This prevents flickering "connecting..." when we are already connected
             setHybridConnectionStatus(prev => (prev === 'connected' ? 'connected' : 'connecting'));
@@ -366,42 +437,56 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             ocrModelUsed: ocrModelsUsed.join(', '),
         };
 
-        updateMessages(prev => [...prev, userMessage]);
+        updateRequestMessages(prev => [...prev, userMessage]);
         setInput('');
         setImages([]);
 
         try {
-            const currentMessages = messagesRef.current;
+            const currentMessages = [...messagesRef.current, userMessage];
             const currentThreadSummary = activeConversation?.threadSummary;
             const memoryToInject = isGlobalMemoryEnabled ? globalMemory : undefined;
             const instructionsToUse = getActiveCustomInstructions();
 
-            // Initialize analysis pipeline steps
-            initAnalysisSteps([
-                { id: 'market-data', title: 'Fetching market data', status: 'pending' },
-                { id: 'gate-scan', title: 'Running pattern gate scan', status: 'pending' },
-                { id: 'analysis', title: 'Analyzing charts', status: 'pending' },
-                { id: 'debate', title: 'Ensemble debate', status: 'pending' },
-            ]);
+            // These steps describe the ensemble analysis pipeline only. Casual
+            // chat must not render analysis/fetching progress at all.
+            if (isEnsembleEnabled) {
+                initAnalysisSteps([
+                    { id: 'market-data', title: 'Fetching market data', status: 'pending' },
+                    { id: 'gate-scan', title: 'Running pattern gate scan', status: 'pending' },
+                    { id: 'analysis', title: 'Analyzing charts', status: 'pending' },
+                    { id: 'debate', title: 'Ensemble debate', status: 'pending' },
+                ]);
+            } else {
+                setAnalysisSteps([]);
+            }
 
             // HYBRID INTELLIGENCE: Inject real-time market data if enabled
+            // Bayesian confidence cap computed by the hybrid fetch (calibration
+            // pipeline) — enforced in processNewAnalysis below. Hoisted so the
+            // nested function can read it (hybridResult is block-scoped).
+            let bayesianConfidenceCap: 'High' | 'Medium' | 'Low' | 'Avoid' | undefined;
+
             // Skip fetching if preset data was already passed (from auto-capture)
             let hybridDataInjection = '';
             console.warn('[Hybrid Intelligence] ======= START =======');
             console.warn('[Hybrid Intelligence] Enabled:', isHybridIntelligenceEnabled);
             console.warn('[Hybrid Intelligence] HasPresetData:', !!options?.presetHybridData);
             console.warn('[Hybrid Intelligence] User prompt:', effectiveInput);
-            if (isHybridIntelligenceEnabled && !options?.presetHybridData) {
+            if (isEnsembleEnabled && isHybridIntelligenceEnabled && !options?.presetHybridData) {
                 try {
                     console.warn('[Hybrid Intelligence] Attempting to fetch data for prompt:', effectiveInput);
                     setLoadingMessage('Fetching real-time market data...');
                     startStep('market-data');
+                    const learningRules = loadLearningRules();
                     const hybridResult = await tryFetchHybridDataFromPromptWithCalibration(
                         effectiveInput,
-                        GlobalLearningService.getCalibration()
+                        GlobalLearningService.getCalibration(),
+                        learningRules
                     );
+                    if (!isCurrentRequest()) return;
                     setIsHybridLoading(false);
                     if (hybridResult) {
+                        bayesianConfidenceCap = hybridResult.adjustedConfidence;
                         // Use enhanced injection which includes calibration data
                         hybridDataInjection = hybridResult.enhancedInjection || hybridResult.promptInjection;
                         setCurrentHybridData(hybridResult.data); // Store for UI display
@@ -420,8 +505,9 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                         console.warn('[Hybrid Intelligence] FAILED - No symbol detected in prompt');
                     }
                 } catch (hybridError) {
+                    if (!isCurrentRequest()) return;
                     setIsHybridLoading(false);
-                    console.error('[Hybrid Intelligence] ERROR fetching market data:', hybridError);
+                    console.error('[Hybrid Intelligence] ERROR fetching market data');
                 }
             } else if (options?.presetHybridData) {
                 console.warn('[Hybrid Intelligence] SKIPPED - Using preset data from auto-capture');
@@ -445,7 +531,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 loggedTrades,
                 {
                     coin: detectedLearningCoin,
-                    pattern: undefined,
+                    pattern: minePatternFromPrompt(effectiveInput),
                     direction: effectiveInput.toLowerCase().includes('long') ? 'Long' :
                         effectiveInput.toLowerCase().includes('short') ? 'Short' : 'Neutral'
                 },
@@ -522,7 +608,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
             let gateInjection = '';
             let capturedGateResult: typeof currentGateResult = null; // Local variable to avoid state closure issue
-            if (finalSymbol && isHybridIntelligenceEnabled) {
+            if (finalSymbol && isEnsembleEnabled && isHybridIntelligenceEnabled) {
                 try {
                     console.log(`[GateKeeper] Running Gate check for ${finalSymbol}...`);
                     setLoadingMessage('Running Gate Scan...');
@@ -616,7 +702,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             analysis: finalAnalysis,
                             hybridData: freshHybridData, // May be null in non-hybrid mode
                             calibration: GlobalLearningService.getCalibration(), // Use global persistent calibration
-                            tradeHistory: loggedTrades
+                            tradeHistory: loggedTrades,
+                            learningRules: loadLearningRules().rules as StructuredRule[]
                         });
 
                         // Store original confidence if adjusted
@@ -624,6 +711,20 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             finalAnalysis.originalConfidence = validationResult.originalConfidence;
                             finalAnalysis.confidence = validationResult.adjustedConfidence;
                             console.log(`[ValidationGate] Confidence adjusted: ${validationResult.originalConfidence} → ${validationResult.adjustedConfidence}`);
+                        }
+
+                        // Bayesian cap from the hybrid fetch: the calibration
+                        // pipeline computes a capped confidence level for this
+                        // setup — never let the analysis exceed it.
+                        if (bayesianConfidenceCap) {
+                            const LEVEL_ORDER: Record<string, number> = { low: 0, medium: 1, high: 2 };
+                            const cap = LEVEL_ORDER[bayesianConfidenceCap.toLowerCase()];
+                            const current = LEVEL_ORDER[finalAnalysis.confidence?.toLowerCase() || 'high'];
+                            if (cap !== undefined && current !== undefined && current > cap) {
+                                finalAnalysis.originalConfidence = finalAnalysis.originalConfidence ?? finalAnalysis.confidence;
+                                finalAnalysis.confidence = bayesianConfidenceCap;
+                                console.log(`[Bayesian] Confidence capped: ${current} → ${bayesianConfidenceCap}`);
+                            }
                         }
 
                         // Store validation warnings
@@ -706,6 +807,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                                 indicators: {},
                                 regime: { detected: 'unknown', trendDirection: 'neutral' }
                             } as any).then(mcResult => {
+                                if (!isCurrentRequest()) return;
                                 if (mcResult) {
                                     setLatestMonteCarloResult(mcResult);
                                     // Also add to perAI results as the final moderator result
@@ -828,7 +930,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     );
 
                     const settledResults = await Promise.allSettled(analysisPromises);
-                    if (abortRef.current) return;
+                    if (!isCurrentRequest()) return;
                     setLoadingMessage(null);
                     completeStep('analysis');
 
@@ -876,6 +978,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     // synchronous fallback) so 1000 simulations per analyst
                     // never block the debate UI.
                     for (const [index, settled] of settledResults.entries()) {
+                        if (!isCurrentRequest()) return;
                         if (settled.status !== 'fulfilled') continue; // failed analyst has no analysis
                         const providerName = enabledProviders[index]?.name || `Unknown-${index}`;
                         const analysis = settled.value?.analysis;
@@ -901,6 +1004,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                                     takeProfit: analysis.takeProfit
                                 }, hybridDataForMC);
 
+                                if (!isCurrentRequest()) return;
                                 if (mcResult) {
                                     perAIMC.push({
                                         provider: providerName,
@@ -928,7 +1032,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     const debatePlaceholder: Message = {
                         id: debateMessageId, role: MessageRole.AI, text: '', createdAt: new Date().toISOString(), isDebating: true, debateTurns: [], ocrModelUsed: userMessage.ocrModelUsed,
                         imageSummaries: userMessage.imageSummaries,
-                        modelsUsed: Object.fromEntries(enabledProviders.map(p => [p.config.id, p.model])),
+                        modelsUsed: Object.fromEntries(enabledProviders.map(p => [p.thoughtsKey, p.model])),
 
                         // Add thought processes so all analysts appear in UI
                         thoughtProcesses: { ...thoughtMap },
@@ -940,7 +1044,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     };
 
                     // Prevent Duplicate Keys: Check if message ID already exists
-                    updateMessages(prev => {
+                    updateRequestMessages(prev => {
                         if (prev.some(m => m.id === debateMessageId)) return prev;
                         return [...prev, debatePlaceholder];
                     });
@@ -1023,7 +1127,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     const turnRegex = /(?:^|\n)\s*(?:[*_~]*)(Gemini|DeepSeek|Zhipu|Groq|Groq \(Alt\)|Groq \(Alt 2\)|OpenRouter|Moderator|Master Strategist|Claude[^:]*|GPT[^:]*|Grok[^:]*|Mistral[^:]*|Kimi[^:]*|Qwen[^:]*|LLaMA[^:]*|Puter[^:]*)[^\n]*?(?:[*_~]*)\s*:\s*([\s\S]*?)(?=(?:^|\n)\s*(?:[*_~]*)(?:Gemini|DeepSeek|Zhipu|Groq|Groq \(Alt\)|Groq \(Alt 2\)|OpenRouter|Moderator|Master Strategist|Claude|GPT|Grok|Mistral|Kimi|Qwen|LLaMA|Puter)[^\n]*?(?:[*_~]*)\s*:|$)/gi;
 
                     for await (const chunk of debateStream) {
-                        if (abortRef.current) break;
+                        if (!isCurrentRequest()) break;
                         fullResponseText += chunk;
 
                         const startTagRegex = /(?:<|\*\*<|`|< \*\*|_\*<)?DEBATE_START(?:>|>\*\*|`|\*\* >|>\*_)*/i;
@@ -1078,12 +1182,12 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                         }
 
                         // P1-5: Coalesce per-token updates into one per frame.
-                        throttledDebateUpdate(debateMessageId, currentTurns, thoughtMap);
+                        throttledDebateUpdate(requestConversationId, debateMessageId, currentTurns, thoughtMap);
                     }
                     // Flush the final pending update synchronously so the
                     // last chunk's state is committed before downstream parsing.
                     throttledDebateUpdate.flush();
-                    if (abortRef.current) return;
+                    if (!isCurrentRequest()) return;
 
                     let finalAnalysis: TradeAnalysis;
                     try {
@@ -1136,7 +1240,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                         }
                     }
 
-                    updateMessages(prev => {
+                    updateRequestMessages(prev => {
                         const messageIndex = prev.findIndex(m => m.id === debateMessageId);
                         if (messageIndex === -1) return prev;
 
@@ -1284,11 +1388,11 @@ const result = await cachedAnalyzeTradingView(
                                 )
                                 : undefined
                         );
-                    if (abortRef.current) return;
+                    if (!isCurrentRequest()) return;
                     const soloAiMessage: Message = {
                         id: `ai-${Date.now()}`, role: MessageRole.AI, text: result.thoughtProcess, createdAt: new Date().toISOString(), analysis: processNewAnalysis(result.analysis), sources: result.sources || [], outcome: TradeOutcome.PENDING, ocrModelUsed: userMessage.ocrModelUsed,
                         imageSummaries: userMessage.imageSummaries,
-                        modelsUsed: { [provider.config.id]: provider.model },
+                        modelsUsed: { [provider.thoughtsKey]: provider.model },
                         thoughtProcesses: { [provider.config.id]: result.thoughtProcess },
                         isAccuracyMode: isAccuracyModeEnabled,
                         isLensMode: lensConfig?.enabled ?? false,
@@ -1309,7 +1413,7 @@ const result = await cachedAnalyzeTradingView(
                     if (freshHybridData) {
                         soloAiMessage.analysis!.marketSnapshot = freshHybridData;
                     }
-                    updateMessages(prev => [...prev, soloAiMessage]);
+                        updateRequestMessages(prev => [...prev, soloAiMessage]);
                 }
             } else {
                 // Casual chat: use the user-selected model when it maps to a
@@ -1322,15 +1426,34 @@ const result = await cachedAnalyzeTradingView(
                     ? { config: { ...chosen, selectedModel: selectedChatModel }, name: chosen.name, model: selectedChatModel, useImages: false, thoughtsKey: chosen.id }
                     : enabledProviders[0];
                 setLoadingMessage("Thinking...");
+                setIsAnalysisInProgress(true);
                 startStep('analysis');
-                const responseText = await getQuickResponse(provider.config, promptToSend, [...currentMessages, userMessage]);
-                if (abortRef.current) return;
-                updateMessages(prev => [...prev, { id: `ai-${Date.now()}`, role: MessageRole.AI, text: responseText, createdAt: new Date().toISOString(), modelsUsed: { [provider.config.id]: provider.model }, thoughtProcesses: { [provider.config.id]: responseText } }]);
+                let reasoningContent = '';
+                const responseText = await getQuickResponse(
+                    provider.config,
+                    promptToSend,
+                    currentMessages,
+                    undefined,
+                    currentAbortController.signal,
+                    reasoning => { reasoningContent = reasoning; }
+                );
+                if (!isCurrentRequest()) return;
+                // Casual chat is a single-model conversation. Do not store the
+                // answer as an individual insight; that creates an oversized
+                // "Individual AI Insights" section under ordinary replies.
+                updateRequestMessages(prev => [...prev, {
+                    id: `ai-${Date.now()}`,
+                    role: MessageRole.AI,
+                    text: responseText,
+                    createdAt: new Date().toISOString(),
+                    modelsUsed: { [provider.config.id]: provider.model },
+                    thoughtProcesses: reasoningContent ? { [provider.config.id]: reasoningContent } : undefined,
+                }]);
             }
         } catch (error: any) {
-            if (abortRef.current) return;
+            if (!isCurrentRequest()) return;
             failStep('analysis');
-            updateMessages(prev => prev.filter(m => !m.isDebating));
+            updateRequestMessages(prev => prev.filter(m => !m.isDebating));
 
             if (isQuotaError(error)) {
                 const quotaModelNames = buildModelIdToName(providerConfigs);
@@ -1341,7 +1464,7 @@ const result = await cachedAnalyzeTradingView(
                         flaggedModel = quotaModelNames[p.model] || p.model;
                     }
                 });
-                updateMessages(prev => [...prev, { id: `err-${Date.now()}`, role: MessageRole.SYSTEM, createdAt: new Date().toISOString(), text: `Model "${flaggedModel || 'an enabled AI'}" has exceeded its usage quota.` }]);
+                updateRequestMessages(prev => [...prev, { id: `err-${Date.now()}`, role: MessageRole.SYSTEM, createdAt: new Date().toISOString(), text: `Model "${flaggedModel || 'an enabled AI'}" has exceeded its usage quota.` }]);
                 return;
             }
 
@@ -1350,7 +1473,7 @@ const result = await cachedAnalyzeTradingView(
             // and cap length so internal SDK errors stay readable but bounded.
             const rawMessage = error instanceof Error ? error.message : "An unknown error occurred.";
             const safeMessage = rawMessage.replace(/\b[A-Za-z0-9_-]{24,}\b/g, '***').slice(0, 500);
-            updateMessages(prev => [...prev, { id: `err-${Date.now()}`, role: MessageRole.SYSTEM, createdAt: new Date().toISOString(), text: safeMessage }]);
+            updateRequestMessages(prev => [...prev, { id: `err-${Date.now()}`, role: MessageRole.SYSTEM, createdAt: new Date().toISOString(), text: safeMessage }]);
         } finally {
             if (analysisAbortController.current === currentAbortController) {
                 setLoadingMessage(null);
@@ -1358,6 +1481,7 @@ const result = await cachedAnalyzeTradingView(
                 // Mark any still-running steps as complete
                 setAnalysisSteps(prev => prev.map(s => s.status === 'running' ? { ...s, status: 'complete' as const, endTime: Date.now() } : s));
                 analysisAbortController.current = null;
+                analysisConversationIdRef.current = null;
                 setIsAnalysisInProgress(false);
             }
         }

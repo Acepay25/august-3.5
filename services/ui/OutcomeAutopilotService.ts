@@ -134,6 +134,24 @@ class OutcomeAutopilotServiceClass {
         await this.runChecks();
     }
 
+    /**
+     * Clear every registration/resolution for the previous profile and stop
+     * the loop. Called on profile switch — otherwise the singleton keeps
+     * kline-verifying the old user's pending analyses and the processed/
+     * dismissed sets leak across profiles.
+     */
+    reset(): void {
+        this.registrations.clear();
+        this.resolutions.clear();
+        this.dismissed.clear();
+        this.processed.clear();
+        if (this.timer) {
+            clearInterval(this.timer);
+            this.timer = null;
+        }
+        void this.persist();
+    }
+
     // ── Internals ─────────────────────────────────────────────────────────
 
     private ensureLoop(): void {
