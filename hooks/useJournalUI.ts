@@ -17,7 +17,6 @@ export function useJournalUI() {
     const [expandedDebateTranscripts, setExpandedDebateTranscripts] = useState<Record<string, boolean>>({});
     const [expandedPostMortemImages, setExpandedPostMortemImages] = useState<Record<string, boolean>>({});
     const [expandedPostMortems, setExpandedPostMortems] = useState<Record<string, boolean>>({});
-    const [collapsedUserMessages, setCollapsedUserMessages] = useState<Record<string, boolean>>({});
     const [postMortemCandidate, setPostMortemCandidate] = useState<PostMortemCandidate | null>(null);
 
     return {
@@ -30,7 +29,6 @@ export function useJournalUI() {
         expandedDebateTranscripts, setExpandedDebateTranscripts,
         expandedPostMortemImages, setExpandedPostMortemImages,
         expandedPostMortems, setExpandedPostMortems,
-        collapsedUserMessages, setCollapsedUserMessages,
         postMortemCandidate, setPostMortemCandidate,
     };
 }

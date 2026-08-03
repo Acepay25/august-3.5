@@ -22,6 +22,7 @@ export const PREF_KEYS = {
 
     // Settings
     ANALYST_LENS_CONFIG: 'analyst_lens_config',
+    CASUAL_CHAT_MODEL: 'casual_chat_model',
     MODEL_PERFORMANCE_DATA: 'model_performance_data',
     ROLLING_WINDOW_DATA: 'rolling_window_data',
     CONFIDENCE_CALIBRATION: 'confidence_calibration',

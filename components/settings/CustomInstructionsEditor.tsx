@@ -28,12 +28,12 @@ const InstructionCard: React.FC<{
     const [isExpanded, setIsExpanded] = useState(false);
 
     return (
-        <div className={`rounded-2xl border transition-all duration-300 ${instruction.isActive ? 'bg-zinc-900/80 border-cyan-500/30 shadow-[0_0_15px_-5px_rgba(176, 176, 182,0.1)]' : 'bg-zinc-900/30 border-white/5 opacity-80 hover:opacity-100'}`}>
+        <div className={`rounded-2xl border transition-all duration-300 ${instruction.isActive ? 'bg-zinc-900 border-cyan-500/30 shadow-[0_0_15px_-5px_rgba(176, 176, 182,0.1)]' : 'bg-zinc-800 border-white/5 opacity-80 hover:opacity-100'}`}>
             <div className="p-3 flex items-center justify-between gap-3">
                 <div className="flex-1 flex items-center gap-3 min-w-0">
                     <button
                         onClick={() => setIsExpanded(!isExpanded)}
-                        className="p-1 rounded hover:bg-white/5 transition-colors text-zinc-500 hover:text-zinc-300"
+                        className="p-1 rounded hover:bg-zinc-800 transition-colors text-zinc-500 hover:text-zinc-300"
                     >
                         <ChevronDownIcon className={`w-4 h-4 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
                     </button>
@@ -179,7 +179,7 @@ const CustomInstructionsEditor: React.FC<CustomInstructionsEditorProps> = ({
             </div>
 
             {/* Word Count Progress */}
-            <div className="bg-black/20 rounded-xl p-3 border border-white/5">
+            <div className="bg-zinc-800 rounded-xl p-3 border border-white/5">
                 <div className="flex justify-between items-center text-[10px] font-mono mb-1.5">
                     <span className="text-zinc-500 uppercase font-bold tracking-wider">Token Usage</span>
                     <span className={`${totalWordCount > MAX_WORD_COUNT ? 'text-red-400 font-bold' : 'text-zinc-400'}`}>
@@ -217,7 +217,7 @@ const CustomInstructionsEditor: React.FC<CustomInstructionsEditorProps> = ({
             <button
                 onClick={handleAddInstruction}
                 disabled={currentInstructions.length >= MAX_ITEMS}
-                className="w-full py-3 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 text-xs font-bold uppercase tracking-wider text-zinc-400 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full py-3 rounded-2xl border border-white/10 bg-zinc-800 hover:bg-zinc-700 text-xs font-bold uppercase tracking-wider text-zinc-400 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
                 + Add New Instruction ({currentInstructions.length}/{MAX_ITEMS})
             </button>

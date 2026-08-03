@@ -15,16 +15,16 @@ const isSafeUrl = (url: string): boolean => {
 // Per-provider display metadata for thought-process insights, keyed by provider id.
 // Legacy brand hints — unknown/custom provider ids fall back to DEFAULT_INSIGHT_STYLE.
 const PROVIDER_INSIGHT_STYLES: Record<string, { name: string; bgClass: string; borderClass: string; titleClass: string; textClass: string }> = {
-    gemini: { name: 'Gemini', bgClass: 'bg-blue-950/20', borderClass: 'border-blue-500/20', titleClass: 'text-blue-400', textClass: 'text-blue-100/90' },
-    deepseek: { name: 'DeepSeek', bgClass: 'bg-emerald-950/20', borderClass: 'border-emerald-500/20', titleClass: 'text-emerald-400', textClass: 'text-emerald-100/90' },
-    zhipu: { name: 'Zhipu AI', bgClass: 'bg-orange-950/20', borderClass: 'border-orange-500/20', titleClass: 'text-orange-400', textClass: 'text-orange-100/90' },
-    groq: { name: 'Groq', bgClass: 'bg-yellow-950/20', borderClass: 'border-yellow-500/20', titleClass: 'text-yellow-400', textClass: 'text-yellow-100/90' },
-    groq_new: { name: 'Groq (Alt)', bgClass: 'bg-lime-950/20', borderClass: 'border-lime-500/20', titleClass: 'text-lime-400', textClass: 'text-lime-100/90' },
-    groq_alt2: { name: 'Groq (Alt 2)', bgClass: 'bg-rose-950/20', borderClass: 'border-rose-500/20', titleClass: 'text-rose-400', textClass: 'text-rose-100/90' },
-    openrouter: { name: 'OpenRouter', bgClass: 'bg-emerald-950/20', borderClass: 'border-emerald-500/20', titleClass: 'text-emerald-400', textClass: 'text-emerald-100/90' },
-    grok: { name: 'Grok (xAI)', bgClass: 'bg-sky-950/20', borderClass: 'border-sky-500/20', titleClass: 'text-sky-400', textClass: 'text-sky-100/90' },
+    gemini: { name: 'Gemini', bgClass: 'bg-zinc-800', borderClass: 'border-blue-500/20', titleClass: 'text-blue-400', textClass: 'text-blue-100/90' },
+    deepseek: { name: 'DeepSeek', bgClass: 'bg-zinc-800', borderClass: 'border-emerald-500/20', titleClass: 'text-emerald-400', textClass: 'text-emerald-100/90' },
+    zhipu: { name: 'Zhipu AI', bgClass: 'bg-zinc-800', borderClass: 'border-orange-500/20', titleClass: 'text-orange-400', textClass: 'text-orange-100/90' },
+    groq: { name: 'Groq', bgClass: 'bg-zinc-800', borderClass: 'border-yellow-500/20', titleClass: 'text-yellow-400', textClass: 'text-yellow-100/90' },
+    groq_new: { name: 'Groq (Alt)', bgClass: 'bg-zinc-800', borderClass: 'border-lime-500/20', titleClass: 'text-lime-400', textClass: 'text-lime-100/90' },
+    groq_alt2: { name: 'Groq (Alt 2)', bgClass: 'bg-zinc-800', borderClass: 'border-rose-500/20', titleClass: 'text-rose-400', textClass: 'text-rose-100/90' },
+    openrouter: { name: 'OpenRouter', bgClass: 'bg-zinc-800', borderClass: 'border-emerald-500/20', titleClass: 'text-emerald-400', textClass: 'text-emerald-100/90' },
+    grok: { name: 'Grok (xAI)', bgClass: 'bg-zinc-800', borderClass: 'border-sky-500/20', titleClass: 'text-sky-400', textClass: 'text-sky-100/90' },
 };
-const DEFAULT_INSIGHT_STYLE = { name: 'AI', bgClass: 'bg-zinc-950/20', borderClass: 'border-zinc-500/20', titleClass: 'text-zinc-400', textClass: 'text-zinc-100/90' };
+const DEFAULT_INSIGHT_STYLE = { name: 'AI', bgClass: 'bg-zinc-800', borderClass: 'border-zinc-500/20', titleClass: 'text-zinc-400', textClass: 'text-zinc-100/90' };
 
 export interface ChatContextProps {
     typingMessageState: { id: string; fullText: string; field: 'postMortem' } | null;
@@ -39,8 +39,6 @@ export interface ChatContextProps {
     setExpandedIndividualThoughts: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
     expandedDebateTranscripts: Record<string, boolean>;
     setExpandedDebateTranscripts: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
-    collapsedUserMessages: Record<string, boolean>;
-    setCollapsedUserMessages: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
     savedAnalyses: SavedAnalysis[];
     loggingTradeId: string | null;
     activeFrameworks: string[];
@@ -83,7 +81,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
     const {
         typingMessageState, highlightedAnalysisId, expandedPostMortems, setExpandedPostMortems,
         expandedPostMortemImages, setExpandedPostMortemImages, expandedIndividualThoughts, setExpandedIndividualThoughts,
-        expandedDebateTranscripts, setExpandedDebateTranscripts, collapsedUserMessages, setCollapsedUserMessages,
+        expandedDebateTranscripts, setExpandedDebateTranscripts,
         savedAnalyses, loggingTradeId,
         activeFrameworks, activeConversation, copiedMessageId, modelIdToName, ocrModelIdToName, providerNameToId,
         handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy,
@@ -96,7 +94,6 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
 
     const isHighlighted = highlightedAnalysisId === message.id;
     const isUserMessage = message.role === MessageRole.USER;
-    const isCollapsed = isUserMessage && collapsedUserMessages[message.id];
 
     // Resolve a human-readable model name for a given provider id from message.modelsUsed.
     const resolveModelName = (providerId: string): string => {
@@ -149,7 +146,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
             className={`flex items-start gap-2 sm:gap-4 my-2 sm:my-4 px-2 sm:px-4 transition-all duration-200 lg:max-w-3xl lg:mx-auto
             ${message.role === MessageRole.USER ? 'justify-end' : message.role === MessageRole.SYSTEM ? 'justify-center' : ''} 
             ${isHighlighted ? 'ring-2 ring-blue-500/40 rounded-2xl bg-blue-900/10' : ''}
-            ${isSelectionMode ? 'cursor-pointer hover:bg-white/5 rounded-xl py-2' : ''}
+            ${isSelectionMode ? 'cursor-pointer hover:bg-zinc-800 rounded-xl py-2' : ''}
         `}
             onClick={isSelectionMode ? handleSelectionClick : undefined}
         >
@@ -166,22 +163,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                 : 'p-3 sm:p-5 rounded-2xl w-fit max-w-[85%] sm:max-w-3xl break-words shadow-sm border relative group'
                 } ${isUserMessage ? '' : bubbleClass}`}>
 
-                {isUserMessage && !isSelectionMode && (
-                    <button
-                        onClick={() => setCollapsedUserMessages(prev => ({ ...prev, [message.id]: !prev[message.id] }))}
-                        className="absolute top-2 right-2 p-1.5 text-white/50 hover:text-white bg-black/10 hover:bg-black/30 rounded-full transition-all opacity-0 group-hover:opacity-100 focus:opacity-100 z-10"
-                        title={isCollapsed ? "Expand message" : "Collapse message"}
-                    >
-                        <ChevronDownIcon className={`w-3 h-3 sm:w-4 sm:h-4 transition-transform duration-300 ${isCollapsed ? '' : 'rotate-180'}`} />
-                    </button>
-                )}
-
-                {isCollapsed ? (
-                    <div className="text-sm italic opacity-80 cursor-pointer pr-6 select-none" onClick={() => setCollapsedUserMessages(prev => ({ ...prev, [message.id]: false }))}>
-                        {displayContent.length > 0 ? (displayContent.slice(0, 80) + (displayContent.length > 80 ? "..." : "")) : "Message collapsed"}
-                    </div>
-                ) : (
-                    <>
+                <>
                         {/* Post-Mortem Collapsible Header */}
                         {message.isPostMortem && (
                             <button
@@ -326,7 +308,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                                                     if (isSelectionMode) return;
                                                                     setExpandedIndividualThoughts(prev => ({ ...prev, [insightKey]: !isExpanded }));
                                                                 }}
-                                                                className="w-full flex items-center justify-between p-3 sm:p-4 hover:bg-white/5 transition-colors"
+                                                                className="w-full flex items-center justify-between p-3 sm:p-4 hover:bg-zinc-800 transition-colors"
                                                             >
                                                                 <p className={`font-bold ${insight.titleClass}`}>{insight.provider} ({insight.model})</p>
                                                                 <ChevronDownIcon className={`w-4 h-4 ${insight.titleClass} transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
@@ -380,12 +362,11 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                         </div>
                                         {message.ocrModelUsed && <span className="block">Vision: <span className="text-zinc-300">{(message.ocrModelUsed || '').split(',').map(id => id.trim()).map(id => ocrModelIdToName[id] || id).join(' & ')}</span></span>}
                                     </div>
-                                    <button onClick={() => handleCopy(message)} className="self-start sm:self-auto flex items-center gap-2 text-zinc-400 hover:text-white transition-colors bg-white/5 hover:bg-white/10 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg font-medium">{copiedMessageId === message.id ? (<><CheckIcon className="h-3 w-3 sm:h-4 sm:w-4 text-emerald-400" />Copied</>) : (<><CopyIcon />Copy Text</>)}</button>
+                                    <button onClick={() => handleCopy(message)} className="self-start sm:self-auto flex items-center gap-2 text-zinc-400 hover:text-white transition-colors bg-zinc-800 hover:bg-zinc-700 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg font-medium">{copiedMessageId === message.id ? (<><CheckIcon className="h-3 w-3 sm:h-4 sm:w-4 text-emerald-400" />Copied</>) : (<><CopyIcon />Copy Text</>)}</button>
                                 </div>
                             )}
                         </div>
-                    </>
-                )}
+                </>
             </div>
         </div>
     );

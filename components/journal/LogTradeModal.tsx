@@ -52,7 +52,7 @@ export const LogTradeModal: React.FC<{
   const content = outcome === TradeOutcome.WIN ? winContent : lossContent;
 
   return (
-    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Log trade">
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Log trade">
       <div className="bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-md border border-white/10 animate-fade-in max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className={`p-5 border-b border-white/5 ${outcome === TradeOutcome.WIN ? 'bg-emerald-500/10' : 'bg-rose-500/10'}`}>

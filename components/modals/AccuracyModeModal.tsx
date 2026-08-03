@@ -13,7 +13,7 @@ export const AccuracyModeModal: React.FC<AccuracyModeModalProps> = ({ isOpen, on
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in" role="dialog" aria-modal="true" aria-label="Accuracy mode">
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 animate-fade-in" role="dialog" aria-modal="true" aria-label="Accuracy mode">
       <div className={`bg-zinc-950 border-2 ${isEnabling ? 'border-cyan-600' : 'border-zinc-700'} rounded-2xl max-w-md w-full overflow-hidden shadow-[0_0_50px_rgba(176, 176, 182,0.3)] max-h-[90vh] overflow-y-auto`}>
         <div className="p-6 text-center">
           {isEnabling ? (
@@ -25,7 +25,7 @@ export const AccuracyModeModal: React.FC<AccuracyModeModalProps> = ({ isOpen, on
               <p className="text-cyan-200/80 text-sm mb-6 leading-relaxed">
                 This will activate the <strong>10-Layer Accuracy Protocol</strong>.
               </p>
-              <ul className="text-left text-xs text-cyan-300 space-y-2 bg-black/40 p-4 rounded-xl border border-cyan-900/50 mb-6">
+              <ul className="text-left text-xs text-cyan-300 space-y-2 bg-zinc-800 p-4 rounded-xl border border-cyan-900/50 mb-6">
                 <li className="flex gap-2"> <strong>Strict Logic:</strong> Lazy analysis is forbidden.</li>
                 <li className="flex gap-2"> <strong>Model Lockdown:</strong> Dropdowns will disappear.</li>
 
@@ -47,7 +47,7 @@ export const AccuracyModeModal: React.FC<AccuracyModeModalProps> = ({ isOpen, on
           <div className="flex gap-3">
             <button
               onClick={onClose}
-              className="flex-1 py-3 rounded-xl font-bold text-zinc-400 hover:bg-white/5 transition-colors"
+              className="flex-1 py-3 rounded-xl font-bold text-zinc-400 hover:bg-zinc-800 transition-colors"
             >
               Cancel
             </button>

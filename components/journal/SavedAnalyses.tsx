@@ -29,7 +29,7 @@ const SavedAnalysisRow: React.FC<{
   const safeDirection = direction || 'Neutral';
 
   return (
-    <div className={`bg-zinc-950/50 rounded-lg border ${isSelected ? 'border-cyan-500' : 'border-white/10'}`}>
+    <div className={`bg-zinc-950 rounded-lg border ${isSelected ? 'border-cyan-500' : 'border-white/10'}`}>
       <div className="flex items-center p-3 cursor-pointer" onClick={onToggle}>
         <input
           type="checkbox"
@@ -64,7 +64,7 @@ const SavedAnalysisRow: React.FC<{
               <strong className="text-zinc-400 block mb-1">Take Profit Targets:</strong>
               <div className="flex flex-col gap-2">
                 {(takeProfit || []).map((tp, i) => (
-                  <div key={i} className="flex items-center justify-between font-mono text-emerald-400 bg-zinc-950/30 p-2 rounded-md border border-white/5">
+                  <div key={i} className="flex items-center justify-between font-mono text-emerald-400 bg-zinc-900 p-2 rounded-md border border-white/5">
                     <span>{tp.price}</span>
                     <div className="flex items-center gap-2 text-xs">
                       {tp.percentage && <span className="text-cyan-300 bg-cyan-900/50 px-2 py-0.5 rounded-md">{tp.percentage}</span>}
@@ -135,7 +135,7 @@ const SavedAnalyses: React.FC<SavedAnalysesProps> = ({ analyses, onClose, isVisi
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/70 z-40 backdrop-blur-sm" onClick={onClose}></div>
+      <div className="fixed inset-0 bg-black/70 z-40" onClick={onClose}></div>
       <aside className="fixed top-0 right-0 h-full w-full sm:max-w-2xl bg-zinc-900 shadow-2xl z-50 transform transition-transform duration-300 ease-in-out flex flex-col">
         <header className="flex items-center justify-between p-4 border-b border-white/10">
           <h2 className="text-lg font-bold text-cyan-400">Saved Analyses for Review</h2>

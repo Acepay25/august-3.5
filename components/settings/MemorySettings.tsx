@@ -24,7 +24,7 @@ export interface MemorySettingsProps {
 
 // Memory Provider
 const MemorySettings: React.FC<MemorySettingsProps> = ({ providerConfigs, memoryConfig, onMemoryConfigChange }) => (
-    <div className="p-4 rounded-2xl bg-zinc-900/50 border border-purple-500/20">
+    <div className="p-4 rounded-2xl bg-zinc-800 border border-purple-500/20">
         <div className="flex items-center gap-2 mb-3">
             <span className="text-xl"></span>
             <span className="text-sm font-bold text-purple-400">Memory Provider</span>

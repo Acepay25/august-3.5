@@ -12,7 +12,7 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onRefres
             <div className="bg-gradient-to-r from-cyan-600 to-blue-600 text-white px-4 py-3 shadow-lg">
                 <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
                     <div className="flex items-center gap-3">
-                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center">
                             <RefreshIcon className="w-4 h-4" />
                         </div>
                         <div>
@@ -29,7 +29,7 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onRefres
                         </button>
                         <button
                             onClick={onDismiss}
-                            className="p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                            className="p-2 text-white/70 hover:text-white hover:bg-zinc-700 rounded-lg transition-colors"
                             title="Dismiss"
                         >
                             <CloseIcon className="w-4 h-4" />

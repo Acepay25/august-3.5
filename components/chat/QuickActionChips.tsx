@@ -23,7 +23,7 @@ export const QuickActionChips: React.FC<QuickActionChipsProps> = ({
     const [isHidden, setIsHidden] = useState(false);
 
     if (layout === 'centered') {
-        const chipClass = "flex items-center gap-2 px-4 py-2 bg-transparent border border-white/10 hover:border-white/25 hover:bg-white/5 rounded-full text-sm font-medium text-zinc-300 hover:text-zinc-100 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed";
+        const chipClass = "flex items-center gap-2 px-4 py-2 bg-transparent border border-white/10 hover:border-white/25 hover:bg-zinc-800 rounded-full text-sm font-medium text-zinc-300 hover:text-zinc-100 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed";
         return (
             <div className="flex items-center justify-center gap-2 flex-wrap">
                 <button
@@ -62,7 +62,7 @@ export const QuickActionChips: React.FC<QuickActionChipsProps> = ({
             {/* Toggle Button - Always visible */}
             <button
                 onClick={() => setIsHidden(!isHidden)}
-                className="flex items-center justify-center w-8 h-8 bg-zinc-800/80 hover:bg-zinc-700/80 border border-white/10 hover:border-zinc-500/50 rounded-full text-zinc-400 hover:text-white transition-all duration-300 shrink-0 z-10 lg:mb-2"
+                className="flex items-center justify-center w-8 h-8 bg-zinc-800 hover:bg-zinc-700 border border-white/10 hover:border-zinc-500/50 rounded-full text-zinc-400 hover:text-white transition-all duration-300 shrink-0 z-10 lg:mb-2"
                 title={isHidden ? "Show quick actions" : "Hide quick actions"}
             >
                 {isHidden ? (
@@ -84,7 +84,7 @@ export const QuickActionChips: React.FC<QuickActionChipsProps> = ({
                     <button
                         onClick={onNewAnalysis}
                         disabled={isDisabled}
-                        className="flex items-center justify-center lg:justify-start gap-2 px-4 py-2.5 lg:py-3 bg-zinc-800/60 hover:bg-zinc-700/60 border border-white/10 hover:border-cyan-500/30 rounded-full lg:rounded-xl whitespace-nowrap text-sm font-medium text-zinc-300 hover:text-white transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shrink-0 lg:w-full"
+                        className="flex items-center justify-center lg:justify-start gap-2 px-4 py-2.5 lg:py-3 bg-zinc-800 hover:bg-zinc-700 border border-white/10 hover:border-cyan-500/30 rounded-full lg:rounded-xl whitespace-nowrap text-sm font-medium text-zinc-300 hover:text-white transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shrink-0 lg:w-full"
                     >
                         <span className="text-cyan-400"><PlusIcon className="w-4 h-4" /></span>
                         <span>New Analysis</span>
@@ -92,7 +92,7 @@ export const QuickActionChips: React.FC<QuickActionChipsProps> = ({
                     <button
                         onClick={onOpenJournal}
                         disabled={isDisabled}
-                        className="flex items-center justify-center lg:justify-start gap-2 px-4 py-2.5 lg:py-3 bg-zinc-800/60 hover:bg-zinc-700/60 border border-white/10 hover:border-violet-500/30 rounded-full lg:rounded-xl whitespace-nowrap text-sm font-medium text-zinc-300 hover:text-white transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shrink-0 lg:w-full"
+                        className="flex items-center justify-center lg:justify-start gap-2 px-4 py-2.5 lg:py-3 bg-zinc-800 hover:bg-zinc-700 border border-white/10 hover:border-violet-500/30 rounded-full lg:rounded-xl whitespace-nowrap text-sm font-medium text-zinc-300 hover:text-white transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shrink-0 lg:w-full"
                     >
                         <span className="text-violet-400"><BookmarkIcon className="w-4 h-4" /></span>
                         <span>Trade Journal</span>
@@ -100,7 +100,7 @@ export const QuickActionChips: React.FC<QuickActionChipsProps> = ({
                     <button
                         onClick={onOpenAnalytics}
                         disabled={isDisabled}
-                        className="flex items-center justify-center lg:justify-start gap-2 px-4 py-2.5 lg:py-3 bg-zinc-800/60 hover:bg-zinc-700/60 border border-white/10 hover:border-purple-500/30 rounded-full lg:rounded-xl whitespace-nowrap text-sm font-medium text-zinc-300 hover:text-white transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shrink-0 lg:w-full"
+                        className="flex items-center justify-center lg:justify-start gap-2 px-4 py-2.5 lg:py-3 bg-zinc-800 hover:bg-zinc-700 border border-white/10 hover:border-purple-500/30 rounded-full lg:rounded-xl whitespace-nowrap text-sm font-medium text-zinc-300 hover:text-white transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shrink-0 lg:w-full"
                     >
                         <span></span>
                         <span>Analytics</span>
@@ -108,7 +108,7 @@ export const QuickActionChips: React.FC<QuickActionChipsProps> = ({
                     <button
                         onClick={onOpenLiveMarket}
                         disabled={isDisabled}
-                        className="flex items-center justify-center lg:justify-start gap-2 px-4 py-2.5 lg:py-3 bg-zinc-800/60 hover:bg-zinc-700/60 border border-white/10 hover:border-emerald-500/30 rounded-full lg:rounded-xl whitespace-nowrap text-sm font-medium text-zinc-300 hover:text-white transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shrink-0 lg:w-full"
+                        className="flex items-center justify-center lg:justify-start gap-2 px-4 py-2.5 lg:py-3 bg-zinc-800 hover:bg-zinc-700 border border-white/10 hover:border-emerald-500/30 rounded-full lg:rounded-xl whitespace-nowrap text-sm font-medium text-zinc-300 hover:text-white transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shrink-0 lg:w-full"
                     >
                         <span className="text-emerald-400"><ActivityIcon className="w-4 h-4" /></span>
                         <span>Live Market</span>

@@ -44,7 +44,7 @@ const TimeframeBadge: React.FC<{ tf: string; indicators: any; expanded?: boolean
 
     if (!expanded) {
         return (
-            <div className="bg-zinc-900/50 rounded-lg p-2 border border-white/5">
+            <div className="bg-zinc-800 rounded-lg p-2 border border-white/5">
                 <div className="text-[9px] font-bold text-cyan-400 uppercase tracking-wider mb-1">{tf}</div>
                 <div className="space-y-0">
                     <IndicatorRow label="RSI14" value={indicators.rsi.rsi14} color={rsiColor} />
@@ -56,7 +56,7 @@ const TimeframeBadge: React.FC<{ tf: string; indicators: any; expanded?: boolean
     }
 
     return (
-        <div className="bg-zinc-900/50 rounded-lg p-3 border border-white/5 space-y-2">
+        <div className="bg-zinc-800 rounded-lg p-3 border border-white/5 space-y-2">
             <div className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider border-b border-white/5 pb-1">{tf} Timeframe</div>
 
             {/* RSI Section */}
@@ -231,7 +231,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
                             }`}></div>
                     </div>
                     {/* Tooltip */}
-                    <div className="absolute left-14 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-zinc-900/95 border border-white/10 rounded-lg px-3 py-2 whitespace-nowrap pointer-events-none min-w-[180px]">
+                    <div className="absolute left-14 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-zinc-900 border border-white/10 rounded-lg px-3 py-2 whitespace-nowrap pointer-events-none min-w-[180px]">
                         <div className="flex items-center gap-2 mb-1">
                             <span className="text-zinc-400 font-bold text-[10px] uppercase">Hybrid Intelligence</span>
                         </div>
@@ -268,7 +268,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
                             }`}></div>
                     </div>
                     {/* Tooltip */}
-                    <div className="absolute left-14 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-zinc-900/95 border border-white/10 rounded-lg px-3 py-2 whitespace-nowrap pointer-events-none min-w-[180px]">
+                    <div className="absolute left-14 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-zinc-900 border border-white/10 rounded-lg px-3 py-2 whitespace-nowrap pointer-events-none min-w-[180px]">
                         <div className="flex items-center gap-2 mb-1">
                             <span className="text-emerald-400 font-bold text-[10px] uppercase">Hybrid Intelligence</span>
                         </div>
@@ -302,7 +302,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
 
                 {/* Top banner notification */}
                 <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 animate-slide-down">
-                    <div className="bg-gradient-to-r from-emerald-950/95 to-cyan-950/95 border border-emerald-500/50 rounded-xl px-6 py-3 shadow-2xl shadow-emerald-500/20 backdrop-blur-xl">
+                    <div className="bg-gradient-to-r from-emerald-950/95 to-cyan-950/95 border border-emerald-500/50 rounded-xl px-6 py-3 shadow-2xl shadow-emerald-500/20">
                         <div className="flex items-center gap-4">
                             {/* Animated icon */}
                             <div className="relative">
@@ -372,7 +372,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
                 >
                     <span className="text-xl pointer-events-none"></span>
                     <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full ${data.marketData.priceChangePercent24h >= 0 ? 'bg-emerald-500' : 'bg-rose-500'} border border-black animate-pulse pointer-events-none`}></div>
-                    <div className="absolute left-14 opacity-0 group-hover:opacity-100 transition-opacity bg-zinc-900/95 border border-white/10 rounded-lg px-3 py-2 whitespace-nowrap pointer-events-none">
+                    <div className="absolute left-14 opacity-0 group-hover:opacity-100 transition-opacity bg-zinc-900 border border-white/10 rounded-lg px-3 py-2 whitespace-nowrap pointer-events-none">
                         <div className="text-[10px] text-zinc-300 font-bold">{data.symbol}</div>
                         <div className="text-white font-bold text-sm">${formatPrice(data.marketData.currentPrice)}</div>
                         <div className={`text-[10px] ${priceChangeColor}`}>
@@ -393,7 +393,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
             <div className="h-full max-h-[calc(100vh-120px)] bg-zinc-900 border border-white/10 rounded-2xl overflow-hidden shadow-xl flex flex-col">
                 {/* Header - Drag Handle */}
                 <div
-                    className={`flex items-center justify-between p-3 border-b border-white/5 bg-zinc-800/50 ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+                    className={`flex items-center justify-between p-3 border-b border-white/5 bg-zinc-800 ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
                     onMouseDown={handleDragStart}
                     onTouchStart={handleDragStart}
                 >
@@ -418,7 +418,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
                         </button>
                         <button
                             onClick={() => setIsExpanded(false)}
-                            className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-zinc-400 hover:text-white"
+                            className="p-1.5 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400 hover:text-white"
                         >
                             <CloseIcon className="w-4 h-4" />
                         </button>
@@ -443,13 +443,13 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
                                 <span>{data.session.minutesToSessionEnd}m remaining</span>
                             </div>
                             <div className="grid grid-cols-2 gap-2 text-[9px]">
-                                <div className="bg-black/20 rounded p-1.5">
+                                <div className="bg-zinc-800 rounded p-1.5">
                                     <div className="text-zinc-500">Volatility</div>
                                     <div className={data.session.volatilityExpectation === 'high' ? 'text-rose-400 font-bold' : 'text-zinc-300'}>
                                         {data.session.volatilityExpectation.toUpperCase()}
                                     </div>
                                 </div>
-                                <div className="bg-black/20 rounded p-1.5">
+                                <div className="bg-zinc-800 rounded p-1.5">
                                     <div className="text-zinc-500">Action</div>
                                     <div className={data.session.suggestedAction === 'optimal' ? 'text-emerald-400 font-bold' : 'text-zinc-300'}>
                                         {data.session.suggestedAction.toUpperCase()}
@@ -460,7 +460,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
                     )}
 
                     {/* Price Card */}
-                    <div className="bg-zinc-900/50 rounded-xl p-3 border border-white/5">
+                    <div className="bg-zinc-800 rounded-xl p-3 border border-white/5">
                         <div className="flex items-baseline justify-between">
                             <div className="text-white font-bold text-xl">${formatPrice(data.marketData.currentPrice)}</div>
                             <div className={`text-sm font-bold ${priceChangeColor}`}>
@@ -481,7 +481,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
 
                     {/* NEW: Market Regime */}
                     {data.regime && (
-                        <div className="bg-zinc-900/50 rounded-xl p-3 border border-white/5">
+                        <div className="bg-zinc-800 rounded-xl p-3 border border-white/5">
                             <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2">Market Regime</div>
                             <div className="flex items-center justify-between mb-2">
                                 <div className="text-xs font-bold text-white">{data.regime.regime.replace(/_/g, ' ').toUpperCase()}</div>
@@ -495,7 +495,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
 
                     {/* NEW: Derivatives Sentiment */}
                     {data.derivatives && (
-                        <div className="bg-zinc-900/50 rounded-xl p-3 border border-white/5">
+                        <div className="bg-zinc-800 rounded-xl p-3 border border-white/5">
                             <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2">Derivatives Sentiment</div>
                             <div className="flex items-center justify-between mb-2">
                                 <div className={`text-xs font-bold ${data.derivatives.overallSentiment.includes('bullish') ? 'text-emerald-400' :
@@ -506,15 +506,15 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
                                 <div className="text-[9px] text-zinc-400">Score: {data.derivatives.sentimentScore}</div>
                             </div>
                             <div className="grid grid-cols-3 gap-1 text-[8px]">
-                                <div className="bg-black/20 rounded p-1 text-center">
+                                <div className="bg-zinc-800 rounded p-1 text-center">
                                     <div className="text-zinc-500">L/S Ratio</div>
                                     <div className="text-zinc-300">{data.derivatives.longShortRatio.ratio.toFixed(2)}</div>
                                 </div>
-                                <div className="bg-black/20 rounded p-1 text-center">
+                                <div className="bg-zinc-800 rounded p-1 text-center">
                                     <div className="text-zinc-500">Top Trader</div>
                                     <div className="text-zinc-300">{data.derivatives.topTraderRatio.ratio.toFixed(2)}</div>
                                 </div>
-                                <div className="bg-black/20 rounded p-1 text-center">
+                                <div className="bg-zinc-800 rounded p-1 text-center">
                                     <div className="text-zinc-500">OI</div>
                                     <div className="text-zinc-300">{formatVolume(data.derivatives.openInterestValue)}</div>
                                 </div>
@@ -524,7 +524,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
 
                     {/* NEW: Order Book Depth */}
                     {data.orderBook && (
-                        <div className="bg-zinc-900/50 rounded-xl p-3 border border-white/5">
+                        <div className="bg-zinc-800 rounded-xl p-3 border border-white/5">
                             <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2"> Order Book Depth</div>
                             <div className="flex items-center justify-between mb-2">
                                 <div className={`text-xs font-bold ${data.orderBook.dominantSide === 'buyers' ? 'text-emerald-400' :
@@ -563,7 +563,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
 
                     {/* NEW: Recent Liquidations */}
                     {data.liquidations && (
-                        <div className="bg-zinc-900/50 rounded-xl p-3 border border-white/5">
+                        <div className="bg-zinc-800 rounded-xl p-3 border border-white/5">
                             <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2"> Recent Liquidations (1H)</div>
                             <div className="flex items-center justify-between mb-2">
                                 <div className={`text-xs font-bold ${data.liquidations.liquidationPressure === 'high' ? 'text-orange-400' :
@@ -686,7 +686,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
                             {(slOptimization.contextRecommendations?.length ?? 0) > 0 && (
                                 <div className="space-y-1">
                                     {slOptimization.contextRecommendations!.slice(0, 2).map((rec, i) => (
-                                        <div key={i} className="text-[9px] text-amber-200/70 bg-black/20 px-2 py-1 rounded">
+                                        <div key={i} className="text-[9px] text-amber-200/70 bg-zinc-800 px-2 py-1 rounded">
                                             {rec.context}: {(rec.recommendedMultiplier * 100).toFixed(0)}%
                                         </div>
                                     ))}
@@ -699,7 +699,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
                     )}
 
                     {/* 24H Range */}
-                    <div className="bg-zinc-900/50 rounded-xl p-2 border border-white/5">
+                    <div className="bg-zinc-800 rounded-xl p-2 border border-white/5">
                         <div className="flex justify-between text-[9px] text-zinc-500 uppercase mb-1">
                             <span>${formatPrice(data.marketData.price24hLow)}</span>
                             <span>24H</span>
@@ -763,7 +763,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
                 </div>
 
                 {/* Footer */}
-                <div className="p-2 border-t border-white/5 bg-zinc-900/50">
+                <div className="p-2 border-t border-white/5 bg-zinc-800">
                     <div className="text-center text-[8px] text-zinc-600">
                         Source: Binance API • Calculated by technicalindicators
                     </div>

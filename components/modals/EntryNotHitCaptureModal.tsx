@@ -24,7 +24,7 @@ export const EntryNotHitCaptureModal: React.FC<EntryNotHitCaptureModalProps> = (
     const coinName = message.analysis?.coinName || 'this trade';
 
     return (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Entry not hit capture">
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Entry not hit capture">
             <div className="bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-lg border border-cyan-500/30 animate-fade-in max-h-[90vh] overflow-y-auto">
                 {/* Header */}
                 <div className="p-5 border-b border-white/5 bg-cyan-950/30">
@@ -47,7 +47,7 @@ export const EntryNotHitCaptureModal: React.FC<EntryNotHitCaptureModalProps> = (
                 </div>
 
                 {/* Info Section */}
-                <div className="p-5 border-b border-white/5 bg-zinc-900/50">
+                <div className="p-5 border-b border-white/5 bg-zinc-800">
                     <div className="flex items-start gap-3 p-3 rounded-lg bg-cyan-500/5 border border-cyan-500/10">
                         <span className="text-lg"></span>
                         <div>
@@ -101,7 +101,7 @@ export const EntryNotHitCaptureModal: React.FC<EntryNotHitCaptureModalProps> = (
                     <button
                         onClick={onUploadScreenshot}
                         disabled={isCapturing}
-                        className="w-full p-4 rounded-xl border border-white/10 bg-zinc-800/50 hover:bg-zinc-800 hover:border-cyan-500/30 transition-all text-left group disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full p-4 rounded-xl border border-white/10 bg-zinc-800 hover:bg-zinc-800 hover:border-cyan-500/30 transition-all text-left group disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <div className="flex items-start gap-4">
                             <div className="text-3xl"></div>
@@ -120,7 +120,7 @@ export const EntryNotHitCaptureModal: React.FC<EntryNotHitCaptureModalProps> = (
                     <button
                         onClick={onSkip}
                         disabled={isCapturing}
-                        className="w-full p-3 rounded-xl border border-white/5 bg-zinc-900/50 hover:bg-zinc-800/50 hover:border-white/10 transition-all text-center disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full p-3 rounded-xl border border-white/5 bg-zinc-800 hover:bg-zinc-800 hover:border-white/10 transition-all text-center disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <span className="text-sm text-zinc-500 hover:text-zinc-400 transition-colors">
                             Skip data capture →
@@ -129,7 +129,7 @@ export const EntryNotHitCaptureModal: React.FC<EntryNotHitCaptureModalProps> = (
                 </div>
 
                 {/* Footer */}
-                <div className="px-5 py-4 border-t border-white/5 bg-zinc-950/50">
+                <div className="px-5 py-4 border-t border-white/5 bg-zinc-950">
                     <div className="flex items-center justify-between">
                         <p className="text-[10px] text-zinc-600 max-w-[200px]">
                             AI will analyze why the setup didn't trigger
@@ -137,7 +137,7 @@ export const EntryNotHitCaptureModal: React.FC<EntryNotHitCaptureModalProps> = (
                         <button
                             onClick={onClose}
                             disabled={isCapturing}
-                            className="py-2 px-4 rounded-lg text-zinc-400 hover:text-white hover:bg-white/5 transition-colors text-sm disabled:opacity-50"
+                            className="py-2 px-4 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors text-sm disabled:opacity-50"
                         >
                             Cancel
                         </button>

@@ -305,13 +305,12 @@ code,
   max-height: 30000px;
 }
 
-/* ===== GLASSMORPHISM ===== */
+/* ===== SOLID SURFACES ===== */
 
-/* Glassmorphism utilities - Optimized for Mobile Performance */
+/* Solid charcoal surfaces — glassmorphism (translucency + blur) is
+   intentionally removed; cards render on opaque zinc fills. */
 .glass {
-  background: rgba(22, 22, 24, 0.95);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: #161618; /* zinc-900 */
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
@@ -320,15 +319,7 @@ code,
   .glass {
     background: #161618;
     /* zinc-900 fallback */
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
     border-bottom: 1px solid #202024;
-  }
-
-  /* Globally disable backdrop-filter on mobile for performance */
-  * {
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
   }
 
   .glass-panel {
@@ -346,8 +337,7 @@ code,
 }
 
 .glass-panel {
-  background: rgba(12, 12, 14, 0.8);
-  backdrop-filter: blur(6px);
+  background: #202024; /* zinc-800 */
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
 

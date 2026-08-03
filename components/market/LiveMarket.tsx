@@ -685,7 +685,7 @@ ${JSON.stringify(marketData, null, 2)}
     return (
         <div className="fixed inset-0 bg-zinc-950 z-50 flex flex-col animate-fade-in pb-[env(safe-area-inset-bottom)]">
             {/* Header - 2 rows on mobile for spacious feel */}
-            <div className="bg-zinc-900/95 backdrop-blur-sm border-b border-white/10 flex-shrink-0">
+            <div className="bg-zinc-900 border-b border-white/10 flex-shrink-0">
                 {/* Top Row - Title, Price & Close */}
                 <div className="flex items-center justify-between px-3 sm:px-4 py-3 border-b border-white/5">
                     <div className="flex items-center gap-2 sm:gap-3">
@@ -768,7 +768,7 @@ ${JSON.stringify(marketData, null, 2)}
                     <div className="flex items-center gap-2 shrink-0">
                         <button
                             onClick={() => setIsAlertModalOpen(true)}
-                            className="h-10 w-10 flex items-center justify-center text-zinc-400 hover:text-yellow-400 bg-zinc-800/80 hover:bg-yellow-500/10 border border-white/5 hover:border-yellow-500/30 rounded-xl transition-all active:scale-95"
+                            className="h-10 w-10 flex items-center justify-center text-zinc-400 hover:text-yellow-400 bg-zinc-800 hover:bg-yellow-500/10 border border-white/5 hover:border-yellow-500/30 rounded-xl transition-all active:scale-95"
                             aria-label="Price Alerts"
                         >
                             <BellIcon className="w-5 h-5" />
@@ -795,7 +795,7 @@ ${JSON.stringify(marketData, null, 2)}
                             <div className="absolute top-2 right-2 z-10 flex flex-col gap-2 max-w-[200px]">
                                 {/* AI Analyzing Indicator */}
                                 {isAIAnalyzing && (
-                                    <div className="flex items-center gap-2 bg-[#b0b0b6]/10 border border-[#b0b0b6]/20 rounded-lg px-3 py-1.5 backdrop-blur-sm">
+                                    <div className="flex items-center gap-2 bg-[#b0b0b6]/10 border border-[#b0b0b6]/20 rounded-lg px-3 py-1.5">
                                         <Spinner size="w-3 h-3" color="border-[#b0b0b6]" />
                                         <span className="text-[#b0b0b6] font-bold text-xs">AI Analyzing...</span>
                                     </div>
@@ -803,7 +803,7 @@ ${JSON.stringify(marketData, null, 2)}
 
                                 {/* Market Bias Badge */}
                                 {!isAIAnalyzing && marketBias !== 'neutral' && (
-                                    <div className={`flex items-center gap-2 rounded-lg px-3 py-1.5 backdrop-blur-sm ${marketBias === 'bullish'
+                                    <div className={`flex items-center gap-2 rounded-lg px-3 py-1.5 ${marketBias === 'bullish'
                                         ? 'bg-emerald-500/10 border border-emerald-500/20'
                                         : 'bg-rose-500/10 border border-rose-500/20'
                                         }`}>
@@ -816,7 +816,7 @@ ${JSON.stringify(marketData, null, 2)}
 
                                 {/* Key Levels */}
                                 {!isAIAnalyzing && keyLevels.length > 0 && (
-                                    <div className="bg-zinc-900/80 border border-white/10 rounded-lg px-3 py-2 backdrop-blur-sm">
+                                    <div className="bg-zinc-900 border border-white/10 rounded-lg px-3 py-2">
                                         <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Key Levels</span>
                                         <div className="flex flex-col gap-1 mt-1">
                                             {keyLevels.slice(0, 4).map((level, i) => (
@@ -833,7 +833,7 @@ ${JSON.stringify(marketData, null, 2)}
 
                                 {/* AI Summary */}
                                 {!isAIAnalyzing && aiSummary && (
-                                    <div className="bg-zinc-900/80 border border-white/10 rounded-lg px-3 py-2 backdrop-blur-sm">
+                                    <div className="bg-zinc-900 border border-white/10 rounded-lg px-3 py-2">
                                         <span className="text-[10px] text-zinc-400 leading-relaxed line-clamp-3">{aiSummary}</span>
                                     </div>
                                 )}
@@ -847,7 +847,7 @@ ${JSON.stringify(marketData, null, 2)}
                     {/* Panel Header */}
                     <button
                         onClick={() => setIsInsightsPanelExpanded(!isInsightsPanelExpanded)}
-                        className="w-full flex items-center justify-between px-4 py-3 hover:bg-zinc-800/50 transition-colors"
+                        className="w-full flex items-center justify-between px-4 py-3 hover:bg-zinc-800 transition-colors"
                     >
                         <div className="flex items-center gap-2">
                             <BrainIcon className="w-5 h-5 text-cyan-400" />
@@ -871,7 +871,7 @@ ${JSON.stringify(marketData, null, 2)}
                     {isInsightsPanelExpanded && marketInsights && !isAIAnalyzing && (
                         <div className="px-4 pb-4 space-y-4 max-h-[40vh] overflow-y-auto custom-scrollbar">
                             {/* Current Situation */}
-                            <div className="bg-zinc-800/50 rounded-xl p-3 border border-white/5">
+                            <div className="bg-zinc-800 rounded-xl p-3 border border-white/5">
                                 <div className="flex items-center gap-2 mb-2">
                                     <ActivityIcon className="w-4 h-4 text-cyan-400" />
                                     <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Current Situation</span>
@@ -881,7 +881,7 @@ ${JSON.stringify(marketData, null, 2)}
 
                             {/* Key Observations */}
                             {marketInsights.observations.length > 0 && (
-                                <div className="bg-zinc-800/50 rounded-xl p-3 border border-white/5">
+                                <div className="bg-zinc-800 rounded-xl p-3 border border-white/5">
                                     <div className="flex items-center gap-2 mb-2">
                                         <span className="text-base"></span>
                                         <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Key Observations</span>
@@ -941,7 +941,7 @@ ${JSON.stringify(marketData, null, 2)}
                     {/* Loading State */}
                     {isInsightsPanelExpanded && isAIAnalyzing && (
                         <div className="px-4 pb-4">
-                            <div className="bg-zinc-800/50 rounded-xl p-6 border border-white/5 flex flex-col items-center justify-center gap-3">
+                            <div className="bg-zinc-800 rounded-xl p-6 border border-white/5 flex flex-col items-center justify-center gap-3">
                                 <Spinner size="w-8 h-8" color="border-cyan-400" />
                                 <span className="text-sm text-zinc-400">Analyzing market conditions...</span>
                             </div>
@@ -952,7 +952,7 @@ ${JSON.stringify(marketData, null, 2)}
 
             {/* Notification Toast */}
             {notification && (
-                <div className="absolute top-28 left-4 right-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-50 bg-emerald-500/90 text-white px-5 py-3.5 rounded-2xl shadow-2xl backdrop-blur-md flex items-center gap-3 animate-fade-in">
+                <div className="absolute top-28 left-4 right-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-50 bg-emerald-500/90 text-white px-5 py-3.5 rounded-2xl shadow-2xl flex items-center gap-3 animate-fade-in">
                     <CheckIcon className="w-5 h-5 shrink-0" />
                     <span className="font-medium text-sm">{notification}</span>
                 </div>
@@ -960,7 +960,7 @@ ${JSON.stringify(marketData, null, 2)}
 
             {/* Alert Modal - Mobile Optimized */}
             {isAlertModalOpen && (
-                <div className="absolute top-32 left-4 right-4 sm:left-4 sm:right-auto sm:w-80 bg-zinc-900/95 backdrop-blur-sm border border-white/10 rounded-2xl shadow-2xl p-5 animate-fade-in z-50">
+                <div className="absolute top-32 left-4 right-4 sm:left-4 sm:right-auto sm:w-80 bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl p-5 animate-fade-in z-50">
                     <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-widest mb-4">Price Alerts</h3>
                     <div className="flex gap-3 mb-4">
                         <input

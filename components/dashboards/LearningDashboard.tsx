@@ -15,7 +15,7 @@ const StatCard: React.FC<{
     items: { name: string; value: string; subtext?: string; color?: string }[];
     emptyText?: string;
 }> = ({ title, items, emptyText = 'Not enough data' }) => (
-    <div className="bg-zinc-900/50 rounded-xl border border-white/5 p-3 sm:p-4">
+    <div className="bg-zinc-800 rounded-xl border border-white/5 p-3 sm:p-4">
         <h4 className="text-[10px] sm:text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2 sm:mb-3">{title}</h4>
         {items.length > 0 ? (
             <div className="space-y-2">
@@ -56,7 +56,7 @@ const CalibrationBar: React.FC<{ label: string; actual: number; expected: number
                 />
                 {/* Expected marker */}
                 <div
-                    className="absolute h-full w-0.5 bg-white/30"
+                    className="absolute h-full w-0.5 bg-zinc-600"
                     style={{ left: `${expected}%` }}
                 />
             </div>
@@ -184,7 +184,7 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades }) 
 
             {/*Confidence Calibration */}
             {profile.confidenceAccuracy.length > 0 && (
-                <div className="bg-zinc-900/50 rounded-xl border border-white/5 p-3 sm:p-4">
+                <div className="bg-zinc-800 rounded-xl border border-white/5 p-3 sm:p-4">
                     <h4 className="text-[10px] sm:text-xs font-bold text-zinc-500 uppercase tracking-wider mb-3 sm:mb-4">
                         Confidence Calibration
                     </h4>

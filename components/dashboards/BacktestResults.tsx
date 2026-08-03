@@ -63,7 +63,7 @@ const BacktestResults: React.FC<BacktestResultsProps> = ({
                     </div>
 
                     {/* Win Rate Visual */}
-                    <div className="p-3 rounded-xl bg-black/20 border border-white/[0.04]">
+                    <div className="p-3 rounded-xl bg-zinc-800 border border-white/[0.04]">
                         <div className="flex justify-between text-[10px] mb-2">
                             <span className="text-emerald-400 font-medium">✓ Wins</span>
                             <span className="text-zinc-500">{backtestResult!.winRate.toFixed(0)}% / {(100 - backtestResult!.winRate).toFixed(0)}%</span>
@@ -74,7 +74,7 @@ const BacktestResults: React.FC<BacktestResultsProps> = ({
 
                     {/* Secondary Stats */}
                     <div className="grid grid-cols-2 gap-2">
-                        <div className="p-3 rounded-xl bg-black/20 border border-white/[0.04]">
+                        <div className="p-3 rounded-xl bg-zinc-800 border border-white/[0.04]">
                             <span className="text-[10px] text-zinc-500 block mb-2">Average Outcome</span>
                             <div className="space-y-1.5">
                                 <div className="flex justify-between text-[11px]">
@@ -87,7 +87,7 @@ const BacktestResults: React.FC<BacktestResultsProps> = ({
                                 </div>
                             </div>
                         </div>
-                        <div className="p-3 rounded-xl bg-black/20 border border-white/[0.04]">
+                        <div className="p-3 rounded-xl bg-zinc-800 border border-white/[0.04]">
                             <span className="text-[10px] text-zinc-500 block mb-2">Ratios</span>
                             <div className="space-y-1.5">
                                 <div className="flex justify-between text-[11px]">
@@ -122,7 +122,7 @@ const BacktestResults: React.FC<BacktestResultsProps> = ({
 
                     {/* Session Performance Breakdown */}
                     {backtestResult!.sessionBreakdown && backtestResult!.sessionBreakdown.length > 0 && (
-                        <div className="p-3 rounded-xl bg-black/20 border border-white/[0.04]">
+                        <div className="p-3 rounded-xl bg-zinc-800 border border-white/[0.04]">
                             <div className="flex items-center justify-between mb-2">
                                 <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-medium"> Session Performance</span>
                                 {backtestResult!.bestSession && (
@@ -139,7 +139,7 @@ const BacktestResults: React.FC<BacktestResultsProps> = ({
                                             ? 'bg-emerald-500/10 border border-emerald-500/20'
                                             : session.session === backtestResult!.worstSession
                                                 ? 'bg-rose-500/10 border border-rose-500/20'
-                                                : 'bg-white/[0.02] border border-white/[0.04]'
+                                                : 'bg-zinc-800 border border-white/[0.04]'
                                             }`}
                                     >
                                         <div className="text-[9px] text-zinc-500 mb-0.5">{session.session}</div>

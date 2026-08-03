@@ -40,6 +40,10 @@ interface ChatInputProps {
     // upload/analysis disabled); on = full analysis pipeline.
     isEnsembleEnabled: boolean;
     setIsEnsembleEnabled: (v: boolean) => void;
+    // Casual-chat model: which model answers when ensemble is off.
+    // Stored app-wide (Preferences); falls back to the first ready model.
+    selectedChatModel: string;
+    setSelectedChatModel: (modelId: string) => void;
     // Fresh-session layout: center the input until the first message exists.
     centered?: boolean;
 }
@@ -73,6 +77,8 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
     setLensConfig,
     isEnsembleEnabled,
     setIsEnsembleEnabled,
+    selectedChatModel,
+    setSelectedChatModel,
     // Fresh-session layout: static centered input until the first message
     // exists, then it docks at the bottom.
     centered = false,
@@ -83,13 +89,22 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
     // Charts can only be analyzed in ensemble mode.
     const uploadDisabled = isImageUploadDisabled || !isEnsembleEnabled;
 
+    // Casual-chat model dropdown (ensemble off): every model of every ready
+    // provider. Falls back to the first ready provider's model when the
+    // stored selection is empty or no longer available.
+    const chatProviders = providers.filter(p => p.isEnabled && p.apiKey.trim().length > 0);
+    const chatModelOptions = chatProviders.flatMap(p => p.models.map(m => ({ providerName: p.name, modelId: m })));
+    const effectiveChatModel = selectedChatModel && chatModelOptions.some(o => o.modelId === selectedChatModel)
+        ? selectedChatModel
+        : (chatProviders[0]?.selectedModel || chatProviders[0]?.models[0] || '');
+
     return (
         <div className={centered
             ? 'w-full'
             : 'absolute bottom-0 left-0 right-0 px-3 sm:px-4 lg:px-8 pointer-events-none z-10 pb-[calc(env(safe-area-inset-bottom,16px)+0.5rem)] sm:pb-[calc(env(safe-area-inset-bottom,24px)+1rem)] lg:pb-8'}>
             <div className={centered ? 'w-full' : 'w-full lg:max-w-3xl lg:mx-auto pointer-events-auto'}>
                 {/* Main Input Container — carded composer surface */}
-                <div className="rounded-2xl border border-white/10 bg-zinc-900/60 backdrop-blur-sm shadow-xl p-2 sm:p-3 lg:p-4 transition-all">
+                <div className="rounded-2xl border border-white/10 bg-zinc-900 shadow-xl p-2 sm:p-3 lg:p-4 transition-all">
 
                     {/* Image Preview */}
                     <ImagePreview images={images} onRemoveImage={removeImage} />
@@ -103,7 +118,9 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             placeholder={images.length > 0 ? "Analyze charts..." : "Message August"}
                             className="flex-1 bg-transparent px-2 py-2 text-sm lg:text-base text-white placeholder-zinc-500 focus:outline-none transition-all min-h-[44px] lg:min-h-[48px] max-h-32 resize-none leading-relaxed"
                             rows={1}
-                            disabled={!!loadingMessage || isRateLimited || !isAnyProviderEnabled}
+                            // Always typeable — sending (not typing) is what
+                            // requires a ready provider.
+                            disabled={!!loadingMessage || isRateLimited}
                             style={{ overflow: 'hidden' }}
                         />
                     </div>
@@ -121,11 +138,34 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             >
                                 <PlusIcon className="h-5 w-5" />
                             </button>
+                            {/* Casual-chat model dropdown — only when ensemble
+                                is off: pick which model answers casual chat. */}
+                            {!isEnsembleEnabled && chatModelOptions.length > 0 && (
+                                <select
+                                    value={effectiveChatModel}
+                                    onChange={(e) => setSelectedChatModel(e.target.value)}
+                                    className="max-w-[150px] sm:max-w-[190px] bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1.5 text-xs text-zinc-200 font-mono focus:outline-none focus:border-zinc-600 cursor-pointer"
+                                    title="Casual chat model (ensemble off)"
+                                    aria-label="Casual chat model"
+                                >
+                                    {chatModelOptions.map(opt => (
+                                        <option key={`${opt.providerName}-${opt.modelId}`} value={opt.modelId}>
+                                            {opt.providerName}: {opt.modelId}
+                                        </option>
+                                    ))}
+                                </select>
+                            )}
+
                             {/* Ensemble split button: toggle ensemble mode /
-                                configure providers */}
-                            <div className={`relative flex items-center shadow-sm rounded-full transition-all ${isEnsembleEnabled ? 'bg-cyan-600' : 'bg-zinc-800/80 lg:bg-zinc-800 hover:bg-zinc-700'}`}>
+                                configure providers. Clicking the main button
+                                turns ensemble on/off AND opens the provider
+                                list so you can pick which models participate. */}
+                            <div className={`relative flex items-center shadow-sm rounded-full transition-all ${isEnsembleEnabled ? 'bg-cyan-600' : 'bg-zinc-800 hover:bg-zinc-700'}`}>
                                 <button
-                                    onClick={() => setIsEnsembleEnabled(!isEnsembleEnabled)}
+                                    onClick={() => {
+                                        setShowAISettings(true);
+                                        setIsEnsembleEnabled(!isEnsembleEnabled);
+                                    }}
                                     className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 lg:px-4 py-1 sm:py-1.5 lg:py-2 transition-all text-xs sm:text-sm border-r border-black/10 rounded-l-full ${isEnsembleEnabled ? 'text-white shadow-[inset_0_0_10px_rgba(0,0,0,0.1)]' : 'text-zinc-400 hover:text-white'}`}
                                     title={isEnsembleEnabled ? 'Ensemble on — chart analysis enabled' : 'Enable ensemble mode for chart analysis'}
                                 >
@@ -144,7 +184,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             </div>
 
                             {/* Lens Mode Split Button */}
-                            <div className={`relative group flex items-center shadow-sm rounded-full transition-all ${lensConfig.enabled ? 'bg-zinc-700' : 'bg-zinc-800/80 lg:bg-zinc-800 hover:bg-zinc-700'}`}>
+                            <div className={`relative group flex items-center shadow-sm rounded-full transition-all ${lensConfig.enabled ? 'bg-zinc-700' : 'bg-zinc-800 hover:bg-zinc-700'}`}>
                                 {/* Main Toggle */}
                                 <button
                                     onClick={() => setLensConfig({ ...lensConfig, enabled: !lensConfig.enabled })}
@@ -168,7 +208,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                 {/* Role Assignment Dropdown */}
                                 {showLensSettings && (
                                     <div className="absolute bottom-full left-0 mb-2 w-64 bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden animate-fade-in divide-y divide-white/5">
-                                        <div className="px-3 py-2 bg-zinc-800/50 text-[10px] uppercase font-bold text-zinc-500 tracking-wider">
+                                        <div className="px-3 py-2 bg-zinc-800 text-[10px] uppercase font-bold text-zinc-500 tracking-wider">
                                             Assign Analysts
                                         </div>
                                         {/* Macro Analyst */}
@@ -269,7 +309,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             <div className="relative" ref={leverageRef}>
                                 <button
                                     onClick={() => setIsLeverageDropdownOpen(!isLeverageDropdownOpen)}
-                                    className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full transition-all text-xs sm:text-sm ${isLeverageDropdownOpen ? 'bg-zinc-700 text-white' : 'bg-zinc-800/80 text-zinc-400 hover:text-white hover:bg-zinc-700'}`}
+                                    className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full transition-all text-xs sm:text-sm ${isLeverageDropdownOpen ? 'bg-zinc-700 text-white' : 'bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700'}`}
                                 >
                                     <span className="text-xs sm:text-sm"></span>
                                     <span className="font-medium">{leverageInput}x</span>
@@ -314,7 +354,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
 
                     {/* Ensemble Intelligence Panel - List Style */}
                     {showAISettings && (
-                        <div className="mt-4 bg-zinc-900/80 rounded-2xl border border-white/10 overflow-hidden animate-fade-in">
+                        <div className="mt-4 bg-zinc-900 rounded-2xl border border-white/10 overflow-hidden animate-fade-in">
                             {/* AI Providers List */}
                             <div className="max-h-[300px] overflow-y-auto">
                                 {providers.length > 0 ? (
@@ -328,7 +368,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                                 className={`w-full flex items-center justify-between px-4 py-3 transition-all ${index !== 0 ? 'border-t border-white/5' : ''
                                                     } ${isEnabled
                                                         ? 'bg-cyan-500/10'
-                                                        : 'hover:bg-white/5 opacity-60'
+                                                        : 'hover:bg-zinc-800 opacity-60'
                                                     }`}
                                             >
                                                 <div className="flex items-center gap-3">
@@ -389,12 +429,12 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             </div>
 
                             {/* Vision Model Selector */}
-                            <div className="px-4 py-3 border-t border-white/10 bg-white/[0.02]">
+                            <div className="px-4 py-3 border-t border-white/10 bg-zinc-800">
                                 <div className="text-[10px] uppercase font-bold tracking-wider text-zinc-500 mb-2">Vision Model</div>
                                 <select
                                     value={selectedVisionModel}
                                     onChange={(e) => setSelectedVisionModel(e.target.value)}
-                                    className="w-full bg-zinc-800/80 border border-white/10 rounded-lg px-3 py-2 text-sm text-zinc-300 focus:outline-none focus:border-cyan-500/50"
+                                    className="w-full bg-zinc-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-zinc-300 focus:outline-none focus:border-cyan-500/50"
                                 >
                                     {providers.filter(p => p.isEnabled && p.apiKey.trim().length > 0).flatMap(p => p.models.map(m => ({ providerName: p.name, modelId: m }))).map(item => (
                                         <option key={`${item.providerName}-${item.modelId}`} value={item.modelId} className="bg-zinc-900">

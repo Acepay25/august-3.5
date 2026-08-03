@@ -77,7 +77,7 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ isVisible, onUs
                      <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest pl-1 block">Continue Session</label>
                      <div className="max-h-48 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
                          {existingUsers.map(user => (
-                             <div key={user} className="group flex items-center gap-3 p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-cyan-500/30 transition-all cursor-pointer" onClick={() => onUserSelect(user)}>
+                             <div key={user} className="group flex items-center gap-3 p-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-white/5 hover:border-cyan-500/30 transition-all cursor-pointer" onClick={() => onUserSelect(user)}>
                                  <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 group-hover:text-cyan-400 group-hover:bg-cyan-500/10 transition-colors">
                                      <UserIcon />
                                  </div>
@@ -103,7 +103,7 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ isVisible, onUs
                         value={newUsername} 
                         onChange={(e) => { setNewUsername(e.target.value); setFormError(''); }} 
                         placeholder="Create New Workspace" 
-                        className={`w-full bg-zinc-950/50 border rounded-xl px-5 py-4 text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-transparent transition-all font-medium ${formError ? 'border-red-500/50' : 'border-white/10'}`}
+                        className={`w-full bg-zinc-950 border rounded-xl px-5 py-4 text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-transparent transition-all font-medium ${formError ? 'border-red-500/50' : 'border-white/10'}`}
                         autoFocus
                         aria-invalid={!!formError}
                         aria-describedby={formError ? 'username-error' : undefined}
@@ -130,7 +130,7 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ isVisible, onUs
                  />
                  <button 
                     onClick={handleImportClick} 
-                    className="flex items-center gap-2 text-xs font-bold text-zinc-500 hover:text-cyan-400 uppercase tracking-widest transition-colors py-2 px-4 rounded-lg hover:bg-white/5"
+                    className="flex items-center gap-2 text-xs font-bold text-zinc-500 hover:text-cyan-400 uppercase tracking-widest transition-colors py-2 px-4 rounded-lg hover:bg-zinc-800"
                  >
                      <UploadIcon /> Import Backup Data
                  </button>

@@ -17,11 +17,11 @@ const PROVIDER_COLORS: Record<string, { bg: string; border: string; text: string
   moderator: { bg: 'bg-cyan-950/20', border: 'border-cyan-500/20', text: 'text-cyan-400' },
   openrouter: { bg: 'bg-emerald-950/20', border: 'border-emerald-500/20', text: 'text-emerald-400' },
   openai: { bg: 'bg-emerald-950/20', border: 'border-emerald-500/20', text: 'text-emerald-400' },
-  grok: { bg: 'bg-zinc-800/20', border: 'border-zinc-500/20', text: 'text-zinc-300' },
+  grok: { bg: 'bg-zinc-800', border: 'border-zinc-500/20', text: 'text-zinc-300' },
 };
 
 const getColor = (provider: string) => PROVIDER_COLORS[provider.toLowerCase()] || {
-  bg: 'bg-zinc-800/20',
+  bg: 'bg-zinc-800',
   border: 'border-white/10',
   text: 'text-zinc-400',
 };
@@ -144,7 +144,7 @@ export const ReasoningPanel: React.FC<ReasoningPanelProps> = ({ tradeId, outcome
 
               {/* Debate turns (collapsible) */}
               {debateTurns.length > 0 && (
-                <details className="rounded-lg border border-white/5 bg-black/20 p-2">
+                <details className="rounded-lg border border-white/5 bg-zinc-800 p-2">
                   <summary className="cursor-pointer text-xs font-medium text-zinc-500 hover:text-zinc-300 flex items-center gap-2">
                     <MessageSquare className="w-3 h-3" />
                     Debate Transcript ({debateTurns.length} turns)

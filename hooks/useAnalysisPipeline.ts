@@ -24,7 +24,7 @@ import { saveThinkingBatch, generateThinkingId } from '../services/infrastructur
 import { ThinkingRecord } from '../types/thinking';
 import { extractLastJson } from '../utils/jsonUtils';
 import { sanitizeAIResponse } from '../utils/sanitizers';
-import { buildModelIdToName } from '../utils/providerUtils';
+import { buildModelIdToName, isProviderReady } from '../utils/providerUtils';
 import {
     getCachedResponse, cacheResponse, getImageHash, clearAllCaches,
 } from '../services/infrastructure/responseCache';
@@ -99,6 +99,9 @@ export interface UseAnalysisPipelineParams {
     // Ensemble mode: when off, messages are casual chat with the selected
     // model and the chart-analysis pipeline never runs.
     isEnsembleEnabled: boolean;
+    // Casual-chat model: used when ensemble is off; falls back to the first
+    // ready provider's model when empty/stale.
+    selectedChatModel: string;
 
     // Toast:
     toast: { warning: (t: string, m?: string) => void; error: (t: string, m?: string) => void };
@@ -130,6 +133,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI,
         isHybridIntelligenceEnabled, lensConfig, activeFrameworks,
         isEnsembleEnabled,
+        selectedChatModel,
         toast,
     } = params;
 
@@ -1308,7 +1312,15 @@ const result = await cachedAnalyzeTradingView(
                     updateMessages(prev => [...prev, soloAiMessage]);
                 }
             } else {
-                const provider = enabledProviders[0];
+                // Casual chat: use the user-selected model when it maps to a
+                // ready provider; otherwise fall back to the first ready
+                // provider (previous behavior).
+                const chosen = providerConfigs.find(c =>
+                    isProviderReady(c) && (c.selectedModel === selectedChatModel || c.models.includes(selectedChatModel))
+                );
+                const provider = chosen
+                    ? { config: { ...chosen, selectedModel: selectedChatModel }, name: chosen.name, model: selectedChatModel, useImages: false, thoughtsKey: chosen.id }
+                    : enabledProviders[0];
                 setLoadingMessage("Thinking...");
                 startStep('analysis');
                 const responseText = await getQuickResponse(provider.config, promptToSend, [...currentMessages, userMessage]);
@@ -1349,7 +1361,7 @@ const result = await cachedAnalyzeTradingView(
                 setIsAnalysisInProgress(false);
             }
         }
-    }, [input, images, loadingMessage, finalTradeSummary, activeFrameworks, isRateLimited, providerConfigs, isDeepAnalysis, selectedOcrModel, updateMessages, moderatorConfig, moderatorModel, activeConversationId, activeConversation, isAnalysisInProgress, globalMemory, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, lensConfig, isHybridIntelligenceEnabled, isEnsembleEnabled, loggedTrades, confidenceCalibration, insightKnowledgeBase, currentHybridData]);
+    }, [input, images, loadingMessage, finalTradeSummary, activeFrameworks, isRateLimited, providerConfigs, isDeepAnalysis, selectedOcrModel, updateMessages, moderatorConfig, moderatorModel, activeConversationId, activeConversation, isAnalysisInProgress, globalMemory, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, lensConfig, isHybridIntelligenceEnabled, isEnsembleEnabled, selectedChatModel, loggedTrades, confidenceCalibration, insightKnowledgeBase, currentHybridData]);
 
     // ─── Cancel Analysis ───────────────────────────────────────────────────
     const handleCancelAnalysis = () => {

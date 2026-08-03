@@ -55,7 +55,7 @@ const ProbabilityPanel: React.FC<ProbabilityPanelProps> = ({
             status={status}
             statusLabel={statusLabel}
             action={
-                <div className="flex items-center gap-1.5 bg-black/20 rounded-lg p-0.5 border border-white/5">
+                <div className="flex items-center gap-1.5 bg-zinc-800 rounded-lg p-0.5 border border-white/5">
                     {/* Mode Selector */}
                     <select
                         value={probMode}
@@ -72,7 +72,7 @@ const ProbabilityPanel: React.FC<ProbabilityPanelProps> = ({
                     <button
                         onClick={() => onRegenerateProbabilities?.(probMode, selectedMessageId!)}
                         disabled={isCalculating || !selectedMessageId}
-                        className={`p-1 rounded hover:bg-white/10 text-zinc-400 hover:text-purple-400 transition-all ${isCalculating ? 'animate-spin opacity-50' : ''}`}
+                        className={`p-1 rounded hover:bg-zinc-700 text-zinc-400 hover:text-purple-400 transition-all ${isCalculating ? 'animate-spin opacity-50' : ''}`}
                         title="Regenerate Probability Analysis"
                     >
                         
@@ -166,7 +166,7 @@ const ProbabilityPanel: React.FC<ProbabilityPanelProps> = ({
                     </div>
 
                     {/* AI Reasoning Section */}
-                    <div className="p-3 rounded-xl bg-black/20 border border-purple-500/10">
+                    <div className="p-3 rounded-xl bg-zinc-800 border border-purple-500/10">
                         <span className="text-[10px] text-purple-400 font-medium block mb-2"> AI Reasoning</span>
                         <div className="space-y-2 text-[10px]">
                             {/* SL Reasoning */}
@@ -236,7 +236,7 @@ const ProbabilityPanel: React.FC<ProbabilityPanelProps> = ({
                 </div>
             ) : (
                 /* Placeholder when no data */
-                <div className="flex flex-col items-center justify-center py-8 px-4 rounded-xl bg-white/[0.02] border border-dashed border-white/10">
+                <div className="flex flex-col items-center justify-center py-8 px-4 rounded-xl bg-zinc-800 border border-dashed border-white/10">
                     {isCalculating ? (
                         <>
                             <div className="flex items-center gap-2 mb-3">

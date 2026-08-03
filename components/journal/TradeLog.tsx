@@ -96,7 +96,7 @@ const TradeLogRow: React.FC<{
 
     if (isAccuracyMode) {
         // All accuracy modes use cyan dark theme
-        containerClass = "bg-cyan-950/20 backdrop-blur-md border border-cyan-500/30 hover:border-cyan-500/50 shadow-[0_0_15px_-5px_rgba(176, 176, 182,0.1)]";
+        containerClass = "bg-cyan-950/20 border border-cyan-500/30 hover:border-cyan-500/50 shadow-[0_0_15px_-5px_rgba(176, 176, 182,0.1)]";
         modeBadge = (
             <span className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded border border-cyan-500/30 bg-cyan-900/30 text-cyan-300 ml-2 animate-pulse">
                 {accuracySubMode === 'pure_ai' ? 'Pure AI' : 'Strict Mode'}
@@ -163,14 +163,14 @@ const TradeLogRow: React.FC<{
                             {/* Dollar PnL (user-entered) takes precedence; a percent-only
                                 trade (outcome autopilot) renders its leveraged % instead. */}
                             {pnlAmount !== undefined ? (
-                                <div className={`flex flex-col items-end px-3 py-1.5 rounded-lg border backdrop-blur-md min-w-[80px] ${pnlAmount >= 0 ? 'bg-emerald-500/10 border-emerald-500/20 shadow-[0_0_15px_-5px_rgba(176, 176, 182,0.2)]' : 'bg-rose-500/10 border-rose-500/20 shadow-[0_0_15px_-5px_rgba(107, 107, 115,0.2)]'}`}>
+                                <div className={`flex flex-col items-end px-3 py-1.5 rounded-lg border min-w-[80px] ${pnlAmount >= 0 ? 'bg-emerald-500/10 border-emerald-500/20 shadow-[0_0_15px_-5px_rgba(176, 176, 182,0.2)]' : 'bg-rose-500/10 border-rose-500/20 shadow-[0_0_15px_-5px_rgba(107, 107, 115,0.2)]'}`}>
                                     <span className={`font-mono font-black text-lg leading-none ${pnlAmount >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                         {pnlAmount >= 0 ? '+' : ''}{pnlAmount.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}
                                     </span>
                                     <span className={`text-[9px] font-bold uppercase tracking-widest opacity-70 ${pnlAmount >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>PnL</span>
                                 </div>
                             ) : pnlPercent !== undefined ? (
-                                <div className={`flex flex-col items-end px-3 py-1.5 rounded-lg border backdrop-blur-md min-w-[80px] ${pnlPercent >= 0 ? 'bg-emerald-500/10 border-emerald-500/20 shadow-[0_0_15px_-5px_rgba(176, 176, 182,0.2)]' : 'bg-rose-500/10 border-rose-500/20 shadow-[0_0_15px_-5px_rgba(107, 107, 115,0.2)]'}`}>
+                                <div className={`flex flex-col items-end px-3 py-1.5 rounded-lg border min-w-[80px] ${pnlPercent >= 0 ? 'bg-emerald-500/10 border-emerald-500/20 shadow-[0_0_15px_-5px_rgba(176, 176, 182,0.2)]' : 'bg-rose-500/10 border-rose-500/20 shadow-[0_0_15px_-5px_rgba(107, 107, 115,0.2)]'}`}>
                                     <span className={`font-mono font-black text-lg leading-none ${pnlPercent >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                         {pnlPercent >= 0 ? '+' : ''}{pnlPercent.toLocaleString('en-US', { maximumFractionDigits: 1 })}%
                                     </span>
@@ -183,11 +183,11 @@ const TradeLogRow: React.FC<{
             </div>
 
             {isExpanded && (
-                <div className="px-4 pb-4 border-t border-white/5 animate-fade-in bg-black/20 rounded-b-xl" onClick={(e) => e.stopPropagation()}>
+                <div className="px-4 pb-4 border-t border-white/5 animate-fade-in bg-zinc-800 rounded-b-xl" onClick={(e) => e.stopPropagation()}>
                     <div className="grid grid-cols-2 gap-3 text-xs pt-4 font-mono">
 
                         {/* Trade Settings Row */}
-                        <div className="col-span-2 flex items-center justify-between bg-zinc-900/30 p-2 rounded-lg border border-white/5 mb-1">
+                        <div className="col-span-2 flex items-center justify-between bg-zinc-900 p-2 rounded-lg border border-white/5 mb-1">
                             <span className="text-[9px] uppercase font-bold text-zinc-500 tracking-widest pl-1">Trade Parameters</span>
                             <div className="flex items-center gap-2">
                                 <span className="text-[10px] text-zinc-400">Leverage:</span>
@@ -221,18 +221,18 @@ const TradeLogRow: React.FC<{
                             </div>
                         </div>
 
-                        <div className="p-2.5 bg-zinc-900/50 rounded-lg border border-white/5 hover:border-white/10 transition-colors">
+                        <div className="p-2.5 bg-zinc-800 rounded-lg border border-white/5 hover:border-white/10 transition-colors">
                             <span className="text-[9px] uppercase font-bold text-zinc-500 block mb-1">Entry Zone</span>
                             <span className="text-cyan-200 font-bold text-sm">{(entryPoints || [])[0]?.price || 'N/A'}</span>
                         </div>
-                        <div className="p-2.5 bg-zinc-900/50 rounded-lg border border-white/5 hover:border-white/10 transition-colors">
+                        <div className="p-2.5 bg-zinc-800 rounded-lg border border-white/5 hover:border-white/10 transition-colors">
                             <span className="text-[9px] uppercase font-bold text-zinc-500 block mb-1">Stop Loss</span>
                             <div className="flex items-baseline gap-2">
                                 <span className="text-rose-300 font-bold text-sm">{stopLoss}</span>
                                 {stopLossPercentage && <span className="text-rose-500/60 text-[9px]">{stopLossPercentage}</span>}
                             </div>
                         </div>
-                        <div className="col-span-2 p-2.5 bg-zinc-900/50 rounded-lg border border-white/5 hover:border-white/10 transition-colors">
+                        <div className="col-span-2 p-2.5 bg-zinc-800 rounded-lg border border-white/5 hover:border-white/10 transition-colors">
                             <span className="text-[9px] uppercase font-bold text-zinc-500 block mb-1">Take Profit Targets</span>
                             <div className="flex flex-wrap gap-2">
                                 {(takeProfit || []).map((tp, i) => (
@@ -263,7 +263,7 @@ const TradeLogRow: React.FC<{
                         {(() => {
                             const rule = extractIfThenRule(postMortem);
                             return rule ? (
-                                <div className="col-span-2 bg-zinc-800/60 border border-zinc-600/40 rounded-lg px-3 py-2">
+                                <div className="col-span-2 bg-zinc-800 border border-zinc-600/40 rounded-lg px-3 py-2">
                                     <span className="text-[10px] uppercase font-bold tracking-widest text-zinc-400">Rule</span>
                                     <p className="text-xs text-zinc-200 mt-0.5 leading-relaxed">{rule}</p>
                                 </div>
@@ -374,7 +374,7 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({ trades, onDeleteTrade
     return (
         <div className="flex flex-col h-full bg-transparent">
             {/* Trade Type Filter */}
-            <div className="px-4 py-2 border-b border-white/5 bg-zinc-900/30 shrink-0 flex items-center justify-between">
+            <div className="px-4 py-2 border-b border-white/5 bg-zinc-900 shrink-0 flex items-center justify-between">
                 <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-widest">Filter by Type</span>
                 <div className="flex gap-1">
                     {(['all', 'scalp', 'swing'] as const).map(type => (
@@ -398,7 +398,7 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({ trades, onDeleteTrade
 
             {/* Optional Action Header */}
             {currentInsightIds.length > 0 && (
-                <div className="p-3 border-b border-white/5 bg-zinc-900/30 shrink-0">
+                <div className="p-3 border-b border-white/5 bg-zinc-900 shrink-0">
                     <button onClick={handleSelectActiveInsights} className="w-full flex items-center justify-center gap-2 p-2 rounded-lg bg-cyan-500/10 border border-cyan-500/20 hover:bg-cyan-500/20 text-cyan-400 text-[10px] font-bold uppercase tracking-widest transition-all">
                         <BrainIcon className="w-3 h-3" /> Select {currentInsightIds.length} Active Memory Trades
                     </button>

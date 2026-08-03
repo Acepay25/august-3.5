@@ -105,14 +105,14 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
             <div className={`
         relative overflow-hidden
         bg-gradient-to-br ${config.split(' ')[0]} ${config.split(' ')[1]}
-        backdrop-blur-md rounded-3xl border border-white/5
+        rounded-3xl border border-white/5
         transition-all duration-300 hover:shadow-2xl hover:border-white/10 hover:-translate-y-1
         ${large ? 'col-span-1 md:col-span-2 row-span-2' : 'col-span-1'}
         flex flex-col group
       `}>
                 <div className="p-6 flex-1 flex flex-col relative z-10">
                     <div className="flex items-center justify-between mb-4">
-                        <div className={`p-2 rounded-2xl bg-white/5 ${config.split(' ').pop()} group-hover:scale-110 transition-transform`}>
+                        <div className={`p-2 rounded-2xl bg-zinc-800 ${config.split(' ').pop()} group-hover:scale-110 transition-transform`}>
                             {icon}
                         </div>
                         {large && <div className="text-xs font-mono text-white/30 uppercase tracking-widest">Live Monitor</div>}
@@ -302,7 +302,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                                         <option value="postMortem">Post-Mortem</option>
                                     </select>
                                 </div>
-                                <div className="flex-1 bg-black/40 rounded-xl p-3 font-mono text-[9px] text-zinc-400 overflow-auto border border-white/5 scrollbar-thin scrollbar-thumb-zinc-700">
+                                <div className="flex-1 bg-zinc-800 rounded-xl p-3 font-mono text-[9px] text-zinc-400 overflow-auto border border-white/5 scrollbar-thin scrollbar-thumb-zinc-700">
                                     <div className="whitespace-pre">
                                         {JSON.stringify(validationSchemas[selectedSchema] || { type: 'object' }, null, 2)}
                                     </div>
@@ -345,13 +345,13 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-8">
             {/* Backdrop */}
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-xl" onClick={onClose} />
+            <div className="absolute inset-0 bg-black/60" onClick={onClose} />
 
             {/* Main Container */}
             <div className="relative w-full max-w-6xl h-[85vh] bg-zinc-950 rounded-[2.5rem] border border-zinc-800 shadow-2xl flex flex-col overflow-hidden ring-1 ring-white/5">
 
                 {/* Header Section */}
-                <div className="px-8 py-6 flex items-center justify-between bg-zinc-950/50 backdrop-blur-sm z-20">
+                <div className="px-8 py-6 flex items-center justify-between bg-zinc-950 z-20">
                     <div className="flex items-center gap-4">
                         <div className="bg-gradient-to-br from-blue-600 to-cyan-400 p-0.5 rounded-xl shadow-lg shadow-blue-500/20">
                             <div className="bg-zinc-950 p-2 rounded-[10px]">
@@ -384,7 +384,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
 
                         <button
                             onClick={onClose}
-                            className="p-2 rounded-full hover:bg-white/10 text-zinc-400 hover:text-white transition-all duration-200"
+                            className="p-2 rounded-full hover:bg-zinc-700 text-zinc-400 hover:text-white transition-all duration-200"
                         >
                             <Icons.Close className="w-6 h-6" />
                         </button>
@@ -393,7 +393,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
 
                 {/* Tab Navigation */}
                 <div className="px-8 pb-2">
-                    <div className="flex p-1 bg-zinc-900/80 rounded-2xl w-fit border border-white/5 backdrop-blur-sm">
+                    <div className="flex p-1 bg-zinc-900 rounded-2xl w-fit border border-white/5">
                         {['Intelligence', 'Algorithm', 'System'].map((tab) => (
                             <button
                                 key={tab}
@@ -402,7 +402,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                        px-6 py-2 rounded-xl text-sm font-medium transition-all duration-300
                        ${activeTab === tab
                                         ? 'bg-zinc-800 text-white shadow-lg shadow-black/20 ring-1 ring-white/10'
-                                        : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/5'}
+                                        : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800'}
                     `}
                             >
                                 {tab}

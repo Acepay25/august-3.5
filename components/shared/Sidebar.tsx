@@ -5,10 +5,7 @@ import {
     ArchiveIcon,
     BookmarkIcon,
     CodeIcon,
-    FullscreenEnterIcon,
-    FullscreenExitIcon,
     PlusIcon,
-    SettingsIcon,
 } from './Icons';
 
 interface NavRowProps {
@@ -20,7 +17,7 @@ interface NavRowProps {
 const NavRow: React.FC<NavRowProps> = ({ icon, label, onClick }) => (
     <button
         onClick={onClick}
-        className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-zinc-400 hover:text-zinc-100 hover:bg-white/5 transition-colors"
+        className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
     >
         <span className="shrink-0">{icon}</span>
         <span className="truncate">{label}</span>
@@ -32,14 +29,15 @@ interface SidebarContentProps {
     conversations: Conversation[];
     activeConversationId: string | null;
     hasVisionData: boolean;
-    isFullscreen: boolean;
+    // Fresh session = the active conversation has no messages yet; starting
+    // another new conversation from that state is pointless.
+    isFreshSession: boolean;
     onNewConversation: () => void;
     onLoadConversation: (id: string) => void;
     onOpenLiveMarket: () => void;
     onOpenVisionData: () => void;
     onOpenJournal: () => void;
     onOpenHistory: () => void;
-    onToggleFullscreen: () => void;
     onOpenSettings: () => void;
     // Called after every action so the mobile drawer can close itself;
     // a no-op for the persistent desktop sidebar.
@@ -53,14 +51,13 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
     conversations,
     activeConversationId,
     hasVisionData,
-    isFullscreen,
+    isFreshSession,
     onNewConversation,
     onLoadConversation,
     onOpenLiveMarket,
     onOpenVisionData,
     onOpenJournal,
     onOpenHistory,
-    onToggleFullscreen,
     onOpenSettings,
     onNavigate,
 }) => {
@@ -78,11 +75,14 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
 
     return (
         <div className="flex flex-col h-full min-h-0">
-            {/* New Conversation — highlighted row */}
+            {/* New Conversation — highlighted row (disabled in a fresh
+                session: nothing exists yet to branch from) */}
             <div className="p-3 pb-2">
                 <button
                     onClick={act(onNewConversation)}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 text-sm font-medium text-zinc-100 transition-colors"
+                    disabled={isFreshSession}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl bg-zinc-800 border border-white/10 hover:bg-zinc-700 text-sm font-medium text-zinc-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-zinc-800"
+                    title={isFreshSession ? 'Start typing to begin a conversation' : 'Start a new conversation'}
                 >
                     <PlusIcon className="h-4 w-4 text-zinc-400" />
                     New Conversation
@@ -101,12 +101,6 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                     )}
                     <NavRow icon={<BookmarkIcon className="h-4 w-4" />} label="Trading Journal" onClick={act(onOpenJournal)} />
                     <NavRow icon={<ArchiveIcon className="h-4 w-4" />} label="Conversation History" onClick={act(onOpenHistory)} />
-                    <NavRow
-                        icon={isFullscreen ? <FullscreenExitIcon className="h-4 w-4" /> : <FullscreenEnterIcon className="h-4 w-4" />}
-                        label={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
-                        onClick={act(onToggleFullscreen)}
-                    />
-                    <NavRow icon={<SettingsIcon className="h-4 w-4" />} label="Settings" onClick={act(onOpenSettings)} />
                 </div>
             </nav>
 
@@ -123,8 +117,8 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                             key={conv.id}
                             onClick={act(() => onLoadConversation(conv.id))}
                             className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-colors ${conv.id === activeConversationId
-                                ? 'bg-white/5 text-zinc-100'
-                                : 'text-zinc-400 hover:text-zinc-100 hover:bg-white/5'
+                                ? 'bg-zinc-800 text-zinc-100'
+                                : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800'
                                 }`}
                         >
                             <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${conv.id === activeConversationId ? 'bg-zinc-300' : 'bg-zinc-700'}`} />
@@ -134,14 +128,18 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                 )}
             </div>
 
-            {/* User footer */}
+            {/* User footer — clickable to open Settings */}
             {activeUsername && (
-                <div className="border-t border-white/5 p-3 flex items-center gap-2.5">
+                <button
+                    onClick={act(onOpenSettings)}
+                    className="border-t border-white/5 p-3 flex items-center gap-2.5 w-full hover:bg-zinc-800 transition-colors text-left"
+                    title="Open settings"
+                >
                     <div className="w-8 h-8 rounded-full bg-zinc-800 border border-white/10 flex items-center justify-center text-xs font-bold text-zinc-300 uppercase shrink-0">
                         {activeUsername.charAt(0)}
                     </div>
                     <span className="text-sm font-medium text-zinc-300 truncate">{activeUsername}</span>
-                </div>
+                </button>
             )}
         </div>
     );
