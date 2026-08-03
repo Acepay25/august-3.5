@@ -75,6 +75,7 @@ export interface AnalyzeTradingViewParams {
     isMemoryEnabledInPureAI?: boolean;
     rolePrompt?: string;                    // Analyst Lens: specialized role prompt
     signal?: AbortSignal;
+    onReasoning?: (reasoning: string) => void;
 }
 
 export async function analyzeTradingView(
@@ -85,7 +86,7 @@ export async function analyzeTradingView(
         prompt, images, imageSummaries, chatHistory, finalTradeSummary, recentInsights,
         activeFrameworks, globalMemory, threadSummary, subMode, customInstructions,
         isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI,
-        rolePrompt, signal,
+        rolePrompt, signal, onReasoning,
     } = params;
 
     const modelName = config.selectedModel;
@@ -454,7 +455,9 @@ export async function analyzeTradingView(
     }
 
     // --- CALL THE GENERIC CLIENT ---
-    const options: ChatRequestOptions = { jsonMode: true, signal };
+    // Reasoning-capable models can spend most of the budget before emitting
+    // the final JSON. Give analysis enough room to finish both phases.
+    const options: ChatRequestOptions = { jsonMode: true, maxTokens: 8192, signal, onReasoning };
     const responseText = await sendChatRequest(config, messages, options);
     if (!responseText) throw new Error("Received an empty response from the AI.");
 

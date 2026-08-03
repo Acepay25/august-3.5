@@ -116,7 +116,10 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
     const isHighlighted = highlightedAnalysisId === message.id;
     const isUserMessage = message.role === MessageRole.USER;
     const [isThinkingExpanded, setIsThinkingExpanded] = React.useState(false);
-    const thinkingEntries = Object.entries(message.thoughtProcesses ?? {}).filter(([, content]) => Boolean(content));
+    const thinkingEntries = Object.entries({
+        ...(message.thoughtProcesses ?? {}),
+        ...(message.reasoningProcesses ?? {}),
+    }).filter(([, content]) => Boolean(content));
     const isCasualReply = message.role === MessageRole.AI && !message.analysis && !message.isDebating;
 
     React.useEffect(() => {
@@ -262,6 +265,11 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 </div>
                             )}
 
+                            {message.role === MessageRole.AI && displayContent.trim() && (
+                                <div className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
+                                    Final output
+                                </div>
+                            )}
                             <div className={`prose prose-invert prose-sm max-w-none whitespace-pre-wrap leading-[1.65] overflow-x-auto min-w-0 ${message.isPostMortem ? 'text-zinc-100' : 'text-zinc-200'}`}>
                                 <SmoothText text={displayContent} animate={message.role === MessageRole.AI && context.latestMessageId === message.id && !message.analysis} />
                             </div>
@@ -408,7 +416,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                             )}
 
                             {/* Main Analysis Debate (Initial) */}
-                            {message.isDebating && message.debateTurns && <DebateView debateTurns={message.debateTurns} modelsUsed={message.modelsUsed} modelIdToName={modelIdToName} providerNameToId={providerNameToId} lensConfig={lensConfig} isDebating={true} />}
+                            {message.isDebating && message.debateTurns && <DebateView debateTurns={message.debateTurns} modelsUsed={message.modelsUsed} thoughtProcesses={message.thoughtProcesses} reasoningProcesses={message.reasoningProcesses} modelIdToName={modelIdToName} providerNameToId={providerNameToId} lensConfig={lensConfig} isDebating={true} />}
 
                             {message.role === MessageRole.AI && !message.isDebating && Array.isArray(message.debateTurns) && message.debateTurns.length > 0 && (
                                 <div className="mt-4 sm:mt-6 pt-3 sm:pt-5 border-t border-white/10">
@@ -423,7 +431,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     >
                                         <strong className="text-xs sm:text-sm uppercase tracking-wider font-bold opacity-80">Debate Transcript</strong><ChevronDownIcon className={`w-5 h-5 sm:w-6 sm:h-6 transform transition-transform duration-300 ${expandedDebateTranscripts[message.id] ? 'rotate-180' : ''}`} />
                                     </button>
-                                    <div id={`debate-transcript-${message.id}`} className={`collapsible-content ${expandedDebateTranscripts[message.id] ? 'expanded' : ''}`}><DebateView debateTurns={message.debateTurns} modelsUsed={message.modelsUsed} modelIdToName={modelIdToName} providerNameToId={providerNameToId} lensConfig={lensConfig} /></div>
+                                    <div id={`debate-transcript-${message.id}`} className={`collapsible-content ${expandedDebateTranscripts[message.id] ? 'expanded' : ''}`}><DebateView debateTurns={message.debateTurns} modelsUsed={message.modelsUsed} thoughtProcesses={message.thoughtProcesses} reasoningProcesses={message.reasoningProcesses} modelIdToName={modelIdToName} providerNameToId={providerNameToId} lensConfig={lensConfig} /></div>
                                 </div>
                             )}
 

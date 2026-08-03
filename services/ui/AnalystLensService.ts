@@ -905,7 +905,12 @@ export function getRoleForProvider(
     provider: AIProvider,
     config: AnalystRoleAssignment[]
 ): AnalystRole {
-    const assignment = config.find(a => a.assignedProvider === provider);
+    const separator = provider.indexOf('::');
+    const providerId = separator >= 0 ? provider.slice(0, separator) : provider;
+    const modelId = separator >= 0 ? provider.slice(separator + 2) : undefined;
+    const assignment = config.find(a => a.assignedProvider === providerId && (
+        modelId ? a.assignedModel === modelId : !a.assignedModel
+    ));
     return assignment?.role || AnalystRole.UNASSIGNED;
 }
 
@@ -1000,19 +1005,20 @@ export function getDefaultLensAssignments(): AnalystRoleAssignment[] {
 }
 
 /**
- * Validate that no provider is assigned to multiple roles
+ * Validate that no model is assigned to multiple roles. The same provider may
+ * appear more than once when each role uses a different model.
  */
 export function validateLensConfig(config: AnalystRoleAssignment[]): string | null {
-    const assignedProviders = config
+    const assignedModels = config
         .filter(a => a.assignedProvider !== null)
-        .map(a => a.assignedProvider);
+        .map(a => `${a.assignedProvider}::${a.assignedModel || ''}`);
 
-    const duplicates = assignedProviders.filter(
-        (p, i) => assignedProviders.indexOf(p) !== i
+    const duplicates = assignedModels.filter(
+        (model, i) => assignedModels.indexOf(model) !== i
     );
 
     if (duplicates.length > 0) {
-        return `Provider ${duplicates[0]} is assigned to multiple roles`;
+        return `Model ${duplicates[0].replace('::', ' · ')} is assigned to multiple roles`;
     }
     return null;
 }

@@ -8,8 +8,9 @@ interface LiveStreamViewProps {
   isVisible: boolean;
   onClose: () => void;
   thoughts: LiveThoughts;
-  /** Ready provider configs — one panel per participating provider. */
-  providers: ProviderConfig[];
+  reasoning?: LiveThoughts;
+  /** Model-level participants — one panel per selected ensemble model. */
+  providers: Array<Pick<ProviderConfig, 'id' | 'name' | 'isEnabled' | 'apiKey'> & { modelName?: string }>;
   onAllTypingComplete: () => void;
   /** 'analysis' for live analysis, 'postmortem' for post-trade forensics */
   variant: 'analysis' | 'postmortem';
@@ -46,6 +47,7 @@ const AnalystPanel: React.FC<{
   title: string;
   modelName?: string;
   text: string | null;
+  reasoning?: string;
   colorClasses: {
     bg: string;
     border: string;
@@ -56,7 +58,7 @@ const AnalystPanel: React.FC<{
   loadingIdle: string;
   loadingStreaming: string;
   onTypingComplete: () => void;
-}> = ({ title, modelName, text, colorClasses, loadingIdle, loadingStreaming, onTypingComplete }) => {
+}> = ({ title, modelName, text, reasoning, colorClasses, loadingIdle, loadingStreaming, onTypingComplete }) => {
   const [typedText, isFinished] = useTypingEffect(text, 4);
 
   useEffect(() => {
@@ -80,6 +82,14 @@ const AnalystPanel: React.FC<{
         </div>
       </div>
       <div className="flex-1 p-4 sm:p-5 overflow-y-auto custom-scrollbar relative">
+        {(
+          <details className="mb-4 rounded-lg border border-white/10 bg-black/20 group">
+            <summary className="cursor-pointer list-none px-3 py-2 text-[10px] uppercase tracking-widest text-zinc-400 group-open:text-zinc-200">
+              Thinking <span className="normal-case tracking-normal text-zinc-600">(expand)</span>
+            </summary>
+            <div className="border-t border-white/5 px-3 py-2 text-xs leading-relaxed text-zinc-500 whitespace-pre-wrap">{reasoning || 'This model did not return separate reasoning content.'}</div>
+          </details>
+        )}
         {showLoadingState ? (
           <div className="flex flex-col items-center justify-center h-full text-zinc-500 space-y-3 animate-pulse">
             <LoadingIcon className={`w-6 h-6 ${colorClasses.text}`} />
@@ -102,7 +112,7 @@ const AnalystPanel: React.FC<{
 };
 
 const LiveStreamView: React.FC<LiveStreamViewProps> = ({
-  isVisible, onClose, thoughts, providers,
+  isVisible, onClose, thoughts, reasoning = {}, providers,
   onAllTypingComplete, variant,
 }) => {
   const [completedTyping, setCompletedTyping] = useState<Set<string>>(new Set());
@@ -112,7 +122,7 @@ const LiveStreamView: React.FC<LiveStreamViewProps> = ({
     providers.filter(p => p.isEnabled && p.apiKey.trim().length > 0).map((p, idx) => ({
       key: p.id,
       title: p.name,
-      modelName: p.selectedModel,
+      modelName: p.modelName,
       colors: COLOR_PALETTE[idx % COLOR_PALETTE.length],
     }))
   ), [providers]);
@@ -178,6 +188,7 @@ const LiveStreamView: React.FC<LiveStreamViewProps> = ({
               title={panel.title}
               modelName={panel.modelName}
               text={thoughts[panel.key as keyof LiveThoughts] || null}
+              reasoning={reasoning[panel.key as keyof LiveThoughts] || undefined}
               colorClasses={panel.colors}
               loadingIdle={config.loadingIdle}
               loadingStreaming={config.loadingStreaming}

@@ -54,20 +54,48 @@ function devProviderProxy() {
           } else {
             throw new Error('Unknown provider API format.');
           }
-          const upstream = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal: AbortSignal.timeout(120000) });
-          const text = await upstream.text();
+          let upstream = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal: AbortSignal.timeout(120000) });
+          if (!upstream.ok && request.jsonMode && (upstream.status === 400 || upstream.status === 422) && body.response_format) {
+            const fallbackBody = { ...body };
+            delete fallbackBody.response_format;
+            upstream = await fetch(url, { method: 'POST', headers, body: JSON.stringify(fallbackBody), signal: AbortSignal.timeout(120000) });
+          }
+          let text = await upstream.text();
+          if (upstream.ok && request.jsonMode && body.response_format) {
+            try {
+              const parsed = JSON.parse(text);
+              const message = parsed?.choices?.[0]?.message || {};
+              const content = Array.isArray(message.content)
+                ? message.content.filter((part: any) => typeof part?.text === 'string').map((part: any) => part.text).join('')
+                : message.content;
+              const reasoning = message.reasoning_content || message.reasoning;
+              if (!content && !reasoning) {
+                const fallbackBody = { ...body };
+                delete fallbackBody.response_format;
+                upstream = await fetch(url, { method: 'POST', headers, body: JSON.stringify(fallbackBody), signal: AbortSignal.timeout(120000) });
+                text = await upstream.text();
+              }
+            } catch { /* non-JSON output is handled by the client parser */ }
+          }
           res.statusCode = upstream.status;
           res.setHeader('Content-Type', 'application/json');
           let reasoning = '';
+          let message = '';
           try {
             const parsed = JSON.parse(text);
             reasoning = parsed.choices?.[0]?.message?.reasoning_content || parsed.choices?.[0]?.message?.reasoning || '';
+            message = parsed.error?.message || parsed.error?.error?.message || parsed.message || parsed.detail || '';
           } catch { /* provider returned non-JSON content */ }
-          res.end(JSON.stringify({ ok: upstream.ok, status: upstream.status, body: text.slice(0, 2000), reasoning }));
+          if (!message && !upstream.ok) message = text.replace(/\s+/g, ' ').trim().slice(0, 300);
+          // Successful analysis responses can be larger than 2,000 characters;
+          // truncating them produces invalid JSON in the renderer. Only cap
+          // failed response bodies because they are diagnostic text.
+          res.end(JSON.stringify({ ok: upstream.ok, status: upstream.status, body: upstream.ok ? text : text.slice(0, 2000), reasoning, message }));
         } catch (error) {
           res.statusCode = 502;
           res.setHeader('Content-Type', 'application/json');
-          res.end(JSON.stringify({ ok: false, message: error instanceof Error ? error.message : 'Provider proxy failed.' }));
+          const message = error instanceof Error ? error.message : 'Provider proxy failed.';
+          res.end(JSON.stringify({ ok: false, status: 502, message: `Provider proxy could not reach the configured endpoint: ${message}` }));
         }
       });
     },

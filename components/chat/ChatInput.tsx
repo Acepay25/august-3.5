@@ -113,11 +113,49 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
             ?? (provider.selectedModel ? [provider.selectedModel] : []);
         return total + selected.length;
     }, 0);
+    const selectedModelsForLens = (provider: typeof providers[number]): string[] => {
+        const selected = provider.ensembleModels?.filter(model => provider.models.includes(model)) || [];
+        return isEnsembleEnabled
+            ? (selected.length > 0 ? selected : (provider.selectedModel ? [provider.selectedModel] : []))
+            : [];
+    };
+    const lensAssignmentValue = (role: string): string => {
+        const assignment = lensConfig.assignments?.find(item => item.role === role);
+        if (!assignment?.assignedProvider) return '';
+        const provider = providers.find(item => item.id === assignment.assignedProvider);
+        const availableModels = provider ? selectedModelsForLens(provider) : [];
+        const model = assignment.assignedModel || provider?.selectedModel || '';
+        return model && availableModels.includes(model) ? `${assignment.assignedProvider}::${model}` : '';
+    };
+    const updateLensAssignment = (role: string, value: string): void => {
+        const separator = value.indexOf('::');
+        const assignedProvider = separator >= 0 ? value.slice(0, separator) : value;
+        const assignedModel = separator >= 0 ? value.slice(separator + 2) : undefined;
+        const assignments = [...(lensConfig.assignments || [])];
+        const index = assignments.findIndex(item => item.role === role);
+        const assignment = { assignedProvider: assignedProvider || null, ...(assignedModel ? { assignedModel } : {}) };
+        if (index >= 0) {
+            assignments[index] = { ...assignments[index], ...assignment };
+        }
+        setLensConfig({ ...lensConfig, assignments });
+    };
+    const lensModelOptions = providers
+        .filter(provider => provider.isEnabled && provider.apiKey.trim().length > 0)
+        .flatMap(provider => selectedModelsForLens(provider).map(model => ({ value: `${provider.id}::${model}`, label: `${provider.name} · ${model}` })));
+    const lensModelOptionsForRole = (role: string) => lensModelOptions.map(option => ({
+        ...option,
+        disabled: lensConfig.assignments?.some(assignment => {
+            if (assignment.role === role || !assignment.assignedProvider) return false;
+            const provider = providers.find(item => item.id === assignment.assignedProvider);
+            const assignedModel = assignment.assignedModel || provider?.selectedModel || provider?.models[0] || '';
+            return `${assignment.assignedProvider}::${assignedModel}` === option.value;
+        }) ?? false,
+    }));
 
     return (
         <div className={centered
             ? 'w-full'
-                            : 'absolute bottom-0 left-0 right-0 px-3 sm:px-4 lg:px-8 pointer-events-none z-10 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:pb-[calc(env(safe-area-inset-bottom)+1rem)] lg:pb-8'}>
+            : 'absolute bottom-0 left-0 right-0 px-3 sm:px-4 lg:px-8 pointer-events-none z-20 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:pb-[calc(env(safe-area-inset-bottom)+1rem)] lg:pb-8'}>
             <div className={centered ? 'w-full' : 'w-full lg:max-w-3xl lg:mx-auto pointer-events-auto'}>
                 {/* Main Input Container — carded composer surface */}
                 <div className="rounded-2xl border border-white/10 bg-[#202020]/95 shadow-[0_8px_32px_rgba(0,0,0,0.24)] p-2 sm:p-3 lg:p-4 transition-all">
@@ -203,7 +241,8 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                 </button>
                             </div>
 
-                            {/* Lens Mode Split Button */}
+                            {/* Lens Mode Split Button — only meaningful for ensemble analysis. */}
+                            {isEnsembleEnabled && <>
                             <div className={`relative group flex items-center shadow-sm rounded-full transition-all ${lensConfig.enabled ? 'bg-zinc-700' : 'bg-zinc-800 hover:bg-zinc-700'}`}>
                                 {/* Main Toggle */}
                                 <button
@@ -242,25 +281,12 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                                 <span className="text-[10px] font-medium text-zinc-400">Macro & Volatility</span>
                                             </div>
                                             <select
-                                                value={lensConfig.assignments?.find(a => a.role === 'macro_volatility')?.assignedProvider || ''}
-                                                onChange={(e) => {
-                                                    const newConfig = { ...lensConfig };
-                                                    if (!newConfig.assignments) newConfig.assignments = [];
-                                                    const idx = newConfig.assignments.findIndex(a => a.role === 'macro_volatility');
-                                                    if (idx >= 0) {
-                                                        newConfig.assignments[idx].assignedProvider = e.target.value;
-                                                    } else {
-                                                        // @ts-expect-error -- role literal not in LensAssignment union
-                                                        newConfig.assignments.push({ role: 'macro_volatility', assignedProvider: e.target.value });
-                                                    }
-                                                    setLensConfig(newConfig);
-                                                }}
+                                                value={lensAssignmentValue('macro_volatility')}
+                                                onChange={(e) => updateLensAssignment('macro_volatility', e.target.value)}
                                                 className="w-full bg-zinc-950 border border-white/10 rounded px-2 py-1 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500/50"
                                             >
-                                                <option value="" disabled>Select Provider</option>
-                                                {providers.filter(p => p.isEnabled).map(p => (
-                                                    <option key={p.id} value={p.id}>{p.name}</option>
-                                                ))}
+                                                <option value="">Select provider/model</option>
+                                                {lensModelOptionsForRole('macro_volatility').map(option => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}{option.disabled ? ' (assigned)' : ''}</option>)}
                                             </select>
                                         </div>
 
@@ -271,25 +297,12 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                                 <span className="text-[10px] font-medium text-zinc-400">Technical Analyst</span>
                                             </div>
                                             <select
-                                                value={lensConfig.assignments?.find(a => a.role === 'technical_analyst')?.assignedProvider || ''}
-                                                onChange={(e) => {
-                                                    const newConfig = { ...lensConfig };
-                                                    if (!newConfig.assignments) newConfig.assignments = [];
-                                                    const idx = newConfig.assignments.findIndex(a => a.role === 'technical_analyst');
-                                                    if (idx >= 0) {
-                                                        newConfig.assignments[idx].assignedProvider = e.target.value;
-                                                    } else {
-                                                        // @ts-expect-error -- role literal not in LensAssignment union
-                                                        newConfig.assignments.push({ role: 'technical_analyst', assignedProvider: e.target.value });
-                                                    }
-                                                    setLensConfig(newConfig);
-                                                }}
+                                                value={lensAssignmentValue('technical_analyst')}
+                                                onChange={(e) => updateLensAssignment('technical_analyst', e.target.value)}
                                                 className="w-full bg-zinc-950 border border-white/10 rounded px-2 py-1 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500/50"
                                             >
-                                                <option value="" disabled>Select Provider</option>
-                                                {providers.filter(p => p.isEnabled).map(p => (
-                                                    <option key={p.id} value={p.id}>{p.name}</option>
-                                                ))}
+                                                <option value="">Select provider/model</option>
+                                                {lensModelOptionsForRole('technical_analyst').map(option => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}{option.disabled ? ' (assigned)' : ''}</option>)}
                                             </select>
                                         </div>
 
@@ -300,30 +313,18 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                                 <span className="text-[10px] font-medium text-zinc-400">Risk Manager</span>
                                             </div>
                                             <select
-                                                value={lensConfig.assignments?.find(a => a.role === 'risk_execution')?.assignedProvider || ''}
-                                                onChange={(e) => {
-                                                    const newConfig = { ...lensConfig };
-                                                    if (!newConfig.assignments) newConfig.assignments = [];
-                                                    const idx = newConfig.assignments.findIndex(a => a.role === 'risk_execution');
-                                                    if (idx >= 0) {
-                                                        newConfig.assignments[idx].assignedProvider = e.target.value;
-                                                    } else {
-                                                        // @ts-expect-error -- role literal not in LensAssignment union
-                                                        newConfig.assignments.push({ role: 'risk_execution', assignedProvider: e.target.value });
-                                                    }
-                                                    setLensConfig(newConfig);
-                                                }}
+                                                value={lensAssignmentValue('risk_execution')}
+                                                onChange={(e) => updateLensAssignment('risk_execution', e.target.value)}
                                                 className="w-full bg-zinc-950 border border-white/10 rounded px-2 py-1 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500/50"
                                             >
-                                                <option value="" disabled>Select Provider</option>
-                                                {providers.filter(p => p.isEnabled).map(p => (
-                                                    <option key={p.id} value={p.id}>{p.name}</option>
-                                                ))}
+                                                <option value="">Select provider/model</option>
+                                                {lensModelOptionsForRole('risk_execution').map(option => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}{option.disabled ? ' (assigned)' : ''}</option>)}
                                             </select>
                                         </div>
                                     </div>
                                 )}
                             </div>
+                            </>}
 
                         </div>
 

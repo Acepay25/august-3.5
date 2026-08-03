@@ -105,6 +105,16 @@ function providerRequestDetails(request) {
     return { url, headers, body };
 }
 
+function parseProviderErrorBody(raw) {
+    try {
+        const parsed = raw ? JSON.parse(raw) : {};
+        const message = parsed?.error?.message || parsed?.error?.error?.message || parsed?.message || parsed?.detail;
+        return typeof message === 'string' ? message.trim().slice(0, 300) : '';
+    } catch {
+        return String(raw || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+    }
+}
+
 async function sendProviderRequest(request) {
     const { url, headers, body } = providerRequestDetails(request);
     const controller = new AbortController();
@@ -118,16 +128,46 @@ async function sendProviderRequest(request) {
             body: JSON.stringify(body),
             signal: controller.signal,
         });
+        if (!response.ok && request.jsonMode && (response.status === 400 || response.status === 422) && body.response_format) {
+            const fallbackBody = { ...body };
+            delete fallbackBody.response_format;
+            response = await net.fetch(url, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(fallbackBody),
+                signal: controller.signal,
+            });
+        }
     } finally {
         clearTimeout(timeout);
         if (request.requestId) activeProviderRequests.delete(request.requestId);
     }
-    const raw = await response.text();
+    let raw = await response.text();
     let data = {};
     try { data = raw ? JSON.parse(raw) : {}; } catch { /* handled by fallback below */ }
 
+    if (response.ok && request.jsonMode && body.response_format) {
+        const message = data?.choices?.[0]?.message || {};
+        const content = Array.isArray(message.content)
+            ? message.content.filter(block => typeof block?.text === 'string').map(block => block.text).join('')
+            : message.content;
+        const reasoning = message.reasoning_content || message.reasoning;
+        if (!content && !reasoning) {
+            const fallbackBody = { ...body };
+            delete fallbackBody.response_format;
+            response = await net.fetch(url, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(fallbackBody),
+                signal: controller.signal,
+            });
+            raw = await response.text();
+            try { data = raw ? JSON.parse(raw) : {}; } catch { data = {}; }
+        }
+    }
+
     if (!response.ok) {
-        const error = new Error(response.status === 401
+        const error = new Error(parseProviderErrorBody(raw) || (response.status === 401
             ? 'Invalid API key. Check your provider settings.'
             : response.status === 403
                 ? 'Access denied. Check your provider permissions or credits.'
@@ -135,7 +175,7 @@ async function sendProviderRequest(request) {
                     ? 'Rate limit reached. Please wait and try again.'
                     : response.status >= 500
                         ? 'Provider server error. Try again later.'
-                        : `Provider request failed (${response.status}).`);
+                        : `Provider request failed (${response.status}).`));
         error.status = response.status;
         throw error;
     }
@@ -153,10 +193,13 @@ async function sendProviderRequest(request) {
                 .filter(block => block?.type === 'output_text').map(block => block.text).join('\n');
         }
     } else {
-        text = data.choices?.[0]?.message?.content || '';
+        const content = data.choices?.[0]?.message?.content;
+        text = Array.isArray(content)
+            ? content.filter(block => typeof block?.text === 'string').map(block => block.text).join('\n')
+            : content || '';
         reasoning = data.choices?.[0]?.message?.reasoning_content || data.choices?.[0]?.message?.reasoning || '';
     }
-    return { text: text || (raw && typeof data === 'object' ? JSON.stringify(data) : raw), reasoning };
+    return { text: text || reasoning || '', reasoning };
 }
 
 async function createWindow() {

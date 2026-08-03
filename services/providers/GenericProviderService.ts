@@ -139,11 +139,37 @@ async function chatCompletionsCall(
     if (options?.jsonMode) {
         (params as any).response_format = { type: 'json_object' };
     }
-    const response = await client.chat.completions.create(params, options?.signal ? { signal: options.signal } : undefined);
+    let response: OpenAI.Chat.Completions.ChatCompletion;
+    try {
+        response = await client.chat.completions.create(params, options?.signal ? { signal: options.signal } : undefined);
+    } catch (error: any) {
+        // A number of OpenAI-compatible gateways reject response_format even
+        // though they support the chat-completions endpoint. Retry once
+        // without that optional parameter; the prompt still requires JSON.
+        if (options?.jsonMode && (error?.status === 400 || error?.status === 422)) {
+            const fallbackParams = { ...params } as Record<string, unknown>;
+            delete fallbackParams.response_format;
+            response = await client.chat.completions.create(fallbackParams as any, options?.signal ? { signal: options.signal } : undefined);
+        } else {
+            throw error;
+        }
+    }
     const message = response.choices[0]?.message as any;
     const reasoning = message?.reasoning_content || message?.reasoning;
     if (typeof reasoning === 'string' && reasoning.trim()) options?.onReasoning?.(reasoning.trim());
-    return message?.content || '';
+    const content = Array.isArray(message?.content)
+        ? message.content.filter((part: any) => typeof part?.text === 'string').map((part: any) => part.text).join('\n')
+        : message?.content;
+    if (!content && !reasoning && options?.jsonMode) {
+        // Some gateways return 200 with an empty message when response_format
+        // is present. Retry once without the optional JSON enforcement.
+        return chatCompletionsCall(config, messages, { ...options, jsonMode: false });
+    }
+    // Some reasoning-capable gateways place the generated answer in
+    // reasoning_content when the final content field is omitted. Preserve it
+    // so the caller can still extract a structured answer instead of seeing
+    // a misleading empty-response error.
+    return content || (typeof reasoning === 'string' ? reasoning : '') || '';
 }
 
 async function* chatCompletionsStream(
@@ -164,6 +190,8 @@ async function* chatCompletionsStream(
     }
     const stream = await client.chat.completions.create(params, options?.signal ? { signal: options.signal } : undefined);
     for await (const chunk of stream) {
+        const reasoning = (chunk.choices[0]?.delta as any)?.reasoning_content || (chunk.choices[0]?.delta as any)?.reasoning;
+        if (typeof reasoning === 'string' && reasoning.trim()) options?.onReasoning?.(reasoning);
         yield chunk.choices[0]?.delta?.content || '';
     }
 }
@@ -338,11 +366,14 @@ function toFriendlyProviderError(error: unknown, providerName: string): unknown 
     } else if (status) {
         friendly = `${name}: request failed (${status}).`;
     } else {
-        const raw = (err?.message || '').toLowerCase();
+        const rawMessage = (err?.message || '').trim();
+        const raw = rawMessage.toLowerCase();
         if (raw.includes('desktop provider bridge')) {
             friendly = 'Desktop provider bridge is not loaded. Fully quit and restart the Electron app.';
         } else if (raw.includes('fetch') || raw.includes('network') || raw.includes('econnrefused') || raw.includes('enotfound') || raw.includes('failed to connect') || raw.includes('certificate') || raw.includes('tls') || raw.includes('timeout') || raw.includes('timed out')) {
             friendly = `${name}: could not reach the server. Check the base URL and your connection.`;
+        } else if (rawMessage && rawMessage.toLowerCase() !== 'provider request failed.') {
+            friendly = `${name}: ${rawMessage.slice(0, 300)}`;
         } else {
             friendly = `${name}: request failed.`;
         }
@@ -354,6 +385,16 @@ function toFriendlyProviderError(error: unknown, providerName: string): unknown 
         (wrapped as any).status = status;
     }
     return wrapped;
+}
+
+function parseProviderErrorBody(raw: string): string {
+    try {
+        const parsed = JSON.parse(raw) as any;
+        const message = parsed?.error?.message || parsed?.error?.error?.message || parsed?.message || parsed?.detail;
+        return typeof message === 'string' ? message.trim().slice(0, 300) : '';
+    } catch {
+        return raw.replace(/\s+/g, ' ').trim().slice(0, 300);
+    }
 }
 
 /**
@@ -415,10 +456,12 @@ export async function sendChatRequest(
                             temperature: options?.temperature,
                             jsonMode: options?.jsonMode,
                         }),
+                        signal: options?.signal,
                     }).then(async response => {
                         const result = await response.json() as { ok?: boolean; status?: number; body?: string; reasoning?: string; message?: string };
                         if (!response.ok || !result.ok) {
-                            const error = new Error(result.message || `Provider request failed (${result.status || response.status}).`);
+                            const providerBody = result.body ? parseProviderErrorBody(result.body) : '';
+                            const error = new Error(result.message || providerBody || `Provider request failed (${result.status || response.status}).`);
                             if (result.status !== undefined) (error as any).status = result.status;
                             throw error;
                         }
@@ -431,7 +474,11 @@ export async function sendChatRequest(
                         if (effectiveConfig.apiFormat === 'responses') {
                             return data.output_text || '';
                         }
-                        return data.choices?.[0]?.message?.content || '';
+                        const message = data.choices?.[0]?.message || {};
+                        const content = Array.isArray(message.content)
+                            ? message.content.filter((part: any) => typeof part?.text === 'string').map((part: any) => part.text).join('\n')
+                            : message.content;
+                        return content || message.reasoning_content || message.reasoning || '';
                     });
                 }
                 switch (effectiveConfig.apiFormat) {
@@ -450,7 +497,7 @@ export async function sendChatRequest(
             options?.signal
         );
     } catch (error) {
-        throw toFriendlyProviderError(error, effectiveConfig.name);
+        throw toFriendlyProviderError(error, `${effectiveConfig.name} · ${effectiveConfig.selectedModel}`);
     }
 }
 

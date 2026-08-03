@@ -36,7 +36,8 @@ import { useRafThrottle } from './useRafThrottle';
 import { generateLearningFromPrompt, isLearningEnabled } from '../services/learning/LearningPromptService';
 import { generatePersonalizedInjection } from '../services/ui/PersonalizedPromptService';
 import { buildUnifiedLearningContext } from '../services/learning/UnifiedLearningBuilder';
-import { getLensPromptForStyle } from '../services/ui/AnalystLensService';
+import { ANALYST_ROLE_DEFINITIONS, getLensPromptForStyle, getRoleForProvider } from '../services/ui/AnalystLensService';
+import { AnalystRole } from '../types/enums';
 import GlobalLearningService from '../services/learning/GlobalLearningService';
 
 // ─── Params Interface ──────────────────────────────────────────────────────────
@@ -203,6 +204,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             isMemoryEnabledInPureAI: rest[12] as boolean,
             rolePrompt: rest[13] as string | undefined,
             signal,
+            onReasoning: rest[14] as ((reasoning: string) => void) | undefined,
         });
 
         // Only cache successful, non-empty results.
@@ -229,7 +231,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         conversationId: string | null,
         debateMessageId: string,
         currentTurns: DebateTurn[],
-        thoughtMap: Record<string, string>
+        thoughtMap: Record<string, string>,
+        reasoningMap: Record<string, string>
     ) => {
         updateMessages(prev => {
             const messageIndex = prev.findIndex(m => m.id === debateMessageId);
@@ -238,6 +241,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 ...prev[messageIndex],
                 debateTurns: currentTurns,
                 thoughtProcesses: thoughtMap,
+                reasoningProcesses: reasoningMap,
             };
             const newMessages = [...prev];
             newMessages[messageIndex] = updatedMessage;
@@ -251,6 +255,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     const [loadingMessage, setLoadingMessage] = useState<string | null>(null);
     const [analysisSteps, setAnalysisSteps] = useState<AnalysisStep[]>([]);
     const [liveThoughts, setLiveThoughts] = useState<LiveThoughts>({});
+    const [liveReasoning, setLiveReasoning] = useState<LiveThoughts>({});
+    const reasoningMapRef = useRef<Record<string, string>>({});
     const [currentGateResult, setCurrentGateResult] = useState<GateOutput | null>(null);
     const [currentVisionData, setCurrentVisionData] = useState<string[]>([]);
     const [isDeepAnalysis, setIsDeepAnalysis] = useState<boolean>(false);
@@ -337,13 +343,23 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         const enabledProviders = providerConfigs
             .filter(c => c.isEnabled && c.apiKey.trim().length > 0)
             .flatMap(c => {
+                const assignedModels = lensConfig?.enabled
+                    ? lensConfig.assignments
+                        .filter(assignment => assignment.assignedProvider === c.id && assignment.assignedModel && c.models.includes(assignment.assignedModel))
+                        .map(assignment => assignment.assignedModel as string)
+                    : [];
+                const configuredModels = c.ensembleModels?.filter(model => c.models.includes(model)).slice(0, 3) || [];
+                if (configuredModels.length === 0 && c.selectedModel) configuredModels.push(c.selectedModel);
                 const models = isEnsembleEnabled
-                    ? (c.ensembleModels?.filter(model => c.models.includes(model)).slice(0, 3)
-                        ?? (c.selectedModel ? [c.selectedModel] : []))
+                    ? [...new Set([...assignedModels, ...configuredModels])].slice(0, 3)
                     : (c.selectedModel ? [c.selectedModel] : []);
                 return models.map(model => ({
                     config: { ...c, selectedModel: model },
-                    name: isEnsembleEnabled && models.length > 1 ? `${c.name} · ${model}` : c.name,
+            name: (() => {
+                if (!isEnsembleEnabled || !lensConfig?.enabled) return isEnsembleEnabled && models.length > 1 ? `${c.name} · ${model}` : c.name;
+                const role = getRoleForProvider(`${c.id}::${model}`, lensConfig.assignments);
+                return role !== AnalystRole.UNASSIGNED ? ANALYST_ROLE_DEFINITIONS[role].name : c.name;
+            })(),
                     model,
                     useImages: false,
                     thoughtsKey: `${c.id}:${model}`,
@@ -410,7 +426,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
         // IMMEDIATELY show hybrid loading indicator if enabled (before message appears)
         // BUT skip if preset hybrid data was passed (from auto-capture)
-        if (isEnsembleEnabled && isHybridIntelligenceEnabled && !currentHybridData && !options?.presetHybridData) {
+        if (isEnsembleEnabled && !currentHybridData && !options?.presetHybridData) {
             // Only show loading and clear data if we are currently disconnected or in error state
             // This prevents flickering "connecting..." when we are already connected
             setHybridConnectionStatus(prev => (prev === 'connected' ? 'connected' : 'connecting'));
@@ -472,7 +488,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             console.warn('[Hybrid Intelligence] Enabled:', isHybridIntelligenceEnabled);
             console.warn('[Hybrid Intelligence] HasPresetData:', !!options?.presetHybridData);
             console.warn('[Hybrid Intelligence] User prompt:', effectiveInput);
-            if (isEnsembleEnabled && isHybridIntelligenceEnabled && !options?.presetHybridData) {
+            if (isEnsembleEnabled && !options?.presetHybridData) {
                 try {
                     console.warn('[Hybrid Intelligence] Attempting to fetch data for prompt:', effectiveInput);
                     setLoadingMessage('Fetching real-time market data...');
@@ -608,7 +624,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
             let gateInjection = '';
             let capturedGateResult: typeof currentGateResult = null; // Local variable to avoid state closure issue
-            if (finalSymbol && isEnsembleEnabled && isHybridIntelligenceEnabled) {
+            if (finalSymbol && isEnsembleEnabled) {
                 try {
                     console.log(`[GateKeeper] Running Gate check for ${finalSymbol}...`);
                     setLoadingMessage('Running Gate Scan...');
@@ -657,7 +673,10 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 upperPrompt.includes("ANALYZE") ||
                 upperPrompt.includes("CHART") ||
                 upperPrompt.includes("SETUP") ||
-                isUpdate;
+                isUpdate ||
+                // Ensemble mode always follows the analysis/debate pipeline,
+                // even when the user uses conversational wording.
+                isEnsembleEnabled;
 
             // Chart analysis only runs in ensemble mode; otherwise the
             // message is handled as casual chat with the selected model.
@@ -887,6 +906,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     setLatestMonteCarloResult(null);
                     setLatestBacktestResult(null);
                     setLiveThoughts(Object.fromEntries(enabledProviders.map(p => [p.thoughtsKey, null])));
+                    setLiveReasoning(Object.fromEntries(enabledProviders.map(p => [p.thoughtsKey, null])));
+                    reasoningMapRef.current = {};
                     setIsAnalysisTypingComplete(false);
                     setIsLiveAnalysisVisible(true);
 
@@ -912,14 +933,18 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             isFamiliesEnabledInPureAI,
                             isMemoryEnabledInPureAI,
                             // Analyst Lens: pass role-specific prompt based on trading style
-                            lensConfig.enabled && provider.config.id
+                            lensConfig.enabled && provider.thoughtsKey
                                 ? getLensPromptForStyle(
-                                    provider.config.id,
+                                    provider.thoughtsKey,
                                     lensConfig.assignments,
                                     // For auto mode, use swing as default (will be detected per-call with hybrid data)
                                     lensConfig.tradingStyle === 'auto' ? 'swing' : lensConfig.tradingStyle
                                 )
-                                : undefined
+                                : undefined,
+                            (reasoning: string) => {
+                                reasoningMapRef.current[provider.name] = reasoning;
+                                setLiveReasoning(prev => ({ ...prev, [provider.thoughtsKey]: reasoning }));
+                            }
                         )
                             .catch((err: any) => {
                                 const errorMsg = err instanceof Error ? err.message : String(err);
@@ -953,6 +978,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                         if (settled.status === 'fulfilled') {
                             const providerKey = enabledProviders[index].thoughtsKey;
                             thoughtMap[providerKey] = settled.value.thoughtProcess;
+                            thoughtMap[enabledProviders[index].name] = settled.value.thoughtProcess;
                         }
                     });
 
@@ -1036,6 +1062,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
                         // Add thought processes so all analysts appear in UI
                         thoughtProcesses: { ...thoughtMap },
+                        reasoningProcesses: { ...reasoningMapRef.current },
 
                         isAccuracyMode: isAccuracyModeEnabled,
                         isLensMode: lensConfig?.enabled ?? false,
@@ -1080,7 +1107,12 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             capturedGateResult, // Gate result for reconciliation (local, not stale state)
                             tradeSummaries, // Recent Insights
                             moderatorLearningContext, // Unified learning context for moderator
-                            currentAbortController.signal // Cancellation for the moderator stream
+                            currentAbortController.signal, // Cancellation for the moderator stream
+                            (reasoning: string) => {
+                                reasoningMapRef.current.moderator = reasoning;
+                                setLiveReasoning(prev => ({ ...prev, moderator: reasoning }));
+                                thoughtMap.moderator = reasoning;
+                            }
                         );
                     } else {
                         // STANDARD MODE
@@ -1098,7 +1130,12 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                                 moderatorLearningContext, // Unified learning context for moderator
                                 fulfilledAnalysts.map(a => a.provider.config.id), // enabledProviders for weighted voting
                                 loggedTrades, // trades for weighted voting
-                                currentAbortController.signal // Cancellation for the moderator stream
+                                currentAbortController.signal, // Cancellation for the moderator stream
+                                (reasoning: string) => {
+                                    reasoningMapRef.current.moderator = reasoning;
+                                    setLiveReasoning(prev => ({ ...prev, moderator: reasoning }));
+                                    thoughtMap.moderator = reasoning;
+                                }
                             );
                         } else if (fulfilledAnalysts.length === 3) {
                             debateStream = ensembleService.conductThreeWayDebate(
@@ -1115,7 +1152,12 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                                 tradeSummaries, // recent insights for pattern matching
                                 capturedGateResult, // Gate result (current run, not stale state)
                                 moderatorLearningContext, // NEW: Unified learning context for moderator
-                                currentAbortController.signal // Cancellation for the moderator stream
+                                currentAbortController.signal, // Cancellation for the moderator stream
+                                (reasoning: string) => {
+                                    reasoningMapRef.current.moderator = reasoning;
+                                    setLiveReasoning(prev => ({ ...prev, moderator: reasoning }));
+                                    thoughtMap.moderator = reasoning;
+                                }
                             );
                         } else {
                             throw new Error(`Debate requires at least 2 analysts to respond (${fulfilledAnalysts.length} succeeded). Partial analyses were not used.`);
@@ -1124,7 +1166,15 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
                     let fullResponseText = '';
                     // Updated regex to include Puter model names (Claude, GPT, Grok, etc.) and OpenRouter
-                    const turnRegex = /(?:^|\n)\s*(?:[*_~]*)(Gemini|DeepSeek|Zhipu|Groq|Groq \(Alt\)|Groq \(Alt 2\)|OpenRouter|Moderator|Master Strategist|Claude[^:]*|GPT[^:]*|Grok[^:]*|Mistral[^:]*|Kimi[^:]*|Qwen[^:]*|LLaMA[^:]*|Puter[^:]*)[^\n]*?(?:[*_~]*)\s*:\s*([\s\S]*?)(?=(?:^|\n)\s*(?:[*_~]*)(?:Gemini|DeepSeek|Zhipu|Groq|Groq \(Alt\)|Groq \(Alt 2\)|OpenRouter|Moderator|Master Strategist|Claude|GPT|Grok|Mistral|Kimi|Qwen|LLaMA|Puter)[^\n]*?(?:[*_~]*)\s*:|$)/gi;
+                    const assignedRoleNames = enabledProviders.map(provider => provider.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+                    const speakerNames = [...new Set([
+                        ...assignedRoleNames,
+                        'Gemini', 'DeepSeek', 'Zhipu', 'Groq', 'Groq \\(Alt\\)', 'Groq \\(Alt 2\\)', 'OpenRouter',
+                        'Moderator', 'Master Strategist', 'Claude[^:]*', 'GPT[^:]*', 'Grok[^:]*', 'Mistral[^:]*',
+                        'Kimi[^:]*', 'Qwen[^:]*', 'LLaMA[^:]*', 'Puter[^:]*'
+                    ])].sort((a, b) => b.length - a.length);
+                    const speakerPattern = speakerNames.join('|');
+                    const turnRegex = new RegExp(`(?:^|\\n)\\s*(?:[*_~]*)(${speakerPattern})[^\\n]*?(?:[*_~]*)\\s*:\\s*([\\s\\S]*?)(?=(?:^|\\n)\\s*(?:[*_~]*)(${speakerPattern})[^\\n]*?(?:[*_~]*)\\s*:|$)`, 'gi');
 
                     for await (const chunk of debateStream) {
                         if (!isCurrentRequest()) break;
@@ -1182,7 +1232,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                         }
 
                         // P1-5: Coalesce per-token updates into one per frame.
-                        throttledDebateUpdate(requestConversationId, debateMessageId, currentTurns, thoughtMap);
+                        throttledDebateUpdate(requestConversationId, debateMessageId, currentTurns, thoughtMap, reasoningMapRef.current);
                     }
                     // Flush the final pending update synchronously so the
                     // last chunk's state is committed before downstream parsing.
@@ -1253,6 +1303,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             outcome: TradeOutcome.PENDING,
                             debateTurns: existingMessage.debateTurns,
                             thoughtProcesses: { ...thoughtMap },
+                            reasoningProcesses: { ...reasoningMapRef.current },
                             // Multi-Timeframe Confluence from Hybrid Intelligence
                             confluenceData: freshHybridData?.confluence ? {
                                 score: freshHybridData.confluence.score,
@@ -1380,9 +1431,9 @@ const result = await cachedAnalyzeTradingView(
                             isFamiliesEnabledInPureAI,
                             isMemoryEnabledInPureAI,
                             // Analyst Lens: pass role-specific prompt based on trading style
-                            lensConfig.enabled && provider.config.id
+                            lensConfig.enabled && provider.thoughtsKey
                                 ? getLensPromptForStyle(
-                                    provider.config.id,
+                                    provider.thoughtsKey,
                                     lensConfig.assignments,
                                     lensConfig.tradingStyle === 'auto' ? 'swing' : lensConfig.tradingStyle
                                 )
@@ -1393,7 +1444,7 @@ const result = await cachedAnalyzeTradingView(
                         id: `ai-${Date.now()}`, role: MessageRole.AI, text: result.thoughtProcess, createdAt: new Date().toISOString(), analysis: processNewAnalysis(result.analysis), sources: result.sources || [], outcome: TradeOutcome.PENDING, ocrModelUsed: userMessage.ocrModelUsed,
                         imageSummaries: userMessage.imageSummaries,
                         modelsUsed: { [provider.thoughtsKey]: provider.model },
-                        thoughtProcesses: { [provider.config.id]: result.thoughtProcess },
+                        thoughtProcesses: { [provider.thoughtsKey]: result.thoughtProcess },
                         isAccuracyMode: isAccuracyModeEnabled,
                         isLensMode: lensConfig?.enabled ?? false,
                         // Always set tradingStyle regardless of Lens mode
@@ -1520,6 +1571,7 @@ const result = await cachedAnalyzeTradingView(
         loadingMessage, setLoadingMessage,
         analysisSteps, setAnalysisSteps,
         liveThoughts, setLiveThoughts,
+        liveReasoning, setLiveReasoning,
         currentGateResult, setCurrentGateResult,
         currentVisionData, setCurrentVisionData,
         isDeepAnalysis, setIsDeepAnalysis,
