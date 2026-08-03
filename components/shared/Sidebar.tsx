@@ -74,14 +74,14 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
     };
 
     return (
-        <div className="flex flex-col h-full min-h-0">
+        <div className="flex flex-col h-full min-h-0 bg-[#151515]">
             {/* New Conversation — highlighted row (disabled in a fresh
                 session: nothing exists yet to branch from) */}
             <div className="p-3 pb-2">
                 <button
                     onClick={act(onNewConversation)}
                     disabled={isFreshSession}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl bg-zinc-800 border border-white/10 hover:bg-zinc-700 text-sm font-medium text-zinc-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-zinc-800"
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-sm font-medium text-zinc-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-zinc-800"
                     title={isFreshSession ? 'Start typing to begin a conversation' : 'Start a new conversation'}
                 >
                     <PlusIcon className="h-4 w-4 text-zinc-400" />
@@ -90,9 +90,9 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
             </div>
 
             {/* Quick actions */}
-            <nav className="px-3">
+            <nav className="px-2">
                 <div className="px-3 pb-1 pt-2">
-                    <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Quick Actions</span>
+                    <span className="text-[10px] font-medium text-zinc-600 uppercase tracking-widest">Quick actions</span>
                 </div>
                 <div className="space-y-0.5">
                     <NavRow icon={<ActivityIcon className="h-4 w-4" />} label="Live Market" onClick={act(onOpenLiveMarket)} />
@@ -105,10 +105,10 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
             </nav>
 
             {/* Recent conversations */}
-            <div className="px-6 pb-1 pt-4">
-                <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Recent</span>
+            <div className="px-5 pb-1 pt-5">
+                <span className="text-[10px] font-medium text-zinc-600 uppercase tracking-widest">Recent</span>
             </div>
-            <div className="flex-1 min-h-0 overflow-y-auto px-3 pb-2 space-y-0.5">
+            <div className="flex-1 min-h-0 overflow-y-auto px-2 pb-2 space-y-0.5">
                 {recentConversations.length === 0 ? (
                     <div className="px-3 py-2 text-xs text-zinc-600">No conversations yet</div>
                 ) : (
@@ -116,9 +116,9 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                         <button
                             key={conv.id}
                             onClick={act(() => onLoadConversation(conv.id))}
-                            className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-colors ${conv.id === activeConversationId
+                            className={`w-full flex items-center gap-2 px-3 py-2 rounded-md text-left transition-colors ${conv.id === activeConversationId
                                 ? 'bg-zinc-800 text-zinc-100'
-                                : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800'
+                                : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/80'
                                 }`}
                         >
                             <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${conv.id === activeConversationId ? 'bg-zinc-300' : 'bg-zinc-700'}`} />

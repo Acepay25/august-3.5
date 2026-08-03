@@ -246,7 +246,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
 
     return (
         <div
-            className={`flex-1 relative min-h-0 flex flex-col bg-transparent transition-colors duration-500`}
+            className={`flex-1 relative min-h-0 flex flex-col bg-zinc-950 transition-colors duration-500`}
             onClick={onInteract}
             onTouchStart={onInteract}
         >
@@ -390,7 +390,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
             ) : messages.length === 0 ? (
                 /* Fresh session: hero canvas — grid background, tagline,
                     carded composer and centered quick actions */
-                <div className="absolute inset-0 z-10 bg-zinc-950 bg-grid overflow-y-auto">
+                <div className="absolute inset-0 z-10 bg-zinc-950 overflow-y-auto">
                     <div className="min-h-full flex flex-col items-center justify-center px-3 sm:px-4 lg:px-8 py-10">
                         {/* First-run guidance lives in the app-level
                             OnboardingCard (dismissible, persisted) — no

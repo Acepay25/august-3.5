@@ -104,7 +104,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
             : 'absolute bottom-0 left-0 right-0 px-3 sm:px-4 lg:px-8 pointer-events-none z-10 pb-[calc(env(safe-area-inset-bottom,16px)+0.5rem)] sm:pb-[calc(env(safe-area-inset-bottom,24px)+1rem)] lg:pb-8'}>
             <div className={centered ? 'w-full' : 'w-full lg:max-w-3xl lg:mx-auto pointer-events-auto'}>
                 {/* Main Input Container — carded composer surface */}
-                <div className="rounded-2xl border border-white/10 bg-zinc-900 shadow-xl p-2 sm:p-3 lg:p-4 transition-all">
+                <div className="rounded-2xl border border-white/10 bg-[#202020]/95 shadow-[0_8px_32px_rgba(0,0,0,0.24)] p-2 sm:p-3 lg:p-4 transition-all">
 
                     {/* Image Preview */}
                     <ImagePreview images={images} onRemoveImage={removeImage} />
@@ -115,7 +115,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey ? (e.preventDefault(), handleSendMessage()) : null}
-                            placeholder={images.length > 0 ? "Analyze charts..." : "Message August"}
+                            placeholder={images.length > 0 ? "Analyze charts..." : "Write a message..."}
                             className="flex-1 bg-transparent px-2 py-2 text-sm lg:text-base text-white placeholder-zinc-500 focus:outline-none transition-all min-h-[44px] lg:min-h-[48px] max-h-32 resize-none leading-relaxed"
                             rows={1}
                             // Always typeable — sending (not typing) is what
