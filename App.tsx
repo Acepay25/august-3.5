@@ -209,6 +209,22 @@ const App: React.FC = () => {
             ?? (provider.selectedModel ? [provider.selectedModel] : []);
         return total + selected.length;
     }, 0), [readyProviders]);
+    const requiredAnalystRoles = [AnalystRole.MACRO_VOLATILITY, AnalystRole.TECHNICAL_ANALYST, AnalystRole.RISK_EXECUTION];
+    const missingAnalystRoles = useMemo(() => requiredAnalystRoles
+        .filter(role => {
+            const assignment = lensConfig?.assignments.find(item => item.role === role);
+            const provider = readyProviders.find(item => item.id === assignment?.assignedProvider);
+            return !assignment?.assignedProvider || !(assignment.assignedModel || provider?.selectedModel);
+        }), [lensConfig, readyProviders]);
+    const hasCompleteAnalystAssignments = useMemo(() => {
+        if (missingAnalystRoles.length > 0) return false;
+        const identities = requiredAnalystRoles.map(role => {
+            const assignment = lensConfig.assignments.find(item => item.role === role)!;
+            const provider = readyProviders.find(item => item.id === assignment.assignedProvider);
+            return `${assignment.assignedProvider}::${assignment.assignedModel || provider?.selectedModel}`;
+        });
+        return new Set(identities).size === identities.length;
+    }, [lensConfig, missingAnalystRoles, readyProviders]);
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
         try {
             return window.localStorage.getItem('august_sidebar_collapsed') === 'true';
@@ -236,20 +252,20 @@ const App: React.FC = () => {
     // multiple selected models to one ensemble.
     const liveAnalysisProviders = useMemo(() => readyProviders
         .flatMap(provider => {
-            const assignedModels = lensConfig?.enabled
-                ? lensConfig.assignments
-                    .filter(assignment => assignment.assignedProvider === provider.id && assignment.assignedModel && provider.models.includes(assignment.assignedModel))
-                    .map(assignment => assignment.assignedModel as string)
-                : [];
+            const assignedModels = lensConfig.assignments
+                .filter(assignment => assignment.assignedProvider === provider.id)
+                .map(assignment => assignment.assignedModel || provider.selectedModel)
+                .filter((model): model is string => Boolean(model));
             const configuredModels = provider.ensembleModels?.filter(model => provider.models.includes(model)).slice(0, 3) || [];
             if (configuredModels.length === 0 && provider.selectedModel) configuredModels.push(provider.selectedModel);
+            const uniqueAssignedModels = [...new Set(assignedModels)].slice(0, 3);
             const models = isEnsembleEnabled
-                ? [...new Set([...assignedModels, ...configuredModels])].slice(0, 3)
+                ? (hasCompleteAnalystAssignments ? uniqueAssignedModels : configuredModels)
                 : (provider.selectedModel ? [provider.selectedModel] : []);
             return models.map(model => ({
                 id: `${provider.id}:${model}`,
                 name: (() => {
-                    if (!isEnsembleEnabled || !lensConfig?.enabled) return isEnsembleEnabled && models.length > 1 ? `${provider.name} · ${model}` : provider.name;
+                    if (!isEnsembleEnabled || !hasCompleteAnalystAssignments) return isEnsembleEnabled && models.length > 1 ? `${provider.name} · ${model}` : provider.name;
                     const role = getRoleForProvider(`${provider.id}::${model}`, lensConfig.assignments);
                     return role !== AnalystRole.UNASSIGNED ? ANALYST_ROLE_DEFINITIONS[role].name : provider.name;
                 })(),
@@ -258,7 +274,7 @@ const App: React.FC = () => {
                 apiKey: provider.apiKey,
             }));
         })
-        .slice(0, 3), [readyProviders, isEnsembleEnabled, lensConfig]);
+        .slice(0, 3), [readyProviders, isEnsembleEnabled, lensConfig, hasCompleteAnalystAssignments]);
 
     // Market data state and effects (extracted to hooks/useMarketData.ts)
     const marketData = useMarketData(isHybridIntelligenceEnabled, isEnsembleEnabled);
@@ -462,10 +478,20 @@ const App: React.FC = () => {
         if (!moderatorProviderId || !readyProviders.some(p => p.id === moderatorProviderId)) {
             issues.push('select a moderator in Settings → AI Models');
         }
+        if (missingAnalystRoles.length > 0) {
+            issues.push(`assign ${missingAnalystRoles.map(role => ANALYST_ROLE_DEFINITIONS[role].shortName).join(', ')} in Assign Analysts`);
+        } else {
+            const identities = requiredAnalystRoles.map(role => {
+                const assignment = lensConfig.assignments.find(item => item.role === role)!;
+                const provider = readyProviders.find(item => item.id === assignment.assignedProvider);
+                return `${assignment.assignedProvider}::${assignment.assignedModel || provider?.selectedModel}`;
+            });
+            if (new Set(identities).size !== identities.length) issues.push('assign a different model to each analyst role');
+        }
         if (issues.length > 0) {
             toast.warning('Ensemble needs more setup', `To use ensemble: ${issues.join(' and ')}.`);
         }
-    }, [readyProviders, ensembleModelCount, moderatorProviderId, isAccuracyModeEnabled, toast, setImages]);
+    }, [readyProviders, ensembleModelCount, moderatorProviderId, isAccuracyModeEnabled, toast, setImages, lensConfig.enabled, missingAnalystRoles]);
 
     // P0-2: Mirror the (later-declared) activeUsername into a ref so the
     // usePostMortem hook — which is instantiated BEFORE useUserProfiles

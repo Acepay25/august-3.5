@@ -12,7 +12,7 @@
 
 import { ProviderConfig } from '../../types/provider';
 import { Message, GroundingChunk, TradeAnalysis, GlobalMemory, AccuracySubMode, TradeOutcome, LoggedTrade, StrategySearchResult, TradeSummary, MessageRole } from '../../types';
-import { extractAndParseJson } from '../../utils/jsonUtils';
+import { extractAndParseJson, extractLastJson } from '../../utils/jsonUtils';
 import { sanitizeAIResponse, sanitizeJSONString } from '../../utils/sanitizers';
 import { sanitizeTradeAnalysis, truncateTextToTokens } from '../../utils/analysisUtils';
 import { parseGlobalMemory, parseStrategySearchResults } from '../../schemas/learning';
@@ -462,7 +462,19 @@ export async function analyzeTradingView(
     if (!responseText) throw new Error("Received an empty response from the AI.");
 
     try {
-        const responseJson = extractAndParseJson(responseText);
+        let responseJson: any;
+        try {
+            responseJson = extractAndParseJson(responseText);
+        } catch (primaryError) {
+            // Reasoning-capable models sometimes prepend a long analysis and
+            // place the final JSON block at the end. Prefer that final block
+            // before declaring the entire response invalid.
+            try {
+                responseJson = extractLastJson(responseText);
+            } catch {
+                throw primaryError;
+            }
+        }
         const thoughtProcess = sanitizeAIResponse(responseJson.thoughtProcess || "No thought process provided.");
         const analysis: TradeAnalysis = sanitizeTradeAnalysis(responseJson.analysis);
         if (!analysis) throw new Error("AI response JSON did not contain the 'analysis' object.");

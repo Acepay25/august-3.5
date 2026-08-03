@@ -908,9 +908,9 @@ export function getRoleForProvider(
     const separator = provider.indexOf('::');
     const providerId = separator >= 0 ? provider.slice(0, separator) : provider;
     const modelId = separator >= 0 ? provider.slice(separator + 2) : undefined;
-    const assignment = config.find(a => a.assignedProvider === providerId && (
-        modelId ? a.assignedModel === modelId : !a.assignedModel
-    ));
+    const exactAssignment = config.find(a => a.assignedProvider === providerId && a.assignedModel === modelId);
+    const providerFallback = config.find(a => a.assignedProvider === providerId && !a.assignedModel);
+    const assignment = exactAssignment || providerFallback;
     return assignment?.role || AnalystRole.UNASSIGNED;
 }
 

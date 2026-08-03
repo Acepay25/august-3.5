@@ -96,9 +96,12 @@ const AnalystPanel: React.FC<{
             <span className="text-xs font-mono uppercase tracking-widest">{text === null ? loadingIdle : loadingStreaming}</span>
           </div>
         ) : (
-          <div className={`text-xs sm:text-sm leading-relaxed whitespace-pre-wrap font-sans ${colorClasses.text} animate-fade-in`}>
-            {typedText}
-            {!isFinished && <span className={`inline-block w-1.5 h-4 ml-1 align-middle ${colorClasses.accent} animate-pulse`}></span>}
+          <div className="animate-fade-in">
+            <div className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Final output</div>
+            <div className={`text-xs sm:text-sm leading-relaxed whitespace-pre-wrap font-sans ${colorClasses.text}`}>
+              {typedText}
+              {!isFinished && <span className={`inline-block w-1.5 h-4 ml-1 align-middle ${colorClasses.accent} animate-pulse`}></span>}
+            </div>
           </div>
         )}
       </div>

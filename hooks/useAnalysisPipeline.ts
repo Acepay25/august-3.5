@@ -340,23 +340,38 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         // Ensemble participants are model-level entries, not just provider
         // entries. This allows several models from one provider while keeping
         // each result and reasoning trace separate.
+        const requiredAnalystRoles = [AnalystRole.MACRO_VOLATILITY, AnalystRole.TECHNICAL_ANALYST, AnalystRole.RISK_EXECUTION];
+        const missingAnalystRoles = requiredAnalystRoles.filter(role => {
+            const assignment = lensConfig.assignments.find(item => item.role === role);
+            const provider = providerConfigs.find(item => item.id === assignment?.assignedProvider);
+            return !assignment?.assignedProvider || !(assignment.assignedModel || provider?.selectedModel);
+        });
+        const hasCompleteAnalystAssignments = missingAnalystRoles.length === 0 && (() => {
+            const identities = requiredAnalystRoles.map(role => {
+                const assignment = lensConfig.assignments.find(item => item.role === role)!;
+                const provider = providerConfigs.find(item => item.id === assignment.assignedProvider);
+                return `${assignment.assignedProvider}::${assignment.assignedModel || provider?.selectedModel}`;
+            });
+            return new Set(identities).size === identities.length;
+        })();
+
         const enabledProviders = providerConfigs
             .filter(c => c.isEnabled && c.apiKey.trim().length > 0)
             .flatMap(c => {
-                const assignedModels = lensConfig?.enabled
-                    ? lensConfig.assignments
-                        .filter(assignment => assignment.assignedProvider === c.id && assignment.assignedModel && c.models.includes(assignment.assignedModel))
-                        .map(assignment => assignment.assignedModel as string)
-                    : [];
+                const assignedModels = lensConfig.assignments
+                    .filter(assignment => assignment.assignedProvider === c.id)
+                    .map(assignment => assignment.assignedModel || c.selectedModel)
+                    .filter((model): model is string => Boolean(model));
                 const configuredModels = c.ensembleModels?.filter(model => c.models.includes(model)).slice(0, 3) || [];
                 if (configuredModels.length === 0 && c.selectedModel) configuredModels.push(c.selectedModel);
+                const uniqueAssignedModels = [...new Set(assignedModels)].slice(0, 3);
                 const models = isEnsembleEnabled
-                    ? [...new Set([...assignedModels, ...configuredModels])].slice(0, 3)
+                    ? (hasCompleteAnalystAssignments ? uniqueAssignedModels : configuredModels)
                     : (c.selectedModel ? [c.selectedModel] : []);
                 return models.map(model => ({
                     config: { ...c, selectedModel: model },
             name: (() => {
-                if (!isEnsembleEnabled || !lensConfig?.enabled) return isEnsembleEnabled && models.length > 1 ? `${c.name} · ${model}` : c.name;
+                if (!isEnsembleEnabled || !hasCompleteAnalystAssignments) return isEnsembleEnabled && models.length > 1 ? `${c.name} · ${model}` : c.name;
                 const role = getRoleForProvider(`${c.id}::${model}`, lensConfig.assignments);
                 return role !== AnalystRole.UNASSIGNED ? ANALYST_ROLE_DEFINITIONS[role].name : c.name;
             })(),
@@ -387,6 +402,16 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 "Add an API key in Settings → AI Models to start analyzing charts."
             );
             return;
+        }
+        if (isEnsembleEnabled) {
+            if (missingAnalystRoles.length > 0) {
+                toast.warning('Assign all analysts', `Assign ${missingAnalystRoles.map(role => ANALYST_ROLE_DEFINITIONS[role].shortName).join(', ')} before starting the ensemble.`);
+                return;
+            }
+            if (!hasCompleteAnalystAssignments) {
+                toast.warning('Distinct analyst models required', 'Each analyst role must use a different model. The same provider is allowed.');
+                return;
+            }
         }
 
         if (!isAccuracyModeEnabled && enabledProviders.length > 3) {
@@ -970,6 +995,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     });
 
                     const thoughtMap: Record<string, string> = {};
+                    const finalOutputMap: Record<string, string> = {};
                     // P1-6 (pre-existing fix): iterate settledResults, NOT the
                     // re-indexed `results` array — otherwise a failed provider
                     // at index 0 would cause results[0] (actually provider #1's
@@ -979,13 +1005,18 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             const providerKey = enabledProviders[index].thoughtsKey;
                             thoughtMap[providerKey] = settled.value.thoughtProcess;
                             thoughtMap[enabledProviders[index].name] = settled.value.thoughtProcess;
+                            const finalOutput = settled.value.analysis
+                                ? JSON.stringify(settled.value.analysis, null, 2)
+                                : settled.value.thoughtProcess;
+                            finalOutputMap[providerKey] = finalOutput;
+                            finalOutputMap[enabledProviders[index].name] = finalOutput;
                         }
                     });
 
                     // FIX: Populate liveThoughts for LiveAnalysisView display
                     setLiveThoughts(prev => ({
                         ...prev,
-                        ...thoughtMap
+                        ...finalOutputMap
                     } as LiveThoughts));
 
                     // ========== PER-AI MONTE CARLO ==========
