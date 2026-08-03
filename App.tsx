@@ -1845,7 +1845,7 @@ const App: React.FC = () => {
 
             {/* Main row: persistent desktop sidebar + chat column */}
             <div className="flex-1 flex flex-row min-h-0">
-                <aside className="hidden lg:flex flex-col w-72 shrink-0 min-h-0 border-r border-white/5 bg-zinc-900">
+                <aside className="hidden lg:flex flex-col w-60 shrink-0 min-h-0 border-r border-white/5 bg-[#151515]">
                     <SidebarContent
                         activeUsername={activeUsername}
                         conversations={conversationHistory}

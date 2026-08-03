@@ -124,8 +124,8 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
         ? '' // user messages render as plain text (Cursor-style, no bubble)
         : message.role === MessageRole.AI
             ? (message.isPostMortem
-                ? 'bg-zinc-800 text-zinc-100 border border-purple-500/20 rounded-2xl rounded-bl-md'
-                : 'bg-zinc-800 text-zinc-200 border border-white/5 rounded-2xl rounded-bl-md')
+                ? 'bg-zinc-900/60 text-zinc-100 border border-purple-500/20 rounded-xl'
+                : 'bg-transparent text-zinc-200')
             : 'bg-rose-500/10 text-rose-300 border border-rose-500/20 text-center rounded-xl';
 
     const isSelected = selectedMessageIds?.has(message.id);
@@ -143,7 +143,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
     return (
         <div
             id={`message-${message.id}`}
-            className={`flex items-start gap-2 sm:gap-4 my-2 sm:my-4 px-2 sm:px-4 transition-all duration-200 lg:max-w-3xl lg:mx-auto
+            className={`flex items-start gap-2 sm:gap-4 my-2 sm:my-4 px-2 sm:px-4 transition-all duration-200 lg:max-w-4xl lg:mx-auto
             ${message.role === MessageRole.USER ? 'justify-end' : message.role === MessageRole.SYSTEM ? 'justify-center' : ''} 
             ${isHighlighted ? 'ring-2 ring-blue-500/40 rounded-2xl bg-blue-900/10' : ''}
             ${isSelectionMode ? 'cursor-pointer hover:bg-zinc-800 rounded-xl py-2' : ''}
@@ -160,7 +160,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
 
             <div className={`${isUserMessage
                 ? 'py-1 pl-1 pr-6 max-w-[85%] sm:max-w-3xl break-words relative group text-zinc-100'
-                : 'p-3 sm:p-5 rounded-2xl w-fit max-w-[85%] sm:max-w-3xl break-words shadow-sm border relative group'
+                : 'w-full max-w-3xl break-words relative group'
                 } ${isUserMessage ? '' : bubbleClass}`}>
 
                 <>
@@ -191,7 +191,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 </div>
                             )}
 
-                            <div className={`prose prose-invert prose-sm sm:prose-lg max-w-none whitespace-pre-wrap leading-relaxed overflow-x-auto min-w-0 ${message.isPostMortem ? 'text-zinc-100' : 'text-zinc-200'}`}>
+                            <div className={`prose prose-invert prose-sm max-w-none whitespace-pre-wrap leading-[1.65] overflow-x-auto min-w-0 ${message.isPostMortem ? 'text-zinc-100' : 'text-zinc-200'}`}>
                                 {displayContent}
                             </div>
 

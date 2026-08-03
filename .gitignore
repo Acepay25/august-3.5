@@ -52,3 +52,7 @@ services/test_output.txt
 
 # Tool artifacts
 .commandcode
+
+# Test artifacts
+playwright-report
+test-results
