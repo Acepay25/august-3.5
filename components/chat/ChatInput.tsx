@@ -123,7 +123,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             </button>
                             {/* Ensemble split button: toggle ensemble mode /
                                 configure providers */}
-                            <div className={`relative flex items-center shadow-sm rounded-full transition-all ${isEnsembleEnabled ? 'bg-cyan-600' : 'bg-zinc-700/80 lg:bg-zinc-700 hover:bg-zinc-600'}`}>
+                            <div className={`relative flex items-center shadow-sm rounded-full transition-all ${isEnsembleEnabled ? 'bg-cyan-600' : 'bg-zinc-800/80 lg:bg-zinc-800 hover:bg-zinc-700'}`}>
                                 <button
                                     onClick={() => setIsEnsembleEnabled(!isEnsembleEnabled)}
                                     className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 lg:px-4 py-1 sm:py-1.5 lg:py-2 transition-all text-xs sm:text-sm border-r border-black/10 rounded-l-full ${isEnsembleEnabled ? 'text-white shadow-[inset_0_0_10px_rgba(0,0,0,0.1)]' : 'text-zinc-400 hover:text-white'}`}
@@ -136,7 +136,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                         e.stopPropagation();
                                         setShowAISettings(!showAISettings);
                                     }}
-                                    className={`px-1.5 sm:px-2 py-1 sm:py-1.5 lg:py-2 transition-colors flex items-center justify-center rounded-r-full ${isEnsembleEnabled ? 'text-white hover:bg-cyan-700' : 'text-zinc-400 hover:text-white hover:bg-zinc-500'}`}
+                                    className={`px-1.5 sm:px-2 py-1 sm:py-1.5 lg:py-2 transition-colors flex items-center justify-center rounded-r-full ${isEnsembleEnabled ? 'text-white hover:bg-cyan-700' : 'text-zinc-400 hover:text-white hover:bg-zinc-700'}`}
                                     title="Configure providers"
                                 >
                                     <ChevronDownIcon className={`w-3 h-3 sm:w-3.5 sm:h-3.5 transition-transform duration-200 ${showAISettings ? 'rotate-180' : ''}`} />
@@ -144,7 +144,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             </div>
 
                             {/* Lens Mode Split Button */}
-                            <div className={`relative group flex items-center shadow-sm rounded-full transition-all ${lensConfig.enabled ? 'bg-indigo-600' : 'bg-zinc-700/80 lg:bg-zinc-700 hover:bg-zinc-600'}`}>
+                            <div className={`relative group flex items-center shadow-sm rounded-full transition-all ${lensConfig.enabled ? 'bg-zinc-700' : 'bg-zinc-800/80 lg:bg-zinc-800 hover:bg-zinc-700'}`}>
                                 {/* Main Toggle */}
                                 <button
                                     onClick={() => setLensConfig({ ...lensConfig, enabled: !lensConfig.enabled })}
@@ -160,7 +160,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                         e.stopPropagation();
                                         setShowLensSettings(!showLensSettings);
                                     }}
-                                    className={`px-1.5 sm:px-2 py-1 sm:py-1.5 lg:py-2 transition-colors flex items-center justify-center rounded-r-full ${lensConfig.enabled ? 'text-white hover:bg-indigo-700' : 'text-zinc-400 hover:text-white hover:bg-zinc-500'}`}
+                                    className={`px-1.5 sm:px-2 py-1 sm:py-1.5 lg:py-2 transition-colors flex items-center justify-center rounded-r-full ${lensConfig.enabled ? 'text-white hover:bg-zinc-600' : 'text-zinc-400 hover:text-white hover:bg-zinc-700'}`}
                                 >
                                     <ChevronDownIcon className={`w-3 h-3 sm:w-3.5 sm:h-3.5 transition-transform duration-200 ${showLensSettings ? 'rotate-180' : ''}`} />
                                 </button>
@@ -303,7 +303,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             <button
                                 onClick={handleSendMessage}
                                 disabled={!!loadingMessage || isSummarizing || (!input.trim() && images.length === 0) || isRateLimited || !isAnyProviderEnabled}
-                                className="h-9 w-9 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-white disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-zinc-600 transition-all flex items-center justify-center shrink-0"
+                                className="h-9 w-9 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-white disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-zinc-800 transition-all flex items-center justify-center shrink-0"
                                 title="Send"
                                 aria-label="Send message"
                             >

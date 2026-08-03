@@ -35,10 +35,6 @@ interface ChatAreaProps {
     setIsLivePostMortemVisible: (val: boolean) => void;
     handleCancelAnalysis: () => void;
     onDeleteMessages: (ids: string[]) => void;
-    // First-run onboarding: true when at least one provider is ready to call.
-    hasReadyProviders: boolean;
-    onOpenSettings?: () => void;
-
     // ChatInput Props
     images: ImageMetadata[];
     removeImage: (index: number) => void;
@@ -116,8 +112,6 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     setIsLivePostMortemVisible,
     handleCancelAnalysis,
     onDeleteMessages,
-    hasReadyProviders,
-    onOpenSettings,
     // ChatInput Props
     images,
     removeImage,
@@ -391,26 +385,9 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                     tagline, carded composer and centered quick actions */
                 <div className="absolute inset-0 z-10 bg-zinc-950 bg-grid overflow-y-auto">
                     <div className="min-h-full flex flex-col items-center justify-center px-3 sm:px-4 lg:px-8 py-10">
-                        {/* First-run onboarding: no providers configured yet */}
-                        {!hasReadyProviders && (
-                            <div className="w-full max-w-3xl glass rounded-2xl border border-white/10 p-4 sm:p-5 mb-8 animate-fade-in">
-                                <div className="flex items-center gap-3">
-                                    <div className="flex-1">
-                                        <h3 className="text-sm font-bold text-zinc-100">Connect an AI provider to start analyzing</h3>
-                                        <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
-                                            August uses your own API keys — add a provider (Gemini, OpenAI, Groq, DeepSeek…)
-                                            in Settings to enable ensemble debates and chart analysis.
-                                        </p>
-                                    </div>
-                                    <button
-                                        onClick={onOpenSettings}
-                                        className="shrink-0 bg-zinc-100 hover:bg-zinc-200 text-zinc-950 font-bold text-xs px-4 py-2.5 rounded-xl transition-colors"
-                                    >
-                                        Open Settings
-                                    </button>
-                                </div>
-                            </div>
-                        )}
+                        {/* First-run guidance lives in the app-level
+                            OnboardingCard (dismissible, persisted) — no
+                            duplicate card here. */}
                         <div className="w-14 h-14 rounded-2xl border border-white/10 bg-zinc-900/60 flex items-center justify-center text-zinc-300">
                             <BotIcon className="w-7 h-7" />
                         </div>
