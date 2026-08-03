@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Message, MessageRole, TradeOutcome, SavedAnalysis, Conversation, DebateTurn, ConfidenceCalibration, AnalystLensConfig } from '../../types';
-import { BotIcon, ChevronDownIcon, LinkIcon, CopyIcon, CheckIcon } from '../shared/Icons';
+import { ChevronDownIcon, LinkIcon, CopyIcon, CheckIcon } from '../shared/Icons';
 import LiveMarketDataView from '../market/LiveMarketDataView';
 import DebateView from '../analysis/DebateView';
 import AnalysisResult from '../analysis/AnalysisResult';
@@ -160,8 +160,6 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                     </div>
                 </div>
             )}
-
-            {message.role !== MessageRole.USER && message.role !== MessageRole.SYSTEM && <div className="flex-shrink-0 w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-zinc-700 flex items-center justify-center mt-1"><BotIcon /></div>}
 
             <div className={`${isUserMessage
                 ? 'py-1 pl-1 pr-6 max-w-[85%] sm:max-w-3xl break-words relative group text-zinc-100'

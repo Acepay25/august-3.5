@@ -149,9 +149,6 @@ export const Header: React.FC<HeaderProps> = ({
                         <HamburgerIcon className="h-5 w-5" />
                     </button>
 
-                    <div className="flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400">
-                        <BotIcon />
-                    </div>
                     <div className="flex flex-col justify-center">
                         <div className="flex items-center gap-3">
                             <h1 className="text-base sm:text-lg font-bold tracking-tight text-zinc-100 leading-none">August <span className="text-cyan-500">3.5</span></h1>

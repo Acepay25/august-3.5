@@ -355,6 +355,34 @@ const App: React.FC = () => {
         toast,
     });
 
+    // Warn when ensemble is switched on without the required configuration
+    // (2–3 enabled models + a selected moderator). The toggle still turns
+    // on; the pipeline degrades to single-model analysis / casual chat.
+    // Toggling off clears attached charts — they are only analyzed in
+    // ensemble mode. Note: Accuracy Mode lifts the 3-provider cap
+    // (useAnalysisPipeline only enforces it in Standard Mode), so the
+    // maximum warning is skipped there.
+    const handleSetEnsembleEnabled = useCallback((enabled: boolean) => {
+        setIsEnsembleEnabled(enabled);
+        if (!enabled) {
+            setImages([]);
+            return;
+        }
+        const issues: string[] = [];
+        if (readyProviders.length < 2) {
+            const missing = 2 - readyProviders.length;
+            issues.push(`enable ${missing} more AI model${missing === 1 ? '' : 's'} (ensemble needs 2–3 enabled models)`);
+        } else if (!isAccuracyModeEnabled && readyProviders.length > 3) {
+            issues.push('disable extra models (maximum 3 for ensemble)');
+        }
+        if (!moderatorProviderId || !readyProviders.some(p => p.id === moderatorProviderId)) {
+            issues.push('select a moderator in Settings → AI Models');
+        }
+        if (issues.length > 0) {
+            toast.warning('Ensemble needs more setup', `To use ensemble: ${issues.join(' and ')}.`);
+        }
+    }, [readyProviders, moderatorProviderId, isAccuracyModeEnabled, toast, setImages]);
+
     // P0-2: Mirror the (later-declared) activeUsername into a ref so the
     // usePostMortem hook — which is instantiated BEFORE useUserProfiles
     // destructures activeUsername — can observe user switches and cancel
@@ -1874,13 +1902,11 @@ const App: React.FC = () => {
                 setIsLivePostMortemVisible={setIsLivePostMortemVisible}
                 handleCancelAnalysis={handleCancelAnalysis}
                 onDeleteMessages={handleDeleteMessages}
-                hasReadyProviders={readyProviders.length > 0}
-                onOpenSettings={() => setIsSettingsMenuVisible(true)}
                 // ChatInput props
                 lensConfig={lensConfig}
                 setLensConfig={handleSetLensConfig}
                 isEnsembleEnabled={isEnsembleEnabled}
-                setIsEnsembleEnabled={setIsEnsembleEnabled}
+                setIsEnsembleEnabled={handleSetEnsembleEnabled}
                 images={images}
                 removeImage={removeImage}
                 leverageRef={leverageRef}

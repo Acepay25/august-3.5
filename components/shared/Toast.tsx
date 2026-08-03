@@ -3,7 +3,7 @@
  * Provides visual feedback for user actions and errors
  */
 
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info';
 
@@ -40,7 +40,10 @@ export const useToast = () => {
 export const useToastActions = () => {
     const { addToast } = useToast();
 
-    return {
+    // Stable identity (addToast is useCallback'd) so consumers can safely
+    // include `toast` in their own useCallback deps without re-creating
+    // handlers on every render.
+    return useMemo(() => ({
         success: (title: string, message?: string) =>
             addToast({ type: 'success', title, message }),
         error: (title: string, message?: string, action?: Toast['action']) =>
@@ -49,7 +52,7 @@ export const useToastActions = () => {
             addToast({ type: 'warning', title, message }),
         info: (title: string, message?: string) =>
             addToast({ type: 'info', title, message }),
-    };
+    }), [addToast]);
 };
 
 export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
