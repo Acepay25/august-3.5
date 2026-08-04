@@ -5,6 +5,7 @@ import { ChevronDownIcon, LinkIcon, CheckIcon, BrainIcon } from '../shared/Icons
 import MarkdownContent from '../shared/MarkdownContent';
 import LiveMarketDataView from '../market/LiveMarketDataView';
 import DebateChat from '../analysis/DebateChat';
+import EnsembleProgressChat from '../analysis/EnsembleProgressChat';
 import AnalysisResult from '../analysis/AnalysisResult';
 import { AutopilotResolution } from '../../services/ui/OutcomeAutopilotService';
 
@@ -111,6 +112,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
     const isUserMessage = message.role === MessageRole.USER;
     const [isThinkingExpanded, setIsThinkingExpanded] = React.useState(false);
     const [isPreviousDebateExpanded, setIsPreviousDebateExpanded] = React.useState(false);
+    const [isAnalystOutputsExpanded, setIsAnalystOutputsExpanded] = React.useState(false);
     const thinkingEntries = Object.entries({
         ...(message.thoughtProcesses ?? {}),
         ...(message.reasoningProcesses ?? {}),
@@ -310,6 +312,11 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 </div>
                             )}
 
+                            {/* Analyst requests appear in chat before the moderator debate starts. */}
+                            {!message.isDebating && !message.analysis && message.ensembleProgress && (
+                                <EnsembleProgressChat progress={message.ensembleProgress} modelIdToName={modelIdToName} isLive />
+                            )}
+
                             {/* Live debates stay visible; completed cards default to the result only. */}
                             {message.isDebating && debateTurns.length > 0 && (
                                 <DebateChat
@@ -339,6 +346,26 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     lensConfig={lensConfig}
                                     activeDebateSpeakers={message.activeDebateSpeakers}
                                 />
+                            )}
+
+                            {!message.isDebating && message.analysis && message.ensembleProgress && (
+                                <div className="mt-4 border-t border-white/10 pt-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsAnalystOutputsExpanded(previous => !previous)}
+                                        className="flex w-full items-center justify-between rounded-xl border border-white/5 bg-zinc-900/60 px-3 py-2.5 text-left text-xs font-semibold text-zinc-400 transition-colors hover:border-cyan-400/20 hover:bg-zinc-800/80 hover:text-zinc-200 focus-visible:ring-2 focus-visible:ring-cyan-400"
+                                        aria-expanded={isAnalystOutputsExpanded}
+                                        aria-controls={`analyst-outputs-${message.id}`}
+                                    >
+                                        <span>Analyst outputs</span>
+                                        <ChevronDownIcon className={`h-4 w-4 transition-transform ${isAnalystOutputsExpanded ? 'rotate-180' : ''}`} />
+                                    </button>
+                                    {isAnalystOutputsExpanded && (
+                                        <div id={`analyst-outputs-${message.id}`}>
+                                            <EnsembleProgressChat progress={message.ensembleProgress} modelIdToName={modelIdToName} />
+                                        </div>
+                                    )}
+                                </div>
                             )}
 
                             {!message.isDebating && message.analysis && debateTurns.length > 0 && (

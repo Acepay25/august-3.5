@@ -43,6 +43,31 @@ export interface ConfluenceData {
   timeframeCount: number;
 }
 
+export type EnsembleAnalystProgressStatus = 'waiting' | 'analyzing' | 'complete' | 'error';
+
+export interface EnsembleAnalystProgress {
+  key: string;
+  providerId: string;
+  providerName: string;
+  modelId: string;
+  modelName: string;
+  displayName: string;
+  status: EnsembleAnalystProgressStatus;
+  finalOutput?: string;
+  thoughtProcess?: string;
+  reasoning?: string;
+  error?: string;
+}
+
+export interface EnsembleProgress {
+  analysts: EnsembleAnalystProgress[];
+  moderator: {
+    status: 'waiting' | 'reviewing' | 'error';
+    waitingFor?: string[];
+    error?: string;
+  };
+}
+
 export interface Message {
   id: string;
   role: MessageRole;
@@ -70,6 +95,8 @@ export interface Message {
   debateTurns?: DebateTurn[]; // Holds the live debate conversation
   /** Transient speaker -> round map for the live debate indicator. */
   activeDebateSpeakers?: Record<string, number>;
+  /** Transient pre-debate analyst outputs and moderator waiting state. */
+  ensembleProgress?: EnsembleProgress;
 
   // Mode Tracking
   isAccuracyMode?: boolean;

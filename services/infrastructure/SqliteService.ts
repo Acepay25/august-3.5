@@ -10,7 +10,7 @@
 
 import { Capacitor } from '@capacitor/core';
 import { CapacitorSQLite, SQLiteConnection, SQLiteDBConnection } from '@capacitor-community/sqlite';
-import { LoggedTrade, UserProfile, Conversation, TradeSummary, GlobalMemory, UserSettings } from '../../types';
+import { LoggedTrade, UserProfile, Conversation, TradeSummary, GlobalMemory, UserSettings, Message } from '../../types';
 import { setSqliteDb } from './SqliteServiceHelpers';
 
 // Database configuration
@@ -393,6 +393,10 @@ export const sqliteGetUserProfile = async (username: string): Promise<UserProfil
 /**
  * Save user profile (upsert)
  */
+const serializeConversationMessages = (messages: Message[]): string => JSON.stringify(
+    messages.map(({ activeDebateSpeakers, ensembleProgress, ...message }) => message)
+);
+
 export const sqliteSaveUserProfile = async (profile: UserProfile): Promise<void> => {
     if (!db) throw new Error('Database not initialized');
 
@@ -440,7 +444,7 @@ export const sqliteSaveUserProfile = async (profile: UserProfile): Promise<void>
                 profile.username,
                 conv.title,
                 new Date(conv.timestamp).toISOString(),
-                JSON.stringify(conv.messages),
+                 serializeConversationMessages(conv.messages),
                 JSON.stringify(settings) // Save extended flags and models
             ]);
         }
