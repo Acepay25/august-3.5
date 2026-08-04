@@ -14,7 +14,10 @@ import {
     MODERATOR_VERIFICATION_ENFORCEMENT_PROMPT,
     POST_MORTEM_PATTERN_LEARNING_PROMPT,
     PROBABILITY_ESTIMATION_PROMPT,
-    MODERATOR_FINAL_AUTHORITY_PROTOCOL
+    MODERATOR_FINAL_AUTHORITY_PROTOCOL,
+    DEBATE_RESPONSE_PROMPT,
+    MODERATOR_FINAL_VERDICT_PROMPT,
+    MODERATOR_FINAL_VERDICT_PROMPT_COMPACT
 } from '../../constants/prompts';
 import { DUAL_SCENARIO_JSON_SCHEMA } from '../../constants/schemas';
 import { parseLiveMarketData } from '../../utils/liveMarketParser';
@@ -161,7 +164,7 @@ Before finalizing your response:
  */
 export const generateGateReconciliationContext = (
     gateResult: GateOutput | null,
-    analystsResults: { analysis: TradeAnalysis, thoughtProcess: string }[]
+    analystsResults: { analysis: TradeAnalysis, thoughtProcess: string, finalOutput?: string }[]
 ): string => {
     if (!gateResult) return '';
 
@@ -264,7 +267,9 @@ const getModeratorAnalysisStream = async function* (config: ProviderConfig, mode
         { role: 'user', content: prompt },
     ];
     try {
-        for await (const chunk of streamChatRequest(effectiveConfig, messages, { temperature: 0.1, signal, onReasoning })) {
+        // maxTokens guards reasoning-heavy moderators against truncating the
+        // response mid-JSON (which previously surfaced as a Neutral card).
+        for await (const chunk of streamChatRequest(effectiveConfig, messages, { temperature: 0.1, maxTokens: 8192, signal, onReasoning })) {
             if (chunk) yield chunk;
         }
     } catch (e: any) {
@@ -658,7 +663,7 @@ export interface DivergenceAnalysis {
  * Returns a divergence score and recommended actions for the moderator.
  */
 export const analyzePreDebateDivergence = (
-    analystsResults: { analysis: TradeAnalysis, thoughtProcess: string }[],
+    analystsResults: { analysis: TradeAnalysis, thoughtProcess: string, finalOutput?: string }[],
     analystNames: string[]
 ): DivergenceAnalysis => {
     if (analystsResults.length < 2) {
@@ -779,7 +784,7 @@ Before proceeding to the final verdict, the moderator MUST:
  * Generate a concise divergence summary for the moderator prompt.
  */
 export const generateDivergenceContext = (
-    analystsResults: { analysis: TradeAnalysis, thoughtProcess: string }[],
+    analystsResults: { analysis: TradeAnalysis, thoughtProcess: string, finalOutput?: string }[],
     analystNames: string[]
 ): string => {
     const analysis = analyzePreDebateDivergence(analystsResults, analystNames);
@@ -804,7 +809,7 @@ ${analysis.details.map(d => `- ${d}`).join('\n')}
 };
 
 export const conductDebate = (
-    analystsResults: { analysis: TradeAnalysis, thoughtProcess: string }[],
+    analystsResults: { analysis: TradeAnalysis, thoughtProcess: string, finalOutput?: string }[],
     analystNames: string[],
     userPrompt: string,
     finalTradeSummary: string | null,
@@ -956,8 +961,8 @@ const sanitizeAnalystOutput = (analysis: TradeAnalysis): TradeAnalysis => {
 
 
 export const conductTwoWayDebate = async function* (
-    analyst1Result: { analysis: TradeAnalysis, thoughtProcess: string },
-    analyst2Result: { analysis: TradeAnalysis, thoughtProcess: string },
+    analyst1Result: { analysis: TradeAnalysis, thoughtProcess: string, finalOutput?: string },
+    analyst2Result: { analysis: TradeAnalysis, thoughtProcess: string, finalOutput?: string },
     analyst1Name: string,
     analyst2Name: string,
     userPrompt: string,
@@ -1445,8 +1450,8 @@ export const conductTwoWayDebate = async function* (
       History: ${tradeHistoryContext}
       ${mcContext}
 
-      **${analyst1Name.toUpperCase()} INITIAL THOUGHTS**: ${truncateJsonSafely(JSON.stringify(sanitizeAnalystOutput(analyst1Result.analysis)), 1000)} ${calibratedAnalysts[0].calibrationNote}
-      **${analyst2Name.toUpperCase()} INITIAL THOUGHTS**: ${truncateJsonSafely(JSON.stringify(sanitizeAnalystOutput(analyst2Result.analysis)), 1000)} ${calibratedAnalysts[1].calibrationNote}
+      **${analyst1Name.toUpperCase()} INITIAL OUTPUT**: ${truncateTextToTokens(analyst1Result.finalOutput || analyst1Result.thoughtProcess, 1000)} ${calibratedAnalysts[0].calibrationNote}
+      **${analyst2Name.toUpperCase()} INITIAL OUTPUT**: ${truncateTextToTokens(analyst2Result.finalOutput || analyst2Result.thoughtProcess, 1000)} ${calibratedAnalysts[1].calibrationNote}
 
       
       Start with <DEBATE_START> now.`;
@@ -1455,9 +1460,9 @@ export const conductTwoWayDebate = async function* (
 };
 
 export const conductThreeWayDebate = async function* (
-    analyst1Result: { analysis: TradeAnalysis, thoughtProcess: string },
-    analyst2Result: { analysis: TradeAnalysis, thoughtProcess: string },
-    analyst3Result: { analysis: TradeAnalysis, thoughtProcess: string },
+    analyst1Result: { analysis: TradeAnalysis, thoughtProcess: string, finalOutput?: string },
+    analyst2Result: { analysis: TradeAnalysis, thoughtProcess: string, finalOutput?: string },
+    analyst3Result: { analysis: TradeAnalysis, thoughtProcess: string, finalOutput?: string },
     analyst1Name: string,
     analyst2Name: string,
     analyst3Name: string,
@@ -2078,20 +2083,309 @@ Request: "${truncateTextToTokens(userPrompt, 1500)}"
 History:  
 ${tradeHistoryContext}
 
-**${analyst1Name.toUpperCase()} INITIAL THOUGHTS:**  
-${truncateJsonSafely(JSON.stringify(sanitizeAnalystOutput(analyst1Result.analysis)), 1500)}
+**${analyst1Name.toUpperCase()} INITIAL OUTPUT:**
+${truncateTextToTokens(analyst1Result.finalOutput || analyst1Result.thoughtProcess, 1500)}
 
-**${analyst2Name.toUpperCase()} INITIAL THOUGHTS:**  
-${truncateJsonSafely(JSON.stringify(sanitizeAnalystOutput(analyst2Result.analysis)), 1500)}
+**${analyst2Name.toUpperCase()} INITIAL OUTPUT:**
+${truncateTextToTokens(analyst2Result.finalOutput || analyst2Result.thoughtProcess, 1500)}
 
-**${analyst3Name.toUpperCase()} INITIAL THOUGHTS:**  
-${truncateJsonSafely(JSON.stringify(sanitizeAnalystOutput(analyst3Result.analysis)), 1500)}
+**${analyst3Name.toUpperCase()} INITIAL OUTPUT:**
+${truncateTextToTokens(analyst3Result.finalOutput || analyst3Result.thoughtProcess, 1500)}
 
 Start with <DEBATE_START> now.
 `;
 
 
     yield* getModeratorAnalysisStream(moderatorConfig, moderatorModel, moderatorSystemPrompt, signal, onReasoning);
+};
+
+// =============================================================================
+// REAL INTER-MODEL DEBATE
+// =============================================================================
+
+/**
+ * Number of genuine rebuttal rounds that run after the opening statements.
+ * Each round calls every analyst AGAIN on its own provider (in parallel), so
+ * the analysts actually respond to each other instead of one moderator
+ * autoplaying the entire transcript.
+ */
+export const REAL_DEBATE_RESPONSE_ROUNDS = 2;
+
+/** An analyst participating in the real debate — the provider is needed to re-call it between rounds. */
+export interface RealDebateAnalyst {
+    provider: { config: ProviderConfig; name: string; model: string; thoughtsKey: string };
+    result: { thoughtProcess: string; finalOutput: string; analysis: TradeAnalysis };
+}
+
+/**
+ * Streaming event emitted by conductRealDebate. `text` is a DELTA chunk —
+ * the consumer accumulates it per (speaker, round). Rounds:
+ * 1 = opening statements, 2..REAL_DEBATE_RESPONSE_ROUNDS+1 = rebuttals,
+ * last round = moderator verdict (speaker 'Moderator').
+ */
+export interface RealDebateTurnEvent {
+    speaker: string;
+    round: number;
+    text: string;
+}
+
+/**
+ * Run a REAL multi-round debate:
+ * 1. Round 1 — opening statements taken from each analyst's own final output
+ *    (no extra API calls).
+ * 2. Rounds 2..N — every analyst is called AGAIN on its own provider, in
+ *    parallel within a round, and asked to rebut the others' latest positions.
+ *    A failed/rate-limited analyst is skipped for the remaining rounds; the
+ *    debate continues with whoever is left.
+ * 3. Final — the moderator (moderatorConfig + moderatorModel) receives the
+ *    full transcript plus the usual context blocks (gate reconciliation,
+ *    Monte Carlo, lens roles, learning context, recent insights, market
+ *    telemetry) and streams the verdict + </DEBATE_END> + <JSON_PLAN>
+ *    contract that the pipeline parses into the final trade card.
+ */
+export const conductRealDebate = async function* (
+    analysts: RealDebateAnalyst[],
+    userPrompt: string,
+    finalTradeSummary: string | null,
+    moderatorConfig: ProviderConfig,
+    moderatorModel: string,
+    customInstructions?: string,
+    monteCarloResults?: { provider: string; result: any }[],
+    lensConfig?: AnalystLensConfig,
+    analystProviders?: string[],
+    activeFrameworks?: string[],
+    tradeSummaries?: { id: string; summaryText: string; timestamp: string }[],
+    gateResult?: GateOutput | null,
+    learningContext?: string,
+    signal?: AbortSignal,
+    onReasoning?: (reasoning: string) => void,
+    onAnalystReasoning?: (speaker: string, reasoning: string) => void
+): AsyncGenerator<RealDebateTurnEvent, void, unknown> {
+
+    if (analysts.length < 2) {
+        throw new Error(`Real debate requires at least 2 analysts (${analysts.length} provided).`);
+    }
+
+    const names = analysts.map(a => a.provider.name);
+    // Per-analyst text per round (1-based index). Rebuttal deltas accumulate.
+    const roundTexts: Record<string, string[]> = {};
+    analysts.forEach(a => { roundTexts[a.provider.name] = []; });
+
+    // --- ROUND 1: OPENING STATEMENTS (free — each analyst's own final output) ---
+    for (const analyst of analysts) {
+        const opening = truncateTextToTokens(
+            analyst.result.finalOutput || analyst.result.thoughtProcess || 'No opening statement provided.',
+            175 // ~700 chars
+        );
+        roundTexts[analyst.provider.name][1] = opening;
+        yield { speaker: analyst.provider.name, round: 1, text: opening };
+    }
+
+    // --- REBUTTAL ROUNDS 2..N ---
+    const totalRounds = REAL_DEBATE_RESPONSE_ROUNDS + 1;
+    for (let round = 2; round <= totalRounds; round++) {
+        if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+
+        // Context is snapshotted BEFORE the round starts, so every analyst
+        // responds to the others' previous round — never to themselves.
+        const tasks = analysts
+            .filter(a => roundTexts[a.provider.name]?.[round - 1])
+            .map((analyst) => {
+                const ownPosition = roundTexts[analyst.provider.name]?.[round - 1];
+                const others = analysts
+                    .filter(o => o.provider.name !== analyst.provider.name && roundTexts[o.provider.name]?.[round - 1])
+                    .map(o => `**${o.provider.name} (Round ${round - 1}):**\n${roundTexts[o.provider.name][round - 1]}`)
+                    .join('\n\n') || 'No other analyst has spoken yet.';
+
+                const systemPrompt = DEBATE_RESPONSE_PROMPT
+                    .replace('{{NAME}}', analyst.provider.name)
+                    .replace('{{ROUND}}', String(round));
+                const userContent =
+                    `**TRADING REQUEST:**\n${truncateTextToTokens(userPrompt, 350)}\n\n` +
+                    `**YOUR POSITION (Round ${round - 1}):**\n${truncateTextToTokens(ownPosition, 225)}\n\n` +
+                    `**OTHER ANALYSTS' LATEST POSITIONS:**\n${truncateTextToTokens(others, 600)}\n\n` +
+                    `Respond now with your rebuttal for Round ${round}.`;
+
+                const messages: ChatMessage[] = [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: userContent },
+                ];
+
+                return {
+                    name: analyst.provider.name,
+                    thoughtsKey: analyst.provider.thoughtsKey,
+                    run: async (emit: (delta: string) => void) => {
+                        for await (const chunk of streamChatRequest(analyst.provider.config, messages, {
+                            temperature: 0.4,
+                            signal,
+                            onReasoning: (reasoning: string) => onAnalystReasoning?.(analyst.provider.name, reasoning),
+                        })) {
+                            if (chunk) emit(chunk);
+                        }
+                    },
+                };
+            });
+
+        if (tasks.length === 0) break; // nobody left in the debate
+
+        // Stream every rebuttal of this round concurrently, coalescing the
+        // deltas through a small queue so the generator can yield as fast as
+        // each provider responds (rounds stay parallel; rounds are sequential).
+        const queue: { name: string; delta: string }[] = [];
+        let notify: (() => void) | null = null;
+        let finished = 0;
+        const total = tasks.length;
+
+        const push = (name: string, delta: string) => {
+            queue.push({ name, delta });
+            if (notify) { const n = notify; notify = null; n(); }
+        };
+
+        for (const task of tasks) {
+            task.run(delta => push(task.name, delta))
+                .catch((e: any) => {
+                    const isAbort = e?.name === 'AbortError' || e?.code === 'ABORT_ERR' || e?.name === 'TimeoutError';
+                    if (!isAbort) {
+                        console.warn(`[RealDebate] ${task.name} failed Round ${round}:`, e?.message || e);
+                        // Analyst drops out of the debate — remaining rounds continue.
+                        delete roundTexts[task.name];
+                    }
+                })
+                .finally(() => {
+                    finished++;
+                    push('__done__', '');
+                });
+        }
+
+        while (finished < total || queue.length > 0) {
+            if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+            if (queue.length === 0) {
+                await new Promise<void>(resolve => { notify = resolve; });
+                continue;
+            }
+            const item = queue.shift()!;
+            if (item.name === '__done__') continue;
+            roundTexts[item.name][round] = (roundTexts[item.name][round] || '') + item.delta;
+            yield { speaker: item.name, round, text: item.delta };
+        }
+    }
+
+    // --- FINAL: MODERATOR VERDICT ---
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+
+    // Complete transcript, one entry per analyst per round they spoke.
+    // Turns are trimmed so the moderator prompt stays within safe limits —
+    // oversized prompts are the usual cause of moderator call failures.
+    const transcriptLines: string[] = [];
+    for (const name of names) {
+        for (let r = 1; r <= totalRounds; r++) {
+            const text = roundTexts[name]?.[r];
+            if (text) transcriptLines.push(`**${name} (Round ${r}):**\n${truncateTextToTokens(text, 100)}`);
+        }
+    }
+    const transcriptBlock = truncateTextToTokens(transcriptLines.join('\n\n') || 'The debate produced no transcript.', 1500);
+
+    // --- CONTEXT BLOCKS (reused from the simulated-debate machinery) ---
+    let mcContext = "No Monte Carlo simulation data available.";
+    if (monteCarloResults && monteCarloResults.length > 0) {
+        mcContext = "**MONTE CARLO STATISTICAL VALIDATION:**\n";
+        monteCarloResults.forEach(mc => {
+            if (mc.result) {
+                mcContext += `- ${mc.provider}: Win Rate ${mc.result.winRate}%, EV ${mc.result.expectedValue}R, Max DD ${mc.result.maxDrawdownAvg}%\n`;
+            }
+        });
+    }
+
+    const tradeHistoryContext = finalTradeSummary
+        ? `**PATTERN MEMORY LIBRARY (pre-processed recent trade summary):**\n${truncateTextToTokens(finalTradeSummary, 750)}`
+        : "No past trades logged.";
+
+    let recentInsightsBlock = '';
+    if (tradeSummaries && tradeSummaries.length > 0) {
+        const top5 = tradeSummaries.slice(0, 5);
+        recentInsightsBlock = `\n**RECENT INSIGHTS FOR PATTERN MATCHING (Top ${top5.length}):**\n`;
+        top5.forEach((insight, idx) => {
+            const date = new Date(insight.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            recentInsightsBlock += `${idx + 1}. [${date}] ${insight.summaryText.slice(0, 200)}...\n`;
+        });
+    }
+
+    const parsedMarketData = parseLiveMarketData(userPrompt);
+    let marketDataOverride = '';
+    if (parsedMarketData) {
+        const safePrices = JSON.stringify(parsedMarketData.prices).slice(0, 1000);
+        const safePatterns = JSON.stringify(parsedMarketData.patterns).slice(0, 1000);
+        const safeZones = JSON.stringify(parsedMarketData.keyZones).slice(0, 1000);
+        const playbookList = activeFrameworks && activeFrameworks.length > 0
+            ? activeFrameworks.slice(0, 10).join(', ')
+            : 'No active playbook';
+        marketDataOverride = `
+    **VERIFIED LIVE MARKET TELEMETRY (HIGHEST PRIORITY):**
+    You MUST incorporate this exact data into your Final Verdict and JSON Output.
+
+    - **Prices:** ${safePrices}
+    - **Detected Patterns:** ${safePatterns}
+    - **Key Zones:** ${safeZones}
+    - **Active Playbook/Strategies:** ${playbookList}
+        `;
+    }
+
+    const userOverride = customInstructions
+        ? `\n\n**USER BEHAVIOR OVERRIDE:**\nThe user has provided specific instructions for how you must respond, calculate, and reason. These instructions take precedence over default tone/style settings:\n"${truncateTextToTokens(customInstructions, 125)}"\n`
+        : '';
+
+    const effectiveTradingStyle = lensConfig?.tradingStyle === 'auto' ? 'swing' : (lensConfig?.tradingStyle || 'swing');
+    const lensContext = generateLensContext(
+        names,
+        analystProviders || [],
+        lensConfig,
+        'medium',
+        effectiveTradingStyle as 'swing' | 'scalp'
+    );
+
+    const moderatorPrompt = [
+        MODERATOR_FINAL_VERDICT_PROMPT.replace('{{ANALYSTS}}', names.join(', ')),
+        `\n\n**THE DEBATE TRANSCRIPT (COMPLETE):**\n${transcriptBlock}`,
+        `\n\n**TRADING REQUEST:**\n${truncateTextToTokens(userPrompt, 350)}`,
+        marketDataOverride,
+        generateGateReconciliationContext(gateResult ?? null, []),
+        mcContext,
+        lensContext,
+        learningContext ? `\n\n**LEARNING CONTEXT (from the user's trading history):**\n${truncateTextToTokens(learningContext, 500)}` : '',
+        recentInsightsBlock,
+        userOverride,
+        tradeHistoryContext,
+    ].filter(Boolean).join('\n');
+
+    // Compact fallback used for ONE automatic retry when the first moderator
+    // attempt errors or produces no JSON plan (long prompts are the usual
+    // culprit on reasoning-heavy models).
+    const compactModeratorPrompt = [
+        MODERATOR_FINAL_VERDICT_PROMPT_COMPACT.replace('{{ANALYSTS}}', names.join(', ')),
+        `\n\n**THE DEBATE TRANSCRIPT (COMPACT):**\n${transcriptBlock}`,
+    ].join('\n');
+
+    const finalRound = totalRounds + 1;
+    const attempts = [moderatorPrompt, compactModeratorPrompt];
+    for (let attempt = 0; attempt < attempts.length; attempt++) {
+        if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+        let moderatorText = '';
+        for await (const chunk of getModeratorAnalysisStream(moderatorConfig, moderatorModel, attempts[attempt], signal, onReasoning)) {
+            if (chunk) {
+                moderatorText += chunk;
+                yield { speaker: 'Moderator', round: finalRound, text: chunk };
+            }
+        }
+        // Retry only when the attempt clearly failed: an error marker or no
+        // JSON plan anywhere in the response. The moderator call is always a
+        // fresh streamChatRequest with its own prompt — never a reused
+        // analyst result, even when the same model fills both roles.
+        const hasJsonPlan = /<JSON_PLAN>|```json/i.test(moderatorText);
+        const hasErrorMarker = /<MODERATOR_ERROR>/.test(moderatorText);
+        if (hasJsonPlan && !hasErrorMarker) break;
+        if (attempt === attempts.length - 1) break;
+        console.warn(`[RealDebate] Moderator attempt ${attempt + 1} failed (jsonPlan=${hasJsonPlan}, errorMarker=${hasErrorMarker}); retrying with compact prompt.`);
+    }
 };
 
 export const conductTwoWayPostMortemDebate = (

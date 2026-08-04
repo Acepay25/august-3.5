@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
 /* ===== CHARCOAL THEME WITH BLUE ACCENT =====
    Cool-neutral dark charcoal (near-black) ramp + a single muted steel blue
@@ -518,4 +519,17 @@ select:focus-visible {
     width: 2px;
     height: 2px;
   }
+}
+
+/* Tighten native select option spacing so dropdown choices aren't too spread out. */
+select option {
+  padding-block: 4px;
+  line-height: 1.3;
+  min-height: 28px;
+}
+
+/* Ensure select dropdowns have good contrast and are easy to click */
+select {
+  cursor: pointer;
+  transition: border-color 0.15s ease;
 }

@@ -43,6 +43,35 @@ export const sanitizeJSONString = (str: string): string => {
 };
 
 /**
+ * Light sanitizer for analyst thinking / final output: strips HTML tags and
+ * control characters but PRESERVES markdown (bold, code, lists, tables) so
+ * the cards can render it with proper formatting. ReactMarkdown escapes any
+ * residual raw HTML, so this stays XSS-safe.
+ */
+export const sanitizeAIResponseLight = (text: string): string => {
+  if (!text) return '';
+  if (typeof text !== 'string') {
+    try {
+      text = JSON.stringify(text, null, 2);
+    } catch {
+      return String(text);
+    }
+  }
+  let cleaned = text;
+  // Strip control characters (except newline/tab/CR)
+  // eslint-disable-next-line no-control-regex -- intentional control-char stripping
+  cleaned = cleaned.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+  // Strip HTML tags (loop until stable to defeat nested-tag bypasses); the
+  // markdown renderer escapes raw HTML as a second layer.
+  let prev = '';
+  while (prev !== cleaned) {
+    prev = cleaned;
+    cleaned = cleaned.replace(/<[^>]*>/gm, '');
+  }
+  return cleaned;
+};
+
+/**
  * Strict price-field cleaning for AI output: strips parenthesized asides and
  * options jargon the models hallucinate into crypto prices ("94500 (call)"),
  * normalizes whitespace/punctuation, then control-char sanitizes the result.

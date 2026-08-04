@@ -111,6 +111,11 @@ function isVisionModel(modelId: string): boolean {
 /** Abort a request if it exceeds this wall-clock duration (per attempt). */
 const REQUEST_TIMEOUT_MS = 120_000;
 
+// Streaming analysis calls (reasoning-heavy models + large prompts) regularly
+// exceed the non-streaming budget — the chain of thought streams first, then
+// the answer. Give streams 5 minutes before declaring a timeout.
+const STREAM_TIMEOUT_MS = 300_000;
+
 /**
  * Combine the caller's AbortSignal with a strict timeout. A fresh combined
  * signal is created per attempt so a retry gets a full timeout budget.
@@ -119,6 +124,11 @@ const REQUEST_TIMEOUT_MS = 120_000;
  */
 function withTimeoutSignal(signal?: AbortSignal): AbortSignal {
     const timeoutSignal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+    return signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
+}
+
+function withStreamTimeoutSignal(signal?: AbortSignal): AbortSignal {
+    const timeoutSignal = AbortSignal.timeout(STREAM_TIMEOUT_MS);
     return signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
 }
 
@@ -523,8 +533,21 @@ export async function* streamChatRequest(
             yield await sendChatRequest(effectiveConfig, messages, options);
             return;
         }
+        // Dev browser on localhost: route through the CORS-avoiding Vite
+        // provider proxy, which passes SSE through. Direct SDK streaming from
+        // the browser fails for providers without CORS headers (e.g. opencode).
+        if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+            if (effectiveConfig.apiFormat === 'chat_completions') {
+                yield* streamViaProxy(effectiveConfig, messages, options);
+                return;
+            }
+            // Other formats: non-streaming through the proxy (existing behavior).
+            const full = await sendChatRequest(effectiveConfig, messages, options);
+            yield full;
+            return;
+        }
         if (effectiveConfig.apiFormat === 'chat_completions') {
-            yield* chatCompletionsStream(effectiveConfig, messages, { ...options, signal: withTimeoutSignal(options?.signal) });
+            yield* chatCompletionsStream(effectiveConfig, messages, { ...options, signal: withStreamTimeoutSignal(options?.signal) });
             return;
         }
     } catch (error) {
@@ -533,6 +556,88 @@ export async function* streamChatRequest(
     // Fallback for non-OpenAI-compat formats: fetch then yield once.
     const full = await sendChatRequest(effectiveConfig, messages, options);
     yield full;
+}
+
+/**
+ * Stream chat_completions through the localhost dev provider proxy. The proxy
+ * pipes the upstream SSE response through; we parse `data:` events here and
+ * yield content deltas while forwarding reasoning deltas to onReasoning.
+ */
+async function* streamViaProxy(
+    config: ProviderConfig,
+    messages: ChatMessage[],
+    options?: ChatRequestOptions
+): AsyncGenerator<string, void, unknown> {
+    const response = await fetch('/__provider_proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            config,
+            messages,
+            maxTokens: options?.maxTokens,
+            temperature: options?.temperature,
+            jsonMode: options?.jsonMode,
+            stream: true,
+        }),
+        signal: withStreamTimeoutSignal(options?.signal),
+    });
+    if (!response.ok || !response.body) {
+        const result = await response.json().catch(() => null);
+        const message = result?.message || `Provider stream failed (${response.status}).`;
+        const error = new Error(message);
+        if (result?.status !== undefined) (error as any).status = result.status;
+        throw error;
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    try {
+        for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            // SSE events are separated by a blank line; each event carries a
+            // `data:` payload (possibly `data: [DONE]` at the end).
+            let sep: number;
+            while ((sep = buffer.indexOf('\n\n')) >= 0) {
+                const event = buffer.slice(0, sep);
+                buffer = buffer.slice(sep + 2);
+                const dataLine = event.split('\n').find(line => line.startsWith('data:'));
+                if (!dataLine) continue;
+                const data = dataLine.slice(5).trim();
+                if (!data || data === '[DONE]') continue;
+                let chunk: any;
+                try {
+                    chunk = JSON.parse(data);
+                } catch {
+                    continue; // partial / non-JSON event
+                }
+                const delta = chunk?.choices?.[0]?.delta || {};
+                const reasoning = delta.reasoning_content || delta.reasoning;
+                if (typeof reasoning === 'string' && reasoning.trim()) options?.onReasoning?.(reasoning);
+                const content = delta.content;
+                if (typeof content === 'string' && content) yield content;
+            }
+        }
+        // Flush any trailing buffer (final event without a blank line).
+        if (buffer.trim()) {
+            const dataLine = buffer.split('\n').find(line => line.startsWith('data:'));
+            if (dataLine) {
+                const data = dataLine.slice(5).trim();
+                if (data && data !== '[DONE]') {
+                    try {
+                        const chunk = JSON.parse(data);
+                        const delta = chunk?.choices?.[0]?.delta || {};
+                        const reasoning = delta.reasoning_content || delta.reasoning;
+                        if (typeof reasoning === 'string' && reasoning.trim()) options?.onReasoning?.(reasoning);
+                        if (typeof delta.content === 'string' && delta.content) yield delta.content;
+                    } catch { /* ignore */ }
+                }
+            }
+        }
+    } finally {
+        reader.releaseLock();
+    }
 }
 
 /**

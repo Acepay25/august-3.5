@@ -2,7 +2,10 @@
 import React, { useState } from 'react';
 import ImagePreview from '../shared/ImagePreview';
 import { PlusIcon, LoadingIcon, SendIcon, StopIcon, ChevronDownIcon, ChevronUpIcon, BotIcon } from '../shared/Icons';
-import { ImageMetadata, AnalystLensConfig } from '../../types';
+import { ImageMetadata, AnalystLensConfig, AnalystRole } from '../../types';
+import { EnsembleModelSelection, ANALYST_ROLE_DEFINITIONS, getLensPromptForRole } from '../../services/ui/AnalystLensService';
+import { MASTER_ANALYSIS_PROMPT } from '../../constants/prompts';
+import PromptEditorModal from '../settings/PromptEditorModal';
 
 import { ProviderConfig } from '../../types/provider';
 
@@ -36,6 +39,15 @@ interface ChatInputProps {
     // Lens Config
     lensConfig: AnalystLensConfig;
     setLensConfig: (config: AnalystLensConfig) => void;
+    // Ordinary ensemble model selection (Lenses off): the three models chosen
+    // here drive the live cards and the debate.
+    ensembleModelSelection: EnsembleModelSelection;
+    setEnsembleModelSelection: (selection: EnsembleModelSelection) => void;
+    // Custom prompt overrides (prompt editor).
+    customEnsemblePrompt: string | null;
+    setCustomEnsemblePrompt: (prompt: string | null) => void;
+    customLensPrompts: Record<string, string>;
+    setCustomLensPrompts: (prompts: Record<string, string>) => void;
     // Ensemble mode: off = casual chat with the selected model (chart
     // upload/analysis disabled); on = full analysis pipeline.
     isEnsembleEnabled: boolean;
@@ -75,6 +87,12 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
     setSelectedVisionModel,
     lensConfig,
     setLensConfig,
+    ensembleModelSelection,
+    setEnsembleModelSelection,
+    customEnsemblePrompt,
+    setCustomEnsemblePrompt,
+    customLensPrompts,
+    setCustomLensPrompts,
     isEnsembleEnabled,
     setIsEnsembleEnabled,
     selectedChatModel,
@@ -85,6 +103,10 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
 }) => {
     const [showAISettings, setShowAISettings] = useState(false);
     const [showLensSettings, setShowLensSettings] = useState(false);
+    // Two-step dropdown: 'choose' shows ONLY the mode chooser; the assignment
+    // UI ('lenses' = roles, 'normal' = model picker) appears after the user
+    // picks a mode.
+    const [lensAssignStep, setLensAssignStep] = useState<'choose' | 'lenses' | 'normal'>('choose');
 
     React.useEffect(() => {
         const handleEscape = (event: KeyboardEvent) => {
@@ -114,9 +136,11 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
         return total + selected.length;
     }, 0);
     const selectedModelsForLens = (provider: typeof providers[number]): string[] => {
-        const selected = provider.ensembleModels?.filter(model => provider.models.includes(model)) || [];
+        // All of the provider's models, not just ensembleModels — an assigned
+        // model outside ensembleModels used to render the dropdown blank even
+        // though the pipeline still ran it.
         return isEnsembleEnabled
-            ? (selected.length > 0 ? selected : (provider.selectedModel ? [provider.selectedModel] : []))
+            ? (provider.models.length > 0 ? provider.models : (provider.selectedModel ? [provider.selectedModel] : []))
             : [];
     };
     const lensAssignmentValue = (role: string): string => {
@@ -151,6 +175,69 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
             return `${assignment.assignedProvider}::${assignedModel}` === option.value;
         }) ?? false,
     }));
+
+    // --- ORDINARY "DEBATE MODELS" PICKER (Lenses OFF) ---
+    // Mirrors the lens role dropdowns, but without roles: the three selected
+    // models become the debate participants (source of truth for the cards).
+    const ensembleSelectionValue = (slot: number): string => {
+        const entry = ensembleModelSelection?.[slot];
+        if (!entry) return '';
+        const provider = providers.find(p => p.id === entry.providerId);
+        if (!provider || !provider.models.includes(entry.model)) return '';
+        return `${entry.providerId}::${entry.model}`;
+    };
+    const updateEnsembleSelection = (slot: number, value: string): void => {
+        const separator = value.indexOf('::');
+        const providerId = separator >= 0 ? value.slice(0, separator) : value;
+        const model = separator >= 0 ? value.slice(separator + 2) : '';
+        const next = [...(ensembleModelSelection || [])];
+        if (value && providerId && model) {
+            next[slot] = { providerId, model };
+        } else {
+            next.splice(slot, 1);
+        }
+        // A model may only occupy one slot; keep at most 3 picks.
+        const seen = new Set<string>();
+        const deduped = next
+            .filter(e => {
+                const key = `${e.providerId}::${e.model}`;
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            })
+            .slice(0, 3);
+        setEnsembleModelSelection(deduped);
+    };
+    const isChosenInOtherSlot = (slot: number, value: string): boolean =>
+        (ensembleModelSelection || []).some((e, i) => i !== slot && `${e.providerId}::${e.model}` === value);
+
+    // --- PROMPT EDITOR (view / modify each mode's prompt) ---
+    type PromptEditorTarget =
+        | { kind: 'normal' }
+        | { kind: 'lens'; role: AnalystRole; defaultPrompt: string }
+        | null;
+    const [promptEditor, setPromptEditor] = useState<PromptEditorTarget>(null);
+
+    const openLensPromptEditor = (role: AnalystRole) => {
+        const style = (lensConfig.tradingStyle === 'auto' ? 'swing' : lensConfig.tradingStyle) as 'position' | 'swing' | 'scalp';
+        setPromptEditor({ kind: 'lens', role, defaultPrompt: getLensPromptForRole(role, style) });
+    };
+
+    const promptEditorProps = promptEditor
+        ? promptEditor.kind === 'lens'
+            ? {
+                title: `Lenses · ${ANALYST_ROLE_DEFINITIONS[promptEditor.role].name} Prompt`,
+                subtitle: 'Sent to the analyst assigned to this role (custom overrides win)',
+                defaultPrompt: promptEditor.defaultPrompt,
+                value: customLensPrompts[promptEditor.role] || '',
+            }
+            : {
+                title: 'Normal Mode Prompt',
+                subtitle: 'Base prompt every analyst receives in Normal mode (same for all models)',
+                defaultPrompt: MASTER_ANALYSIS_PROMPT,
+                value: customEnsemblePrompt || '',
+            }
+        : null;
 
     return (
         <div className={centered
@@ -244,46 +331,93 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             {/* Lens Mode Split Button — only meaningful for ensemble analysis. */}
                             {isEnsembleEnabled && <>
                             <div className={`relative group flex items-center shadow-sm rounded-full transition-all ${lensConfig.enabled ? 'bg-zinc-700' : 'bg-zinc-800 hover:bg-zinc-700'}`}>
-                                {/* Main Toggle */}
+                                {/* Main Toggle — label reflects the current mode */}
                                 <button
-                                    onClick={() => setLensConfig({ ...lensConfig, enabled: !lensConfig.enabled })}
+                                    onClick={() => {
+                                        setLensConfig({ ...lensConfig, enabled: !lensConfig.enabled });
+                                        setLensAssignStep('choose');
+                                    }}
                                     className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 lg:py-2 transition-all text-xs sm:text-sm border-r border-black/10 rounded-l-full ${lensConfig.enabled ? 'text-white shadow-[inset_0_0_10px_rgba(0,0,0,0.1)]' : 'text-zinc-400 hover:text-white'}`}
                                     aria-pressed={lensConfig.enabled}
+                                    title={lensConfig.enabled ? 'Lenses mode — role-based prompts' : 'Normal mode — same prompt for all models'}
                                 >
                                     <span className="text-xs sm:text-sm"></span>
-                                    <span className="font-medium hidden xs:inline sm:inline">Lenses</span>
+                                    <span className="font-medium hidden xs:inline sm:inline">{lensConfig.enabled ? 'Lenses' : 'Normal'}</span>
                                 </button>
 
                                 {/* Dropdown Trigger */}
                                 <button
                                     onClick={(e) => {
                                         e.stopPropagation();
+                                        if (!showLensSettings) setLensAssignStep('choose');
                                         setShowLensSettings(!showLensSettings);
                                     }}
                                     className={`px-1.5 sm:px-2 py-1 sm:py-1.5 lg:py-2 transition-colors flex items-center justify-center rounded-r-full focus-visible:ring-2 focus-visible:ring-cyan-400 ${lensConfig.enabled ? 'text-white hover:bg-zinc-600' : 'text-zinc-400 hover:text-white hover:bg-zinc-700'}`}
-                                    aria-label="Configure analyst lenses"
+                                    aria-label="Configure ensemble mode"
                                     aria-expanded={showLensSettings}
                                     aria-haspopup="dialog"
                                 >
                                     <ChevronDownIcon className={`w-3 h-3 sm:w-3.5 sm:h-3.5 transition-transform duration-200 ${showLensSettings ? 'rotate-180' : ''}`} />
                                 </button>
 
-                                {/* Role Assignment Dropdown */}
+                                {/* Two-step dropdown: mode chooser first, then the
+                                    assignment UI for the chosen mode. */}
                                 {showLensSettings && (
-                                    <div role="dialog" aria-label="Assign analysts" className="absolute bottom-full left-0 mb-2 w-64 bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden animate-fade-in divide-y divide-white/5">
-                                        <div className="px-3 py-2 bg-zinc-800 text-[10px] uppercase font-bold text-zinc-500 tracking-wider">
-                                            Assign Analysts
+                                    <div
+                                        role="dialog"
+                                        aria-label={lensAssignStep === 'lenses' ? 'Assign analysts' : lensAssignStep === 'normal' ? 'Debate models' : 'Debate mode'}
+                                        className="absolute bottom-full left-0 mb-2 w-64 bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl z-50 animate-fade-in"
+                                    >
+                                        {lensAssignStep === 'choose' ? (
+                                            <>
+                                        {/* Step 1 — choose the debate mode. The picker
+                                            only appears after a mode is selected. */}
+                                        <div className="px-3 py-2 bg-zinc-800">
+                                            <div className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider mb-1.5">Choose Debate Mode</div>
+                                            <div className="grid grid-cols-2 gap-1.5">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setLensConfig({ ...lensConfig, enabled: true });
+                                                        setLensAssignStep('lenses');
+                                                    }}
+                                                    aria-pressed={lensConfig.enabled}
+                                                    className={`rounded-lg border px-2 py-1.5 text-left transition-colors ${lensConfig.enabled ? 'bg-zinc-700 border-white/20' : 'bg-zinc-950 border-white/10 hover:bg-zinc-800'}`}
+                                                >
+                                                    <span className={`block text-xs font-semibold ${lensConfig.enabled ? 'text-white' : 'text-zinc-400'}`}>Lenses</span>
+                                                    <span className="block text-[9px] text-zinc-500 leading-tight">Role-based prompts per analyst</span>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setLensConfig({ ...lensConfig, enabled: false });
+                                                        setLensAssignStep('normal');
+                                                    }}
+                                                    aria-pressed={!lensConfig.enabled}
+                                                    className={`rounded-lg border px-2 py-1.5 text-left transition-colors ${!lensConfig.enabled ? 'bg-zinc-700 border-white/20' : 'bg-zinc-950 border-white/10 hover:bg-zinc-800'}`}
+                                                >
+                                                    <span className={`block text-xs font-semibold ${!lensConfig.enabled ? 'text-white' : 'text-zinc-400'}`}>Normal</span>
+                                                    <span className="block text-[9px] text-zinc-500 leading-tight">Same prompt for all models</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                            </>
+                                        ) : lensAssignStep === 'lenses' ? (
+                                            <>
+                                        <div className="px-3 py-2 bg-zinc-800 flex items-center justify-between">
+                                            <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">Lenses · Assign Analysts</span>
+                                            <button type="button" onClick={() => setLensAssignStep('choose')} className="text-[10px] text-zinc-500 hover:text-zinc-300">‹ Mode</button>
                                         </div>
                                         {/* Macro Analyst */}
-                                        <div className="p-2">
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <span className="text-xs"></span>
+                                        <div className="px-1.5 py-0.5">
+                                            <div className="flex items-center justify-between mb-0">
                                                 <span className="text-[10px] font-medium text-zinc-400">Macro & Volatility</span>
+                                                <button type="button" onClick={() => openLensPromptEditor(AnalystRole.MACRO_VOLATILITY)} className="text-[9px] uppercase tracking-wider text-zinc-500 hover:text-zinc-300 transition-colors" title="View / edit this role's prompt">✎ Prompt</button>
                                             </div>
                                             <select
                                                 value={lensAssignmentValue('macro_volatility')}
                                                 onChange={(e) => updateLensAssignment('macro_volatility', e.target.value)}
-                                                className="w-full bg-zinc-950 border border-white/10 rounded px-2 py-1 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500/50"
+                                                className="w-full bg-zinc-950 border border-white/10 rounded px-2 py-0.5 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500/50 cursor-pointer"
                                             >
                                                 <option value="">Select provider/model</option>
                                                 {lensModelOptionsForRole('macro_volatility').map(option => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}{option.disabled ? ' (assigned)' : ''}</option>)}
@@ -291,15 +425,15 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                         </div>
 
                                         {/* Technical Analyst */}
-                                        <div className="p-2">
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <span className="text-xs"></span>
+                                        <div className="px-1.5 py-0.5">
+                                            <div className="flex items-center justify-between mb-0">
                                                 <span className="text-[10px] font-medium text-zinc-400">Technical Analyst</span>
+                                                <button type="button" onClick={() => openLensPromptEditor(AnalystRole.TECHNICAL_ANALYST)} className="text-[9px] uppercase tracking-wider text-zinc-500 hover:text-zinc-300 transition-colors" title="View / edit this role's prompt">✎ Prompt</button>
                                             </div>
                                             <select
                                                 value={lensAssignmentValue('technical_analyst')}
                                                 onChange={(e) => updateLensAssignment('technical_analyst', e.target.value)}
-                                                className="w-full bg-zinc-950 border border-white/10 rounded px-2 py-1 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500/50"
+                                                className="w-full bg-zinc-950 border border-white/10 rounded px-2 py-0.5 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500/50 cursor-pointer"
                                             >
                                                 <option value="">Select provider/model</option>
                                                 {lensModelOptionsForRole('technical_analyst').map(option => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}{option.disabled ? ' (assigned)' : ''}</option>)}
@@ -307,20 +441,48 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                         </div>
 
                                         {/* Risk Manager */}
-                                        <div className="p-2">
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <span className="text-xs"></span>
+                                        <div className="px-1.5 py-0.5">
+                                            <div className="flex items-center justify-between mb-0">
                                                 <span className="text-[10px] font-medium text-zinc-400">Risk Manager</span>
+                                                <button type="button" onClick={() => openLensPromptEditor(AnalystRole.RISK_EXECUTION)} className="text-[9px] uppercase tracking-wider text-zinc-500 hover:text-zinc-300 transition-colors" title="View / edit this role's prompt">✎ Prompt</button>
                                             </div>
                                             <select
                                                 value={lensAssignmentValue('risk_execution')}
                                                 onChange={(e) => updateLensAssignment('risk_execution', e.target.value)}
-                                                className="w-full bg-zinc-950 border border-white/10 rounded px-2 py-1 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500/50"
+                                                className="w-full bg-zinc-950 border border-white/10 rounded px-2 py-0.5 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500/50 cursor-pointer"
                                             >
                                                 <option value="">Select provider/model</option>
                                                 {lensModelOptionsForRole('risk_execution').map(option => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}{option.disabled ? ' (assigned)' : ''}</option>)}
                                             </select>
                                         </div>
+                                            </>
+                                        ) : (
+                                            <>
+                                        <div className="px-3 py-2 bg-zinc-800 flex items-center justify-between">
+                                            <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">Normal · Debate Models</span>
+                                            <div className="flex items-center gap-2">
+                                                <button type="button" onClick={() => setPromptEditor({ kind: 'normal' })} className="text-[10px] text-zinc-500 hover:text-zinc-300" title="View / edit this mode's prompt">✎ Prompt</button>
+                                                <button type="button" onClick={() => setLensAssignStep('choose')} className="text-[10px] text-zinc-500 hover:text-zinc-300">‹ Mode</button>
+                                            </div>
+                                        </div>
+                                        <p className="px-3 py-1.5 text-[10px] text-zinc-500">Pick up to 3 models for the ensemble debate.</p>
+                                        {[0, 1, 2].map(slot => (
+                                            <div key={slot} className="px-1.5 py-0.5">
+                                                <div className="flex items-center gap-2 mb-0">
+                                                    <span className="text-[10px] font-medium text-zinc-400">Model {slot + 1}</span>
+                                                </div>
+                                                <select
+                                                    value={ensembleSelectionValue(slot)}
+                                                    onChange={(e) => updateEnsembleSelection(slot, e.target.value)}
+                                                    className="w-full bg-zinc-950 border border-white/10 rounded px-2 py-0.5 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500/50 cursor-pointer"
+                                                >
+                                                    <option value="">Select provider/model</option>
+                                                    {lensModelOptions.map(option => <option key={option.value} value={option.value} disabled={isChosenInOtherSlot(slot, option.value)}>{option.label}{isChosenInOtherSlot(slot, option.value) ? ' (assigned)' : ''}</option>)}
+                                                </select>
+                                            </div>
+                                        ))}
+                                            </>
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -477,6 +639,31 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                     )}
                 </div>
             </div>
+
+            {/* Prompt editor modal — view/modify the prompt of the current mode. */}
+            <PromptEditorModal
+                isOpen={promptEditor !== null}
+                title={promptEditorProps?.title ?? ''}
+                subtitle={promptEditorProps?.subtitle}
+                defaultPrompt={promptEditorProps?.defaultPrompt ?? ''}
+                value={promptEditorProps?.value ?? ''}
+                onSave={(prompt) => {
+                    if (!promptEditor) return;
+                    if (promptEditor.kind === 'lens') {
+                        const next = { ...customLensPrompts };
+                        if (prompt) {
+                            next[promptEditor.role] = prompt;
+                        } else {
+                            delete next[promptEditor.role];
+                        }
+                        setCustomLensPrompts(next);
+                    } else {
+                        setCustomEnsemblePrompt(prompt);
+                    }
+                    setPromptEditor(null);
+                }}
+                onClose={() => setPromptEditor(null)}
+            />
         </div>
     );
 };

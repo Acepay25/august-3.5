@@ -905,9 +905,14 @@ export function getRoleForProvider(
     provider: AIProvider,
     config: AnalystRoleAssignment[]
 ): AnalystRole {
-    const separator = provider.indexOf('::');
+    // Accept both `provider::model` (canonical) and `provider:model` keys.
+    // The pipeline's thoughtsKey historically used a single colon while the
+    // role lookup split on double colon — that silently returned UNASSIGNED
+    // and the lens prompt was never injected.
+    const sep2 = provider.indexOf('::');
+    const separator = sep2 >= 0 ? sep2 : provider.indexOf(':');
     const providerId = separator >= 0 ? provider.slice(0, separator) : provider;
-    const modelId = separator >= 0 ? provider.slice(separator + 2) : undefined;
+    const modelId = separator >= 0 ? provider.slice(separator + (sep2 >= 0 ? 2 : 1)) : undefined;
     const exactAssignment = config.find(a => a.assignedProvider === providerId && a.assignedModel === modelId);
     const providerFallback = config.find(a => a.assignedProvider === providerId && !a.assignedModel);
     const assignment = exactAssignment || providerFallback;
@@ -990,6 +995,46 @@ export function saveLensConfig(config: AnalystLensConfig): void {
     _lensConfigCache = config;
     setPreferenceObject(PREF_KEYS.ANALYST_LENS_CONFIG, config).catch(e =>
         console.warn('[AnalystLens] Failed to save config:', e)
+    );
+}
+
+// =============================================================================
+// ORDINARY ENSEMBLE MODEL SELECTION (used when Lenses are OFF)
+// =============================================================================
+
+/**
+ * The plain "pick 3 models for the debate" selection shown in the chat input
+ * when Analyst Lenses are disabled. Mirrors lens role assignments: the chosen
+ * models become the source of truth for the three cards and the debate.
+ */
+export type EnsembleModelSelection = { providerId: string; model: string }[];
+
+/**
+ * Load the ordinary ensemble model selection (max 3 entries).
+ * Web reads localStorage directly (matching loadLensConfig); native reads go
+ * through initAnalystLensService's Preferences sync in App.tsx.
+ */
+export function loadEnsembleModelSelection(): EnsembleModelSelection {
+    try {
+        const stored = localStorage.getItem(PREF_KEYS.ENSEMBLE_MODEL_SELECTION);
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed)) {
+                return parsed
+                    .filter((e: any) => e && typeof e.providerId === 'string' && typeof e.model === 'string')
+                    .slice(0, 3);
+            }
+        }
+    } catch (e) {
+        console.error('Failed to load ensemble model selection:', e);
+    }
+    return [];
+}
+
+/** Persist the ordinary ensemble model selection (capped at 3 entries). */
+export function saveEnsembleModelSelection(selection: EnsembleModelSelection): void {
+    setPreferenceObject(PREF_KEYS.ENSEMBLE_MODEL_SELECTION, selection.slice(0, 3)).catch(e =>
+        console.warn('[AnalystLens] Failed to save ensemble model selection:', e)
     );
 }
 
@@ -1687,6 +1732,20 @@ Conservative. Patient. Risk-focused.
 
 
 /**
+ * Get the lens prompt for a role and trading style directly (no provider
+ * resolution needed — used by the prompt editor modal).
+ */
+export function getLensPromptForRole(
+    role: AnalystRole,
+    style: 'position' | 'swing' | 'scalp'
+): string {
+    if (role === AnalystRole.UNASSIGNED) return '';
+    if (style === 'position') return POSITION_PROMPTS[role];
+    if (style === 'scalp') return SCALP_PROMPTS[role];
+    return ANALYST_ROLE_DEFINITIONS[role].promptPrefix;
+}
+
+/**
  * Get the lens prompt for a provider based on role AND trading style
  */
 export function getLensPromptForStyle(
@@ -1701,16 +1760,63 @@ export function getLensPromptForStyle(
         return '';
     }
 
-    // Return appropriate prompt based on style
-    if (style === 'position') {
-        return POSITION_PROMPTS[role];
-    }
+    return getLensPromptForRole(role, style);
+}
 
-    if (style === 'scalp') {
-        return SCALP_PROMPTS[role];
-    }
+// =============================================================================
+// CUSTOM PROMPT OVERRIDES (prompt editor)
+// =============================================================================
 
-    // Default to swing (original prompts)
-    return ANALYST_ROLE_DEFINITIONS[role].promptPrefix;
+/**
+ * Load the user's custom Normal-mode prompt override (Lenses off). The
+ * MASTER_ANALYSIS_PROMPT is used when null.
+ */
+export function loadCustomEnsemblePrompt(): string | null {
+    try {
+        return localStorage.getItem(PREF_KEYS.CUSTOM_ENSEMBLE_PROMPT);
+    } catch (e) {
+        console.error('Failed to load custom ensemble prompt:', e);
+        return null;
+    }
+}
+
+/** Persist the Normal-mode prompt override (null clears it). */
+export function saveCustomEnsemblePrompt(prompt: string | null): void {
+    if (prompt && prompt.trim()) {
+        setPreferenceObject(PREF_KEYS.CUSTOM_ENSEMBLE_PROMPT, prompt.trim()).catch(e =>
+            console.warn('[AnalystLens] Failed to save custom ensemble prompt:', e)
+        );
+    } else {
+        setPreferenceObject(PREF_KEYS.CUSTOM_ENSEMBLE_PROMPT, '').catch(e =>
+            console.warn('[AnalystLens] Failed to clear custom ensemble prompt:', e)
+        );
+    }
+}
+
+/**
+ * Load per-role lens prompt overrides (role id → custom prompt). Roles
+ * without an entry keep their built-in role prompt.
+ */
+export function loadCustomLensPrompts(): Record<string, string> {
+    try {
+        const stored = localStorage.getItem(PREF_KEYS.CUSTOM_LENS_PROMPTS);
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            if (parsed && typeof parsed === 'object') return parsed as Record<string, string>;
+        }
+    } catch (e) {
+        console.error('Failed to load custom lens prompts:', e);
+    }
+    return {};
+}
+
+/** Persist per-role lens prompt overrides. */
+export function saveCustomLensPrompts(prompts: Record<string, string>): void {
+    const clean = Object.fromEntries(
+        Object.entries(prompts).filter(([, value]) => typeof value === 'string' && value.trim().length > 0)
+    );
+    setPreferenceObject(PREF_KEYS.CUSTOM_LENS_PROMPTS, clean).catch(e =>
+        console.warn('[AnalystLens] Failed to save custom lens prompts:', e)
+    );
 }
 

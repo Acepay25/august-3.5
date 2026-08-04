@@ -612,7 +612,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                     <AnalystLensSettings
                                         config={lensConfig}
                                         onChange={onSetLensConfig}
-                                        enabledProviders={enabledProvidersList}
+                                        providers={providerConfigs ?? []}
                                     />
                                 </div>
                             )}

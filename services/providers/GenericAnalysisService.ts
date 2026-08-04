@@ -13,8 +13,8 @@
 import { ProviderConfig } from '../../types/provider';
 import { Message, GroundingChunk, TradeAnalysis, GlobalMemory, AccuracySubMode, TradeOutcome, LoggedTrade, StrategySearchResult, TradeSummary, MessageRole } from '../../types';
 import { extractAndParseJson, extractLastJson } from '../../utils/jsonUtils';
-import { sanitizeAIResponse, sanitizeJSONString } from '../../utils/sanitizers';
-import { sanitizeTradeAnalysis, truncateTextToTokens } from '../../utils/analysisUtils';
+import { sanitizeAIResponse, sanitizeAIResponseLight, sanitizeJSONString } from '../../utils/sanitizers';
+import { sanitizeTradeAnalysis, truncateTextToTokens, formatAnalysisForDisplay } from '../../utils/analysisUtils';
 import { parseGlobalMemory, parseStrategySearchResults } from '../../schemas/learning';
 import {
     MASTER_ANALYSIS_PROMPT, DEVILS_ADVOCATE_PROMPT, INVALIDATION_THESIS_PROMPT, CORRELATION_AWARENESS_PROMPT,
@@ -24,7 +24,7 @@ import {
 import { constructOptimizedContext } from '../../utils/memoryUtils';
 import { parseLiveMarketData } from '../../utils/liveMarketParser';
 import {
-    sendChatRequest, ChatMessage, ContentPart, ChatRequestOptions,
+    sendChatRequest, streamChatRequest, ChatMessage, ContentPart, ChatRequestOptions,
 } from './GenericProviderService';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -74,6 +74,12 @@ export interface AnalyzeTradingViewParams {
     isFamiliesEnabledInPureAI?: boolean;
     isMemoryEnabledInPureAI?: boolean;
     rolePrompt?: string;                    // Analyst Lens: specialized role prompt
+    /**
+     * User-edited base prompt for Normal mode (Lenses off). Replaces
+     * MASTER_ANALYSIS_PROMPT as the standard-mode base while the appended
+     * contract sections (rules, formatting, evidence discipline) stay intact.
+     */
+    systemPromptOverride?: string;
     signal?: AbortSignal;
     onReasoning?: (reasoning: string) => void;
 }
@@ -81,12 +87,12 @@ export interface AnalyzeTradingViewParams {
 export async function analyzeTradingView(
     config: ProviderConfig,
     params: AnalyzeTradingViewParams
-): Promise<{ analysis: TradeAnalysis; thoughtProcess: string; sources: GroundingChunk[] }> {
+): Promise<{ analysis: TradeAnalysis; thoughtProcess: string; finalOutput: string; sources: GroundingChunk[] }> {
     const {
         prompt, images, imageSummaries, chatHistory, finalTradeSummary, recentInsights,
         activeFrameworks, globalMemory, threadSummary, subMode, customInstructions,
         isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI,
-        rolePrompt, signal, onReasoning,
+        rolePrompt, systemPromptOverride, signal, onReasoning,
     } = params;
 
     const modelName = config.selectedModel;
@@ -100,13 +106,13 @@ export async function analyzeTradingView(
     if (parsedMarketData) {
         marketDataOverride = `
     **VERIFIED LIVE MARKET TELEMETRY (HIGHEST PRIORITY):**
-    Use this exact data for your analysis and JSON output. Do NOT output "N/A" for these fields.
+    Use this exact data for your analysis. Do NOT output "N/A" for these fields.
 
     - **Prices:** ${JSON.stringify(parsedMarketData.prices)}
     - **Detected Patterns:** ${JSON.stringify(parsedMarketData.patterns)}
     - **Key Zones:** ${JSON.stringify(parsedMarketData.keyZones)}
 
-    **MANDATORY:** You MUST populate the 'detectedPatterns', 'keyLevels', and 'marketConditions.prices' fields in your JSON response with this data.
+    **MANDATORY:** Reference these detected patterns, key zones, and prices in your readable final output.
         `;
     }
 
@@ -164,10 +170,9 @@ export async function analyzeTradingView(
       ${RISK_MANAGEMENT_RULES}
 
       **SYNTHESIS & OUTPUT:**
-      Your entire response MUST be a single, valid JSON object with two keys: "thoughtProcess" and "analysis".
-      Adhere strictly to the provided JSON structure.
-      - Put the full text output into the "thoughtProcess" field.
-      - Extract the trade details into the "analysis" field.
+      Do NOT output JSON. Return exactly two readable sections:
+      <THINKING>your concise reasoning and evidence</THINKING>
+      <FINAL_OUTPUT>your readable trade proposal with direction, levels, confidence, and risks</FINAL_OUTPUT>
     `;
     } else if (isAccuracyMode) {
         systemPrompt = `${ACCURACY_MODE_PROMPT}
@@ -190,14 +195,15 @@ export async function analyzeTradingView(
       ${RISK_MANAGEMENT_RULES}
 
       **SYNTHESIS & OUTPUT:**
-      Your entire response MUST be a single, valid JSON object with two keys: "thoughtProcess" and "analysis".
-      Adhere strictly to the provided JSON structure.
-      - Put the full text output (Sections 1-8) into the "thoughtProcess" field.
-      - Extract the trade details into the "analysis" field based on Section 7.
+      Do NOT output JSON. Return exactly two readable sections:
+      <THINKING>your concise reasoning and evidence</THINKING>
+      <FINAL_OUTPUT>your readable trade proposal with direction, levels, confidence, and risks</FINAL_OUTPUT>
     `;
     } else {
         // Standard mode — full master prompt with formatting rules and lens support.
-        const basePrompt = rolePrompt ? LENS_MODE_BASE_PROMPT : MASTER_ANALYSIS_PROMPT;
+        const basePrompt = rolePrompt
+            ? LENS_MODE_BASE_PROMPT
+            : (systemPromptOverride || MASTER_ANALYSIS_PROMPT);
 
         systemPrompt = `${rolePrompt ? ' **SPECIALIZED ANALYST ROLE ACTIVE**\n\n' + rolePrompt + '\n\n---\n\n' : ''}${basePrompt}
 
@@ -227,7 +233,7 @@ export async function analyzeTradingView(
 
       ${RISK_MANAGEMENT_RULES}
 
-      **SYNTHESIS & OUTPUT (STRICT JSON):**
+      **SYNTHESIS & OUTPUT (READABLE TEXT ONLY):**
 
       ${rolePrompt ? '' : `**FORMATTING RULE (MANDATORY):** Your 'thoughtProcess' MUST follow this EXACT structure with separator lines:
 
@@ -348,56 +354,18 @@ export async function analyzeTradingView(
       ────────────────────────────────────────
       `}
 
-      Your entire response MUST be a single, valid JSON object with two keys: "thoughtProcess" and "analysis".
-      **Output ONLY valid JSON. Do not wrap it in markdown (\`\`\`json). Do not include any preamble or postscript.**
+      Do NOT output JSON. Return exactly these two readable sections — plain prose, NEVER JSON keys, braces, or arrays:
 
-      **RESPONSE JSON Structure:**
-      {
-        "thoughtProcess": "Your detailed thought process string goes here (Sections 1-8 with separators)...",
-        "analysis": {
-            "coinName": "BTCUSDT",
-            "direction": "Long",
-            "confidence": "High",
-            "probability": 79,
-            "strategy": "...",
-            "activeStrategies": ["..."],
-            "entryPoints": [{"description": "...", "price": "..."}],
-            "stopLoss": "...",
-            "stopLossPercentage": "...",
-            "takeProfit": [{"price": "...", "percentage": "..."}],
-            "historicalCorrelation": "...",
-            "marketConditions": {
-                "pattern": "...",
-                "candleBehavior": "...",
-                "timeframeAlignment": "...",
-                "rsi": "...",
-                "macd": "...",
-                "sentiment": "...",
-                "prices": { "5m": "...", "15m": "...", "1h": "...", "4h": "..." }
-            },
-            "detectedPatternFamily": "Family A | Family B | Family C | Family Omega",
-            "detectedPatterns": [{ "name": "...", "timeframe": "...", "type": "Bullish | Bearish | Neutral", "confidence": "...", "description": "..." }],
-            "keyLevels": { "support": ["..."], "resistance": ["..."] },
-            "evidence": [
-                { "claim": "Trend is bullish on 1h", "sources": ["Binance 1h OHLCV", "EMA 20/50 cross"], "state": "observed" },
-                { "claim": "Volume confirms breakout", "sources": ["volume bars"], "state": "partial", "note": "Only 2h of volume data available" }
-            ],
-            "invalidationCriteria": [
-                { "level": "94,500", "condition": "4H close below this support", "category": "price", "note": "Bullish thesis dead — exit or flip neutral" },
-                { "level": "6h from analysis", "condition": "No breakout above entry zone before expiry", "category": "time" }
-            ]
-        }
-      }
+      <THINKING>
+        Write your full chain-of-thought here as normal prose: multi-timeframe structure, price action type, family classification, pattern matching, bias & probability, the trade setup, numeric chart analysis, and your final summary (Sections 1-8 with separator lines).
+      </THINKING>
+      <FINAL_OUTPUT>
+        Write your readable trade proposal here as normal prose: the coin, direction, entry level(s), stop loss, take-profit target(s), probability, confidence, strategy, key support/resistance levels, and the key risks.
+      </FINAL_OUTPUT>
 
-      **EVIDENCE DISCIPLINE (MANDATORY):** The "evidence" array must back your 2-4 most important conclusions. For each claim:
-      - "sources": the concrete data you used (indicator names, timeframe, OCR/chart references, injected market data).
-      - "state": "observed" = directly verified in the data; "partial" = some supporting data; "unobserved" = inference without direct data.
-      - Never fabricate data to fill gaps — mark the claim "unobserved" and explain in "note" instead.
+      **EVIDENCE DISCIPLINE (MANDATORY):** Back your 2-4 most important conclusions with concrete data sources (indicator names, timeframes, OCR/chart references, injected market data). Mark each as observed (directly verified), partial (some supporting data), or unobserved (inference only) — never fabricate data to fill gaps.
 
-      **INVALIDATION CONTRACT (MANDATORY):** The "invalidationCriteria" array must state exactly what kills this setup — 2-4 criteria:
-      - At least one "price" criterion with a CONCRETE level (number, not prose) that breaks the thesis.
-      - Add "time" (validity expiry), "structure" (market structure shift), or "signal" (indicator/counter-signal) criteria where relevant.
-      - "condition" = the observable trigger; "note" = the consequence. Never leave this array empty — a setup with no invalidation is not a setup.
+      **INVALIDATION CONTRACT (MANDATORY):** State exactly what kills this setup — 2-4 concrete criteria: at least one price level (a number, not prose) that breaks the thesis, plus time (validity expiry), structure (market-structure shift), or signal (indicator/counter-signal) criteria where relevant. For each: the observable trigger and the consequence. A setup with no invalidation is not a setup.
     `;
     }
 
@@ -411,7 +379,7 @@ export async function analyzeTradingView(
     // Standard mode uses pattern memory + recent insights blocks; accuracy mode relies on global memory context.
     let userPromptText: string;
     if (isAccuracyMode) {
-        userPromptText = `${formattedPrompt}${imageSummaryContext}\n\n${memoryContext}\n\nOUTPUT VALID JSON ONLY.`;
+        userPromptText = `${formattedPrompt}${imageSummaryContext}\n\n${memoryContext}\n\nReturn the THINKING and FINAL_OUTPUT sections described above.`;
     } else {
         const patternMemoryContext = finalTradeSummary
             ? truncateTextToTokens(`\n\n** PATTERN MEMORY (SYNTHESIS) - MANDATORY REFERENCE:**\nThe following is a synthesis of your recent trading performance and patterns. You MUST reference this data for Section 4 (Pattern Matching):\n${finalTradeSummary}\n`, 600)
@@ -426,13 +394,13 @@ export async function analyzeTradingView(
             const minimalInsights = recentInsightsContext.length > 300 ? recentInsightsContext.substring(0, 300) + '...[truncated]' : recentInsightsContext;
             const minimalImages = imageSummaryContext.length > 600 ? imageSummaryContext.substring(0, 600) + '...[truncated]' : imageSummaryContext;
             systemPrompt = effectiveSystemPrompt;
-            userPromptText = `${formattedPrompt}\n\n${marketDataOverride}\n\n${minimalImages}\n\n${minimalPattern}\n\n${minimalInsights}\n\nOUTPUT VALID JSON ONLY.`;
+            userPromptText = `${formattedPrompt}\n\n${marketDataOverride}\n\n${minimalImages}\n\n${minimalPattern}\n\n${minimalInsights}\n\nReturn readable THINKING and FINAL_OUTPUT sections only.`;
         } else {
             const truncatedImages = imageSummaryContext.length > 600 ? imageSummaryContext.substring(0, 600) + '...[truncated for TPM]' : imageSummaryContext;
             const truncatedPattern = patternMemoryContext.length > 400 ? patternMemoryContext.substring(0, 400) + '...[truncated for TPM]' : patternMemoryContext;
             const truncatedInsights = recentInsightsContext.length > 300 ? recentInsightsContext.substring(0, 300) + '...[truncated for TPM]' : recentInsightsContext;
             const truncatedMemory = memoryContext.length > 500 ? memoryContext.substring(0, 500) + '...[truncated for TPM]' : memoryContext;
-            userPromptText = `${formattedPrompt}${truncatedImages}\n\n${truncatedPattern}\n\n${truncatedInsights}\n\n${truncatedMemory}\n\nOUTPUT VALID JSON ONLY.`;
+            userPromptText = `${formattedPrompt}${truncatedImages}\n\n${truncatedPattern}\n\n${truncatedInsights}\n\n${truncatedMemory}\n\nReturn readable THINKING and FINAL_OUTPUT sections only.`;
         }
     }
 
@@ -454,30 +422,76 @@ export async function analyzeTradingView(
         messages.push({ role: 'user', content: userPromptText });
     }
 
-    // --- CALL THE GENERIC CLIENT ---
-    // Reasoning-capable models can spend most of the budget before emitting
-    // the final JSON. Give analysis enough room to finish both phases.
-    const options: ChatRequestOptions = { jsonMode: true, maxTokens: 8192, signal, onReasoning };
-    const responseText = await sendChatRequest(config, messages, options);
+    // --- CALL THE GENERIC CLIENT (STREAMING) ---
+    // Stream so the model's chain of thought (reasoning_content / reasoning
+    // deltas) flows to onReasoning in real-time and the live cards can render
+    // it harness-style, THEN present the final output. Non-chat_completions
+    // formats and Electron fall back to non-streaming inside streamChatRequest.
+    const options: ChatRequestOptions = { jsonMode: false, maxTokens: 8192, signal, onReasoning };
+    let responseText = '';
+    let reasoningAccumulated = '';
+    try {
+        for await (const chunk of streamChatRequest(config, messages, {
+            ...options,
+            onReasoning: (reasoning: string) => {
+                reasoningAccumulated += reasoning;
+                options.onReasoning?.(reasoning);
+            },
+        })) {
+            if (chunk) responseText += chunk;
+        }
+    } catch (error) {
+        console.error(`${config.name} analysis streaming failed:`, error);
+        throw error;
+    }
     if (!responseText) throw new Error("Received an empty response from the AI.");
 
     try {
-        let responseJson: any;
-        try {
-            responseJson = extractAndParseJson(responseText);
-        } catch (primaryError) {
-            // Reasoning-capable models sometimes prepend a long analysis and
-            // place the final JSON block at the end. Prefer that final block
-            // before declaring the entire response invalid.
+        const thinkingMatch = responseText.match(/<THINKING>\s*([\s\S]*?)\s*<\/THINKING>/i);
+        const outputMatch = responseText.match(/<FINAL_OUTPUT>\s*([\s\S]*?)\s*<\/FINAL_OUTPUT>/i);
+        let thoughtProcess = sanitizeAIResponseLight(thinkingMatch?.[1] || '');
+        let finalOutput = sanitizeAIResponseLight(outputMatch?.[1] || '');
+
+        // Defensive recovery: some models ignore the tagged format and return
+        // raw JSON (legacy {thoughtProcess, analysis} or a bare trade plan).
+        // Recover it into readable text so the cards never show raw JSON.
+        if (!thoughtProcess || !finalOutput) {
             try {
-                responseJson = extractLastJson(responseText);
+                const json = extractAndParseJson(responseText);
+                if (json && typeof json === 'object') {
+                    const jsonThought = typeof json.thoughtProcess === 'string'
+                        ? sanitizeAIResponseLight(json.thoughtProcess)
+                        : '';
+                    const analysisObj = json.analysis && typeof json.analysis === 'object' ? json.analysis : json;
+                    const isTradePlan = typeof analysisObj.coinName === 'string' || typeof analysisObj.direction === 'string';
+                    if (!thoughtProcess) {
+                        thoughtProcess = jsonThought || reasoningAccumulated || 'No separate thinking section was provided.';
+                    }
+                    if (!finalOutput) {
+                        finalOutput = isTradePlan
+                            ? formatAnalysisForDisplay(analysisObj)
+                            : (jsonThought || reasoningAccumulated || responseText.replace(/<\/?(?:THINKING|FINAL_OUTPUT)>/gi, '').trim());
+                    }
+                }
             } catch {
-                throw primaryError;
+                // Not JSON — fall through to the text fallbacks below.
             }
         }
-        const thoughtProcess = sanitizeAIResponse(responseJson.thoughtProcess || "No thought process provided.");
-        const analysis: TradeAnalysis = sanitizeTradeAnalysis(responseJson.analysis);
-        if (!analysis) throw new Error("AI response JSON did not contain the 'analysis' object.");
+        if (!finalOutput) {
+            finalOutput = sanitizeAIResponseLight(responseText.replace(/<\/?(?:THINKING|FINAL_OUTPUT)>/gi, '').trim());
+        }
+        if (!thoughtProcess) {
+            thoughtProcess = reasoningAccumulated || 'No separate thinking section was provided.';
+        }
+
+        // Analysts deliberately do not produce the structured trade plan.
+        // Keep a neutral internal value for legacy validation/Monte Carlo paths;
+        // only the moderator's post-debate JSON becomes the real analysis.
+        const analysis: TradeAnalysis = sanitizeTradeAnalysis({
+            direction: 'Neutral',
+            confidence: 'Low',
+            strategy: finalOutput,
+        });
 
         analysis.activeStrategies = Array.isArray(analysis.activeStrategies) ? analysis.activeStrategies : [];
         analysis.stopLoss = sanitizeJSONString(analysis.stopLoss);
@@ -489,7 +503,7 @@ export async function analyzeTradingView(
             : [];
         analysis.createdAt = new Date().toISOString();
 
-        return { analysis, thoughtProcess, sources: [] };
+        return { analysis, thoughtProcess, finalOutput, sources: [] };
     } catch (error) {
         console.error(`${config.name} analysis JSON parsing failed:`, error, "Response:", responseText);
         throw new Error("Failed to parse the trading analysis from the AI response.", { cause: error });

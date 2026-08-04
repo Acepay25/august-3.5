@@ -60,6 +60,44 @@ function devProviderProxy() {
             delete fallbackBody.response_format;
             upstream = await fetch(url, { method: 'POST', headers, body: JSON.stringify(fallbackBody), signal: AbortSignal.timeout(120000) });
           }
+
+          // Streaming (SSE) passthrough — used by streamChatRequest on localhost
+          // so the renderer receives per-chunk deltas without CORS failures
+          // (direct browser SDK calls are blocked by providers without CORS
+          // headers, e.g. opencode). The renderer parses the SSE events.
+          if (request.stream) {
+            const streamBody: Record<string, unknown> = { ...body, stream: true };
+            let sse = await fetch(url, { method: 'POST', headers, body: JSON.stringify(streamBody), signal: AbortSignal.timeout(300000) });
+            if (!sse.ok && request.jsonMode && (sse.status === 400 || sse.status === 422) && streamBody.response_format) {
+              const fallbackBody = { ...streamBody };
+              delete fallbackBody.response_format;
+              sse = await fetch(url, { method: 'POST', headers, body: JSON.stringify(fallbackBody), signal: AbortSignal.timeout(300000) });
+            }
+            if (!sse.ok || !sse.body) {
+              const text = await sse.text();
+              res.statusCode = sse.status;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ ok: false, status: sse.status, body: text.slice(0, 2000), message: '', reasoning: '' }));
+              return;
+            }
+            res.statusCode = 200;
+            res.setHeader('Content-Type', 'text/event-stream');
+            res.setHeader('Cache-Control', 'no-cache');
+            res.setHeader('Connection', 'keep-alive');
+            const reader = sse.body.getReader();
+            const decoder = new TextDecoder();
+            try {
+              for (;;) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                res.write(decoder.decode(value, { stream: true }));
+              }
+            } finally {
+              reader.releaseLock();
+            }
+            res.end();
+            return;
+          }
           let text = await upstream.text();
           if (upstream.ok && request.jsonMode && body.response_format) {
             try {

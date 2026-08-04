@@ -440,7 +440,7 @@ Formatting rules:
 - Numbers only for price fields
 - No strategy names or options terms
 
-**MANDATORY JSON:**
+**MANDATORY FIELDS (COVER IN PROSE):**
 - marketConditions.prices (5m, 15m, 1h, 4h)
 - detectedPatterns (name, timeframe, type, confidence, description)
 - keyLevels (support/resistance with timeframe)
@@ -561,20 +561,7 @@ export const LENS_MODE_BASE_PROMPT = `You are a specialized trading analyst oper
 
 3. ** OUTPUT FORMAT ** - Your response must be structured according to your role's defined sections and tables.
 
-4. ** JSON OUTPUT IS STILL REQUIRED ** - After your specialized analysis, you must STILL produce the JSON block with these fields:
-\`\`\`json
-{
-  "confidence": "High" | "Medium" | "Low" | "Avoid",
-  "direction": "Long" | "Short" | "Neutral",
-  "entryPoints": ["price1", "price2"],
-  "stopLoss": "price",
-  "takeProfit": ["tp1", "tp2", "tp3"],
-  "strategy": "Brief summary of your specialized analysis",
-  "coinName": "SYMBOL",
-  "detectedPatternFamily": "Family A" | "Family B" | "Family C" | "Family Omega",
-  "reasoning": "Your domain-specific reasoning"
-}
-\`\`\`
+4. ** COMPLETE OUTPUT REQUIRED ** - After your specialized analysis, cover these fields in your readable FINAL_OUTPUT prose: confidence, direction, entry levels, stop loss, take-profit targets, strategy, coin, pattern family, and your domain-specific reasoning. Do NOT output JSON.
 
 5. **YOUR PRIORITY ORDER:**
    - 1st: Your specialized role instructions (above)

@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Message, ImageMetadata, AccuracySubMode, AnalysisStep, AnalystLensConfig, LiveThoughts, ProviderConfig } from '../../types';
+import { EnsembleModelSelection } from '../../services/ui/AnalystLensService';
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
 import MessageItem, { ChatContextProps } from './MessageItem';
 import { ChatInput } from './ChatInput';
@@ -65,6 +66,14 @@ interface ChatAreaProps {
     // Lens Config
     lensConfig: AnalystLensConfig;
     setLensConfig: (config: AnalystLensConfig) => void;
+    // Ordinary ensemble model selection (Lenses off)
+    ensembleModelSelection: EnsembleModelSelection;
+    setEnsembleModelSelection: (selection: EnsembleModelSelection) => void;
+    // Custom prompt overrides (prompt editor)
+    customEnsemblePrompt: string | null;
+    setCustomEnsemblePrompt: (prompt: string | null) => void;
+    customLensPrompts: Record<string, string>;
+    setCustomLensPrompts: (prompts: Record<string, string>) => void;
     // Ensemble mode toggle (casual chat vs chart analysis)
     isEnsembleEnabled: boolean;
     setIsEnsembleEnabled: (v: boolean) => void;
@@ -144,6 +153,12 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     setSelectedVisionModel,
     lensConfig,
     setLensConfig,
+    ensembleModelSelection,
+    setEnsembleModelSelection,
+    customEnsemblePrompt,
+    setCustomEnsemblePrompt,
+    customLensPrompts,
+    setCustomLensPrompts,
     isEnsembleEnabled,
     setIsEnsembleEnabled,
     selectedChatModel,
@@ -251,6 +266,12 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         setSelectedVisionModel,
         lensConfig,
         setLensConfig,
+        ensembleModelSelection,
+        setEnsembleModelSelection,
+        customEnsemblePrompt,
+        setCustomEnsemblePrompt,
+        customLensPrompts,
+        setCustomLensPrompts,
         isEnsembleEnabled,
         setIsEnsembleEnabled,
         selectedChatModel,

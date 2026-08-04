@@ -72,13 +72,13 @@ import { useUserProfiles } from './hooks/useUserProfiles';
 import { useSaveOnUnload } from './hooks/useSaveOnUnload';
 import { offlineQueue, QueuedRequest } from './services/infrastructure/OfflineQueueService';
 import { jobQueue, JobType } from './services/infrastructure/JobQueueService';
-import { getPreference, setPreference, removePreference, PREF_KEYS } from './services/infrastructure/PreferencesService';
+import { getPreference, setPreference, removePreference, getPreferenceObject, PREF_KEYS } from './services/infrastructure/PreferencesService';
 // AI Learning Services - Adaptive Learning, Mistake Patterns, Insight Extraction
 import { extractInsightsFromPostMortem, storeInsights, initializeKnowledgeBase } from './services/learning/InsightExtractionService';
 import * as MemoryService from './services/learning/MemoryService';
 import { ProviderConfig } from './types/provider';
 import { syncFromTradeLog, syncRollingWindowFromTradeLog, initModelPerformanceService } from './services/backtesting/ModelPerformanceService';
-import { saveLensConfig, initAnalystLensService } from './services/ui/AnalystLensService';
+import { saveLensConfig, initAnalystLensService, loadLensConfig, saveEnsembleModelSelection, EnsembleModelSelection, saveCustomEnsemblePrompt, saveCustomLensPrompts } from './services/ui/AnalystLensService';
 import { detectTradingStyle, getEffectiveStyle, generateMasterPromptStyleInjection } from './services/ui/TradingStyleDetector';
 import { checkDataIntegrity, createStartupBackup, updateTradeCount, logIntegrityEvent, runMigrations } from './services/validation/DataIntegrityService';
 import { startAutoBackup, stopAutoBackup } from './services/infrastructure/BackupService';
@@ -180,6 +180,9 @@ const App: React.FC = () => {
         isMemoryEnabledInPureAI, setIsMemoryEnabledInPureAI,
         isHybridIntelligenceEnabled, setIsHybridIntelligenceEnabled,
         lensConfig, setLensConfig,
+        ensembleModelSelection, setEnsembleModelSelection,
+        customEnsemblePrompt, setCustomEnsemblePrompt,
+        customLensPrompts, setCustomLensPrompts,
         confidenceCalibration, setConfidenceCalibration,
         insightKnowledgeBase, setInsightKnowledgeBase,
         activeFrameworks, setActiveFrameworks,
@@ -259,13 +262,20 @@ const App: React.FC = () => {
             const configuredModels = provider.ensembleModels?.filter(model => provider.models.includes(model)).slice(0, 3) || [];
             if (configuredModels.length === 0 && provider.selectedModel) configuredModels.push(provider.selectedModel);
             const uniqueAssignedModels = [...new Set(assignedModels)].slice(0, 3);
+            // Lenses OFF: the plain 3-model picker in the chat input is the
+            // source of truth; falls back to per-provider ensembleModels.
+            const selectionModels = (isEnsembleEnabled && !lensConfig?.enabled && ensembleModelSelection && ensembleModelSelection.length > 0)
+                ? ensembleModelSelection.filter(s => s.providerId === provider.id && provider.models.includes(s.model)).map(s => s.model)
+                : [];
             const models = isEnsembleEnabled
-                ? (hasCompleteAnalystAssignments ? uniqueAssignedModels : configuredModels)
+                ? (lensConfig?.enabled && hasCompleteAnalystAssignments
+                    ? uniqueAssignedModels
+                    : (selectionModels.length > 0 ? selectionModels : configuredModels))
                 : (provider.selectedModel ? [provider.selectedModel] : []);
             return models.map(model => ({
                 id: `${provider.id}:${model}`,
                 name: (() => {
-                    if (!isEnsembleEnabled || !hasCompleteAnalystAssignments) return isEnsembleEnabled && models.length > 1 ? `${provider.name} · ${model}` : provider.name;
+                    if (!isEnsembleEnabled || !(lensConfig?.enabled && hasCompleteAnalystAssignments)) return isEnsembleEnabled && models.length > 1 ? `${provider.name} · ${model}` : provider.name;
                     const role = getRoleForProvider(`${provider.id}::${model}`, lensConfig.assignments);
                     return role !== AnalystRole.UNASSIGNED ? ANALYST_ROLE_DEFINITIONS[role].name : provider.name;
                 })(),
@@ -274,7 +284,7 @@ const App: React.FC = () => {
                 apiKey: provider.apiKey,
             }));
         })
-        .slice(0, 3), [readyProviders, isEnsembleEnabled, lensConfig, hasCompleteAnalystAssignments]);
+        .slice(0, 3), [readyProviders, isEnsembleEnabled, lensConfig, hasCompleteAnalystAssignments, ensembleModelSelection]);
 
     // Market data state and effects (extracted to hooks/useMarketData.ts)
     const marketData = useMarketData(isHybridIntelligenceEnabled, isEnsembleEnabled);
@@ -415,7 +425,7 @@ const App: React.FC = () => {
         images, setImages,
         loadingMessage, setLoadingMessage,
         analysisSteps, setAnalysisSteps,
-        liveThoughts, setLiveThoughts,
+        liveThoughts, liveOutputs, setLiveThoughts,
         liveReasoning,
         currentGateResult, setCurrentGateResult,
         currentVisionData, setCurrentVisionData,
@@ -451,6 +461,9 @@ const App: React.FC = () => {
         isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI,
         isHybridIntelligenceEnabled, lensConfig, activeFrameworks,
         isEnsembleEnabled,
+        ensembleModelSelection,
+        customEnsemblePrompt,
+        customLensPrompts,
         selectedChatModel,
         toast,
     });
@@ -478,9 +491,9 @@ const App: React.FC = () => {
         if (!moderatorProviderId || !readyProviders.some(p => p.id === moderatorProviderId)) {
             issues.push('select a moderator in Settings → AI Models');
         }
-        if (missingAnalystRoles.length > 0) {
+        if (missingAnalystRoles.length > 0 && lensConfig.enabled) {
             issues.push(`assign ${missingAnalystRoles.map(role => ANALYST_ROLE_DEFINITIONS[role].shortName).join(', ')} in Assign Analysts`);
-        } else {
+        } else if (lensConfig.enabled) {
             const identities = requiredAnalystRoles.map(role => {
                 const assignment = lensConfig.assignments.find(item => item.role === role)!;
                 const provider = readyProviders.find(item => item.id === assignment.assignedProvider);
@@ -784,6 +797,25 @@ const App: React.FC = () => {
         // Initialize service caches
         await initModelPerformanceService();
         await initAnalystLensService();
+        // Native (Capacitor) loads the lens config asynchronously, after the
+        // useAppSettings lazy initializer already ran with an empty default —
+        // push the cached config into React state so the lens dropdowns don't
+        // open empty on startup.
+        const cachedLens = loadLensConfig();
+        if (cachedLens && JSON.stringify(cachedLens) !== JSON.stringify(lensConfig)) {
+            handleSetLensConfig(cachedLens);
+        }
+        // Same async-load sync for the ordinary ensemble model selection
+        // (native stores it in Capacitor Preferences, not localStorage).
+        try {
+            const cachedSelection = await getPreferenceObject<EnsembleModelSelection>(PREF_KEYS.ENSEMBLE_MODEL_SELECTION);
+            if (Array.isArray(cachedSelection) && cachedSelection.length > 0
+                && JSON.stringify(cachedSelection) !== JSON.stringify(ensembleModelSelection)) {
+                handleSetEnsembleModelSelection(cachedSelection);
+            }
+        } catch (e) {
+            console.warn('[App] Failed to sync ensemble model selection:', e);
+        }
         await initInvalidationRuleService();
         await PriceAlertService.init();
         await OutcomeAutopilotService.init();
@@ -1097,6 +1129,63 @@ const App: React.FC = () => {
         saveLensConfig(newConfig);
     }, []);
 
+    // Ordinary ensemble model selection (Lenses off) handler — persists the
+    // three picked models that drive the cards and the debate.
+    const handleSetEnsembleModelSelection = useCallback((selection: EnsembleModelSelection) => {
+        setEnsembleModelSelection(selection.slice(0, 3));
+        saveEnsembleModelSelection(selection.slice(0, 3));
+    }, [setEnsembleModelSelection]);
+
+    // Custom prompt overrides (prompt editor) — persist so they survive reloads.
+    const handleSetCustomEnsemblePrompt = useCallback((prompt: string | null) => {
+        setCustomEnsemblePrompt(prompt);
+        saveCustomEnsemblePrompt(prompt);
+    }, [setCustomEnsemblePrompt]);
+
+    const handleSetCustomLensPrompts = useCallback((prompts: Record<string, string>) => {
+        setCustomLensPrompts(prompts);
+        saveCustomLensPrompts(prompts);
+    }, [setCustomLensPrompts]);
+
+    // Reconcile stale lens assignments when providers/models change: drop a
+    // role whose provider was removed or whose assigned model no longer
+    // exists, so the lens dropdowns never render a blank value for a dead
+    // assignment (the pipeline used to run a model the UI could not show).
+    useEffect(() => {
+        if (!lensConfig || !lensConfig.assignments) return;
+        const providersById = new Map(providerConfigs.map(c => [c.id, c]));
+        let changed = false;
+        const assignments = lensConfig.assignments.map(a => {
+            if (!a.assignedProvider) return a;
+            const provider = providersById.get(a.assignedProvider);
+            if (!provider) {
+                changed = true;
+                return { ...a, assignedProvider: null, assignedModel: undefined };
+            }
+            if (a.assignedModel && !provider.models.includes(a.assignedModel)) {
+                changed = true;
+                return { ...a, assignedModel: undefined };
+            }
+            return a;
+        });
+        if (changed) {
+            handleSetLensConfig({ ...lensConfig, assignments });
+        }
+    }, [providerConfigs, lensConfig, handleSetLensConfig]);
+
+    // Reconcile stale ordinary ensemble selections: drop entries whose
+    // provider was removed or whose model no longer exists on that provider.
+    useEffect(() => {
+        if (!ensembleModelSelection || ensembleModelSelection.length === 0) return;
+        const providersById = new Map(providerConfigs.map(c => [c.id, c]));
+        const cleaned = ensembleModelSelection.filter(e =>
+            Boolean(providersById.get(e.providerId)?.models.includes(e.model))
+        );
+        if (cleaned.length !== ensembleModelSelection.length) {
+            handleSetEnsembleModelSelection(cleaned);
+        }
+    }, [providerConfigs, ensembleModelSelection, handleSetEnsembleModelSelection]);
+
     const handleQuotaExceeded = useCallback((modelId: string) => {
         setQuotaExceededModels(prev => new Set(prev).add(modelId));
     }, []);
@@ -1115,7 +1204,9 @@ const App: React.FC = () => {
     // Missing Handlers Implementation Start
     const handleAllAnalysisTypingComplete = useCallback(() => {
         setIsAnalysisTypingComplete(true);
-    }, []);
+        // The analyst cards are complete; reveal the moderator-led debate.
+        setIsLiveAnalysisVisible(false);
+    }, [setIsLiveAnalysisVisible]);
 
     const handleSetSummarizationProvider = (provider: AIProvider) => setSummarizationProvider(provider);
     const handleSetSummarizationModel = (id: string) => setSummarizationModel(id);
@@ -1758,15 +1849,18 @@ const App: React.FC = () => {
                 isVisible={isLiveAnalysisVisible}
                 onClose={() => setIsLiveAnalysisVisible(false)}
                 thoughts={liveThoughts}
+                outputs={liveOutputs}
                 reasoning={liveReasoning}
                 providers={liveAnalysisProviders}
                 onAllTypingComplete={handleAllAnalysisTypingComplete}
+                mode={lensConfig.enabled ? 'lenses' : 'normal'}
             />
             <LiveStreamView
                 variant="postmortem"
                 isVisible={isLivePostMortemVisible}
                 onClose={() => setIsLivePostMortemVisible(false)}
                 thoughts={livePostMortemThoughts}
+                outputs={livePostMortemThoughts}
                 providers={readyProviders}
                 onAllTypingComplete={handleAllPostMortemTypingComplete}
             />
@@ -2072,6 +2166,12 @@ const App: React.FC = () => {
                 // ChatInput props
                 lensConfig={lensConfig}
                 setLensConfig={handleSetLensConfig}
+                ensembleModelSelection={ensembleModelSelection}
+                setEnsembleModelSelection={handleSetEnsembleModelSelection}
+                customEnsemblePrompt={customEnsemblePrompt}
+                setCustomEnsemblePrompt={handleSetCustomEnsemblePrompt}
+                customLensPrompts={customLensPrompts}
+                setCustomLensPrompts={handleSetCustomLensPrompts}
                 isEnsembleEnabled={isEnsembleEnabled}
                 setIsEnsembleEnabled={handleSetEnsembleEnabled}
                 selectedChatModel={selectedChatModel}
