@@ -366,15 +366,15 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                     <div
                                         role="dialog"
                                         aria-label={lensAssignStep === 'lenses' ? 'Assign analysts' : lensAssignStep === 'normal' ? 'Debate models' : 'Debate mode'}
-                                        className="absolute bottom-full left-0 mb-2 w-64 bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl z-50 animate-fade-in"
+                                        className="absolute bottom-full left-0 mb-2 w-72 overflow-hidden rounded-2xl border border-cyan-400/20 bg-zinc-950/95 shadow-[0_18px_50px_rgba(0,0,0,0.45)] backdrop-blur-xl animate-fade-in"
                                     >
                                         {lensAssignStep === 'choose' ? (
                                             <>
-                                        {/* Step 1 — choose the debate mode. The picker
-                                            only appears after a mode is selected. */}
-                                        <div className="px-3 py-2 bg-zinc-800">
-                                            <div className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider mb-1.5">Choose Debate Mode</div>
-                                            <div className="grid grid-cols-2 gap-1.5">
+                                        <div className="border-b border-white/10 bg-gradient-to-br from-cyan-950/40 via-zinc-900 to-zinc-900 px-4 py-3">
+                                            <div className="text-[10px] font-black uppercase tracking-[0.18em] text-cyan-300">Analysis mode</div>
+                                            <div className="mt-1 text-[11px] leading-relaxed text-zinc-500">Choose how the ensemble frames each analyst.</div>
+                                        </div>
+                                        <div className="space-y-2 p-2.5">
                                                 <button
                                                     type="button"
                                                     onClick={() => {
@@ -382,10 +382,10 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                                         setLensAssignStep('lenses');
                                                     }}
                                                     aria-pressed={lensConfig.enabled}
-                                                    className={`rounded-lg border px-2 py-1.5 text-left transition-colors ${lensConfig.enabled ? 'bg-zinc-700 border-white/20' : 'bg-zinc-950 border-white/10 hover:bg-zinc-800'}`}
+                                                    className={`group w-full rounded-xl border px-3 py-3 text-left transition-all ${lensConfig.enabled ? 'border-cyan-400/40 bg-cyan-500/10 shadow-[0_0_18px_rgba(100,141,198,0.14)]' : 'border-white/10 bg-zinc-950/70 hover:border-cyan-400/25 hover:bg-zinc-800/80'}`}
                                                 >
-                                                    <span className={`block text-xs font-semibold ${lensConfig.enabled ? 'text-white' : 'text-zinc-400'}`}>Lenses</span>
-                                                    <span className="block text-[9px] text-zinc-500 leading-tight">Role-based prompts per analyst</span>
+                                                    <span className="flex items-center justify-between"><span className={`text-xs font-bold ${lensConfig.enabled ? 'text-cyan-200' : 'text-zinc-300'}`}>Lenses</span><span className={`h-2 w-2 rounded-full ${lensConfig.enabled ? 'bg-cyan-400 shadow-[0_0_8px_rgba(100,141,198,0.8)]' : 'bg-zinc-700 group-hover:bg-zinc-500'}`} /></span>
+                                                    <span className="mt-1 block text-[10px] leading-tight text-zinc-500">Role-based prompts for Macro, Technical, and Risk.</span>
                                                 </button>
                                                 <button
                                                     type="button"
@@ -394,19 +394,18 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                                         setLensAssignStep('normal');
                                                     }}
                                                     aria-pressed={!lensConfig.enabled}
-                                                    className={`rounded-lg border px-2 py-1.5 text-left transition-colors ${!lensConfig.enabled ? 'bg-zinc-700 border-white/20' : 'bg-zinc-950 border-white/10 hover:bg-zinc-800'}`}
+                                                    className={`group w-full rounded-xl border px-3 py-3 text-left transition-all ${!lensConfig.enabled ? 'border-cyan-400/40 bg-cyan-500/10 shadow-[0_0_18px_rgba(100,141,198,0.14)]' : 'border-white/10 bg-zinc-950/70 hover:border-cyan-400/25 hover:bg-zinc-800/80'}`}
                                                 >
-                                                    <span className={`block text-xs font-semibold ${!lensConfig.enabled ? 'text-white' : 'text-zinc-400'}`}>Normal</span>
-                                                    <span className="block text-[9px] text-zinc-500 leading-tight">Same prompt for all models</span>
+                                                    <span className="flex items-center justify-between"><span className={`text-xs font-bold ${!lensConfig.enabled ? 'text-cyan-200' : 'text-zinc-300'}`}>Normal</span><span className={`h-2 w-2 rounded-full ${!lensConfig.enabled ? 'bg-cyan-400 shadow-[0_0_8px_rgba(100,141,198,0.8)]' : 'bg-zinc-700 group-hover:bg-zinc-500'}`} /></span>
+                                                    <span className="mt-1 block text-[10px] leading-tight text-zinc-500">Same prompt sent to each selected model.</span>
                                                 </button>
-                                            </div>
                                         </div>
                                             </>
                                         ) : lensAssignStep === 'lenses' ? (
                                             <>
-                                        <div className="px-3 py-2 bg-zinc-800 flex items-center justify-between">
-                                            <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">Lenses · Assign Analysts</span>
-                                            <button type="button" onClick={() => setLensAssignStep('choose')} className="text-[10px] text-zinc-500 hover:text-zinc-300">‹ Mode</button>
+                                        <div className="flex items-center justify-between border-b border-white/10 bg-gradient-to-br from-cyan-950/35 via-zinc-900 to-zinc-900 px-4 py-3">
+                                            <div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-cyan-300">Lenses</div><div className="mt-1 text-[10px] text-zinc-500">Assign one model to each role.</div></div>
+                                            <button type="button" onClick={() => setLensAssignStep('choose')} className="rounded-lg px-2 py-1 text-[10px] text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-200">‹ Mode</button>
                                         </div>
                                         {/* Macro Analyst */}
                                         <div className="px-1.5 py-0.5">
@@ -458,12 +457,9 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                             </>
                                         ) : (
                                             <>
-                                        <div className="px-3 py-2 bg-zinc-800 flex items-center justify-between">
-                                            <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">Normal · Debate Models</span>
-                                            <div className="flex items-center gap-2">
-                                                <button type="button" onClick={() => setPromptEditor({ kind: 'normal' })} className="text-[10px] text-zinc-500 hover:text-zinc-300" title="View / edit this mode's prompt">✎ Prompt</button>
-                                                <button type="button" onClick={() => setLensAssignStep('choose')} className="text-[10px] text-zinc-500 hover:text-zinc-300">‹ Mode</button>
-                                            </div>
+                                        <div className="flex items-center justify-between border-b border-white/10 bg-gradient-to-br from-cyan-950/35 via-zinc-900 to-zinc-900 px-4 py-3">
+                                            <div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-cyan-300">Normal</div><div className="mt-1 text-[10px] text-zinc-500">Pick up to three debate models.</div></div>
+                                            <div className="flex items-center gap-1"><button type="button" onClick={() => setPromptEditor({ kind: 'normal' })} className="rounded-lg px-2 py-1 text-[10px] text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-200" title="View / edit this mode's prompt">✎ Prompt</button><button type="button" onClick={() => setLensAssignStep('choose')} className="rounded-lg px-2 py-1 text-[10px] text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-200">‹ Mode</button></div>
                                         </div>
                                         <p className="px-3 py-1.5 text-[10px] text-zinc-500">Pick up to 3 models for the ensemble debate.</p>
                                         {[0, 1, 2].map(slot => (
@@ -505,12 +501,14 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                     <span className="font-medium">{leverageInput}x</span>
                                 </button>
                                 {isLeverageDropdownOpen && (
-                                    <div role="menu" aria-label="Leverage presets" className="absolute bottom-full right-0 mb-2 w-28 bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden animate-fade-in">
+                                     <div role="menu" aria-label="Leverage presets" className="absolute bottom-full right-0 mb-2 w-36 overflow-hidden rounded-2xl border border-cyan-400/20 bg-zinc-950/95 shadow-[0_18px_50px_rgba(0,0,0,0.45)] backdrop-blur-xl animate-fade-in">
+                                        <div className="border-b border-white/10 bg-gradient-to-br from-cyan-950/35 via-zinc-900 to-zinc-900 px-3 py-2.5"><div className="text-[10px] font-black uppercase tracking-[0.16em] text-cyan-300">Leverage</div><div className="mt-1 text-[10px] text-zinc-500">Choose a risk multiplier.</div></div>
+                                        <div className="p-1.5">
                                         {[25, 50, 75, 100, 125].map(preset => (
                                             <button
                                                 key={preset}
                                                 onClick={() => handlePresetLeverage(preset)}
-                                                className={`w-full text-left px-4 py-2.5 text-sm font-mono transition-colors ${parseInt(leverageInput) === preset ? 'bg-cyan-500/20 text-cyan-300' : 'text-zinc-300 hover:bg-zinc-800'}`}
+                                                className={`w-full rounded-lg px-3 py-2 text-left text-sm font-mono transition-colors ${parseInt(leverageInput) === preset ? 'bg-cyan-500/15 text-cyan-200' : 'text-zinc-300 hover:bg-zinc-800'}`}
                                             >
                                                 {preset}x
                                             </button>
@@ -527,6 +525,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                                 max="125"
                                                 placeholder="Custom"
                                             />
+                                        </div>
                                         </div>
                                     </div>
                                 )}
