@@ -110,6 +110,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
     const isHighlighted = highlightedAnalysisId === message.id;
     const isUserMessage = message.role === MessageRole.USER;
     const [isThinkingExpanded, setIsThinkingExpanded] = React.useState(false);
+    const [isPreviousDebateExpanded, setIsPreviousDebateExpanded] = React.useState(false);
     const thinkingEntries = Object.entries({
         ...(message.thoughtProcesses ?? {}),
         ...(message.reasoningProcesses ?? {}),
@@ -309,8 +310,8 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 </div>
                             )}
 
-                            {/* Debate chat ends immediately before the final trade card. */}
-                            {debateTurns.length > 0 && (
+                            {/* Live debates stay visible; completed cards default to the result only. */}
+                            {message.isDebating && debateTurns.length > 0 && (
                                 <DebateChat
                                     debateTurns={debateTurns}
                                     modelsUsed={message.modelsUsed}
@@ -319,13 +320,55 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     modelIdToName={modelIdToName}
                                     providerNameToId={providerNameToId}
                                     lensConfig={lensConfig}
-                                    isDebating={message.isDebating}
+                                    isDebating
                                     activeDebateSpeakers={message.activeDebateSpeakers}
                                 />
                             )}
 
                             {/* Main Analysis Result */}
                             {message.analysis && <AnalysisResult analysis={message.analysis} messageId={message.id} onLogTrade={handleInitiateLogTrade} onInitiateSkip={handleInitiateSkipTrade} onViewStrategy={handleViewStrategyDetails} onSaveAnalysis={handleSaveAnalysis} onUpdateTrade={handleInitiateUpdateTrade} onSimulate={handleInitiateSimulator} isSaved={savedAnalyses.some(sa => sa.id === message.id)} outcome={message.outcome} isLogging={loggingTradeId === message.id} activeFrameworks={activeFrameworks} onApplyStrategy={handleApplyStrategy} imageSummaries={message.imageSummaries} isAccuracyMode={message.isAccuracyMode} accuracySubMode={message.accuracySubMode} confidenceCalibration={confidenceCalibration} confluenceData={message.confluenceData} leverage={leverage} isLensMode={message.isLensMode} tradingStyle={message.tradingStyle} onSelectForProbability={onSelectMessageForProbability} autopilotResolution={autopilotResolutions?.[message.id]} onConfirmAutopilot={onConfirmAutopilot} onDismissAutopilot={onDismissAutopilot} />}
+
+                            {!message.isDebating && debateTurns.length > 0 && !message.analysis && (
+                                <DebateChat
+                                    debateTurns={debateTurns}
+                                    modelsUsed={message.modelsUsed}
+                                    thoughtProcesses={message.thoughtProcesses}
+                                    reasoningProcesses={message.reasoningProcesses}
+                                    modelIdToName={modelIdToName}
+                                    providerNameToId={providerNameToId}
+                                    lensConfig={lensConfig}
+                                    activeDebateSpeakers={message.activeDebateSpeakers}
+                                />
+                            )}
+
+                            {!message.isDebating && message.analysis && debateTurns.length > 0 && (
+                                <div className="mt-4 border-t border-white/10 pt-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsPreviousDebateExpanded(previous => !previous)}
+                                        className="flex w-full items-center justify-between rounded-xl border border-white/5 bg-zinc-900/60 px-3 py-2.5 text-left text-xs font-semibold text-zinc-400 transition-colors hover:border-cyan-400/20 hover:bg-zinc-800/80 hover:text-zinc-200 focus-visible:ring-2 focus-visible:ring-cyan-400"
+                                        aria-expanded={isPreviousDebateExpanded}
+                                        aria-controls={`previous-debate-${message.id}`}
+                                    >
+                                        <span>Previous debate</span>
+                                        <ChevronDownIcon className={`h-4 w-4 transition-transform ${isPreviousDebateExpanded ? 'rotate-180' : ''}`} />
+                                    </button>
+                                    {isPreviousDebateExpanded && (
+                                        <div id={`previous-debate-${message.id}`}>
+                                            <DebateChat
+                                                debateTurns={debateTurns}
+                                                modelsUsed={message.modelsUsed}
+                                                thoughtProcesses={message.thoughtProcesses}
+                                                reasoningProcesses={message.reasoningProcesses}
+                                                modelIdToName={modelIdToName}
+                                                providerNameToId={providerNameToId}
+                                                lensConfig={lensConfig}
+                                                activeDebateSpeakers={message.activeDebateSpeakers}
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            )}
 
                             {Array.isArray(message.postMortemImages) && message.postMortemImages.length > 0 && (
                                 <div className="mt-4 sm:mt-6 pt-3 sm:pt-5 border-t border-white/10">
