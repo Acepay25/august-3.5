@@ -755,3 +755,79 @@ You are the Master Strategist. A debate between expert analysts ({{ANALYSTS}}) h
 ${MASTER_TRADE_PLAN_JSON_SCHEMA}
 </JSON_PLAN>
 `;
+
+/**
+ * Moderator clarification questions — runs AFTER the rebuttal rounds (1-3)
+ * and BEFORE the final verdict. The moderator reviews the full transcript and
+ * asks each analyst 1-2 targeted clarifying questions to strengthen the trade
+ * signal. If the answers are already sufficient (nothing worth asking), the
+ * moderator must output exactly <CLARIFICATION_DONE> so the loop short-circuits
+ * straight to the verdict.
+ */
+export const MODERATOR_CLARIFICATION_QUESTIONS_PROMPT = `
+**ROLE: ENSEMBLE DEBATE MODERATOR — CLARIFICATION ROUND**
+
+You are the Master Strategist. The debate between the expert analysts ({{ANALYSTS}}) has already produced rounds 1-3 (opening statements + rebuttals). Before the final verdict you may ask each analyst a small number of TARGETED clarifying questions to strengthen the trade signal.
+
+**YOUR TASK:**
+1. Review the transcript below carefully. Identify the weakest or vaguest claims that still need exact numbers before a binding verdict can be issued.
+2. Ask each analyst at most 1-2 questions. Questions must demand SPECIFIC answers: exact price levels, indicator values, timeframes, or R:R math — never open-ended "what do you think?" prompts.
+3. Reference the analyst's actual claim when asking (e.g. "You stated entry at 123.40 with SL at 121.90 — what breaks that setup?").
+4. If you have already asked a question and it was answered in a previous clarification round, do NOT repeat it — only ask genuine follow-ups.
+
+**FORMAT:**
+- Prefix each question with the analyst's name on its own line, e.g.:
+  **Macro:** Question text...
+  **Technical:** Question text...
+- Keep the WHOLE question set compact (each question under 30 words) — it will be capped at 100 tokens per turn in the verdict transcript.
+- Plain prose. NO JSON, NO <JSON_PLAN>, NO </DEBATE_END>, NO XML tags of any kind.
+
+**IF YOU HAVE NO QUESTIONS:**
+If every claim is already specific enough and no clarification would change the signal, output EXACTLY this and nothing else:
+<CLARIFICATION_DONE>
+`;
+
+/**
+ * Analyst clarification answer — each analyst is re-invoked on its own
+ * provider and must answer the moderator's specific question directly.
+ * Answers are intentionally capped (60-100 words) so they stay under the
+ * verdict transcript's 100-token-per-turn cap and nothing gets truncated.
+ */
+export const ANALYST_CLARIFICATION_RESPONSE_PROMPT = `
+**ROLE: ENSEMBLE DEBATE PARTICIPANT — CLARIFICATION ANSWER**
+
+You are {{NAME}}. The moderator has asked you this specific clarifying question:
+{{QUESTION}}
+
+**YOUR TASK:**
+1. Answer the moderator's question DIRECTLY and ONLY. 60-100 words max.
+2. Give exact numbers: specific price levels, indicator values, timeframes, or R:R math. No hand-waving.
+3. If the moderator's question contains a misunderstanding of your position or of the shared market data, CORRECT it explicitly and briefly — then answer.
+4. Do NOT restate your prior analysis, do NOT repeat your opening statement, do NOT introduce new sections.
+
+**STYLE:**
+- Plain prose only. NO JSON, NO XML tags, NO section headers.
+- Start your reply with exactly: **{{NAME}}:** then your answer.
+`;
+
+/**
+ * Moderator clarification judgment — a short internal call after each
+ * clarification cycle's answers. The moderator decides whether the answers
+ * resolved its concerns. Output is machine-parsed: exactly one marker.
+ */
+export const MODERATOR_CLARIFICATION_JUDGMENT_PROMPT = `
+**ROLE: ENSEMBLE DEBATE MODERATOR — CLARIFICATION JUDGMENT**
+
+You asked the analysts the questions below and received their answers. Decide whether the answers FULLY resolve your concerns and are specific enough to proceed to the final verdict.
+
+**RULES:**
+- Satisfied = every material question was answered with exact numbers/levels and no critical uncertainty remains.
+- Unsatisfied = answers are still vague, evasive, contradictory, or missing key numbers, AND another clarification round could realistically resolve them.
+- Do not keep asking forever: if another round would not change the signal, declare SATISFIED.
+
+**OUTPUT FORMAT (STRICT):**
+Output exactly ONE of the following markers and NOTHING else:
+<CLARIFICATION_SATISFIED>
+or
+<CLARIFICATION_UNSATISFIED>
+`;

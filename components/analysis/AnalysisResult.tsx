@@ -237,9 +237,11 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
     const isShort = safeDirectionString === 'Short';
     const isNeutral = !isLong && !isShort;
 
-    const directionColor = isLong ? 'text-emerald-400' : isShort ? 'text-rose-400' : 'text-gray-400';
-    const directionBg = isLong ? 'bg-emerald-500/15 border-emerald-400/30 shadow-emerald-500/20' : isShort ? 'bg-rose-500/15 border-rose-400/30 shadow-rose-500/20' : 'bg-gray-500/15 border-gray-400/30 shadow-gray-500/20';
-    const directionGradient = isLong ? 'from-emerald-500/30 via-emerald-500/10 to-transparent' : isShort ? 'from-rose-500/30 via-rose-500/10 to-transparent' : 'from-gray-500/30 via-gray-500/10 to-transparent';
+    const directionVisual = isLong
+        ? { accent: '#34d399', border: 'rgba(52, 211, 153, 0.55)', surface: 'rgba(6, 78, 59, 0.32)', glow: 'rgba(16, 185, 129, 0.22)', gradient: 'linear-gradient(135deg, rgba(16, 185, 129, 0.28), rgba(6, 78, 59, 0.12) 42%, transparent 78%)' }
+        : isShort
+            ? { accent: '#fb7185', border: 'rgba(251, 113, 133, 0.55)', surface: 'rgba(127, 29, 29, 0.32)', glow: 'rgba(244, 63, 94, 0.22)', gradient: 'linear-gradient(135deg, rgba(244, 63, 94, 0.28), rgba(127, 29, 29, 0.12) 42%, transparent 78%)' }
+            : { accent: '#8aabd8', border: 'rgba(138, 171, 216, 0.55)', surface: 'rgba(33, 47, 67, 0.38)', glow: 'rgba(100, 141, 198, 0.22)', gradient: 'linear-gradient(135deg, rgba(100, 141, 198, 0.28), rgba(33, 47, 67, 0.14) 42%, transparent 78%)' };
 
     // Helper to find family UI details
     const familyData = detectedPatternFamily ? FAMILY_UI_DATA.find(f =>
@@ -285,7 +287,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
             {/* Coin Name Header */}
             <div className="mb-4 sm:mb-6 flex items-center px-1 justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-3 sm:gap-4 overflow-hidden min-w-0">
-                    <div className={`w-1.5 h-10 sm:w-2 sm:h-14 rounded-full shrink-0 ${isLong ? 'bg-gradient-to-b from-emerald-400 to-emerald-600 shadow-[0_0_20px_rgba(228,228,231,0.5)]' : isShort ? 'bg-gradient-to-b from-rose-400 to-rose-600 shadow-[0_0_20px_rgba(107, 107, 115,0.5)]' : 'bg-gradient-to-b from-cyan-400 to-cyan-600 shadow-[0_0_20px_rgba(176, 176, 182,0.5)]'}`}></div>
+                    <div className="w-1.5 h-10 sm:w-2 sm:h-14 rounded-full shrink-0" style={{ background: `linear-gradient(to bottom, ${directionVisual.accent}, ${directionVisual.accent}99)`, boxShadow: `0 0 20px ${directionVisual.glow}` }}></div>
                     <h3 className="text-2xl sm:text-4xl font-black text-white tracking-tight uppercase truncate min-w-0 drop-shadow-lg">{coinName}</h3>
                     <span className="px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-[10px] sm:text-xs font-bold bg-zinc-800 text-zinc-300 border border-white/10 uppercase tracking-wider shrink-0 shadow-lg">FUTURES</span>
                 </div>
@@ -391,22 +393,23 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
 
             {/* Header Card (Collapsible Trigger) - Modern Glassmorphism */}
             <div
-                className={`relative overflow-hidden ${isDetailsVisible ? 'rounded-t-3xl sm:rounded-t-[2rem] border-b-0' : 'rounded-3xl sm:rounded-[2rem] hover:scale-[1.01] cursor-pointer'} border-2 ${isLong ? 'border-emerald-400/40' : isShort ? 'border-rose-400/40' : 'border-gray-400/40'} bg-zinc-900 transition-all duration-500 group shadow-2xl hover:shadow-3xl`}
+                className={`relative overflow-hidden ${isDetailsVisible ? 'rounded-t-3xl sm:rounded-t-[2rem] border-b-0' : 'rounded-3xl sm:rounded-[2rem] hover:scale-[1.01] cursor-pointer'} border-2 bg-zinc-900 transition-all duration-500 group shadow-2xl hover:shadow-3xl`}
+                style={{ borderColor: directionVisual.border }}
                 onClick={() => setIsDetailsVisible(!isDetailsVisible)}
             >
                 {/* Premium Gradient Overlay */}
-                <div className={`absolute inset-0 bg-gradient-to-br ${directionGradient}`}></div>
+                <div className="absolute inset-0" style={{ background: directionVisual.gradient }}></div>
                 <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent"></div>
 
                 {/* Animated Glow Effect */}
-                <div className={`absolute -inset-1 rounded-3xl blur-2xl opacity-30 ${isLong ? 'bg-emerald-500' : isShort ? 'bg-rose-500' : 'bg-gray-500'} group-hover:opacity-40 transition-opacity duration-500`}></div>
+                <div className="absolute -inset-1 rounded-3xl blur-2xl opacity-30 group-hover:opacity-40 transition-opacity duration-500" style={{ backgroundColor: directionVisual.glow }}></div>
 
                 <div className="relative p-4 sm:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4 sm:gap-6 z-10">
                     {/* Direction, Type, and Confidence - stacks vertically on mobile */}
                     <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-8 w-full sm:w-auto">
                         {/* Row 1: Direction Badge + Trading Style */}
                         <div className="flex items-center gap-3 sm:gap-5">
-                            <div className={`px-4 py-2.5 sm:px-6 sm:py-3.5 rounded-2xl font-black text-lg sm:text-2xl uppercase tracking-wide border-2 shadow-xl transition-transform duration-300 group-hover:scale-105 ${directionBg} ${directionColor}`}>
+                            <div className="px-4 py-2.5 sm:px-6 sm:py-3.5 rounded-2xl font-black text-lg sm:text-2xl uppercase tracking-wide border-2 shadow-xl transition-transform duration-300 group-hover:scale-105" style={{ color: directionVisual.accent, backgroundColor: directionVisual.surface, borderColor: directionVisual.border, boxShadow: `0 12px 30px ${directionVisual.glow}` }}>
                                 {safeDirectionString}
                             </div>
                             {/* Trade Type Badge - Always visible next to direction */}

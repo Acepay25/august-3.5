@@ -83,8 +83,6 @@ export interface UseAnalysisPipelineParams {
     setIsHybridLoading: (v: boolean) => void;
     isRateLimited: boolean;
     setIsRateLimited: (v: boolean) => void;
-    setIsLiveAnalysisVisible: (v: boolean) => void;
-    setIsAnalysisTypingComplete: (v: boolean) => void;
     setHighlightedAnalysisId: (v: string | null) => void;
     setIsPostMortemInProgress: (v: boolean) => void;
     setIsLivePostMortemVisible: (v: boolean) => void;
@@ -151,7 +149,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         isAnalysisInProgress, setIsAnalysisInProgress,
         isHybridLoading, setIsHybridLoading,
         isRateLimited, setIsRateLimited,
-        setIsLiveAnalysisVisible, setIsAnalysisTypingComplete,
         setHighlightedAnalysisId,
         setIsPostMortemInProgress, setIsLivePostMortemVisible,
         isAccuracyModeEnabled, accuracySubMode,
@@ -248,7 +245,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         debateMessageId: string,
         currentTurns: DebateTurn[],
         thoughtMap: Record<string, string>,
-        reasoningMap: Record<string, string>
+        reasoningMap: Record<string, string>,
+        activeSpeakers: Record<string, number>
     ) => {
         updateMessages(prev => {
             const messageIndex = prev.findIndex(m => m.id === debateMessageId);
@@ -258,6 +256,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 debateTurns: currentTurns,
                 thoughtProcesses: thoughtMap,
                 reasoningProcesses: reasoningMap,
+                activeDebateSpeakers: { ...activeSpeakers },
             };
             const newMessages = [...prev];
             newMessages[messageIndex] = updatedMessage;
@@ -282,6 +281,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     const [liveOutputs, setLiveOutputs] = useState<LiveThoughts>({});
     const [liveReasoning, setLiveReasoning] = useState<LiveThoughts>({});
     const reasoningMapRef = useRef<Record<string, string>>({});
+    const activeDebateSpeakersRef = useRef<Record<string, number>>({});
+    const debateTurnsRef = useRef<DebateTurn[]>([]);
     const [currentGateResult, setCurrentGateResult] = useState<GateOutput | null>(null);
     const [currentVisionData, setCurrentVisionData] = useState<string[]>([]);
     const [isDeepAnalysis, setIsDeepAnalysis] = useState<boolean>(false);
@@ -303,10 +304,9 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         setLoadingMessage(null);
         setIsAnalysisInProgress(false);
         setIsPostMortemInProgress(false);
-        setIsLiveAnalysisVisible(false);
         setIsLivePostMortemVisible(false);
         setAnalysisSteps([]);
-    }, [activeConversationId, setIsLiveAnalysisVisible, setIsLivePostMortemVisible, setIsPostMortemInProgress]);
+    }, [activeConversationId, setIsLivePostMortemVisible, setIsPostMortemInProgress]);
 
     // Hybrid data and pipeline steps are ensemble-only. Clear any stale visual
     // state immediately when the user switches back to casual chat mode.
@@ -971,8 +971,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     setLiveOutputs(Object.fromEntries(enabledProviders.map(p => [p.thoughtsKey, null])));
                     setLiveReasoning(Object.fromEntries(enabledProviders.map(p => [p.thoughtsKey, null])));
                     reasoningMapRef.current = {};
-                    setIsAnalysisTypingComplete(false);
-                    setIsLiveAnalysisVisible(true);
+                    activeDebateSpeakersRef.current = {};
+                    debateTurnsRef.current = [];
 
                     const analysisPromises = enabledProviders.map(provider =>
                         cachedAnalyzeTradingView(
@@ -1138,6 +1138,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                         // Add thought processes so all analysts appear in UI
                         thoughtProcesses: { ...thoughtMap },
                         reasoningProcesses: { ...reasoningMapRef.current },
+                        activeDebateSpeakers: {},
 
                         isAccuracyMode: isAccuracyModeEnabled,
                         isLensMode: lensConfig?.enabled ?? false,
@@ -1221,10 +1222,24 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                                 thoughtMap.moderator = reasoningMapRef.current.moderator;
                             },
                             (speaker: string, reasoning: string) => {
-                                // Rebuttal-round reasoning — keyed by speaker
-                                // so the debate transcript's thinking
-                                // collapsibles can show it.
+                                // Rebuttal and clarification reasoning is keyed by speaker
+                                // so the debate chat can show it live.
                                 reasoningMapRef.current[speaker] = reasoning;
+                            },
+                            (speaker: string, round: number, active: boolean) => {
+                                if (active) {
+                                    activeDebateSpeakersRef.current[speaker] = round;
+                                } else if (activeDebateSpeakersRef.current[speaker] === round) {
+                                    delete activeDebateSpeakersRef.current[speaker];
+                                }
+                                throttledDebateUpdate(
+                                    requestConversationId,
+                                    debateMessageId,
+                                    debateTurnsRef.current,
+                                    thoughtMap,
+                                    reasoningMapRef.current,
+                                    activeDebateSpeakersRef.current,
+                                );
                             }
                         );
                     }
@@ -1313,7 +1328,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             }
 
                             // P1-5: Coalesce per-token updates into one per frame.
-                            throttledDebateUpdate(requestConversationId, debateMessageId, currentTurns, thoughtMap, reasoningMapRef.current);
+                            debateTurnsRef.current = currentTurns;
+                            throttledDebateUpdate(requestConversationId, debateMessageId, currentTurns, thoughtMap, reasoningMapRef.current, activeDebateSpeakersRef.current);
                         }
                     } else {
                         // STANDARD MODE — REAL debate: the pipeline receives
@@ -1336,15 +1352,26 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             const currentTurns: DebateTurn[] = Object.entries(turnTexts)
                                 .map(([k, text]) => {
                                     const sep = k.indexOf('::');
+                                    const speaker = k.slice(sep + 2) as DebateTurn['speaker'];
+                                    const cleanedText = speaker === 'Moderator'
+                                        ? text
+                                            .replace(/<CLARIFICATION_(?:DONE|SATISFIED|UNSATISFIED)>/gi, '')
+                                            .replace(/<MODERATOR_ERROR>[\s\S]*?<\/MODERATOR_ERROR>/gi, '')
+                                            .replace(/<JSON_PLAN>[\s\S]*/i, '')
+                                            .replace(/<\/?DEBATE_END>/gi, '')
+                                            .trim()
+                                        : text.trim();
                                     return {
-                                        speaker: k.slice(sep + 2) as DebateTurn['speaker'],
+                                        speaker,
                                         round: parseInt(k.slice(0, sep), 10) || undefined,
-                                        text: sanitizeAIResponse(text.trim()),
+                                        text: sanitizeAIResponse(cleanedText),
                                     };
                                 })
+                                .filter(turn => Boolean(turn.text))
                                 .sort((a, b) => (a.round ?? 0) - (b.round ?? 0));
 
-                            throttledDebateUpdate(requestConversationId, debateMessageId, currentTurns, thoughtMap, reasoningMapRef.current);
+                            debateTurnsRef.current = currentTurns;
+                            throttledDebateUpdate(requestConversationId, debateMessageId, currentTurns, thoughtMap, reasoningMapRef.current, activeDebateSpeakersRef.current);
                         }
 
                         // The moderator's verdict prose lives before the
@@ -1363,14 +1390,25 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                                     const finalTurns: DebateTurn[] = Object.entries(turnTexts)
                                         .map(([k, text]) => {
                                             const sep = k.indexOf('::');
+                                            const speaker = k.slice(sep + 2) as DebateTurn['speaker'];
+                                            const cleanedText = speaker === 'Moderator'
+                                                ? text
+                                                    .replace(/<CLARIFICATION_(?:DONE|SATISFIED|UNSATISFIED)>/gi, '')
+                                                    .replace(/<MODERATOR_ERROR>[\s\S]*?<\/MODERATOR_ERROR>/gi, '')
+                                                    .replace(/<JSON_PLAN>[\s\S]*/i, '')
+                                                    .replace(/<\/?DEBATE_END>/gi, '')
+                                                    .trim()
+                                                : text.trim();
                                             return {
-                                                speaker: k.slice(sep + 2) as DebateTurn['speaker'],
+                                                speaker,
                                                 round: parseInt(k.slice(0, sep), 10) || undefined,
-                                                text: sanitizeAIResponse(text.trim()),
+                                                text: sanitizeAIResponse(cleanedText),
                                             };
                                         })
+                                        .filter(turn => Boolean(turn.text))
                                         .sort((a, b) => (a.round ?? 0) - (b.round ?? 0));
-                                    throttledDebateUpdate(requestConversationId, debateMessageId, finalTurns, thoughtMap, reasoningMapRef.current);
+                                    debateTurnsRef.current = finalTurns;
+                                    throttledDebateUpdate(requestConversationId, debateMessageId, finalTurns, thoughtMap, reasoningMapRef.current, activeDebateSpeakersRef.current);
                                 }
                             }
                         }
@@ -1459,6 +1497,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             debateTurns: existingMessage.debateTurns,
                             thoughtProcesses: { ...thoughtMap },
                             reasoningProcesses: { ...reasoningMapRef.current },
+                            activeDebateSpeakers: {},
                             // Multi-Timeframe Confluence from Hybrid Intelligence
                             confluenceData: freshHybridData?.confluence ? {
                                 score: freshHybridData.confluence.score,
@@ -1675,6 +1714,7 @@ const result = await cachedAnalyzeTradingView(
                 return {
                     ...m,
                     isDebating: false,
+                    activeDebateSpeakers: {},
                     text: 'The debate was interrupted by an error before the moderator could issue a final verdict.',
                 };
             }).filter((m): m is Message => m !== null));
@@ -1719,7 +1759,6 @@ const result = await cachedAnalyzeTradingView(
             setLoadingMessage(null);
             setIsAnalysisInProgress(false);
             setIsPostMortemInProgress(false);
-            setIsLiveAnalysisVisible(false);
             setIsLivePostMortemVisible(false);
         }
     };

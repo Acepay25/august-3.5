@@ -13,7 +13,6 @@ interface UIStateShape {
     isLiveMarketVisible: boolean;
     isAdvancedAnalyticsOpen: boolean;
     isVersionHistoryVisible: boolean;
-    isLiveAnalysisVisible: boolean;
     isLivePostMortemVisible: boolean;
     isMobileMenuOpen: boolean;
     showMismatchModal: boolean;
@@ -29,7 +28,6 @@ interface UIStateShape {
     isLoading: boolean;
     isHybridLoading: boolean;
     isCalculatingAIProbabilities: boolean;
-    isAnalysisTypingComplete: boolean;
     isPostMortemTypingComplete: boolean;
     isAnalysisInProgress: boolean;
     isPostMortemInProgress: boolean;
@@ -49,7 +47,6 @@ const initialState: UIStateShape = {
     isLiveMarketVisible: false,
     isAdvancedAnalyticsOpen: false,
     isVersionHistoryVisible: false,
-    isLiveAnalysisVisible: false,
     isLivePostMortemVisible: false,
     isMobileMenuOpen: false,
     showMismatchModal: false,
@@ -63,7 +60,6 @@ const initialState: UIStateShape = {
     isLoading: false,
     isHybridLoading: false,
     isCalculatingAIProbabilities: false,
-    isAnalysisTypingComplete: false,
     isPostMortemTypingComplete: false,
     isAnalysisInProgress: false,
     isPostMortemInProgress: false,
@@ -93,7 +89,6 @@ const OVERLAY_KEYS: (keyof UIStateShape)[] = [
     'isLiveMarketVisible',
     'isAdvancedAnalyticsOpen',
     'isVersionHistoryVisible',
-    'isLiveAnalysisVisible',
     'isLivePostMortemVisible',
     'isMobileMenuOpen',
     'showMismatchModal',
@@ -107,7 +102,6 @@ const PROGRESS_KEYS: (keyof UIStateShape)[] = [
     'isLoading',
     'isHybridLoading',
     'isCalculatingAIProbabilities',
-    'isAnalysisTypingComplete',
     'isPostMortemTypingComplete',
     'isAnalysisInProgress',
     'isPostMortemInProgress',

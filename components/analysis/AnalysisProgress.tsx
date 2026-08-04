@@ -160,9 +160,7 @@ interface AnalysisProgressProps {
   isActive: boolean;
   onCancel: () => void;
   isPostMortem?: boolean;
-  isAnalysisInProgress?: boolean;
   isPostMortemInProgress?: boolean;
-  onOpenLiveView?: () => void;
   onOpenPostMortem?: () => void;
 }
 
@@ -171,9 +169,7 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({
   isActive,
   onCancel,
   isPostMortem,
-  isAnalysisInProgress,
   isPostMortemInProgress,
-  onOpenLiveView,
   onOpenPostMortem,
 }) => {
   const totalElapsed = useMemo(() => {
@@ -210,15 +206,6 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({
 
           {/* Action buttons row */}
           <div className="flex items-center gap-3 mt-3 pt-3 border-t border-zinc-800">
-            {isAnalysisInProgress && onOpenLiveView && (
-              <button
-                onClick={onOpenLiveView}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 transition-colors"
-              >
-                <EyeIcon className="size-3.5" />
-                Live View
-              </button>
-            )}
             {isPostMortemInProgress && onOpenPostMortem && (
               <button
                 onClick={onOpenPostMortem}

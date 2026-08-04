@@ -34,7 +34,6 @@ interface ChatAreaProps {
     loadingMessage: string | null;
     isAnalysisInProgress: boolean;
     isPostMortemInProgress: boolean;
-    setIsLiveAnalysisVisible: (val: boolean) => void;
     setIsLivePostMortemVisible: (val: boolean) => void;
     handleCancelAnalysis: () => void;
     onDeleteMessages: (ids: string[]) => void;
@@ -123,7 +122,6 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     loadingMessage,
     isAnalysisInProgress,
     isPostMortemInProgress,
-    setIsLiveAnalysisVisible,
     setIsLivePostMortemVisible,
     handleCancelAnalysis,
     onDeleteMessages,
@@ -406,9 +404,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                                 isActive={!!loadingMessage}
                                 onCancel={handleCancelAnalysis}
                                 isPostMortem={isPostMortemInProgress}
-                                isAnalysisInProgress={isAnalysisInProgress}
                                 isPostMortemInProgress={isPostMortemInProgress}
-                                onOpenLiveView={() => setIsLiveAnalysisVisible(true)}
                                 onOpenPostMortem={() => setIsLivePostMortemVisible(true)}
                             />
                         ) : (
@@ -425,7 +421,6 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                                 </div>
                                 <p className="mt-1 text-xs text-zinc-500">{loadingMessage}</p>
                                 <div className="flex items-center gap-4 mt-4">
-                                    {isAnalysisInProgress && <button onClick={() => setIsLiveAnalysisVisible(true)} className="flex items-center gap-2 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 font-medium py-1.5 px-4 rounded-full text-xs transition-all uppercase tracking-wide"><EyeIcon />Live View</button>}
                                     {isPostMortemInProgress && <button onClick={() => setIsLivePostMortemVisible(true)} className="flex items-center gap-2 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 font-medium py-1.5 px-4 rounded-full text-xs transition-all uppercase tracking-wide"><EyeIcon />View Post-Mortem</button>}
                                     <button onClick={handleCancelAnalysis} className="bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 font-medium py-1.5 px-4 rounded-full text-xs transition-all uppercase tracking-wide">Stop generating</button>
                                 </div>

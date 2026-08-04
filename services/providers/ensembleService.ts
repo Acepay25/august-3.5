@@ -17,7 +17,10 @@ import {
     MODERATOR_FINAL_AUTHORITY_PROTOCOL,
     DEBATE_RESPONSE_PROMPT,
     MODERATOR_FINAL_VERDICT_PROMPT,
-    MODERATOR_FINAL_VERDICT_PROMPT_COMPACT
+    MODERATOR_FINAL_VERDICT_PROMPT_COMPACT,
+    MODERATOR_CLARIFICATION_QUESTIONS_PROMPT,
+    ANALYST_CLARIFICATION_RESPONSE_PROMPT,
+    MODERATOR_CLARIFICATION_JUDGMENT_PROMPT
 } from '../../constants/prompts';
 import { DUAL_SCENARIO_JSON_SCHEMA } from '../../constants/schemas';
 import { parseLiveMarketData } from '../../utils/liveMarketParser';
@@ -2111,6 +2114,15 @@ Start with <DEBATE_START> now.
  */
 export const REAL_DEBATE_RESPONSE_ROUNDS = 2;
 
+/**
+ * Maximum number of moderator clarification cycles that run AFTER the rebuttal
+ * rounds (1-3) and BEFORE the verdict. Each cycle = moderator questions →
+ * analyst answers → moderator satisfaction judgment. The first cycle always
+ * runs; repeats are capped here (3 total = 1 initial + up to 2 extra rounds).
+ * After the cap the moderator must proceed to the verdict regardless.
+ */
+export const MAX_CLARIFICATION_CYCLES = 3;
+
 /** An analyst participating in the real debate — the provider is needed to re-call it between rounds. */
 export interface RealDebateAnalyst {
     provider: { config: ProviderConfig; name: string; model: string; thoughtsKey: string };
@@ -2121,13 +2133,53 @@ export interface RealDebateAnalyst {
  * Streaming event emitted by conductRealDebate. `text` is a DELTA chunk —
  * the consumer accumulates it per (speaker, round). Rounds:
  * 1 = opening statements, 2..REAL_DEBATE_RESPONSE_ROUNDS+1 = rebuttals,
- * last round = moderator verdict (speaker 'Moderator').
+ * then clarification cycles (question round + answer round each), and the
+ * LAST round = moderator verdict (speaker 'Moderator').
  */
 export interface RealDebateTurnEvent {
     speaker: string;
     round: number;
     text: string;
 }
+
+// Machine-readable markers emitted by the clarification phase. The questions
+// call may short-circuit with <CLARIFICATION_DONE>; the (internal) judgment
+// call outputs one of the SATISFIED/UNSATISFIED markers.
+const CLARIFICATION_MARKERS = /<CLARIFICATION_(DONE|SATISFIED|UNSATISFIED)>/gi;
+
+const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const getAnalystClarificationQuestion = (questionText: string, analystName: string): string => {
+    const speaker = escapeRegExp(analystName);
+    const match = questionText.match(new RegExp(`(?:^|\\n)\\s*\\*{0,2}${speaker}\\*{0,2}\\s*:\\s*([\\s\\S]*?)(?=\\n\\s*\\*{0,2}[^\\n:]+\\*{0,2}\\s*:|$)`, 'i'));
+    return (match?.[1] || questionText).trim();
+};
+
+/**
+ * Builds a compact transcript of every turn up to (and including) maxRound —
+ * moderator turns first, then each analyst, in chronological round order.
+ * Used for the clarification questions and the final verdict. Each turn is
+ * trimmed to stay within the verdict transcript's per-turn cap; the whole
+ * block is capped at `totalTokens`.
+ */
+const buildDebateTranscript = (
+    names: string[],
+    roundTexts: Record<string, string[]>,
+    maxRound: number,
+    perTurnTokens = 100,
+    totalTokens = 1500
+): string => {
+    const lines: string[] = [];
+    for (let r = 1; r <= maxRound; r++) {
+        const moderatorText = roundTexts.Moderator?.[r]?.replace(CLARIFICATION_MARKERS, '').trim();
+        if (moderatorText) lines.push(`**Moderator (Round ${r}):**\n${truncateTextToTokens(moderatorText, perTurnTokens)}`);
+        for (const name of names) {
+            const text = roundTexts[name]?.[r];
+            if (text) lines.push(`**${name} (Round ${r}):**\n${truncateTextToTokens(text, perTurnTokens)}`);
+        }
+    }
+    return truncateTextToTokens(lines.join('\n\n') || 'The debate produced no transcript.', totalTokens);
+};
 
 /**
  * Run a REAL multi-round debate:
@@ -2137,11 +2189,17 @@ export interface RealDebateTurnEvent {
  *    parallel within a round, and asked to rebut the others' latest positions.
  *    A failed/rate-limited analyst is skipped for the remaining rounds; the
  *    debate continues with whoever is left.
- * 3. Final — the moderator (moderatorConfig + moderatorModel) receives the
+ * 3. Clarification loop — the moderator reviews the transcript and asks each
+ *    analyst targeted clarifying questions; the analysts answer (60-100 words);
+ *    a short internal judgment call decides whether the concerns are resolved.
+ *    Unsatisfied → one more cycle, capped at MAX_CLARIFICATION_CYCLES.
+ * 4. Final — the moderator (moderatorConfig + moderatorModel) receives the
  *    full transcript plus the usual context blocks (gate reconciliation,
  *    Monte Carlo, lens roles, learning context, recent insights, market
  *    telemetry) and streams the verdict + </DEBATE_END> + <JSON_PLAN>
  *    contract that the pipeline parses into the final trade card.
+ * `onSpeakerStatus` is invoked with (speaker, round, active) around every
+ * stream so the UI can show exactly which models are currently generating.
  */
 export const conductRealDebate = async function* (
     analysts: RealDebateAnalyst[],
@@ -2159,7 +2217,8 @@ export const conductRealDebate = async function* (
     learningContext?: string,
     signal?: AbortSignal,
     onReasoning?: (reasoning: string) => void,
-    onAnalystReasoning?: (speaker: string, reasoning: string) => void
+    onAnalystReasoning?: (speaker: string, reasoning: string) => void,
+    onSpeakerStatus?: (speaker: string, round: number, active: boolean) => void
 ): AsyncGenerator<RealDebateTurnEvent, void, unknown> {
 
     if (analysts.length < 2) {
@@ -2167,8 +2226,9 @@ export const conductRealDebate = async function* (
     }
 
     const names = analysts.map(a => a.provider.name);
-    // Per-analyst text per round (1-based index). Rebuttal deltas accumulate.
-    const roundTexts: Record<string, string[]> = {};
+    const activeAnalystNames = new Set(names);
+    // Per-speaker text per round (1-based index). Rebuttal deltas accumulate.
+    const roundTexts: Record<string, string[]> = { Moderator: [] };
     analysts.forEach(a => { roundTexts[a.provider.name] = []; });
 
     // --- ROUND 1: OPENING STATEMENTS (free — each analyst's own final output) ---
@@ -2189,7 +2249,7 @@ export const conductRealDebate = async function* (
         // Context is snapshotted BEFORE the round starts, so every analyst
         // responds to the others' previous round — never to themselves.
         const tasks = analysts
-            .filter(a => roundTexts[a.provider.name]?.[round - 1])
+            .filter(a => activeAnalystNames.has(a.provider.name) && roundTexts[a.provider.name]?.[round - 1])
             .map((analyst) => {
                 const ownPosition = roundTexts[analyst.provider.name]?.[round - 1];
                 const others = analysts
@@ -2241,6 +2301,11 @@ export const conductRealDebate = async function* (
             if (notify) { const n = notify; notify = null; n(); }
         };
 
+        // Mark every active speaker of this round as streaming BEFORE the
+        // tasks launch — a provider that finishes in 50ms never appears as
+        // active otherwise.
+        for (const task of tasks) onSpeakerStatus?.(task.name, round, true);
+
         for (const task of tasks) {
             task.run(delta => push(task.name, delta))
                 .catch((e: any) => {
@@ -2248,7 +2313,7 @@ export const conductRealDebate = async function* (
                     if (!isAbort) {
                         console.warn(`[RealDebate] ${task.name} failed Round ${round}:`, e?.message || e);
                         // Analyst drops out of the debate — remaining rounds continue.
-                        delete roundTexts[task.name];
+                        activeAnalystNames.delete(task.name);
                     }
                 })
                 .finally(() => {
@@ -2268,22 +2333,201 @@ export const conductRealDebate = async function* (
             roundTexts[item.name][round] = (roundTexts[item.name][round] || '') + item.delta;
             yield { speaker: item.name, round, text: item.delta };
         }
+        for (const task of tasks) onSpeakerStatus?.(task.name, round, false);
+    }
+
+    // --- CLARIFICATION LOOP ---
+    // After the rebuttal rounds and BEFORE the verdict, the moderator reviews
+    // the full transcript and asks each analyst 1-2 targeted clarifying
+    // questions; the analysts answer (60-100 words) on their own providers
+    // in parallel; a short internal judgment call decides whether the
+    // concerns are resolved. Unsatisfied → one more cycle, capped at
+    // MAX_CLARIFICATION_CYCLES (1 initial + up to 2 repeats). On cycle 3 no
+    // judgment runs — the moderator must proceed to the verdict regardless.
+    //
+    // Round numbering stays dense/dynamic: questions round, answers round,
+    // judgment round (when present). The verdict's `finalRound` is computed
+    // after the loop so the transcript builder can include all turns.
+    let lastRebuttalRound = totalRounds;
+
+    for (let cycle = 1; cycle <= MAX_CLARIFICATION_CYCLES; cycle++) {
+        if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+
+        // -- MODERATOR QUESTIONS (streamed once, ~100 tokens/turn cap) --
+        const questionRound = lastRebuttalRound + 1;
+        const priorQATranscript = buildDebateTranscript(names, roundTexts, lastRebuttalRound, 100, 1500);
+        const questionSystemPrompt = MODERATOR_CLARIFICATION_QUESTIONS_PROMPT.replace('{{ANALYSTS}}', names.join(', '));
+        const questionUserContent = `**THE DEBATE TRANSCRIPT (rounds 1-${lastRebuttalRound}):**\n${priorQATranscript}`;
+        onSpeakerStatus?.('Moderator', questionRound, true);
+        let questionText = '';
+        try {
+            for await (const chunk of getModeratorAnalysisStream(
+                moderatorConfig, moderatorModel,
+                `${questionSystemPrompt}\n\n${questionUserContent}`,
+                signal,
+                onReasoning,
+            )) {
+                if (chunk) {
+                    questionText += chunk;
+                    yield { speaker: 'Moderator', round: questionRound, text: chunk };
+                }
+            }
+        } catch (e: any) {
+            const isAbort = e?.name === 'AbortError' || e?.code === 'ABORT_ERR' || e?.name === 'TimeoutError';
+            if (isAbort) throw e;
+            console.warn('[RealDebate] Clarification questions call failed; proceeding to verdict.', e?.message || e);
+            onSpeakerStatus?.('Moderator', questionRound, false);
+            break;
+        }
+        onSpeakerStatus?.('Moderator', questionRound, false);
+        // Moderator wrapper failures arrive as an error marker rather than a
+        // thrown exception. Skip clarification and proceed to the verdict.
+        if (/<MODERATOR_ERROR>/i.test(questionText)) {
+            console.warn('[RealDebate] Clarification questions returned an error marker; proceeding to verdict.');
+            break;
+        }
+        // Store the moderator turn AFTER marker-stripping so the transcript
+        // doesn't leak <CLARIFICATION_DONE> into the verdict prompt.
+        roundTexts.Moderator[questionRound] = questionText.replace(CLARIFICATION_MARKERS, '').trim();
+
+        // Short-circuit: moderator has no follow-up → skip answers + judgment.
+        // The marker-only question is not a visible turn, so do not reserve its
+        // round number; the verdict remains the next dense round.
+        if (/<CLARIFICATION_DONE>/i.test(questionText)) {
+            break;
+        }
+        lastRebuttalRound = questionRound;
+
+        // -- ANALYST ANSWERS (parallel, each on its own provider) --
+        const answerRound = questionRound + 1;
+        lastRebuttalRound = answerRound;
+        const liveAnalysts = analysts.filter(a => activeAnalystNames.has(a.provider.name));
+        const clarificationTranscript = buildDebateTranscript(
+            names,
+            roundTexts,
+            questionRound,
+            100,
+            1500,
+        );
+        const answerTasks = liveAnalysts.map((analyst) => {
+            const answerSystemPrompt = ANALYST_CLARIFICATION_RESPONSE_PROMPT
+                .replace('{{NAME}}', analyst.provider.name)
+                .replace('{{QUESTION}}', getAnalystClarificationQuestion(questionText, analyst.provider.name));
+            const answerUserContent =
+                `**THE DEBATE TRANSCRIPT (with this round's moderator questions):**\n${clarificationTranscript}\n\n` +
+                `Respond now with your answer for Round ${answerRound}.`;
+            const messages: ChatMessage[] = [
+                { role: 'system', content: answerSystemPrompt },
+                { role: 'user', content: answerUserContent },
+            ];
+            return {
+                name: analyst.provider.name,
+                run: async (emit: (delta: string) => void) => {
+                    for await (const chunk of streamChatRequest(analyst.provider.config, messages, {
+                        temperature: 0.3,
+                        signal,
+                        maxTokens: 300,
+                        onReasoning: (reasoning: string) => onAnalystReasoning?.(analyst.provider.name, reasoning),
+                    })) {
+                        if (chunk) emit(chunk);
+                    }
+                },
+            };
+        });
+
+        for (const task of answerTasks) {
+            onSpeakerStatus?.(task.name, answerRound, true);
+        }
+        const answerQueue: { name: string; delta: string }[] = [];
+        let answerNotify: (() => void) | null = null;
+        let answerFinished = 0;
+        const answerTotal = answerTasks.length;
+        const answerPush = (name: string, delta: string) => {
+            answerQueue.push({ name, delta });
+            if (answerNotify) { const n = answerNotify; answerNotify = null; n(); }
+        };
+        for (const task of answerTasks) {
+            task.run(delta => answerPush(task.name, delta))
+                .catch((e: any) => {
+                    const isAbort = e?.name === 'AbortError' || e?.code === 'ABORT_ERR' || e?.name === 'TimeoutError';
+                    if (!isAbort) {
+                        console.warn(`[RealDebate] ${task.name} clarification answer failed:`, e?.message || e);
+                        // Drop-out semantics mirror the rebuttal rounds.
+                        activeAnalystNames.delete(task.name);
+                    }
+                })
+                .finally(() => {
+                    answerFinished++;
+                    answerPush('__done__', '');
+                });
+        }
+        while (answerFinished < answerTotal || answerQueue.length > 0) {
+            if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+            if (answerQueue.length === 0) {
+                await new Promise<void>(resolve => { answerNotify = resolve; });
+                continue;
+            }
+            const item = answerQueue.shift()!;
+            if (item.name === '__done__') continue;
+            roundTexts[item.name][answerRound] = (roundTexts[item.name][answerRound] || '') + item.delta;
+            yield { speaker: item.name, round: answerRound, text: item.delta };
+        }
+        for (const task of answerTasks) {
+            onSpeakerStatus?.(task.name, answerRound, false);
+        }
+
+        // -- Cap: on cycle 3 there is no judgment — proceed to verdict --
+        if (cycle === MAX_CLARIFICATION_CYCLES) {
+            break;
+        }
+
+        // -- MODERATOR JUDGMENT (short internal call) --
+        const judgmentRound = answerRound;
+        const judgmentTranscript = buildDebateTranscript(
+            names,
+            roundTexts,
+            answerRound,
+            100,
+            1500,
+        );
+        onSpeakerStatus?.('Moderator', judgmentRound, true);
+        let judgmentText = '';
+        let satisfied = true;
+        try {
+            for await (const chunk of getModeratorAnalysisStream(
+                moderatorConfig, moderatorModel,
+                `${MODERATOR_CLARIFICATION_JUDGMENT_PROMPT}\n\n**THE CYCLE Q&A:**\n${judgmentTranscript}`,
+                signal,
+            )) {
+                if (chunk) judgmentText += chunk;
+            }
+        } catch (e: any) {
+            const isAbort = e?.name === 'AbortError' || e?.code === 'ABORT_ERR' || e?.name === 'TimeoutError';
+            if (isAbort) throw e;
+            console.warn('[RealDebate] Clarification judgment call failed; treating as satisfied.', e?.message || e);
+        } finally {
+            onSpeakerStatus?.('Moderator', judgmentRound, false);
+        }
+        // Judgment is internal: it affects control flow but never becomes a
+        // visible transcript turn or consumes a round number.
+        // Fail-safe: ambiguous/empty judgment → treat as satisfied, proceed.
+        const upper = judgmentText.toUpperCase();
+        if (upper.includes('UNSATISFIED')) {
+            satisfied = false;
+        }
+        if (satisfied) {
+            break;
+        }
+        // else: loop again for another cycle
     }
 
     // --- FINAL: MODERATOR VERDICT ---
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
-    // Complete transcript, one entry per analyst per round they spoke.
-    // Turns are trimmed so the moderator prompt stays within safe limits —
-    // oversized prompts are the usual cause of moderator call failures.
-    const transcriptLines: string[] = [];
-    for (const name of names) {
-        for (let r = 1; r <= totalRounds; r++) {
-            const text = roundTexts[name]?.[r];
-            if (text) transcriptLines.push(`**${name} (Round ${r}):**\n${truncateTextToTokens(text, 100)}`);
-        }
-    }
-    const transcriptBlock = truncateTextToTokens(transcriptLines.join('\n\n') || 'The debate produced no transcript.', 1500);
+    // Include every visible analyst and moderator turn in chronological order.
+    // The per-turn 100-token cap is unchanged; the total cap is raised so all
+    // clarification cycles fit before the verdict.
+    const transcriptBlock = buildDebateTranscript(names, roundTexts, lastRebuttalRound, 100, 2400);
 
     // --- CONTEXT BLOCKS (reused from the simulated-debate machinery) ---
     let mcContext = "No Monte Carlo simulation data available.";
@@ -2365,16 +2609,21 @@ export const conductRealDebate = async function* (
         `\n\n**THE DEBATE TRANSCRIPT (COMPACT):**\n${transcriptBlock}`,
     ].join('\n');
 
-    const finalRound = totalRounds + 1;
+    const finalRound = lastRebuttalRound + 1;
     const attempts = [moderatorPrompt, compactModeratorPrompt];
     for (let attempt = 0; attempt < attempts.length; attempt++) {
         if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+        onSpeakerStatus?.('Moderator', finalRound, true);
         let moderatorText = '';
-        for await (const chunk of getModeratorAnalysisStream(moderatorConfig, moderatorModel, attempts[attempt], signal, onReasoning)) {
-            if (chunk) {
-                moderatorText += chunk;
-                yield { speaker: 'Moderator', round: finalRound, text: chunk };
+        try {
+            for await (const chunk of getModeratorAnalysisStream(moderatorConfig, moderatorModel, attempts[attempt], signal, onReasoning)) {
+                if (chunk) {
+                    moderatorText += chunk;
+                    yield { speaker: 'Moderator', round: finalRound, text: chunk };
+                }
             }
+        } finally {
+            onSpeakerStatus?.('Moderator', finalRound, false);
         }
         // Retry only when the attempt clearly failed: an error marker or no
         // JSON plan anywhere in the response. The moderator call is always a
