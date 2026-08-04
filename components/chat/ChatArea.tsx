@@ -14,7 +14,7 @@ import AnalysisProgress from '../analysis/AnalysisProgress';
 const ListHeader = () => <div className="h-16"></div>;
 // Reserve the full vertical footprint of the fixed composer so the final
 // message can always scroll above it instead of being hidden underneath it.
-const ListFooter = () => <div className="h-48 sm:h-56 lg:h-64" aria-hidden="true" />;
+const ListFooter = () => <div className="h-72 sm:h-80 lg:h-96" aria-hidden="true" />;
 
 interface ChatAreaProps {
     messages: Message[];

@@ -546,9 +546,9 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                         </div>
                         <div className="bg-gradient-to-br from-rose-500/15 to-rose-600/5 border border-rose-400/25 rounded-2xl sm:rounded-2xl p-4 shadow-lg hover:shadow-rose-500/10 transition-all duration-300 hover:scale-[1.02]">
                             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-baseline gap-2 sm:gap-3">
-                                <span className="text-xl sm:text-3xl font-mono font-black text-rose-300 tracking-tight break-words drop-shadow-lg">{stopLoss || 'N/A'}</span>
+                                <span className="text-xl sm:text-3xl font-mono font-black tracking-tight break-words drop-shadow-lg" style={{ color: '#fb7185' }}>{stopLoss || 'N/A'}</span>
                                 <div className="flex flex-col items-end gap-1">
-                                    {stopLossPercentage && <span className="text-xs font-mono font-bold text-rose-400 bg-rose-950/60 px-3 py-1.5 rounded-xl sm:rounded-xl border border-rose-400/20 shadow-inner">{stopLossPercentage}</span>}
+                                    {stopLossPercentage && <span className="text-xs font-mono font-bold px-3 py-1.5 rounded-xl sm:rounded-xl border shadow-inner" style={{ color: '#fb7185', backgroundColor: 'rgba(127, 29, 29, 0.42)', borderColor: 'rgba(251, 113, 133, 0.3)' }}>{stopLossPercentage}</span>}
                                     {originalStopLossPercentage && originalStopLossPercentage !== stopLossPercentage && (
                                         <span className="text-[10px] font-mono text-zinc-500 strike-through line-through opacity-60">
                                             {originalStopLossPercentage}
@@ -642,10 +642,10 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                         </div>
                         <div className="space-y-2.5">
                             {(takeProfit && takeProfit.length > 0) ? (takeProfit || []).map((tp, i) => (
-                                <div key={i} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 border border-emerald-400/20 px-4 py-3 rounded-2xl sm:rounded-2xl group hover:scale-[1.02] hover:shadow-emerald-500/10 transition-all duration-300 shadow-lg">
-                                    <span className="font-mono font-black text-xl sm:text-2xl text-emerald-300 break-words drop-shadow-lg">{typeof tp.price === 'object' ? 'Invalid' : tp.price}</span>
-                                    {tp.percentage && <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-950/40 px-3 py-1.5 rounded-xl sm:rounded-xl self-start sm:self-auto border border-emerald-400/20 shadow-inner">{typeof tp.percentage === 'object' ? '' : tp.percentage}</span>}
-                                </div>
+                                <div key={i} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 rounded-2xl border px-4 py-3 shadow-lg transition-all duration-300 group hover:scale-[1.02]" style={{ backgroundColor: 'rgba(6, 78, 59, 0.28)', borderColor: 'rgba(52, 211, 153, 0.3)' }}>
+                                     <span className="font-mono font-black text-xl sm:text-2xl break-words drop-shadow-lg" style={{ color: '#6ee7b7' }}>{typeof tp.price === 'object' ? 'Invalid' : tp.price}</span>
+                                     {tp.percentage && <span className="self-start rounded-xl border px-3 py-1.5 text-[10px] font-mono font-bold shadow-inner sm:self-auto" style={{ color: '#6ee7b7', backgroundColor: 'rgba(6, 78, 59, 0.48)', borderColor: 'rgba(52, 211, 153, 0.3)' }}>{typeof tp.percentage === 'object' ? '' : tp.percentage}</span>}
+                                 </div>
                             )) : <div className="text-zinc-600 text-xs sm:text-sm italic">No targets defined.</div>}
                         </div>
                     </div>
@@ -1226,7 +1226,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                                                         <span className="text-[8px] font-bold text-rose-300 block mb-0.5">RESISTANCE</span>
                                                         <div className="flex flex-wrap gap-1.5">
                                                             {keyLevels.resistance.map((lvl, idx) => (
-                                                                <span key={idx} className="bg-rose-900/20 text-rose-300 border border-rose-500/20 px-1.5 py-0.5 rounded text-[9px]">{lvl}</span>
+                                                                <span key={idx} className="rounded border px-1.5 py-0.5 text-[9px]" style={{ color: '#fda4af', backgroundColor: 'rgba(127, 29, 29, 0.3)', borderColor: 'rgba(251, 113, 133, 0.28)' }}>{lvl}</span>
                                                             ))}
                                                         </div>
                                                     </div>
@@ -1236,7 +1236,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                                                         <span className="text-[8px] font-bold text-emerald-300 block mb-0.5">SUPPORT</span>
                                                         <div className="flex flex-wrap gap-1.5">
                                                             {keyLevels.support.map((lvl, idx) => (
-                                                                <span key={idx} className="bg-emerald-900/20 text-emerald-300 border border-emerald-500/20 px-1.5 py-0.5 rounded text-[9px]">{lvl}</span>
+                                                                <span key={idx} className="rounded border px-1.5 py-0.5 text-[9px]" style={{ color: '#6ee7b7', backgroundColor: 'rgba(6, 78, 59, 0.3)', borderColor: 'rgba(52, 211, 153, 0.28)' }}>{lvl}</span>
                                                             ))}
                                                         </div>
                                                     </div>
