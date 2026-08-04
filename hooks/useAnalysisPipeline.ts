@@ -414,6 +414,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             })
             .slice(0, 3);
 
+        const isStagedEnsemble = isEnsembleEnabled && !isAccuracyModeEnabled && enabledProviders.length > 1;
+
         let effectiveInput = '';
         if (typeof customPrompt === 'string') {
             effectiveInput = customPrompt;
@@ -486,25 +488,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
         const ocrModelsUsed = [...new Set(imagesToUse.map(meta => meta.ocrModelUsed).filter(Boolean) as string[])];
 
-        // IMMEDIATELY show hybrid loading indicator if enabled (before message appears)
-        // BUT skip if preset hybrid data was passed (from auto-capture)
-        if (isEnsembleEnabled && !currentHybridData && !options?.presetHybridData) {
-            // Only show loading and clear data if we are currently disconnected or in error state
-            // This prevents flickering "connecting..." when we are already connected
-            setHybridConnectionStatus(prev => (prev === 'connected' ? 'connected' : 'connecting'));
-            setIsHybridLoading(true);
-            setCurrentHybridData(null);
-        }
-        // Local copy of the freshest hybrid data - the closure-captured `currentHybridData`
-        // stays stale after setCurrentHybridData, so all downstream code must use this variable.
-        let freshHybridData: HybridDataPacket | null = currentHybridData;
-        // If preset hybrid data was passed, use it immediately
-        if (options?.presetHybridData) {
-            setCurrentHybridData(options.presetHybridData);
-            freshHybridData = options.presetHybridData;
-            setIsHybridLoading(false);
-        }
-
         const userMessage: Message = {
             id: `user-${Date.now()}`,
             role: MessageRole.USER,
@@ -512,12 +495,64 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             createdAt: new Date().toISOString(),
             images: dataURLs,
             imageSummaries: imagesToUse.map(meta => meta.summary).filter(Boolean) as string[],
-            ocrModelUsed: ocrModelsUsed.join(', '),
+            ocrModelUsed: ocrModelsUsed.join(','),
         };
 
-        updateRequestMessages(prev => [...prev, userMessage]);
+        const ensembleMessageId = `ensemble-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+        const ensembleProgress = isStagedEnsemble ? {
+            analysts: enabledProviders.map(provider => ({
+                key: provider.thoughtsKey,
+                providerId: provider.config.id,
+                providerName: provider.config.name,
+                modelId: provider.model,
+                modelName: provider.model,
+                displayName: provider.name,
+                status: 'waiting' as const,
+            })),
+            moderator: {
+                status: 'waiting' as const,
+                waitingFor: enabledProviders.map(provider => provider.name),
+            },
+        } : undefined;
+        const ensemblePlaceholder: Message | null = isStagedEnsemble ? {
+            id: ensembleMessageId,
+            role: MessageRole.AI,
+            text: '',
+            createdAt: new Date().toISOString(),
+            isDebating: false,
+            debateTurns: [],
+            ensembleProgress,
+            ocrModelUsed: userMessage.ocrModelUsed,
+            imageSummaries: userMessage.imageSummaries,
+            modelsUsed: Object.fromEntries(enabledProviders.map(provider => [provider.thoughtsKey, provider.model])),
+            isAccuracyMode: isAccuracyModeEnabled,
+            isLensMode: lensConfig?.enabled ?? false,
+            accuracySubMode: isAccuracyModeEnabled ? accuracySubMode : undefined,
+            tradingStyle: (lensConfig?.enabled && lensConfig.tradingStyle !== 'auto') ? (lensConfig.tradingStyle as any) : (lensConfig?.enabled ? 'swing' : undefined),
+        } : null;
+
+        updateRequestMessages(prev => ensemblePlaceholder ? [...prev, userMessage, ensemblePlaceholder] : [...prev, userMessage]);
         setInput('');
         setImages([]);
+
+        const updateEnsembleProgress = (updater: (progress: NonNullable<Message['ensembleProgress']>) => NonNullable<Message['ensembleProgress']>): void => {
+            if (!ensemblePlaceholder) return;
+            updateRequestMessages(prev => prev.map(message => message.id === ensemblePlaceholder.id
+                ? { ...message, ensembleProgress: updater(message.ensembleProgress ?? ensembleProgress!) }
+                : message));
+        };
+
+        if (isEnsembleEnabled && !currentHybridData && !options?.presetHybridData) {
+            setHybridConnectionStatus(prev => (prev === 'connected' ? 'connected' : 'connecting'));
+            setIsHybridLoading(true);
+            setCurrentHybridData(null);
+        }
+        let freshHybridData: HybridDataPacket | null = currentHybridData;
+        if (options?.presetHybridData) {
+            setCurrentHybridData(options.presetHybridData);
+            freshHybridData = options.presetHybridData;
+            setIsHybridLoading(false);
+        }
 
         try {
             const currentMessages = [...messagesRef.current, userMessage];
@@ -974,8 +1009,16 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     activeDebateSpeakersRef.current = {};
                     debateTurnsRef.current = [];
 
-                    const analysisPromises = enabledProviders.map(provider =>
-                        cachedAnalyzeTradingView(
+                    const analysisPromises = enabledProviders.map(provider => {
+                        if (isStagedEnsemble) {
+                            updateEnsembleProgress(progress => ({
+                                ...progress,
+                                analysts: progress.analysts.map(analyst => analyst.key === provider.thoughtsKey
+                                    ? { ...analyst, status: 'analyzing' }
+                                    : analyst),
+                            }));
+                        }
+                        return cachedAnalyzeTradingView(
                             provider.config,
                             provider.model,
                             enhancedPrompt,
@@ -1010,22 +1053,60 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             lensConfig.enabled ? undefined : (customEnsemblePrompt || undefined),
                             // Streamed chain-of-thought deltas accumulate — the
                             // latest full string is pushed to the live cards.
-                            (reasoning: string) => {
-                                reasoningMapRef.current[provider.name] = (reasoningMapRef.current[provider.name] || '') + reasoning;
-                                throttledLiveReasoning(provider.thoughtsKey, reasoningMapRef.current[provider.name]);
-                            }
-                        )
-                            .catch((err: any) => {
-                                const errorMsg = err instanceof Error ? err.message : String(err);
-                                setLiveThoughts(prev => ({ ...prev, [provider.thoughtsKey]: errorMsg }));
-                                setLiveOutputs(prev => ({ ...prev, [provider.thoughtsKey]: 'This analyst was unavailable for this analysis.' }));
-
-                                throw err;
-                            })
-                    );
+                             (reasoning: string) => {
+                                 reasoningMapRef.current[provider.name] = (reasoningMapRef.current[provider.name] || '') + reasoning;
+                                 throttledLiveReasoning(provider.thoughtsKey, reasoningMapRef.current[provider.name]);
+                                 if (isStagedEnsemble) {
+                                     updateEnsembleProgress(progress => ({
+                                         ...progress,
+                                         analysts: progress.analysts.map(analyst => analyst.key === provider.thoughtsKey
+                                             ? { ...analyst, reasoning: reasoningMapRef.current[provider.name] }
+                                             : analyst),
+                                     }));
+                                 }
+                             }
+                         )
+                             .then(result => {
+                                 if (isStagedEnsemble) {
+                                     updateEnsembleProgress(progress => ({
+                                         ...progress,
+                                         analysts: progress.analysts.map(analyst => analyst.key === provider.thoughtsKey
+                                             ? {
+                                                 ...analyst,
+                                                 status: 'complete',
+                                                 finalOutput: result.finalOutput || result.thoughtProcess,
+                                                 thoughtProcess: result.thoughtProcess,
+                                                 reasoning: reasoningMapRef.current[provider.name],
+                                             }
+                                             : analyst),
+                                     }));
+                                 }
+                                 return result;
+                             })
+                             .catch((err: any) => {
+                                 const errorMsg = err instanceof Error ? err.message : String(err);
+                                 setLiveThoughts(prev => ({ ...prev, [provider.thoughtsKey]: errorMsg }));
+                                 setLiveOutputs(prev => ({ ...prev, [provider.thoughtsKey]: 'This analyst was unavailable for this analysis.' }));
+                                 if (isStagedEnsemble) {
+                                     updateEnsembleProgress(progress => ({
+                                         ...progress,
+                                         analysts: progress.analysts.map(analyst => analyst.key === provider.thoughtsKey
+                                             ? { ...analyst, status: 'error', error: 'This analyst was unavailable for this analysis.' }
+                                             : analyst),
+                                     }));
+                                 }
+                                 throw err;
+                             });
+                    });
 
                     const settledResults = await Promise.allSettled(analysisPromises);
                     if (!isCurrentRequest()) return;
+                    if (isStagedEnsemble) {
+                        updateEnsembleProgress(progress => ({
+                            ...progress,
+                            moderator: { status: 'reviewing' },
+                        }));
+                    }
                     setLoadingMessage(null);
                     completeStep('analysis');
 
@@ -1129,28 +1210,24 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     }
                     // ========== END PER-AI MONTE CARLO ==========
 
-                    const debateMessageId = `debate-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+                    const debateMessageId = ensemblePlaceholder?.id || `debate-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
                     const debatePlaceholder: Message = {
-                        id: debateMessageId, role: MessageRole.AI, text: '', createdAt: new Date().toISOString(), isDebating: true, debateTurns: [], ocrModelUsed: userMessage.ocrModelUsed,
-                        imageSummaries: userMessage.imageSummaries,
-                        modelsUsed: Object.fromEntries(enabledProviders.map(p => [p.thoughtsKey, p.model])),
-
-                        // Add thought processes so all analysts appear in UI
-                        thoughtProcesses: { ...thoughtMap },
-                        reasoningProcesses: { ...reasoningMapRef.current },
+                        ...(ensemblePlaceholder || {
+                            id: debateMessageId,
+                            role: MessageRole.AI,
+                            text: '',
+                            createdAt: new Date().toISOString(),
+                        }),
+                        isDebating: true,
+                        debateTurns: [],
+                        thoughtProcesses: { ...(ensemblePlaceholder?.thoughtProcesses || {}), ...thoughtMap },
+                        reasoningProcesses: { ...(ensemblePlaceholder?.reasoningProcesses || {}), ...reasoningMapRef.current },
                         activeDebateSpeakers: {},
-
-                        isAccuracyMode: isAccuracyModeEnabled,
-                        isLensMode: lensConfig?.enabled ?? false,
-                        accuracySubMode: isAccuracyModeEnabled ? accuracySubMode : undefined,
-                        tradingStyle: (lensConfig?.enabled && lensConfig.tradingStyle !== 'auto') ? (lensConfig.tradingStyle as any) : (lensConfig?.enabled ? 'swing' : undefined)
                     };
 
-                    // Prevent Duplicate Keys: Check if message ID already exists
-                    updateRequestMessages(prev => {
-                        if (prev.some(m => m.id === debateMessageId)) return prev;
-                        return [...prev, debatePlaceholder];
-                    });
+                    updateRequestMessages(prev => ensemblePlaceholder
+                        ? prev.map(message => message.id === debateMessageId ? debatePlaceholder : message)
+                        : [...prev, debatePlaceholder]);
                     startStep('debate');
 
                     // --- ENSEMBLE ROUTING ---
@@ -1709,6 +1786,15 @@ const result = await cachedAnalyzeTradingView(
             // never wipe a debate that already produced turns. A bare
             // placeholder (no turns yet) is still removed.
             updateRequestMessages(prev => prev.map(m => {
+                if (m.id === ensemblePlaceholder?.id && m.ensembleProgress) {
+                    return {
+                        ...m,
+                        ensembleProgress: {
+                            ...m.ensembleProgress,
+                            moderator: { status: 'error', error: 'The ensemble could not continue before the debate started.' },
+                        },
+                    };
+                }
                 if (!m.isDebating) return m;
                 if ((m.debateTurns?.length ?? 0) === 0) return null;
                 return {
