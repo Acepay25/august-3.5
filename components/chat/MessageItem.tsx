@@ -118,11 +118,22 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
         ...(message.reasoningProcesses ?? {}),
     }).filter(([, content]) => Boolean(content));
     const isCasualReply = message.role === MessageRole.AI && !message.analysis && !message.isDebating;
+    // Ensemble reasoning is presented in the analyst progress/output card.
+    // Do not duplicate it in the generic chat-level Thinking disclosure.
+    const isEnsembleMessage = Boolean(
+        message.ensembleProgress ||
+        message.isDebating ||
+        Object.keys(message.modelsUsed ?? {}).length > 1
+    );
     const debateTurns = message.debateTurns ?? message.postMortemDebateTurns ?? [];
 
     React.useEffect(() => {
-        if (thinkingEntries.length > 0) setIsThinkingExpanded(true);
-    }, [message.id, thinkingEntries.length]);
+        if (isEnsembleMessage) {
+            setIsThinkingExpanded(false);
+        } else if (thinkingEntries.length > 0) {
+            setIsThinkingExpanded(true);
+        }
+    }, [isEnsembleMessage, message.id, thinkingEntries.length]);
 
     // Extract embedded Live Market JSON if present
     const liveMarketMatch = message.text.match(/\*\*LIVE MARKET DATA\*\*\s*```json\s*([\s\S]*?)\s*```/);
@@ -217,7 +228,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                         {/* Main Content Container - Collapsible if Post-Mortem */}
                         <div id={message.isPostMortem ? `post-mortem-content-${message.id}` : undefined} className={`${message.isPostMortem ? `collapsible-content ${expandedPostMortems[message.id] ? 'expanded' : ''} w-full` : ''}`}>
 
-                            {isCasualReply && (
+                            {isCasualReply && !isEnsembleMessage && (
                                 <div className="mb-4 border-b border-white/10 pb-3">
                                     <button type="button" onClick={() => setIsThinkingExpanded(prev => !prev)} className="flex w-full items-center gap-2 text-left text-sm text-zinc-500 hover:text-zinc-300 transition-colors" aria-expanded={isThinkingExpanded}>
                                         <BrainIcon className="h-4 w-4" />
@@ -226,7 +237,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                         <ChevronDownIcon className={`ml-auto h-4 w-4 transition-transform ${isThinkingExpanded ? 'rotate-180' : ''}`} />
                                     </button>
                                     {isThinkingExpanded && (
-                                        <div className="mt-3 space-y-3 rounded-lg bg-zinc-900/60 px-3 py-2 text-xs leading-relaxed text-zinc-500">
+                                        <div className="mt-3 max-h-[min(52vh,34rem)] space-y-3 overflow-y-auto overscroll-contain rounded-lg border border-white/5 bg-zinc-900/60 px-3 py-3 text-xs leading-relaxed text-zinc-500 custom-scrollbar">
                                             {thinkingEntries.length > 0
                                                 ? thinkingEntries.map(([providerId, content]) => (
                                                     <MarkdownContent key={providerId} content={content} className="text-zinc-400" />
@@ -237,7 +248,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 </div>
                             )}
 
-                            {message.role === MessageRole.AI && !isCasualReply && thinkingEntries.length > 0 && (
+                            {message.role === MessageRole.AI && !isCasualReply && !isEnsembleMessage && thinkingEntries.length > 0 && (
                                 <div className="mb-4 border-b border-white/10 pb-3">
                                     <button type="button" onClick={() => setIsThinkingExpanded(prev => !prev)} className="flex w-full items-center gap-2 text-left text-sm text-zinc-500 hover:text-zinc-300 transition-colors" aria-expanded={isThinkingExpanded}>
                                         <BrainIcon className="h-4 w-4" />
@@ -245,7 +256,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                         <span className="text-zinc-600">for a few seconds</span>
                                         <ChevronDownIcon className={`ml-auto h-4 w-4 transition-transform ${isThinkingExpanded ? 'rotate-180' : ''}`} />
                                     </button>
-                                    {isThinkingExpanded && <div className="mt-3 space-y-3 rounded-lg bg-zinc-900/60 px-3 py-2 text-xs leading-relaxed text-zinc-400">{thinkingEntries.map(([providerId, content]) => <MarkdownContent key={providerId} content={content} className="text-zinc-400" />)}</div>}
+                                    {isThinkingExpanded && <div className="mt-3 max-h-[min(52vh,34rem)] space-y-3 overflow-y-auto overscroll-contain rounded-lg border border-white/5 bg-zinc-900/60 px-3 py-3 text-xs leading-relaxed text-zinc-400 custom-scrollbar">{thinkingEntries.map(([providerId, content]) => <MarkdownContent key={providerId} content={content} className="text-zinc-400" />)}</div>}
                                 </div>
                             )}
 

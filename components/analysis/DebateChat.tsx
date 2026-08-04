@@ -35,7 +35,8 @@ const SpeakerAvatar: React.FC<{ speaker: string; moderator?: boolean; small?: bo
     );
 };
 
-const getRoundLabel = (round: number): string => {
+const getRoundLabel = (round: number, isVerdictRound = false): string => {
+    if (isVerdictRound) return `Round ${round} · Final Verdict`;
     if (round === 1) return 'Round 1 · Openings';
     if (round === 2 || round === 3) return `Round ${round} · Rebuttals`;
     return `Round ${round} · Clarification`;
@@ -57,7 +58,10 @@ const DebateChat: React.FC<DebateChatProps> = ({
     const scrollRef = useRef<HTMLDivElement>(null);
 
     const visibleTurns = useMemo(() => debateTurns.filter(turn => activeDebateSpeakers[turn.speaker] !== turn.round), [debateTurns, activeDebateSpeakers]);
-    const latestModeratorRound = useMemo(() => Math.max(0, ...visibleTurns.filter(turn => turn.speaker === 'Moderator').map(turn => turn.round ?? 0)), [visibleTurns]);
+    // Computed from ALL turns (not just visible ones) so a completed
+    // clarification-question round is never mistaken for the verdict while
+    // the verdict round is still streaming.
+    const latestModeratorRound = useMemo(() => Math.max(0, ...debateTurns.filter(turn => turn.speaker === 'Moderator').map(turn => turn.round ?? 0)), [debateTurns]);
     const activeSpeakers = useMemo(() => Object.entries(activeDebateSpeakers), [activeDebateSpeakers]);
 
     useEffect(() => {
@@ -102,7 +106,8 @@ const DebateChat: React.FC<DebateChatProps> = ({
                 {visibleTurns.map((turn, index) => {
                     const previousRound = visibleTurns[index - 1]?.round;
                     const hasRoundSeparator = typeof turn.round === 'number' && turn.round !== previousRound;
-                    const isVerdict = turn.speaker === 'Moderator' && !isDebating && turn.round === latestModeratorRound;
+                    const isVerdictRound = turn.speaker === 'Moderator' && turn.round === latestModeratorRound;
+                    const isVerdict = isVerdictRound && !isDebating;
                     const displayName = getDisplayName(turn.speaker);
                     const modelName = getModelName(turn.speaker);
                     return (
@@ -110,7 +115,7 @@ const DebateChat: React.FC<DebateChatProps> = ({
                             {hasRoundSeparator && (
                                 <div className="flex items-center gap-2 py-1 text-[10px] font-medium uppercase tracking-widest text-zinc-600">
                                     <span className="h-px flex-1 bg-white/5" />
-                                    <span>{getRoundLabel(turn.round!)}</span>
+                                    <span>{getRoundLabel(turn.round!, isVerdictRound)}</span>
                                     <span className="h-px flex-1 bg-white/5" />
                                 </div>
                             )}
@@ -133,7 +138,7 @@ const DebateChat: React.FC<DebateChatProps> = ({
                     );
                 })}
 
-                {isDebating && (
+                {isDebating && activeSpeakers.length > 0 && (
                     <div className="relative flex justify-center pt-2">
                         <button type="button" onClick={() => setIsThinkingOpen(previous => !previous)} className="flex items-center gap-2 rounded-full border border-white/5 bg-zinc-900 px-3 py-2 text-[10px] uppercase tracking-widest text-cyan-300/80">
                             <span className="flex gap-1" aria-hidden="true"><i className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-bounce [animation-delay:-0.2s]" /><i className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-bounce [animation-delay:-0.1s]" /><i className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-bounce" /></span>
