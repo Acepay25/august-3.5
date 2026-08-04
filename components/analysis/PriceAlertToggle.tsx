@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { TradeAnalysis } from '../../types';
+import { BellIcon } from '../shared/Icons';
 import { PriceAlertService } from '../../services/ui/PriceAlertService';
 
 interface PriceAlertToggleProps {
@@ -35,10 +36,12 @@ const PriceAlertToggle: React.FC<PriceAlertToggleProps> = ({
     return (
         <button
             onClick={handleToggle}
-            className={`px-3 py-2 rounded-lg transition-all flex items-center justify-center gap-1 ${alertEnabled ? 'text-amber-400 bg-amber-500/20 border border-amber-500/30' : 'text-zinc-300 bg-zinc-700 hover:bg-zinc-600'}`}
+            className={`px-3 py-2 rounded-lg border transition-all flex items-center justify-center gap-1.5 ${alertEnabled ? 'border-amber-400/30 bg-amber-500/15 text-amber-200' : 'border-white/10 bg-zinc-700/80 text-zinc-300 hover:border-amber-400/25 hover:bg-amber-500/10 hover:text-amber-200'}`}
             title={alertEnabled ? 'Alerts ON' : 'Enable Price Alerts'}
+            aria-pressed={alertEnabled}
         >
-            {alertEnabled ? '' : ''}
+            <BellIcon className="w-4 h-4" />
+            <span className="hidden sm:inline text-[10px] font-bold uppercase tracking-wider">{alertEnabled ? 'Alerts on' : 'Alert'}</span>
         </button>
     );
 };

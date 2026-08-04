@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { TradeAnalysis, TradeOutcome, AccuracySubMode, ConfidenceCalibration, ConfluenceData, DualScenarioAnalysis, LevelProbabilities, ProbabilityReasoning, TradingStyle } from '../../types';
-import { ChevronDownIcon, BookmarkIcon, BookmarkSolidIcon, BrainIcon, UpdateIcon } from '../shared/Icons';
+import { ChevronDownIcon, BookmarkIcon, BookmarkSolidIcon, BrainIcon, UpdateIcon, ActivityIcon, SkipIcon } from '../shared/Icons';
 import { FAMILY_UI_DATA } from '../../constants/models';
 import { ConfidenceLevel } from '../../services/validation/ConfidenceCalibrationService';
 import { simulateFromAnalysisTime } from '../../services/backtesting/BacktestingService';
@@ -505,8 +505,8 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                     <div className="p-4 sm:p-6 space-y-3">
                         <div className="text-[10px] uppercase font-bold text-zinc-500 tracking-widest flex items-center gap-2 flex-wrap">
                             <div className="flex items-center gap-2">
-                                <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_#8a8a92]"></div>
-                                <span>Entry Zone</span>
+                                   <div className="w-2 h-2 rounded-full" style={{ backgroundColor: directionVisual.accent, boxShadow: `0 0 8px ${directionVisual.glow}` }}></div>
+                                <span style={{ color: directionVisual.accent }}>Entry Zone</span>
                             </div>
                             {/* Entry Timing Score Badge */}
                             {analysisEntryTiming && (
@@ -521,10 +521,10 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                         </div>
                         <div className="space-y-2">
                             {(entryPoints && entryPoints.length > 0) ? (entryPoints || []).map((ep, i) => (
-                                <div key={i} className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 border border-blue-400/20 rounded-2xl sm:rounded-2xl p-4 shadow-lg hover:shadow-blue-500/10 transition-all duration-300 hover:scale-[1.02]">
-                                    <div className="text-xl sm:text-3xl font-mono font-black text-blue-200 tracking-tight break-words drop-shadow-lg">{typeof ep.price === 'object' ? 'Invalid Price' : ep.price}</div>
-                                    <div className="text-xs sm:text-sm text-blue-300/80 leading-tight mt-2 font-medium">{typeof ep.description === 'object' ? '' : ep.description}</div>
-                                </div>
+                                <div key={i} className="rounded-2xl border p-4 shadow-lg transition-all duration-300 hover:scale-[1.02]" style={{ backgroundColor: directionVisual.surface, borderColor: directionVisual.border, boxShadow: `0 10px 24px ${directionVisual.glow}` }}>
+                                     <div className="text-xl sm:text-3xl font-mono font-black tracking-tight break-words drop-shadow-lg" style={{ color: directionVisual.accent }}>{typeof ep.price === 'object' ? 'Invalid Price' : ep.price}</div>
+                                     <div className="mt-2 text-xs font-medium leading-tight text-zinc-300/80 sm:text-sm">{typeof ep.description === 'object' ? '' : ep.description}</div>
+                                 </div>
                             )) : <div className="text-zinc-600 text-xs sm:text-sm italic">No specific entry provided.</div>}
                         </div>
                         {/* Suggested Better Entry */}
@@ -541,8 +541,8 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
 
                     {/* Stop Loss */}
                     <div className="p-4 sm:p-6 space-y-3 bg-rose-500/[0.02]">
-                        <div className="text-[10px] uppercase font-bold text-zinc-500 tracking-widest flex items-center gap-2">
-                            <div className="w-2 h-2 rounded-full bg-rose-500 shadow-[0_0_8px_#6b6b73]"></div> Stop Loss
+                        <div className="text-[10px] uppercase font-bold tracking-widest flex items-center gap-2 text-rose-300">
+                             <div className="w-2 h-2 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(251,113,133,0.7)]"></div> Stop Loss
                         </div>
                         <div className="bg-gradient-to-br from-rose-500/15 to-rose-600/5 border border-rose-400/25 rounded-2xl sm:rounded-2xl p-4 shadow-lg hover:shadow-rose-500/10 transition-all duration-300 hover:scale-[1.02]">
                             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-baseline gap-2 sm:gap-3">
@@ -637,8 +637,8 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
 
                     {/* Take Profit */}
                     <div className="p-4 sm:p-6 space-y-3 bg-emerald-500/[0.03]">
-                        <div className="text-[10px] uppercase font-bold text-zinc-500 tracking-widest flex items-center gap-2">
-                            <div className="w-2.5 h-2.5 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-[0_0_12px_#b0b0b6]"></div> Targets
+                        <div className="text-[10px] uppercase font-bold tracking-widest flex items-center gap-2 text-emerald-300">
+                             <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.7)]"></div> Targets
                         </div>
                         <div className="space-y-2.5">
                             {(takeProfit && takeProfit.length > 0) ? (takeProfit || []).map((tp, i) => (
@@ -1223,7 +1223,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                                             <div className="space-y-2">
                                                 {keyLevels.resistance.length > 0 && (
                                                     <div>
-                                                        <span className="text-[8px] font-bold text-rose-500 block mb-0.5">RESISTANCE</span>
+                                                        <span className="text-[8px] font-bold text-rose-300 block mb-0.5">RESISTANCE</span>
                                                         <div className="flex flex-wrap gap-1.5">
                                                             {keyLevels.resistance.map((lvl, idx) => (
                                                                 <span key={idx} className="bg-rose-900/20 text-rose-300 border border-rose-500/20 px-1.5 py-0.5 rounded text-[9px]">{lvl}</span>
@@ -1233,7 +1233,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                                                 )}
                                                 {keyLevels.support.length > 0 && (
                                                     <div>
-                                                        <span className="text-[8px] font-bold text-emerald-500 block mb-0.5">SUPPORT</span>
+                                                        <span className="text-[8px] font-bold text-emerald-300 block mb-0.5">SUPPORT</span>
                                                         <div className="flex flex-wrap gap-1.5">
                                                             {keyLevels.support.map((lvl, idx) => (
                                                                 <span key={idx} className="bg-emerald-900/20 text-emerald-300 border border-emerald-500/20 px-1.5 py-0.5 rounded text-[9px]">{lvl}</span>
@@ -1342,27 +1342,28 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                         onOutcomeValidated={onLogTrade}
                     >
                         {/* Secondary Actions: Grid layout for mobile */}
-                        <button onClick={() => onInitiateSkip(messageId)} className="flex-1 min-w-[60px] px-3 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-lg text-xs font-medium transition-colors">Skip</button>
+                        <button onClick={() => onInitiateSkip(messageId)} className="flex-1 min-w-[60px] px-3 py-2 rounded-lg border border-zinc-500/30 bg-zinc-700/80 text-zinc-200 transition-colors hover:border-zinc-300/40 hover:bg-zinc-600 text-xs font-medium flex items-center justify-center gap-1.5" title="Skip trade"><SkipIcon className="w-3.5 h-3.5" />Skip</button>
                         {onSimulate && (
                             <button
                                 onClick={() => onSimulate(messageId)}
-                                className="flex-1 min-w-[60px] px-3 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1"
+                                className="flex-1 min-w-[60px] px-3 py-2 rounded-lg border border-cyan-400/25 bg-cyan-500/10 text-cyan-200 transition-colors hover:border-cyan-300/40 hover:bg-cyan-500/20 text-xs font-medium flex items-center justify-center gap-1.5"
                                 title="Scenario Simulator"
                             >
-                                 <span className="hidden sm:inline">Simulate</span><span className="sm:hidden">Sim</span>
+                                 <ActivityIcon className="w-3.5 h-3.5" /><span className="hidden sm:inline">Simulate</span><span className="sm:hidden">Sim</span>
                             </button>
                         )}
-                        <button onClick={() => onSaveAnalysis(messageId)} disabled={isSaved} className={`px-3 py-2 rounded-lg transition-colors flex items-center justify-center ${isSaved ? 'text-purple-400 bg-purple-500/20' : 'text-zinc-300 bg-zinc-700 hover:bg-zinc-600'}`} title="Save Analysis">
-                            {isSaved ? <BookmarkSolidIcon className="w-4 h-4" /> : <BookmarkIcon className="w-4 h-4" />}
-                        </button>
+                        <button onClick={() => onSaveAnalysis(messageId)} disabled={isSaved} className={`px-3 py-2 rounded-lg border transition-colors flex items-center justify-center gap-1.5 ${isSaved ? 'border-cyan-400/30 bg-cyan-500/15 text-cyan-200' : 'border-white/10 bg-zinc-700/80 text-zinc-300 hover:border-cyan-400/30 hover:bg-cyan-500/10 hover:text-cyan-200'}`} title="Save Analysis">
+                             {isSaved ? <BookmarkSolidIcon className="w-4 h-4" /> : <BookmarkIcon className="w-4 h-4" />}
+                             <span className="hidden sm:inline text-[10px] font-bold uppercase tracking-wider">{isSaved ? 'Saved' : 'Save'}</span>
+                         </button>
                         {/* Price Alert Toggle */}
                         <PriceAlertToggle analysis={analysis} messageId={messageId} />
                         {/* Share Button */}
                         <ShareMenu analysis={analysis} messageId={messageId} outcome={outcome} tradingStyle={tradingStyle} />
                         {onUpdateTrade && (
-                            <button onClick={() => onUpdateTrade(messageId)} className="px-3 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-lg transition-colors flex items-center justify-center" title="Update Setup">
-                                <UpdateIcon className="w-4 h-4" />
-                            </button>
+                            <button onClick={() => onUpdateTrade(messageId)} className="px-3 py-2 rounded-lg border border-violet-400/25 bg-violet-500/10 text-violet-200 hover:border-violet-300/40 hover:bg-violet-500/20 transition-colors flex items-center justify-center gap-1.5" title="Update Setup">
+                                 <UpdateIcon className="w-4 h-4" /><span className="hidden sm:inline text-[10px] font-bold uppercase tracking-wider">Update</span>
+                             </button>
                         )}
                     </BacktestPanel>
                 </div>

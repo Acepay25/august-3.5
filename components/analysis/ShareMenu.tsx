@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { TradeAnalysis, TradeOutcome, TradingStyle } from '../../types';
-import { LoadingIcon } from '../shared/Icons';
+import { LoadingIcon, ShareIcon } from '../shared/Icons';
 import { TradeShareService } from '../../services/ui/TradeShareService';
 
 interface ShareMenuProps {
@@ -56,10 +56,11 @@ const ShareMenu: React.FC<ShareMenuProps> = ({
         <button
             onClick={handleShare}
             disabled={isSharing}
-            className="px-3 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-lg transition-colors flex items-center justify-center gap-1 relative"
+            className="px-3 py-2 rounded-lg border border-cyan-400/20 bg-cyan-500/10 text-cyan-200 hover:border-cyan-300/35 hover:bg-cyan-500/20 transition-colors flex items-center justify-center gap-1.5 relative"
             title="Share Trade Card"
         >
-            {isSharing ? <LoadingIcon className="w-4 h-4" /> : ''}
+            {isSharing ? <LoadingIcon className="w-4 h-4" /> : <ShareIcon className="w-4 h-4" />}
+            <span className="hidden sm:inline text-[10px] font-bold uppercase tracking-wider">Share</span>
             {shareSuccess && (
                 <span className="absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-1 bg-emerald-600 text-white text-[10px] rounded whitespace-nowrap">
                     {shareSuccess}
