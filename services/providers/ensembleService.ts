@@ -2396,7 +2396,6 @@ export const conductRealDebate = async function* (
         if (/<CLARIFICATION_DONE>/i.test(questionText)) {
             break;
         }
-        lastRebuttalRound = questionRound;
 
         // -- ANALYST ANSWERS (parallel, each on its own provider) --
         const answerRound = questionRound + 1;

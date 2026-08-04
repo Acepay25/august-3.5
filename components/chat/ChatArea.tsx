@@ -14,7 +14,12 @@ import AnalysisProgress from '../analysis/AnalysisProgress';
 const ListHeader = () => <div className="h-16"></div>;
 // Reserve the full vertical footprint of the fixed composer so the final
 // message can always scroll above it instead of being hidden underneath it.
-const ListFooter = () => <div className="h-72 sm:h-80 lg:h-96" aria-hidden="true" />;
+const ListFooter: React.FC<{ isLoading?: boolean }> = ({ isLoading = false }) => (
+    <div
+        className={isLoading ? 'h-[32rem] sm:h-[36rem] lg:h-[40rem]' : 'h-72 sm:h-80 lg:h-96'}
+        aria-hidden="true"
+    />
+);
 
 interface ChatAreaProps {
     messages: Message[];
@@ -343,7 +348,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 increaseViewportBy={200}
                 components={{
                     Header: ListHeader,
-                    Footer: ListFooter
+                    Footer: () => <ListFooter isLoading={Boolean(loadingMessage)} />
                 }}
             />
 

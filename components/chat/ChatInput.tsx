@@ -107,6 +107,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
     // UI ('lenses' = roles, 'normal' = model picker) appears after the user
     // picks a mode.
     const [lensAssignStep, setLensAssignStep] = useState<'choose' | 'lenses' | 'normal'>('choose');
+    const lensMenuRef = React.useRef<HTMLDivElement>(null);
 
     React.useEffect(() => {
         const handleEscape = (event: KeyboardEvent) => {
@@ -118,6 +119,17 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
         document.addEventListener('keydown', handleEscape);
         return () => document.removeEventListener('keydown', handleEscape);
     }, [setIsLeverageDropdownOpen]);
+
+    // Close the lenses dropdown when the user clicks anywhere outside it.
+    React.useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (showLensSettings && lensMenuRef.current && !lensMenuRef.current.contains(event.target as Node)) {
+                setShowLensSettings(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [showLensSettings]);
 
     // Charts can only be analyzed in ensemble mode.
     const uploadDisabled = isImageUploadDisabled || !isEnsembleEnabled;
@@ -330,7 +342,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
 
                             {/* Lens Mode Split Button — only meaningful for ensemble analysis. */}
                             {isEnsembleEnabled && <>
-                            <div className={`relative group flex items-center shadow-sm rounded-full transition-all ${lensConfig.enabled ? 'bg-zinc-700' : 'bg-zinc-800 hover:bg-zinc-700'}`}>
+                            <div ref={lensMenuRef} className={`relative group flex items-center shadow-sm rounded-full transition-all ${lensConfig.enabled ? 'bg-zinc-700' : 'bg-zinc-800 hover:bg-zinc-700'}`}>
                                 {/* Main Toggle — label reflects the current mode */}
                                 <button
                                     onClick={() => {

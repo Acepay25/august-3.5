@@ -1513,7 +1513,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             // Only surface the moderator error marker when no
                             // valid JSON plan could be recovered at all.
                             if (moderatorErrorMatch) {
-                                throw new Error(`Moderator Error: ${moderatorErrorMatch[1]}`);
+                                throw new Error(`Moderator Error: ${moderatorErrorMatch[1]}`, { cause: e });
                             }
                             throw e;
                         }
