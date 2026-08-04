@@ -282,7 +282,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
     const hasValidRR = rrRatio !== undefined && rrRatio !== null && !isNaN(rrRatio) && rrRatio > 0;
 
     return (
-        <div className="mt-6 sm:mt-8 w-full pb-28 sm:pb-8">
+        <div className="analysis-card mt-6 sm:mt-8 w-full pb-28 sm:pb-8">
 
             {/* Coin Name Header */}
             <div className="mb-4 sm:mb-6 flex items-center px-1 justify-between flex-wrap gap-2">
