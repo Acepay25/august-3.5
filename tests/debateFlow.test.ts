@@ -222,18 +222,26 @@ describe('conductRealDebate (real inter-model debate)', () => {
     return events;
   }
 
-  /** Mock stream: rebuttal calls echo the analyst name; the moderator emits the verdict contract. */
+  /** Mock stream: rebuttals echo the analyst name; clarification defaults to done; verdict emits JSON. */
   const mockStreams = () => {
     const calls: { system: string; user: string }[] = [];
     streamMock.mockImplementation(async function* (...args: any[]) {
       const messages = args[1] as { role: string; content: string }[];
-      calls.push({ system: messages[0].content, user: messages[1].content });
-      if (messages[0].content.includes('debate moderator')) {
+      const system = messages[0].content;
+      const user = messages[1].content;
+      calls.push({ system, user });
+      if (system.includes('CLARIFICATION ANSWER')) {
+        yield `**${system.includes('Analyst One') ? 'Analyst One' : 'Analyst Two'}:** exact clarification answer`;
+      } else if (user.includes('CLARIFICATION JUDGMENT')) {
+        yield '<CLARIFICATION_SATISFIED>';
+      } else if (user.includes('CLARIFICATION ROUND')) {
+        yield '<CLARIFICATION_DONE>';
+      } else if (system.includes('debate moderator')) {
         yield 'Verdict: Long on breakout with tight stop.\n';
         yield '</DEBATE_END>\n';
         yield '<JSON_PLAN>{"direction":"Long","confidence":"Medium","probability":60,"strategy":"s","activeStrategies":[],"entryPoints":[],"stopLoss":"","takeProfit":[],"marketConditions":{"pattern":"","candleBehavior":"","timeframeAlignment":"","rsi":"","macd":"","sentiment":""},"historicalCorrelation":""}</JSON_PLAN>';
       } else {
-        yield `rebuttal-${messages[0].content.includes('One') ? 'one' : 'two'}`;
+        yield `rebuttal-${system.includes('One') ? 'one' : 'two'}`;
       }
     });
     return calls;
@@ -259,9 +267,9 @@ describe('conductRealDebate (real inter-model debate)', () => {
       events.findIndex(e => e.round === 2),
     );
 
-    // 2 rebuttal rounds × 2 analysts + 1 moderator call.
-    expect(calls.length).toBe(2 * REAL_DEBATE_RESPONSE_ROUNDS + 1);
-    expect(calls.length).toBe(5);
+    // 2 rebuttal rounds × 2 analysts + clarification questions + verdict.
+    expect(calls.length).toBe(2 * REAL_DEBATE_RESPONSE_ROUNDS + 2);
+    expect(calls.length).toBe(6);
 
     // Rebuttal calls carry the DEBATE_RESPONSE_PROMPT with the speaker and round.
     const firstRebuttal = calls.find(c => !c.system.includes('debate moderator'))!;
@@ -276,7 +284,7 @@ describe('conductRealDebate (real inter-model debate)', () => {
     expect(modText).toContain('</DEBATE_END>');
     expect(extractLastJson(modText).direction).toBe('Long');
 
-    // Round structure: 1 (openings) + rebuttal rounds + final verdict round.
+    // Round structure includes the clarification question before the verdict.
     const rounds = [...new Set(events.map(e => e.round))];
     expect(rounds).toEqual([1, 2, 3, 4]);
   });
@@ -285,10 +293,21 @@ describe('conductRealDebate (real inter-model debate)', () => {
     let analystTwoCalls = 0;
     streamMock.mockImplementation(async function* (...args: any[]) {
       const messages = args[1] as { role: string; content: string }[];
-      if (messages[0].content.includes('debate moderator')) {
-        yield '</DEBATE_END>\n<JSON_PLAN>{"direction":"Short","confidence":"Low","probability":45,"strategy":"s","activeStrategies":[],"entryPoints":[],"stopLoss":"","takeProfit":[],"marketConditions":{"pattern":"","candleBehavior":"","timeframeAlignment":"","rsi":"","macd":"","sentiment":""},"historicalCorrelation":""}</JSON_PLAN>';
+      const system = messages[0].content;
+      const user = messages[1].content;
+      if (user.includes('CLARIFICATION ROUND')) {
+        yield '<CLARIFICATION_DONE>';
+        return;
       }
-      if (messages[0].content.includes('Analyst Two')) {
+      if (user.includes('CLARIFICATION JUDGMENT')) {
+        yield '<CLARIFICATION_SATISFIED>';
+        return;
+      }
+      if (system.includes('debate moderator')) {
+        yield '</DEBATE_END>\n<JSON_PLAN>{"direction":"Short","confidence":"Low","probability":45,"strategy":"s","activeStrategies":[],"entryPoints":[],"stopLoss":"","takeProfit":[],"marketConditions":{"pattern":"","candleBehavior":"","timeframeAlignment":"","rsi":"","macd":"","sentiment":""},"historicalCorrelation":""}</JSON_PLAN>';
+        return;
+      }
+      if (system.includes('Analyst Two')) {
         analystTwoCalls++;
         if (analystTwoCalls === 1) {
           throw new Error('Analyst Two provider exploded');
@@ -346,7 +365,9 @@ describe('conductRealDebate (real inter-model debate)', () => {
     streamMock.mockImplementation(async function* (...args: any[]) {
       const messages = args[1] as { role: string; content: string }[];
       calls.push(messages[0].content);
-      if (messages[0].content.includes('debate moderator')) {
+      if (messages[1].content.includes('CLARIFICATION ROUND')) {
+        yield '<CLARIFICATION_DONE>';
+      } else if (messages[0].content.includes('debate moderator')) {
         yield 'Moderator verdict text.\n</DEBATE_END>\n<JSON_PLAN>{"direction":"Long","confidence":"Medium","probability":60,"strategy":"s","activeStrategies":[],"entryPoints":[],"stopLoss":"","takeProfit":[],"marketConditions":{"pattern":"","candleBehavior":"","timeframeAlignment":"","rsi":"","macd":"","sentiment":""},"historicalCorrelation":""}</JSON_PLAN>';
       } else {
         yield 'rebuttal-from-analyst';
@@ -362,10 +383,10 @@ describe('conductRealDebate (real inter-model debate)', () => {
       null, moderatorConfig, 'model-b',
     ));
 
-    // 2 rebuttal rounds × 2 analysts + exactly ONE separate moderator call.
+    // 2 rebuttal rounds × 2 analysts + clarification questions + verdict.
     const moderatorCalls = calls.filter(c => c.includes('debate moderator'));
-    expect(calls.length).toBe(2 * REAL_DEBATE_RESPONSE_ROUNDS + 1);
-    expect(moderatorCalls.length).toBe(1);
+    expect(calls.length).toBe(2 * REAL_DEBATE_RESPONSE_ROUNDS + 2);
+    expect(moderatorCalls.length).toBe(2);
 
     // The moderator's output is its own scripted verdict — never the analyst's
     // rebuttal text, even though the same model id backs both roles.
@@ -380,9 +401,15 @@ describe('conductRealDebate (real inter-model debate)', () => {
     const moderatorPrompts: string[] = [];
     streamMock.mockImplementation(async function* (...args: any[]) {
       const messages = args[1] as { role: string; content: string }[];
-      if (messages[0].content.includes('debate moderator')) {
+      const system = messages[0].content;
+      const user = messages[1].content;
+      if (user.includes('CLARIFICATION ROUND')) {
+        yield '<CLARIFICATION_DONE>';
+        return;
+      }
+      if (system.includes('debate moderator')) {
         moderatorCalls++;
-        moderatorPrompts.push(messages[1].content);
+        moderatorPrompts.push(user);
         if (moderatorCalls === 1) {
           yield '<MODERATOR_ERROR>provider exploded</MODERATOR_ERROR>';
           return;
@@ -430,5 +457,143 @@ describe('conductRealDebate (real inter-model debate)', () => {
     const moderatorText = events.filter(e => e.speaker === 'Moderator').map(e => e.text).join('');
     expect(moderatorText).toContain('<MODERATOR_ERROR>');
     expect(events.some(e => e.speaker === 'Analyst One')).toBe(true);
+  });
+
+  const verdictJson = '<JSON_PLAN>{"direction":"Long","confidence":"Medium","probability":60,"strategy":"s","activeStrategies":[],"entryPoints":[],"stopLoss":"","takeProfit":[],"marketConditions":{"pattern":"","candleBehavior":"","timeframeAlignment":"","rsi":"","macd":"","sentiment":""},"historicalCorrelation":""}</JSON_PLAN>';
+  const clarificationAnalysts = () => [realAnalyst('prov-a', 'Analyst One', 'model-a'), realAnalyst('prov-b', 'Analyst Two', 'model-b')];
+
+  const scriptedClarificationStreams = (judgments: string[], options: { done?: boolean; failQuestion?: boolean; failAnswer?: string; failJudgment?: boolean } = {}) => {
+    const calls: { system: string; user: string }[] = [];
+    let judgmentIndex = 0;
+    streamMock.mockImplementation(async function* (...args: any[]) {
+      const messages = args[1] as { role: string; content: string }[];
+      const system = messages[0].content;
+      const user = messages[1].content;
+      calls.push({ system, user });
+
+      if (user.includes('CLARIFICATION ROUND')) {
+        if (options.failQuestion) throw new Error('clarification questions unavailable');
+        if (options.done) {
+          yield '<CLARIFICATION_DONE>';
+        } else {
+          yield '**Analyst One:** Which exact level confirms the breakout?\n**Analyst Two:** Which exact level invalidates the breakout?';
+        }
+        return;
+      }
+      if (user.includes('CLARIFICATION JUDGMENT')) {
+        if (options.failJudgment) throw new Error('judgment unavailable');
+        yield judgments[judgmentIndex++] || '<CLARIFICATION_SATISFIED>';
+        return;
+      }
+      if (system.includes('CLARIFICATION ANSWER')) {
+        if (options.failAnswer && system.includes(options.failAnswer)) throw new Error('answer provider unavailable');
+        yield system.includes('Analyst One') ? '**Analyst One:** 123.40 confirms.' : '**Analyst Two:** 121.90 invalidates.';
+        return;
+      }
+      if (system.includes('debate moderator')) {
+        yield 'Moderator verdict.\n</DEBATE_END>\n';
+        yield verdictJson;
+        return;
+      }
+      yield 'rebuttal';
+    });
+    return calls;
+  };
+
+  it('runs one clarification cycle, then reaches the verdict after satisfaction', async () => {
+    const calls = scriptedClarificationStreams(['<CLARIFICATION_SATISFIED>']);
+    const events = await collectEvents(conductRealDebate(clarificationAnalysts(), 'Analyze BTCUSDT', null, config, 'model-a'));
+
+    expect(calls.length).toBe(9);
+    expect([...new Set(events.map(event => event.round))]).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(events.some(event => event.round === 4 && event.speaker === 'Moderator')).toBe(true);
+    expect(events.some(event => event.round === 5 && event.speaker === 'Analyst One')).toBe(true);
+    expect(events.some(event => event.round === 6 && event.speaker === 'Moderator')).toBe(true);
+  });
+
+  it('runs a second clarification cycle after one unsatisfied judgment', async () => {
+    const calls = scriptedClarificationStreams(['<CLARIFICATION_UNSATISFIED>', '<CLARIFICATION_SATISFIED>']);
+    const events = await collectEvents(conductRealDebate(clarificationAnalysts(), 'Analyze BTCUSDT', null, config, 'model-a'));
+
+    expect(calls.length).toBe(13);
+    expect([...new Set(events.map(event => event.round))]).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+  });
+
+  it('caps unsatisfied clarification cycles without a third judgment call', async () => {
+    const calls = scriptedClarificationStreams([
+      '<CLARIFICATION_UNSATISFIED>',
+      '<CLARIFICATION_UNSATISFIED>',
+    ]);
+    const events = await collectEvents(conductRealDebate(clarificationAnalysts(), 'Analyze BTCUSDT', null, config, 'model-a'));
+
+    expect(calls.length).toBe(16);
+    expect([...new Set(events.map(event => event.round))]).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(calls.filter(call => call.user.includes('CLARIFICATION JUDGMENT')).length).toBe(2);
+  });
+
+  it('short-circuits clarification when the moderator has no questions', async () => {
+    const calls = scriptedClarificationStreams([], { done: true });
+    const events = await collectEvents(conductRealDebate(clarificationAnalysts(), 'Analyze BTCUSDT', null, config, 'model-a'));
+
+    expect(calls.length).toBe(6);
+    expect(events.some(event => event.text.includes('<CLARIFICATION_DONE>'))).toBe(true);
+    expect(events.some(event => event.round === 4 && event.speaker === 'Moderator')).toBe(true);
+  });
+
+  it('drops an analyst after a failed clarification answer and continues', async () => {
+    const calls = scriptedClarificationStreams(['<CLARIFICATION_UNSATISFIED>', '<CLARIFICATION_SATISFIED>'], { failAnswer: 'Analyst Two' });
+    const events = await collectEvents(conductRealDebate(clarificationAnalysts(), 'Analyze BTCUSDT', null, config, 'model-a'));
+
+    expect(events.some(event => event.speaker === 'Analyst One' && event.round === 5)).toBe(true);
+    expect(events.some(event => event.speaker === 'Analyst Two' && event.round === 5)).toBe(false);
+    expect(calls.filter(call => call.system.includes('CLARIFICATION ANSWER') && call.system.includes('Analyst Two')).length).toBe(1);
+    expect(events.some(event => event.speaker === 'Moderator' && event.text.includes('Moderator verdict'))).toBe(true);
+  });
+
+  it('skips clarification after a questions-call failure', async () => {
+    const calls = scriptedClarificationStreams([], { failQuestion: true });
+    const events = await collectEvents(conductRealDebate(clarificationAnalysts(), 'Analyze BTCUSDT', null, config, 'model-a'));
+
+    expect(calls.length).toBe(6);
+    expect(events.some(event => event.speaker === 'Moderator' && event.text.includes('Moderator verdict'))).toBe(true);
+  });
+
+  it('treats a judgment failure as satisfied', async () => {
+    const calls = scriptedClarificationStreams([], { failJudgment: true });
+    const events = await collectEvents(conductRealDebate(clarificationAnalysts(), 'Analyze BTCUSDT', null, config, 'model-a'));
+
+    expect(calls.length).toBe(9);
+    expect(events.some(event => event.round === 6 && event.speaker === 'Moderator')).toBe(true);
+  });
+
+  it('reports active speaker status around clarification and verdict streams', async () => {
+    const calls = scriptedClarificationStreams(['<CLARIFICATION_SATISFIED>']);
+    const statuses: Array<{ speaker: string; round: number; active: boolean }> = [];
+    await collectEvents(conductRealDebate(
+      clarificationAnalysts(),
+      'Analyze BTCUSDT',
+      null,
+      config,
+      'model-a',
+      undefined,
+      [],
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      null,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      (speaker: string, round: number, active: boolean) => statuses.push({ speaker, round, active }),
+    ));
+
+    expect(statuses).toContainEqual({ speaker: 'Moderator', round: 4, active: true });
+    expect(statuses).toContainEqual({ speaker: 'Moderator', round: 4, active: false });
+    expect(statuses).toContainEqual({ speaker: 'Analyst One', round: 5, active: true });
+    expect(statuses).toContainEqual({ speaker: 'Analyst Two', round: 5, active: false });
+    expect(statuses).toContainEqual({ speaker: 'Moderator', round: 6, active: true });
+    expect(statuses).toContainEqual({ speaker: 'Moderator', round: 6, active: false });
   });
 });

@@ -20,7 +20,6 @@ interface HeaderProps {
     setIsVisionDataVisible: (visible: boolean) => void;
     setJournalState: (state: { isOpen: boolean; tab: 'log' | 'performance' | 'analytics' }) => void;
     setIsSettingsVisible: (visible: boolean) => void;
-    setIsLiveAnalysisVisible: (visible: boolean) => void;
     setIsLivePostMortemVisible: (visible: boolean) => void;
     isLoading: boolean;
     isRateLimited: boolean;
@@ -56,7 +55,6 @@ export const Header: React.FC<HeaderProps> = ({
     setIsVisionDataVisible,
     setJournalState,
     setIsSettingsVisible,
-    setIsLiveAnalysisVisible,
     setIsLivePostMortemVisible,
     isLoading,
     isRateLimited,
@@ -295,12 +293,12 @@ export const Header: React.FC<HeaderProps> = ({
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></svg>
                     </button>
 
-                    {(isAnalysisInProgress || isPostMortemInProgress) && (
+                    {isPostMortemInProgress && (
                         <button
-                            onClick={() => isAnalysisInProgress ? setIsLiveAnalysisVisible(true) : setIsLivePostMortemVisible(true)}
+                            onClick={() => setIsLivePostMortemVisible(true)}
                             className="p-2.5 bg-cyan-500/10 text-cyan-400 rounded-xl animate-pulse"
-                            title="Live Analysis"
-                            aria-label="View live analysis progress"
+                            title="Live Post-Mortem"
+                            aria-label="View live post-mortem progress"
                         >
                             <EyeIcon />
                         </button>

@@ -4,7 +4,7 @@ import { Message, MessageRole, TradeOutcome, SavedAnalysis, Conversation, Debate
 import { ChevronDownIcon, LinkIcon, CheckIcon, BrainIcon } from '../shared/Icons';
 import MarkdownContent from '../shared/MarkdownContent';
 import LiveMarketDataView from '../market/LiveMarketDataView';
-import DebateView from '../analysis/DebateView';
+import DebateChat from '../analysis/DebateChat';
 import AnalysisResult from '../analysis/AnalysisResult';
 import { AutopilotResolution } from '../../services/ui/OutcomeAutopilotService';
 
@@ -15,8 +15,6 @@ const isSafeUrl = (url: string): boolean => {
 
 // Neutral insight card style — no provider brand hints (providers are
 // user-configured, so names render as-is).
-const DEFAULT_INSIGHT_STYLE = { name: 'AI', bgClass: 'bg-zinc-800', borderClass: 'border-zinc-500/20', titleClass: 'text-zinc-400', textClass: 'text-zinc-100/90' };
-
 export interface ChatContextProps {
     typingMessageState: { id: string; fullText: string; field: 'postMortem' } | null;
     setTypingMessageState: React.Dispatch<React.SetStateAction<{ id: string; fullText: string; field: 'postMortem' } | null>>;
@@ -26,10 +24,6 @@ export interface ChatContextProps {
     setExpandedPostMortems: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
     expandedPostMortemImages: Record<string, boolean>;
     setExpandedPostMortemImages: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
-    expandedIndividualThoughts: Record<string, boolean>;
-    setExpandedIndividualThoughts: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
-    expandedDebateTranscripts: Record<string, boolean>;
-    setExpandedDebateTranscripts: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
     savedAnalyses: SavedAnalysis[];
     loggingTradeId: string | null;
     activeFrameworks: string[];
@@ -102,8 +96,7 @@ const SmoothText: React.FC<{ text: string; animate: boolean }> = ({ text, animat
 const MessageItem = React.memo(({ message, context }: { message: Message, context: ChatContextProps }) => {
     const {
         typingMessageState, highlightedAnalysisId, expandedPostMortems, setExpandedPostMortems,
-        expandedPostMortemImages, setExpandedPostMortemImages, expandedIndividualThoughts, setExpandedIndividualThoughts,
-        expandedDebateTranscripts, setExpandedDebateTranscripts,
+        expandedPostMortemImages, setExpandedPostMortemImages,
         savedAnalyses, loggingTradeId,
         activeFrameworks, activeConversation, modelIdToName, providerNameToId,
         handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy,
@@ -122,17 +115,11 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
         ...(message.reasoningProcesses ?? {}),
     }).filter(([, content]) => Boolean(content));
     const isCasualReply = message.role === MessageRole.AI && !message.analysis && !message.isDebating;
+    const debateTurns = message.debateTurns ?? message.postMortemDebateTurns ?? [];
 
     React.useEffect(() => {
         if (thinkingEntries.length > 0) setIsThinkingExpanded(true);
     }, [message.id, thinkingEntries.length]);
-
-    // Resolve a human-readable model name for a given provider id from message.modelsUsed.
-    const resolveModelName = (providerId: string): string => {
-        const modelId = message.modelsUsed?.[providerId];
-        if (!modelId) return "Unknown";
-        return modelIdToName[modelId] ?? modelId;
-    };
 
     // Extract embedded Live Market JSON if present
     const liveMarketMatch = message.text.match(/\*\*LIVE MARKET DATA\*\*\s*```json\s*([\s\S]*?)\s*```/);
@@ -322,6 +309,21 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 </div>
                             )}
 
+                            {/* Debate chat ends immediately before the final trade card. */}
+                            {debateTurns.length > 0 && (
+                                <DebateChat
+                                    debateTurns={debateTurns}
+                                    modelsUsed={message.modelsUsed}
+                                    thoughtProcesses={message.thoughtProcesses}
+                                    reasoningProcesses={message.reasoningProcesses}
+                                    modelIdToName={modelIdToName}
+                                    providerNameToId={providerNameToId}
+                                    lensConfig={lensConfig}
+                                    isDebating={message.isDebating}
+                                    activeDebateSpeakers={message.activeDebateSpeakers}
+                                />
+                            )}
+
                             {/* Main Analysis Result */}
                             {message.analysis && <AnalysisResult analysis={message.analysis} messageId={message.id} onLogTrade={handleInitiateLogTrade} onInitiateSkip={handleInitiateSkipTrade} onViewStrategy={handleViewStrategyDetails} onSaveAnalysis={handleSaveAnalysis} onUpdateTrade={handleInitiateUpdateTrade} onSimulate={handleInitiateSimulator} isSaved={savedAnalyses.some(sa => sa.id === message.id)} outcome={message.outcome} isLogging={loggingTradeId === message.id} activeFrameworks={activeFrameworks} onApplyStrategy={handleApplyStrategy} imageSummaries={message.imageSummaries} isAccuracyMode={message.isAccuracyMode} accuracySubMode={message.accuracySubMode} confidenceCalibration={confidenceCalibration} confluenceData={message.confluenceData} leverage={leverage} isLensMode={message.isLensMode} tradingStyle={message.tradingStyle} onSelectForProbability={onSelectMessageForProbability} autopilotResolution={autopilotResolutions?.[message.id]} onConfirmAutopilot={onConfirmAutopilot} onDismissAutopilot={onDismissAutopilot} />}
 
@@ -362,79 +364,6 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 </div>
                             )}
 
-                            {message.role === MessageRole.AI && (message.analysis || message.isDebating || (message.debateTurns?.length ?? 0) > 0) && message.thoughtProcesses && Object.values(message.thoughtProcesses ?? {}).some(c => c) && (
-                                <div className="mt-4 sm:mt-6 pt-3 sm:pt-5 border-t border-white/10">
-                                    <button
-                                        onClick={(e) => {
-                                            if (isSelectionMode) return;
-                                            setExpandedIndividualThoughts(prev => ({ ...prev, [message.id]: !prev[message.id] }))
-                                        }}
-                                        className="flex justify-between items-center w-full text-left text-zinc-400 hover:text-white transition-colors py-2 sm:py-3"
-                                        aria-expanded={expandedIndividualThoughts[message.id]}
-                                        aria-controls={`individual-insights-${message.id}`}
-                                    >
-                                        <strong className="text-xs sm:text-sm uppercase tracking-wider font-bold opacity-80">Individual AI Insights</strong><ChevronDownIcon className={`w-5 h-5 sm:w-6 sm:h-6 transform transition-transform duration-300 ${expandedIndividualThoughts[message.id] ? 'rotate-180' : ''}`} />
-                                    </button>
-                                    <div id={`individual-insights-${message.id}`} className={`collapsible-content ${expandedIndividualThoughts[message.id] ? 'expanded' : ''}`}>
-                                        <div className="pt-3 sm:pt-5 space-y-3 sm:space-y-4 text-xs sm:text-sm md:text-base">
-                                            {/* Collapsible Insight Helper */}
-                                            {(() => {
-                                                const insights = Object.entries(message.thoughtProcesses ?? {})
-                                                    .filter(([, content]) => content)
-                                                    .map(([providerId, content]) => {
-                                                        const style = DEFAULT_INSIGHT_STYLE;
-                                                        return { providerId, provider: style.name, model: resolveModelName(providerId), content, bgClass: style.bgClass, borderClass: style.borderClass, titleClass: style.titleClass, textClass: style.textClass };
-                                                    });
-
-                                                return insights.map((insight) => {
-                                                    const insightKey = `${message.id}-insight-${insight.providerId}`;
-                                                    const isExpanded = expandedIndividualThoughts[insightKey] === true; // Default to collapsed
-                                                    return (
-                                                        <div key={insightKey} className={`${insight.bgClass} rounded-xl border ${insight.borderClass} overflow-hidden`}>
-                                                            <button
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    if (isSelectionMode) return;
-                                                                    setExpandedIndividualThoughts(prev => ({ ...prev, [insightKey]: !isExpanded }));
-                                                                }}
-                                                                className="w-full flex items-center justify-between p-3 sm:p-4 hover:bg-zinc-800 transition-colors"
-                                                            >
-                                                                <p className={`font-bold ${insight.titleClass}`}>{insight.provider} ({insight.model})</p>
-                                                                <ChevronDownIcon className={`w-4 h-4 ${insight.titleClass} transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
-                                                            </button>
-                                                            <div className={`collapsible-content ${isExpanded ? 'expanded' : ''}`}>
-                                                                <div className="px-4 pb-4 sm:px-5 sm:pb-5">
-                                                                    <p className={`whitespace-pre-wrap ${insight.textClass} leading-relaxed`}>{insight.content}</p>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                });
-                                            })()}
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Main Analysis Debate (Initial) */}
-                            {message.isDebating && message.debateTurns && <DebateView debateTurns={message.debateTurns} modelsUsed={message.modelsUsed} thoughtProcesses={message.thoughtProcesses} reasoningProcesses={message.reasoningProcesses} modelIdToName={modelIdToName} providerNameToId={providerNameToId} lensConfig={lensConfig} isDebating={true} />}
-
-                            {message.role === MessageRole.AI && !message.isDebating && Array.isArray(message.debateTurns) && message.debateTurns.length > 0 && (
-                                <div className="mt-4 sm:mt-6 pt-3 sm:pt-5 border-t border-white/10">
-                                    <button
-                                        onClick={(e) => {
-                                            if (isSelectionMode) return;
-                                            setExpandedDebateTranscripts(prev => ({ ...prev, [message.id]: !prev[message.id] }))
-                                        }}
-                                        className="flex justify-between items-center w-full text-left text-zinc-400 hover:text-white transition-colors py-2 sm:py-3"
-                                        aria-expanded={expandedDebateTranscripts[message.id]}
-                                        aria-controls={`debate-transcript-${message.id}`}
-                                    >
-                                        <strong className="text-xs sm:text-sm uppercase tracking-wider font-bold opacity-80">Debate Transcript</strong><ChevronDownIcon className={`w-5 h-5 sm:w-6 sm:h-6 transform transition-transform duration-300 ${expandedDebateTranscripts[message.id] ? 'rotate-180' : ''}`} />
-                                    </button>
-                                    <div id={`debate-transcript-${message.id}`} className={`collapsible-content ${expandedDebateTranscripts[message.id] ? 'expanded' : ''}`}><DebateView debateTurns={message.debateTurns} modelsUsed={message.modelsUsed} thoughtProcesses={message.thoughtProcesses} reasoningProcesses={message.reasoningProcesses} modelIdToName={modelIdToName} providerNameToId={providerNameToId} lensConfig={lensConfig} /></div>
-                                </div>
-                            )}
 
                             {Array.isArray(message.sources) && message.sources.length > 0 && <div className="mt-4 sm:mt-6 pt-4 border-t border-white/10"><h4 className="text-xs uppercase font-bold text-zinc-500 mb-2 sm:mb-3 tracking-widest">Reference Sources</h4><ul className="text-xs sm:text-sm space-y-2 sm:space-y-3">{message.sources.map((source, index) => (<li key={`${message.id}-src-${index}`}>{isSafeUrl(source.web.uri) ? (<a href={source.web.uri} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:text-cyan-300 hover:underline break-all flex items-center gap-2"><LinkIcon /> {source.web.title}</a>) : (<span className="text-cyan-400 break-all flex items-center gap-2"><LinkIcon /> {source.web.title}</span>)}</li>))}</ul></div>}
 

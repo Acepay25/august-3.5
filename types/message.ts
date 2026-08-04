@@ -68,6 +68,8 @@ export interface Message {
 
   isDebating?: boolean; // Flag for showing the debate UI
   debateTurns?: DebateTurn[]; // Holds the live debate conversation
+  /** Transient speaker -> round map for the live debate indicator. */
+  activeDebateSpeakers?: Record<string, number>;
 
   // Mode Tracking
   isAccuracyMode?: boolean;

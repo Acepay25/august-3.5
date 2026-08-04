@@ -105,7 +105,6 @@ const App: React.FC = () => {
         isLiveMarketVisible, setIsLiveMarketVisible,
         isAdvancedAnalyticsOpen, setIsAdvancedAnalyticsOpen,
         isVersionHistoryVisible, setIsVersionHistoryVisible,
-        isLiveAnalysisVisible, setIsLiveAnalysisVisible,
         isLivePostMortemVisible, setIsLivePostMortemVisible,
         isMobileMenuOpen, setIsMobileMenuOpen,
         showMismatchModal, setShowMismatchModal,
@@ -117,7 +116,6 @@ const App: React.FC = () => {
         isLoading, setIsLoading,
         isHybridLoading, setIsHybridLoading,
         isCalculatingAIProbabilities, setIsCalculatingAIProbabilities,
-        isAnalysisTypingComplete, setIsAnalysisTypingComplete,
         isPostMortemTypingComplete, setIsPostMortemTypingComplete,
         isAnalysisInProgress, setIsAnalysisInProgress,
         isPostMortemInProgress, setIsPostMortemInProgress,
@@ -250,42 +248,6 @@ const App: React.FC = () => {
         }
     }, [ensembleModelCount]);
 
-    // Keep the live analysis cards aligned with the exact model-level
-    // participants used by useAnalysisPipeline. A provider can contribute
-    // multiple selected models to one ensemble.
-    const liveAnalysisProviders = useMemo(() => readyProviders
-        .flatMap(provider => {
-            const assignedModels = lensConfig.assignments
-                .filter(assignment => assignment.assignedProvider === provider.id)
-                .map(assignment => assignment.assignedModel || provider.selectedModel)
-                .filter((model): model is string => Boolean(model));
-            const configuredModels = provider.ensembleModels?.filter(model => provider.models.includes(model)).slice(0, 3) || [];
-            if (configuredModels.length === 0 && provider.selectedModel) configuredModels.push(provider.selectedModel);
-            const uniqueAssignedModels = [...new Set(assignedModels)].slice(0, 3);
-            // Lenses OFF: the plain 3-model picker in the chat input is the
-            // source of truth; falls back to per-provider ensembleModels.
-            const selectionModels = (isEnsembleEnabled && !lensConfig?.enabled && ensembleModelSelection && ensembleModelSelection.length > 0)
-                ? ensembleModelSelection.filter(s => s.providerId === provider.id && provider.models.includes(s.model)).map(s => s.model)
-                : [];
-            const models = isEnsembleEnabled
-                ? (lensConfig?.enabled && hasCompleteAnalystAssignments
-                    ? uniqueAssignedModels
-                    : (selectionModels.length > 0 ? selectionModels : configuredModels))
-                : (provider.selectedModel ? [provider.selectedModel] : []);
-            return models.map(model => ({
-                id: `${provider.id}:${model}`,
-                name: (() => {
-                    if (!isEnsembleEnabled || !(lensConfig?.enabled && hasCompleteAnalystAssignments)) return isEnsembleEnabled && models.length > 1 ? `${provider.name} · ${model}` : provider.name;
-                    const role = getRoleForProvider(`${provider.id}::${model}`, lensConfig.assignments);
-                    return role !== AnalystRole.UNASSIGNED ? ANALYST_ROLE_DEFINITIONS[role].name : provider.name;
-                })(),
-                modelName: model,
-                isEnabled: provider.isEnabled,
-                apiKey: provider.apiKey,
-            }));
-        })
-        .slice(0, 3), [readyProviders, isEnsembleEnabled, lensConfig, hasCompleteAnalystAssignments, ensembleModelSelection]);
-
     // Market data state and effects (extracted to hooks/useMarketData.ts)
     const marketData = useMarketData(isHybridIntelligenceEnabled, isEnsembleEnabled);
     const {
@@ -311,8 +273,6 @@ const App: React.FC = () => {
         strategyToView, setStrategyToView,
         copiedMessageId, setCopiedMessageId,
         highlightedAnalysisId, setHighlightedAnalysisId,
-        expandedIndividualThoughts, setExpandedIndividualThoughts,
-        expandedDebateTranscripts, setExpandedDebateTranscripts,
         expandedPostMortemImages, setExpandedPostMortemImages,
         expandedPostMortems, setExpandedPostMortems,
         postMortemCandidate, setPostMortemCandidate,
@@ -425,8 +385,6 @@ const App: React.FC = () => {
         images, setImages,
         loadingMessage, setLoadingMessage,
         analysisSteps, setAnalysisSteps,
-        liveThoughts, liveOutputs, setLiveThoughts,
-        liveReasoning,
         currentGateResult, setCurrentGateResult,
         currentVisionData, setCurrentVisionData,
         isDeepAnalysis, setIsDeepAnalysis,
@@ -453,7 +411,6 @@ const App: React.FC = () => {
         isAnalysisInProgress, setIsAnalysisInProgress,
         isHybridLoading, setIsHybridLoading,
         isRateLimited, setIsRateLimited,
-        setIsLiveAnalysisVisible, setIsAnalysisTypingComplete,
         setHighlightedAnalysisId,
         setIsPostMortemInProgress, setIsLivePostMortemVisible,
         isAccuracyModeEnabled, accuracySubMode,
@@ -716,8 +673,6 @@ const App: React.FC = () => {
         setSummarizationModel(firstReady?.selectedModel || '');
         setInput('');
         setImages([]);
-        setExpandedIndividualThoughts({});
-        setExpandedDebateTranscripts({});
         setExpandedPostMortems({});
 
         if (activeUsername) {
@@ -1200,13 +1155,6 @@ const App: React.FC = () => {
         setIsLiveMarketVisible(false);
         setInput(data); // PREFILL INPUT, DO NOT SEND IMMEDIATELY
     };
-
-    // Missing Handlers Implementation Start
-    const handleAllAnalysisTypingComplete = useCallback(() => {
-        setIsAnalysisTypingComplete(true);
-        // The analyst cards are complete; reveal the moderator-led debate.
-        setIsLiveAnalysisVisible(false);
-    }, [setIsLiveAnalysisVisible]);
 
     const handleSetSummarizationProvider = (provider: AIProvider) => setSummarizationProvider(provider);
     const handleSetSummarizationModel = (id: string) => setSummarizationModel(id);
@@ -1795,10 +1743,6 @@ const App: React.FC = () => {
         setExpandedPostMortems,
         expandedPostMortemImages,
         setExpandedPostMortemImages,
-        expandedIndividualThoughts,
-        setExpandedIndividualThoughts,
-        expandedDebateTranscripts,
-        setExpandedDebateTranscripts,
         savedAnalyses,
         loggingTradeId,
         activeFrameworks,
@@ -1822,7 +1766,7 @@ const App: React.FC = () => {
         autopilotResolutions, // Outcome autopilot detected resolutions
         onConfirmAutopilot: handleConfirmAutopilot,
         onDismissAutopilot: handleDismissAutopilot
-    }), [typingMessageState, highlightedAnalysisId, expandedPostMortems, expandedPostMortemImages, expandedIndividualThoughts, expandedDebateTranscripts, savedAnalyses, loggingTradeId, activeFrameworks, activeConversation, copiedMessageId, modelIdToName, providerNameToId, handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy, handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, confidenceCalibration, handleRetryPostMortem, lensConfig, leverageInput, autopilotResolutions, handleConfirmAutopilot, handleDismissAutopilot]);
+    }), [typingMessageState, highlightedAnalysisId, expandedPostMortems, expandedPostMortemImages, savedAnalyses, loggingTradeId, activeFrameworks, activeConversation, copiedMessageId, modelIdToName, providerNameToId, handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy, handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, confidenceCalibration, handleRetryPostMortem, lensConfig, leverageInput, autopilotResolutions, handleConfirmAutopilot, handleDismissAutopilot]);
 
     // ... (Rest of component remains unchanged) ...
     return (
@@ -1844,17 +1788,6 @@ const App: React.FC = () => {
             <React.Suspense fallback={null}>
                 <UpdateOverlay />
             </React.Suspense>
-            <LiveStreamView
-                variant="analysis"
-                isVisible={isLiveAnalysisVisible}
-                onClose={() => setIsLiveAnalysisVisible(false)}
-                thoughts={liveThoughts}
-                outputs={liveOutputs}
-                reasoning={liveReasoning}
-                providers={liveAnalysisProviders}
-                onAllTypingComplete={handleAllAnalysisTypingComplete}
-                mode={lensConfig.enabled ? 'lenses' : 'normal'}
-            />
             <LiveStreamView
                 variant="postmortem"
                 isVisible={isLivePostMortemVisible}
@@ -1990,7 +1923,6 @@ const App: React.FC = () => {
                 setIsVisionDataVisible={setIsVisionDataVisible}
                 setJournalState={setJournalState}
                 setIsSettingsVisible={setIsSettingsMenuVisible}
-                setIsLiveAnalysisVisible={setIsLiveAnalysisVisible}
                 setIsLivePostMortemVisible={setIsLivePostMortemVisible}
                 isLoading={isLoading}
                 isRateLimited={isRateLimited}
@@ -2159,7 +2091,6 @@ const App: React.FC = () => {
                 loadingMessage={loadingMessage}
                 isAnalysisInProgress={isAnalysisInProgress}
                 isPostMortemInProgress={isPostMortemInProgress}
-                setIsLiveAnalysisVisible={setIsLiveAnalysisVisible}
                 setIsLivePostMortemVisible={setIsLivePostMortemVisible}
                 handleCancelAnalysis={handleCancelAnalysis}
                 onDeleteMessages={handleDeleteMessages}
