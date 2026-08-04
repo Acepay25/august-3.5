@@ -355,8 +355,8 @@ const BacktestPanel: React.FC<BacktestPanelProps> = ({
                     )}
                     {/* Primary Actions: Win/Loss - Full width on mobile */}
                     <div className="flex gap-2">
-                        <button onClick={() => validateAndLogOutcome(TradeOutcome.WIN)} className="flex-1 border border-emerald-300/35 bg-emerald-500/20 text-emerald-100 py-3 rounded-xl font-bold uppercase tracking-wide transition-colors hover:bg-emerald-500/30 active:scale-[0.98] flex items-center justify-center gap-2"><WinIcon className="h-4 w-4" />Win</button>
-                        <button onClick={() => validateAndLogOutcome(TradeOutcome.LOSS)} className="flex-1 border border-rose-300/35 bg-rose-500/20 text-rose-100 py-3 rounded-xl font-bold uppercase tracking-wide transition-colors hover:bg-rose-500/30 active:scale-[0.98] flex items-center justify-center gap-2"><LossIcon className="h-4 w-4" />Loss</button>
+                        <button onClick={() => validateAndLogOutcome(TradeOutcome.WIN)} className="flex-1 border border-[#86efac]/70 bg-[#16a34a] text-white py-3 rounded-xl font-bold uppercase tracking-wide transition-colors hover:bg-[#22c55e] active:scale-[0.98] flex items-center justify-center gap-2"><WinIcon className="h-4 w-4" />Win</button>
+                        <button onClick={() => validateAndLogOutcome(TradeOutcome.LOSS)} className="flex-1 border border-[#fda4af]/70 bg-[#dc2626] text-white py-3 rounded-xl font-bold uppercase tracking-wide transition-colors hover:bg-[#ef4444] active:scale-[0.98] flex items-center justify-center gap-2"><LossIcon className="h-4 w-4" />Loss</button>
                     </div>
                     {/* Entry Selector for Backtest - shown when multiple entries exist */}
                     {hasMultipleEntries && (
@@ -394,7 +394,7 @@ const BacktestPanel: React.FC<BacktestPanelProps> = ({
                         <button
                             onClick={handleBacktest}
                             disabled={isBacktesting}
-                            className="flex-1 min-w-[60px] px-3 py-2 rounded-lg border border-cyan-400/25 bg-cyan-500/10 text-cyan-200 hover:border-cyan-300/40 hover:bg-cyan-500/20 text-xs font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                            className="flex-1 min-w-[60px] px-3 py-2 rounded-lg border border-cyan-300/45 bg-cyan-600/25 text-cyan-100 hover:border-cyan-200/60 hover:bg-cyan-500/35 text-xs font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
                             title="Run Backtest"
                         >
                             {isBacktesting ? <LoadingIcon className="w-3 h-3" /> : <><ActivityIcon className="w-3.5 h-3.5" /> Test</>}
@@ -414,7 +414,7 @@ const BacktestPanel: React.FC<BacktestPanelProps> = ({
                     <button
                         onClick={handleBacktest}
                         disabled={isBacktesting}
-                        className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider text-zinc-400 bg-zinc-800 hover:text-cyan-400 hover:bg-zinc-700 transition-colors disabled:opacity-50"
+                        className="px-3 py-1.5 rounded-lg border border-cyan-300/30 text-[10px] font-bold uppercase tracking-wider text-cyan-200 bg-cyan-600/15 hover:text-cyan-100 hover:bg-cyan-500/25 transition-colors disabled:opacity-50"
                         title="Run Backtest Simulation"
                     >
                         {isBacktesting ? <LoadingIcon className="w-3 h-3" /> : ' Backtest'}
