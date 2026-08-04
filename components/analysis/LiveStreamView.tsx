@@ -3,17 +3,21 @@ import { useTypingEffect } from '../../hooks/useTypingEffect';
 import { CloseIcon, LoadingIcon, BotIcon } from '../shared/Icons';
 import { LiveThoughts } from '../../types';
 import { ProviderConfig } from '../../types/provider';
+import MarkdownContent from '../shared/MarkdownContent';
 
 interface LiveStreamViewProps {
   isVisible: boolean;
   onClose: () => void;
   thoughts: LiveThoughts;
+  outputs: LiveThoughts;
   reasoning?: LiveThoughts;
   /** Model-level participants — one panel per selected ensemble model. */
   providers: Array<Pick<ProviderConfig, 'id' | 'name' | 'isEnabled' | 'apiKey'> & { modelName?: string }>;
   onAllTypingComplete: () => void;
   /** 'analysis' for live analysis, 'postmortem' for post-trade forensics */
   variant: 'analysis' | 'postmortem';
+  /** Debate mode of the current run — shown as a badge (analysis variant only). */
+  mode?: 'lenses' | 'normal';
 }
 
 const VARIANT_CONFIG = {
@@ -47,6 +51,7 @@ const AnalystPanel: React.FC<{
   title: string;
   modelName?: string;
   text: string | null;
+  output: string | null;
   reasoning?: string;
   colorClasses: {
     bg: string;
@@ -58,16 +63,21 @@ const AnalystPanel: React.FC<{
   loadingIdle: string;
   loadingStreaming: string;
   onTypingComplete: () => void;
-}> = ({ title, modelName, text, reasoning, colorClasses, loadingIdle, loadingStreaming, onTypingComplete }) => {
-  const [typedText, isFinished] = useTypingEffect(text, 4);
+}> = ({ title, modelName, text, output, reasoning, colorClasses, loadingIdle, loadingStreaming, onTypingComplete }) => {
+  const [typedText, isFinished] = useTypingEffect(output, 4);
+  const [thinkingOpen, setThinkingOpen] = useState(false);
 
   useEffect(() => {
-    if (isFinished && text !== null) {
+    if (isFinished && output !== null) {
       onTypingComplete();
     }
-  }, [isFinished, text, onTypingComplete]);
+  }, [isFinished, output, onTypingComplete]);
 
-  const showLoadingState = text === null || (text !== null && typedText.length === 0 && !isFinished);
+  // Harness-style: while the model's chain of thought streams (reasoning
+  // deltas) and no final output exists yet, keep the Thinking block
+  // auto-expanded so the user watches it think in real-time.
+  const isStreamingThinking = output === null && !!reasoning;
+  const showLoadingState = output === null || (output !== null && typedText.length === 0 && !isFinished);
 
   return (
     <div className={`flex flex-col h-full rounded-2xl border ${colorClasses.border} ${colorClasses.bg} shadow-xl transition-all duration-300 overflow-hidden relative group will-change-transform`}>
@@ -83,23 +93,39 @@ const AnalystPanel: React.FC<{
       </div>
       <div className="flex-1 p-4 sm:p-5 overflow-y-auto custom-scrollbar relative">
         {(
-          <details className="mb-4 rounded-lg border border-white/10 bg-black/20 group">
+          <details
+            className="mb-4 rounded-lg border border-white/10 bg-black/20 group"
+            open={thinkingOpen || isStreamingThinking}
+            onToggle={(e) => setThinkingOpen((e.target as HTMLDetailsElement).open)}
+          >
             <summary className="cursor-pointer list-none px-3 py-2 text-[10px] uppercase tracking-widest text-zinc-400 group-open:text-zinc-200">
-              Thinking <span className="normal-case tracking-normal text-zinc-600">(expand)</span>
+              {isStreamingThinking ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
+                  Thinking<span className="normal-case tracking-normal text-zinc-600">…</span>
+                </span>
+              ) : (
+                <>Thinking <span className="normal-case tracking-normal text-zinc-600">(expand)</span></>
+              )}
             </summary>
-            <div className="border-t border-white/5 px-3 py-2 text-xs leading-relaxed text-zinc-500 whitespace-pre-wrap">{reasoning || 'This model did not return separate reasoning content.'}</div>
+            <div className="border-t border-white/5 px-3 py-2">
+              <MarkdownContent
+                content={text || reasoning || 'This model did not return separate reasoning content.'}
+                className="text-zinc-500"
+              />
+            </div>
           </details>
         )}
         {showLoadingState ? (
           <div className="flex flex-col items-center justify-center h-full text-zinc-500 space-y-3 animate-pulse">
             <LoadingIcon className={`w-6 h-6 ${colorClasses.text}`} />
-            <span className="text-xs font-mono uppercase tracking-widest">{text === null ? loadingIdle : loadingStreaming}</span>
+            <span className="text-xs font-mono uppercase tracking-widest">{output === null ? loadingIdle : loadingStreaming}</span>
           </div>
         ) : (
           <div className="animate-fade-in">
             <div className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Final output</div>
-            <div className={`text-xs sm:text-sm leading-relaxed whitespace-pre-wrap font-sans ${colorClasses.text}`}>
-              {typedText}
+            <div className={`font-sans ${colorClasses.text}`}>
+              <MarkdownContent content={typedText} className={colorClasses.text} />
               {!isFinished && <span className={`inline-block w-1.5 h-4 ml-1 align-middle ${colorClasses.accent} animate-pulse`}></span>}
             </div>
           </div>
@@ -115,8 +141,8 @@ const AnalystPanel: React.FC<{
 };
 
 const LiveStreamView: React.FC<LiveStreamViewProps> = ({
-  isVisible, onClose, thoughts, reasoning = {}, providers,
-  onAllTypingComplete, variant,
+  isVisible, onClose, thoughts, outputs, reasoning = {}, providers,
+  onAllTypingComplete, variant, mode = 'normal',
 }) => {
   const [completedTyping, setCompletedTyping] = useState<Set<string>>(new Set());
   const config = VARIANT_CONFIG[variant];
@@ -176,6 +202,15 @@ const LiveStreamView: React.FC<LiveStreamViewProps> = ({
             <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-3">
               <span className={`w-3 h-3 rounded-full ${config.dotColor} animate-pulse ${config.dotShadow}`}></span>
               {config.title}
+              {variant === 'analysis' && (
+                <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-1 rounded-full border ${
+                  mode === 'lenses'
+                    ? 'bg-zinc-700/60 border-white/15 text-zinc-200'
+                    : 'bg-zinc-900/80 border-white/10 text-zinc-400'
+                }`}>
+                  {mode === 'lenses' ? 'Lenses · Role-based' : 'Normal · Same prompt'}
+                </span>
+              )}
             </h2>
             <p className="text-zinc-500 text-xs sm:text-sm mt-1 font-medium">{config.subtitle}</p>
           </div>
@@ -191,6 +226,7 @@ const LiveStreamView: React.FC<LiveStreamViewProps> = ({
               title={panel.title}
               modelName={panel.modelName}
               text={thoughts[panel.key as keyof LiveThoughts] || null}
+              output={outputs[panel.key as keyof LiveThoughts] || null}
               reasoning={reasoning[panel.key as keyof LiveThoughts] || undefined}
               colorClasses={panel.colors}
               loadingIdle={config.loadingIdle}

@@ -7,7 +7,7 @@ import { useState } from 'react';
 import { AccuracySubMode, CustomInstructionsMap, AnalystLensConfig, GlobalMemory, ConfidenceCalibration, InsightKnowledgeBase, AIProvider } from '../types';
 import { ProviderConfig } from '../types/provider';
 import { DEFAULT_FRAMEWORKS } from '../constants/models';
-import { loadLensConfig } from '../services/ui/AnalystLensService';
+import { loadLensConfig, loadEnsembleModelSelection, EnsembleModelSelection, loadCustomEnsemblePrompt, loadCustomLensPrompts } from '../services/ui/AnalystLensService';
 
 export function useAppSettings() {
     // Layer 3: Global Long-Term Memory
@@ -35,6 +35,15 @@ export function useAppSettings() {
 
     // Analyst Lens Configuration
     const [lensConfig, setLensConfig] = useState<AnalystLensConfig>(() => loadLensConfig());
+
+    // Ordinary ensemble model selection (used when Lenses are OFF): the three
+    // models the user picks in the chat input become the debate participants.
+    const [ensembleModelSelection, setEnsembleModelSelection] = useState<EnsembleModelSelection>(() => loadEnsembleModelSelection());
+
+    // Custom prompt overrides (prompt editor): Normal-mode base prompt and
+    // per-role lens prompts. null/empty = use the built-in prompt.
+    const [customEnsemblePrompt, setCustomEnsemblePrompt] = useState<string | null>(() => loadCustomEnsemblePrompt());
+    const [customLensPrompts, setCustomLensPrompts] = useState<Record<string, string>>(() => loadCustomLensPrompts());
 
     // Confidence Calibration
     const [confidenceCalibration, setConfidenceCalibration] = useState<ConfidenceCalibration | undefined>(undefined);
@@ -64,6 +73,9 @@ export function useAppSettings() {
         isMemoryEnabledInPureAI, setIsMemoryEnabledInPureAI,
         isHybridIntelligenceEnabled, setIsHybridIntelligenceEnabled,
         lensConfig, setLensConfig,
+        ensembleModelSelection, setEnsembleModelSelection,
+        customEnsemblePrompt, setCustomEnsemblePrompt,
+        customLensPrompts, setCustomLensPrompts,
         confidenceCalibration, setConfidenceCalibration,
         insightKnowledgeBase, setInsightKnowledgeBase,
         activeFrameworks, setActiveFrameworks,

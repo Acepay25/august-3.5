@@ -210,7 +210,9 @@ Assign the confidence grade the evidence supports; do not inflate confidence to 
 
 9. **Moderator Final Verdict** (Text)
 
-10. **MANDATORY JSON OUTPUT** (Last)
+9.5. Immediately after your verdict text, on its own line, output exactly: </DEBATE_END>
+
+10. **MANDATORY JSON OUTPUT** (Last — must come AFTER </DEBATE_END>)
 
 **MANDATORY JSON OUTPUT (CRITICAL - READ CAREFULLY):**
 
@@ -662,4 +664,94 @@ Similar Trades Found:
 2. Flag if any recommendation matches a recurring LOSING pattern
 3. Warning if trade matches user's known weakness
 4. Adjust final confidence based on historical performance
+`;
+
+/**
+ * Prompt for a single analyst's rebuttal response during a REAL (multi-call)
+ * debate. Each analyst is invoked again on its own provider between rounds,
+ * so the "debate" is genuine turn-taking — not one moderator autoplaying
+ * every role. Placeholders: {{NAME}}, {{ROUND}}, {{CONTEXT}}.
+ */
+export const DEBATE_RESPONSE_PROMPT = `
+**ROLE: ENSEMBLE DEBATE PARTICIPANT (ROUND {{ROUND}})**
+
+You are {{NAME}}, an expert trading analyst participating in a LIVE ensemble debate with other AI analysts. You have already presented your initial analysis; the others have read it and responded.
+
+**YOUR TASK NOW:**
+1. Challenge the weakest or vaguest claims from the others — demand exact price levels, indicator values, and timeframes instead of hand-waving.
+2. Defend your own position where the evidence supports you.
+3. Explicitly concede and revise when the others are right — adapting to strong evidence is a strength, not a weakness.
+4. Flag anything that directly contradicts the shared market data.
+
+**STYLE:**
+- Concise and direct: 150-250 words. Do NOT repeat your full initial analysis.
+- Plain prose only. NO JSON, NO XML tags, NO section headers.
+
+**OUTPUT FORMAT:**
+Start your reply with exactly: **{{NAME}}:** then your response.
+`;
+
+/**
+ * Moderator final-verdict prompt used by the REAL debate pipeline. The
+ * debate transcript has already happened (each analyst was called for real);
+ * the moderator's single job is to synthesize the strongest evidence and
+ * produce the ONE binding structured trade plan. Output contract mirrors the
+ * simulated-debate contract the hook consumes: verdict prose, then a
+ * </DEBATE_END> marker, then the <JSON_PLAN> block (last).
+ */
+export const MODERATOR_FINAL_VERDICT_PROMPT = `
+**ROLE: ENSEMBLE DEBATE MODERATOR — FINAL VERDICT**
+
+You are the Master Strategist. A REAL debate between the expert analysts ({{ANALYSTS}}) has already taken place — the complete transcript is provided below. Your job: synthesize the strongest evidence, resolve disagreements explicitly, and issue the ONE binding trade plan.
+
+**VERDICT REQUIREMENTS:**
+1. Read every analyst's position and rebuttals carefully before judging.
+2. Resolve each contested point explicitly: state which position won and why.
+3. Vague claims carry no weight — a claim without a specific price level, timeframe, or data reference is dismissed.
+4. Cross-check the debate against the provided market telemetry and Gate findings. The final probability MUST respect the Gate confidence cap.
+5. Anti-hallucination discipline: never assign confidence above 69% unless every element is present (specific entry/SL/TP, aligned timeframes, verified claims, R:R ≥ 1.2).
+6. If the debate ends unresolved or the evidence is too weak, issue an AVOID/NO TRADE verdict over forcing a trade.
+
+**MANDATORY OUTPUT FORMAT (STRICT ORDER):**
+1. **MODERATOR VERDICT** — readable prose (2-4 paragraphs): direction, entry zone with conditions, stop loss, take profit targets, probability %, confidence grade, and the key risks that survived the debate.
+2. On its own line immediately after the verdict, output exactly: </DEBATE_END>
+3. Then output the final structured trade plan wrapped in <JSON_PLAN> and </JSON_PLAN> tags.
+
+**JSON RULES (CRITICAL — FAILURE BREAKS THE SYSTEM):**
+- The <JSON_PLAN> block MUST be the ABSOLUTE LAST thing in your response (no text after </JSON_PLAN>).
+- Complete JSON only — never truncate, never use "N/A", "..." or empty arrays for price fields.
+- If the verdict is AVOID/NO TRADE, still fill the JSON with the concrete setup the analysts proposed and set confidence to "Avoid" with a low probability.
+
+**EXACT FORMAT REQUIRED:**
+<JSON_PLAN>
+${MASTER_TRADE_PLAN_JSON_SCHEMA}
+</JSON_PLAN>
+`;
+
+/**
+ * Compact moderator final-verdict prompt used for ONE automatic retry when the
+ * full-prompt attempt errors or fails to produce a JSON plan. Long prompts are
+ * the usual culprit on reasoning-heavy models — this drops the extra context
+ * blocks and keeps only the transcript, so a retry has a real chance to land.
+ */
+export const MODERATOR_FINAL_VERDICT_PROMPT_COMPACT = `
+**ROLE: ENSEMBLE DEBATE MODERATOR — FINAL VERDICT (COMPACT)**
+
+You are the Master Strategist. A debate between expert analysts ({{ANALYSTS}}) has already taken place — the compact transcript is provided below. Produce the ONE binding trade plan.
+
+**MANDATORY OUTPUT FORMAT (STRICT ORDER):**
+1. **MODERATOR VERDICT** — concise readable prose (1-2 paragraphs): direction, entry zone, stop loss, take profit targets, probability %, confidence grade, and key risks.
+2. On its own line immediately after the verdict, output exactly: </DEBATE_END>
+3. Then the final structured trade plan wrapped in <JSON_PLAN> and </JSON_PLAN> tags.
+
+**JSON RULES (CRITICAL — FAILURE BREAKS THE SYSTEM):**
+- The <JSON_PLAN> block MUST be the ABSOLUTE LAST thing in your response (no text after </JSON_PLAN>).
+- Complete JSON only — never truncate, never use "N/A", "..." or empty arrays for price fields.
+- If the verdict is AVOID/NO TRADE, still fill the JSON with the concrete setup the analysts proposed and set confidence to "Avoid" with a low probability.
+- Respect any Gate confidence cap mentioned in the transcript.
+
+**EXACT FORMAT REQUIRED:**
+<JSON_PLAN>
+${MASTER_TRADE_PLAN_JSON_SCHEMA}
+</JSON_PLAN>
 `;

@@ -9,6 +9,12 @@ export interface DebateTurn {
   text: string;
   /** Public reasoning summary emitted by the model, when the provider supports it. */
   reasoning?: string;
+  /**
+   * 1-based debate round (real inter-model debates only): 1 = opening
+   * statements, subsequent rounds = rebuttals, last = moderator verdict.
+   * Absent on legacy/simulated transcripts (grouped by moderator turns).
+   */
+  round?: number;
 }
 
 export interface Kline {

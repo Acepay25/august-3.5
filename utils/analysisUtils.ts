@@ -20,6 +20,40 @@ export { cleanPriceField } from './sanitizers';
  */
 export const sanitizeTradeAnalysis = (raw: any): TradeAnalysis => parseTradeAnalysis(raw);
 
+/**
+ * Render a raw trade-plan JSON object as readable multi-line text.
+ *
+ * Used when a model ignores the <THINKING>/<FINAL_OUTPUT> format and returns a
+ * JSON trade plan instead — the card shows this readable summary rather than
+ * the raw JSON blob.
+ */
+export const formatAnalysisForDisplay = (analysis: any): string => {
+    if (!analysis || typeof analysis !== 'object') return '';
+    const parts: string[] = [];
+    if (analysis.coinName) parts.push(`**Coin:** ${analysis.coinName}`);
+    if (analysis.direction) parts.push(`**Direction:** ${analysis.direction}`);
+    const entries = Array.isArray(analysis.entryPoints)
+        ? analysis.entryPoints.map((e: any) => e?.price).filter(Boolean).join(', ')
+        : '';
+    if (entries) parts.push(`**Entry:** ${entries}`);
+    if (analysis.stopLoss) parts.push(`**Stop Loss:** ${analysis.stopLoss}`);
+    const tps = Array.isArray(analysis.takeProfit)
+        ? analysis.takeProfit.map((t: any) => t?.price).filter(Boolean).join(', ')
+        : '';
+    if (tps) parts.push(`**Take Profit:** ${tps}`);
+    if (typeof analysis.probability === 'number' && !isNaN(analysis.probability)) {
+        parts.push(`**Probability:** ${analysis.probability}%`);
+    }
+    if (analysis.confidence) parts.push(`**Confidence:** ${analysis.confidence}`);
+    if (analysis.strategy) parts.push(`**Strategy:** ${analysis.strategy}`);
+    if (analysis.keyLevels && typeof analysis.keyLevels === 'object') {
+        const sup = Array.isArray(analysis.keyLevels.support) ? analysis.keyLevels.support.join(', ') : '';
+        const res = Array.isArray(analysis.keyLevels.resistance) ? analysis.keyLevels.resistance.join(', ') : '';
+        if (sup || res) parts.push(`**Key Levels:** Support ${sup || '—'} | Resistance ${res || '—'}`);
+    }
+    return parts.join('\n');
+};
+
 /** Extract the first numeric value from a price string (e.g. "69,000" → 69000). */
 export const parsePrice = (priceStr: string): number => {
     if (!priceStr) return NaN;

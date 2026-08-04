@@ -37,6 +37,7 @@ import { generateLearningFromPrompt, isLearningEnabled } from '../services/learn
 import { generatePersonalizedInjection } from '../services/ui/PersonalizedPromptService';
 import { buildUnifiedLearningContext } from '../services/learning/UnifiedLearningBuilder';
 import { ANALYST_ROLE_DEFINITIONS, getLensPromptForStyle, getRoleForProvider } from '../services/ui/AnalystLensService';
+import { EnsembleModelSelection } from '../services/ui/AnalystLensService';
 import { AnalystRole } from '../types/enums';
 import GlobalLearningService from '../services/learning/GlobalLearningService';
 
@@ -98,6 +99,15 @@ export interface UseAnalysisPipelineParams {
     isMemoryEnabledInPureAI: boolean;
     isHybridIntelligenceEnabled: boolean;
     lensConfig: AnalystLensConfig;
+    /**
+     * Ordinary 3-model picker used when Lenses are OFF — the selected models
+     * become the debate participants (mirrors lens role assignments).
+     */
+    ensembleModelSelection?: EnsembleModelSelection;
+    /** Custom Normal-mode base prompt (prompt editor); undefined = built-in master prompt. */
+    customEnsemblePrompt?: string | null;
+    /** Custom per-role lens prompts (prompt editor); missing roles use built-ins. */
+    customLensPrompts?: Record<string, string>;
     activeFrameworks: string[];
     // Ensemble mode: when off, messages are casual chat with the selected
     // model and the chart-analysis pipeline never runs.
@@ -148,6 +158,9 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         isGlobalMemoryEnabled, customInstructions,
         isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI,
         isHybridIntelligenceEnabled, lensConfig, activeFrameworks,
+        ensembleModelSelection,
+        customEnsemblePrompt,
+        customLensPrompts,
         isEnsembleEnabled,
         selectedChatModel,
         toast,
@@ -167,7 +180,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         signal: AbortSignal | undefined,
         // The remaining args are passed through unchanged.
         ...rest: any[]
-    ): Promise<{ thoughtProcess: string; analysis: any; sources?: any[] }> => {
+    ): Promise<{ thoughtProcess: string; finalOutput: string; analysis: any; sources?: any[] }> => {
         // Build cache key from image hashes + prompt + model. We hash the
         // File names+sizes as a proxy (the responseCache.getImageHash helper
         // is designed for base64 data URLs; for File objects we synthesize a
@@ -181,6 +194,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             console.log(`[ResponseCache] HIT for ${config.name || model} (${model})`);
             return {
                 thoughtProcess: cached.thoughtProcess,
+                finalOutput: cached.finalOutput || cached.thoughtProcess,
                 analysis: cached.analysis,
                 sources: cached.sources,
             };
@@ -204,13 +218,15 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             isMemoryEnabledInPureAI: rest[12] as boolean,
             rolePrompt: rest[13] as string | undefined,
             signal,
-            onReasoning: rest[14] as ((reasoning: string) => void) | undefined,
+            systemPromptOverride: rest[14] as string | undefined,
+            onReasoning: rest[15] as ((reasoning: string) => void) | undefined,
         });
 
         // Only cache successful, non-empty results.
         if (result && result.analysis) {
             cacheResponse(cacheKey, prompt, model, {
                 thoughtProcess: result.thoughtProcess,
+                finalOutput: result.finalOutput,
                 analysis: result.analysis,
                 sources: result.sources,
             });
@@ -249,12 +265,21 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         }, conversationId);
     });
 
+    // ─── RAF-throttled LIVE reasoning updates ─────────────────────────────
+    // The streaming analyst calls deliver chain-of-thought deltas per chunk.
+    // The latest FULL accumulated string wins (never a partial delta), so the
+    // live cards' Thinking block streams at frame rate without dropping text.
+    const throttledLiveReasoning = useRafThrottle((key: string, full: string) => {
+        setLiveReasoning(prev => ({ ...prev, [key]: full }));
+    });
+
     // ─── State ─────────────────────────────────────────────────────────────
     const [input, setInput] = useState('');
     const [images, setImages] = useState<ImageMetadata[]>([]);
     const [loadingMessage, setLoadingMessage] = useState<string | null>(null);
     const [analysisSteps, setAnalysisSteps] = useState<AnalysisStep[]>([]);
     const [liveThoughts, setLiveThoughts] = useState<LiveThoughts>({});
+    const [liveOutputs, setLiveOutputs] = useState<LiveThoughts>({});
     const [liveReasoning, setLiveReasoning] = useState<LiveThoughts>({});
     const reasoningMapRef = useRef<Record<string, string>>({});
     const [currentGateResult, setCurrentGateResult] = useState<GateOutput | null>(null);
@@ -365,8 +390,15 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 const configuredModels = c.ensembleModels?.filter(model => c.models.includes(model)).slice(0, 3) || [];
                 if (configuredModels.length === 0 && c.selectedModel) configuredModels.push(c.selectedModel);
                 const uniqueAssignedModels = [...new Set(assignedModels)].slice(0, 3);
+                // Lenses OFF: the plain 3-model picker in the chat input is
+                // the source of truth for the cards + debate.
+                const selectionModels = (isEnsembleEnabled && !lensConfig.enabled && ensembleModelSelection && ensembleModelSelection.length > 0)
+                    ? ensembleModelSelection.filter(s => s.providerId === c.id && c.models.includes(s.model)).map(s => s.model)
+                    : [];
                 const models = isEnsembleEnabled
-                    ? (hasCompleteAnalystAssignments ? uniqueAssignedModels : configuredModels)
+                    ? (lensConfig.enabled && hasCompleteAnalystAssignments
+                        ? uniqueAssignedModels
+                        : (selectionModels.length > 0 ? selectionModels : configuredModels))
                     : (c.selectedModel ? [c.selectedModel] : []);
                 return models.map(model => ({
                     config: { ...c, selectedModel: model },
@@ -404,13 +436,18 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             return;
         }
         if (isEnsembleEnabled) {
-            if (missingAnalystRoles.length > 0) {
-                toast.warning('Assign all analysts', `Assign ${missingAnalystRoles.map(role => ANALYST_ROLE_DEFINITIONS[role].shortName).join(', ')} before starting the ensemble.`);
-                return;
-            }
-            if (!hasCompleteAnalystAssignments) {
-                toast.warning('Distinct analyst models required', 'Each analyst role must use a different model. The same provider is allowed.');
-                return;
+            // Role-assignment requirements only apply when Lenses are ON —
+            // with Lenses off, the ordinary "Debate Models" picker (or the
+            // per-provider ensemble models) determines the participants.
+            if (lensConfig.enabled) {
+                if (missingAnalystRoles.length > 0) {
+                    toast.warning('Assign all analysts', `Assign ${missingAnalystRoles.map(role => ANALYST_ROLE_DEFINITIONS[role].shortName).join(', ')} before starting the ensemble.`);
+                    return;
+                }
+                if (!hasCompleteAnalystAssignments) {
+                    toast.warning('Distinct analyst models required', 'Each analyst role must use a different model. The same provider is allowed.');
+                    return;
+                }
             }
         }
 
@@ -931,6 +968,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     setLatestMonteCarloResult(null);
                     setLatestBacktestResult(null);
                     setLiveThoughts(Object.fromEntries(enabledProviders.map(p => [p.thoughtsKey, null])));
+                    setLiveOutputs(Object.fromEntries(enabledProviders.map(p => [p.thoughtsKey, null])));
                     setLiveReasoning(Object.fromEntries(enabledProviders.map(p => [p.thoughtsKey, null])));
                     reasoningMapRef.current = {};
                     setIsAnalysisTypingComplete(false);
@@ -957,23 +995,30 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             isPlaybookEnabledInPureAI,
                             isFamiliesEnabledInPureAI,
                             isMemoryEnabledInPureAI,
-                            // Analyst Lens: pass role-specific prompt based on trading style
+                            // Analyst Lens: pass role-specific prompt based on trading style.
+                            // Custom overrides from the prompt editor win over built-ins.
                             lensConfig.enabled && provider.thoughtsKey
-                                ? getLensPromptForStyle(
-                                    provider.thoughtsKey,
-                                    lensConfig.assignments,
-                                    // For auto mode, use swing as default (will be detected per-call with hybrid data)
-                                    lensConfig.tradingStyle === 'auto' ? 'swing' : lensConfig.tradingStyle
-                                )
+                                ? (customLensPrompts?.[getRoleForProvider(`${provider.config.id}::${provider.model}`, lensConfig.assignments)]
+                                    || getLensPromptForStyle(
+                                        `${provider.config.id}::${provider.model}`,
+                                        lensConfig.assignments,
+                                        // For auto mode, use swing as default (will be detected per-call with hybrid data)
+                                        lensConfig.tradingStyle === 'auto' ? 'swing' : lensConfig.tradingStyle
+                                    ))
                                 : undefined,
+                            // Normal mode (Lenses off): custom base prompt override.
+                            lensConfig.enabled ? undefined : (customEnsemblePrompt || undefined),
+                            // Streamed chain-of-thought deltas accumulate — the
+                            // latest full string is pushed to the live cards.
                             (reasoning: string) => {
-                                reasoningMapRef.current[provider.name] = reasoning;
-                                setLiveReasoning(prev => ({ ...prev, [provider.thoughtsKey]: reasoning }));
+                                reasoningMapRef.current[provider.name] = (reasoningMapRef.current[provider.name] || '') + reasoning;
+                                throttledLiveReasoning(provider.thoughtsKey, reasoningMapRef.current[provider.name]);
                             }
                         )
                             .catch((err: any) => {
                                 const errorMsg = err instanceof Error ? err.message : String(err);
                                 setLiveThoughts(prev => ({ ...prev, [provider.thoughtsKey]: errorMsg }));
+                                setLiveOutputs(prev => ({ ...prev, [provider.thoughtsKey]: 'This analyst was unavailable for this analysis.' }));
 
                                 throw err;
                             })
@@ -1005,19 +1050,18 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             const providerKey = enabledProviders[index].thoughtsKey;
                             thoughtMap[providerKey] = settled.value.thoughtProcess;
                             thoughtMap[enabledProviders[index].name] = settled.value.thoughtProcess;
-                            const finalOutput = settled.value.analysis
-                                ? JSON.stringify(settled.value.analysis, null, 2)
-                                : settled.value.thoughtProcess;
+                            const finalOutput = settled.value.finalOutput || settled.value.thoughtProcess;
                             finalOutputMap[providerKey] = finalOutput;
                             finalOutputMap[enabledProviders[index].name] = finalOutput;
                         }
                     });
 
-                    // FIX: Populate liveThoughts for LiveAnalysisView display
+                    // Populate the two distinct analyst card sections.
                     setLiveThoughts(prev => ({
                         ...prev,
-                        ...finalOutputMap
+                        ...thoughtMap
                     } as LiveThoughts));
+                    setLiveOutputs(prev => ({ ...prev, ...finalOutputMap } as LiveThoughts));
 
                     // ========== PER-AI MONTE CARLO ==========
                     // Run Monte Carlo on each AI's proposed setup BEFORE moderation
@@ -1120,7 +1164,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     // enabledProviders count — crashing the n-way debaters).
                     const fulfilledAnalysts = settledResults
                         .map((settled, i) => settled.status === 'fulfilled' ? { provider: enabledProviders[i], result: settled.value } : null)
-                        .filter((x): x is { provider: (typeof enabledProviders)[number]; result: { thoughtProcess: string; analysis: any } } => x !== null);
+                        .filter((x): x is { provider: (typeof enabledProviders)[number]; result: { thoughtProcess: string; finalOutput: string; analysis: any } } => x !== null);
 
                     if (isAccuracyModeEnabled) {
                         // ACCURACY MODE
@@ -1140,130 +1184,196 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             moderatorLearningContext, // Unified learning context for moderator
                             currentAbortController.signal, // Cancellation for the moderator stream
                             (reasoning: string) => {
-                                reasoningMapRef.current.moderator = reasoning;
-                                setLiveReasoning(prev => ({ ...prev, moderator: reasoning }));
-                                thoughtMap.moderator = reasoning;
+                                // Streamed moderator chain-of-thought accumulates
+                                // (deltas replace nothing — they append).
+                                reasoningMapRef.current.moderator = (reasoningMapRef.current.moderator || '') + reasoning;
+                                throttledLiveReasoning('moderator', reasoningMapRef.current.moderator);
+                                thoughtMap.moderator = reasoningMapRef.current.moderator;
                             }
                         );
                     } else {
-                        // STANDARD MODE
-                        if (fulfilledAnalysts.length === 2) {
-                            debateStream = ensembleService.conductTwoWayDebate(
-                                fulfilledAnalysts[0].result, fulfilledAnalysts[1].result,
-                                fulfilledAnalysts[0].provider.name, fulfilledAnalysts[1].provider.name,
-                                enhancedPrompt, finalTradeSummary,
-                                moderatorConfig, activeModModel, instructionsToUse, perAIMC,
-                                lensConfig.enabled ? lensConfig : undefined, // lensConfig
-                                lensConfig.enabled ? fulfilledAnalysts.map(a => a.provider.config.id) : undefined, // analystProviders
-                                activeFrameworks, // playbook
-                                tradeSummaries, // recent insights for pattern matching
-                                capturedGateResult, // Gate result (current run, not stale state)
-                                moderatorLearningContext, // Unified learning context for moderator
-                                fulfilledAnalysts.map(a => a.provider.config.id), // enabledProviders for weighted voting
-                                loggedTrades, // trades for weighted voting
-                                currentAbortController.signal, // Cancellation for the moderator stream
-                                (reasoning: string) => {
-                                    reasoningMapRef.current.moderator = reasoning;
-                                    setLiveReasoning(prev => ({ ...prev, moderator: reasoning }));
-                                    thoughtMap.moderator = reasoning;
-                                }
-                            );
-                        } else if (fulfilledAnalysts.length === 3) {
-                            debateStream = ensembleService.conductThreeWayDebate(
-                                fulfilledAnalysts[0].result, fulfilledAnalysts[1].result, fulfilledAnalysts[2].result,
-                                fulfilledAnalysts[0].provider.name, fulfilledAnalysts[1].provider.name, fulfilledAnalysts[2].provider.name,
-                                enhancedPrompt, finalTradeSummary,
-                                moderatorConfig, activeModModel, instructionsToUse,
-                                loggedTrades, // trades (was undefined — fixes dead weighted voting)
-                                fulfilledAnalysts.map(a => a.provider.config.id), // enabledProviders (was undefined)
-                                perAIMC,   // monteCarloResults
-                                lensConfig.enabled ? lensConfig : undefined, // lensConfig
-                                lensConfig.enabled ? fulfilledAnalysts.map(a => a.provider.config.id) : undefined, // analystProviders
-                                activeFrameworks, // playbook
-                                tradeSummaries, // recent insights for pattern matching
-                                capturedGateResult, // Gate result (current run, not stale state)
-                                moderatorLearningContext, // NEW: Unified learning context for moderator
-                                currentAbortController.signal, // Cancellation for the moderator stream
-                                (reasoning: string) => {
-                                    reasoningMapRef.current.moderator = reasoning;
-                                    setLiveReasoning(prev => ({ ...prev, moderator: reasoning }));
-                                    thoughtMap.moderator = reasoning;
-                                }
-                            );
-                        } else {
-                            throw new Error(`Debate requires at least 2 analysts to respond (${fulfilledAnalysts.length} succeeded). Partial analyses were not used.`);
-                        }
+                        // STANDARD MODE — REAL inter-model debate. Each analyst
+                        // is re-invoked on its own provider for the rebuttal
+                        // rounds; only the moderator produces the JSON plan.
+                        debateStream = ensembleService.conductRealDebate(
+                            fulfilledAnalysts.map(a => ({
+                                provider: a.provider,
+                                result: a.result,
+                            })),
+                            enhancedPrompt,
+                            finalTradeSummary,
+                            moderatorConfig,
+                            activeModModel,
+                            instructionsToUse,
+                            perAIMC,   // monteCarloResults
+                            lensConfig.enabled ? lensConfig : undefined, // lensConfig
+                            lensConfig.enabled ? fulfilledAnalysts.map(a => a.provider.config.id) : undefined, // analystProviders
+                            activeFrameworks, // playbook
+                            tradeSummaries, // recent insights for pattern matching
+                            capturedGateResult, // Gate result (current run, not stale state)
+                            moderatorLearningContext, // Unified learning context for moderator
+                            currentAbortController.signal, // Cancellation for the moderator stream
+                            (reasoning: string) => {
+                                // Streamed moderator chain-of-thought accumulates
+                                // (deltas replace nothing — they append).
+                                reasoningMapRef.current.moderator = (reasoningMapRef.current.moderator || '') + reasoning;
+                                throttledLiveReasoning('moderator', reasoningMapRef.current.moderator);
+                                thoughtMap.moderator = reasoningMapRef.current.moderator;
+                            },
+                            (speaker: string, reasoning: string) => {
+                                // Rebuttal-round reasoning — keyed by speaker
+                                // so the debate transcript's thinking
+                                // collapsibles can show it.
+                                reasoningMapRef.current[speaker] = reasoning;
+                            }
+                        );
                     }
 
                     let fullResponseText = '';
-                    // Updated regex to include Puter model names (Claude, GPT, Grok, etc.) and OpenRouter
-                    const assignedRoleNames = enabledProviders.map(provider => provider.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-                    const speakerNames = [...new Set([
-                        ...assignedRoleNames,
-                        'Gemini', 'DeepSeek', 'Zhipu', 'Groq', 'Groq \\(Alt\\)', 'Groq \\(Alt 2\\)', 'OpenRouter',
-                        'Moderator', 'Master Strategist', 'Claude[^:]*', 'GPT[^:]*', 'Grok[^:]*', 'Mistral[^:]*',
-                        'Kimi[^:]*', 'Qwen[^:]*', 'LLaMA[^:]*', 'Puter[^:]*'
-                    ])].sort((a, b) => b.length - a.length);
-                    const speakerPattern = speakerNames.join('|');
-                    const turnRegex = new RegExp(`(?:^|\\n)\\s*(?:[*_~]*)(${speakerPattern})[^\\n]*?(?:[*_~]*)\\s*:\\s*([\\s\\S]*?)(?=(?:^|\\n)\\s*(?:[*_~]*)(${speakerPattern})[^\\n]*?(?:[*_~]*)\\s*:|$)`, 'gi');
+                    if (isAccuracyModeEnabled) {
+                        // ACCURACY MODE — the moderator autoplays the whole
+                        // simulated transcript as one stream; parse `Speaker:`
+                        // lines out of it with the established regex.
+                        // Updated regex to include Puter model names (Claude, GPT, Grok, etc.) and OpenRouter
+                        const assignedRoleNames = enabledProviders.map(provider => provider.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+                        const speakerNames = [...new Set([
+                            ...assignedRoleNames,
+                            'Gemini', 'DeepSeek', 'Zhipu', 'Groq', 'Groq \\(Alt\\)', 'Groq \\(Alt 2\\)', 'OpenRouter',
+                            'Moderator', 'Master Strategist', 'Claude[^:]*', 'GPT[^:]*', 'Grok[^:]*', 'Mistral[^:]*',
+                            'Kimi[^:]*', 'Qwen[^:]*', 'LLaMA[^:]*', 'Puter[^:]*'
+                        ])].sort((a, b) => b.length - a.length);
+                        const speakerPattern = speakerNames.join('|');
+                        const turnRegex = new RegExp(`(?:^|\\n)\\s*(?:[*_~]*)(${speakerPattern})[^\\n]*?(?:[*_~]*)\\s*:\\s*([\\s\\S]*?)(?=(?:^|\\n)\\s*(?:[*_~]*)(${speakerPattern})[^\\n]*?(?:[*_~]*)\\s*:|$)`, 'gi');
 
-                    for await (const chunk of debateStream) {
-                        if (!isCurrentRequest()) break;
-                        fullResponseText += chunk;
+                        for await (const chunk of debateStream as AsyncGenerator<string, void, unknown>) {
+                            if (!isCurrentRequest()) break;
+                            fullResponseText += chunk;
 
-                        const startTagRegex = /(?:<|\*\*<|`|< \*\*|_\*<)?DEBATE_START(?:>|>\*\*|`|\*\* >|>\*_)*/i;
-                        const endTagRegex = /(?:<|\*\*<|`|< \*\*|_\*<)?\/?(?:DEBATE_END|\/DEBATE_START)(?:>|>\*\*|`|\*\* >|>\*_)*/i;
+                            const startTagRegex = /(?:<|\*\*<|`|< \*\*|_\*<)?DEBATE_START(?:>|>\*\*|`|\*\* >|>\*_)*/i;
+                            const endTagRegex = /(?:<|\*\*<|`|< \*\*|_\*<)?\/?(?:DEBATE_END|\/DEBATE_START)(?:>|>\*\*|`|\*\* >|>\*_)*/i;
 
-                        const startMatch = fullResponseText.match(startTagRegex);
-                        let debateContent = '';
-                        let synthesisContent = '';
+                            const startMatch = fullResponseText.match(startTagRegex);
+                            let debateContent = '';
+                            let synthesisContent = '';
 
-                        if (startMatch) {
-                            const startIndex = startMatch.index! + startMatch[0].length;
-                            const endMatch = fullResponseText.slice(startIndex).match(endTagRegex);
-                            if (endMatch) {
-                                debateContent = fullResponseText.slice(startIndex, startIndex + endMatch.index!);
-                                const endTagLength = endMatch[0].length;
-                                const contentAfterDebate = fullResponseText.slice(startIndex + endMatch.index! + endTagLength);
-                                const jsonStart = contentAfterDebate.match(/<JSON_PLAN>|```json/i);
-                                if (jsonStart) {
-                                    synthesisContent = contentAfterDebate.substring(0, jsonStart.index).trim();
+                            if (startMatch) {
+                                const startIndex = startMatch.index! + startMatch[0].length;
+                                const endMatch = fullResponseText.slice(startIndex).match(endTagRegex);
+                                if (endMatch) {
+                                    debateContent = fullResponseText.slice(startIndex, startIndex + endMatch.index!);
+                                    const endTagLength = endMatch[0].length;
+                                    const contentAfterDebate = fullResponseText.slice(startIndex + endMatch.index! + endTagLength);
+                                    const jsonStart = contentAfterDebate.match(/<JSON_PLAN>|```json/i);
+                                    if (jsonStart) {
+                                        synthesisContent = contentAfterDebate.substring(0, jsonStart.index).trim();
+                                    } else {
+                                        synthesisContent = contentAfterDebate.trim();
+                                    }
                                 } else {
-                                    synthesisContent = contentAfterDebate.trim();
+                                    debateContent = fullResponseText.slice(startIndex);
                                 }
                             } else {
-                                debateContent = fullResponseText.slice(startIndex);
+                                if (/(Gemini|DeepSeek|Zhipu|Groq|Groq \(Alt\)|Moderator|Master Strategist).*:/.test(fullResponseText)) {
+                                    const jsonStart = fullResponseText.match(/<JSON_PLAN>|```json/i);
+                                    if (jsonStart) {
+                                        debateContent = fullResponseText.substring(0, jsonStart.index);
+                                    } else {
+                                        debateContent = fullResponseText;
+                                    }
+                                }
                             }
-                        } else {
-                            if (/(Gemini|DeepSeek|Zhipu|Groq|Groq \(Alt\)|Moderator|Master Strategist).*:/.test(fullResponseText)) {
-                                const jsonStart = fullResponseText.match(/<JSON_PLAN>|```json/i);
-                                if (jsonStart) {
-                                    debateContent = fullResponseText.substring(0, jsonStart.index);
-                                } else {
-                                    debateContent = fullResponseText;
+
+                            const currentTurns: DebateTurn[] = [];
+                            const matches = [...debateContent.matchAll(turnRegex)];
+                            for (const m of matches) {
+                                let speaker = m[1].trim();
+                                if (speaker === "Master Strategist") speaker = "Moderator";
+                                speaker = speaker.charAt(0).toUpperCase() + speaker.slice(1);
+                                currentTurns.push({ speaker: speaker as DebateTurn['speaker'], text: sanitizeAIResponse(m[2].trim()) });
+                            }
+
+                            // The moderator's verdict prose sits right before
+                            // </DEBATE_END> (no "Speaker:" prefix), so the turn
+                            // regex can't capture it — surface it as the final
+                            // moderator synthesis instead of dropping it.
+                            if (!synthesisContent && matches.length > 0) {
+                                const lastMatch = matches[matches.length - 1];
+                                const trailing = debateContent.slice((lastMatch.index ?? 0) + lastMatch[0].length);
+                                if (trailing.trim()) {
+                                    synthesisContent = trailing.trim();
+                                }
+                            }
+
+                            if (synthesisContent) {
+                                const cleanSynthesis = synthesisContent.replace(/^(?:[*_~]*)(Moderator|Master Strategist)[^:\n]*?:\s*/i, '');
+                                const lastTurn = currentTurns[currentTurns.length - 1];
+                                if (cleanSynthesis && (!lastTurn || lastTurn.text !== cleanSynthesis)) {
+                                    currentTurns.push({ speaker: 'Moderator', text: sanitizeAIResponse(cleanSynthesis) });
+                                }
+                            }
+
+                            // P1-5: Coalesce per-token updates into one per frame.
+                            throttledDebateUpdate(requestConversationId, debateMessageId, currentTurns, thoughtMap, reasoningMapRef.current);
+                        }
+                    } else {
+                        // STANDARD MODE — REAL debate: the pipeline receives
+                        // structured turn events (delta chunks per speaker +
+                        // round) instead of a transcript to regex-parse.
+                        const turnTexts: Record<string, string> = {}; // `${round}::${speaker}` → accumulated text
+                        let moderatorRound = 0;
+
+                        for await (const event of debateStream as AsyncGenerator<ensembleService.RealDebateTurnEvent, void, unknown>) {
+                            if (!isCurrentRequest()) break;
+                            if (!event || typeof event.text !== 'string') continue;
+
+                            const key = `${event.round}::${event.speaker}`;
+                            turnTexts[key] = (turnTexts[key] || '') + event.text;
+                            if (event.speaker === 'Moderator') {
+                                fullResponseText += event.text;
+                                moderatorRound = event.round;
+                            }
+
+                            const currentTurns: DebateTurn[] = Object.entries(turnTexts)
+                                .map(([k, text]) => {
+                                    const sep = k.indexOf('::');
+                                    return {
+                                        speaker: k.slice(sep + 2) as DebateTurn['speaker'],
+                                        round: parseInt(k.slice(0, sep), 10) || undefined,
+                                        text: sanitizeAIResponse(text.trim()),
+                                    };
+                                })
+                                .sort((a, b) => (a.round ?? 0) - (b.round ?? 0));
+
+                            throttledDebateUpdate(requestConversationId, debateMessageId, currentTurns, thoughtMap, reasoningMapRef.current);
+                        }
+
+                        // The moderator's verdict prose lives before the
+                        // </DEBATE_END> / <JSON_PLAN> markers — strip them so
+                        // the transcript shows clean verdict text.
+                        if (moderatorRound > 0) {
+                            const modKey = `${moderatorRound}::Moderator`;
+                            if (turnTexts[modKey]) {
+                                const cleaned = turnTexts[modKey]
+                                    .replace(/<\/?DEBATE_END>/gi, '')
+                                    .replace(/<MODERATOR_ERROR>[\s\S]*?<\/MODERATOR_ERROR>/gi, '')
+                                    .replace(/<JSON_PLAN>[\s\S]*/i, '')
+                                    .trim();
+                                if (cleaned) {
+                                    turnTexts[modKey] = cleaned;
+                                    const finalTurns: DebateTurn[] = Object.entries(turnTexts)
+                                        .map(([k, text]) => {
+                                            const sep = k.indexOf('::');
+                                            return {
+                                                speaker: k.slice(sep + 2) as DebateTurn['speaker'],
+                                                round: parseInt(k.slice(0, sep), 10) || undefined,
+                                                text: sanitizeAIResponse(text.trim()),
+                                            };
+                                        })
+                                        .sort((a, b) => (a.round ?? 0) - (b.round ?? 0));
+                                    throttledDebateUpdate(requestConversationId, debateMessageId, finalTurns, thoughtMap, reasoningMapRef.current);
                                 }
                             }
                         }
-
-                        const currentTurns: DebateTurn[] = [];
-                        const matches = [...debateContent.matchAll(turnRegex)];
-                        for (const m of matches) {
-                            let speaker = m[1].trim();
-                            if (speaker === "Master Strategist") speaker = "Moderator";
-                            speaker = speaker.charAt(0).toUpperCase() + speaker.slice(1);
-                            currentTurns.push({ speaker: speaker as DebateTurn['speaker'], text: sanitizeAIResponse(m[2].trim()) });
-                        }
-
-                        if (synthesisContent) {
-                            const cleanSynthesis = synthesisContent.replace(/^(?:[*_~]*)(Moderator|Master Strategist)[^:\n]*?:\s*/i, '');
-                            const lastTurn = currentTurns[currentTurns.length - 1];
-                            if (cleanSynthesis && (!lastTurn || lastTurn.text !== cleanSynthesis)) {
-                                currentTurns.push({ speaker: 'Moderator', text: sanitizeAIResponse(cleanSynthesis) });
-                            }
-                        }
-
-                        // P1-5: Coalesce per-token updates into one per frame.
-                        throttledDebateUpdate(requestConversationId, debateMessageId, currentTurns, thoughtMap, reasoningMapRef.current);
                     }
                     // Flush the final pending update synchronously so the
                     // last chunk's state is committed before downstream parsing.
@@ -1272,12 +1382,26 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
                     let finalAnalysis: TradeAnalysis;
                     try {
-                        // Check if the response contains a moderator error
+                        // Layered extraction: prefer the moderator's post-debate
+                        // section, but never hard-fail when the moderator omits
+                        // </DEBATE_END> — fall back to the last JSON in the whole
+                        // response so a formatting hiccup can't turn the run into
+                        // a Neutral "no signal" card.
                         const moderatorErrorMatch = fullResponseText.match(/<MODERATOR_ERROR>([\s\S]*?)<\/MODERATOR_ERROR>/);
-                        if (moderatorErrorMatch) {
-                            throw new Error(`Moderator Error: ${moderatorErrorMatch[1]}`);
+                        const debateEnd = fullResponseText.match(/<\/?DEBATE_END>/i);
+                        const candidate = debateEnd && debateEnd.index !== undefined
+                            ? fullResponseText.slice(debateEnd.index + debateEnd[0].length)
+                            : fullResponseText;
+                        try {
+                            finalAnalysis = extractLastJson(candidate);
+                        } catch (e) {
+                            // Only surface the moderator error marker when no
+                            // valid JSON plan could be recovered at all.
+                            if (moderatorErrorMatch) {
+                                throw new Error(`Moderator Error: ${moderatorErrorMatch[1]}`);
+                            }
+                            throw e;
                         }
-                        finalAnalysis = extractLastJson(fullResponseText);
                     } catch (e) {
                         console.error("Failed to parse final debate JSON:", e);
                         const errorMessage = e instanceof Error ? e.message : 'Unknown error';
@@ -1462,13 +1586,20 @@ const result = await cachedAnalyzeTradingView(
                             isFamiliesEnabledInPureAI,
                             isMemoryEnabledInPureAI,
                             // Analyst Lens: pass role-specific prompt based on trading style
+                            // (custom prompt overrides from the prompt editor win).
                             lensConfig.enabled && provider.thoughtsKey
-                                ? getLensPromptForStyle(
-                                    provider.thoughtsKey,
-                                    lensConfig.assignments,
-                                    lensConfig.tradingStyle === 'auto' ? 'swing' : lensConfig.tradingStyle
-                                )
-                                : undefined
+                                ? (customLensPrompts?.[getRoleForProvider(`${provider.config.id}::${provider.model}`, lensConfig.assignments)]
+                                    || getLensPromptForStyle(
+                                        `${provider.config.id}::${provider.model}`,
+                                        lensConfig.assignments,
+                                        lensConfig.tradingStyle === 'auto' ? 'swing' : lensConfig.tradingStyle
+                                    ))
+                                : undefined,
+                            // Normal mode (Lenses off): custom base prompt override.
+                            lensConfig.enabled ? undefined : (customEnsemblePrompt || undefined),
+                            // Solo path has no onReasoning callback — keep the
+                            // positional slots aligned with the multi path.
+                            undefined
                         );
                     if (!isCurrentRequest()) return;
                     const soloAiMessage: Message = {
@@ -1535,7 +1666,18 @@ const result = await cachedAnalyzeTradingView(
         } catch (error: any) {
             if (!isCurrentRequest()) return;
             failStep('analysis');
-            updateRequestMessages(prev => prev.filter(m => !m.isDebating));
+            // Preserve the debate transcript when the debate was interrupted —
+            // never wipe a debate that already produced turns. A bare
+            // placeholder (no turns yet) is still removed.
+            updateRequestMessages(prev => prev.map(m => {
+                if (!m.isDebating) return m;
+                if ((m.debateTurns?.length ?? 0) === 0) return null;
+                return {
+                    ...m,
+                    isDebating: false,
+                    text: 'The debate was interrupted by an error before the moderator could issue a final verdict.',
+                };
+            }).filter((m): m is Message => m !== null));
 
             if (isQuotaError(error)) {
                 const quotaModelNames = buildModelIdToName(providerConfigs);
@@ -1601,7 +1743,7 @@ const result = await cachedAnalyzeTradingView(
         images, setImages,
         loadingMessage, setLoadingMessage,
         analysisSteps, setAnalysisSteps,
-        liveThoughts, setLiveThoughts,
+        liveThoughts, liveOutputs, setLiveThoughts, setLiveOutputs,
         liveReasoning, setLiveReasoning,
         currentGateResult, setCurrentGateResult,
         currentVisionData, setCurrentVisionData,

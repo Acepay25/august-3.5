@@ -22,6 +22,7 @@ interface CacheEntry<T> {
 
 interface CachedResponse {
   thoughtProcess: string;
+  finalOutput?: string;
   analysis: unknown;
   sources?: unknown[];
   model: string;
@@ -178,7 +179,7 @@ export const cacheResponse = (
   imageHashes: string[],
   prompt: string,
   model: string,
-  response: { thoughtProcess: string; analysis: unknown; sources?: unknown[] }
+  response: { thoughtProcess: string; finalOutput?: string; analysis: unknown; sources?: unknown[] }
 ): void => {
   const key = buildResponseKey(imageHashes, hashString(prompt), model);
   responseCache.set(key, {

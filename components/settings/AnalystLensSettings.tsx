@@ -7,6 +7,7 @@
 
 import React from 'react';
 import { AIProvider, AnalystRole, AnalystRoleAssignment, AnalystLensConfig, TradingStyle } from '../../types';
+import { ProviderConfig } from '../../types/provider';
 import {
   ANALYST_ROLE_DEFINITIONS,
   validateLensConfig,
@@ -15,7 +16,8 @@ import {
 
 interface Props {
   config: AnalystLensConfig;
-  enabledProviders: AIProvider[];
+  /** Full provider configs (ready or not) so the dropdowns can show the currently assigned provider AND its model. */
+  providers: ProviderConfig[];
   onChange: (config: AnalystLensConfig) => void;
 }
 
@@ -27,7 +29,7 @@ const TRADING_STYLES: { value: TradingStyle; label: string; emoji: string; descr
   { value: 'auto', label: 'Auto', emoji: '', description: 'AI detects best' },
 ];
 
-export const AnalystLensSettings: React.FC<Props> = ({ config, enabledProviders, onChange }) => {
+export const AnalystLensSettings: React.FC<Props> = ({ config, providers, onChange }) => {
   const handleToggle = () => {
     onChange({
       ...config,
@@ -35,9 +37,21 @@ export const AnalystLensSettings: React.FC<Props> = ({ config, enabledProviders,
     });
   };
 
-  const handleAssignment = (role: AnalystRole, provider: AIProvider | null) => {
+  const handleAssignment = (role: AnalystRole, providerId: AIProvider | null) => {
+    // Switching providers resets the model so a stale assignedModel can't
+    // leak onto a provider that doesn't have it.
     const newAssignments = config.assignments.map(a =>
-      a.role === role ? { ...a, assignedProvider: provider } : a
+      a.role === role ? { ...a, assignedProvider: providerId, assignedModel: undefined } : a
+    );
+    onChange({
+      ...config,
+      assignments: newAssignments,
+    });
+  };
+
+  const handleModelChange = (role: AnalystRole, model: string) => {
+    const newAssignments = config.assignments.map(a =>
+      a.role === role ? { ...a, assignedModel: model || undefined } : a
     );
     onChange({
       ...config,
@@ -120,6 +134,13 @@ export const AnalystLensSettings: React.FC<Props> = ({ config, enabledProviders,
         {availableRoles.map(def => {
           const currentAssignment = config.assignments.find(a => a.role === def.id);
           const assignedProviders = getAssignedProviders(def.id);
+          // All providers (ready or not) so a saved assignment always shows —
+          // a disabled/removed provider is labeled instead of silently blank.
+          const selectedProvider = providers.find(c => c.id === currentAssignment?.assignedProvider);
+          const providerModels = selectedProvider
+            ? (selectedProvider.models.length > 0 ? selectedProvider.models : (selectedProvider.selectedModel ? [selectedProvider.selectedModel] : []))
+            : [];
+          const selectedModel = currentAssignment?.assignedModel || selectedProvider?.selectedModel || '';
 
           return (
             <div key={def.id} className="role-card">
@@ -140,20 +161,39 @@ export const AnalystLensSettings: React.FC<Props> = ({ config, enabledProviders,
                 disabled={!config.enabled}
               >
                 <option value="">-- Not Assigned --</option>
-                {enabledProviders.map(provider => {
-                  const isAssignedElsewhere = assignedProviders.includes(provider);
+                {providers.map(provider => {
+                  const isReady = provider.isEnabled && provider.apiKey.trim().length > 0;
+                  const isAssignedElsewhere = assignedProviders.includes(provider.id);
                   return (
                     <option
-                      key={provider}
-                      value={provider}
+                      key={provider.id}
+                      value={provider.id}
                       disabled={isAssignedElsewhere}
                     >
-                      {provider}
+                      {provider.name}
+                      {!isReady ? ' (disabled)' : ''}
                       {isAssignedElsewhere ? ' (assigned)' : ''}
                     </option>
                   );
                 })}
               </select>
+
+              {/* Model dropdown — appears once a provider is chosen, so the
+                  settings UI shows the full provider + model assignment. */}
+              {currentAssignment?.assignedProvider && (
+                <select
+                  className="provider-select"
+                  style={{ marginTop: 6 }}
+                  value={selectedModel}
+                  onChange={(e) => handleModelChange(def.id, e.target.value)}
+                  disabled={!config.enabled}
+                >
+                  <option value="">-- Default model --</option>
+                  {providerModels.map(model => (
+                    <option key={model} value={model}>{model}</option>
+                  ))}
+                </select>
+              )}
             </div>
           );
         })}
@@ -168,7 +208,7 @@ export const AnalystLensSettings: React.FC<Props> = ({ config, enabledProviders,
               {config.assignments.filter(a => a.assignedProvider !== null).length} / 3 roles
             </span>
           </div>
-          {enabledProviders.length < 3 && (
+          {providers.filter(p => p.isEnabled && p.apiKey.trim().length > 0).length < 3 && (
             <div className="info-warning">
                Enable at least 3 AI providers to fully utilize analyst lenses.
             </div>

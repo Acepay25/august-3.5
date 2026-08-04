@@ -2,6 +2,7 @@
 import React from 'react';
 import { Message, MessageRole, TradeOutcome, SavedAnalysis, Conversation, DebateTurn, ConfidenceCalibration, AnalystLensConfig } from '../../types';
 import { ChevronDownIcon, LinkIcon, CheckIcon, BrainIcon } from '../shared/Icons';
+import MarkdownContent from '../shared/MarkdownContent';
 import LiveMarketDataView from '../market/LiveMarketDataView';
 import DebateView from '../analysis/DebateView';
 import AnalysisResult from '../analysis/AnalysisResult';
@@ -235,10 +236,10 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                         <ChevronDownIcon className={`ml-auto h-4 w-4 transition-transform ${isThinkingExpanded ? 'rotate-180' : ''}`} />
                                     </button>
                                     {isThinkingExpanded && (
-                                        <div className="mt-3 rounded-lg bg-zinc-900/60 px-3 py-2 text-xs leading-relaxed text-zinc-500">
+                                        <div className="mt-3 space-y-3 rounded-lg bg-zinc-900/60 px-3 py-2 text-xs leading-relaxed text-zinc-500">
                                             {thinkingEntries.length > 0
                                                 ? thinkingEntries.map(([providerId, content]) => (
-                                                    <p key={providerId} className="whitespace-pre-wrap text-zinc-400">{content}</p>
+                                                    <MarkdownContent key={providerId} content={content} className="text-zinc-400" />
                                                 ))
                                                 : 'This model did not return a separate reasoning trace. Only the generated answer is available.'}
                                         </div>
@@ -254,7 +255,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                         <span className="text-zinc-600">for a few seconds</span>
                                         <ChevronDownIcon className={`ml-auto h-4 w-4 transition-transform ${isThinkingExpanded ? 'rotate-180' : ''}`} />
                                     </button>
-                                    {isThinkingExpanded && <div className="mt-3 space-y-2 rounded-lg bg-zinc-900/60 px-3 py-2 text-xs leading-relaxed text-zinc-400">{thinkingEntries.map(([providerId, content]) => <p key={providerId} className="whitespace-pre-wrap">{content}</p>)}</div>}
+                                    {isThinkingExpanded && <div className="mt-3 space-y-3 rounded-lg bg-zinc-900/60 px-3 py-2 text-xs leading-relaxed text-zinc-400">{thinkingEntries.map(([providerId, content]) => <MarkdownContent key={providerId} content={content} className="text-zinc-400" />)}</div>}
                                 </div>
                             )}
 
@@ -361,7 +362,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 </div>
                             )}
 
-                            {false && message.role === MessageRole.AI && (message.analysis || message.isDebating || (message.debateTurns?.length ?? 0) > 0) && message.thoughtProcesses && Object.values(message.thoughtProcesses ?? {}).some(c => c) && (
+                            {message.role === MessageRole.AI && (message.analysis || message.isDebating || (message.debateTurns?.length ?? 0) > 0) && message.thoughtProcesses && Object.values(message.thoughtProcesses ?? {}).some(c => c) && (
                                 <div className="mt-4 sm:mt-6 pt-3 sm:pt-5 border-t border-white/10">
                                     <button
                                         onClick={(e) => {

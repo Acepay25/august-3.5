@@ -73,6 +73,25 @@ const DebateView: React.FC<DebateViewProps> = ({ debateTurns, modelsUsed, reason
     const rounds = useMemo(() => {
         if (!debateTurns || debateTurns.length === 0) return [];
 
+        // Real inter-model debates carry an explicit round per turn — group by
+        // it directly (round 1 = opening statements, rebuttals follow, the
+        // moderator verdict round closes the debate).
+        if (debateTurns.some(t => typeof t.round === 'number')) {
+            const byRound = new Map<number, { moderator?: DebateTurn, analysts: DebateTurn[] }>();
+            debateTurns.forEach(turn => {
+                const round = turn.round ?? 1;
+                if (!byRound.has(round)) byRound.set(round, { analysts: [] });
+                const bucket = byRound.get(round)!;
+                if (turn.speaker === 'Moderator') {
+                    bucket.moderator = turn;
+                } else {
+                    bucket.analysts.push(turn);
+                }
+            });
+            return [...byRound.entries()].sort((a, b) => a[0] - b[0]).map(([, value]) => value);
+        }
+
+        // Legacy/simulated transcripts: a moderator turn starts a new round.
         const newRounds: { moderator?: DebateTurn, analysts: DebateTurn[] }[] = [];
         let currentRound: { moderator?: DebateTurn, analysts: DebateTurn[] } | null = null;
 
@@ -146,7 +165,15 @@ const DebateView: React.FC<DebateViewProps> = ({ debateTurns, modelsUsed, reason
                 {rounds.map((round, roundIndex) => {
                     const isFinalRound = roundIndex === rounds.length - 1;
                     const isVerdict = round.moderator?.text?.toLowerCase().includes('verdict') || false;
-                    const roundTitle = isVerdict ? 'Final Verdict' : `Round ${roundIndex + 1}`;
+                    // Real debates label rounds semantically; the round number
+                    // comes from the turn payload (fallback: index-based).
+                    const roundNum = round.analysts[0]?.round ?? round.moderator?.round;
+                    const ROUND_TITLES = ['Opening Statements', 'Rebuttals', 'Counter-Rebuttals', 'Moderator Verdict'];
+                    const roundTitle = isVerdict
+                        ? 'Final Verdict'
+                        : (roundNum && roundNum >= 1 && roundNum <= ROUND_TITLES.length)
+                            ? `Round ${roundNum} — ${ROUND_TITLES[roundNum - 1]}`
+                            : `Round ${roundIndex + 1}`;
 
                     return (
                         <div key={`round-${roundIndex}`} className="animate-fade-in">
