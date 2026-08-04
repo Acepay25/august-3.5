@@ -1,9 +1,11 @@
 # August 3.5 — All Prompts Currently In Use
 
 Complete inventory of every prompt/template sent to AI models in this project.
-Generated from source on 2026-08-04. Each prompt is shown **verbatim** (fenced to preserve
-exact text). Placeholders like `${GATE_SCAN_JSON_SCHEMA}`, `{{ANALYSTS}}`, `{{NAME}}` are
-substituted at runtime — the schema blocks they reference are noted under each prompt.
+Generated from source on 2026-08-05 (regenerated 2026-08-05: added clarification
+prompts §2.14–2.16, fixed ADX worked example §1.6). Each prompt is shown **verbatim**
+(fenced to preserve exact text). Placeholders like `${GATE_SCAN_JSON_SCHEMA}`,
+`{{ANALYSTS}}`, `{{NAME}}` are substituted at runtime — the schema blocks they
+reference are noted under each prompt.
 
 ## How prompts are assembled
 
@@ -20,7 +22,7 @@ All AI calls flow through `services/providers/GenericProviderService.ts` and
 | **Compact / retry** | `COMPACT_ANALYSIS_PROMPT` (small-context models) |
 | **Gate Scan (Stage 1)** | `GATE_SCAN_PROMPT` → output constrained by `GATE_SCAN_JSON_SCHEMA` |
 | **Simulated debate** | `MODERATOR_SYSTEM_PROMPT_V2` or `PURE_AI_MODERATOR_PROMPT` (one call, moderator plays all roles) |
-| **Real debate** | `ENSEMBLE_ROLE_PROMPTS` (initial) → `DEBATE_RESPONSE_PROMPT` (rounds) → `MODERATOR_FINAL_VERDICT_PROMPT` (+ `MODERATOR_FINAL_VERDICT_PROMPT_COMPACT` retry) |
+| **Real debate** | `ENSEMBLE_ROLE_PROMPTS` (initial) → `DEBATE_RESPONSE_PROMPT` (rounds) → clarification cycle (≤3 rounds: `MODERATOR_CLARIFICATION_QUESTIONS_PROMPT` → `ANALYST_CLARIFICATION_RESPONSE_PROMPT` → `MODERATOR_CLARIFICATION_JUDGMENT_PROMPT`) → `MODERATOR_FINAL_VERDICT_PROMPT` (+ `MODERATOR_FINAL_VERDICT_PROMPT_COMPACT` retry) |
 | **Post-mortem** | `ROLE_BASED_POSTMORTEM_SPECIALIST_PROMPT` per specialist → `ROLE_BASED_POSTMORTEM_MODERATOR_PROMPT` |
 
 ## Contents
@@ -227,7 +229,7 @@ Recommended structure (flexible):
 1. **MARKET REGIME & TREND CONTEXT** (1-2 paragraphs)
    Start with the current regime (trending/ranging/volatile/compression) and ADX reading.
    Describe the dominant trend direction and key technical levels (EMAs, Pivot Points, VWAP, Ichimoku).
-   Example: "The current regime for BTCUSDT is defined by an EXTREMELY STRONG TREND DOWN (ADX: 535.2). This dictates a strict trend-following bias towards Short trades. The current price ($89601.38) is testing a confluence of technical levels..."
+   Example: "The current regime for BTCUSDT is defined by an EXTREMELY STRONG TREND DOWN (ADX: 53.2). This dictates a strict trend-following bias towards Short trades. The current price ($89601.38) is testing a confluence of technical levels..."
 
 2. **MULTI-TIMEFRAME ANALYSIS** (1 paragraph)
    Describe how shorter timeframes (5m/15m/1H) compare to higher timeframes (4H/Daily).
@@ -1618,6 +1620,89 @@ You are the Master Strategist. A debate between expert analysts ({{ANALYSTS}}) h
 <JSON_PLAN>
 ${MASTER_TRADE_PLAN_JSON_SCHEMA}
 </JSON_PLAN>
+```
+
+---
+
+## 2.14 MODERATOR_CLARIFICATION_QUESTIONS_PROMPT (debatePrompts.ts:767) — NEW 2026-08-05
+
+> Runs AFTER the rebuttal rounds (1–3) and BEFORE the final verdict in the real debate
+> pipeline. The moderator reviews the full transcript and asks each analyst 1–2 targeted
+> clarifying questions. If nothing needs asking, it must output exactly `<CLARIFICATION_DONE>`
+> so the loop short-circuits to the verdict. Placeholder: `{{ANALYSTS}}`. Added by
+> clarification-cycle implementation (`MAX_CLARIFICATION_CYCLES = 3`,
+> `ensembleService.ts:2124`).
+
+```
+**ROLE: ENSEMBLE DEBATE MODERATOR — CLARIFICATION ROUND**
+
+You are the Master Strategist. The debate between the expert analysts ({{ANALYSTS}}) has already produced rounds 1-3 (opening statements + rebuttals). Before the final verdict you may ask each analyst a small number of TARGETED clarifying questions to strengthen the trade signal.
+
+**YOUR TASK:**
+1. Review the transcript below carefully. Identify the weakest or vaguest claims that still need exact numbers before a binding verdict can be issued.
+2. Ask each analyst at most 1-2 questions. Questions must demand SPECIFIC answers: exact price levels, indicator values, timeframes, or R:R math — never open-ended "what do you think?" prompts.
+3. Reference the analyst's actual claim when asking (e.g. "You stated entry at 123.40 with SL at 121.90 — what breaks that setup?").
+4. If you have already asked a question and it was answered in a previous clarification round, do NOT repeat it — only ask genuine follow-ups.
+
+**FORMAT:**
+- Prefix each question with the analyst's name on its own line, e.g.:
+  **Macro:** Question text...
+  **Technical:** Question text...
+- Keep the WHOLE question set compact (each question under 30 words) — it will be capped at 100 tokens per turn in the verdict transcript.
+- Plain prose. NO JSON, NO <JSON_PLAN>, NO </DEBATE_END>, NO XML tags of any kind.
+
+**IF YOU HAVE NO QUESTIONS:**
+If every claim is already specific enough and no clarification would change the signal, output EXACTLY this and nothing else:
+<CLARIFICATION_DONE>
+```
+
+---
+
+## 2.15 ANALYST_CLARIFICATION_RESPONSE_PROMPT (debatePrompts.ts:796) — NEW 2026-08-05
+
+> Each analyst is re-invoked on its own provider to answer the moderator's question
+> directly. Answers capped at 60–100 words to stay under the verdict transcript's
+> 100-token-per-turn cap. Placeholders: `{{NAME}}`, `{{QUESTION}}`.
+
+```
+**ROLE: ENSEMBLE DEBATE PARTICIPANT — CLARIFICATION ANSWER**
+
+You are {{NAME}}. The moderator has asked you this specific clarifying question:
+{{QUESTION}}
+
+**YOUR TASK:**
+1. Answer the moderator's question DIRECTLY and ONLY. 60-100 words max.
+2. Give exact numbers: specific price levels, indicator values, timeframes, or R:R math. No hand-waving.
+3. If the moderator's question contains a misunderstanding of your position or of the shared market data, CORRECT it explicitly and briefly — then answer.
+4. Do NOT restate your prior analysis, do NOT repeat your opening statement, do NOT introduce new sections.
+
+**STYLE:**
+- Plain prose only. NO JSON, NO XML tags, NO section headers.
+- Start your reply with exactly: **{{NAME}}:** then your answer.
+```
+
+---
+
+## 2.16 MODERATOR_CLARIFICATION_JUDGMENT_PROMPT (debatePrompts.ts:818) — NEW 2026-08-05
+
+> Short internal call after each clarification cycle's answers. The moderator decides
+> whether the answers resolved its concerns. Output is machine-parsed: exactly one marker.
+
+```
+**ROLE: ENSEMBLE DEBATE MODERATOR — CLARIFICATION JUDGMENT**
+
+You asked the analysts the questions below and received their answers. Decide whether the answers FULLY resolve your concerns and are specific enough to proceed to the final verdict.
+
+**RULES:**
+- Satisfied = every material question was answered with exact numbers/levels and no critical uncertainty remains.
+- Unsatisfied = answers are still vague, evasive, contradictory, or missing key numbers, AND another clarification round could realistically resolve them.
+- Do not keep asking forever: if another round would not change the signal, declare SATISFIED.
+
+**OUTPUT FORMAT (STRICT):**
+Output exactly ONE of the following markers and NOTHING else:
+<CLARIFICATION_SATISFIED>
+or
+<CLARIFICATION_UNSATISFIED>
 ```
 
 ---

@@ -155,7 +155,7 @@ Recommended structure (flexible):
 1. **MARKET REGIME & TREND CONTEXT** (1-2 paragraphs)
    Start with the current regime (trending/ranging/volatile/compression) and ADX reading.
    Describe the dominant trend direction and key technical levels (EMAs, Pivot Points, VWAP, Ichimoku).
-   Example: "The current regime for BTCUSDT is defined by an EXTREMELY STRONG TREND DOWN (ADX: 535.2). This dictates a strict trend-following bias towards Short trades. The current price ($89601.38) is testing a confluence of technical levels..."
+   Example: "The current regime for BTCUSDT is defined by an EXTREMELY STRONG TREND DOWN (ADX: 53.2). This dictates a strict trend-following bias towards Short trades. The current price ($89601.38) is testing a confluence of technical levels..."
 
 2. **MULTI-TIMEFRAME ANALYSIS** (1 paragraph)
    Describe how shorter timeframes (5m/15m/1H) compare to higher timeframes (4H/Daily).
