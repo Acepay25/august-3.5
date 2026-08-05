@@ -66,9 +66,16 @@ export interface ChatContextProps {
 
 const SmoothText: React.FC<{ text: string; animate: boolean }> = ({ text, animate }) => {
     const [visibleText, setVisibleText] = React.useState(animate ? '' : text);
+    // The reveal is JS-driven (setTimeout), so the global CSS reduced-motion
+    // block can't affect it — check the media query here. Clicking the text
+    // skips the animation entirely.
+    const reducedMotion = React.useRef(
+        typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ).current;
+    const skippedRef = React.useRef(false);
 
     React.useEffect(() => {
-        if (!animate) {
+        if (!animate || reducedMotion || skippedRef.current) {
             setVisibleText(text);
             return;
         }
@@ -89,9 +96,18 @@ const SmoothText: React.FC<{ text: string; animate: boolean }> = ({ text, animat
             window.clearTimeout(frame);
         };
     // The animation is intentionally tied to the message text and animate flag.
-    }, [text, animate]);
+    }, [text, animate, reducedMotion]);
 
-    return <>{visibleText}</>;
+    if (!animate || reducedMotion || skippedRef.current) return <>{text}</>;
+    return (
+        <span
+            onClick={() => { skippedRef.current = true; setVisibleText(text); }}
+            title="Click to reveal the full text instantly"
+            className="cursor-pointer"
+        >
+            {visibleText}
+        </span>
+    );
 };
 
 const MessageItem = React.memo(({ message, context }: { message: Message, context: ChatContextProps }) => {
@@ -176,7 +192,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
     return (
         <div
             id={`message-${message.id}`}
-            className={`flex items-start gap-2 sm:gap-4 my-2 sm:my-4 px-2 sm:px-4 transition-all duration-200 lg:max-w-4xl lg:mx-auto
+            className={`status-surface flex items-start gap-2 sm:gap-4 my-2 sm:my-4 px-2 sm:px-4 transition-all duration-200 lg:max-w-4xl lg:mx-auto
             ${message.role === MessageRole.USER ? 'justify-end' : message.role === MessageRole.SYSTEM ? 'justify-center' : ''} 
             ${isHighlighted ? 'ring-2 ring-blue-500/40 rounded-2xl bg-blue-900/10' : ''}
             ${isSelectionMode ? 'cursor-pointer hover:bg-zinc-800 rounded-xl py-2' : ''}
@@ -340,6 +356,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     lensConfig={lensConfig}
                                     isDebating
                                     activeDebateSpeakers={message.activeDebateSpeakers}
+                                    analysis={message.analysis}
                                 />
                             )}
 
@@ -356,6 +373,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     providerNameToId={providerNameToId}
                                     lensConfig={lensConfig}
                                     activeDebateSpeakers={message.activeDebateSpeakers}
+                                    analysis={message.analysis}
                                 />
                             )}
 
