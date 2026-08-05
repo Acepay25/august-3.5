@@ -126,8 +126,13 @@ const alignToIntervalStart = (timestamp: number, intervalMs: number): number => 
  * Uses all candles up to and including the specified index
  */
 const calculateSnapshotAtCandle = (klines: Kline[], candleIndex: number): HistoricalIndicatorSnapshot | null => {
-    // Need at least 50 candles for reliable indicator calculation
-    if (candleIndex < 50 || candleIndex >= klines.length) {
+    // The ANALYSIS snapshot is taken at index 0 (the analysis-time candle) —
+    // requiring >= 50 candles here made it ALWAYS null (the old caller sampled
+    // candle 50, biasing the comparison). Indicators computed from a short
+    // window may be NaN ("N/A" in the comparison block) — that is the honest
+    // "at analysis time" view. The internal try/catch still guards against
+    // actual computation errors.
+    if (candleIndex < 0 || candleIndex >= klines.length) {
         return null;
     }
 
@@ -435,7 +440,9 @@ export const verifyHistoricalOutcome = async (
                         timeAfterAnalysis
                     });
                 }
-                if (!tp2Hit && tp2 > 0 && candle.high >= tp2) {
+                // After the breakeven exit the remainder is FLAT — a later rally
+                // to TP2/TP3 was never realized by a live position.
+                if (!tp2Hit && tp2 > 0 && !breakevenHit && candle.high >= tp2) {
                     tp2Hit = true;
                     highestTpHit = 'TP2';
                     tpHits.push({
@@ -446,7 +453,7 @@ export const verifyHistoricalOutcome = async (
                         timeAfterAnalysis
                     });
                 }
-                if (!tp3Hit && tp3 > 0 && candle.high >= tp3) {
+                if (!tp3Hit && tp3 > 0 && !breakevenHit && candle.high >= tp3) {
                     tp3Hit = true;
                     highestTpHit = 'TP3';
                     tpHits.push({
@@ -517,7 +524,7 @@ export const verifyHistoricalOutcome = async (
                         timeAfterAnalysis
                     });
                 }
-                if (!tp2Hit && tp2 > 0 && candle.low <= tp2) {
+                if (!tp2Hit && tp2 > 0 && !breakevenHit && candle.low <= tp2) {
                     tp2Hit = true;
                     highestTpHit = 'TP2';
                     tpHits.push({
@@ -528,7 +535,7 @@ export const verifyHistoricalOutcome = async (
                         timeAfterAnalysis
                     });
                 }
-                if (!tp3Hit && tp3 > 0 && candle.low <= tp3) {
+                if (!tp3Hit && tp3 > 0 && !breakevenHit && candle.low <= tp3) {
                     tp3Hit = true;
                     highestTpHit = 'TP3';
                     tpHits.push({

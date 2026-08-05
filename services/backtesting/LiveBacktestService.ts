@@ -315,9 +315,11 @@ export const backtestSimilarSetups = (
         };
     }).filter(d => d.count > 0);
 
-    // Current regime stats
+    // Current regime stats — normalize the raw hybrid regime ('strong_trend_up',
+    // 'volatile_chop'…) to the breakdown keys ('trending', 'volatile'…); the
+    // old substring compare never matched and the context was silently absent.
     const currentRegimeStats = currentRegime
-        ? regimeBreakdown.find(r => currentRegime.includes(r.regime) || r.regime.includes(currentRegime))
+        ? regimeBreakdown.find(r => r.regime === normalizeRegime(currentRegime))
         : undefined;
 
     // === SESSION BREAKDOWN ===

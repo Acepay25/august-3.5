@@ -854,17 +854,28 @@ ${planJson.slice(0, 6000)}
         return { verdict: 'confirmed', note: '' };
     }
 
-    const note = text.replace(/<ACCURACY_(?:ADJUST|CONFIRMED)>/gi, '').trim();
+    // A provider failure arrives as a <MODERATOR_ERROR> marker instead of a
+    // throw — treat it as a failed pass (keep the original plan, clean note)
+    // so the raw marker never leaks into the chat bubble.
+    if (/<MODERATOR_ERROR>/i.test(text)) {
+        console.warn('[AccuracyVerification] Pass errored; keeping the original plan.');
+        return { verdict: 'confirmed', note: '' };
+    }
+
     if (/<ACCURACY_ADJUST>/i.test(text)) {
         try {
             const adjustedJson = extractLastJson(text);
             if (adjustedJson) {
-                return { verdict: 'adjusted', note: note || 'Plan adjusted by the accuracy pass.', planJson: typeof adjustedJson === 'string' ? adjustedJson : JSON.stringify(adjustedJson) };
+                // Human note only — the raw corrected JSON must not become the
+                // chat bubble text (the model was told to output JSON after
+                // the marker and nothing else).
+                return { verdict: 'adjusted', note: 'Plan adjusted by the accuracy pass.', planJson: typeof adjustedJson === 'string' ? adjustedJson : JSON.stringify(adjustedJson) };
             }
         } catch {
             // fall through to confirmed — never discard the original plan
         }
     }
+    const note = text.replace(/<ACCURACY_(?:ADJUST|CONFIRMED)>/gi, '').trim();
     return { verdict: 'confirmed', note: note || 'Plan verified by the accuracy pass.' };
 };
 
@@ -2215,9 +2226,8 @@ const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\
  * ("Target: 94k"), and it didn't know lens short names (every analyst then
  * fell back to the whole question block).
  */
-const getAnalystClarificationQuestion = (questionText: string, analystName: string, allSpeakerLabels: string[]): string => {
-    const aliases = [analystName, ...allSpeakerLabels.filter(l => l && l !== analystName)];
-    const targetAlt = aliases.map(escapeRegExp).join('|');
+const getAnalystClarificationQuestion = (questionText: string, targetAliases: string[], allSpeakerLabels: string[]): string => {
+    const targetAlt = targetAliases.map(escapeRegExp).join('|');
     const allAlt = allSpeakerLabels.map(escapeRegExp).join('|');
     const match = questionText.match(new RegExp(
         `(?:^|\\n)\\s*\\*{0,2}(?:${targetAlt})\\*{0,2}\\s*:\\s*([\\s\\S]*?)(?=\\n\\s*\\*{0,2}(?:${allAlt})\\*{0,2}\\s*:|$)`,
@@ -2315,6 +2325,8 @@ export const conductRealDebate = async function* (
     // Speaker labels the moderator may use when addressing analysts: provider
     // names plus lens role short names (Macro / Technical / Risk). Used to
     // split the clarification question block per analyst.
+    // All speaker labels the moderator may use (provider names + lens short
+    // names + 'Moderator' so a moderator interjection terminates a section).
     const speakerLabels = analysts.flatMap((a) => {
         const labels = [a.provider.name];
         if (lensConfig?.enabled) {
@@ -2324,6 +2336,23 @@ export const conductRealDebate = async function* (
         }
         return labels;
     });
+    speakerLabels.push('Moderator');
+    // Per-analyst TARGET aliases — only the analyst's OWN labels may anchor
+    // its section (the old code included every other analyst's labels, so an
+    // unaddressed analyst grabbed the first section and answered the wrong
+    // question).
+    const targetAliasesFor = (name: string): string[] => {
+        const aliases = [name];
+        if (lensConfig?.enabled) {
+            const analyst = analysts.find(a => a.provider.name === name);
+            if (analyst) {
+                const role = getRoleForProvider(`${analyst.provider.config.id}::${analyst.provider.model}`, lensConfig.assignments);
+                const shortName = role !== AnalystRole.UNASSIGNED ? ANALYST_ROLE_DEFINITIONS[role].shortName : '';
+                if (shortName) aliases.push(shortName);
+            }
+        }
+        return aliases;
+    };
     // Per-speaker text per round (1-based index). Rebuttal deltas accumulate.
     const roundTexts: Record<string, string[]> = { Moderator: [] };
     analysts.forEach(a => { roundTexts[a.provider.name] = []; });
@@ -2515,7 +2544,7 @@ export const conductRealDebate = async function* (
         const answerTasks = liveAnalysts.map((analyst) => {
             const answerSystemPrompt = ANALYST_CLARIFICATION_RESPONSE_PROMPT
                 .replace('{{NAME}}', analyst.provider.name)
-                .replace('{{QUESTION}}', getAnalystClarificationQuestion(questionText, analyst.provider.name, speakerLabels));
+                .replace('{{QUESTION}}', getAnalystClarificationQuestion(questionText, targetAliasesFor(analyst.provider.name), speakerLabels));
             const answerUserContent =
                 `**THE DEBATE TRANSCRIPT (with this round's moderator questions):**\n${clarificationTranscript}\n\n` +
                 `Respond now with your answer for Round ${answerRound}.`;

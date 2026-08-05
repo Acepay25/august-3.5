@@ -202,6 +202,24 @@ describe('verifyHistoricalOutcome — win/loss detection (Long)', () => {
     expect(result.verificationDetails).toContain('breakeven');
   });
 
+  it('does NOT record TP2 when price retraces to breakeven and later rallies (remainder is flat)', async () => {
+    scripted1m = [
+      [94950, 95100, 94900, 95000], // entry fills
+      [95100, 96100, 95050, 96000], // TP1 hit → stop to breakeven (95000)
+      [95050, 95500, 94990, 95100], // retrace to entry — remainder exits at breakeven, position FLAT
+      [95100, 97100, 95050, 97000], // rally to TP2 — no live position to realize it
+      ...Array.from({ length: 10 }, () => [95100, 95800, 95050, 95500] as [number, number, number, number]),
+    ];
+
+    const result = await verify(makeAnalysis());
+    expect(result.outcome).toBe('TP_HIT');
+    // The highest realized target is TP1 — the post-exit rally must not
+    // inflate the reported hit target.
+    expect(result.hitTarget).toBe('TP1');
+    expect(result.tpHits?.map(t => t.level)).toEqual(['TP1']);
+    expect(result.verificationDetails).toContain('breakeven');
+  });
+
 describe('verifyHistoricalOutcome — win/loss detection (Short)', () => {
   // Short setup: entry 95000, SL 96000 (extended zone 96500), TP1 94000.
   const shortAnalysis = makeAnalysis({
