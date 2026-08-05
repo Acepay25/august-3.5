@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import TradeLogContent from './TradeLog';
 import PerformanceReviewContent from './PerformanceReview';
 import WinRateDashboard from '../dashboards/WinRateDashboard';
@@ -9,6 +9,7 @@ import ReasoningDashboard from '../dashboards/ReasoningDashboard';
 import { CloseIcon, HistoryIcon, StarIcon, ChartBarIcon, BrainIcon } from '../shared/Icons';
 import { exportTradesCSV, exportTradesHTML } from '../../utils/reportExport';
 import { AIProvider, LoggedTrade, TradeSummary, GlobalMemory } from '../../types';
+import { computeJournalStats } from '../../utils/journalAnalytics';
 import { ProviderConfig } from '../../types/provider';
 
 interface JournalProps {
@@ -302,6 +303,9 @@ const JournalInner: React.FC<JournalProps> = ({
                     </div>
                 </div>
 
+                {/* Analytics summary — streaks, expectancy, win rate, top strategy */}
+                <JournalAnalyticsSummary trades={trades} />
+
                 {/* Embedded Tab Content Area */}
                 <div className="flex-1 overflow-hidden min-h-[480px]">
                     {renderContent()}
@@ -447,6 +451,32 @@ const JournalInner: React.FC<JournalProps> = ({
             </aside>
         </>
     );
+};
+
+const Stat: React.FC<{ label: string; value: React.ReactNode; sub?: string }> = ({ label, value, sub }) => (
+  <div className="min-w-0">
+    <div className="text-[9px] uppercase tracking-wider text-zinc-500">{label}</div>
+    <div className="text-sm font-bold text-white truncate">{value}</div>
+    {sub && <div className="text-[9px] text-zinc-600 truncate">{sub}</div>}
+  </div>
+);
+
+const JournalAnalyticsSummary: React.FC<{ trades: LoggedTrade[] }> = ({ trades }) => {
+  const stats = useMemo(() => computeJournalStats(trades), [trades]);
+  if (stats.total === 0) return null;
+  const top = stats.perStrategy[0];
+  return (
+    <div className="grid grid-cols-2 gap-3 border-b border-zinc-800 bg-zinc-950/60 px-4 py-3 sm:grid-cols-4">
+      <Stat label="Win rate" value={`${stats.winRate}%`} sub={`${stats.wins}W / ${stats.losses}L of ${stats.total}`} />
+      <Stat label="Expectancy" value={`${stats.expectancyR > 0 ? '+' : ''}${stats.expectancyR}R`} sub={`avg win ${stats.avgWinR}R · avg loss ${stats.avgLossR}R`} />
+      <Stat
+        label="Streak"
+        value={stats.currentStreak > 0 ? `${stats.currentStreak}W` : stats.currentStreak < 0 ? `${-stats.currentStreak}L` : '—'}
+        sub={`best ${stats.bestWinStreak}W / ${-stats.bestLossStreak}L`}
+      />
+      <Stat label="Top strategy" value={top?.key ?? '—'} sub={top ? `${top.trades} trades · ${top.winRate}% WR` : undefined} />
+    </div>
+  );
 };
 
 export const Journal = React.memo(JournalInner);

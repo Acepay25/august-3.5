@@ -3,6 +3,7 @@ import React, { useMemo } from 'react';
 import { BrainCircuit } from 'lucide-react';
 import { LoggedTrade } from '../../types';
 import { computeLearningProfile, PersonalizedLearningProfile } from '../../services/learning/SelfLearningService';
+import { loadLearningRules } from '../../services/learning/LearningRulesService';
 import { EmptyState } from '../ui/EmptyState';
 
 interface LearningDashboardProps {
@@ -121,6 +122,20 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades }) 
             {/* Strengths & Weaknesses Grid */}
             <div className="grid grid-cols-1 gap-3 sm:gap-4">
                 {/* Best Coins */}
+                <StatCard
+                    title="Learned Rules"
+                    items={(() => {
+                        const rules = loadLearningRules().rules || [];
+                        return rules.slice(0, 5).map(rule => ({
+                            name: String((rule as any).promptInjection || (rule as any).condition || (rule as any).id || 'Rule').slice(0, 80),
+                            value: (rule as any).strength !== undefined ? `${(rule as any).strength}` : '✓',
+                            subtext: undefined,
+                            color: 'text-cyan-300',
+                        }));
+                    })()}
+                    emptyText="No rules learned yet — rules are generated from loss post-mortems"
+                />
+
                 <StatCard
                     title="Best Coins"
                     items={profile.bestCoins.slice(0, 4).map(c => ({
