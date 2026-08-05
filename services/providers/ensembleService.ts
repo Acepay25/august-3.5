@@ -2149,9 +2149,23 @@ const CLARIFICATION_MARKERS = /<CLARIFICATION_(DONE|SATISFIED|UNSATISFIED)>/gi;
 
 const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-const getAnalystClarificationQuestion = (questionText: string, analystName: string): string => {
-    const speaker = escapeRegExp(analystName);
-    const match = questionText.match(new RegExp(`(?:^|\\n)\\s*\\*{0,2}${speaker}\\*{0,2}\\s*:\\s*([\\s\\S]*?)(?=\\n\\s*\\*{0,2}[^\\n:]+\\*{0,2}\\s*:|$)`, 'i'));
+/**
+ * Extract the clarifying question addressed to a specific analyst. The
+ * moderator prefixes each question with a speaker label (provider name or
+ * lens role short name, e.g. "**Macro:**"). The section terminates only at
+ * the NEXT known speaker's label — the old lookahead stopped at ANY line
+ * ending in a colon, truncating questions that mention levels
+ * ("Target: 94k"), and it didn't know lens short names (every analyst then
+ * fell back to the whole question block).
+ */
+const getAnalystClarificationQuestion = (questionText: string, analystName: string, allSpeakerLabels: string[]): string => {
+    const aliases = [analystName, ...allSpeakerLabels.filter(l => l && l !== analystName)];
+    const targetAlt = aliases.map(escapeRegExp).join('|');
+    const allAlt = allSpeakerLabels.map(escapeRegExp).join('|');
+    const match = questionText.match(new RegExp(
+        `(?:^|\\n)\\s*\\*{0,2}(?:${targetAlt})\\*{0,2}\\s*:\\s*([\\s\\S]*?)(?=\\n\\s*\\*{0,2}(?:${allAlt})\\*{0,2}\\s*:|$)`,
+        'i'
+    ));
     return (match?.[1] || questionText).trim();
 };
 
@@ -2171,14 +2185,27 @@ const buildDebateTranscript = (
 ): string => {
     const lines: string[] = [];
     for (let r = 1; r <= maxRound; r++) {
-        const moderatorText = roundTexts.Moderator?.[r]?.replace(CLARIFICATION_MARKERS, '').trim();
+        const moderatorText = roundTexts['Moderator']?.[r]?.replace(CLARIFICATION_MARKERS, '').trim();
         if (moderatorText) lines.push(`**Moderator (Round ${r}):**\n${truncateTextToTokens(moderatorText, perTurnTokens)}`);
         for (const name of names) {
             const text = roundTexts[name]?.[r];
             if (text) lines.push(`**${name} (Round ${r}):**\n${truncateTextToTokens(text, perTurnTokens)}`);
         }
     }
-    return truncateTextToTokens(lines.join('\n\n') || 'The debate produced no transcript.', totalTokens);
+    const full = lines.join('\n\n') || 'The debate produced no transcript.';
+    // Tail-first truncation: when the transcript exceeds the budget, drop the
+    // OLDEST turns (the earliest rounds are listed first) instead of
+    // head-truncating mid-turn — the moderator needs the most recent rounds
+    // (especially the latest clarification answers) the most.
+    const maxChars = totalTokens * 4;
+    if (full.length <= maxChars) return full;
+    let kept = '';
+    for (let i = lines.length - 1; i >= 0; i--) {
+        const candidate = kept ? `${lines[i]}\n\n${kept}` : lines[i];
+        if (candidate.length > maxChars) break;
+        kept = candidate;
+    }
+    return `...[Earlier debate rounds truncated to fit context memory]...\n\n${kept}`;
 };
 
 /**
@@ -2227,6 +2254,18 @@ export const conductRealDebate = async function* (
 
     const names = analysts.map(a => a.provider.name);
     const activeAnalystNames = new Set(names);
+    // Speaker labels the moderator may use when addressing analysts: provider
+    // names plus lens role short names (Macro / Technical / Risk). Used to
+    // split the clarification question block per analyst.
+    const speakerLabels = analysts.flatMap((a) => {
+        const labels = [a.provider.name];
+        if (lensConfig?.enabled) {
+            const role = getRoleForProvider(`${a.provider.config.id}::${a.provider.model}`, lensConfig.assignments);
+            const shortName = role !== AnalystRole.UNASSIGNED ? ANALYST_ROLE_DEFINITIONS[role].shortName : '';
+            if (shortName) labels.push(shortName);
+        }
+        return labels;
+    });
     // Per-speaker text per round (1-based index). Rebuttal deltas accumulate.
     const roundTexts: Record<string, string[]> = { Moderator: [] };
     analysts.forEach(a => { roundTexts[a.provider.name] = []; });
@@ -2377,6 +2416,10 @@ export const conductRealDebate = async function* (
             if (isAbort) throw e;
             console.warn('[RealDebate] Clarification questions call failed; proceeding to verdict.', e?.message || e);
             onSpeakerStatus?.('Moderator', questionRound, false);
+            // Reserve the question round: partial text may already have been
+            // streamed to the consumer — the verdict must NOT share its round
+            // or the two merge into one bubble (consumer keys by round::speaker).
+            lastRebuttalRound = questionRound;
             break;
         }
         onSpeakerStatus?.('Moderator', questionRound, false);
@@ -2384,6 +2427,7 @@ export const conductRealDebate = async function* (
         // thrown exception. Skip clarification and proceed to the verdict.
         if (/<MODERATOR_ERROR>/i.test(questionText)) {
             console.warn('[RealDebate] Clarification questions returned an error marker; proceeding to verdict.');
+            lastRebuttalRound = questionRound;
             break;
         }
         // Store the moderator turn AFTER marker-stripping so the transcript
@@ -2391,9 +2435,11 @@ export const conductRealDebate = async function* (
         roundTexts.Moderator[questionRound] = questionText.replace(CLARIFICATION_MARKERS, '').trim();
 
         // Short-circuit: moderator has no follow-up → skip answers + judgment.
-        // The marker-only question is not a visible turn, so do not reserve its
-        // round number; the verdict remains the next dense round.
+        // Reserve the question round for the verdict so the questions turn
+        // (which may carry visible prose before the marker) and the verdict can
+        // never collide on the same round.
         if (/<CLARIFICATION_DONE>/i.test(questionText)) {
+            lastRebuttalRound = questionRound;
             break;
         }
 
@@ -2411,7 +2457,7 @@ export const conductRealDebate = async function* (
         const answerTasks = liveAnalysts.map((analyst) => {
             const answerSystemPrompt = ANALYST_CLARIFICATION_RESPONSE_PROMPT
                 .replace('{{NAME}}', analyst.provider.name)
-                .replace('{{QUESTION}}', getAnalystClarificationQuestion(questionText, analyst.provider.name));
+                .replace('{{QUESTION}}', getAnalystClarificationQuestion(questionText, analyst.provider.name, speakerLabels));
             const answerUserContent =
                 `**THE DEBATE TRANSCRIPT (with this round's moderator questions):**\n${clarificationTranscript}\n\n` +
                 `Respond now with your answer for Round ${answerRound}.`;
@@ -2614,6 +2660,7 @@ export const conductRealDebate = async function* (
         if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
         onSpeakerStatus?.('Moderator', finalRound, true);
         let moderatorText = '';
+        let streamFailed = false;
         try {
             for await (const chunk of getModeratorAnalysisStream(moderatorConfig, moderatorModel, attempts[attempt], signal, onReasoning)) {
                 if (chunk) {
@@ -2621,18 +2668,29 @@ export const conductRealDebate = async function* (
                     yield { speaker: 'Moderator', round: finalRound, text: chunk };
                 }
             }
+        } catch (e: any) {
+            const isAbort = e?.name === 'AbortError' || e?.code === 'ABORT_ERR' || e?.name === 'TimeoutError';
+            if (isAbort) throw e;
+            // A thrown stream error (network, provider 5xx) is a failed attempt
+            // too — previously it skipped the compact-prompt retry entirely.
+            console.warn(`[RealDebate] Moderator attempt ${attempt + 1} threw:`, e?.message || e);
+            streamFailed = true;
         } finally {
             onSpeakerStatus?.('Moderator', finalRound, false);
         }
-        // Retry only when the attempt clearly failed: an error marker or no
-        // JSON plan anywhere in the response. The moderator call is always a
-        // fresh streamChatRequest with its own prompt — never a reused
-        // analyst result, even when the same model fills both roles.
-        const hasJsonPlan = /<JSON_PLAN>|```json/i.test(moderatorText);
-        const hasErrorMarker = /<MODERATOR_ERROR>/.test(moderatorText);
+        // Retry only when the attempt clearly failed: a thrown error, an error
+        // marker, or no JSON plan anywhere in the response. The moderator call
+        // is always a fresh streamChatRequest with its own prompt — never a
+        // reused analyst result, even when the same model fills both roles.
+        const hasJsonPlan = !streamFailed && /<JSON_PLAN>|```json/i.test(moderatorText);
+        const hasErrorMarker = !streamFailed && /<MODERATOR_ERROR>/.test(moderatorText);
         if (hasJsonPlan && !hasErrorMarker) break;
         if (attempt === attempts.length - 1) break;
         console.warn(`[RealDebate] Moderator attempt ${attempt + 1} failed (jsonPlan=${hasJsonPlan}, errorMarker=${hasErrorMarker}); retrying with compact prompt.`);
+        // Reset the consumer's accumulated text for this round before the
+        // retry streams — otherwise the failed attempt's partial prose
+        // concatenates with the successful verdict in one bubble.
+        yield { speaker: 'Moderator', round: finalRound, text: '\n<MODERATOR_RETRY>\n' };
     }
 };
 
