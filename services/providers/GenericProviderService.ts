@@ -383,7 +383,14 @@ function toFriendlyProviderError(error: unknown, providerName: string): unknown 
         } else if (raw.includes('fetch') || raw.includes('network') || raw.includes('econnrefused') || raw.includes('enotfound') || raw.includes('failed to connect') || raw.includes('certificate') || raw.includes('tls') || raw.includes('timeout') || raw.includes('timed out')) {
             friendly = `${name}: could not reach the server. Check the base URL and your connection.`;
         } else if (rawMessage && rawMessage.toLowerCase() !== 'provider request failed.') {
-            friendly = `${name}: ${rawMessage.slice(0, 300)}`;
+            // Sanitize the raw SDK text before surfacing it: it can embed the
+            // provider base URL and response-body excerpts (which may echo the
+            // user's prompt). Strip URLs and key-like tokens, then cap length.
+            const sanitized = rawMessage
+                .replace(/https?:\/\/\S+/g, '[url]')
+                .replace(/\b[A-Za-z0-9_-]{24,}\b/g, '***')
+                .slice(0, 300);
+            friendly = `${name}: ${sanitized}`;
         } else {
             friendly = `${name}: request failed.`;
         }
@@ -591,6 +598,7 @@ async function* streamViaProxy(
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    let droppedEvents = 0;
     try {
         for (;;) {
             const { done, value } = await reader.read();
@@ -610,7 +618,17 @@ async function* streamViaProxy(
                 try {
                     chunk = JSON.parse(data);
                 } catch {
+                    droppedEvents++;
+                    if (droppedEvents === 1) console.warn(`[ProxyStream] Dropping non-JSON SSE events (first seen: ${data.slice(0, 80)})`);
                     continue; // partial / non-JSON event
+                }
+                // A provider error event is a real failure — surface it instead
+                // of silently finishing the stream as if it completed cleanly.
+                if (chunk?.error) {
+                    const message = chunk.error.message || `Provider stream error (${chunk.error.code ?? 'unknown'})`;
+                    const error = new Error(message);
+                    if (chunk.error.code !== undefined) (error as any).status = chunk.error.code;
+                    throw error;
                 }
                 const delta = chunk?.choices?.[0]?.delta || {};
                 const reasoning = delta.reasoning_content || delta.reasoning;
@@ -627,6 +645,9 @@ async function* streamViaProxy(
                 if (data && data !== '[DONE]') {
                     try {
                         const chunk = JSON.parse(data);
+                        if (chunk?.error) {
+                            throw new Error(chunk.error.message || `Provider stream error (${chunk.error.code ?? 'unknown'})`);
+                        }
                         const delta = chunk?.choices?.[0]?.delta || {};
                         const reasoning = delta.reasoning_content || delta.reasoning;
                         if (typeof reasoning === 'string' && reasoning.trim()) options?.onReasoning?.(reasoning);
