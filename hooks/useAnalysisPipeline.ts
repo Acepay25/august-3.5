@@ -11,7 +11,7 @@ import { analyzeTradingView, getQuickResponse } from '../services/providers/Gene
 import * as ensembleService from '../services/providers/ensembleService';
 
 // Analysis / validation / backtesting services
-import { tryFetchHybridDataFromPromptWithCalibration, HybridDataPacket, runMonteCarloForSetupAsync } from '../services/analysis/HybridIntelligenceService';
+import { tryFetchHybridDataFromPromptWithCalibration, generateHybridPromptInjection, HybridDataPacket, runMonteCarloForSetupAsync } from '../services/analysis/HybridIntelligenceService';
 import { LabeledMonteCarloResult } from '../services/analysis/MonteCarloService';
 import { backtestSimilarSetups } from '../services/backtesting/LiveBacktestService';
 import { runValidationGate } from '../services/validation/TradeValidationGate';
@@ -186,7 +186,13 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         const imageHashes = imageFiles.map(f => `${f.name}:${f.size}:${f.lastModified}`);
         const cacheKey = imageHashes.length > 0 ? imageHashes : ['no-images'];
 
-        const cached = getCachedResponse(cacheKey, prompt, model);
+        // Mode/role context must be part of the key — the same chart+prompt
+        // legitimately produces different analyses under deep analysis, an
+        // accuracy submode, a lens role prompt, or a custom ensemble prompt.
+        // Without this a 10-minute-TTL hit serves the previous mode's analysis.
+        const modeContext = JSON.stringify([rest[5], rest[8], rest[13], rest[14]]);
+
+        const cached = getCachedResponse(cacheKey, prompt, model, modeContext);
         if (cached) {
             console.log(`[ResponseCache] HIT for ${config.name || model} (${model})`);
             return {
@@ -226,7 +232,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 finalOutput: result.finalOutput,
                 analysis: result.analysis,
                 sources: result.sources,
-            });
+            }, modeContext);
             console.log(`[ResponseCache] STORED for ${config.name || model} (${model})`);
         }
 
@@ -285,6 +291,10 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     const analysisAbortController = useRef<AbortController | null>(null);
     const analysisConversationIdRef = useRef<string | null>(null);
     const abortRef = useRef<boolean>(false);
+    // Which pipeline phase is running — used to fail the CORRECT step when a
+    // run errors (the old catch hardcoded failStep('analysis'), so debate-phase
+    // failures marked the wrong step and the finally force-completed everything).
+    const currentPhaseRef = useRef<'analysis' | 'debate'>('analysis');
 
     useEffect(() => {
         const requestConversationId = analysisConversationIdRef.current;
@@ -539,7 +549,11 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             console.warn('[Hybrid Intelligence] Enabled:', isHybridIntelligenceEnabled);
             console.warn('[Hybrid Intelligence] HasPresetData:', !!options?.presetHybridData);
             console.warn('[Hybrid Intelligence] User prompt:', effectiveInput);
-            if (isEnsembleEnabled && !options?.presetHybridData) {
+            // The toggle gates the fetch: with Hybrid Intelligence OFF no data
+            // is fetched and nothing is injected into the analyst prompts.
+            // Preset data (auto-capture) always wins — it was explicitly
+            // fetched for this analysis, so it is injected below regardless.
+            if (isEnsembleEnabled && isHybridIntelligenceEnabled && !options?.presetHybridData) {
                 try {
                     console.warn('[Hybrid Intelligence] Attempting to fetch data for prompt:', effectiveInput);
                     setLoadingMessage('Fetching real-time market data...');
@@ -577,6 +591,10 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     console.error('[Hybrid Intelligence] ERROR fetching market data');
                 }
             } else if (options?.presetHybridData) {
+                // Auto-capture flow: the data was already fetched upstream —
+                // build the same injection so the three analysts still receive
+                // the hybrid market data in their prompts.
+                hybridDataInjection = generateHybridPromptInjection(options.presetHybridData);
                 console.warn('[Hybrid Intelligence] SKIPPED - Using preset data from auto-capture');
             } else {
                 console.warn('[Hybrid Intelligence] SKIPPED - Feature not enabled');
@@ -950,6 +968,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 if (enabledProviders.length > 1) {
                     setLoadingMessage("Thinking...");
                     completeStep('gate-scan'); startStep('analysis');
+                    currentPhaseRef.current = 'analysis';
                     setAnalysisSteps(prev => prev.map(s => s.id === 'analysis' ? { ...s, title: `Analyzing with ${enabledProviders.map(p => p.name).join(', ')}` } : s));
                     setIsAnalysisInProgress(true);
                     // Clear previous Monte Carlo results for fresh analysis
@@ -1157,6 +1176,10 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                         }),
                         isDebating: true,
                         debateTurns: [],
+                        // Non-staged runs never carried modelsUsed — the chat's
+                        // per-bubble model line was blank for them.
+                        modelsUsed: ensemblePlaceholder?.modelsUsed
+                            || Object.fromEntries(enabledProviders.map(p => [p.config.id, p.model])),
                         thoughtProcesses: { ...(ensemblePlaceholder?.thoughtProcesses || {}), ...thoughtMap },
                         reasoningProcesses: { ...(ensemblePlaceholder?.reasoningProcesses || {}), ...reasoningMapRef.current },
                         activeDebateSpeakers: {},
@@ -1166,6 +1189,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                         ? prev.map(message => message.id === debateMessageId ? debatePlaceholder : message)
                         : [...prev, debatePlaceholder]);
                     startStep('debate');
+                    currentPhaseRef.current = 'debate';
 
                     // --- ENSEMBLE ROUTING ---
                     let debateStream;
@@ -1323,11 +1347,23 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
                             const currentTurns: DebateTurn[] = [];
                             const matches = [...debateContent.matchAll(turnRegex)];
+                            // Autoplayed transcripts carry no explicit rounds —
+                            // derive them: each moderator turn starts a new
+                            // round, so the messenger chat keeps its round
+                            // separators and the final moderator message gets
+                            // the verdict treatment. Prefix-stable: earlier
+                            // turns never change as the stream grows.
+                            let autoplayRound = 0;
                             for (const m of matches) {
                                 let speaker = m[1].trim();
                                 if (speaker === "Master Strategist") speaker = "Moderator";
                                 speaker = speaker.charAt(0).toUpperCase() + speaker.slice(1);
-                                currentTurns.push({ speaker: speaker as DebateTurn['speaker'], text: sanitizeAIResponse(m[2].trim()) });
+                                if (speaker === 'Moderator') autoplayRound++;
+                                currentTurns.push({
+                                    speaker: speaker as DebateTurn['speaker'],
+                                    round: autoplayRound > 0 ? autoplayRound : undefined,
+                                    text: sanitizeAIResponse(m[2].trim()),
+                                });
                             }
 
                             // The moderator's verdict prose sits right before
@@ -1346,7 +1382,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                                 const cleanSynthesis = synthesisContent.replace(/^(?:[*_~]*)(Moderator|Master Strategist)[^:\n]*?:\s*/i, '');
                                 const lastTurn = currentTurns[currentTurns.length - 1];
                                 if (cleanSynthesis && (!lastTurn || lastTurn.text !== cleanSynthesis)) {
-                                    currentTurns.push({ speaker: 'Moderator', text: sanitizeAIResponse(cleanSynthesis) });
+                                    currentTurns.push({ speaker: 'Moderator', round: autoplayRound + 1, text: sanitizeAIResponse(cleanSynthesis) });
                                 }
                             }
 
@@ -1366,6 +1402,13 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             if (!event || typeof event.text !== 'string') continue;
 
                             const key = `${event.round}::${event.speaker}`;
+                            // The engine emits this marker before a moderator
+                            // verdict retry — discard the failed attempt's
+                            // partial prose so it never glues onto the verdict.
+                            if (event.text.includes('<MODERATOR_RETRY>')) {
+                                turnTexts[key] = '';
+                                continue;
+                            }
                             turnTexts[key] = (turnTexts[key] || '') + event.text;
                             if (event.speaker === 'Moderator') {
                                 fullResponseText += event.text;
@@ -1379,6 +1422,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                                     const cleanedText = speaker === 'Moderator'
                                         ? text
                                             .replace(/<CLARIFICATION_(?:DONE|SATISFIED|UNSATISFIED)>/gi, '')
+                                            .replace(/<MODERATOR_RETRY>/gi, '')
                                             .replace(/<MODERATOR_ERROR>[\s\S]*?<\/MODERATOR_ERROR>/gi, '')
                                             .replace(/<JSON_PLAN>[\s\S]*/i, '')
                                             .replace(/<\/?DEBATE_END>/gi, '')
@@ -1404,6 +1448,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             const modKey = `${moderatorRound}::Moderator`;
                             if (turnTexts[modKey]) {
                                 const cleaned = turnTexts[modKey]
+                                    .replace(/<MODERATOR_RETRY>/gi, '')
                                     .replace(/<\/?DEBATE_END>/gi, '')
                                     .replace(/<MODERATOR_ERROR>[\s\S]*?<\/MODERATOR_ERROR>/gi, '')
                                     .replace(/<JSON_PLAN>[\s\S]*/i, '')
@@ -1594,11 +1639,12 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             createdAt: now,
                         });
 
-                        // Save debate turns (if any were parsed)
-                        const debateTurns = (prev => {
-                            const msg = prev.find(m => m.id === debateMessageId);
-                            return msg?.debateTurns || [];
-                        })(messagesRef.current);
+                        // Save debate turns (if any were parsed). Read from the
+                        // stream ref (the final flush already committed it) —
+                        // messagesRef only refreshes in a useEffect and can lag
+                        // behind the just-written message, dropping the last
+                        // moderator turn from the persisted thinking records.
+                        const debateTurns = debateTurnsRef.current;
 
                         debateTurns.forEach((turn, idx) => {
                             thinkingRecords.push({
@@ -1726,8 +1772,12 @@ const result = await cachedAnalyzeTradingView(
                 }]);
             }
         } catch (error: any) {
-            if (!isCurrentRequest()) return;
-            failStep('analysis');
+            // Runs for BOTH errors and user cancels. Previously the
+            // `!isCurrentRequest()` early-return skipped this cleanup on abort,
+            // leaving the placeholder stuck as isDebating:true with a permanent
+            // "thinking" indicator until the next reload.
+            const cancelled = !isCurrentRequest();
+            if (!cancelled) failStep(currentPhaseRef.current);
             // Preserve the debate transcript when the debate was interrupted —
             // never wipe a debate that already produced turns. A bare
             // placeholder (no turns yet) is still removed.
@@ -1735,9 +1785,12 @@ const result = await cachedAnalyzeTradingView(
                 if (m.id === ensemblePlaceholder?.id && m.ensembleProgress) {
                     return {
                         ...m,
+                        isDebating: false,
+                        activeDebateSpeakers: {},
+                        text: cancelled ? 'The analysis was cancelled.' : 'The ensemble could not continue before the debate started.',
                         ensembleProgress: {
                             ...m.ensembleProgress,
-                            moderator: { status: 'error', error: 'The ensemble could not continue before the debate started.' },
+                            moderator: { status: 'error', error: cancelled ? 'Cancelled by user.' : 'The ensemble could not continue before the debate started.' },
                         },
                     };
                 }
@@ -1747,9 +1800,22 @@ const result = await cachedAnalyzeTradingView(
                     ...m,
                     isDebating: false,
                     activeDebateSpeakers: {},
-                    text: 'The debate was interrupted by an error before the moderator could issue a final verdict.',
+                    text: cancelled ? 'The analysis was cancelled.' : 'The debate was interrupted by an error before the moderator could issue a final verdict.',
                 };
             }).filter((m): m is Message => m !== null));
+
+            // User cancels / stale runs get no error bubbles.
+            if (cancelled) return;
+
+            // Rate limits first — isQuotaError also claims status === 429, so
+            // the dedicated rate-limit path below was previously unreachable.
+            if (error.status === 429 || (error.message && error.message.includes('Too Many Requests'))) {
+                setIsRateLimited(true);
+                // Auto-clear after a backoff so a later run isn't blocked
+                // forever (the old reset sat behind an early-return guard).
+                window.setTimeout(() => setIsRateLimited(false), 60_000);
+                return;
+            }
 
             if (isQuotaError(error)) {
                 const quotaModelNames = buildModelIdToName(providerConfigs);
@@ -1764,7 +1830,6 @@ const result = await cachedAnalyzeTradingView(
                 return;
             }
 
-            if (error.status === 429 || (error.message && error.message.includes('Too Many Requests'))) return setIsRateLimited(true);
             // Sanitize the fallback: never leak long key-like tokens (API keys)
             // and cap length so internal SDK errors stay readable but bounded.
             const rawMessage = error instanceof Error ? error.message : "An unknown error occurred.";
@@ -1773,15 +1838,16 @@ const result = await cachedAnalyzeTradingView(
         } finally {
             if (analysisAbortController.current === currentAbortController) {
                 setLoadingMessage(null);
-                completeStep('debate');
-                // Mark any still-running steps as complete
-                setAnalysisSteps(prev => prev.map(s => s.status === 'running' ? { ...s, status: 'complete' as const, endTime: Date.now() } : s));
+                // NOTE: the old finally force-completed every running step,
+                // masking debate-phase errors and cancellations as "complete".
+                // Failures are marked by the catch above; success paths already
+                // complete their own steps.
                 analysisAbortController.current = null;
                 analysisConversationIdRef.current = null;
                 setIsAnalysisInProgress(false);
             }
         }
-    }, [input, images, loadingMessage, finalTradeSummary, activeFrameworks, isRateLimited, providerConfigs, isDeepAnalysis, selectedOcrModel, updateMessages, moderatorConfig, moderatorModel, activeConversationId, activeConversation, isAnalysisInProgress, globalMemory, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, lensConfig, isHybridIntelligenceEnabled, isEnsembleEnabled, selectedChatModel, loggedTrades, confidenceCalibration, insightKnowledgeBase, currentHybridData]);
+    }, [input, images, loadingMessage, finalTradeSummary, activeFrameworks, isRateLimited, providerConfigs, isDeepAnalysis, selectedOcrModel, updateMessages, moderatorConfig, moderatorModel, activeConversationId, activeConversation, isAnalysisInProgress, globalMemory, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, lensConfig, isHybridIntelligenceEnabled, isEnsembleEnabled, selectedChatModel, loggedTrades, confidenceCalibration, insightKnowledgeBase, currentHybridData, tradeSummaries, customEnsemblePrompt, customLensPrompts]);
 
     // ─── Cancel Analysis ───────────────────────────────────────────────────
     const handleCancelAnalysis = () => {
