@@ -10,6 +10,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { ProviderConfig, ApiFormat, API_FORMAT_LABELS } from '../../types/provider';
 import { testConnection } from '../../services/providers/GenericProviderService';
+import { getProviderHealth } from '../../services/infrastructure/ProviderHealthService';
 import { validateProviderUrl } from '../../utils/providerUrlValidation';
 
 interface ProviderManagerProps {
@@ -722,6 +723,9 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                     <span className="break-all leading-relaxed">{testResult.message}</span>
                                 </div>
                             )}
+
+                            {/* Provider health telemetry — live request counts, latency, last error */}
+                            <HealthStrip providerId={selected.id} />
                         </div>
                     ) : (
                         <div className="py-12 text-center text-xs text-zinc-500">
@@ -730,6 +734,51 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                     )}
                 </div>
             </div>
+        </div>
+    );
+};
+
+/**
+ * Live provider health strip — reads ProviderHealthService telemetry and
+ * refreshes every 5s while the provider panel is open.
+ */
+const HealthStrip: React.FC<{ providerId: string }> = ({ providerId }) => {
+    const [tick, setTick] = useState(0);
+    useEffect(() => {
+        const interval = setInterval(() => setTick(t => t + 1), 5000);
+        return () => clearInterval(interval);
+    }, []);
+    const health = getProviderHealth(providerId);
+    if (!health || health.requestCount === 0) {
+        return (
+            <div className="text-[10px] uppercase tracking-wider text-zinc-600">
+                No requests recorded for this session yet — run an analysis or press Test.
+            </div>
+        );
+    }
+    return (
+        <div className="space-y-1 rounded-xl border border-white/10 bg-zinc-900/60 px-3 py-2 text-[10px]">
+            <div className="flex items-center gap-2 uppercase tracking-wider text-zinc-500">
+                <span>Session health</span>
+                <span className="ml-auto font-mono text-zinc-400">{health.requestCount} req · {health.errorCount} err · {health.rateLimitCount} rate-limited</span>
+            </div>
+            {typeof health.avgLatencyMs === 'number' && (
+                <div className="flex items-center gap-2 text-zinc-500">
+                    <span>Avg latency</span>
+                    <span className="ml-auto font-mono text-zinc-300">{health.avgLatencyMs}ms</span>
+                </div>
+            )}
+            {health.lastSuccessAt && (
+                <div className="flex items-center gap-2 text-zinc-500">
+                    <span>Last success</span>
+                    <span className="ml-auto font-mono text-zinc-300">{new Date(health.lastSuccessAt).toLocaleTimeString()}</span>
+                </div>
+            )}
+            {health.lastError && (
+                <div className="rounded-md bg-rose-500/10 border border-rose-500/25 px-2 py-1 text-rose-300 break-all leading-relaxed">
+                    Last error: {health.lastError}
+                </div>
+            )}
         </div>
     );
 };
