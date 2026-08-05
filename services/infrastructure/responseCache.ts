@@ -143,21 +143,27 @@ export const getCachedContext = (sessionId: string): string | undefined => {
 
 /**
  * Get or compute an image hash for deduplication.
+ * The dedup map is keyed by the FULL data URL — keying by a header slice
+ * (e.g. first 100 chars) made two different same-size images collide and
+ * return the wrong analysis from the response cache.
  */
 export const getImageHash = (dataURL: string): string => {
-  const existing = imageHashCache.get(dataURL.slice(0, 100));
+  const existing = imageHashCache.get(dataURL);
   if (existing) return existing;
 
   const hash = hashImage(dataURL);
-  imageHashCache.set(dataURL.slice(0, 100), hash);
+  imageHashCache.set(dataURL, hash);
   return hash;
 };
 
 /**
  * Build a cache key for a full AI response.
+ * `contextKey` folds mode/role context (deep analysis, accuracy submode, lens
+ * role prompt, custom ensemble prompt) into the key so a 10-minute-TTL hit can
+ * never serve an analysis computed under a different mode for the same chart.
  */
-const buildResponseKey = (imageHashes: string[], promptHash: string, model: string): string => {
-  return `${imageHashes.sort().join('+')}:${promptHash}:${model}`;
+const buildResponseKey = (imageHashes: string[], promptHash: string, model: string, contextKey?: string): string => {
+  return `${imageHashes.sort().join('+')}:${promptHash}:${model}${contextKey ? `:${contextKey}` : ''}`;
 };
 
 /**
@@ -166,9 +172,10 @@ const buildResponseKey = (imageHashes: string[], promptHash: string, model: stri
 export const getCachedResponse = (
   imageHashes: string[],
   prompt: string,
-  model: string
+  model: string,
+  contextKey?: string
 ): CachedResponse | undefined => {
-  const key = buildResponseKey(imageHashes, hashString(prompt), model);
+  const key = buildResponseKey(imageHashes, hashString(prompt), model, contextKey);
   return responseCache.get(key);
 };
 
@@ -179,9 +186,10 @@ export const cacheResponse = (
   imageHashes: string[],
   prompt: string,
   model: string,
-  response: { thoughtProcess: string; finalOutput?: string; analysis: unknown; sources?: unknown[] }
+  response: { thoughtProcess: string; finalOutput?: string; analysis: unknown; sources?: unknown[] },
+  contextKey?: string
 ): void => {
-  const key = buildResponseKey(imageHashes, hashString(prompt), model);
+  const key = buildResponseKey(imageHashes, hashString(prompt), model, contextKey);
   responseCache.set(key, {
     ...response,
     model,
