@@ -252,7 +252,17 @@ class OutcomeAutopilotServiceClass {
                 detectedAt: new Date().toISOString(),
             });
         }
-        // Otherwise: still live — keep watching.
+
+        // Otherwise: still live — keep watching. But never forever: a setup
+        // without a validity window that never hits SL/TP would otherwise poll
+        // Binance every 60s indefinitely (the 7-day cap below used to apply
+        // only to the INSUFFICIENT_DATA branch).
+        const watchedMs = Date.now() - new Date(reg.registeredAt).getTime();
+        if (watchedMs > 7 * 24 * 60 * 60 * 1000) {
+            this.registrations.delete(messageId);
+            this.stopLoopIfEmpty();
+            console.warn(`[OutcomeAutopilot] ${messageId} dropped after 7-day observation cap (setup never resolved).`);
+        }
     }
 
     private isExpired(analysis: TradeAnalysis): boolean {

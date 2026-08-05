@@ -817,6 +817,30 @@ ${patternMatch.warning ? `\n PATTERN MEMORY:\n${patternMatch.warning}` : ''}
 
 
 
+    // Detect trade type and run type-specific validation BEFORE the report is
+    // built — the scalp/swing block can downgrade adjustedConfidence and push
+    // warnings, and the report must reflect the FINAL state (it used to be
+    // stringified first, so it could say "FINAL CONFIDENCE: High" while the
+    // returned state was Medium, and the scalp warnings were missing entirely).
+    const tradeTypeDetection = detectTradeType(analysis);
+    const detectedTradeType = tradeTypeDetection.detectedType;
+
+    // Scalp vs Swing specific validation
+    if (detectedTradeType === 'scalp') {
+        const scalpValidation = validateScalpTrade(analysis, {
+            currentSession: hybridData.session.currentSession,
+            isWeekend: hybridData.session.isWeekend
+        });
+        warnings.push(...scalpValidation.warnings);
+        if (scalpValidation.shouldDowngrade && adjustedConfidence === 'High') {
+            adjustedConfidence = 'Medium';
+            warnings.push(' SCALP RULE: Conditions unfavorable - confidence capped');
+        }
+    } else {
+        const swingValidation = validateSwingTrade(analysis);
+        warnings.push(...swingValidation.warnings);
+    }
+
     // ====== STEP 4: GENERATE REPORT ======
     const confidenceWasAdjusted = adjustedConfidence !== originalConfidence;
 
@@ -851,26 +875,6 @@ ${patternMatchWarning ? `\n PATTERN MEMORY:\n  ${patternMatchWarning}` : ''}
  VALIDATION: ${errors.length === 0 ? 'PASSED' : 'FAILED'}
 ═══════════════════════════════════════════════════════════════
 `.trim();
-
-    // Detect trade type and run type-specific validation
-    const tradeTypeDetection = detectTradeType(analysis);
-    const detectedTradeType = tradeTypeDetection.detectedType;
-
-    // Scalp vs Swing specific validation
-    if (detectedTradeType === 'scalp') {
-        const scalpValidation = validateScalpTrade(analysis, {
-            currentSession: hybridData.session.currentSession,
-            isWeekend: hybridData.session.isWeekend
-        });
-        warnings.push(...scalpValidation.warnings);
-        if (scalpValidation.shouldDowngrade && adjustedConfidence === 'High') {
-            adjustedConfidence = 'Medium';
-            warnings.push(' SCALP RULE: Conditions unfavorable - confidence capped');
-        }
-    } else {
-        const swingValidation = validateSwingTrade(analysis);
-        warnings.push(...swingValidation.warnings);
-    }
 
     return {
         isValid: errors.length === 0,

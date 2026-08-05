@@ -101,7 +101,10 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             ] as (string | null)[]).filter((p): p is string => p !== null);
 
         providers.forEach(p => {
-            trackTradeOutcome(p, isWin, analysis.detectedPatternFamily || '', trade.marketRegime || 'ranging', analysis.confidence || 'Medium');
+            trackTradeOutcome(p, isWin, analysis.detectedPatternFamily || '', trade.marketRegime || 'ranging', analysis.confidence || 'Medium', {
+                direction: analysis.direction,
+                entryPrice: parseFloat(String(analysis.entryPoints?.[0]?.price || 0).replace(/[^0-9.-]/g, '')) || 0,
+            });
         });
 
         // Auto-create learning rule from LOSS
