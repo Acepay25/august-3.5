@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { DebateTurn, AnalystLensConfig } from '../../types';
+import { DebateTurn, AnalystLensConfig, TradeAnalysis } from '../../types';
 import { BotIcon, ChevronDownIcon } from '../shared/Icons';
 import { getRoleDisplayForProvider } from '../../services/ui/AnalystLensService';
 
@@ -13,6 +13,8 @@ interface DebateChatProps {
     lensConfig?: AnalystLensConfig;
     isDebating?: boolean;
     activeDebateSpeakers?: Record<string, number>;
+    /** Final trade plan — renders the pinned consensus strip on completed debates. */
+    analysis?: TradeAnalysis | null;
 }
 
 const cleanSpeakerPrefix = (text: string, speaker: string): string => text
@@ -40,6 +42,14 @@ const getRoundLabel = (round: number, isVerdictRound = false): string => {
     if (round === 1) return 'Round 1 · Openings';
     if (round === 2 || round === 3) return `Round ${round} · Rebuttals`;
     return `Round ${round} · Clarification`;
+};
+
+/** Human phase name for the thinking indicator (instead of a raw round number). */
+const getPhaseLabel = (round: number, isVerdictRound: boolean): string => {
+    if (isVerdictRound) return 'Verdict';
+    if (round === 1) return 'Openings';
+    if (round === 2 || round === 3) return 'Rebuttals';
+    return 'Clarification';
 };
 
 interface ModeratorSegment {
@@ -84,11 +94,14 @@ const DebateChat: React.FC<DebateChatProps> = ({
     lensConfig,
     isDebating = false,
     activeDebateSpeakers = {},
+    analysis = null,
 }) => {
     const [isThinkingOpen, setIsThinkingOpen] = useState(false);
     const [expandedSpeaker, setExpandedSpeaker] = useState<string | null>(null);
+    const [isScrolledUp, setIsScrolledUp] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
     const thinkingControlRef = useRef<HTMLDivElement>(null);
+    const userScrolledUpRef = useRef(false);
 
     // Keep the currently streaming turn visible. The typing bubble is an
     // additional activity indicator, not a replacement for the analyst's
@@ -102,10 +115,26 @@ const DebateChat: React.FC<DebateChatProps> = ({
     const analystNames = useMemo(() => [...new Set(debateTurns.filter(turn => turn.speaker !== 'Moderator').map(turn => turn.speaker))], [debateTurns]);
     const modelNames = useMemo(() => Object.entries(modelsUsed).map(([key, modelId]) => modelIdToName[modelId] ?? modelId ?? key), [modelIdToName, modelsUsed]);
 
+    // Auto-scroll only while the reader is at the live bottom — scrolling up
+    // (e.g. to re-read a rebuttal) must not yank them back down every chunk.
     useEffect(() => {
         const element = scrollRef.current;
-        if (element) element.scrollTop = element.scrollHeight;
-    }, [visibleTurns, activeDebateSpeakers, isThinkingOpen, expandedSpeaker]);
+        if (element && !userScrolledUpRef.current) element.scrollTop = element.scrollHeight;
+    }, [visibleTurns, activeDebateSpeakers]);
+
+    const jumpToLatest = () => {
+        userScrolledUpRef.current = false;
+        setIsScrolledUp(false);
+        const element = scrollRef.current;
+        if (element) element.scrollTo({ top: element.scrollHeight, behavior: 'smooth' });
+    };
+
+    const copyTranscript = () => {
+        const text = debateTurns
+            .map(t => `**${t.speaker}**${t.round ? ` (Round ${t.round})` : ''}:\n${t.text}`)
+            .join('\n\n');
+        navigator.clipboard.writeText(text).catch(() => {});
+    };
 
     useEffect(() => {
         if (!isThinkingOpen) return undefined;
@@ -144,6 +173,13 @@ const DebateChat: React.FC<DebateChatProps> = ({
         return speaker;
     };
     const getReasoning = (speaker: string): string => {
+        // The moderator's streamed chain-of-thought is stored under the
+        // lowercase 'moderator' key (the pipeline keys it that way) — the old
+        // lookup only checked 'Moderator' and always fell through to
+        // "Reasoning is not available yet." for the moderator.
+        if (speaker === 'Moderator') {
+            return reasoningProcesses.moderator || thoughtProcesses.moderator || '';
+        }
         const providerId = getProviderId(speaker);
         return reasoningProcesses[speaker] || thoughtProcesses[speaker] || (providerId ? reasoningProcesses[providerId] || thoughtProcesses[providerId] : '') || '';
     };
@@ -152,7 +188,36 @@ const DebateChat: React.FC<DebateChatProps> = ({
 
     return (
         <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-zinc-950/80">
-            <div ref={scrollRef} className="max-h-[520px] space-y-3 overflow-y-auto px-3 py-4 custom-scrollbar">
+            {/* Pinned consensus strip + copy affordance on completed debates */}
+            {analysis && !isDebating && (
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-white/10 bg-zinc-900/80 px-3 py-2 text-[10px]">
+                    <span className="font-black uppercase tracking-widest text-cyan-300">Consensus</span>
+                    <span className={`font-bold ${analysis.direction === 'Long' ? 'text-emerald-400' : analysis.direction === 'Short' ? 'text-rose-400' : 'text-zinc-400'}`}>{analysis.direction}</span>
+                    <span className="text-zinc-500">Entry</span><span className="font-mono text-zinc-200">{analysis.entryPoints?.[0]?.price || '—'}</span>
+                    <span className="text-zinc-500">SL</span><span className="font-mono text-zinc-200">{analysis.stopLoss || '—'}</span>
+                    <span className="text-zinc-500">TP</span><span className="font-mono text-zinc-200">{analysis.takeProfit?.[0]?.price || '—'}</span>
+                    <span className="text-zinc-500">Confidence</span><span className="font-mono text-zinc-200">{analysis.confidence}</span>
+                    <button
+                        type="button"
+                        onClick={copyTranscript}
+                        className="ml-auto rounded-md border border-white/10 px-2 py-1 text-[9px] uppercase tracking-wider text-zinc-400 transition-colors hover:border-cyan-400/30 hover:text-cyan-300"
+                        title="Copy the full debate transcript"
+                    >
+                        Copy transcript
+                    </button>
+                </div>
+            )}
+            <div
+                ref={scrollRef}
+                onScroll={() => {
+                    const el = scrollRef.current;
+                    if (!el) return;
+                    const away = el.scrollHeight - el.scrollTop - el.clientHeight > 80;
+                    userScrolledUpRef.current = away;
+                    setIsScrolledUp(away);
+                }}
+                className="relative max-h-[520px] space-y-3 overflow-y-auto px-3 py-4 custom-scrollbar"
+            >
                 {visibleTurns.map((turn, index) => {
                     const previousRound = visibleTurns[index - 1]?.round;
                     const hasRoundSeparator = typeof turn.round === 'number' && turn.round !== previousRound;
@@ -219,7 +284,7 @@ const DebateChat: React.FC<DebateChatProps> = ({
                                             <button type="button" onClick={() => setExpandedSpeaker(selected ? null : speaker)} className="flex w-full items-center gap-2 text-left">
                                                 <SpeakerAvatar speaker={speaker} moderator={speaker === 'Moderator'} small />
                                                 <span className="min-w-0 flex-1 truncate text-xs text-zinc-300">{getDisplayName(speaker)}</span>
-                                                <span className="text-[9px] text-zinc-600">R{round}</span>
+                                                <span className="text-[9px] text-zinc-600">{getPhaseLabel(round, speaker === 'Moderator' && round === latestModeratorRound)}</span>
                                             </button>
                                             {selected && <div className="mt-2 max-h-32 overflow-y-auto border-t border-white/5 pt-2 text-xs leading-relaxed text-zinc-500 whitespace-pre-wrap">{reasoning || 'Reasoning is not available yet.'}</div>}
                                         </div>
@@ -227,6 +292,19 @@ const DebateChat: React.FC<DebateChatProps> = ({
                                 })}
                             </div>
                         )}
+                    </div>
+                )}
+
+                {/* Jump-to-latest affordance when the reader scrolled up */}
+                {isScrolledUp && (
+                    <div className="sticky bottom-2 z-10 flex justify-center">
+                        <button
+                            type="button"
+                            onClick={jumpToLatest}
+                            className="flex items-center gap-1.5 rounded-full border border-white/10 bg-zinc-800/95 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-cyan-300 shadow-lg transition-colors hover:border-cyan-400/30 hover:bg-zinc-700"
+                        >
+                            ↓ Latest
+                        </button>
                     </div>
                 )}
             </div>

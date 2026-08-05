@@ -317,8 +317,20 @@ Please investigate this discrepancy in your analysis.
 
                         const currentTurns: DebateTurn[] = [];
                         const matches = [...debateContent.matchAll(turnRegex)];
+                        // Autoplayed post-mortem transcripts carry no explicit
+                        // rounds — derive them the same way as accuracy mode:
+                        // each moderator turn starts a new round so the
+                        // messenger chat keeps its separators + verdict badge.
+                        let autoplayRound = 0;
                         for (const m of matches) {
-                            currentTurns.push({ speaker: m[1] as any, text: sanitizeAIResponse(m[2].trim()) });
+                            let speaker = m[1].trim();
+                            if (speaker === 'Master Strategist') speaker = 'Moderator';
+                            if (speaker === 'Moderator') autoplayRound++;
+                            currentTurns.push({
+                                speaker: speaker as any,
+                                round: autoplayRound > 0 ? autoplayRound : undefined,
+                                text: sanitizeAIResponse(m[2].trim()),
+                            });
                         }
 
                         updatePostMortemMessages(prev => prev.map(m => m.id === postMortemMessageId ? { ...m, debateTurns: currentTurns, postMortemDebateTurns: currentTurns } : m));
