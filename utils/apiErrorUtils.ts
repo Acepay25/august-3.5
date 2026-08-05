@@ -61,13 +61,24 @@ export const parseAPIError = (error: any, provider: ProviderName): ParsedAPIErro
     if (errorStatus === 401 || errorMessage.includes('api key') || errorMessage.includes('unauthorized') || errorMessage.includes('authentication')) {
         return {
             type: 'invalid_key',
-            message: `${provider} API key is invalid or expired. Please check your .env.local file.`,
+            message: `${provider} API key is invalid or expired. Check your API key in Settings → Providers.`,
             provider
         };
     }
 
-    // Network Error
-    if (errorMessage.includes('network') || errorMessage.includes('fetch') || errorMessage.includes('econnrefused') || errorMessage.includes('timeout')) {
+    // Network Error — includes real timeouts. AbortSignal.timeout() rejects
+    // with name 'TimeoutError' and message "The operation timed out." — the
+    // old matcher only looked for 'timeout' (no space), so genuine timeouts
+    // were classified 'unknown' and never retried.
+    if (
+        error?.name === 'TimeoutError'
+        || errorMessage.includes('timed out')
+        || errorMessage.includes('timeout')
+        || errorMessage.includes('the operation was aborted') // Electron main-side 120s timeout
+        || errorMessage.includes('network')
+        || errorMessage.includes('fetch')
+        || errorMessage.includes('econnrefused')
+    ) {
         return {
             type: 'network',
             message: `Network error connecting to ${provider}. Check your internet connection.`,
@@ -154,7 +165,9 @@ export const shouldRetry = (parsedError: ParsedAPIError): boolean => {
  */
 export const getRetryDelay = (parsedError: ParsedAPIError, attempt: number): number => {
     if (parsedError.retryAfterSeconds) {
-        return parsedError.retryAfterSeconds * 1000;
+        // A real Retry-After header can be huge (e.g. 600s for quota resets) —
+        // honor it but never let it stall the pipeline for minutes per attempt.
+        return Math.min(parsedError.retryAfterSeconds, 30) * 1000;
     }
     // Exponential backoff: 2s, 4s, 8s, max 30s
     return Math.min(2000 * Math.pow(2, attempt), 30000);
