@@ -1531,6 +1531,36 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
                     finalAnalysis = sanitizeTradeAnalysis(finalAnalysis);
 
+                    // === ACCURACY MODE VERIFICATION PASS ===
+                    // Standard mode has the clarification loop; accuracy mode is a
+                    // single autoplayed stream. This second focused moderator call
+                    // reviews the debate + plan and may adjust levels/confidence.
+                    // Fail-safe: any error keeps the moderator's plan untouched.
+                    let accuracyVerificationNote = '';
+                    if (isAccuracyModeEnabled && finalAnalysis.direction && finalAnalysis.direction !== 'Neutral') {
+                        try {
+                            const verification = await ensembleService.verifyAccuracyPlan(
+                                moderatorConfig,
+                                activeModModel,
+                                fullResponseText,
+                                JSON.stringify(finalAnalysis),
+                                currentAbortController.signal,
+                            );
+                            if (verification.verdict === 'adjusted' && verification.planJson) {
+                                const adjusted = sanitizeTradeAnalysis(extractLastJson(verification.planJson));
+                                if (adjusted && adjusted.direction && adjusted.direction !== 'Neutral') {
+                                    finalAnalysis = adjusted;
+                                    accuracyVerificationNote = verification.note;
+                                }
+                            } else {
+                                accuracyVerificationNote = verification.note || 'Plan verified by the accuracy pass.';
+                            }
+                        } catch (verifyError) {
+                            const err = verifyError as { message?: string };
+                            console.warn('[AccuracyVerification] Skipped (kept original plan):', err?.message || verifyError);
+                        }
+                    }
+
                     // === PROGRAMMATIC GATE CAP ENFORCEMENT ===
                     // The Gate produces a confidenceCap based on data integrity, pattern memory,
                     // HTF/LTF conflict, and volume context. The moderator can emit any probability
@@ -1567,7 +1597,11 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                         const updatedMessage = {
                             ...existingMessage,
                             isDebating: false,
-                            text: `The ensemble has concluded its debate.`,
+                            text: accuracyVerificationNote
+                                ? `The ensemble has concluded its debate.
+
+${accuracyVerificationNote}`
+                                : `The ensemble has concluded its debate.`,
                             analysis: processNewAnalysis(finalAnalysis),
                             outcome: TradeOutcome.PENDING,
                             debateTurns: existingMessage.debateTurns,

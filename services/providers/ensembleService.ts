@@ -2,7 +2,7 @@
 import { TradeAnalysis, Message, TradeOutcome, AccuracySubMode, LoggedTrade, AnalystLensConfig, AnalystRole } from '../../types';
 import { ProviderConfig } from '../../types/provider';
 import { streamChatRequest, ChatMessage } from './GenericProviderService';
-import { extractAndParseJson } from '../../utils/jsonUtils';
+import { extractAndParseJson, extractLastJson } from '../../utils/jsonUtils';
 import {
     MODERATOR_SYSTEM_PROMPT_V2,
     PURE_AI_MODERATOR_PROMPT,
@@ -809,6 +809,63 @@ ${analysis.details.map(d => `- ${d}`).join('\n')}
     }
 
     return context.trim();
+};
+
+/**
+ * Accuracy-mode verification pass — the counterpart of the standard mode's
+ * clarification loop. The autoplayed debate produces ONE moderator stream;
+ * this second, focused call reviews the debate + the proposed plan and either
+ * confirms it (<ACCURACY_CONFIRMED>) or returns a corrected plan
+ * (<ACCURACY_ADJUST> + complete JSON). Fail-safe: any error degrades to
+ * 'confirmed' so the moderator's plan is never discarded.
+ */
+export const verifyAccuracyPlan = async (
+    moderatorConfig: ProviderConfig,
+    moderatorModel: string,
+    debateContent: string,
+    planJson: string,
+    signal?: AbortSignal
+): Promise<{ verdict: 'confirmed' | 'adjusted'; note: string; planJson?: string }> => {
+    const prompt = `
+**ROLE: ENSEMBLE DEBATE MODERATOR — ACCURACY VERIFICATION PASS**
+
+The autoplayed debate below produced the attached trade plan. Before the plan is final:
+1. Re-check the plan against the debate for contradictions, hallucinated price levels, or unsupported confidence.
+2. Re-check the confidence against the anti-hallucination rule (>=70% requires all 7 conditions) and any Gate confidence cap.
+3. If the plan is sound, output EXACTLY this and nothing else:
+<ACCURACY_CONFIRMED>
+4. If any level or the confidence needs correcting, output <ACCURACY_ADJUST> followed by the COMPLETE corrected plan as a single valid JSON object (same schema as the original), and NOTHING else.
+
+**THE DEBATE:**
+${debateContent.slice(0, 8000)}
+
+**THE PROPOSED PLAN (JSON):**
+${planJson.slice(0, 6000)}
+`;
+    let text = '';
+    try {
+        for await (const chunk of getModeratorAnalysisStream(moderatorConfig, moderatorModel, prompt, signal)) {
+            if (chunk) text += chunk;
+        }
+    } catch (e: any) {
+        const isAbort = e?.name === 'AbortError' || e?.code === 'ABORT_ERR' || e?.name === 'TimeoutError';
+        if (isAbort) throw e;
+        console.warn('[AccuracyVerification] Pass failed; keeping the original plan:', e?.message || e);
+        return { verdict: 'confirmed', note: '' };
+    }
+
+    const note = text.replace(/<ACCURACY_(?:ADJUST|CONFIRMED)>/gi, '').trim();
+    if (/<ACCURACY_ADJUST>/i.test(text)) {
+        try {
+            const adjustedJson = extractLastJson(text);
+            if (adjustedJson) {
+                return { verdict: 'adjusted', note: note || 'Plan adjusted by the accuracy pass.', planJson: typeof adjustedJson === 'string' ? adjustedJson : JSON.stringify(adjustedJson) };
+            }
+        } catch {
+            // fall through to confirmed — never discard the original plan
+        }
+    }
+    return { verdict: 'confirmed', note: note || 'Plan verified by the accuracy pass.' };
 };
 
 export const conductDebate = (
