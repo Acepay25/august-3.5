@@ -2233,10 +2233,10 @@ export const conductRealDebate = async function* (
 
     // --- ROUND 1: OPENING STATEMENTS (free — each analyst's own final output) ---
     for (const analyst of analysts) {
-        const opening = truncateTextToTokens(
-            analyst.result.finalOutput || analyst.result.thoughtProcess || 'No opening statement provided.',
-            175 // ~700 chars
-        );
+        // Keep the complete analyst response in the visible transcript. The
+        // transcript builder still applies its own context budget when this
+        // content is sent back to the moderator.
+        const opening = analyst.result.finalOutput || analyst.result.thoughtProcess || 'No opening statement provided.';
         roundTexts[analyst.provider.name][1] = opening;
         yield { speaker: analyst.provider.name, round: 1, text: opening };
     }

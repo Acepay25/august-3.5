@@ -42,6 +42,38 @@ const getRoundLabel = (round: number, isVerdictRound = false): string => {
     return `Round ${round} · Clarification`;
 };
 
+interface ModeratorSegment {
+    target?: string;
+    text: string;
+}
+
+/**
+ * Clarification prompts can contain one labelled question for each analyst in
+ * a single moderator stream. Split those labelled sections for display so the
+ * transcript reads like a one-to-one Messenger exchange. Unlabelled verdict
+ * prose stays as one Moderator message.
+ */
+const splitModeratorTurn = (
+    text: string,
+    analystNames: string[],
+    modelNames: string[],
+): ModeratorSegment[] => {
+    const labels = [...new Set([...analystNames, ...modelNames].map(label => label.trim()).filter(Boolean))]
+        .sort((a, b) => b.length - a.length);
+    if (labels.length < 2) return [{ text }];
+
+    const escapedLabels = labels.map(label => label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const labelPattern = new RegExp(`(?:^|\\n)\\s*[*_~]*(${escapedLabels.join('|')})[*_~]*\\s*:\\s*`, 'g');
+    const matches = [...text.matchAll(labelPattern)];
+    if (matches.length < 2) return [{ text }];
+
+    return matches.map((match, index) => {
+        const start = (match.index ?? 0) + match[0].length;
+        const end = index + 1 < matches.length ? (matches[index + 1].index ?? text.length) : text.length;
+        return { target: match[1].trim(), text: text.slice(start, end).trim() };
+    }).filter(segment => Boolean(segment.text));
+};
+
 const DebateChat: React.FC<DebateChatProps> = ({
     debateTurns,
     modelsUsed = {},
@@ -56,18 +88,36 @@ const DebateChat: React.FC<DebateChatProps> = ({
     const [isThinkingOpen, setIsThinkingOpen] = useState(false);
     const [expandedSpeaker, setExpandedSpeaker] = useState<string | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
+    const thinkingControlRef = useRef<HTMLDivElement>(null);
 
-    const visibleTurns = useMemo(() => debateTurns.filter(turn => activeDebateSpeakers[turn.speaker] !== turn.round), [debateTurns, activeDebateSpeakers]);
+    // Keep the currently streaming turn visible. The typing bubble is an
+    // additional activity indicator, not a replacement for the analyst's
+    // partial reply.
+    const visibleTurns = useMemo(() => debateTurns, [debateTurns]);
     // Computed from ALL turns (not just visible ones) so a completed
     // clarification-question round is never mistaken for the verdict while
     // the verdict round is still streaming.
     const latestModeratorRound = useMemo(() => Math.max(0, ...debateTurns.filter(turn => turn.speaker === 'Moderator').map(turn => turn.round ?? 0)), [debateTurns]);
     const activeSpeakers = useMemo(() => Object.entries(activeDebateSpeakers), [activeDebateSpeakers]);
+    const analystNames = useMemo(() => [...new Set(debateTurns.filter(turn => turn.speaker !== 'Moderator').map(turn => turn.speaker))], [debateTurns]);
+    const modelNames = useMemo(() => Object.entries(modelsUsed).map(([key, modelId]) => modelIdToName[modelId] ?? modelId ?? key), [modelIdToName, modelsUsed]);
 
     useEffect(() => {
         const element = scrollRef.current;
         if (element) element.scrollTop = element.scrollHeight;
     }, [visibleTurns, activeDebateSpeakers, isThinkingOpen, expandedSpeaker]);
+
+    useEffect(() => {
+        if (!isThinkingOpen) return undefined;
+        const handleBodyPointerDown = (event: PointerEvent): void => {
+            if (!thinkingControlRef.current?.contains(event.target as Node)) {
+                setIsThinkingOpen(false);
+                setExpandedSpeaker(null);
+            }
+        };
+        document.addEventListener('pointerdown', handleBodyPointerDown);
+        return () => document.removeEventListener('pointerdown', handleBodyPointerDown);
+    }, [isThinkingOpen]);
 
     const getProviderId = (speaker: string): string | undefined => providerNameToId[speaker];
     const getModelKey = (speaker: string): string | undefined => {
@@ -110,6 +160,9 @@ const DebateChat: React.FC<DebateChatProps> = ({
                     const isVerdict = isVerdictRound && !isDebating;
                     const displayName = getDisplayName(turn.speaker);
                     const modelName = getModelName(turn.speaker);
+                    const segments = turn.speaker === 'Moderator'
+                        ? splitModeratorTurn(turn.text, analystNames, modelNames)
+                        : [{ text: turn.text }];
                     return (
                         <React.Fragment key={`${turn.speaker}-${turn.round ?? 'legacy'}-${index}`}>
                             {hasRoundSeparator && (
@@ -119,27 +172,29 @@ const DebateChat: React.FC<DebateChatProps> = ({
                                     <span className="h-px flex-1 bg-white/5" />
                                 </div>
                             )}
-                            <div className={`flex items-start gap-2.5 ${turn.speaker === 'Moderator' ? 'justify-end' : ''}`}>
-                                {turn.speaker !== 'Moderator' && <SpeakerAvatar speaker={turn.speaker} />}
-                                <div className={`min-w-0 max-w-[92%] rounded-2xl border px-3.5 py-3 ${isVerdict ? 'border-cyan-400/25 bg-cyan-500/10' : 'border-white/5 bg-zinc-800/60'}`}>
-                                    <div className="mb-1.5 flex items-center gap-2">
-                                        {turn.speaker === 'Moderator' && <SpeakerAvatar speaker="Moderator" moderator small />}
-                                        <div className="min-w-0">
-                                            <div className={`text-xs font-semibold ${isVerdict ? 'text-cyan-300' : 'text-zinc-200'}`}>{displayName}</div>
-                                            {modelName && <div className="truncate text-[10px] text-zinc-600">{modelName}</div>}
+                            {segments.map((segment, segmentIndex) => (
+                                <div key={`${turn.speaker}-${turn.round ?? 'legacy'}-${index}-${segmentIndex}`} className={`flex items-start gap-2.5 ${turn.speaker === 'Moderator' ? 'justify-end' : ''}`}>
+                                    {turn.speaker !== 'Moderator' && <SpeakerAvatar speaker={turn.speaker} />}
+                                    <div className={`min-w-0 max-w-[92%] rounded-2xl border px-3.5 py-3 ${isVerdict ? 'border-cyan-400/25 bg-cyan-500/10' : 'border-white/5 bg-zinc-800/60'}`}>
+                                        <div className="mb-1.5 flex items-center gap-2">
+                                            {turn.speaker === 'Moderator' && <SpeakerAvatar speaker="Moderator" moderator small />}
+                                            <div className="min-w-0">
+                                                <div className={`text-xs font-semibold ${isVerdict ? 'text-cyan-300' : 'text-zinc-200'}`}>{displayName}</div>
+                                                {segment.target ? <div className="truncate text-[10px] text-cyan-400/70">To {segment.target}</div> : modelName && <div className="truncate text-[10px] text-zinc-600">{modelName}</div>}
+                                            </div>
+                                            {isVerdict && <span className="ml-auto rounded border border-cyan-400/20 bg-cyan-400/10 px-1.5 py-0.5 text-[9px] font-bold tracking-widest text-cyan-300">DECISION</span>}
                                         </div>
-                                        {isVerdict && <span className="ml-auto rounded border border-cyan-400/20 bg-cyan-400/10 px-1.5 py-0.5 text-[9px] font-bold tracking-widest text-cyan-300">DECISION</span>}
+                                        <div className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-300">{turn.speaker === 'Moderator' ? segment.text : cleanSpeakerPrefix(segment.text, turn.speaker)}</div>
                                     </div>
-                                    <div className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-300">{cleanSpeakerPrefix(turn.text, turn.speaker)}</div>
+                                    {turn.speaker === 'Moderator' && <SpeakerAvatar speaker="Moderator" moderator />}
                                 </div>
-                                {turn.speaker === 'Moderator' && <SpeakerAvatar speaker="Moderator" moderator />}
-                            </div>
+                            ))}
                         </React.Fragment>
                     );
                 })}
 
                 {isDebating && activeSpeakers.length > 0 && (
-                    <div className="relative flex items-end gap-2 pt-2">
+                    <div ref={thinkingControlRef} className="relative flex items-end gap-2 pt-2">
                         <div className="flex -space-x-2 pl-1">
                             {activeSpeakers.map(([speaker]) => <SpeakerAvatar key={speaker} speaker={speaker} moderator={speaker === 'Moderator'} small />)}
                         </div>
