@@ -429,13 +429,20 @@ export const generateHybridPromptInjection = (data: HybridDataPacket): string =>
             data.regime.regime === 'compression' ? '' :
                 data.regime.regime === 'volatile_chop' ? '' : '↔';
 
+    // Staleness: the model should know when the packet is no longer real-time
+    // instead of trusting a blanket "Real-Time" claim.
+    const dataAgeMin = Math.max(0, Math.round((Date.now() - new Date(data.dataTimestamp).getTime()) / 60000));
+    const sourceLine = dataAgeMin <= 10
+        ? `**Source:** Binance API (${dataAgeMin}m ago)`
+        : `**Source:** Binance API — DATA IS ${dataAgeMin}m OLD; verify levels against the current price before acting`;
+
     return `
 ═══════════════════════════════════════════════════════════════
  HYBRID INTELLIGENCE V2: ENHANCED MARKET DATA
 ═══════════════════════════════════════════════════════════════
 **Symbol:** ${data.symbol}
 **Data Timestamp:** ${data.dataTimestamp}
-**Source:** Binance API (Real-Time)
+${sourceLine}
 
  **MARKET OVERVIEW:**
 - Current Price: $${data.marketData.currentPrice}
