@@ -11,7 +11,8 @@ export interface DebateTurn {
   reasoning?: string;
   /**
    * 1-based debate round (real inter-model debates only): 1 = opening
-   * statements, subsequent rounds = rebuttals, last = moderator verdict.
+   * statements, 2-3 = rebuttals, then clarification cycles (one question
+   * round + one answer round each), last = moderator verdict.
    * Absent on legacy/simulated transcripts (grouped by moderator turns).
    */
   round?: number;

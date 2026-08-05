@@ -783,10 +783,19 @@ const App: React.FC = () => {
             const correctedConvs = (profile.conversations || []).map(conv => {
                 const leverage = conv.leverage || 100;
                 const correctedMessages = (conv.messages || []).map(msg => {
-                    if (msg.analysis) {
-                        return { ...msg, analysis: recalculateAnalysisMetrics(msg.analysis, leverage) };
+                    // A restored message can never be mid-stream: the abort
+                    // controller and the debate status callbacks died with the
+                    // page that was running them. Clear live debate state so a
+                    // message saved mid-debate doesn't render a stuck
+                    // "thinking" indicator or permanently hide its turns
+                    // (DebateChat filters turns by activeDebateSpeakers).
+                    const normalized: Message = msg.isDebating || msg.activeDebateSpeakers
+                        ? { ...msg, isDebating: false, activeDebateSpeakers: undefined }
+                        : msg;
+                    if (normalized.analysis) {
+                        return { ...normalized, analysis: recalculateAnalysisMetrics(normalized.analysis, leverage) };
                     }
-                    return msg;
+                    return normalized;
                 });
                 return { ...conv, leverage, messages: correctedMessages };
             });

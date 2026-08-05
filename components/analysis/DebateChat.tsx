@@ -139,14 +139,20 @@ const DebateChat: React.FC<DebateChatProps> = ({
                 })}
 
                 {isDebating && activeSpeakers.length > 0 && (
-                    <div className="relative flex justify-center pt-2">
-                        <button type="button" onClick={() => setIsThinkingOpen(previous => !previous)} className="flex items-center gap-2 rounded-full border border-white/5 bg-zinc-900 px-3 py-2 text-[10px] uppercase tracking-widest text-cyan-300/80">
-                            <span className="flex gap-1" aria-hidden="true"><i className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-bounce [animation-delay:-0.2s]" /><i className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-bounce [animation-delay:-0.1s]" /><i className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-bounce" /></span>
-                            <span>thinking</span>
-                            <div className="flex -space-x-1.5">
-                                {activeSpeakers.map(([speaker]) => <SpeakerAvatar key={speaker} speaker={speaker} moderator={speaker === 'Moderator'} small />)}
-                            </div>
-                            <ChevronDownIcon className={`h-3 w-3 transition-transform ${isThinkingOpen ? 'rotate-180' : ''}`} />
+                    <div className="relative flex items-end gap-2 pt-2">
+                        <div className="flex -space-x-2 pl-1">
+                            {activeSpeakers.map(([speaker]) => <SpeakerAvatar key={speaker} speaker={speaker} moderator={speaker === 'Moderator'} small />)}
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setIsThinkingOpen(previous => !previous)}
+                            className="group flex items-center gap-2 rounded-2xl rounded-bl-md border border-white/10 bg-zinc-800 px-3 py-2 text-left shadow-lg transition-colors hover:border-cyan-400/30 hover:bg-zinc-700"
+                            aria-expanded={isThinkingOpen}
+                            aria-label="Show analysts who are thinking"
+                        >
+                            <span className="flex gap-1" aria-hidden="true"><i className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-400 [animation-delay:-0.2s]" /><i className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-400 [animation-delay:-0.1s]" /><i className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-400" /></span>
+                            <span className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 group-hover:text-cyan-300">Thinking</span>
+                            <ChevronDownIcon className={`h-3 w-3 text-zinc-500 transition-transform ${isThinkingOpen ? 'rotate-180' : ''}`} />
                         </button>
                         {isThinkingOpen && activeSpeakers.length > 0 && (
                             <div className="absolute bottom-full z-20 mb-2 w-64 rounded-xl border border-white/10 bg-zinc-900 p-2 shadow-xl">

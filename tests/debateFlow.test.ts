@@ -596,4 +596,112 @@ describe('conductRealDebate (real inter-model debate)', () => {
     expect(statuses).toContainEqual({ speaker: 'Moderator', round: 6, active: true });
     expect(statuses).toContainEqual({ speaker: 'Moderator', round: 6, active: false });
   });
+
+  const threeAnalysts = () => [
+    realAnalyst('prov-a', 'Analyst One', 'model-a'),
+    realAnalyst('prov-b', 'Analyst Two', 'model-b'),
+    realAnalyst('prov-c', 'Analyst Three', 'model-c'),
+  ];
+
+  it('runs the full debate with three analysts (openings, rebuttals, verdict)', async () => {
+    const calls: { system: string; user: string }[] = [];
+    streamMock.mockImplementation(async function* (...args: any[]) {
+      const messages = args[1] as { role: string; content: string }[];
+      const system = messages[0].content;
+      const user = messages[1].content;
+      calls.push({ system, user });
+      if (user.includes('CLARIFICATION ROUND')) {
+        yield '<CLARIFICATION_DONE>';
+      } else if (system.includes('debate moderator')) {
+        yield 'Verdict for three.\n</DEBATE_END>\n';
+        yield verdictJson;
+      } else {
+        const name = ['Analyst One', 'Analyst Two', 'Analyst Three'].find(n => system.includes(n)) ?? 'unknown';
+        yield `rebuttal-${name}`;
+      }
+    });
+
+    const events = await collectEvents(conductRealDebate(threeAnalysts(), 'Analyze BTCUSDT', null, config, 'model-a'));
+
+    // Round 1 = three opening statements, before any provider call happened.
+    expect(events.filter(e => e.round === 1).map(e => e.speaker)).toEqual(['Analyst One', 'Analyst Two', 'Analyst Three']);
+
+    // Rebuttal rounds: every analyst speaks in BOTH rounds.
+    for (const round of [2, 3]) {
+      expect(events.filter(e => e.round === round).map(e => e.speaker).sort()).toEqual(['Analyst One', 'Analyst Three', 'Analyst Two']);
+    }
+
+    // 2 rebuttal rounds × 3 analysts + clarification questions + verdict.
+    expect(calls.length).toBe(2 * 3 + 2);
+
+    const moderatorEvents = events.filter(e => e.speaker === 'Moderator');
+    expect(moderatorEvents.length).toBeGreaterThan(0);
+    const modText = moderatorEvents.map(e => e.text).join('');
+    expect(modText).toContain('</DEBATE_END>');
+    expect(extractLastJson(modText).direction).toBe('Long');
+    expect([...new Set(events.map(e => e.round))]).toEqual([1, 2, 3, 4]);
+  });
+
+  it('runs a clarification cycle with all three analysts answering in parallel', async () => {
+    streamMock.mockImplementation(async function* (...args: any[]) {
+      const messages = args[1] as { role: string; content: string }[];
+      const system = messages[0].content;
+      const user = messages[1].content;
+      if (system.includes('CLARIFICATION ANSWER')) {
+        const name = ['Analyst One', 'Analyst Two', 'Analyst Three'].find(n => system.includes(n)) ?? 'unknown';
+        yield `**${name}:** exact clarification answer`;
+      } else if (user.includes('CLARIFICATION JUDGMENT')) {
+        yield '<CLARIFICATION_SATISFIED>';
+      } else if (user.includes('CLARIFICATION ROUND')) {
+        yield '**Analyst One:** justify your entry? **Analyst Two:** justify your stop? **Analyst Three:** justify your target?';
+      } else if (system.includes('debate moderator')) {
+        yield 'Verdict for three.\n</DEBATE_END>\n';
+        yield verdictJson;
+      } else {
+        yield 'rebuttal';
+      }
+    });
+
+    const events = await collectEvents(conductRealDebate(threeAnalysts(), 'Analyze BTCUSDT', null, config, 'model-a'));
+
+    // Clarification: moderator questions (round 4), three parallel answers
+    // (round 5), satisfied judgment, verdict (round 6).
+    expect(events.filter(e => e.round === 4).some(e => e.speaker === 'Moderator')).toBe(true);
+    expect(events.filter(e => e.round === 5).map(e => e.speaker).sort()).toEqual(['Analyst One', 'Analyst Three', 'Analyst Two']);
+    expect(events.filter(e => e.round === 5).every(e => e.text.includes('exact clarification answer'))).toBe(true);
+    expect([...new Set(events.map(e => e.round))]).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+
+  it('continues with the remaining analysts when one of three fails a rebuttal', async () => {
+    let analystThreeCalls = 0;
+    streamMock.mockImplementation(async function* (...args: any[]) {
+      const messages = args[1] as { role: string; content: string }[];
+      const system = messages[0].content;
+      const user = messages[1].content;
+      if (user.includes('CLARIFICATION ROUND')) {
+        yield '<CLARIFICATION_DONE>';
+        return;
+      }
+      if (system.includes('debate moderator')) {
+        yield 'Verdict for three.\n</DEBATE_END>\n';
+        yield verdictJson;
+        return;
+      }
+      if (system.includes('Analyst Three')) {
+        analystThreeCalls++;
+        if (analystThreeCalls === 1) throw new Error('Analyst Three provider exploded');
+      }
+      yield 'rebuttal';
+    });
+
+    const events = await collectEvents(conductRealDebate(threeAnalysts(), 'Analyze BTCUSDT', null, config, 'model-a'));
+
+    // Analyst Three still got its opening statement, then dropped out: it
+    // never produces a rebuttal and is not called again.
+    expect(events.filter(e => e.round === 1).map(e => e.speaker)).toContain('Analyst Three');
+    expect(events.filter(e => e.round === 3).map(e => e.speaker).sort()).toEqual(['Analyst One', 'Analyst Two']);
+    expect(analystThreeCalls).toBe(1);
+    // The moderator verdict still arrives.
+    expect(events.some(e => e.speaker === 'Moderator')).toBe(true);
+  });
 });
