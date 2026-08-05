@@ -45,6 +45,8 @@ export interface ChatContextProps {
     onRetryPostMortem?: (messageId: string) => void;
     // Probability Selection
     onSelectMessageForProbability?: (id: string) => void;
+    // Side-by-side compare of two analysis cards.
+    onCompareAnalysis?: (messageId: string) => void;
     // Selection Mode Props
     isSelectionMode?: boolean;
     selectedMessageIds?: Set<string>;
@@ -121,7 +123,8 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
         isSelectionMode, selectedMessageIds, onToggleMessageSelection,
         confidenceCalibration, onRetryPostMortem, lensConfig, leverage, onViewImage,
         autopilotResolutions, onConfirmAutopilot, onDismissAutopilot,
-        onSelectMessageForProbability
+        onSelectMessageForProbability,
+        onCompareAnalysis
     } = context;
 
     const isHighlighted = highlightedAnalysisId === message.id;
@@ -360,8 +363,19 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 />
                             )}
 
+                            {/* Per-run summary — durations, gate cap, Monte Carlo (from runStats) */}
+                            {message.analysis && message.runStats && (
+                                <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[9px] uppercase tracking-wider text-zinc-600">
+                                    <span>Run {Math.round(message.runStats.durationMs / 1000)}s</span>
+                                    {message.runStats.analystCount !== undefined && <span>{message.runStats.analystCount} analysts</span>}
+                                    {message.runStats.gateCap !== undefined && <span>Gate cap {Math.round(message.runStats.gateCap * 100)}%</span>}
+                                    {message.runStats.mcWinRate !== undefined && <span>MC win {message.runStats.mcWinRate}%</span>}
+                                    {message.runStats.mcEV !== undefined && <span>MC EV {message.runStats.mcEV}R</span>}
+                                </div>
+                            )}
+
                             {/* Main Analysis Result */}
-                            {message.analysis && <AnalysisResult analysis={message.analysis} messageId={message.id} onLogTrade={handleInitiateLogTrade} onInitiateSkip={handleInitiateSkipTrade} onViewStrategy={handleViewStrategyDetails} onSaveAnalysis={handleSaveAnalysis} onUpdateTrade={handleInitiateUpdateTrade} onSimulate={handleInitiateSimulator} isSaved={savedAnalyses.some(sa => sa.id === message.id)} outcome={message.outcome} isLogging={loggingTradeId === message.id} activeFrameworks={activeFrameworks} onApplyStrategy={handleApplyStrategy} imageSummaries={message.imageSummaries} isAccuracyMode={message.isAccuracyMode} accuracySubMode={message.accuracySubMode} confidenceCalibration={confidenceCalibration} confluenceData={message.confluenceData} leverage={leverage} isLensMode={message.isLensMode} tradingStyle={message.tradingStyle} onSelectForProbability={onSelectMessageForProbability} autopilotResolution={autopilotResolutions?.[message.id]} onConfirmAutopilot={onConfirmAutopilot} onDismissAutopilot={onDismissAutopilot} />}
+                            {message.analysis && <AnalysisResult analysis={message.analysis} messageId={message.id} onLogTrade={handleInitiateLogTrade} onInitiateSkip={handleInitiateSkipTrade} onViewStrategy={handleViewStrategyDetails} onSaveAnalysis={handleSaveAnalysis} onUpdateTrade={handleInitiateUpdateTrade} onSimulate={handleInitiateSimulator} isSaved={savedAnalyses.some(sa => sa.id === message.id)} outcome={message.outcome} isLogging={loggingTradeId === message.id} activeFrameworks={activeFrameworks} onApplyStrategy={handleApplyStrategy} imageSummaries={message.imageSummaries} isAccuracyMode={message.isAccuracyMode} accuracySubMode={message.accuracySubMode} confidenceCalibration={confidenceCalibration} confluenceData={message.confluenceData} leverage={leverage} isLensMode={message.isLensMode} tradingStyle={message.tradingStyle} onSelectForProbability={onSelectMessageForProbability} autopilotResolution={autopilotResolutions?.[message.id]} onConfirmAutopilot={onConfirmAutopilot} onDismissAutopilot={onDismissAutopilot} onCompare={onCompareAnalysis} />}
 
                             {!message.isDebating && debateTurns.length > 0 && !message.analysis && (
                                 <DebateChat
