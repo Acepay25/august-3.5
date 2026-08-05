@@ -41,6 +41,8 @@ interface AnalysisResultProps {
     autopilotResolution?: AutopilotResolution;
     onConfirmAutopilot?: (messageId: string) => void;
     onDismissAutopilot?: (messageId: string) => void;
+    /** Opens the side-by-side compare picker for this card. */
+    onCompare?: (messageId: string) => void;
 }
 
 const AnalysisResult: React.FC<AnalysisResultProps> = ({
@@ -68,7 +70,8 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
     onSelectForProbability,
     autopilotResolution,
     onConfirmAutopilot,
-    onDismissAutopilot
+    onDismissAutopilot,
+    onCompare
 }) => {
     // Defensive destructuring
     const {
@@ -301,6 +304,15 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                              VIEW PROBABILITIES
                         </button>
                     )}
+                    {onCompare && (
+                        <button
+                            onClick={() => onCompare(messageId)}
+                            className="px-2 py-1 rounded text-[9px] font-bold bg-zinc-800 border border-white/10 text-zinc-300 uppercase tracking-widest flex items-center gap-1 hover:border-cyan-400/30 hover:text-cyan-300 transition-colors"
+                            title="Compare this analysis side-by-side with another"
+                        >
+                            ⧉ Compare
+                        </button>
+                    )}
                 </div>
 
                 {isUpdate && (
@@ -312,6 +324,21 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                     </div>
                 )}
             </div>
+
+            {/* Hybrid data staleness — the packet claims real-time; show its age */}
+            {analysis.marketSnapshot ? (() => {
+                const snapshot = analysis.marketSnapshot as { dataTimestamp?: string } | undefined;
+                if (!snapshot?.dataTimestamp) return null;
+                const ageMin = Math.max(0, Math.round((Date.now() - new Date(snapshot.dataTimestamp).getTime()) / 60000));
+                return (
+                    <div className="mb-3 -mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[9px] uppercase tracking-wider text-zinc-500">
+                        <span>Hybrid data</span>
+                        <span className={`font-mono ${ageMin > 10 ? 'font-semibold text-amber-400' : 'text-zinc-400'}`}>
+                            {new Date(snapshot.dataTimestamp).toLocaleTimeString()} · {ageMin}m ago{ageMin > 10 ? ' (stale)' : ''}
+                        </span>
+                    </div>
+                );
+            })() : null}
 
             {/* Outcome Autopilot — detected SL/TP hit, one-click confirmation */}
             {autopilotResolution && outcome === TradeOutcome.PENDING && (() => {
@@ -325,12 +352,15 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                         : isLoss
                             ? 'from-rose-900/40 to-rose-800/20 border-rose-400/40 text-rose-200'
                             : 'from-amber-900/40 to-amber-800/20 border-amber-400/40 text-amber-200';
+                // Confidence tiers: which TP was hit and whether the SL was
+                // touched first — a "recovered" win is weaker than a clean one.
+                const winTier = isWin && r.hitTarget ? ` · ${r.hitTarget}${r.recoveredAfterSlTouch ? ' · recovered after SL touch' : ' · clean'}` : '';
                 const confirmLabel = r.expiredOpen
                     ? null
                     : r.outcome === TradeOutcome.ENTRY_NOT_HIT
                         ? 'Confirm Entry Not Hit'
                         : isWin
-                            ? `Confirm WIN${r.pnlPercent !== undefined ? ` (+${r.pnlPercent}%)` : ''}`
+                            ? `Confirm WIN${r.pnlPercent !== undefined ? ` (+${r.pnlPercent}%)` : ''}${winTier}`
                             : `Confirm LOSS${r.pnlPercent !== undefined ? ` (${r.pnlPercent}%)` : ''}`;
                 return (
                     <div className={`mb-4 px-4 py-3 rounded-2xl bg-gradient-to-r ${theme} border shadow-lg animate-fade-in`}>

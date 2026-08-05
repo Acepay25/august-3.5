@@ -99,6 +99,8 @@ const DebateChat: React.FC<DebateChatProps> = ({
     const [isThinkingOpen, setIsThinkingOpen] = useState(false);
     const [expandedSpeaker, setExpandedSpeaker] = useState<string | null>(null);
     const [isScrolledUp, setIsScrolledUp] = useState(false);
+    const [isReplaying, setIsReplaying] = useState(false);
+    const [replayIndex, setReplayIndex] = useState(0);
     const scrollRef = useRef<HTMLDivElement>(null);
     const thinkingControlRef = useRef<HTMLDivElement>(null);
     const userScrolledUpRef = useRef(false);
@@ -121,6 +123,23 @@ const DebateChat: React.FC<DebateChatProps> = ({
         const element = scrollRef.current;
         if (element && !userScrolledUpRef.current) element.scrollTop = element.scrollHeight;
     }, [visibleTurns, activeDebateSpeakers]);
+
+    // Replay: reveal turns one-by-one on a timer. Auto-reset when a new
+    // transcript arrives (new debate run) or the chat becomes live again.
+    useEffect(() => {
+        setReplayIndex(0);
+        setIsReplaying(false);
+    }, [debateTurns, isDebating]);
+
+    useEffect(() => {
+        if (!isReplaying) return;
+        if (replayIndex >= debateTurns.length) {
+            setIsReplaying(false);
+            return;
+        }
+        const timer = setTimeout(() => setReplayIndex(i => i + 1), 1100);
+        return () => clearTimeout(timer);
+    }, [isReplaying, replayIndex, debateTurns.length]);
 
     const jumpToLatest = () => {
         userScrolledUpRef.current = false;
@@ -200,11 +219,29 @@ const DebateChat: React.FC<DebateChatProps> = ({
                     <button
                         type="button"
                         onClick={copyTranscript}
-                        className="ml-auto rounded-md border border-white/10 px-2 py-1 text-[9px] uppercase tracking-wider text-zinc-400 transition-colors hover:border-cyan-400/30 hover:text-cyan-300"
+                        className="rounded-md border border-white/10 px-2 py-1 text-[9px] uppercase tracking-wider text-zinc-400 transition-colors hover:border-cyan-400/30 hover:text-cyan-300"
                         title="Copy the full debate transcript"
                     >
                         Copy transcript
                     </button>
+                    {!isReplaying ? (
+                        <button
+                            type="button"
+                            onClick={() => { setIsReplaying(true); setReplayIndex(0); }}
+                            className="rounded-md border border-white/10 px-2 py-1 text-[9px] uppercase tracking-wider text-zinc-400 transition-colors hover:border-cyan-400/30 hover:text-cyan-300"
+                            title="Replay the debate turn by turn"
+                        >
+                            ▶ Replay
+                        </button>
+                    ) : (
+                        <span className="ml-auto flex items-center gap-1.5">
+                            <button type="button" onClick={() => setIsReplaying(p => !p)} className="rounded-md border border-cyan-400/30 bg-cyan-500/10 px-2 py-1 text-[9px] uppercase tracking-wider text-cyan-300">
+                                {replayIndex >= debateTurns.length ? '↺ Restart' : '⏸ Pause'}
+                            </button>
+                            <button type="button" onClick={() => setReplayIndex(i => Math.min(debateTurns.length, i + 1))} className="rounded-md border border-white/10 px-2 py-1 text-[9px] uppercase tracking-wider text-zinc-400">⏭ Step</button>
+                            <button type="button" onClick={() => setIsReplaying(false)} className="rounded-md border border-white/10 px-2 py-1 text-[9px] uppercase tracking-wider text-zinc-500">Exit</button>
+                        </span>
+                    )}
                 </div>
             )}
             <div
@@ -218,8 +255,8 @@ const DebateChat: React.FC<DebateChatProps> = ({
                 }}
                 className="relative max-h-[520px] space-y-3 overflow-y-auto px-3 py-4 custom-scrollbar"
             >
-                {visibleTurns.map((turn, index) => {
-                    const previousRound = visibleTurns[index - 1]?.round;
+                {(isReplaying ? visibleTurns.slice(0, replayIndex) : visibleTurns).map((turn, index) => {
+                    const previousRound = (isReplaying ? visibleTurns.slice(0, replayIndex) : visibleTurns)[index - 1]?.round;
                     const hasRoundSeparator = typeof turn.round === 'number' && turn.round !== previousRound;
                     const isVerdictRound = turn.speaker === 'Moderator' && turn.round === latestModeratorRound;
                     const isVerdict = isVerdictRound && !isDebating;
@@ -245,6 +282,7 @@ const DebateChat: React.FC<DebateChatProps> = ({
                                             {turn.speaker === 'Moderator' && <SpeakerAvatar speaker="Moderator" moderator small />}
                                             <div className="min-w-0">
                                                 <div className={`text-xs font-semibold ${isVerdict ? 'text-cyan-300' : 'text-zinc-200'}`}>{displayName}</div>
+                                                {turn.createdAt && <div className="text-[9px] text-zinc-600">{new Date(turn.createdAt).toLocaleTimeString()}</div>}
                                                 {segment.target ? <div className="truncate text-[10px] text-cyan-400/70">To {segment.target}</div> : modelName && <div className="truncate text-[10px] text-zinc-600">{modelName}</div>}
                                             </div>
                                             {isVerdict && <span className="ml-auto rounded border border-cyan-400/20 bg-cyan-400/10 px-1.5 py-0.5 text-[9px] font-bold tracking-widest text-cyan-300">DECISION</span>}

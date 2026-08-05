@@ -16,6 +16,8 @@ export interface DebateTurn {
    * Absent on legacy/simulated transcripts (grouped by moderator turns).
    */
   round?: number;
+  /** When this turn started streaming (real debates only) — powers replay. */
+  createdAt?: string;
 }
 
 export interface Kline {
@@ -69,6 +71,21 @@ export interface EnsembleProgress {
   };
 }
 
+/** Lightweight per-run summary — durations, gate cap, Monte Carlo snapshot. */
+export interface RunStats {
+  startedAt: string;
+  finishedAt: string;
+  durationMs: number;
+  /** Gate confidence cap (0-1) applied during the run, if any. */
+  gateCap?: number;
+  /** First analyst's Monte Carlo win rate (%), if computed. */
+  mcWinRate?: number;
+  /** First analyst's Monte Carlo expected value (R), if computed. */
+  mcEV?: number;
+  /** How many analysts ran. */
+  analystCount?: number;
+}
+
 export interface Message {
   id: string;
   role: MessageRole;
@@ -120,6 +137,8 @@ export interface Message {
   };
   // Multi-Timeframe Confluence Score from Hybrid Intelligence
   confluenceData?: ConfluenceData;
+  // Per-run execution summary (durations, gate cap, Monte Carlo snapshot)
+  runStats?: RunStats;
 }
 
 export interface ImageMetadata {
