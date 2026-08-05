@@ -2,6 +2,9 @@
 import React from 'react';
 import { TradeOutcome } from '../../types';
 
+import { useEscapeClose } from '../../hooks/useEscapeClose';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
+
 interface SkipTradeModalProps {
   onClose: () => void;
   onConfirm: (reason: TradeOutcome.ENTRY_NOT_HIT | TradeOutcome.SKIPPED) => void;
@@ -19,8 +22,11 @@ export const SkipTradeModal: React.FC<SkipTradeModalProps> = ({
   correctedEntry,
   setCorrectedEntry,
 }) => {
+    useEscapeClose(true, onClose);
+    const dialogRef = useFocusTrap<HTMLDivElement>(true);
+
   return (
-    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Trade not executed">
+    <div ref={dialogRef} className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Trade not executed">
       <div className="bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-md border border-yellow-500/30 animate-fade-in max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="p-5 border-b border-white/5 bg-yellow-500/10">

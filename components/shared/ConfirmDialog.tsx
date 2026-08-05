@@ -145,7 +145,7 @@ export function useConfirmDialog() {
                         className="absolute inset-0 bg-black/60"
                         onClick={handleCancel}
                     />
-                    <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title" className="relative w-full max-w-md bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                    <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title" className="relative status-surface w-full max-w-md bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
                         <div className="p-6">
                             <div className="flex items-start gap-4">
                                 {state.destructive && (

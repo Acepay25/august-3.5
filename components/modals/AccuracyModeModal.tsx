@@ -2,6 +2,9 @@
 import React from 'react';
 import { BotIcon, CloseIcon } from '../shared/Icons';
 
+import { useEscapeClose } from '../../hooks/useEscapeClose';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
+
 interface AccuracyModeModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -10,10 +13,13 @@ interface AccuracyModeModalProps {
 }
 
 export const AccuracyModeModal: React.FC<AccuracyModeModalProps> = ({ isOpen, onClose, onConfirm, isEnabling }) => {
+    useEscapeClose(isOpen, onClose);
+    const dialogRef = useFocusTrap<HTMLDivElement>(isOpen);
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 animate-fade-in" role="dialog" aria-modal="true" aria-label="Accuracy mode">
+    <div ref={dialogRef} className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 animate-fade-in" role="dialog" aria-modal="true" aria-label="Accuracy mode">
       <div className={`bg-zinc-950 border-2 ${isEnabling ? 'border-cyan-600' : 'border-zinc-700'} rounded-2xl max-w-md w-full overflow-hidden shadow-[0_0_50px_rgba(176, 176, 182,0.3)] max-h-[90vh] overflow-y-auto`}>
         <div className="p-6 text-center">
           {isEnabling ? (

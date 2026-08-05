@@ -155,7 +155,7 @@ export const Header: React.FC<HeaderProps> = ({
     };
 
     return (
-        <header className="glass sticky top-0 z-20 px-4 py-1.5 sm:px-6 sm:py-2 border-b border-transparent shadow-sm flex-shrink-0 pt-[calc(env(safe-area-inset-top,0px)+0.375rem)] sm:pt-[calc(env(safe-area-inset-top,0px)+0.5rem)]">
+        <header className="glass status-surface sticky top-0 z-20 px-4 py-1.5 sm:px-6 sm:py-2 border-b border-transparent shadow-sm flex-shrink-0 pt-[calc(env(safe-area-inset-top,0px)+0.375rem)] sm:pt-[calc(env(safe-area-inset-top,0px)+0.5rem)]">
             <div className="max-w-7xl mx-auto flex items-center justify-between">
                 <div className="flex-1 min-w-0 flex items-center gap-3 sm:gap-4 relative">
                     {/* Hamburger Menu Button */}

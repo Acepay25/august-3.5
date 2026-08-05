@@ -6,6 +6,9 @@ import ImagePreview from '../shared/ImagePreview';
 import { UploadIcon, LoadingIcon, UpdateIcon } from '../shared/Icons';
 import { processImagesForSummarization } from '../../utils/imageProcessor';
 
+import { useEscapeClose } from '../../hooks/useEscapeClose';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
+
 export const UpdateTradeModal: React.FC<{
     message: Message;
     onClose: () => void;
@@ -15,6 +18,9 @@ export const UpdateTradeModal: React.FC<{
     visionConfig: ProviderConfig;
     onQuotaExceeded: (modelId: string) => void;
 }> = ({ message, onClose, onConfirm, onAutoCapture, isCapturing = false, visionConfig, onQuotaExceeded }) => {
+    useEscapeClose(true, onClose);
+    const dialogRef = useFocusTrap<HTMLDivElement>(true);
+
     const [updateText, setUpdateText] = useState('');
     const [images, setImages] = useState<ImageMetadata[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -42,7 +48,7 @@ export const UpdateTradeModal: React.FC<{
     const coinName = message.analysis?.coinName || 'this trade';
 
     return (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Update trade setup">
+        <div ref={dialogRef} className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Update trade setup">
             <div className="bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-lg border border-cyan-500/30 animate-fade-in max-h-[90vh] overflow-y-auto">
                 {/* Header */}
                 <div className="p-5 border-b border-white/5 bg-cyan-500/10">
