@@ -1411,7 +1411,11 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             // verdict retry — discard the failed attempt's
                             // partial prose so it never glues onto the verdict.
                             if (event.text.includes('<MODERATOR_RETRY>')) {
+                                // Discard the failed attempt entirely — text AND
+                                // first-delta timestamp (the retried verdict must
+                                // not carry the failed attempt's start time).
                                 turnTexts[key] = '';
+                                delete turnTimes[key];
                                 continue;
                             }
                             if (!turnTimes[key]) turnTimes[key] = new Date().toISOString();
@@ -1556,7 +1560,13 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                                 accuracyVerificationNote = verification.note || 'Plan verified by the accuracy pass.';
                             }
                         } catch (verifyError) {
-                            const err = verifyError as { message?: string };
+                            const err = verifyError as { name?: string; code?: string; message?: string };
+                            // A user cancel must stay a cancel — it was being
+                            // swallowed here, so the run continued and emitted
+                            // the card after the user pressed stop.
+                            if (err?.name === 'AbortError' || err?.code === 'ABORT_ERR' || err?.name === 'TimeoutError' || !isCurrentRequest()) {
+                                throw verifyError;
+                            }
                             console.warn('[AccuracyVerification] Skipped (kept original plan):', err?.message || verifyError);
                         }
                     }

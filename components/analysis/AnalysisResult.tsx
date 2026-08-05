@@ -77,6 +77,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
     // One-click price alerts for entry/SL/TP levels (PriceAlertService).
     const [alertsSet, setAlertsSet] = React.useState(false);
     const handleSetAlerts = () => {
+        if (alertsSet) return; // one alert set per card — avoid duplicate monitoring
         PriceAlertService.createAlert(messageId, analysis);
         setAlertsSet(true);
         setTimeout(() => setAlertsSet(false), 3000);
