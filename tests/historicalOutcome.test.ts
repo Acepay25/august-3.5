@@ -77,7 +77,10 @@ describe('verifyHistoricalOutcome — win/loss detection (Long)', () => {
     scripted1m = [
       [94950, 95100, 94900, 95000], // entry fills (low 94900 <= 95000)
       [95100, 96100, 95050, 96000], // TP1 wicked (high 96100 >= 96000)
-      ...Array.from({ length: 10 }, () => longFiller),
+      // Price stays ABOVE the entry afterwards — a truly clean run to TP1
+      // (with the new breakeven logic, a dip back to 95000 would be a managed
+      // scale-out exit, so these fillers must stay above it).
+      ...Array.from({ length: 10 }, () => [95100, 95800, 95050, 95500] as [number, number, number, number]),
     ];
 
     const result = await verify(makeAnalysis());
@@ -167,6 +170,38 @@ describe('verifyHistoricalOutcome — win/loss detection (Long)', () => {
   });
 });
 
+  it('keeps a TP1 win when price later returns to the entry (breakeven scale-out)', async () => {
+    scripted1m = [
+      [94950, 95100, 94900, 95000], // entry fills
+      [95100, 96100, 95050, 96000], // TP1 hit → stop moves to breakeven (95000)
+      [95050, 95500, 94990, 95100], // price returns to the entry — managed exit
+      ...Array.from({ length: 10 }, () => longFiller),
+    ];
+
+    const result = await verify(makeAnalysis());
+    expect(result.outcome).toBe('TP_HIT');
+    // The breakeven touch is recorded as the exit level, NOT as a failed SL.
+    expect(result.slHit?.price).toBe(95000);
+    expect(result.verificationDetails).toContain('breakeven');
+    expect(result.verificationDetails).not.toContain('SL likely too tight');
+  });
+
+  it('does NOT hard-stop when price crashes past the old extended zone after TP1 (breakeven protects)', async () => {
+    scripted1m = [
+      [94950, 95100, 94900, 95000], // entry fills
+      [95100, 96100, 95050, 96000], // TP1 hit → breakeven active
+      [95000, 95200, 93000, 93500], // crash well below the old extended zone (93500)
+      ...Array.from({ length: 10 }, () => longFiller),
+    ];
+
+    const result = await verify(makeAnalysis());
+    // Before the fix this was SL_HIT (extended-zone hard stop). With TP1 scaled
+    // out the remainder exits at breakeven — the trade is still a WIN.
+    expect(result.outcome).toBe('TP_HIT');
+    expect(result.slHit?.price).toBe(95000);
+    expect(result.verificationDetails).toContain('breakeven');
+  });
+
 describe('verifyHistoricalOutcome — win/loss detection (Short)', () => {
   // Short setup: entry 95000, SL 96000 (extended zone 96500), TP1 94000.
   const shortAnalysis = makeAnalysis({
@@ -210,6 +245,20 @@ describe('verifyHistoricalOutcome — win/loss detection (Short)', () => {
     const result = await verify(shortAnalysis);
     expect(result.outcome).toBe('TP_HIT');
     expect(result.slHit?.price).toBe(96000);
+  });
+
+  it('keeps a TP1 win when price later returns to the entry (short breakeven scale-out)', async () => {
+    scripted1m = [
+      [94900, 95100, 94800, 95000], // entry fills
+      [94000, 95000, 93900, 94100], // TP1 hit → breakeven active
+      [94900, 95050, 94800, 95000], // price returns to the entry — managed exit
+      ...Array.from({ length: 10 }, () => shortFiller),
+    ];
+
+    const result = await verify(shortAnalysis);
+    expect(result.outcome).toBe('TP_HIT');
+    expect(result.slHit?.price).toBe(95000);
+    expect(result.verificationDetails).toContain('breakeven');
   });
 });
 

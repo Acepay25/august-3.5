@@ -2245,7 +2245,8 @@ export const conductRealDebate = async function* (
     signal?: AbortSignal,
     onReasoning?: (reasoning: string) => void,
     onAnalystReasoning?: (speaker: string, reasoning: string) => void,
-    onSpeakerStatus?: (speaker: string, round: number, active: boolean) => void
+    onSpeakerStatus?: (speaker: string, round: number, active: boolean) => void,
+    hybridContext?: string
 ): AsyncGenerator<RealDebateTurnEvent, void, unknown> {
 
     if (analysts.length < 2) {
@@ -2644,6 +2645,7 @@ export const conductRealDebate = async function* (
         recentInsightsBlock,
         userOverride,
         tradeHistoryContext,
+        hybridContext ? `\n\n**HYBRID INTELLIGENCE MARKET DATA (VERIFIED LIVE):**\n${hybridContext}` : '',
     ].filter(Boolean).join('\n');
 
     // Compact fallback used for ONE automatic retry when the first moderator

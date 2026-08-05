@@ -422,6 +422,9 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         }
 
         const runStartedAt = Date.now();
+        // Live-backtest summary (block-scoped result is captured here so the
+        // final message update below can persist it on runStats).
+        let liveBtResult: { totalMatches: number; winRate: number; expectedValue: number } | undefined;
         setHighlightedAnalysisId(null);
         setIsRateLimited(false);
         analysisAbortController.current?.abort();
@@ -938,6 +941,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                                     loggedTrades,
                                     freshHybridData?.regime?.regime
                                 );
+                                liveBtResult = btResult ?? undefined;
 
                                 if (btResult && btResult.totalMatches > 0) {
                                     setLatestBacktestResult(btResult);
@@ -1286,7 +1290,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                                     reasoningMapRef.current,
                                     activeDebateSpeakersRef.current,
                                 );
-                            }
+                            },
+                            hybridDataInjection
                         );
                     }
 
@@ -1592,6 +1597,9 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             mcWinRate: perAIMC[0]?.result?.winRate,
                             mcEV: perAIMC[0]?.result?.expectedValue,
                             analystCount: fulfilledAnalysts.length,
+                            btMatches: liveBtResult?.totalMatches,
+                            btWinRate: liveBtResult?.winRate,
+                            btEV: liveBtResult?.expectedValue,
                         };
 
                         // Background completion notification (native, backgrounded only).

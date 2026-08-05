@@ -84,6 +84,10 @@ export interface RunStats {
   mcEV?: number;
   /** How many analysts ran. */
   analystCount?: number;
+  /** Live-backtest summary: similar historical setups found for this plan. */
+  btMatches?: number;
+  btWinRate?: number;
+  btEV?: number;
 }
 
 export interface Message {

@@ -6,6 +6,7 @@ import { FAMILY_UI_DATA } from '../../constants/models';
 import { ConfidenceLevel } from '../../services/validation/ConfidenceCalibrationService';
 import { simulateFromAnalysisTime } from '../../services/backtesting/BacktestingService';
 import { AutopilotResolution } from '../../services/ui/OutcomeAutopilotService';
+import { PriceAlertService } from '../../services/ui/PriceAlertService';
 import ConfluenceScoreIndicator from './ConfluenceScoreIndicator';
 import ProbabilityWidget from '../market/ProbabilityWidget';
 import CalibrationWidget from './CalibrationWidget';
@@ -73,6 +74,14 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
     onDismissAutopilot,
     onCompare
 }) => {
+    // One-click price alerts for entry/SL/TP levels (PriceAlertService).
+    const [alertsSet, setAlertsSet] = React.useState(false);
+    const handleSetAlerts = () => {
+        PriceAlertService.createAlert(messageId, analysis);
+        setAlertsSet(true);
+        setTimeout(() => setAlertsSet(false), 3000);
+    };
+
     // Defensive destructuring
     const {
         coinName = 'Unknown Asset',
@@ -313,6 +322,15 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                             ⧉ Compare
                         </button>
                     )}
+                    <button
+                        onClick={handleSetAlerts}
+                        className={`px-2 py-1 rounded text-[9px] font-bold uppercase tracking-widest flex items-center gap-1 transition-colors ${alertsSet
+                            ? 'bg-emerald-500/15 border border-emerald-500/40 text-emerald-300'
+                            : 'bg-zinc-800 border border-white/10 text-zinc-300 hover:border-cyan-400/30 hover:text-cyan-300'}`}
+                        title="Create price alerts for this setup's entry, stop loss and take profit levels"
+                    >
+                        {alertsSet ? '✓ Alerts set' : '⏰ Set alerts'}
+                    </button>
                 </div>
 
                 {isUpdate && (
