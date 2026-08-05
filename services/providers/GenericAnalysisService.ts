@@ -444,7 +444,13 @@ export async function analyzeTradingView(
         console.error(`${config.name} analysis streaming failed:`, error);
         throw error;
     }
-    if (!responseText) throw new Error("Received an empty response from the AI.");
+    if (!responseText && !reasoningAccumulated) throw new Error("Received an empty response from the AI.");
+    // Reasoning-only streams: some models (DeepSeek/Qwen reasoning modes,
+    // certain gateways) spend the whole turn on chain-of-thought and never
+    // emit content deltas. Salvage the reasoning as the response so the
+    // analyst fulfills with its thinking instead of being dropped from the
+    // debate before it starts.
+    if (!responseText) responseText = reasoningAccumulated;
 
     try {
         const thinkingMatch = responseText.match(/<THINKING>\s*([\s\S]*?)\s*<\/THINKING>/i);

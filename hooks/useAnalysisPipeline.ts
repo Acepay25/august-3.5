@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
     Message, MessageRole, TradeOutcome, LoggedTrade, ImageMetadata,
-    DebateTurn, Conversation, LiveThoughts, TradeAnalysis, TradeSummary,
+    DebateTurn, Conversation, TradeAnalysis, TradeSummary,
     GlobalMemory, AccuracySubMode, CustomInstructionsMap, CustomInstruction,
     AnalystLensConfig, AnalysisStep, InsightKnowledgeBase, ConfidenceCalibration,
 } from '../types';
@@ -37,8 +37,8 @@ import { generateLearningFromPrompt, isLearningEnabled } from '../services/learn
 import { generatePersonalizedInjection } from '../services/ui/PersonalizedPromptService';
 import { buildUnifiedLearningContext } from '../services/learning/UnifiedLearningBuilder';
 import { ANALYST_ROLE_DEFINITIONS, getLensPromptForStyle, getRoleForProvider } from '../services/ui/AnalystLensService';
+import { buildEnsembleAnalysts, buildAnalystFailureReport } from '../services/ui/EnsembleAnalystService';
 import { EnsembleModelSelection } from '../services/ui/AnalystLensService';
-import { AnalystRole } from '../types/enums';
 import GlobalLearningService from '../services/learning/GlobalLearningService';
 
 // ─── Params Interface ──────────────────────────────────────────────────────────
@@ -265,21 +265,14 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     });
 
     // ─── RAF-throttled LIVE reasoning updates ─────────────────────────────
-    // The streaming analyst calls deliver chain-of-thought deltas per chunk.
-    // The latest FULL accumulated string wins (never a partial delta), so the
-    // live cards' Thinking block streams at frame rate without dropping text.
-    const throttledLiveReasoning = useRafThrottle((key: string, full: string) => {
-        setLiveReasoning(prev => ({ ...prev, [key]: full }));
-    });
+    // (removed: the Live Neural Analysis view that consumed these was
+    // deleted; reasoning now lives in reasoningProcesses/thoughtProcesses)
 
     // ─── State ─────────────────────────────────────────────────────────────
     const [input, setInput] = useState('');
     const [images, setImages] = useState<ImageMetadata[]>([]);
     const [loadingMessage, setLoadingMessage] = useState<string | null>(null);
     const [analysisSteps, setAnalysisSteps] = useState<AnalysisStep[]>([]);
-    const [liveThoughts, setLiveThoughts] = useState<LiveThoughts>({});
-    const [liveOutputs, setLiveOutputs] = useState<LiveThoughts>({});
-    const [liveReasoning, setLiveReasoning] = useState<LiveThoughts>({});
     const reasoningMapRef = useRef<Record<string, string>>({});
     const activeDebateSpeakersRef = useRef<Record<string, number>>({});
     const debateTurnsRef = useRef<DebateTurn[]>([]);
@@ -365,54 +358,15 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         // Ensemble participants are model-level entries, not just provider
         // entries. This allows several models from one provider while keeping
         // each result and reasoning trace separate.
-        const requiredAnalystRoles = [AnalystRole.MACRO_VOLATILITY, AnalystRole.TECHNICAL_ANALYST, AnalystRole.RISK_EXECUTION];
-        const missingAnalystRoles = requiredAnalystRoles.filter(role => {
-            const assignment = lensConfig.assignments.find(item => item.role === role);
-            const provider = providerConfigs.find(item => item.id === assignment?.assignedProvider);
-            return !assignment?.assignedProvider || !(assignment.assignedModel || provider?.selectedModel);
-        });
-        const hasCompleteAnalystAssignments = missingAnalystRoles.length === 0 && (() => {
-            const identities = requiredAnalystRoles.map(role => {
-                const assignment = lensConfig.assignments.find(item => item.role === role)!;
-                const provider = providerConfigs.find(item => item.id === assignment.assignedProvider);
-                return `${assignment.assignedProvider}::${assignment.assignedModel || provider?.selectedModel}`;
-            });
-            return new Set(identities).size === identities.length;
-        })();
-
-        const enabledProviders = providerConfigs
-            .filter(c => c.isEnabled && c.apiKey.trim().length > 0)
-            .flatMap(c => {
-                const assignedModels = lensConfig.assignments
-                    .filter(assignment => assignment.assignedProvider === c.id)
-                    .map(assignment => assignment.assignedModel || c.selectedModel)
-                    .filter((model): model is string => Boolean(model));
-                const configuredModels = c.ensembleModels?.filter(model => c.models.includes(model)).slice(0, 3) || [];
-                if (configuredModels.length === 0 && c.selectedModel) configuredModels.push(c.selectedModel);
-                const uniqueAssignedModels = [...new Set(assignedModels)].slice(0, 3);
-                // Lenses OFF: the plain 3-model picker in the chat input is
-                // the source of truth for the cards + debate.
-                const selectionModels = (isEnsembleEnabled && !lensConfig.enabled && ensembleModelSelection && ensembleModelSelection.length > 0)
-                    ? ensembleModelSelection.filter(s => s.providerId === c.id && c.models.includes(s.model)).map(s => s.model)
-                    : [];
-                const models = isEnsembleEnabled
-                    ? (lensConfig.enabled && hasCompleteAnalystAssignments
-                        ? uniqueAssignedModels
-                        : (selectionModels.length > 0 ? selectionModels : configuredModels))
-                    : (c.selectedModel ? [c.selectedModel] : []);
-                return models.map(model => ({
-                    config: { ...c, selectedModel: model },
-            name: (() => {
-                if (!isEnsembleEnabled || !hasCompleteAnalystAssignments) return isEnsembleEnabled && models.length > 1 ? `${c.name} · ${model}` : c.name;
-                const role = getRoleForProvider(`${c.id}::${model}`, lensConfig.assignments);
-                return role !== AnalystRole.UNASSIGNED ? ANALYST_ROLE_DEFINITIONS[role].name : c.name;
-            })(),
-                    model,
-                    useImages: false,
-                    thoughtsKey: `${c.id}:${model}`,
-                }));
-            })
-            .slice(0, 3);
+        // Build the analyst list (model-level entries). Extracted to a pure
+        // helper so the N-1 failure path is unit-testable; stale lens-assignment
+        // model ids are resolved against each provider's current model list.
+        const { analysts: enabledProviders, missingAnalystRoles, hasCompleteAnalystAssignments } = buildEnsembleAnalysts(
+            providerConfigs,
+            lensConfig,
+            ensembleModelSelection,
+            isEnsembleEnabled
+        );
 
         const isStagedEnsemble = isEnsembleEnabled && !isAccuracyModeEnabled && enabledProviders.length > 1;
 
@@ -1002,9 +956,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     setPerAIMonteCarloResults([]);
                     setLatestMonteCarloResult(null);
                     setLatestBacktestResult(null);
-                    setLiveThoughts(Object.fromEntries(enabledProviders.map(p => [p.thoughtsKey, null])));
-                    setLiveOutputs(Object.fromEntries(enabledProviders.map(p => [p.thoughtsKey, null])));
-                    setLiveReasoning(Object.fromEntries(enabledProviders.map(p => [p.thoughtsKey, null])));
                     reasoningMapRef.current = {};
                     activeDebateSpeakersRef.current = {};
                     debateTurnsRef.current = [];
@@ -1055,7 +1006,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             // latest full string is pushed to the live cards.
                              (reasoning: string) => {
                                  reasoningMapRef.current[provider.name] = (reasoningMapRef.current[provider.name] || '') + reasoning;
-                                 throttledLiveReasoning(provider.thoughtsKey, reasoningMapRef.current[provider.name]);
                                  if (isStagedEnsemble) {
                                      updateEnsembleProgress(progress => ({
                                          ...progress,
@@ -1085,13 +1035,11 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                              })
                              .catch((err: any) => {
                                  const errorMsg = err instanceof Error ? err.message : String(err);
-                                 setLiveThoughts(prev => ({ ...prev, [provider.thoughtsKey]: errorMsg }));
-                                 setLiveOutputs(prev => ({ ...prev, [provider.thoughtsKey]: 'This analyst was unavailable for this analysis.' }));
                                  if (isStagedEnsemble) {
                                      updateEnsembleProgress(progress => ({
                                          ...progress,
                                          analysts: progress.analysts.map(analyst => analyst.key === provider.thoughtsKey
-                                             ? { ...analyst, status: 'error', error: 'This analyst was unavailable for this analysis.' }
+                                             ? { ...analyst, status: 'error', error: errorMsg }
                                              : analyst),
                                      }));
                                  }
@@ -1121,7 +1069,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     });
 
                     const thoughtMap: Record<string, string> = {};
-                    const finalOutputMap: Record<string, string> = {};
                     // P1-6 (pre-existing fix): iterate settledResults, NOT the
                     // re-indexed `results` array — otherwise a failed provider
                     // at index 0 would cause results[0] (actually provider #1's
@@ -1131,18 +1078,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             const providerKey = enabledProviders[index].thoughtsKey;
                             thoughtMap[providerKey] = settled.value.thoughtProcess;
                             thoughtMap[enabledProviders[index].name] = settled.value.thoughtProcess;
-                            const finalOutput = settled.value.finalOutput || settled.value.thoughtProcess;
-                            finalOutputMap[providerKey] = finalOutput;
-                            finalOutputMap[enabledProviders[index].name] = finalOutput;
                         }
                     });
-
-                    // Populate the two distinct analyst card sections.
-                    setLiveThoughts(prev => ({
-                        ...prev,
-                        ...thoughtMap
-                    } as LiveThoughts));
-                    setLiveOutputs(prev => ({ ...prev, ...finalOutputMap } as LiveThoughts));
 
                     // ========== PER-AI MONTE CARLO ==========
                     // Run Monte Carlo on each AI's proposed setup BEFORE moderation
@@ -1265,7 +1202,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                                 // Streamed moderator chain-of-thought accumulates
                                 // (deltas replace nothing — they append).
                                 reasoningMapRef.current.moderator = (reasoningMapRef.current.moderator || '') + reasoning;
-                                throttledLiveReasoning('moderator', reasoningMapRef.current.moderator);
                                 thoughtMap.moderator = reasoningMapRef.current.moderator;
                             }
                         );
@@ -1273,6 +1209,17 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                         // STANDARD MODE — REAL inter-model debate. Each analyst
                         // is re-invoked on its own provider for the rebuttal
                         // rounds; only the moderator produces the JSON plan.
+                        if (fulfilledAnalysts.length < 2) {
+                            // Enrich the bare engine error with the per-analyst
+                            // failure reasons (or the enabled count) so the user
+                            // can see exactly why the debate could not start
+                            // instead of a cryptic "1 provided".
+                            const failureReport = buildAnalystFailureReport(settledResults, enabledProviders);
+                            const detail = failureReport
+                                ? `\n\nFailed analysts:\n${failureReport}`
+                                : `\n\nOnly ${fulfilledAnalysts.length} analyst${fulfilledAnalysts.length === 1 ? ' was' : 's were'} enabled and all of them succeeded. Enable at least 2 models (Settings → AI Models or the Debate Models picker) to run the debate.`;
+                            throw new Error(`Real debate requires at least 2 analysts (${fulfilledAnalysts.length} provided).${detail}`);
+                        }
                         debateStream = ensembleService.conductRealDebate(
                             fulfilledAnalysts.map(a => ({
                                 provider: a.provider,
@@ -1295,7 +1242,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                                 // Streamed moderator chain-of-thought accumulates
                                 // (deltas replace nothing — they append).
                                 reasoningMapRef.current.moderator = (reasoningMapRef.current.moderator || '') + reasoning;
-                                throttledLiveReasoning('moderator', reasoningMapRef.current.moderator);
                                 thoughtMap.moderator = reasoningMapRef.current.moderator;
                             },
                             (speaker: string, reasoning: string) => {
@@ -1868,8 +1814,6 @@ const result = await cachedAnalyzeTradingView(
         images, setImages,
         loadingMessage, setLoadingMessage,
         analysisSteps, setAnalysisSteps,
-        liveThoughts, liveOutputs, setLiveThoughts, setLiveOutputs,
-        liveReasoning, setLiveReasoning,
         currentGateResult, setCurrentGateResult,
         currentVisionData, setCurrentVisionData,
         isDeepAnalysis, setIsDeepAnalysis,
