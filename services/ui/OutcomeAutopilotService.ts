@@ -32,6 +32,8 @@ export interface AutopilotResolution {
     hitLevel?: string;
     /** TP1 / TP2 / TP3 / SL. */
     hitTarget?: string;
+    /** Win confidence tier: the SL was touched before price recovered to the TP. */
+    recoveredAfterSlTouch?: boolean;
     /** Human-readable summary for the banner. */
     detail: string;
     detectedAt: string;
@@ -287,7 +289,10 @@ class OutcomeAutopilotServiceClass {
             pnlPercent,
             hitLevel: result.priceAtHit !== undefined ? String(result.priceAtHit) : undefined,
             hitTarget,
-            detail: `${hitTarget} hit${result.priceAtHit !== undefined ? ` @ ${result.priceAtHit}` : ''}${result.timeToOutcome ? ` · ${result.timeToOutcome} after analysis` : ''}`,
+            // Confidence tier: a win where the SL was touched first is weaker
+            // than a clean run to the TP (the verifier records slHit on touch).
+            recoveredAfterSlTouch: !!result.slHit,
+            detail: `${hitTarget} hit${result.priceAtHit !== undefined ? ` @ ${result.priceAtHit}` : ''}${result.slHit ? ' · recovered after SL touch' : ' · clean'}${result.timeToOutcome ? ` · ${result.timeToOutcome} after analysis` : ''}`,
             detectedAt: new Date().toISOString(),
             timeToOutcome: result.timeToOutcome,
             slOptimizationData: this.computeSLOptimization(reg, result),

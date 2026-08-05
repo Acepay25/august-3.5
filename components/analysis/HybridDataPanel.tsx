@@ -239,6 +239,8 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
         }
     }, [isLoading]);
 
+    const dataAgeMin = data ? Math.max(0, Math.round((Date.now() - new Date(data.dataTimestamp).getTime()) / 60000)) : 0;
+
     // Expanded placement: stay anchored to the icon and fully on-screen.
     // `position` is the ICON's top-left corner — the expanded panel keeps the
     // same spot when there's room; if the icon was dragged near the right or
@@ -467,7 +469,9 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
                         
                         <div>
                             <div className="text-zinc-200 font-bold text-xs">HYBRID DATA</div>
-                            <div className="text-zinc-500 text-[9px]">{data.symbol} • {new Date(data.dataTimestamp).toLocaleTimeString()}</div>
+                            <div className="text-zinc-500 text-[9px]">
+                                {data.symbol} • {new Date(data.dataTimestamp).toLocaleTimeString()} • <span className={dataAgeMin > 10 ? 'text-amber-400 font-semibold' : ''}>{dataAgeMin}m ago{dataAgeMin > 10 ? ' (stale)' : ''}</span>
+                            </div>
                         </div>
                     </div>
                     <div className="flex items-center gap-1">
