@@ -19,6 +19,7 @@ import { ProviderConfig } from '../../types/provider';
 import { withRetry, ProviderName } from '../../utils/apiErrorUtils';
 import { assertValidProviderUrl } from '../../utils/providerUrlValidation';
 
+import { recordProviderSuccess, recordProviderError } from '../infrastructure/ProviderHealthService';
 interface ElectronProviderBridge {
     isElectron?: boolean;
     providerChat?: (request: {
@@ -427,10 +428,11 @@ export async function sendChatRequest(
         ...config,
         apiKey: config.apiKey?.trim() || 'not-needed'
     };
+    const startedAt = Date.now();
     try {
         // Retry transient failures (rate limit / network / 5xx) with
         // exponential backoff; each attempt is hard-capped by REQUEST_TIMEOUT_MS.
-        return await withRetry(
+        const result = await withRetry(
             () => {
                 const electronAPI = typeof window !== 'undefined' ? window.electronAPI : undefined;
                 if (electronAPI?.isElectron && !electronAPI.providerChat) {
@@ -513,7 +515,12 @@ export async function sendChatRequest(
             3,
             options?.signal
         );
+        recordProviderSuccess(config.id, Date.now() - startedAt);
+        return result;
     } catch (error) {
+        const err = error as { name?: string; code?: string };
+        const isAbort = err?.name === 'AbortError' || err?.code === 'ABORT_ERR' || err?.name === 'TimeoutError';
+        if (!isAbort) recordProviderError(config.id, error);
         throw toFriendlyProviderError(error, `${effectiveConfig.name} · ${effectiveConfig.selectedModel}`);
     }
 }
@@ -545,7 +552,16 @@ export async function* streamChatRequest(
         // the browser fails for providers without CORS headers (e.g. opencode).
         if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
             if (effectiveConfig.apiFormat === 'chat_completions') {
-                yield* streamViaProxy(effectiveConfig, messages, options);
+                const startedAt = Date.now();
+                try {
+                    yield* streamViaProxy(effectiveConfig, messages, options);
+                    recordProviderSuccess(config.id, Date.now() - startedAt);
+                } catch (streamError) {
+                    const err = streamError as { name?: string; code?: string };
+                    const isAbort = err?.name === 'AbortError' || err?.code === 'ABORT_ERR' || err?.name === 'TimeoutError';
+                    if (!isAbort) recordProviderError(config.id, streamError);
+                    throw streamError;
+                }
                 return;
             }
             // Other formats: non-streaming through the proxy (existing behavior).
@@ -554,7 +570,16 @@ export async function* streamChatRequest(
             return;
         }
         if (effectiveConfig.apiFormat === 'chat_completions') {
-            yield* chatCompletionsStream(effectiveConfig, messages, { ...options, signal: withStreamTimeoutSignal(options?.signal) });
+            const startedAt = Date.now();
+            try {
+                yield* chatCompletionsStream(effectiveConfig, messages, { ...options, signal: withStreamTimeoutSignal(options?.signal) });
+                recordProviderSuccess(config.id, Date.now() - startedAt);
+            } catch (streamError) {
+                const err = streamError as { name?: string; code?: string };
+                const isAbort = err?.name === 'AbortError' || err?.code === 'ABORT_ERR' || err?.name === 'TimeoutError';
+                if (!isAbort) recordProviderError(config.id, streamError);
+                throw streamError;
+            }
             return;
         }
     } catch (error) {

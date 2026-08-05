@@ -21,6 +21,7 @@ import { getGateAnalysis, GateOutput } from '../services/validation/GateKeeperSe
 import { isQuotaError } from '../utils/errorUtils';
 import { recalculateAnalysisMetrics, sanitizeTradeAnalysis, clampProbabilityToGate } from '../utils/analysisUtils';
 import { saveThinkingBatch, generateThinkingId } from '../services/infrastructure/ThinkingStoreService';
+import { notifyAnalysisComplete } from '../services/infrastructure/CompletionNotifications';
 import { ThinkingRecord } from '../types/thinking';
 import { extractLastJson } from '../utils/jsonUtils';
 import { sanitizeAIResponse } from '../utils/sanitizers';
@@ -192,7 +193,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         // Without this a 10-minute-TTL hit serves the previous mode's analysis.
         const modeContext = JSON.stringify([rest[5], rest[8], rest[13], rest[14]]);
 
-        const cached = getCachedResponse(cacheKey, prompt, model, modeContext);
+        const cached = await getCachedResponse(cacheKey, prompt, model, modeContext);
         if (cached) {
             console.log(`[ResponseCache] HIT for ${config.name || model} (${model})`);
             return {
@@ -420,6 +421,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             return;
         }
 
+        const runStartedAt = Date.now();
         setHighlightedAnalysisId(null);
         setIsRateLimited(false);
         analysisAbortController.current?.abort();
@@ -1392,6 +1394,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                         // structured turn events (delta chunks per speaker +
                         // round) instead of a transcript to regex-parse.
                         const turnTexts: Record<string, string> = {}; // `${round}::${speaker}` → accumulated text
+                        const turnTimes: Record<string, string> = {};   // first-delta timestamp per turn (replay)
                         let moderatorRound = 0;
 
                         for await (const event of debateStream as AsyncGenerator<ensembleService.RealDebateTurnEvent, void, unknown>) {
@@ -1406,6 +1409,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                                 turnTexts[key] = '';
                                 continue;
                             }
+                            if (!turnTimes[key]) turnTimes[key] = new Date().toISOString();
                             turnTexts[key] = (turnTexts[key] || '') + event.text;
                             if (event.speaker === 'Moderator') {
                                 fullResponseText += event.text;
@@ -1428,6 +1432,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                                     return {
                                         speaker,
                                         round: parseInt(k.slice(0, sep), 10) || undefined,
+                                        createdAt: turnTimes[k],
                                         text: sanitizeAIResponse(cleanedText),
                                     };
                                 })
@@ -1467,6 +1472,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                                             return {
                                                 speaker,
                                                 round: parseInt(k.slice(0, sep), 10) || undefined,
+                                                createdAt: turnTimes[k],
                                                 text: sanitizeAIResponse(cleanedText),
                                             };
                                         })
@@ -1576,6 +1582,23 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             // Always set tradingStyle regardless of Lens mode
                             tradingStyle: lensConfig.tradingStyle === 'auto' ? 'swing' : lensConfig.tradingStyle
                         };
+
+                        // Per-run execution summary (compare mode + diagnostics).
+                        updatedMessage.runStats = {
+                            startedAt: new Date(runStartedAt).toISOString(),
+                            finishedAt: new Date().toISOString(),
+                            durationMs: Date.now() - runStartedAt,
+                            gateCap: capturedGateResult?.confidenceCap,
+                            mcWinRate: perAIMC[0]?.result?.winRate,
+                            mcEV: perAIMC[0]?.result?.expectedValue,
+                            analystCount: fulfilledAnalysts.length,
+                        };
+
+                        // Background completion notification (native, backgrounded only).
+                        void notifyAnalysisComplete(
+                            'Analysis complete',
+                            `${finalAnalysis.direction} ${finalAnalysis.coinName || ''} — ${finalAnalysis.confidence} confidence`
+                        );
 
                         // Inject market snapshot if available (for Algo Mode & Regeneration)
                         if (freshHybridData && updatedMessage.analysis) {
