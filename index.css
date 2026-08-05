@@ -497,12 +497,14 @@ select:focus-visible {
 
 /* ===== MOBILE TOUCH ===== */
 
-/* Minimum touch target size (44x44px recommended by WCAG) */
+/* Minimum touch target size (44x44px recommended by WCAG).
+   Micro-chips (9-10px text: badges, RR ratio, small inline pills) are exempt —
+   the blanket rule used to inflate them to 44px, making dense cards jumpy. */
 @media (max-width: 640px) {
 
-  button,
-  a,
-  [role="button"] {
+  button:not([class*='text-[9px]']):not([class*='text-[10px]']),
+  a:not([class*='text-[9px]']):not([class*='text-[10px]']),
+  [role="button"]:not([class*='text-[9px]']):not([class*='text-[10px]']) {
     min-height: 44px;
     min-width: 44px;
   }

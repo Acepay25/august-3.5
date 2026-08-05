@@ -49,6 +49,7 @@ const AdvancedAnalyticsSidePanel = React.lazy(() => import('./components/dashboa
 const ScenarioSimulator = React.lazy(() => import('./components/modals/ScenarioSimulator'));
 const UpdateOverlay = React.lazy(() => import('./components/shared/UpdateOverlay'));
 const CompareModal = React.lazy(() => import('./components/analysis/CompareModal'));
+const SavedAnalysesGallery = React.lazy(() => import('./components/dashboards/SavedAnalysesGallery'));
 const MistakeWarningBanner = React.lazy(() => import('./components/shared/MistakeWarningBanner'));
 import CommandPalette, { PaletteAction } from './components/shared/CommandPalette';
 const AnalysisProgress = React.lazy(() => import('./components/analysis/AnalysisProgress'));
@@ -764,6 +765,17 @@ const App: React.FC = () => {
     }, []);
     const comparePrimary = compareState ? messages.find(m => m.id === compareState.primaryId) ?? null : null;
     const compareSecondary = compareState?.secondaryId ? messages.find(m => m.id === compareState.secondaryId) ?? null : null;
+
+    // ─── Saved analyses gallery ────────────────────────────────────────────
+    const [isSavedGalleryOpen, setIsSavedGalleryOpen] = useState(false);
+    const handleLocateMessage = useCallback((messageId: string) => {
+        const index = messages.findIndex(m => m.id === messageId);
+        if (index >= 0) {
+            virtuosoRef.current?.scrollToIndex({ index, behavior: 'smooth' });
+            setHighlightedAnalysisId(messageId);
+        }
+        setIsSavedGalleryOpen(false);
+    }, [messages]);
 
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
@@ -1614,12 +1626,18 @@ const App: React.FC = () => {
             run: () => setLensConfig({ ...lensConfig, enabled: !lensConfig.enabled }),
         },
         {
+            id: 'saved-analyses',
+            label: 'Open Saved Analyses',
+            hint: `${savedAnalyses.length} saved`,
+            run: () => setIsSavedGalleryOpen(true),
+        },
+        {
             id: 'version-history',
             label: 'Open Version History',
             hint: 'Backups',
             run: () => setIsVersionHistoryVisible(true),
         },
-    ], [handleScrollToBottom, input, stableHandleSendMessage, setJournalState, setIsLiveMarketVisible, setIsSettingsMenuVisible, setIsStrategySearchVisible, setIsVersionHistoryVisible, isEnsembleEnabled, setIsEnsembleEnabled, lensConfig, setLensConfig]);
+    ], [handleScrollToBottom, input, stableHandleSendMessage, setJournalState, setIsLiveMarketVisible, setIsSettingsMenuVisible, setIsStrategySearchVisible, setIsVersionHistoryVisible, isEnsembleEnabled, setIsEnsembleEnabled, lensConfig, setLensConfig, savedAnalyses, setIsSavedGalleryOpen]);
 
     const removeImage = (index: number) => {
         setImages(prev => prev.filter((_, i) => i !== index));
@@ -2290,6 +2308,18 @@ const App: React.FC = () => {
                 inputPreview={input.trim() ? input.trim().slice(0, 60) : undefined}
                 actions={commandPaletteActions}
             />
+
+            {/* Saved analyses gallery */}
+            {isSavedGalleryOpen && (
+                <React.Suspense fallback={null}>
+                    <SavedAnalysesGallery
+                        savedAnalyses={savedAnalyses}
+                        modelIdToName={modelIdToName}
+                        onLocateMessage={handleLocateMessage}
+                        onClose={() => setIsSavedGalleryOpen(false)}
+                    />
+                </React.Suspense>
+            )}
 
             {/* Side-by-side compare */}
             {comparePrimary && (
