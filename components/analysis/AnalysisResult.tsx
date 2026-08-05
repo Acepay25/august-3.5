@@ -964,6 +964,19 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                             </div>
                         )}
 
+                        {/* Warnings — computed by the gate but never surfaced on the card */}
+                        {Array.isArray(analysis.gateResult.warnings) && analysis.gateResult.warnings.length > 0 && (
+                            <div className="mb-3 space-y-1">
+                                <span className="text-[8px] uppercase font-bold text-zinc-600 tracking-wider block mb-1">Gate Warnings:</span>
+                                {analysis.gateResult.warnings.slice(0, 6).map((warning, i) => (
+                                    <div key={i} className="flex items-start gap-1.5 text-[9px] text-amber-300/90 leading-relaxed">
+                                        <span className="shrink-0 mt-0.5">⚠</span>
+                                        <span className="break-all">{warning}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
                         {/* Family Bias */}
                         {analysis.gateResult.familyBias.reasoning.length > 0 && (
                             <div className="mb-3">

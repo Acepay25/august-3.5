@@ -1,9 +1,60 @@
 const { app, BrowserWindow, ipcMain, dialog, protocol, net, safeStorage } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const { pathToFileURL } = require('url');
 const { autoUpdater } = require('electron-updater');
 
 const isDev = !app.isPackaged;
+
+// =============================================================================
+// WINDOW-STATE PERSISTENCE
+// =============================================================================
+
+// Restore the window size/position across restarts. Bounds are saved to a
+// small JSON file in userData on close and validated on load (a position on a
+// disconnected monitor is discarded so the window never opens off-screen).
+const windowStateFile = () => path.join(app.getPath('userData'), 'window-state.json');
+
+const DEFAULT_BOUNDS = { width: 1200, height: 800 };
+
+function loadWindowState() {
+    try {
+        const raw = fs.readFileSync(windowStateFile(), 'utf-8');
+        const state = JSON.parse(raw);
+        const bounds = {
+            width: typeof state.width === 'number' && state.width >= 800 ? state.width : DEFAULT_BOUNDS.width,
+            height: typeof state.height === 'number' && state.height >= 600 ? state.height : DEFAULT_BOUNDS.height,
+            x: typeof state.x === 'number' ? state.x : undefined,
+            y: typeof state.y === 'number' ? state.y : undefined,
+        };
+        // If a saved position doesn't intersect any display, drop it.
+        if (state.x !== undefined && state.y !== undefined) {
+            const visible = require('electron').screen.getAllDisplays().some(d => {
+                const a = d.workArea;
+                return state.x >= a.x - bounds.width + 80 && state.x <= a.x + a.width - 80
+                    && state.y >= a.y - 20 && state.y <= a.y + a.height - 60;
+            });
+            if (!visible) {
+                delete bounds.x;
+                delete bounds.y;
+            }
+        }
+        bounds.maximized = state.maximized === true;
+        return bounds;
+    } catch {
+        return { ...DEFAULT_BOUNDS };
+    }
+}
+
+function saveWindowState(win) {
+    try {
+        if (win.isDestroyed()) return;
+        const bounds = win.getNormalBounds();
+        fs.writeFileSync(windowStateFile(), JSON.stringify({ ...bounds, maximized: win.isMaximized() }));
+    } catch {
+        // best-effort — window-state persistence must never break shutdown
+    }
+}
 
 // =============================================================================
 // CUSTOM PROTOCOL (app://) — must be registered before app.ready
@@ -203,9 +254,11 @@ async function sendProviderRequest(request) {
 }
 
 async function createWindow() {
+    const saved = loadWindowState();
     mainWindow = new BrowserWindow({
-        width: 1200,
-        height: 800,
+        width: saved.width,
+        height: saved.height,
+        ...(saved.x !== undefined && saved.y !== undefined ? { x: saved.x, y: saved.y } : {}),
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
@@ -214,6 +267,10 @@ async function createWindow() {
         },
         icon: path.join(__dirname, '../public/favicon.ico')
     });
+
+    // Persist bounds/position on close so the next launch restores them.
+    mainWindow.on('close', () => saveWindowState(mainWindow));
+    if (saved.maximized) mainWindow.maximize();
 
     // Remove menu bar for cleaner look
     mainWindow.setMenuBarVisibility(false);
