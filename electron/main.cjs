@@ -169,7 +169,10 @@ function parseProviderErrorBody(raw) {
 async function sendProviderRequest(request) {
     const { url, headers, body } = providerRequestDetails(request);
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 120000);
+    // 300s — matches the browser's stream budget (STREAM_TIMEOUT_MS). The old
+    // 120s cap hard-aborted legitimate long reasoning streams on desktop that
+    // survive in the browser.
+    const timeout = setTimeout(() => controller.abort(), 300000);
     if (request.requestId) activeProviderRequests.set(request.requestId, controller);
     let response;
     try {

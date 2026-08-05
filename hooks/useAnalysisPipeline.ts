@@ -29,7 +29,7 @@ import { buildModelIdToName, isProviderReady } from '../utils/providerUtils';
 import { loadLearningRules } from '../services/learning/LearningRulesService';
 import { StructuredRule } from '../types';
 import {
-    getCachedResponse, cacheResponse, getImageHash, clearAllCaches,
+    getCachedResponse, cacheResponse, getImageHash, clearAllCaches, hashString,
 } from '../services/infrastructure/responseCache';
 import { useRafThrottle } from './useRafThrottle';
 
@@ -187,11 +187,17 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         const imageHashes = imageFiles.map(f => `${f.name}:${f.size}:${f.lastModified}`);
         const cacheKey = imageHashes.length > 0 ? imageHashes : ['no-images'];
 
-        // Mode/role context must be part of the key — the same chart+prompt
-        // legitimately produces different analyses under deep analysis, an
-        // accuracy submode, a lens role prompt, or a custom ensemble prompt.
-        // Without this a 10-minute-TTL hit serves the previous mode's analysis.
-        const modeContext = JSON.stringify([rest[5], rest[8], rest[13], rest[14]]);
+        // Everything that alters the model input beyond the prompt itself must
+        // be part of the key: deep analysis, accuracy submode, role/custom
+        // prompts, custom instructions, learning flags, pattern-memory summary,
+        // recent insights, global memory, and thread context. Hashing keeps the
+        // key short. Without this a 10-minute-TTL hit serves an analysis
+        // computed under DIFFERENT instructions for the same chart.
+        const modeContext = hashString(JSON.stringify([
+            rest[5], rest[8], rest[13], rest[14],  // deepen, submode, rolePrompt, customPrompt
+            rest[2], rest[3], rest[6], rest[7],    // pattern memory, insights, global memory, thread
+            rest[9], rest[10], rest[11], rest[12], // instructions, playbook, families, memory flags
+        ]));
 
         const cached = await getCachedResponse(cacheKey, prompt, model, modeContext);
         if (cached) {
@@ -1599,6 +1605,15 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                         }
                     }
 
+                    // Compute OUTSIDE the state updater: updaters may re-run in
+                    // StrictMode (duplicate notifications) and must stay pure
+                    // (processNewAnalysis performs synchronous setState calls).
+                    const processedAnalysis = processNewAnalysis(finalAnalysis);
+                    if (freshHybridData && processedAnalysis) {
+                        // Inject market snapshot (Algo Mode & Regeneration).
+                        processedAnalysis.marketSnapshot = freshHybridData;
+                    }
+
                     updateRequestMessages(prev => {
                         const messageIndex = prev.findIndex(m => m.id === debateMessageId);
                         if (messageIndex === -1) return prev;
@@ -1612,7 +1627,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
 ${accuracyVerificationNote}`
                                 : `The ensemble has concluded its debate.`,
-                            analysis: processNewAnalysis(finalAnalysis),
+                            analysis: processedAnalysis,
                             outcome: TradeOutcome.PENDING,
                             debateTurns: existingMessage.debateTurns,
                             thoughtProcesses: { ...thoughtMap },
@@ -1646,21 +1661,18 @@ ${accuracyVerificationNote}`
                             btEV: liveBtResult?.expectedValue,
                         };
 
-                        // Background completion notification (native, backgrounded only).
-                        void notifyAnalysisComplete(
-                            'Analysis complete',
-                            `${finalAnalysis.direction} ${finalAnalysis.coinName || ''} — ${finalAnalysis.confidence} confidence`
-                        );
-
-                        // Inject market snapshot if available (for Algo Mode & Regeneration)
-                        if (freshHybridData && updatedMessage.analysis) {
-                            updatedMessage.analysis.marketSnapshot = freshHybridData;
-                        }
-
                         const newMessages = [...prev];
                         newMessages[messageIndex] = updatedMessage;
                         return newMessages;
                     });
+
+                    // Background completion notification (native, backgrounded only) —
+                    // outside the updater so StrictMode double-invocation can't
+                    // schedule duplicate notifications.
+                    void notifyAnalysisComplete(
+                        'Analysis complete',
+                        `${processedAnalysis?.direction ?? finalAnalysis.direction} ${finalAnalysis.coinName || ''} — ${finalAnalysis.confidence} confidence`
+                    );
 
                     // === ThinkingStore: Save reasoning for training & analysis ===
                     // Persist per-analyst reasoning, moderator synthesis, and debate turns

@@ -26,8 +26,11 @@ export interface JournalStats {
   perSymbol: JournalGroupStats[];
 }
 
-const pnlOf = (t: LoggedTrade): number =>
-  typeof t.pnlPercent === 'number' ? t.pnlPercent : (typeof t.pnlAmount === 'number' ? t.pnlAmount : NaN);
+// Percent-only: manual captures store dollars (pnlAmount) while autopilot
+// stores percents (pnlPercent). Averaging the two would mix units — a $150
+// manual win would count as 150R. Dollar-only trades are excluded from the
+// R-based stats (they still count toward win rate/streaks).
+const pnlOf = (t: LoggedTrade): number => (typeof t.pnlPercent === 'number' ? t.pnlPercent : NaN);
 
 const groupBy = (trades: LoggedTrade[], keyOf: (t: LoggedTrade) => string): JournalGroupStats[] => {
   const map = new Map<string, { trades: number; wins: number; pnl: number }>();

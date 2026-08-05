@@ -75,6 +75,9 @@ const CalibrationBar: React.FC<{ label: string; actual: number; expected: number
 
 export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades }) => {
     const profile = useMemo(() => computeLearningProfile(trades), [trades]);
+    // Memoized — loadLearningRules parses localStorage; running it inline in
+    // the JSX re-parsed on every render of the dashboard.
+    const learnedRules = useMemo(() => loadLearningRules().rules || [], []);
 
     const getWinRateColor = (rate: number) => {
         if (rate >= 65) return 'text-emerald-400';
@@ -124,15 +127,12 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades }) 
                 {/* Best Coins */}
                 <StatCard
                     title="Learned Rules"
-                    items={(() => {
-                        const rules = loadLearningRules().rules || [];
-                        return rules.slice(0, 5).map(rule => ({
-                            name: String((rule as any).promptInjection || (rule as any).condition || (rule as any).id || 'Rule').slice(0, 80),
-                            value: (rule as any).strength !== undefined ? `${(rule as any).strength}` : '✓',
-                            subtext: undefined,
-                            color: 'text-cyan-300',
-                        }));
-                    })()}
+                    items={learnedRules.slice(0, 5).map(rule => ({
+                        name: String((rule as any).promptInjection || (rule as any).condition || (rule as any).id || 'Rule').slice(0, 80),
+                        value: (rule as any).strength !== undefined ? `${(rule as any).strength}` : '✓',
+                        subtext: undefined,
+                        color: 'text-cyan-300',
+                    }))}
                     emptyText="No rules learned yet — rules are generated from loss post-mortems"
                 />
 

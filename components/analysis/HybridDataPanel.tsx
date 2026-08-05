@@ -265,7 +265,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
             <div
                 ref={panelRef}
                 className={`fixed z-40 status-surface ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
-                style={{ left: position.x, top: position.y }}
+                style={{ left: position.x, top: position.y, touchAction: 'none' }}
                 onMouseDown={handleDragStart}
                 onTouchStart={handleDragStart}
             >
@@ -305,7 +305,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
             <div
                 ref={panelRef}
                 className={`fixed z-40 status-surface ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
-                style={{ left: position.x, top: position.y }}
+                style={{ left: position.x, top: position.y, touchAction: 'none' }}
                 onMouseDown={handleDragStart}
                 onTouchStart={handleDragStart}
             >
@@ -350,7 +350,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
                 <div
                     ref={panelRef}
                     className={`fixed z-40 status-surface ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
-                    style={{ left: position.x, top: position.y }}
+                    style={{ left: position.x, top: position.y, touchAction: 'none' }}
                     onMouseDown={handleDragStart}
                     onTouchStart={handleDragStart}
                 >
@@ -418,7 +418,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
             <div
                 ref={panelRef}
                 className={`fixed z-40 status-surface ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
-                style={{ left: position.x, top: position.y }}
+                style={{ left: position.x, top: position.y, touchAction: 'none' }}
             >
                 <button
                     type="button"
@@ -457,6 +457,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
                 {/* Header - Drag Handle */}
                 <div
                     className={`flex items-center justify-between p-3 border-b border-white/5 bg-zinc-800 ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+                    style={{ touchAction: 'none' }}
                     onMouseDown={handleDragStart}
                     onTouchStart={handleDragStart}
                 >

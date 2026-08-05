@@ -80,7 +80,6 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
         if (alertsSet) return; // one alert set per card — avoid duplicate monitoring
         PriceAlertService.createAlert(messageId, analysis);
         setAlertsSet(true);
-        setTimeout(() => setAlertsSet(false), 3000);
     };
 
     // Defensive destructuring
@@ -154,8 +153,10 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                     : null;
                 const isNowExpired = validUntilMs ? Date.now() > validUntilMs : false;
 
-                // If already marked as active before expiry, preserve that state forever
+                // If already marked as active before expiry, the trade is live —
+                // stop polling entirely (the state can never change again).
                 if (autoEntryStatus?.wasActiveBeforeExpiry) {
+                    clearInterval(interval);
                     return; // Entry was hit within valid window - don't overwrite
                 }
 
@@ -189,6 +190,9 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                 // Entry was NOT hit within validity window - check if timer expired
                 if (isNowExpired) {
                     setStatus({ isActive: false, wasActiveBeforeExpiry: false });
+                    // Expired with no entry → the outcome can never change; stop
+                    // polling instead of hitting the kline API every 30s forever.
+                    clearInterval(interval);
                 } else {
                     // Timer not expired yet, entry not hit yet - keep polling
                     setStatus({ isActive: false, wasActiveBeforeExpiry: false });
@@ -903,8 +907,9 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                     </div>
                 )}
 
-                {/* Gate Scan Results */}
-                {analysis.gateResult && (
+                {/* Gate Scan Results — the full-shape guard protects against
+                    legacy/partial gateResult objects (missing penalties etc.) */}
+                {analysis.gateResult && analysis.gateResult.penalties && analysis.gateResult.familyBias && (
                     <div className="px-4 py-4 sm:px-6 sm:py-5 border-t border-white/10 bg-gradient-to-b from-cyan-950/20 to-transparent">
                         <div className="flex items-center justify-between mb-3">
                             <h4 className="text-[10px] uppercase font-bold text-cyan-400 tracking-widest flex items-center gap-2">
@@ -926,7 +931,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                                     analysis.gateResult.confidenceCap >= 0.5 ? 'text-yellow-400' :
                                         analysis.gateResult.confidenceCap >= 0.35 ? 'text-orange-400' : 'text-rose-400'
                                     }`}>
-                                    {(analysis.gateResult.confidenceCap * 100).toFixed(0)}%
+                                    {((analysis.gateResult.confidenceCap ?? 0) * 100).toFixed(0)}%
                                 </span>
                             </div>
                             {analysis.gateResult.penalties.effectiveTotal > 0 && (
@@ -962,19 +967,6 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                                         </span>
                                     )}
                                 </div>
-                            </div>
-                        )}
-
-                        {/* Warnings — computed by the gate but never surfaced on the card */}
-                        {Array.isArray(analysis.gateResult.warnings) && analysis.gateResult.warnings.length > 0 && (
-                            <div className="mb-3 space-y-1">
-                                <span className="text-[8px] uppercase font-bold text-zinc-600 tracking-wider block mb-1">Gate Warnings:</span>
-                                {analysis.gateResult.warnings.slice(0, 6).map((warning, i) => (
-                                    <div key={i} className="flex items-start gap-1.5 text-[9px] text-amber-300/90 leading-relaxed">
-                                        <span className="shrink-0 mt-0.5">⚠</span>
-                                        <span className="break-all">{warning}</span>
-                                    </div>
-                                ))}
                             </div>
                         )}
 
@@ -1019,7 +1011,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                         )}
 
                         {/* Warnings */}
-                        {analysis.gateResult.warnings.length > 0 && (
+                        {Array.isArray(analysis.gateResult.warnings) && analysis.gateResult.warnings.length > 0 && (
                             <div className="mb-2">
                                 {analysis.gateResult.warnings.map((w, idx) => (
                                     <div key={idx} className="flex items-start gap-1.5 text-[10px] text-amber-300/80 mb-1">

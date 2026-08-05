@@ -69,7 +69,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, action
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'ArrowDown') { e.preventDefault(); setHighlighted(h => Math.min(filtered.length - 1, h + 1)); }
+              if (e.key === 'ArrowDown') { e.preventDefault(); setHighlighted(h => (filtered.length === 0 ? 0 : Math.min(filtered.length - 1, h + 1))); }
               else if (e.key === 'ArrowUp') { e.preventDefault(); setHighlighted(h => Math.max(0, h - 1)); }
               else if (e.key === 'Enter' && filtered[highlighted]) { e.preventDefault(); run(filtered[highlighted]); }
             }}
