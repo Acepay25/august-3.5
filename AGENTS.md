@@ -164,6 +164,11 @@ Optional build-time variables:
 
 - Vite 7 + Tailwind v4 (monochrome zinc theme — color tokens are remapped to gray
   in `index.css` `@theme`; do not reintroduce colored utilities)
+- **Exception — status surfaces**: the `.status-surface` scope (and the existing
+  `.analysis-card` scope) in `index.css` restores real semantic colors (emerald WIN,
+  rose LOSS, amber warnings, destructive actions). Use `status-surface` only where
+  status meaning would otherwise be lost (hybrid panel, toasts, header indicators,
+  destructive buttons, post-mortem accents) — keep everything else monochrome.
 - React 19 strict mode; TypeScript strict
 - Electron shell in `electron/` (custom `app://` protocol for production, safeStorage,
   auto-updater); Capacitor config for mobile

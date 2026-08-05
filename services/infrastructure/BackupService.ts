@@ -250,7 +250,7 @@ export const getBackups = async (username: string): Promise<BackupMetadata[]> =>
 
 /**
  * Read the full profile JSON for a backup (from either storage backend).
- * Used by restoreBackup and exportBackupToFile.
+ * Used by exportBackupToFile.
  */
 const readBackupProfile = async (backupId: string): Promise<{ username: string; timestamp: string; profileJson: string } | null> => {
     if (useNativeStorage()) {
@@ -294,28 +294,6 @@ const readBackupProfile = async (backupId: string): Promise<{ username: string; 
     });
     if (!backup) return null;
     return { username: backup.username, timestamp: backup.timestamp, profileJson: backup.profile };
-};
-
-/**
- * Restore profile from a backup
- */
-export const restoreBackup = async (backupId: string): Promise<boolean> => {
-    try {
-        const record = await readBackupProfile(backupId);
-        if (!record) {
-            console.error('[BackupService] Backup not found:', backupId);
-            return false;
-        }
-
-        const profile = JSON.parse(record.profileJson);
-        await saveUserProfile(record.username, profile);
-
-        console.log(`[BackupService] Restored backup ${backupId}`);
-        return true;
-    } catch (error) {
-        console.error('[BackupService] Failed to restore backup:', error);
-        return false;
-    }
 };
 
 /**

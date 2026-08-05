@@ -88,7 +88,6 @@ export const detectChartPatterns = (klines: Kline[]): DetectedPattern[] => {
 
     if (klines.length < 50) return patterns;
 
-    const currentPrice = klines[klines.length - 1].close;
 
     // 1. DETECT HEAD AND SHOULDERS (Bearish)
     // Logic: Left Shoulder (LS), Head (H), Right Shoulder (RS). H > LS, H > RS. LS ~= RS.
