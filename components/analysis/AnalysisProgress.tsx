@@ -197,7 +197,7 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({
 
   return (
     <div
-      className={`glass rounded-2xl ${glowColor} border-t ${accentBorder} p-4 animate-fade-in`}
+      className={`glass status-surface rounded-2xl ${glowColor} border-t ${accentBorder} p-4 animate-fade-in`}
     >
       {isActive ? (
         <>

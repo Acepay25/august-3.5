@@ -261,6 +261,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         handleCancelAnalysis,
         loadingMessage,
         isSummarizing,
+        isAnalysisInProgress,
         isRateLimited,
         isAnyProviderEnabled,
         providers,
@@ -399,14 +400,17 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 entryTimingScore={entryTimingScore}
             />
 
-            {loadingMessage ? (
+            {/* Progress panel + Stop stay visible through the whole run —
+                loadingMessage goes null when the debate starts, but the user
+                must still be able to cancel mid-debate. */}
+            {(loadingMessage || (isAnalysisInProgress && !isPostMortemInProgress)) ? (
                 <>
                 <div className="absolute bottom-[calc(env(safe-area-inset-bottom)+11rem)] sm:bottom-[calc(env(safe-area-inset-bottom)+12rem)] lg:bottom-[calc(env(safe-area-inset-bottom)+13rem)] left-0 right-0 p-2 sm:p-4 pointer-events-none z-10">
                     <div className="max-w-4xl mx-auto pointer-events-auto">
                         {analysisSteps && analysisSteps.length > 0 ? (
                             <AnalysisProgress
                                 steps={analysisSteps}
-                                isActive={!!loadingMessage}
+                                isActive={!!loadingMessage || isAnalysisInProgress}
                                 onCancel={handleCancelAnalysis}
                                 isPostMortem={isPostMortemInProgress}
                                 isPostMortemInProgress={isPostMortemInProgress}

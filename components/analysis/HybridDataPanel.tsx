@@ -168,7 +168,9 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
 
     // Drag handlers
     const handleDragStart = (e: React.MouseEvent | React.TouchEvent) => {
-        e.preventDefault();
+        // Only preventDefault for mouse: cancelling touchstart suppresses the
+        // synthesized click, so tapping the icon could never open the panel.
+        if (!('touches' in e)) e.preventDefault();
         const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
         const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
         setIsDragging(true);
@@ -237,6 +239,21 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
         }
     }, [isLoading]);
 
+    // Expanded placement: stay anchored to the icon and fully on-screen.
+    // `position` is the ICON's top-left corner — the expanded panel keeps the
+    // same spot when there's room; if the icon was dragged near the right or
+    // bottom edge, the panel opens to its LEFT / above it instead of
+    // overflowing off-screen.
+    const panelPlacement = (() => {
+        if (!isExpanded) return { left: position.x, top: position.y };
+        const panelWidth = Math.min(320, Math.max(240, window.innerWidth - 32));
+        const maxPanelHeight = window.innerHeight - 120; // matches maxHeight below
+        return {
+            left: Math.max(8, Math.min(position.x, window.innerWidth - panelWidth - 8)),
+            top: Math.max(8, Math.min(position.y, window.innerHeight - maxPanelHeight - 8)),
+        };
+    })();
+
     // Hidden while Settings (or another full-screen modal) is open.
     if (hidden) return null;
 
@@ -245,7 +262,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
         return (
             <div
                 ref={panelRef}
-                className={`fixed z-50 ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+                className={`fixed z-40 status-surface ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
                 style={{ left: position.x, top: position.y }}
                 onMouseDown={handleDragStart}
                 onTouchStart={handleDragStart}
@@ -285,7 +302,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
         return (
             <div
                 ref={panelRef}
-                className={`fixed z-50 ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+                className={`fixed z-40 status-surface ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
                 style={{ left: position.x, top: position.y }}
                 onMouseDown={handleDragStart}
                 onTouchStart={handleDragStart}
@@ -298,7 +315,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
                         {connectionStatus === 'connecting' && (
                             <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-yellow-400 animate-spin"></div>
                         )}
-                        <span className="text-lg"></span>
+                        
                         {/* Status dot */}
                         <div className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-zinc-900 ${connectionStatus === 'connecting' ? 'bg-yellow-500 animate-pulse' : 'bg-emerald-500'
                             }`}></div>
@@ -330,7 +347,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
                 {/* Floating button with loading animation */}
                 <div
                     ref={panelRef}
-                    className={`fixed z-50 ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+                    className={`fixed z-40 status-surface ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
                     style={{ left: position.x, top: position.y }}
                     onMouseDown={handleDragStart}
                     onTouchStart={handleDragStart}
@@ -343,13 +360,13 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
                 </div>
 
                 {/* Top banner notification */}
-                <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 animate-slide-down pointer-events-none">
+                <div className="fixed top-4 left-1/2 -translate-x-1/2 z-40 status-surface animate-slide-down pointer-events-none">
                     <div className="bg-gradient-to-r from-emerald-950 to-cyan-950 border border-emerald-500/50 rounded-xl px-6 py-3 shadow-2xl shadow-emerald-500/20">
                         <div className="flex items-center gap-4">
                             {/* Animated icon */}
                             <div className="relative">
                                 <div className="w-10 h-10 bg-emerald-500/20 rounded-full flex items-center justify-center">
-                                    <span className="text-xl"></span>
+                                    
                                 </div>
                                 <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-emerald-400 animate-spin"></div>
                             </div>
@@ -398,7 +415,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
         return (
             <div
                 ref={panelRef}
-                className={`fixed z-50 ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+                className={`fixed z-40 status-surface ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
                 style={{ left: position.x, top: position.y }}
             >
                 <button
@@ -431,8 +448,8 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
     return (
         <div
             ref={panelRef}
-            className="fixed z-50 w-80 max-w-[calc(100vw-2rem)] animate-slide-in-left"
-            style={{ left: position.x, top: position.y, maxHeight: 'calc(100vh - 120px)' }}
+            className="fixed z-40 status-surface w-80 max-w-[calc(100vw-2rem)] animate-fade-in"
+            style={{ left: panelPlacement.left, top: panelPlacement.top, maxHeight: 'calc(100vh - 120px)' }}
         >
             <div className="h-full max-h-[calc(100vh-120px)] bg-zinc-900 border border-white/10 rounded-2xl overflow-hidden shadow-xl flex flex-col">
                 {/* Header - Drag Handle */}
@@ -447,7 +464,7 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
                             <div className="flex gap-0.5"><div className="w-1 h-1 bg-zinc-400 rounded-full"></div><div className="w-1 h-1 bg-zinc-400 rounded-full"></div></div>
                             <div className="flex gap-0.5"><div className="w-1 h-1 bg-zinc-400 rounded-full"></div><div className="w-1 h-1 bg-zinc-400 rounded-full"></div></div>
                         </div>
-                        <span className="text-lg"></span>
+                        
                         <div>
                             <div className="text-zinc-200 font-bold text-xs">HYBRID DATA</div>
                             <div className="text-zinc-500 text-[9px]">{data.symbol} • {new Date(data.dataTimestamp).toLocaleTimeString()}</div>
