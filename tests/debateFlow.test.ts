@@ -284,9 +284,11 @@ describe('conductRealDebate (real inter-model debate)', () => {
     expect(modText).toContain('</DEBATE_END>');
     expect(extractLastJson(modText).direction).toBe('Long');
 
-    // Round structure includes the clarification question before the verdict.
+    // Round structure: the questions round is reserved (even when the moderator
+    // short-circuits with <CLARIFICATION_DONE>) so the verdict gets its own
+    // round and can never merge with the questions turn.
     const rounds = [...new Set(events.map(e => e.round))];
-    expect(rounds).toEqual([1, 2, 3, 4]);
+    expect(rounds).toEqual([1, 2, 3, 4, 5]);
   });
 
   it('continues the debate when one analyst fails a rebuttal round', async () => {
@@ -639,7 +641,9 @@ describe('conductRealDebate (real inter-model debate)', () => {
     const modText = moderatorEvents.map(e => e.text).join('');
     expect(modText).toContain('</DEBATE_END>');
     expect(extractLastJson(modText).direction).toBe('Long');
-    expect([...new Set(events.map(e => e.round))]).toEqual([1, 2, 3, 4]);
+    // The questions round is reserved even on <CLARIFICATION_DONE> — the
+    // verdict gets its own round (5) instead of sharing round 4.
+    expect([...new Set(events.map(e => e.round))]).toEqual([1, 2, 3, 4, 5]);
   });
 
   it('runs a clarification cycle with all three analysts answering in parallel', async () => {
