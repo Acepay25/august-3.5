@@ -2,6 +2,9 @@
 import React, { useState } from 'react';
 import { Message, TradeOutcome } from '../../types';
 
+import { useEscapeClose } from '../../hooks/useEscapeClose';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
+
 interface DataCaptureModalProps {
     message: Message;
     outcome: TradeOutcome;
@@ -21,6 +24,9 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
     onSkip,
     isCapturing = false
 }) => {
+    useEscapeClose(true, onClose);
+    const dialogRef = useFocusTrap<HTMLDivElement>(true);
+
     const coinName = message.analysis?.coinName || 'this trade';
     const [pnl, setPnl] = useState('');
     const [correctedValue, setCorrectedValue] = useState('');

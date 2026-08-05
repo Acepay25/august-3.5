@@ -109,8 +109,13 @@
 }
 
 /* The analysis card uses the semantic colors shown in the trading-card UI
-   while the rest of the application keeps its charcoal palette. */
-.analysis-card {
+   while the rest of the application keeps its charcoal palette. Status-critical
+   surfaces outside the card (hybrid panel, toasts, header indicators,
+   destructive buttons, post-mortem accents) opt in via .status-surface —
+   the monochrome mapping otherwise renders WIN/LOSS/error as indistinguishable
+   grays. */
+.analysis-card,
+.status-surface {
   --color-emerald-200: #a7f3d0;
   --color-emerald-300: #6ee7b7;
   --color-emerald-400: #34d399;

@@ -72,7 +72,7 @@ const MistakeWarningBanner: React.FC<MistakeWarningBannerProps> = ({
 
             {/* Header */}
             <div className="flex items-center gap-2 mb-3">
-                <span className="text-xl"></span>
+                
                 <span className="text-sm font-bold text-amber-400 uppercase tracking-wide">
                     Personal Trading Alert
                 </span>
