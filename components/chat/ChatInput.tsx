@@ -28,6 +28,10 @@ interface ChatInputProps {
     handleCancelAnalysis: () => void;
     loadingMessage: string | null;
     isSummarizing: boolean;
+    // True while ANY phase of the analysis run is active (incl. the debate,
+    // when loadingMessage is null) — drives the Send↔Stop toggle so the user
+    // can always cancel, even mid-debate.
+    isAnalysisInProgress: boolean;
     isRateLimited: boolean;
     isAnyProviderEnabled: boolean;
     // Ensemble Intelligence Configuration — dynamic provider list
@@ -79,6 +83,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
     handleCancelAnalysis,
     loadingMessage,
     isSummarizing,
+    isAnalysisInProgress,
     isRateLimited,
     isAnyProviderEnabled,
     providers,
@@ -253,8 +258,8 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
 
     return (
         <div className={centered
-            ? 'w-full'
-            : 'absolute bottom-0 left-0 right-0 px-3 sm:px-4 lg:px-8 pointer-events-none z-20 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:pb-[calc(env(safe-area-inset-bottom)+1rem)] lg:pb-8'}>
+            ? 'w-full status-surface'
+            : 'absolute bottom-0 left-0 right-0 px-3 sm:px-4 lg:px-8 pointer-events-none z-20 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:pb-[calc(env(safe-area-inset-bottom)+1rem)] lg:pb-8 status-surface'}>
             <div className={centered ? 'w-full' : 'w-full lg:max-w-3xl lg:mx-auto pointer-events-auto'}>
                 {/* Main Input Container — carded composer surface */}
                 <div className="rounded-2xl border border-white/10 bg-[#202020]/95 shadow-[0_8px_32px_rgba(0,0,0,0.24)] p-2 sm:p-3 lg:p-4 transition-all">
@@ -267,7 +272,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                         <textarea
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey ? (e.preventDefault(), handleSendMessage()) : null}
+                            onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing ? (e.preventDefault(), handleSendMessage()) : null}
                             placeholder={images.length > 0 ? "Analyze charts..." : "Write a message..."}
                             className="flex-1 min-w-0 bg-transparent px-2 py-2 text-base text-white placeholder-zinc-500 focus:outline-none focus-visible:outline-none focus-visible:ring-0 transition-all min-h-[44px] lg:min-h-[48px] max-h-32 resize-none leading-relaxed"
                             rows={1}
@@ -323,7 +328,10 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                     title={isEnsembleEnabled ? 'Ensemble on — chart analysis enabled' : 'Enable ensemble mode for chart analysis'}
                                     aria-pressed={isEnsembleEnabled}
                                 >
-                                    <span className="font-medium hidden xs:inline sm:inline">Ensemble</span>
+                                    {/* The label must stay visible on mobile — `xs:` is not a
+                                        real breakpoint, so the old class hid the ONLY content
+                                        of this segment below 640px, leaving a blank pill. */}
+                                    <span className="font-medium inline">Ensemble</span>
                                 </button>
                                 <button
                                     onClick={(e) => {
@@ -353,8 +361,8 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                     aria-pressed={lensConfig.enabled}
                                     title={lensConfig.enabled ? 'Lenses mode — role-based prompts' : 'Normal mode — same prompt for all models'}
                                 >
-                                    <span className="text-xs sm:text-sm"></span>
-                                    <span className="font-medium hidden xs:inline sm:inline">{lensConfig.enabled ? 'Lenses' : 'Normal'}</span>
+                                    
+                                    <span className="font-medium inline">{lensConfig.enabled ? 'Lenses' : 'Normal'}</span>
                                 </button>
 
                                 {/* Dropdown Trigger */}
@@ -509,7 +517,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                     aria-expanded={isLeverageDropdownOpen}
                                     aria-haspopup="menu"
                                 >
-                                    <span className="text-xs sm:text-sm"></span>
+                                    
                                     <span className="font-medium">{leverageInput}x</span>
                                 </button>
                                 {isLeverageDropdownOpen && (
@@ -543,13 +551,13 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                 )}
                             </div>
                             <button
-                                onClick={loadingMessage ? handleCancelAnalysis : handleSendMessage}
-                                disabled={isSummarizing || (!loadingMessage && ((!input.trim() && images.length === 0) || isRateLimited || !isAnyProviderEnabled))}
-                                className={`h-9 w-9 rounded-xl text-white transition-all flex items-center justify-center shrink-0 ${loadingMessage ? 'bg-rose-500/80 hover:bg-rose-500' : 'bg-cyan-500 hover:bg-cyan-400'} disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-zinc-800`}
-                                title={loadingMessage ? 'Stop generating' : 'Send'}
-                                aria-label={loadingMessage ? 'Stop generating' : 'Send message'}
+                                onClick={isAnalysisInProgress ? handleCancelAnalysis : handleSendMessage}
+                                disabled={isSummarizing || (!isAnalysisInProgress && ((!input.trim() && images.length === 0) || isRateLimited || !isAnyProviderEnabled))}
+                                className={`h-9 w-9 rounded-xl text-white transition-all flex items-center justify-center shrink-0 ${isAnalysisInProgress ? 'bg-rose-500/80 hover:bg-rose-500' : 'bg-cyan-500 hover:bg-cyan-400'} disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-zinc-800`}
+                                title={isAnalysisInProgress ? 'Stop generating' : 'Send'}
+                                aria-label={isAnalysisInProgress ? 'Stop generating' : 'Send message'}
                             >
-                                {isSummarizing ? <LoadingIcon className="h-5 w-5" /> : loadingMessage ? <StopIcon className="h-4 w-4" fill="currentColor" /> : <SendIcon />}
+                                {isSummarizing ? <LoadingIcon className="h-5 w-5" /> : isAnalysisInProgress ? <StopIcon className="h-4 w-4" fill="currentColor" /> : <SendIcon />}
                             </button>
                         </div>
                     </div>

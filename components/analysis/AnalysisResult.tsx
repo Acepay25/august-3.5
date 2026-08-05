@@ -124,6 +124,16 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
     useEffect(() => {
         if (outcome !== TradeOutcome.PENDING || !createdAt || !coinName) return;
 
+        // Guarded setter: the poll used to set a FRESH object every 30s even
+        // when nothing changed, re-rendering this 1300+ line card pointlessly.
+        const setStatus = (next: { isActive: boolean; wasActiveBeforeExpiry: boolean }) => {
+            setAutoEntryStatus(prev =>
+                prev && prev.isActive === next.isActive && prev.wasActiveBeforeExpiry === next.wasActiveBeforeExpiry
+                    ? prev
+                    : { ...next, lastChecked: new Date() }
+            );
+        };
+
         const checkEntry = async () => {
             try {
                 const validUntilMs = validityDurationMinutes
@@ -155,11 +165,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                     if (entryWithinValidityWindow) {
                         // Entry hit WITHIN valid window - trade is now active and won't expire
                         console.log(`[AnalysisResult] Entry triggered at ${result.entryTriggerTime}, within validity window`);
-                        setAutoEntryStatus({
-                            isActive: true,
-                            wasActiveBeforeExpiry: true,
-                            lastChecked: new Date()
-                        });
+                        setStatus({ isActive: true, wasActiveBeforeExpiry: true });
                         return;
                     } else {
                         // Entry was hit AFTER validity expired - trade should remain expired
@@ -169,18 +175,10 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
 
                 // Entry was NOT hit within validity window - check if timer expired
                 if (isNowExpired) {
-                    setAutoEntryStatus({
-                        isActive: false,
-                        wasActiveBeforeExpiry: false,
-                        lastChecked: new Date()
-                    });
+                    setStatus({ isActive: false, wasActiveBeforeExpiry: false });
                 } else {
                     // Timer not expired yet, entry not hit yet - keep polling
-                    setAutoEntryStatus({
-                        isActive: false,
-                        wasActiveBeforeExpiry: false,
-                        lastChecked: new Date()
-                    });
+                    setStatus({ isActive: false, wasActiveBeforeExpiry: false });
                 }
             } catch (e) {
                 console.error('[AnalysisResult] Auto entry check failed:', e);
@@ -274,7 +272,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
     // Lens Mode Badge - shows when this trade was analyzed with Analyst Lenses enabled
     const lensBadge = isLensMode ? (
         <span className="px-2 py-1 rounded text-[9px] font-bold bg-indigo-950/80 border border-indigo-500/40 text-indigo-300 uppercase tracking-widest flex items-center gap-1">
-            <span></span> LENS MODE
+             LENS MODE
         </span>
     ) : null;
 
@@ -300,7 +298,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                             className="px-2 py-1 rounded text-[9px] font-bold bg-purple-950/80 border border-purple-500/40 text-purple-300 uppercase tracking-widest flex items-center gap-1 hover:bg-purple-500/30 transition-colors shadow-[0_0_10px_-3px_rgba(161,161,170,0.4)]"
                             title="View AI Probability estimations in side panel"
                         >
-                            <span></span> VIEW PROBABILITIES
+                             VIEW PROBABILITIES
                         </button>
                     )}
                 </div>
@@ -395,7 +393,16 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
             <div
                 className={`relative overflow-hidden ${isDetailsVisible ? 'rounded-t-3xl sm:rounded-t-[2rem] border-b-0' : 'rounded-3xl sm:rounded-[2rem] hover:scale-[1.01] cursor-pointer'} border-2 bg-zinc-900 transition-all duration-500 group shadow-2xl hover:shadow-3xl`}
                 style={{ borderColor: directionVisual.border }}
+                role="button"
+                tabIndex={0}
+                aria-expanded={isDetailsVisible}
                 onClick={() => setIsDetailsVisible(!isDetailsVisible)}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setIsDetailsVisible(!isDetailsVisible);
+                    }
+                }}
             >
                 {/* Premium Gradient Overlay */}
                 <div className="absolute inset-0" style={{ background: directionVisual.gradient }}></div>
@@ -467,7 +474,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                         {isTradeActive && outcome === TradeOutcome.PENDING && (
                             <div className="flex items-center gap-1.5 text-[10px] font-mono px-2 py-1.5 rounded-lg 
                                 text-emerald-400 bg-emerald-500/10 border border-emerald-500/20">
-                                <span></span>
+                                
                                 <span>ACTIVE</span>
                             </div>
                         )}
@@ -618,7 +625,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                                         <div className="mt-3 pt-2 border-t border-rose-500/10">
                                             <div className="flex justify-between items-center">
                                                 <span className="text-[9px] uppercase font-bold text-zinc-500 tracking-wider flex items-center gap-1">
-                                                    <span className="text-amber-500"></span> Extended SL (150%)
+                                                     Extended SL (150%)
                                                 </span>
                                                 <span className="text-xs font-mono font-bold text-amber-400 bg-amber-950/30 px-2 py-0.5 rounded-lg">
                                                     ${extendedSlPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -685,7 +692,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                 {detectedPatterns && detectedPatterns.length > 0 && (
                     <div className="px-4 py-3 sm:px-6 sm:py-4 border-t border-white/10">
                         <h4 className="text-[10px] uppercase font-bold text-zinc-500 mb-2 flex items-center gap-2 tracking-widest">
-                            <span></span> Detected Patterns ({detectedPatterns.length})
+                             Detected Patterns ({detectedPatterns.length})
                         </h4>
                         <div className="flex flex-wrap gap-2">
                             {detectedPatterns.map((pattern, idx) => (
@@ -713,7 +720,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                 {keyLevels && (keyLevels.support?.length > 0 || keyLevels.resistance?.length > 0) && (
                     <div className="px-4 py-3 sm:px-6 sm:py-4 border-t border-white/10">
                         <h4 className="text-[10px] uppercase font-bold text-zinc-500 mb-2 flex items-center gap-2 tracking-widest">
-                            <span></span> Key Levels
+                             Key Levels
                         </h4>
                         <div className="grid grid-cols-2 gap-4">
                             {/* Support Levels */}
@@ -750,7 +757,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                 {dualScenarioAnalysis && (
                     <div className="px-4 py-4 sm:px-6 sm:py-5 border-t border-white/10 bg-gradient-to-b from-indigo-950/20 to-transparent">
                         <h4 className="text-[10px] uppercase font-bold text-indigo-400 mb-3 flex items-center gap-2 tracking-widest">
-                            <span className="text-base"></span> Dual Scenario Analysis
+                             Dual Scenario Analysis
                         </h4>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
@@ -759,7 +766,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                                 ? 'bg-emerald-500/15 border-emerald-400/40 ring-2 ring-emerald-500/20'
                                 : 'bg-emerald-500/5 border-emerald-500/20'}`}>
                                 <div className="flex items-center gap-2 mb-2">
-                                    <span className="text-lg"></span>
+                                    
                                     <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Bullish Scenario</span>
                                     {dualScenarioAnalysis.selectedScenario === 'bullish' && (
                                         <span className="ml-auto px-2 py-0.5 rounded text-[9px] font-bold bg-emerald-500/30 text-emerald-300 border border-emerald-400/30">
@@ -792,7 +799,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                                 ? 'bg-rose-500/15 border-rose-400/40 ring-2 ring-rose-500/20'
                                 : 'bg-rose-500/5 border-rose-500/20'}`}>
                                 <div className="flex items-center gap-2 mb-2">
-                                    <span className="text-lg"></span>
+                                    
                                     <span className="text-xs font-bold text-rose-400 uppercase tracking-wider">Bearish Scenario</span>
                                     {dualScenarioAnalysis.selectedScenario === 'bearish' && (
                                         <span className="ml-auto px-2 py-0.5 rounded text-[9px] font-bold bg-rose-500/30 text-rose-300 border border-rose-400/30">
@@ -852,7 +859,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                     <div className="px-4 py-4 sm:px-6 sm:py-5 border-t border-white/10 bg-gradient-to-b from-cyan-950/20 to-transparent">
                         <div className="flex items-center justify-between mb-3">
                             <h4 className="text-[10px] uppercase font-bold text-cyan-400 tracking-widest flex items-center gap-2">
-                                <span className="text-base"></span> Gate Scan
+                                 Gate Scan
                             </h4>
                             <div className={`px-2 py-1 rounded text-[9px] font-bold uppercase tracking-widest ${analysis.gateResult.passed
                                 ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
@@ -966,7 +973,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                             <div>
                                 {analysis.gateResult.insights.map((insight, idx) => (
                                     <div key={idx} className="flex items-start gap-1.5 text-[10px] text-cyan-300/80 mb-1">
-                                        <span></span>
+                                        
                                         <span>{insight}</span>
                                     </div>
                                 ))}
@@ -1092,7 +1099,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                     <div className="px-4 py-4 sm:px-6 sm:py-5 border-t border-white/10 bg-gradient-to-b from-purple-950/20 to-transparent">
                         <div className="flex items-center justify-between mb-3">
                             <h4 className="text-[10px] uppercase font-bold text-purple-400 tracking-widest flex items-center gap-2">
-                                <span className="text-base"></span> Devil's Advocate Analysis
+                                 Devil's Advocate Analysis
                             </h4>
                             <div className={`px-2 py-1 rounded text-[9px] font-bold uppercase tracking-widest ${devilsAdvocate.riskScore >= 70 ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' :
                                 devilsAdvocate.riskScore >= 50 ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
@@ -1135,7 +1142,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                         {devilsAdvocate.crowdedTradeWarning && (
                             <div className="mt-2 p-2 bg-rose-950/30 border border-rose-500/30 rounded-lg">
                                 <div className="flex items-center gap-2 text-xs text-rose-300">
-                                    <span className="text-rose-400"></span>
+                                    
                                     {devilsAdvocate.crowdedTradeWarning}
                                 </div>
                             </div>
@@ -1305,7 +1312,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                                 {(strategy || (activeStrategies && activeStrategies.length > 0)) && (
                                     <div className="grid grid-cols-1 gap-1 md:col-span-2 pt-2 border-t border-white/5">
                                         <span className="text-[9px] uppercase font-bold text-cyan-600 tracking-widest flex items-center gap-1.5">
-                                            <span className="w-1.5 h-1.5 bg-cyan-500 rounded-full"></span>
+                                            
                                             AI Detected Strategy
                                         </span>
                                         {/* Strategies identified from playbook */}
