@@ -7,6 +7,7 @@
  */
 
 import { TradeAnalysis } from '../../types';
+import { parsePrice } from '../../utils/analysisUtils';
 import { fetchHybridData, generateHybridPromptInjection, HybridDataPacket } from '../analysis/HybridIntelligenceService';
 import { fetchFuturesOHLCVFromTime, Kline } from '../analysis/MarketDataService';
 import {
@@ -84,22 +85,6 @@ export interface AutoCaptureResult {
     historicalOutcome?: HistoricalOutcomeResult;
     error?: string;
 }
-
-/**
- * Parse price string to number (handles ranges like "3050 - 3060")
- */
-const parsePrice = (priceStr: string): number => {
-    if (!priceStr) return 0;
-    const cleaned = priceStr.replace(/[^0-9.\-\s]/g, '');
-    if (cleaned.includes('-') && cleaned.split('-').length === 2) {
-        const parts = cleaned.split('-').map(p => parseFloat(p.trim()));
-        if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-            return (parts[0] + parts[1]) / 2;
-        }
-    }
-    const num = parseFloat(cleaned.replace(/\s+/g, ''));
-    return isNaN(num) ? 0 : num;
-};
 
 /**
  * Format duration in human-readable form
@@ -265,8 +250,11 @@ export const verifyHistoricalOutcome = async (
         // Log which entries we're checking
         console.log(`[AutoCapture] Checking ${entriesToCheck.length} entry point(s): ${entriesToCheck.map(e => `Entry${e.index + 1}=$${e.price.toLocaleString()}`).join(', ')}`);
 
-        // Find analysis candle snapshot (using all candles for indicator calculation)
-        const analysisSnapshotIndex = Math.min(50, klines.length - 1);
+        // Find analysis candle snapshot (using all candles for indicator calculation).
+        // Index 0 IS the analysis-time candle (the fetch starts at the analysis
+        // timestamp) — the old `Math.min(50, ...)` sampled ~50 minutes later,
+        // biasing every post-mortem indicator comparison.
+        const analysisSnapshotIndex = 0;
         const analysisSnapshot = calculateSnapshotAtCandle(klines, analysisSnapshotIndex);
 
         // Track all TP levels hit and SL
@@ -277,16 +265,6 @@ export const verifyHistoricalOutcome = async (
         let highestTpHit: 'TP1' | 'TP2' | 'TP3' | undefined;
         let slTouched = false; // Track if initial SL was touched
         let extendedSlExceeded = false; // Track if price exceeded 150% SL zone
-
-        // Calculate 150% extended SL zone using first entry as reference
-        // (Will recalculate with actual triggered entry after detection if different)
-        // For Long: Original SL distance = entry - SL, Extended SL = entry - (1.5 * distance) = SL - 0.5 * distance
-        // For Short: Original SL distance = SL - entry, Extended SL = entry + (1.5 * distance) = SL + 0.5 * distance
-        const firstEntryPrice = entriesToCheck[0].price;
-        const slDistance = Math.abs(firstEntryPrice - stopLoss);
-        const extendedSlPrice = isLong
-            ? stopLoss - (slDistance * 0.5)  // 150% of SL distance below entry for Long
-            : stopLoss + (slDistance * 0.5); // 150% of SL distance above entry for Short
 
         // Helper to determine timeframe of a candle index
         const getTimeframe = (idx: number): string => {
@@ -335,6 +313,18 @@ export const verifyHistoricalOutcome = async (
 
         // Use the triggered entry's price for SL/TP calculations
         const entryPrice = triggeredEntryPrice || entriesToCheck[0].price;
+
+        // Calculate the 150% extended SL zone from the ACTUALLY TRIGGERED entry.
+        // Multi-entry setups used to anchor the zone to the FIRST entry (the
+        // old comment claimed a recalculation that never happened), which could
+        // mis-place the hard stop — and even flip SL_HIT vs TP_HIT — by the
+        // full entry distance when a later entry filled.
+        // For Long: Extended SL = entry - 1.5 * distance = SL - 0.5 * distance
+        // For Short: Extended SL = entry + 1.5 * distance = SL + 0.5 * distance
+        const triggeredSlDistance = Math.abs(entryPrice - stopLoss);
+        const extendedSlPrice = isLong
+            ? stopLoss - (triggeredSlDistance * 0.5)
+            : stopLoss + (triggeredSlDistance * 0.5);
 
         // If entry hasn't been triggered yet, return early with ENTRY_NOT_TRIGGERED
         if (entryTriggeredAtIndex === -1) {
@@ -583,10 +573,14 @@ export const verifyHistoricalOutcome = async (
             }
 
         } else {
-            // TP hit WITHOUT touching SL first (Clean Win)
-            details = `TARGETS HIT (Clean):\n${tpHits.map(t =>
+            // TP hit — clean win, or a win after the SL was touched first
+            // (TP priority; the SL touch is kept in slHit for reference).
+            details = `TARGETS HIT (${slTouched ? 'after SL touch' : 'Clean'}):\n${tpHits.map(t =>
                 `• ${t.level}: $${t.price.toLocaleString()} @ candle #${t.candleIndex} (${t.timeAfterAnalysis})`
             ).join('\n')} Entry: $${entryPrice.toLocaleString()} | Max DD: ${Math.abs((slHit?.price ? (slHit.price - entryPrice) / entryPrice : 0) * 100).toFixed(2)}%`;
+            if (slTouched) {
+                details += `\n• SL was touched first ($${stopLoss.toLocaleString()}) — SL likely too tight.`;
+            }
         }
 
         console.log(`[AutoCapture] Outcome: ${details}`);

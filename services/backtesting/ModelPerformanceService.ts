@@ -455,7 +455,8 @@ export const trackTradeOutcome = (
     isWin: boolean,
     family: string,
     regime: string,
-    confidence: string
+    confidence: string,
+    trade?: { direction?: string; entryPrice?: number }
 ): void => {
     const data = loadPerformanceData();
     const modelData = ensureProviderEntry(data, provider);
@@ -502,9 +503,11 @@ export const trackTradeOutcome = (
         provider,
         isWin ? 'WIN' : 'LOSS',
         {
-            direction: 'Neutral', // Placeholder, ideally passed from caller
+            // Use the real trade data when available instead of placeholders
+            // (Neutral/0 poisoned the training signal with noise).
+            direction: (trade?.direction as 'Long' | 'Short' | 'Neutral') || 'Neutral',
             confidence: confidence,
-            entryPrice: 0 // Placeholder
+            entryPrice: trade?.entryPrice || 0
         }
     );
 };
@@ -759,8 +762,12 @@ export const syncFromTradeLog = (trades: LoggedTrade[]): void => {
             const family = trade.analysis?.detectedPatternFamily || '';
             const confidence = trade.analysis?.confidence || 'medium';
 
-            // Default regime (in real implementation, this would be stored with the trade)
-            const regime: MarketRegime = 'ranging';
+            // Derive the regime from the analysis's market snapshot when it was
+            // captured (the hybrid packet stores the regime at analysis time).
+            // The old hardcoded 'ranging' put every trade in one bucket, which
+            // is noise for the regime-weighted dynamic model weights.
+            const snapshot = trade.analysis?.marketSnapshot as { regime?: { regime?: string } } | undefined;
+            const regime: MarketRegime = (snapshot?.regime?.regime as MarketRegime) || trade.marketRegime || 'ranging';
 
             // Track for each model that was used (dynamic provider ids)
             const usedProviders = getTradeProviders(trade);

@@ -54,11 +54,20 @@ export const formatAnalysisForDisplay = (analysis: any): string => {
     return parts.join('\n');
 };
 
-/** Extract the first numeric value from a price string (e.g. "69,000" → 69000). */
+/**
+ * Extract a numeric price from a string. Range entries ("3210 - 3220") resolve
+ * to their midpoint so entry-relative SL/zone math uses one consistent value —
+ * a second, range-unaware copy in AutoCaptureService used to differ by import
+ * site ("3210 - 3220" → 3210 vs 3215), silently skewing SL-distance math.
+ */
 export const parsePrice = (priceStr: string): number => {
     if (!priceStr) return NaN;
-    // Remove commas (e.g. 69,000 -> 69000)
-    const cleanStr = priceStr.replace(/,/g, '');
+    // Remove commas (e.g. 69,000 -> 69000) and whitespace so ranges parse.
+    const cleanStr = priceStr.replace(/,/g, '').replace(/\s+/g, '');
+    const range = cleanStr.match(/(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)/);
+    if (range) {
+        return (parseFloat(range[1]) + parseFloat(range[2])) / 2;
+    }
     const match = cleanStr.match(/(\d+(?:\.\d+)?)/);
     if (match) {
         return parseFloat(match[0]);

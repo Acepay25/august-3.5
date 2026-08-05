@@ -1011,13 +1011,19 @@ export const fetchCompleteMarketSnapshot = async (
 
     console.log(`[MarketDataService] Fetching complete snapshot for ${normalizedSymbol}`);
 
+    // Per-source degradation: a single flaky timeframe endpoint used to reject
+    // the WHOLE packet (Promise.all), silently stripping calibration,
+    // correlation, learning rules and validation from every analyst prompt for
+    // the run. Timeframe klines + funding rate now degrade to empty/0 so the
+    // rest of the packet survives; the core ticker (marketData) stays critical
+    // because the packet cannot exist without it.
     const [marketData, klines5m, klines15m, klines1h, klines4h, fundingRate] = await Promise.all([
         fetchMarketData(normalizedSymbol),
-        fetchOHLCV(normalizedSymbol, '5m', 100),   // More candles for more accurate indicators
-        fetchOHLCV(normalizedSymbol, '15m', 100),
-        fetchOHLCV(normalizedSymbol, '1h', 100),
-        fetchOHLCV(normalizedSymbol, '4h', 100),
-        fetchFundingRate(normalizedSymbol)
+        fetchOHLCV(normalizedSymbol, '5m', 100).catch(err => { console.warn(`[MarketData] 5m klines failed, continuing without them:`, err?.message || err); return []; }),
+        fetchOHLCV(normalizedSymbol, '15m', 100).catch(err => { console.warn(`[MarketData] 15m klines failed, continuing without them:`, err?.message || err); return []; }),
+        fetchOHLCV(normalizedSymbol, '1h', 100).catch(err => { console.warn(`[MarketData] 1h klines failed, continuing without them:`, err?.message || err); return []; }),
+        fetchOHLCV(normalizedSymbol, '4h', 100).catch(err => { console.warn(`[MarketData] 4h klines failed, continuing without them:`, err?.message || err); return []; }),
+        fetchFundingRate(normalizedSymbol).catch(err => { console.warn(`[MarketData] funding rate failed, defaulting to 0:`, err?.message || err); return 0; })
     ]);
 
     return {
