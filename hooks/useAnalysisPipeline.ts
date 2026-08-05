@@ -290,7 +290,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     // ─── Refs ──────────────────────────────────────────────────────────────
     const analysisAbortController = useRef<AbortController | null>(null);
     const analysisConversationIdRef = useRef<string | null>(null);
-    const abortRef = useRef<boolean>(false);
     // Which pipeline phase is running — used to fail the CORRECT step when a
     // run errors (the old catch hardcoded failStep('analysis'), so debate-phase
     // failures marked the wrong step and the finally force-completed everything).
@@ -303,7 +302,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         analysisAbortController.current?.abort();
         analysisAbortController.current = null;
         analysisConversationIdRef.current = null;
-        abortRef.current = true;
         setLoadingMessage(null);
         setIsAnalysisInProgress(false);
         setIsPostMortemInProgress(false);
@@ -435,7 +433,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         const updateRequestMessages = (updater: (prevMessages: Message[]) => Message[]): void => {
             updateMessages(updater, requestConversationId);
         };
-        abortRef.current = false;
         const isCurrentRequest = (): boolean =>
             analysisAbortController.current === currentAbortController && !currentAbortController.signal.aborted;
 
@@ -545,17 +542,17 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
             // Skip fetching if preset data was already passed (from auto-capture)
             let hybridDataInjection = '';
-            console.warn('[Hybrid Intelligence] ======= START =======');
-            console.warn('[Hybrid Intelligence] Enabled:', isHybridIntelligenceEnabled);
-            console.warn('[Hybrid Intelligence] HasPresetData:', !!options?.presetHybridData);
-            console.warn('[Hybrid Intelligence] User prompt:', effectiveInput);
+            console.log('[Hybrid Intelligence] ======= START =======');
+            console.log('[Hybrid Intelligence] Enabled:', isHybridIntelligenceEnabled);
+            console.log('[Hybrid Intelligence] HasPresetData:', !!options?.presetHybridData);
+            console.log('[Hybrid Intelligence] User prompt:', effectiveInput);
             // The toggle gates the fetch: with Hybrid Intelligence OFF no data
             // is fetched and nothing is injected into the analyst prompts.
             // Preset data (auto-capture) always wins — it was explicitly
             // fetched for this analysis, so it is injected below regardless.
             if (isEnsembleEnabled && isHybridIntelligenceEnabled && !options?.presetHybridData) {
                 try {
-                    console.warn('[Hybrid Intelligence] Attempting to fetch data for prompt:', effectiveInput);
+                    console.log('[Hybrid Intelligence] Attempting to fetch data for prompt:', effectiveInput);
                     setLoadingMessage('Fetching real-time market data...');
                     startStep('market-data');
                     const learningRules = loadLearningRules();
@@ -578,26 +575,26 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             console.log('[Hybrid Intelligence] Correlation Risk Score:', hybridResult.correlationRisk.correlationRiskScore);
                         }
 
-                        console.warn('[Hybrid Intelligence] SUCCESS - Got data for:', hybridResult.data.symbol);
+                        console.log('[Hybrid Intelligence] SUCCESS - Got data for:', hybridResult.data.symbol);
 
-                        console.warn('[Hybrid Intelligence] Injection length:', hybridDataInjection.length);
-                        console.warn('[Hybrid Intelligence] Injection preview:', hybridDataInjection.substring(0, 500));
+                        console.log('[Hybrid Intelligence] Injection length:', hybridDataInjection.length);
+                        console.log('[Hybrid Intelligence] Injection preview:', hybridDataInjection.substring(0, 500));
                     } else {
-                        console.warn('[Hybrid Intelligence] FAILED - No symbol detected in prompt');
+                        console.log('[Hybrid Intelligence] FAILED - No symbol detected in prompt');
                     }
                 } catch (hybridError) {
                     if (!isCurrentRequest()) return;
                     setIsHybridLoading(false);
-                    console.error('[Hybrid Intelligence] ERROR fetching market data');
+                    console.error('[Hybrid Intelligence] ERROR fetching market data:', hybridError);
                 }
             } else if (options?.presetHybridData) {
                 // Auto-capture flow: the data was already fetched upstream —
                 // build the same injection so the three analysts still receive
                 // the hybrid market data in their prompts.
                 hybridDataInjection = generateHybridPromptInjection(options.presetHybridData);
-                console.warn('[Hybrid Intelligence] SKIPPED - Using preset data from auto-capture');
+                console.log('[Hybrid Intelligence] SKIPPED - Using preset data from auto-capture');
             } else {
-                console.warn('[Hybrid Intelligence] SKIPPED - Feature not enabled');
+                console.log('[Hybrid Intelligence] SKIPPED - Feature not enabled');
             }
 
             // AI LEARNING: Generate UNIFIED learning context from all 6 learning services
@@ -727,10 +724,10 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             }
             // ========== END GATE KEEPER ==========
 
-            console.warn('[Hybrid Intelligence] Enhanced prompt length:', enhancedPrompt.length);
-            console.warn('[Hybrid Intelligence] Has injection:', hybridDataInjection.length > 0);
+            console.log('[Hybrid Intelligence] Enhanced prompt length:', enhancedPrompt.length);
+            console.log('[Hybrid Intelligence] Has injection:', hybridDataInjection.length > 0);
             console.warn('[AI Learning] Has learning injection:', learningInjection.length > 0);
-            console.warn('[Hybrid Intelligence] ======= END =======');
+            console.log('[Hybrid Intelligence] ======= END =======');
 
             // Check if it's an update request via hiddenContext or other triggers
             const isUpdate = !!hiddenContext;
@@ -1853,8 +1850,7 @@ const result = await cachedAnalyzeTradingView(
     const handleCancelAnalysis = () => {
         if (analysisAbortController.current) {
             analysisAbortController.current.abort();
-            abortRef.current = true;
-            setLoadingMessage(null);
+                setLoadingMessage(null);
             setIsAnalysisInProgress(false);
             setIsPostMortemInProgress(false);
             setIsLivePostMortemVisible(false);
@@ -1887,7 +1883,6 @@ const result = await cachedAnalyzeTradingView(
 
         // Refs
         analysisAbortController,
-        abortRef,
 
         // Step tracking helpers
         initAnalysisSteps,

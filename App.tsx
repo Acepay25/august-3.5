@@ -388,7 +388,7 @@ const App: React.FC = () => {
         currentVisionData, setCurrentVisionData,
         isDeepAnalysis, setIsDeepAnalysis,
         quotaExceededModels, setQuotaExceededModels,
-        analysisAbortController, abortRef,
+        analysisAbortController,
         initAnalysisSteps, startStep, completeStep, failStep, addSubStep,
         handleSendMessage,
         handleCancelAnalysis,
