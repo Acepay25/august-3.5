@@ -121,6 +121,8 @@ export const hashImage = (dataURL: string): string => {
 // CACHE INSTANCES
 // =============================================================================
 
+import { persistentGet, persistentSet } from './persistentCache';
+
 const contextCache = new SimpleCache<string>(CONTEXT_CACHE_TTL);
 const imageHashCache = new SimpleCache<string>(IMAGE_CACHE_TTL);
 const responseCache = new SimpleCache<CachedResponse>(RESPONSE_CACHE_TTL);
@@ -168,19 +170,29 @@ const buildResponseKey = (imageHashes: string[], promptHash: string, model: stri
 
 /**
  * Check for a cached AI response.
+ * Async: on a memory miss, hydrates from the IndexedDB-backed persistent
+ * store so analyses survive reloads (the in-memory cache dies with the tab).
  */
-export const getCachedResponse = (
+export const getCachedResponse = async (
   imageHashes: string[],
   prompt: string,
   model: string,
   contextKey?: string
-): CachedResponse | undefined => {
+): Promise<CachedResponse | undefined> => {
   const key = buildResponseKey(imageHashes, hashString(prompt), model, contextKey);
-  return responseCache.get(key);
+  const hit = responseCache.get(key);
+  if (hit) return hit;
+
+  const persisted = await persistentGet<CachedResponse>(key);
+  if (persisted && Date.now() - persisted.timestamp <= RESPONSE_CACHE_TTL) {
+    responseCache.set(key, persisted.value); // rehydrate memory for this session
+    return persisted.value;
+  }
+  return undefined;
 };
 
 /**
- * Cache an AI response.
+ * Cache an AI response (memory + persistent store).
  */
 export const cacheResponse = (
   imageHashes: string[],
@@ -190,11 +202,14 @@ export const cacheResponse = (
   contextKey?: string
 ): void => {
   const key = buildResponseKey(imageHashes, hashString(prompt), model, contextKey);
-  responseCache.set(key, {
+  const entry: CachedResponse = {
     ...response,
     model,
     timestamp: Date.now(),
-  });
+  };
+  responseCache.set(key, entry);
+  // Best-effort persistence — never block the analysis flow on a write.
+  void persistentSet(key, entry, entry.timestamp);
 };
 
 /**
