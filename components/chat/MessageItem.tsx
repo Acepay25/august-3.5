@@ -371,6 +371,11 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     {message.runStats.gateCap !== undefined && <span>Gate cap {Math.round(message.runStats.gateCap * 100)}%</span>}
                                     {message.runStats.mcWinRate !== undefined && <span>MC win {message.runStats.mcWinRate}%</span>}
                                     {message.runStats.mcEV !== undefined && <span>MC EV {message.runStats.mcEV}R</span>}
+                                    {message.runStats.btMatches !== undefined && message.runStats.btMatches > 0 && (
+                                        <span title="How this exact setup did historically (similar past trades)">
+                                            Similar setups: {message.runStats.btMatches} · {message.runStats.btWinRate?.toFixed(0)}% WR · {message.runStats.btEV !== undefined && message.runStats.btEV > 0 ? '+' : ''}{message.runStats.btEV}R
+                                        </span>
+                                    )}
                                 </div>
                             )}
 
