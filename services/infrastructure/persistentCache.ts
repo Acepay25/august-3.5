@@ -59,19 +59,25 @@ export const persistentSet = async (key: string, value: unknown, timestamp: numb
       const store = tx.objectStore(STORE_NAME);
       store.put({ key, value, timestamp } as PersistentEntry<unknown>);
 
-      // Cap the store: evict the oldest entries beyond MAX_ENTRIES.
+      // Cap the store: evict the OLDEST entries beyond MAX_ENTRIES.
+      // openCursor walks in KEY order (hashed keys — not age), so collect all
+      // entries first and delete the oldest by timestamp — otherwise fresh
+      // entries (including the one just written) could be evicted while
+      // expired junk survives.
       const countReq = store.count();
       countReq.onsuccess = () => {
         const overflow = countReq.result - MAX_ENTRIES;
         if (overflow > 0) {
-          const cursorReq = store.openCursor();
-          let toDelete = overflow;
-          cursorReq.onsuccess = () => {
-            const cursor = cursorReq.result;
-            if (cursor && toDelete > 0) {
-              store.delete(cursor.key);
-              toDelete--;
+          const collected: { key: IDBValidKey; timestamp: number }[] = [];
+          const scanReq = store.openCursor();
+          scanReq.onsuccess = () => {
+            const cursor = scanReq.result;
+            if (cursor) {
+              collected.push({ key: cursor.key, timestamp: (cursor.value as { timestamp?: number })?.timestamp ?? 0 });
               cursor.continue();
+            } else {
+              collected.sort((a, b) => a.timestamp - b.timestamp);
+              for (const entry of collected.slice(0, overflow)) store.delete(entry.key);
             }
           };
         }

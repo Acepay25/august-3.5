@@ -741,7 +741,7 @@ const App: React.FC = () => {
         const onKeyDown = (e: KeyboardEvent) => {
             if (e.key !== 'Escape') return;
             const target = e.target as HTMLElement | null;
-            const isTyping = !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+            const isTyping = !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable);
             if (isTyping) return;
             if (isAnalysisInProgress && !isPostMortemInProgress) {
                 handleCancelAnalysis();
@@ -1088,9 +1088,15 @@ const App: React.FC = () => {
     // 15s while a run is active instead.
     useEffect(() => {
         if (!activeUsername || (!isAnalysisInProgress && !isPostMortemInProgress)) return;
+        // buildProfileSnapshot changes identity on every conversationHistory
+        // mutation — using it directly in deps would re-arm this interval every
+        // frame during a run (the exact bug this heartbeat exists to fix). Keep
+        // the freshest snapshot in a ref instead.
+        const snapshotRef = useRef(buildProfileSnapshot);
+        snapshotRef.current = buildProfileSnapshot;
         const interval = setInterval(async () => {
             try {
-                const snapshot = buildProfileSnapshot();
+                const snapshot = snapshotRef.current();
                 await dbService.saveUserProfile(activeUsername, snapshot);
                 lastSavedSnapshotRef.current = snapshot;
             } catch (err) {
@@ -1098,7 +1104,7 @@ const App: React.FC = () => {
             }
         }, 15000);
         return () => clearInterval(interval);
-    }, [activeUsername, isAnalysisInProgress, isPostMortemInProgress, buildProfileSnapshot]);
+    }, [activeUsername, isAnalysisInProgress, isPostMortemInProgress]);
 
     // Flush pending state on tab close / hide. The hook keeps an internal
     // ref to the freshest snapshot (updated every render via getSnapshot)
@@ -1617,13 +1623,16 @@ const App: React.FC = () => {
             id: 'toggle-ensemble',
             label: isEnsembleEnabled ? 'Disable Ensemble mode' : 'Enable Ensemble mode',
             hint: 'Debates',
-            run: () => setIsEnsembleEnabled(!isEnsembleEnabled),
+            // The canonical handler — the raw setter skipped image cleanup and
+            // the setup-warning toasts.
+            run: () => handleSetEnsembleEnabled(!isEnsembleEnabled),
         },
         {
             id: 'toggle-lenses',
             label: lensConfig.enabled ? 'Disable Analyst Lenses' : 'Enable Analyst Lenses',
             hint: 'Roles',
-            run: () => setLensConfig({ ...lensConfig, enabled: !lensConfig.enabled }),
+            // The canonical handler — persists the toggle (raw setter reverted on reload).
+            run: () => handleSetLensConfig({ ...lensConfig, enabled: !lensConfig.enabled }),
         },
         {
             id: 'saved-analyses',
@@ -1637,7 +1646,7 @@ const App: React.FC = () => {
             hint: 'Backups',
             run: () => setIsVersionHistoryVisible(true),
         },
-    ], [handleScrollToBottom, input, stableHandleSendMessage, setJournalState, setIsLiveMarketVisible, setIsSettingsMenuVisible, setIsStrategySearchVisible, setIsVersionHistoryVisible, isEnsembleEnabled, setIsEnsembleEnabled, lensConfig, setLensConfig, savedAnalyses, setIsSavedGalleryOpen]);
+    ], [handleScrollToBottom, input, stableHandleSendMessage, setJournalState, setIsLiveMarketVisible, setIsSettingsMenuVisible, setIsStrategySearchVisible, setIsVersionHistoryVisible, isEnsembleEnabled, handleSetEnsembleEnabled, lensConfig, handleSetLensConfig, savedAnalyses, setIsSavedGalleryOpen]);
 
     const removeImage = (index: number) => {
         setImages(prev => prev.filter((_, i) => i !== index));

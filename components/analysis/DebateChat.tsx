@@ -126,10 +126,17 @@ const DebateChat: React.FC<DebateChatProps> = ({
 
     // Replay: reveal turns one-by-one on a timer. Auto-reset when a new
     // transcript arrives (new debate run) or the chat becomes live again.
+    // Reset replay only when the transcript CONTENT changes (a new debate) —
+    // array identity changes on every background message rebuild (autopilot,
+    // runStats), which used to kill an in-progress replay mid-way.
+    const turnsFingerprint = useMemo(
+        () => visibleTurns.map(t => `${t.speaker}:${t.round ?? ''}:${t.text.length}`).join('|'),
+        [visibleTurns],
+    );
     useEffect(() => {
         setReplayIndex(0);
         setIsReplaying(false);
-    }, [debateTurns, isDebating]);
+    }, [turnsFingerprint, isDebating]);
 
     useEffect(() => {
         if (!isReplaying) return;

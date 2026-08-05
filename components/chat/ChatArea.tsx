@@ -307,7 +307,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                         <button
                             onClick={handleDeleteSelected}
                             disabled={selectedIds.size === 0}
-                            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                            className="status-surface status-surface flex items-center gap-2 px-4 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                         >
                             <TrashIcon className="w-4 h-4" />
                             <span className="text-xs font-bold uppercase tracking-wider">Delete</span>
@@ -431,7 +431,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                                 <p className="mt-1 text-xs text-zinc-500">{loadingMessage}</p>
                                 <div className="flex items-center gap-4 mt-4">
                                     {isPostMortemInProgress && <button onClick={() => setIsLivePostMortemVisible(true)} className="flex items-center gap-2 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 font-medium py-1.5 px-4 rounded-full text-xs transition-all uppercase tracking-wide"><EyeIcon />View Post-Mortem</button>}
-                                    <button onClick={handleCancelAnalysis} className="bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 font-medium py-1.5 px-4 rounded-full text-xs transition-all uppercase tracking-wide">Stop generating</button>
+                                    <button onClick={handleCancelAnalysis} className="status-surface bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 font-medium py-1.5 px-4 rounded-full text-xs transition-all uppercase tracking-wide">Stop generating</button>
                                 </div>
                             </div>
                         )}

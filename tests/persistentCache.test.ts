@@ -90,7 +90,11 @@ class FakeDB {
   constructor(private store: FakeStore) {}
   transaction() {
     const tx = new FakeTransaction(this.store);
-    queueMicrotask(() => tx.oncomplete?.());
+    // setTimeout(0) instead of queueMicrotask: real IndexedDB delivers every
+    // request result BEFORE the transaction completes (count → cursor scan →
+    // deletes all happen first). Firing oncomplete in a microtask raced ahead
+    // of the eviction scan.
+    setTimeout(() => tx.oncomplete?.(), 0);
     return tx;
   }
 }

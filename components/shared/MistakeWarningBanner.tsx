@@ -58,7 +58,7 @@ const MistakeWarningBanner: React.FC<MistakeWarningBannerProps> = ({
     if (!isVisible) return null;
 
     return (
-        <div className="relative overflow-hidden rounded-xl bg-zinc-900 border border-amber-500/30 p-4 mb-4 shadow-lg animate-fade-in">
+        <div className="relative overflow-hidden rounded-xl bg-zinc-900 border border-amber-500/30 p-4 mb-4 shadow-lg animate-fade-in" status-surface>
             {/* Dismiss Button */}
             <button
                 onClick={handleDismiss}
