@@ -45,7 +45,6 @@ const UpdateTradeModal = React.lazy(() => import('./components/journal/UpdateTra
 const VisionDataViewer = React.lazy(() => import('./components/analysis/VisionDataViewer'));
 const LiveMarket = React.lazy(() => import('./components/market/LiveMarket'));
 const AccuracyModeModal = React.lazy(() => import('./components/modals/AccuracyModeModal').then(m => ({ default: m.AccuracyModeModal })));
-const HybridDataPanel = React.lazy(() => import('./components/analysis/HybridDataPanel'));
 const AdvancedAnalyticsSidePanel = React.lazy(() => import('./components/dashboards/AdvancedAnalyticsSidePanel'));
 const ScenarioSimulator = React.lazy(() => import('./components/modals/ScenarioSimulator'));
 const UpdateOverlay = React.lazy(() => import('./components/shared/UpdateOverlay'));
@@ -732,6 +731,23 @@ const App: React.FC = () => {
             stopAutoBackup();
         };
     }, []);
+
+    // Esc cancels an in-progress analysis (including the debate phase). Never
+    // fires while the user is typing in an input/textarea/contenteditable.
+    useEffect(() => {
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key !== 'Escape') return;
+            const target = e.target as HTMLElement | null;
+            const isTyping = !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+            if (isTyping) return;
+            if (isAnalysisInProgress && !isPostMortemInProgress) {
+                handleCancelAnalysis();
+                toast.info('Analysis cancelled', 'The partial debate was preserved in the chat.');
+            }
+        };
+        document.addEventListener('keydown', onKeyDown);
+        return () => document.removeEventListener('keydown', onKeyDown);
+    }, [isAnalysisInProgress, isPostMortemInProgress, handleCancelAnalysis, toast]);
 
     const loadUserData = async (username: string) => {
         handleCancelAnalysis();
@@ -1445,11 +1461,14 @@ const App: React.FC = () => {
         setActiveConversationId(newConv.id);
     };
 
-    const handleApplyStrategy = (strategyName: string) => {
+    // Stable handler identities — plain arrow functions here were recreated
+    // every render, defeating the chatContext memo and re-rendering every
+    // visible MessageItem on each stream chunk / keystroke.
+    const handleApplyStrategy = useCallback((strategyName: string) => {
         if (!activeFrameworks.includes(strategyName)) {
             setActiveFrameworks(prev => [...prev, strategyName]);
         }
-    };
+    }, [activeFrameworks]);
 
     const handleRemoveStrategy = (strategyName: string) => {
         setActiveFrameworks(prev => prev.filter(s => s !== strategyName));
@@ -1566,20 +1585,20 @@ const App: React.FC = () => {
         }
     }, [typingMessageState]);
 
-    const handleCopy = (message: Message) => {
+    const handleCopy = useCallback((message: Message) => {
         if (message.text) {
             navigator.clipboard.writeText(message.text);
             setCopiedMessageId(message.id);
             setTimeout(() => setCopiedMessageId(null), 2000);
         }
-    };
+    }, []);
 
-    const handleViewStrategyDetails = (name: string) => {
+    const handleViewStrategyDetails = useCallback((name: string) => {
         setStrategyToView(name);
         setIsStrategySearchVisible(true);
-    };
+    }, []);
 
-    const handleSaveAnalysis = (messageId: string) => {
+    const handleSaveAnalysis = useCallback((messageId: string) => {
         const msgIndex = messages.findIndex(m => m.id === messageId);
         const msg = msgIndex >= 0 ? messages[msgIndex] : undefined;
         if (msg && msg.analysis) {
@@ -1608,7 +1627,7 @@ const App: React.FC = () => {
                 return [...prev, saved];
             });
         }
-    };
+    }, [messages, moderatorProviderId, moderatorModel]);
 
     const handleCalculateAIProbabilities = async (messageId: string, mode: 'AI' | 'Algo' = 'AI') => {
         const msg = messages.find(m => m.id === messageId);
