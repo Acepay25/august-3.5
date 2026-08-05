@@ -228,11 +228,31 @@ const robustBinanceFetch = async (apiPath: string, timeoutMs: number = 10000): P
 };
 
 /**
+ * Sliding-window rate budget for Binance Futures calls. The autopilot loop
+ * (up to 3 kline tiers per minute per unresolved trade) plus repeated
+ * analyses can trip 429s; throttle instead. Each futures request acquires a
+ * slot and waits (max 5s) when the 60s window is exhausted.
+ */
+const FUTURES_MAX_REQUESTS_PER_MINUTE = 40;
+const futuresRequestTimes: number[] = [];
+
+const acquireFuturesSlot = async (): Promise<void> => {
+    const now = Date.now();
+    while (futuresRequestTimes.length > 0 && futuresRequestTimes[0] < now - 60_000) futuresRequestTimes.shift();
+    if (futuresRequestTimes.length >= FUTURES_MAX_REQUESTS_PER_MINUTE) {
+        const waitMs = Math.min(futuresRequestTimes[0] + 60_000 - now + 50, 5000);
+        await new Promise<void>(resolve => setTimeout(resolve, waitMs));
+    }
+    futuresRequestTimes.push(Date.now());
+};
+
+/**
  * Robust fetch helper for Binance Futures API
  * Tries multiple futures endpoints to handle CORS/SSL issues
  * Enhanced with better error handling and logging
  */
 const robustFuturesFetch = async (apiPath: string, timeoutMs: number = 15000): Promise<Response> => {
+    await acquireFuturesSlot();
     let lastError: Error | null = null;
     let lastStatus: number | null = null;
 

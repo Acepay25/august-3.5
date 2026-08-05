@@ -48,7 +48,9 @@ const AccuracyModeModal = React.lazy(() => import('./components/modals/AccuracyM
 const AdvancedAnalyticsSidePanel = React.lazy(() => import('./components/dashboards/AdvancedAnalyticsSidePanel'));
 const ScenarioSimulator = React.lazy(() => import('./components/modals/ScenarioSimulator'));
 const UpdateOverlay = React.lazy(() => import('./components/shared/UpdateOverlay'));
+const CompareModal = React.lazy(() => import('./components/analysis/CompareModal'));
 const MistakeWarningBanner = React.lazy(() => import('./components/shared/MistakeWarningBanner'));
+import CommandPalette, { PaletteAction } from './components/shared/CommandPalette';
 const AnalysisProgress = React.lazy(() => import('./components/analysis/AnalysisProgress'));
 import { DEFAULT_FRAMEWORKS } from './constants/models';
 import { buildModelIdToName, buildProviderNameToId, getFirstReadyProvider } from './utils/providerUtils';
@@ -749,6 +751,32 @@ const App: React.FC = () => {
         return () => document.removeEventListener('keydown', onKeyDown);
     }, [isAnalysisInProgress, isPostMortemInProgress, handleCancelAnalysis, toast]);
 
+    // ─── Command palette (Ctrl/Cmd+K) ─────────────────────────────────────
+    const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+
+    // ─── Side-by-side compare ──────────────────────────────────────────────
+    const [compareState, setCompareState] = useState<{ primaryId: string; secondaryId: string | null } | null>(null);
+    const handleCompareAnalysis = useCallback((messageId: string) => {
+        setCompareState({ primaryId: messageId, secondaryId: null });
+    }, []);
+    const handlePickSecondary = useCallback((messageId: string) => {
+        setCompareState(prev => prev ? { ...prev, secondaryId: messageId } : prev);
+    }, []);
+    const comparePrimary = compareState ? messages.find(m => m.id === compareState.primaryId) ?? null : null;
+    const compareSecondary = compareState?.secondaryId ? messages.find(m => m.id === compareState.secondaryId) ?? null : null;
+
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+                e.preventDefault();
+                setIsCommandPaletteOpen(prev => !prev);
+            }
+        };
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
+    }, []);
+
+
     const loadUserData = async (username: string) => {
         handleCancelAnalysis();
         invalidatePostMortemRuns();
@@ -1040,6 +1068,25 @@ const App: React.FC = () => {
             clearTimeout(handler);
         };
     }, [activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, confidenceCalibration, memoryConfig, memoryModel, activeUsername]);
+
+    // (3) SAVE HEARTBEAT — the 1500ms DATA debounce restarts on every message
+    // change, so nothing is persisted for the ENTIRE duration of a run (the
+    // RAF-throttled debate updates keep resetting it). A native kill or
+    // background termination mid-run then loses the whole run. Flush every
+    // 15s while a run is active instead.
+    useEffect(() => {
+        if (!activeUsername || (!isAnalysisInProgress && !isPostMortemInProgress)) return;
+        const interval = setInterval(async () => {
+            try {
+                const snapshot = buildProfileSnapshot();
+                await dbService.saveUserProfile(activeUsername, snapshot);
+                lastSavedSnapshotRef.current = snapshot;
+            } catch (err) {
+                console.error('Failed to save user profile (heartbeat):', err);
+            }
+        }, 15000);
+        return () => clearInterval(interval);
+    }, [activeUsername, isAnalysisInProgress, isPostMortemInProgress, buildProfileSnapshot]);
 
     // Flush pending state on tab close / hide. The hook keeps an internal
     // ref to the freshest snapshot (updated every render via getSnapshot)
@@ -1511,10 +1558,68 @@ const App: React.FC = () => {
         virtuosoRef.current?.scrollIntoView({ index: messages.findIndex(m => m.id === nextId), behavior: 'smooth', align: 'start' });
     };
 
+
     const handleScrollToBottom = () => {
         virtuosoRef.current?.scrollToIndex({ index: messages.length - 1, behavior: 'smooth' });
         setHighlightedAnalysisId(null);
     };
+
+    const commandPaletteActions = useMemo<PaletteAction[]>(() => [
+        {
+            id: 'jump-latest',
+            label: 'Jump to latest analysis',
+            hint: '↓',
+            run: handleScrollToBottom,
+        },
+        {
+            id: 'new-analysis',
+            label: input.trim() ? `Analyze: ${input.trim().slice(0, 40)}` : 'Analyze current input',
+            hint: 'Enter',
+            run: () => { if (input.trim()) stableHandleSendMessage(); },
+        },
+        {
+            id: 'journal',
+            label: 'Open Journal',
+            hint: 'Trades',
+            run: () => setJournalState({ isOpen: true, tab: 'log' }),
+        },
+        {
+            id: 'live-market',
+            label: 'Open Live Market',
+            hint: 'Prices',
+            run: () => setIsLiveMarketVisible(true),
+        },
+        {
+            id: 'settings',
+            label: 'Open Settings',
+            hint: 'Providers',
+            run: () => setIsSettingsMenuVisible(true),
+        },
+        {
+            id: 'strategies',
+            label: 'Open Strategy Search',
+            hint: 'Playbook',
+            run: () => setIsStrategySearchVisible(true),
+        },
+        {
+            id: 'toggle-ensemble',
+            label: isEnsembleEnabled ? 'Disable Ensemble mode' : 'Enable Ensemble mode',
+            hint: 'Debates',
+            run: () => setIsEnsembleEnabled(!isEnsembleEnabled),
+        },
+        {
+            id: 'toggle-lenses',
+            label: lensConfig.enabled ? 'Disable Analyst Lenses' : 'Enable Analyst Lenses',
+            hint: 'Roles',
+            run: () => setLensConfig({ ...lensConfig, enabled: !lensConfig.enabled }),
+        },
+        {
+            id: 'version-history',
+            label: 'Open Version History',
+            hint: 'Backups',
+            run: () => setIsVersionHistoryVisible(true),
+        },
+    ], [handleScrollToBottom, input, stableHandleSendMessage, setJournalState, setIsLiveMarketVisible, setIsSettingsMenuVisible, setIsStrategySearchVisible, setIsVersionHistoryVisible, isEnsembleEnabled, setIsEnsembleEnabled, lensConfig, setLensConfig]);
 
     const removeImage = (index: number) => {
         setImages(prev => prev.filter((_, i) => i !== index));
@@ -1793,8 +1898,9 @@ const App: React.FC = () => {
         leverage: parseInt(leverageInput, 10) || 100, // Leverage for backtest P&L calculations
         autopilotResolutions, // Outcome autopilot detected resolutions
         onConfirmAutopilot: handleConfirmAutopilot,
-        onDismissAutopilot: handleDismissAutopilot
-    }), [typingMessageState, highlightedAnalysisId, expandedPostMortems, expandedPostMortemImages, savedAnalyses, loggingTradeId, activeFrameworks, activeConversation, copiedMessageId, modelIdToName, providerNameToId, handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy, handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, confidenceCalibration, handleRetryPostMortem, lensConfig, leverageInput, autopilotResolutions, handleConfirmAutopilot, handleDismissAutopilot]);
+        onDismissAutopilot: handleDismissAutopilot,
+        onCompareAnalysis: handleCompareAnalysis
+    }), [typingMessageState, highlightedAnalysisId, expandedPostMortems, expandedPostMortemImages, savedAnalyses, loggingTradeId, activeFrameworks, activeConversation, copiedMessageId, modelIdToName, providerNameToId, handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy, handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, confidenceCalibration, handleRetryPostMortem, lensConfig, leverageInput, autopilotResolutions, handleConfirmAutopilot, handleDismissAutopilot, handleCompareAnalysis]);
 
     // ... (Rest of component remains unchanged) ...
     return (
@@ -2176,6 +2282,28 @@ const App: React.FC = () => {
             />
                 </main>
             </div>
+
+            {/* Command palette — Ctrl/Cmd+K */}
+            <CommandPalette
+                isOpen={isCommandPaletteOpen}
+                onClose={() => setIsCommandPaletteOpen(false)}
+                inputPreview={input.trim() ? input.trim().slice(0, 60) : undefined}
+                actions={commandPaletteActions}
+            />
+
+            {/* Side-by-side compare */}
+            {comparePrimary && (
+                <React.Suspense fallback={null}>
+                    <CompareModal
+                        primary={comparePrimary}
+                        secondary={compareSecondary}
+                        analysisMessages={messages.filter(m => m.analysis)}
+                        modelIdToName={modelIdToName}
+                        onPickSecondary={handlePickSecondary}
+                        onClose={() => setCompareState(null)}
+                    />
+                </React.Suspense>
+            )}
         </div>
         </React.Suspense>
     );
