@@ -782,6 +782,14 @@ const App: React.FC = () => {
         setJournalState({ isOpen: true, tab: 'reasoning', focusTradeId: tradeId });
     }, [setJournalState]);
 
+    // Stable identity for the Journal's deep-link consumer. An inline arrow
+    // here would change on every render and refire ReasoningDashboard's load
+    // effect (it lists this prop in its deps), re-querying the store during
+    // every streaming debate update while the Think tab is open.
+    const handleReasoningTradeConsumed = useCallback(() => {
+        setJournalState(prev => ({ ...prev, focusTradeId: undefined }));
+    }, [setJournalState]);
+
     // ─── Saved analyses gallery ────────────────────────────────────────────
     const [isSavedGalleryOpen, setIsSavedGalleryOpen] = useState(false);
     const handleLocateMessage = useCallback((messageId: string) => {
@@ -2120,7 +2128,7 @@ const App: React.FC = () => {
                 onClose={() => setJournalState(prev => ({ ...prev, isOpen: false }))}
                 initialTab={journalState.tab}
                 initialTradeId={journalState.focusTradeId}
-                onInitialTradeConsumed={() => setJournalState(prev => ({ ...prev, focusTradeId: undefined }))}
+                onInitialTradeConsumed={handleReasoningTradeConsumed}
                 trades={loggedTrades}
                 enabledProviders={readyProviders.map(p => p.id)}
                 selectedModels={Object.fromEntries(readyProviders.map(p => [p.id, p.selectedModel]))}

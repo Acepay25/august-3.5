@@ -7,6 +7,7 @@ import { ChevronDownIcon, TrashIcon, StarIcon, LoadingIcon, BrainIcon, EditIcon 
 import ImageViewerModal from '../modals/ImageViewerModal';
 import { EmptyState } from '../ui/EmptyState';
 import { ReasoningPanel } from './ReasoningPanel';
+import { getThinkingTradeId } from '../../services/infrastructure/ThinkingStoreService';
 
 interface TradeLogContentProps {
     trades: LoggedTrade[];
@@ -313,7 +314,7 @@ const TradeLogRow: React.FC<{
 
                         {/* Reasoning Panel — per-analyst reasoning + debate transcript */}
                         <div className="col-span-2">
-                            <ReasoningPanel tradeId={trade.analysis.createdAt || trade.id} outcome={trade.outcome} />
+                            <ReasoningPanel tradeId={getThinkingTradeId(trade.analysis?.createdAt, trade.id)} outcome={trade.outcome} />
                         </div>
                     </div>
                 </div>

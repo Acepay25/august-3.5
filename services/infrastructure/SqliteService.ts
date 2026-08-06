@@ -197,6 +197,28 @@ const createTables = async (): Promise<void> => {
         CREATE INDEX IF NOT EXISTS idx_thinking_message ON thinking_records(messageId);
     `);
 
+    // Schema migration tracking — must exist before the gated blocks below.
+    // Records which ALTER migrations have already been applied so the blocks
+    // run once per install instead of on every startup.
+    await db.execute(`
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            version INTEGER PRIMARY KEY,
+            applied_at TEXT NOT NULL
+        );
+    `);
+
+    const migrationResult = await db.query('SELECT COALESCE(MAX(version), 0) as v FROM schema_migrations');
+    const appliedVersion = migrationResult.values?.[0]?.v || 0;
+
+    // Record a migration as applied. Called even when the ALTER was a
+    // no-op duplicate — pre-migration installs already carry the columns.
+    const recordMigration = async (version: number): Promise<void> => {
+        await db!.run(
+            'INSERT OR REPLACE INTO schema_migrations (version, applied_at) VALUES (?, ?)',
+            [version, new Date().toISOString()]
+        );
+    };
+
     // VERSION 2 MIGRATION: Add userPrompt if missing
     // ALTER TABLE ADD COLUMN has no IF NOT EXISTS in SQLite, so "duplicate
     // column" failures are expected on re-runs — anything else is logged.
@@ -208,16 +230,17 @@ const createTables = async (): Promise<void> => {
         }
     };
 
-    if (DB_VERSION >= 2) {
+    if (appliedVersion < 2) {
         try {
             await db.execute(`ALTER TABLE saved_analyses ADD COLUMN userPrompt TEXT;`);
         } catch (e) {
             swallowDuplicateColumn(e, 'v2 saved_analyses.userPrompt');
         }
+        await recordMigration(2);
     }
 
     // VERSION 3 MIGRATION: Add settings to conversations and meta to trades
-    if (DB_VERSION >= 3) {
+    if (appliedVersion < 3) {
         try {
             await db.execute(`ALTER TABLE conversations ADD COLUMN settings TEXT;`);
         } catch (e) {
@@ -228,10 +251,11 @@ const createTables = async (): Promise<void> => {
         } catch (e) {
             swallowDuplicateColumn(e, 'v3 trades.meta');
         }
+        await recordMigration(3);
     }
 
     // VERSION 4 MIGRATION: Add lastActiveConversationId to users and meta to saved_analyses
-    if (DB_VERSION >= 4) {
+    if (appliedVersion < 4) {
         try {
             await db.execute(`ALTER TABLE users ADD COLUMN lastActiveConversationId TEXT;`);
         } catch (e) {
@@ -242,12 +266,13 @@ const createTables = async (): Promise<void> => {
         } catch (e) {
             swallowDuplicateColumn(e, 'v4 saved_analyses.meta');
         }
+        await recordMigration(4);
     }
 
     // VERSION 5 MIGRATION: Enrich thinking_records with final output, raw
     // chain-of-thought, and the analysis card (message) id so each reasoning
     // set is linked to its trade/card prediction.
-    if (DB_VERSION >= 5) {
+    if (appliedVersion < 5) {
         try {
             await db.execute(`ALTER TABLE thinking_records ADD COLUMN finalOutput TEXT;`);
         } catch (e) {
@@ -268,17 +293,10 @@ const createTables = async (): Promise<void> => {
         } catch (e) {
             console.warn('[SqliteService] Migration "v5 thinking_records.messageId index" failed:', e);
         }
+        await recordMigration(5);
     }
 
     console.log('[SqliteService] Tables created successfully');
-
-    // Create schema_migrations tracking table for proper migration management
-    await db.execute(`
-        CREATE TABLE IF NOT EXISTS schema_migrations (
-            version INTEGER PRIMARY KEY,
-            applied_at TEXT NOT NULL
-        );
-    `);
 };
 
 /**

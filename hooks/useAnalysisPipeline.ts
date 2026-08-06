@@ -20,7 +20,7 @@ import { getGateAnalysis, GateOutput } from '../services/validation/GateKeeperSe
 // Utils
 import { isQuotaError } from '../utils/errorUtils';
 import { recalculateAnalysisMetrics, sanitizeTradeAnalysis, clampProbabilityToGate } from '../utils/analysisUtils';
-import { saveThinkingBatch, generateThinkingId } from '../services/infrastructure/ThinkingStoreService';
+import { saveThinkingBatch, generateThinkingId, getThinkingTradeId } from '../services/infrastructure/ThinkingStoreService';
 import { notifyAnalysisComplete } from '../services/infrastructure/CompletionNotifications';
 import { ThinkingRecord } from '../types/thinking';
 import { extractLastJson } from '../utils/jsonUtils';
@@ -361,6 +361,14 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             .filter(inst => inst.isActive)
             .map(inst => `[${inst.title}]\n${inst.content}`)
             .join('\n\n');
+    };
+
+    // ─── Helper: persist thinking records (best-effort, non-blocking) ──────
+    // A failed reasoning write must never fail the analysis run itself.
+    const persistThinkingRecords = (records: ThinkingRecord[]): void => {
+        saveThinkingBatch(records).catch(err => {
+            console.warn('[ThinkingStore] Failed to save thinking records:', err);
+        });
     };
 
     // ─── Main Analysis Handler ─────────────────────────────────────────────
@@ -1678,7 +1686,7 @@ ${accuracyVerificationNote}`
                     // Persist per-analyst reasoning, moderator synthesis, and debate turns
                     // so they can be correlated with outcomes and exported for model training.
                     try {
-                        const tradeId = finalAnalysis.createdAt || new Date().toISOString();
+                        const tradeId = getThinkingTradeId(finalAnalysis.createdAt, debateMessageId);
                         const username = localStorage.getItem('last_active_user') || 'default';
                         const now = new Date().toISOString();
                         const thinkingRecords: ThinkingRecord[] = [];
@@ -1770,9 +1778,7 @@ ${accuracyVerificationNote}`
                         });
 
                         // Save asynchronously (non-blocking)
-                        saveThinkingBatch(thinkingRecords).catch(err => {
-                            console.warn('[ThinkingStore] Failed to save thinking records:', err);
-                        });
+                        persistThinkingRecords(thinkingRecords);
                     } catch (thinkingError) {
                         console.warn('[ThinkingStore] Error preparing thinking records:', thinkingError);
                     }
@@ -1782,7 +1788,11 @@ ${accuracyVerificationNote}`
                     setLoadingMessage(isAccuracyModeEnabled ? `Running High-Precision Analysis...` : `Analyzing with ${provider.name}...`);
                     completeStep('gate-scan'); startStep('analysis');
                     setAnalysisSteps(prev => prev.map(s => s.id === 'analysis' ? { ...s, title: `Analyzing with ${provider.name}` } : s));
-const result = await cachedAnalyzeTradingView(
+                            // Solo path: capture streamed raw reasoning via the
+                            // same onReasoning slot as the multi path so the
+                            // thinking record carries the chain-of-thought.
+                            let soloRawReasoning = '';
+                            const result = await cachedAnalyzeTradingView(
                             provider.config,
                             provider.model,
                             enhancedPrompt, // Fixed: was promptToSend, now uses enhancedPrompt with Hybrid data
@@ -1814,9 +1824,9 @@ const result = await cachedAnalyzeTradingView(
                                 : undefined,
                             // Normal mode (Lenses off): custom base prompt override.
                             lensConfig.enabled ? undefined : (customEnsemblePrompt || undefined),
-                            // Solo path has no onReasoning callback — keep the
-                            // positional slots aligned with the multi path.
-                            undefined
+                            // Streamed chain-of-thought deltas accumulate — the
+                            // multi path uses the same append pattern.
+                            (reasoning: string) => { soloRawReasoning += reasoning; }
                         );
                     if (!isCurrentRequest()) return;
                     const soloAiMessage: Message = {
@@ -1844,6 +1854,33 @@ const result = await cachedAnalyzeTradingView(
                         soloAiMessage.analysis!.marketSnapshot = freshHybridData;
                     }
                         updateRequestMessages(prev => [...prev, soloAiMessage]);
+
+                    // === ThinkingStore: Persist the solo analysis reasoning ===
+                    // Same training-data contract as the debate path (one
+                    // analyst record per card) so the Think view and outcome
+                    // correlation work for single-provider runs too.
+                    try {
+                        const username = localStorage.getItem('last_active_user') || 'default';
+                        const now = new Date().toISOString();
+                        persistThinkingRecords([{
+                            id: generateThinkingId(),
+                            tradeId: getThinkingTradeId(soloAiMessage.analysis?.createdAt, soloAiMessage.id),
+                            username,
+                            provider: provider.thoughtsKey,
+                            role: 'analyst',
+                            modelName: provider.model,
+                            reasoning: result.thoughtProcess || '',
+                            finalOutput: result.finalOutput || undefined,
+                            rawReasoning: soloRawReasoning || undefined,
+                            messageId: soloAiMessage.id,
+                            analysisJson: result.analysis ? JSON.stringify(result.analysis) : undefined,
+                            confidence: result.analysis?.confidence,
+                            probability: result.analysis?.probability,
+                            createdAt: now,
+                        }]);
+                    } catch (thinkingError) {
+                        console.warn('[ThinkingStore] Error preparing thinking records:', thinkingError);
+                    }
                 }
             } else {
                 // Casual chat: use the user-selected model when it maps to a

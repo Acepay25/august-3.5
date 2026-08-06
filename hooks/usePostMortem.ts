@@ -9,7 +9,7 @@ import * as MemoryService from '../services/learning/MemoryService';
 import { getTradingWeaknesses } from '../services/learning/MistakePatternService';
 import { jobQueue, JobType } from '../services/infrastructure/JobQueueService';
 import { MAX_TRADE_SUMMARIES } from './useTradeLogging';
-import { saveThinkingBatch, generateThinkingId } from '../services/infrastructure/ThinkingStoreService';
+import { saveThinkingBatch, generateThinkingId, getThinkingTradeId } from '../services/infrastructure/ThinkingStoreService';
 import { ProviderConfig } from '../types/provider';
 import { conductPostMortem, summarizeTrade } from '../services/providers/GenericAnalysisService';
 
@@ -384,7 +384,7 @@ Please investigate this discrepancy in your analysis.
             // Finalize Message Text
             if (isRunStale(myRunId)) return;
             // Persist post-mortem debate turns to ThinkingStore before clearing from message
-            const postMortemTradeId = candidate.message.analysis?.createdAt || candidate.message.id;
+            const postMortemTradeId = getThinkingTradeId(candidate.message.analysis?.createdAt, candidate.message.id);
             const postMortemTurns = messagesRef.current.find(m => m.id === postMortemMessageId)?.postMortemDebateTurns;
             if (postMortemTurns && postMortemTurns.length > 0) {
                 try {
@@ -402,6 +402,9 @@ Please investigate this discrepancy in your analysis.
                         debateTurnIndex: idx,
                         debateTurnSpeaker: turn.speaker,
                         reasoning: turn.text,
+                        // Card linkage: post-mortem turns belong to the card
+                        // the analysis message id resolves to.
+                        messageId: candidate.message.id,
                         createdAt: now,
                     }));
                     saveThinkingBatch(turnRecords).catch(err => {

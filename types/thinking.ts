@@ -54,8 +54,13 @@ export interface ThinkingRecordStats {
   wins: number;
   losses: number;
   pending: number;
+  /**
+   * Average confidence over records that have one, on the scale
+   * High=4 / Medium=3 / Low=2 / Avoid=1; 0 when no record has a level.
+   */
   avgConfidence: number;
   avgProbability: number;
+  /** Wins / (wins + losses) over resolved records; 0 when none resolved. */
   winRate: number;
 }
 
