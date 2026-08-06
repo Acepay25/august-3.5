@@ -1100,16 +1100,29 @@ ${summariesText}
 Return ONLY the structured summary.
 `;
 
-    const result = sanitizeAIResponse(await sendChatRequest(config, [{ role: 'user', content: prompt }], { signal }) || '');
     // Reasoning-capable models (DeepSeek-R1, etc.) often prefix the answer
     // with their chain of thought — either inline or because the gateway
     // omits the final content field and the client salvages reasoning as the
-    // response text. The answer is the block starting at the LAST standalone
+    // response text. The answer is the block starting at the LAST
     // "Executive Summary" heading that still contains the other mandated
     // headings. Never store the thinking as pattern memory.
-    const structured = extractStructuredSummary(result);
+    // maxTokens is raised well above the ~4000-char summary: with the default
+    // 4096 tokens, a long reasoning trace can truncate the response BEFORE
+    // the answer is emitted, leaving only chain of thought behind.
+    const request = (content: string) => sendChatRequest(config, [{ role: 'user', content }], { signal, maxTokens: 8192 });
+
+    let raw = sanitizeAIResponse(await request(prompt) || '');
+    let structured = extractStructuredSummary(raw);
     if (!structured) {
-        console.warn('[FinalSummary] Model returned its chain of thought instead of a structured summary — not storing the thinking.');
+        console.warn('[FinalSummary] First attempt returned no structured summary (snippet):', raw.slice(0, 400));
+        // One hardened retry: forbid any thinking and demand the first
+        // heading up front. Costs one extra call only when the first
+        // response was unusable.
+        raw = sanitizeAIResponse(await request(`${prompt}\n\nCRITICAL: Do NOT output any reasoning, thinking, or planning. Start your reply directly with the heading "Executive Summary" and output ONLY the structured summary.`) || '');
+        structured = extractStructuredSummary(raw);
+    }
+    if (!structured) {
+        console.warn('[FinalSummary] Retry also returned no structured summary (snippet):', raw.slice(0, 400));
         return 'The AI returned its reasoning instead of a structured pattern-memory summary. Regenerate the review to try again.';
     }
     return structured;
@@ -1148,34 +1161,49 @@ export function extractStructuredSummary(
     const [firstHeading, ...otherHeadings] = headings;
     if (!firstHeading) return null;
 
-    // A real heading line is EXACTLY the heading (optionally decorated with
-    // markdown and/or a trailing colon). Prose like "Executive Summary
-    // heading should include…" or planning fragments ("Missed Win Analysis:
-    // count 0.") are NOT heading lines — they only mention the headings.
-    const isHeadingLine = (line: string, heading: string): boolean => {
-        const stripped = line
-            .replace(/^[\s#>*_\-~`]+/, '')
-            .replace(/[\s#>*_\-~`]+$/, '')
-            .replace(/[:：]+$/, '')
+    // Normalize a line for heading comparison: strip leading/trailing
+    // markdown decoration and list numbering ("1. ", "1) "). A line is in
+    // heading form when it is EXACTLY the heading, or the heading followed
+    // by a colon and content on the same line ("Executive Summary: The
+    // dataset…"). Prose that merely mentions the heading ("Need 'Executive
+    // Summary' include…") never normalizes to it.
+    const normalizeHeadingLine = (line: string): string =>
+        line
+            .replace(/^[\s#>*_\-~`"'«»]+/, '')
+            .replace(/^\d+[.)]?\s*/, '')
+            .replace(/[\s#>*_\-~`"'«»]+$/, '')
             .trim();
-        return stripped.toLowerCase() === heading.toLowerCase();
-    };
+
+    const isHeadingForm = (normalized: string, heading: string): boolean =>
+        normalized === heading.toLowerCase()
+        || normalized.startsWith(heading.toLowerCase() + ':');
 
     // Iterate from the END: the final output of a reasoning model always
     // follows its thinking, so the last candidate is the answer itself.
     for (let i = lines.length - 1; i >= 0; i--) {
-        if (!isHeadingLine(lines[i], firstHeading)) continue;
-        const tail = lines.slice(i).join('\n');
-        const tailHeadingLines = lines
-            .slice(i)
-            .map(l => l.replace(/^[\s#>*_\-~`]+/, '').replace(/[\s#>*_\-~`]+$/, '').replace(/[:：]+$/, '').trim().toLowerCase());
-        const matched = otherHeadings.filter(h => tailHeadingLines.includes(h.toLowerCase())).length;
-        // The prompt mandates all headings, so a real answer carries most of
-        // them as standalone lines. A thinking fragment can't pass unless it
-        // literally emitted several exact heading lines.
-        if (matched >= 3) {
-            return tail.trim();
+        if (!isHeadingForm(normalizeHeadingLine(lines[i]).toLowerCase(), firstHeading)) continue;
+        const tail = lines.slice(i);
+        const tailNorms = tail.map(l => normalizeHeadingLine(l).toLowerCase());
+
+        // Quorum: a real answer carries most mandated headings as heading
+        // lines. A thinking fragment fails unless it literally emitted
+        // several heading-form lines.
+        const matched = otherHeadings.filter(h =>
+            tailNorms.some(n => isHeadingForm(n, h))
+        ).length;
+        if (matched < 3) continue;
+
+        // The answer always ends with the Conclusion section — require
+        // actual content AFTER its heading line. This stops a reasoning-only
+        // checklist that trails off at "Conclusion: …" from being stored.
+        let lastConclusionIdx = -1;
+        for (let j = tail.length - 1; j >= 0; j--) {
+            if (isHeadingForm(tailNorms[j], 'Conclusion')) { lastConclusionIdx = j; break; }
         }
+        if (lastConclusionIdx === -1) continue;
+        if (!tail.slice(lastConclusionIdx + 1).some(l => l.trim().length > 0)) continue;
+
+        return tail.join('\n').trim();
     }
     return null;
 }
