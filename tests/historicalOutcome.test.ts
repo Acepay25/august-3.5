@@ -311,4 +311,45 @@ describe('verifyHistoricalOutcome — insufficient data and guards', () => {
     expect(result.verified).toBe(false);
     expect(result.outcome).toBe('INSUFFICIENT_DATA');
   });
+
+  it('classifies a same-candle SL + TP as SL_HIT (resting stop fills first)', async () => {
+    // Candle 0 fills the entry AND wicks through both SL and TP1. The stop
+    // is a resting order — it filled before any TP could be realized.
+    scripted1m = [
+      [94950, 96100, 93900, 95500], // entry + SL touch + TP1 wick in ONE candle
+      ...Array.from({ length: 10 }, () => longFiller),
+    ];
+
+    const result = await verify(makeAnalysis());
+    expect(result.outcome).toBe('SL_HIT');
+    expect(result.hitTarget).toBe('SL');
+    expect(result.priceAtHit).toBe(94000);
+  });
+
+  it('reports the extended-zone price when the initial SL was touched first', async () => {
+    // SL wicked on candle 1, then the 150% hard stop breached on candle 2 —
+    // the exit price must be the EXTENDED level (93500), not the original SL.
+    scripted1m = [
+      [94950, 95100, 94900, 95000], // entry fills
+      [94100, 95000, 93900, 94400], // initial SL touched (93900 <= 94000)
+      [93800, 94500, 93400, 93600], // extended zone breached (93400 <= 93500)
+      ...Array.from({ length: 10 }, () => longFiller),
+    ];
+
+    const result = await verify(makeAnalysis());
+    expect(result.outcome).toBe('SL_HIT');
+    expect(result.hitTarget).toBe('SL');
+    expect(result.priceAtHit).toBe(93500);
+  });
+
+  it('rejects an unparsable stop loss as INSUFFICIENT_DATA (NaN guard)', async () => {
+    scripted1m = [
+      [94950, 95100, 94900, 95000],
+      ...Array.from({ length: 10 }, () => longFiller),
+    ];
+
+    const result = await verify(makeAnalysis({ stopLoss: 'market' }));
+    expect(result.verified).toBe(false);
+    expect(result.outcome).toBe('INSUFFICIENT_DATA');
+  });
 });

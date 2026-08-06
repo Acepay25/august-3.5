@@ -9,7 +9,8 @@
  */
 
 import { Capacitor } from '@capacitor/core';
-import { getUserProfile, saveUserProfile } from './dbService';
+import { getUserProfile, saveUserProfile, overwriteUserProfile } from './dbService';
+import { isValidUserProfile } from '../../utils/profileUtils';
 
 export interface BackupMetadata {
     id: string;
@@ -366,6 +367,39 @@ export const exportBackupToFile = async (backupId: string): Promise<void> => {
     } catch (error) {
         console.error('[BackupService] Failed to export backup:', error);
         throw error;
+    }
+};
+
+/**
+ * Restore a backup — REPLACES the profile stored under the backup's username
+ * with the backed-up snapshot (delete-sync in sqliteSaveUserProfile removes
+ * rows absent from the backup, so a smaller/older backup truly restores).
+ */
+export const restoreBackup = async (
+    backupId: string
+): Promise<{ success: boolean; error?: string; username?: string }> => {
+    try {
+        const record = await readBackupProfile(backupId);
+        if (!record) {
+            return { success: false, error: 'Backup not found' };
+        }
+        let profile: unknown;
+        try {
+            profile = JSON.parse(record.profileJson);
+        } catch (e) {
+            return { success: false, error: 'Backup file is corrupted (invalid JSON)' };
+        }
+        if (!isValidUserProfile(profile)) {
+            return { success: false, error: 'Backup contains an invalid profile' };
+        }
+        await overwriteUserProfile(profile);
+        return { success: true, username: profile.username };
+    } catch (error) {
+        console.error('[BackupService] Restore failed:', error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Restore failed',
+        };
     }
 };
 

@@ -2077,6 +2077,8 @@ const App: React.FC = () => {
                 onToggleAlgorithmicInsights={setUseAlgorithmicInsights}
                 onSwitchUser={handleSwitchUser}
                 onExportData={handleExportData}
+                username={activeUsername || undefined}
+                onProfileRestored={(restoredUsername) => { loadUserData(restoredUsername); }}
                 isAccuracyModeEnabled={isAccuracyModeEnabled}
                 onToggleAccuracyMode={handleToggleAccuracyMode}
                 accuracySubMode={accuracySubMode}
