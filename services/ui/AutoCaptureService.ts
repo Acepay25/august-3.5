@@ -244,7 +244,10 @@ export const verifyHistoricalOutcome = async (
         const tp3 = parsePrice(analysis.takeProfit?.[2]?.price || '0');
         const isLong = analysis.direction === 'Long';
 
-        if (entriesToCheck.length === 0 || stopLoss === 0) {
+        // Falsy check: NaN (unparsable "market"/"N/A") AND 0 are both invalid —
+        // `stopLoss === 0` missed NaN, silently disabling every SL branch and
+        // resolving stopped-out trades as TP_HIT/STILL_OPEN (false WINs).
+        if (entriesToCheck.length === 0 || !stopLoss) {
             return {
                 verified: false,
                 outcome: 'INSUFFICIENT_DATA',

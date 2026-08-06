@@ -266,6 +266,9 @@ async function createWindow() {
             nodeIntegration: false,
             contextIsolation: true,
             webSecurity: true,
+            // Renderer is fully sandboxed — the preload bridge is its only
+            // privileged surface (sandboxed preloads support contextBridge/ipc).
+            sandbox: true,
             preload: path.join(__dirname, 'preload.cjs')
         },
         icon: path.join(__dirname, '../public/favicon.ico')
@@ -371,7 +374,9 @@ function sendUpdateStatus() {
 function setupAutoUpdater() {
     // Disable auto-download — we let the user decide via the Update button
     autoUpdater.autoDownload = false;
-    autoUpdater.autoInstallOnAppQuit = true;
+    // User-decides flow: the update installs only when update:install fires.
+    // autoInstallOnAppQuit would install silently on window close instead.
+    autoUpdater.autoInstallOnAppQuit = false;
 
     autoUpdater.on('checking-for-update', () => {
         updateInfo = { ...updateInfo, status: 'checking', error: null };
@@ -444,6 +449,13 @@ function setupAutoUpdater() {
     });
 
     ipcMain.handle('update:install', () => {
+        // Only install when an update was actually downloaded — quitAndInstall
+        // with nothing downloaded throws synchronously inside setImmediate
+        // (uncaught exception in main).
+        if (updateInfo.status !== 'downloaded') {
+            console.warn('[AutoUpdater] update:install ignored — no downloaded update');
+            return false;
+        }
         // Push an 'installing' status so the renderer overlay can show a
         // "Restarting…" message before the app quits.
         updateInfo = { ...updateInfo, status: 'installing' };

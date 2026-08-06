@@ -30,7 +30,7 @@ import { DEFAULT_LEVERAGE } from '../utils/conversationUtils';
 import { loadLearningRules } from '../services/learning/LearningRulesService';
 import { StructuredRule } from '../types';
 import {
-    getCachedResponse, cacheResponse, getImageHash, clearAllCaches, hashString,
+    getCachedResponse, cacheResponse, getImageHash, hashString,
 } from '../services/infrastructure/responseCache';
 import { useRafThrottle } from './useRafThrottle';
 
@@ -176,17 +176,18 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         model: string,
         prompt: string,
         imageFiles: File[],
+        dataURLs: string[],
         signal: AbortSignal | undefined,
         // The remaining args are passed through unchanged.
         ...rest: any[]
     ): Promise<{ thoughtProcess: string; finalOutput: string; analysis: any; sources?: any[] }> => {
-        // Build cache key from image hashes + prompt + model. We hash the
-        // File names+sizes as a proxy (the responseCache.getImageHash helper
-        // is designed for base64 data URLs; for File objects we synthesize a
-        // key from stable metadata since reading the bytes would defeat the
-        // purpose of caching).
-        const imageHashes = imageFiles.map(f => `${f.name}:${f.size}:${f.lastModified}`);
-        const cacheKey = imageHashes.length > 0 ? imageHashes : ['no-images'];
+        // Build cache key from image hashes + prompt + model. The hash comes
+        // from the actual image BYTES (the dataURLs) — keying by File
+        // name:size:lastModified let two different charts re-exported with
+        // identical metadata collide and serve each other's analysis.
+        const imageHashes = dataURLs.length > 0
+            ? dataURLs.map(url => getImageHash(url))
+            : ['no-images'];
 
         // Everything that alters the model input beyond the prompt itself must
         // be part of the key: deep analysis, accuracy submode, role/custom
@@ -199,19 +200,24 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         // and the provider identity (config.id) are folded in too: two
         // providers exposing the same model id, or a re-analysis after a
         // different vision model re-OCR'd the chart, must not share entries.
+        // Message IDs are deliberately excluded from the history fingerprint:
+        // every send creates a fresh `user-<Date.now()>` id, so including ids
+        // made the tail differ on EVERY run — the same-chart repeat (the
+        // whole point of the 10-min TTL) could never hit the cache.
         const historyFingerprint = hashString(JSON.stringify(
-            (rest[1] as Message[] | undefined)?.slice(-10).map(m => `${m.id}:${m.role}:${(m.text || '').slice(0, 200)}`) || []
+            (rest[1] as Message[] | undefined)?.slice(-10).map(m => `${m.role}:${(m.text || '').slice(0, 200)}`) || []
         ));
         const modeContext = hashString(JSON.stringify([
             rest[5], rest[8], rest[13], rest[14],  // deepen, submode, rolePrompt, customPrompt
             rest[2], rest[3], rest[6], rest[7],    // pattern memory, insights, global memory, thread
             rest[9], rest[10], rest[11], rest[12], // instructions, playbook, families, memory flags
+            rest[4],                               // active frameworks (injected into the system prompt)
             rest[0],                               // OCR image summaries
             historyFingerprint,                    // recent chat history (bounded)
             config.id,                             // provider identity
         ]));
 
-        const cached = await getCachedResponse(cacheKey, prompt, model, modeContext);
+        const cached = await getCachedResponse(imageHashes, prompt, model, modeContext);
         if (cached) {
             console.log(`[ResponseCache] HIT for ${config.name || model} (${model})`);
             return {
@@ -246,7 +252,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
         // Only cache successful, non-empty results.
         if (result && result.analysis) {
-            cacheResponse(cacheKey, prompt, model, {
+            cacheResponse(imageHashes, prompt, model, {
                 thoughtProcess: result.thoughtProcess,
                 finalOutput: result.finalOutput,
                 analysis: result.analysis,
@@ -1035,6 +1041,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             provider.model,
                             enhancedPrompt,
                             imageFiles,
+                            dataURLs,
                             currentAbortController.signal,
                             summaries,
                             currentMessages,
@@ -1194,6 +1201,12 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                                     console.log(`[PerAI-MonteCarlo] ${providerName}: Success (WinRate=${mcResult.winRate}%)`);
                                 }
                             } catch (err) {
+                                // A user cancel must abort the whole run, not
+                                // just this simulation — swallowing it wrote
+                                // partial post-cancel state (per-AI results +
+                                // an isDebating placeholder) before the debate
+                                // loop noticed the aborted signal.
+                                if ((err as { name?: string })?.name === 'AbortError') throw err;
                                 console.error(`[PerAI-MonteCarlo] ${providerName} failed execution:`, err);
                             }
                         } else {
@@ -1814,6 +1827,10 @@ ${accuracyVerificationNote}`
                     const provider = enabledProviders[0];
                     setLoadingMessage(isAccuracyModeEnabled ? `Running High-Precision Analysis...` : `Analyzing with ${provider.name}...`);
                     completeStep('gate-scan'); startStep('analysis');
+                    // Guard flag for the solo path too — without it Esc couldn't
+                    // cancel solo runs and the re-entrancy guard was inert
+                    // (a second send was only blocked by the loadingMessage check).
+                    setIsAnalysisInProgress(true);
                     setAnalysisSteps(prev => prev.map(s => s.id === 'analysis' ? { ...s, title: `Analyzing with ${provider.name}` } : s));
                             // Solo path: capture streamed raw reasoning via the
                             // same onReasoning slot as the multi path so the
@@ -1824,6 +1841,7 @@ ${accuracyVerificationNote}`
                             provider.model,
                             enhancedPrompt, // Fixed: was promptToSend, now uses enhancedPrompt with Hybrid data
                             imageFiles,
+                            dataURLs,
                             currentAbortController.signal,
                             summaries,
                             currentMessages,
@@ -2011,6 +2029,10 @@ ${accuracyVerificationNote}`
         } finally {
             if (analysisAbortController.current === currentAbortController) {
                 setLoadingMessage(null);
+                // Cancelling during the hybrid fetch skipped setIsHybridLoading
+                // (the assert threw before it) — reset here so the panel
+                // spinner can't spin until the next run.
+                setIsHybridLoading(false);
                 // NOTE: the old finally force-completed every running step,
                 // masking debate-phase errors and cancellations as "complete".
                 // Failures are marked by the catch above; success paths already

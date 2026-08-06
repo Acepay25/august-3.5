@@ -142,6 +142,22 @@ class GlobalLearningService {
                 console.warn('[GlobalLearningService] Preferences load failed:', e);
             }
         }
+        if (!parsed && this._activeUser) {
+            // Per-user scoping orphaned pre-upgrade calibration — fall back to
+            // the legacy unscoped key once and copy it into the scoped slot so
+            // existing installs don't silently lose their calibration history.
+            try {
+                const legacy = await getPreferenceObject<ConfidenceCalibration>('global_learning_state');
+                if (legacy) {
+                    parsed = legacy;
+                    await setPreferenceObject(this.prefKey, legacy).catch(e =>
+                        console.warn('[GlobalLearningService] Legacy calibration copy failed:', e)
+                    );
+                }
+            } catch (e) {
+                console.warn('[GlobalLearningService] Legacy calibration fallback failed:', e);
+            }
+        }
         if (parsed) {
             this._calibration = parsed;
             console.log('[GlobalLearningService] State loaded successfully.');

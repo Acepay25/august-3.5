@@ -192,7 +192,13 @@ export const saveThinkingBatch = async (records: ThinkingRecord[]): Promise<void
                     console.warn('[ThinkingStore] Prune failed:', e);
                 }
             } catch (error) {
-                await db.execute('ROLLBACK');
+                // Guarded: a failed BEGIN (or already-rolled-back transaction)
+                // would make this ROLLBACK throw and mask the original error.
+                try {
+                    await db.execute('ROLLBACK');
+                } catch (rollbackError) {
+                    console.warn('[ThinkingStore] ROLLBACK failed:', rollbackError);
+                }
                 throw error;
             }
         });

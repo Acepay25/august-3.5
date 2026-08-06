@@ -8,6 +8,16 @@
   <link rel="manifest" href="/manifest.json" />
   <meta name="viewport"
     content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content, viewport-fit=cover" />
+  <!-- CSP: blocks script/style injection and inline handlers. Needed because
+       AI-generated content is rendered into the DOM; without it any
+       prompt-injection that escapes React's escaping runs in the origin.
+       - script-src 'self': bundled modules only (no inline scripts)
+       - connect-src: provider APIs (https), WebSocket price feeds (wss/ws),
+         Vite dev HMR (ws://localhost), Electron app:// protocol, blob/data
+         for workers + shared images
+       - img-src: self + data: (base64 chart images) + blob: -->
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self' app:; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' app: https: wss: ws: blob: data:; worker-src 'self' blob:; frame-src 'none'; object-src 'none'; base-uri 'self'" />
   <title>August 3.5</title>
 
   <link rel="stylesheet" href="/index.css">

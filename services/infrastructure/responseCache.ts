@@ -109,12 +109,21 @@ export const hashString = (str: string): string => {
 
 /**
  * Hash a base64 image data URL for deduplication.
- * Uses the first 1000 + last 1000 chars to avoid hashing megabytes.
+ * Samples slices spread across the WHOLE string (first+last 1000 chars alone
+ * let two large images sharing headers/footers collide) plus the total length
+ * as a cheap discriminator.
  */
 export const hashImage = (dataURL: string): string => {
-  if (dataURL.length <= 2000) return hashString(dataURL);
-  const sample = dataURL.slice(0, 1000) + dataURL.slice(-1000);
-  return hashString(sample);
+  if (dataURL.length <= 4096) return hashString(dataURL);
+  const sliceLen = 256;
+  const slices: string[] = [];
+  const step = Math.floor(dataURL.length / 8);
+  for (let i = 0; i < 8; i++) {
+    const start = Math.min(i * step, dataURL.length - sliceLen);
+    slices.push(dataURL.slice(start, start + sliceLen));
+  }
+  slices.push(String(dataURL.length));
+  return hashString(slices.join('|'));
 };
 
 // =============================================================================
@@ -145,16 +154,19 @@ export const getCachedContext = (sessionId: string): string | undefined => {
 
 /**
  * Get or compute an image hash for deduplication.
- * The dedup map is keyed by the FULL data URL — keying by a header slice
- * (e.g. first 100 chars) made two different same-size images collide and
- * return the wrong analysis from the response cache.
+ * The dedup map is keyed by a CHEAP hash of the full URL — keying by the raw
+ * data URL pinned megabytes of base64 per entry (up to 50 entries ≈ 100+ MB).
+ * The full URL would be the exact key, but a 32-bit hash collision between
+ * two different images is far less likely than the memory cost of keeping
+ * the raw strings alive.
  */
 export const getImageHash = (dataURL: string): string => {
-  const existing = imageHashCache.get(dataURL);
+  const dedupKey = hashString(dataURL);
+  const existing = imageHashCache.get(dedupKey);
   if (existing) return existing;
 
   const hash = hashImage(dataURL);
-  imageHashCache.set(dataURL, hash);
+  imageHashCache.set(dedupKey, hash);
   return hash;
 };
 

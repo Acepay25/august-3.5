@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Message, TradeOutcome, LoggedTrade, SavedAnalysis, TradeSummary, LearningRule, ImageMetadata, AIProvider } from '../types';
 import { PostMortemCandidate } from '../components/modals/PostTradeUploadModal';
 import { captureForPostMortem } from '../services/ui/AutoCaptureService';
@@ -134,6 +134,72 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         }
     };
 
+    // ─── Recent Insights helper ────────────────────────────────────────────
+    // Shared by logTradeWithFeedback and logEntryNotHitTrade (the block was
+    // duplicated verbatim for ~40 lines). The 3s animation timer is tracked
+    // so an unmount can't setState after teardown.
+    const insightTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+
+    useEffect(() => {
+        return () => {
+            insightTimersRef.current.forEach(t => clearTimeout(t));
+            insightTimersRef.current.clear();
+        };
+    }, []);
+
+    const autoAddRecentInsight = useCallback(async (loggedTrade: LoggedTrade) => {
+        setIsInsightGenerating(true);
+        try {
+            // Use the user's preference for Algo vs AI insight generation
+            const summary = await MemoryService.summarizeTrade(
+                loggedTrade,
+                memoryModel,
+                memoryConfig,
+                useAlgorithmicInsights // Pass the toggle state
+            );
+            const newSummary = {
+                id: loggedTrade.id,
+                summaryText: summary,
+                timestamp: new Date().toISOString()
+            };
+
+            setTradeSummaries(prev => {
+                // Check if already exists to prevent duplicates
+                if (prev.some(s => s.id === loggedTrade.id)) {
+                    return prev;
+                }
+                const updated = [...prev, newSummary];
+                // FIFO: Remove oldest entries to maintain max limit
+                return updated.slice(-MAX_TRADE_SUMMARIES);
+            });
+
+            // Track newly added insight for animation
+            setNewlyAddedInsightIds(prev => new Set(prev).add(loggedTrade.id));
+            // Clear animation after 3 seconds
+            const timer = setTimeout(() => {
+                insightTimersRef.current.delete(timer);
+                setNewlyAddedInsightIds(prev => {
+                    const next = new Set(prev);
+                    next.delete(loggedTrade.id);
+                    return next;
+                });
+            }, 3000);
+            insightTimersRef.current.add(timer);
+
+            console.log('[AutoInsight] Trade auto-added to Recent Insights:', loggedTrade.id);
+        } catch (error) {
+            // P2-14: Surface the failure so the user knows an insight
+            // wasn't created — their trade was still logged successfully.
+            console.error('[AutoInsight] Failed to generate insight:', error);
+            toast.error(
+                "Insight Generation Failed",
+                "Your trade was logged, but the AI insight couldn't be generated."
+            );
+        } finally {
+            setIsInsightGenerating(false);
+        }
+    }, [memoryModel, memoryConfig, useAlgorithmicInsights, toast]);
+
     // ─── Trade Logging ────────────────────────────────────────────────────
 
     // Helper function to log trade (called by all capture handlers)
@@ -243,56 +309,8 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         autoLearnFromOutcome(loggedTrade);
 
         // Auto-add to Recent Insights with FIFO enforcement
-        (async () => {
-            setIsInsightGenerating(true);
-            try {
-                // Use the user's preference for Algo vs AI insight generation
-                const summary = await MemoryService.summarizeTrade(
-                    loggedTrade,
-                    memoryModel,
-                    memoryConfig,
-                    useAlgorithmicInsights // Pass the toggle state
-                );
-                const newSummary = {
-                    id: loggedTrade.id,
-                    summaryText: summary,
-                    timestamp: new Date().toISOString()
-                };
+        void autoAddRecentInsight(loggedTrade);
 
-                setTradeSummaries(prev => {
-                    // Check if already exists to prevent duplicates
-                    if (prev.some(s => s.id === loggedTrade.id)) {
-                        return prev;
-                    }
-                    const updated = [...prev, newSummary];
-                    // FIFO: Remove oldest entries to maintain max limit
-                    return updated.slice(-MAX_TRADE_SUMMARIES);
-                });
-
-                // Track newly added insight for animation
-                setNewlyAddedInsightIds(prev => new Set(prev).add(loggedTrade.id));
-                // Clear animation after 3 seconds
-                setTimeout(() => {
-                    setNewlyAddedInsightIds(prev => {
-                        const next = new Set(prev);
-                        next.delete(loggedTrade.id);
-                        return next;
-                    });
-                }, 3000);
-
-                console.log('[AutoInsight] Trade auto-added to Recent Insights:', loggedTrade.id);
-            } catch (error) {
-                // P2-14: Surface the failure so the user knows an insight
-                // wasn't created — their trade was still logged successfully.
-                console.error('[AutoInsight] Failed to generate insight:', error);
-                toast.error(
-                    "Insight Generation Failed",
-                    "Your trade was logged, but the AI insight couldn't be generated."
-                );
-            } finally {
-                setIsInsightGenerating(false);
-            }
-        })();
     }, [activeConversationLeverage, moderatorProviderId, moderatorModel, updateMessages, memoryModel, memoryConfig, useAlgorithmicInsights, toast]);
 
     // ─── Data Capture Modal Handlers ──────────────────────────────────────

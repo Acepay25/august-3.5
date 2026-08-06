@@ -232,21 +232,31 @@ export const storeRule = (
     storage: LearningRulesStorage,
     rule: LearningRule
 ): LearningRulesStorage => {
-    // Avoid duplicates - check if similar rule exists
+    // Avoid duplicates - check if similar rule exists. The OUTCOME is part of
+    // the identity: an identical IF/THEN from a WIN must not block storing the
+    // +2-scored LOSS variant (the stronger rule), or vice versa.
     const isDuplicate = storage.rules.some(existing =>
         existing.ifCondition.toLowerCase() === rule.ifCondition.toLowerCase() &&
-        existing.thenAction.toLowerCase() === rule.thenAction.toLowerCase()
+        existing.thenAction.toLowerCase() === rule.thenAction.toLowerCase() &&
+        existing.outcome === rule.outcome
     );
 
     if (isDuplicate) {
         return storage;
     }
 
-    // Limit total rules to prevent bloat (keep most recent 100)
+    // Limit total rules to prevent bloat. Evict by VALUE, not insertion order:
+    // pruning the newest-100 discarded old mistake (LOSS) rules, which are the
+    // most valuable — unused rules (useCount 0, PENDING/blank outcome) go first.
     const maxRules = 100;
     const rules = [...storage.rules, rule];
     const prunedRules = rules.length > maxRules
-        ? rules.slice(-maxRules)
+        ? rules
+            .map((r, index) => ({ r, index }))
+            .sort((a, b) => rulePriority(a.r) - rulePriority(b.r))
+            .slice(0, maxRules)
+            .sort((a, b) => a.index - b.index)
+            .map(x => x.r)
         : rules;
 
     return {
@@ -254,6 +264,17 @@ export const storeRule = (
         rules: prunedRules,
         lastUpdated: new Date().toISOString()
     };
+};
+
+/**
+ * Eviction priority (higher = keep longer): resolved mistake rules with real
+ * usage beat unused PENDING/blank-outcome entries.
+ */
+const rulePriority = (rule: LearningRule): number => {
+    let score = rule.useCount || 0;
+    if (rule.outcome === 'LOSS') score += 10;
+    else if (rule.outcome === 'WIN') score += 5;
+    return score;
 };
 
 /**

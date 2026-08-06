@@ -549,11 +549,20 @@ const getWorker = (): Worker => {
             }
         };
         workerInstance.onerror = (e) => {
-            // Reject all pending requests on worker crash
+            // Reject all pending requests on worker crash, then DROP the
+            // dead worker — without this the next postMessage went to a dead
+            // worker and its promise never settled (pending requests leaked
+            // forever). The next call spawns a fresh worker.
             for (const [id, pending] of pendingRequests) {
                 pending.reject(new Error(e.message || 'Worker crashed'));
                 pendingRequests.delete(id);
             }
+            try {
+                workerInstance?.terminate();
+            } catch (err) {
+                console.warn('[MonteCarlo] Worker terminate failed:', err);
+            }
+            workerInstance = null;
         };
     }
     return workerInstance;
