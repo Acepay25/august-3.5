@@ -9,6 +9,8 @@ import AnalystLensSettings from './AnalystLensSettings';
 import CustomInstructionsEditor, { InstructionTab } from './CustomInstructionsEditor';
 import MemorySettings from './MemorySettings';
 import { DiagnosticsPanel } from './DiagnosticsPanel';
+import { BackupManager } from './BackupManager';
+import { AlertManager } from './AlertManager';
 import { Journal } from '../journal/Journal';
 import { ActivityIcon, AISettingsIcon, BrainIcon, CloseIcon, EditIcon, HistoryIcon, BookmarkIcon, SettingsIcon, UserIcon, ExportIcon, SearchIcon, SwitchUserIcon } from '../shared/Icons';
 
@@ -61,6 +63,10 @@ interface SettingsMenuProps {
     onOpenStrategySearch?: () => void;
     onSwitchUser?: () => void;
     onExportData?: () => Promise<void> | void;
+    /** Active profile — enables the backup management section. */
+    username?: string;
+    /** Called after a backup restore replaces the profile (App reloads it). */
+    onProfileRestored?: (username: string) => void;
     onOpenJournal?: (tab?: string) => void;
     summarizationProvider?: AIProvider;
     summarizationModel?: string;
@@ -175,6 +181,8 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
         onOpenStrategySearch,
         onSwitchUser,
         onExportData,
+        username,
+        onProfileRestored,
         isHybridIntelligenceEnabled,
         onToggleHybridIntelligence,
         isAutoCapturing,
@@ -731,6 +739,18 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                     </div>
                                 </div>
                             )}
+
+                            {/* Backups — list/export/restore/delete the 30-min auto-backups */}
+                            {username && onProfileRestored && (
+                                <div className="border-t border-zinc-800 pt-6">
+                                    <BackupManager username={username} onProfileRestored={onProfileRestored} />
+                                </div>
+                            )}
+
+                            {/* Price alerts — list/toggle/delete */}
+                            <div className="border-t border-zinc-800 pt-6">
+                                <AlertManager />
+                            </div>
 
                         </div>
                     </div>

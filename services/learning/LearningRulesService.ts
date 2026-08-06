@@ -248,13 +248,14 @@ export const storeRule = (
     // Limit total rules to prevent bloat. Evict by VALUE, not insertion order:
     // pruning the newest-100 discarded old mistake (LOSS) rules, which are the
     // most valuable — unused rules (useCount 0, PENDING/blank outcome) go first.
+    // Ascending sort + slice(-maxRules) keeps the HIGHEST-priority rules.
     const maxRules = 100;
     const rules = [...storage.rules, rule];
     const prunedRules = rules.length > maxRules
         ? rules
             .map((r, index) => ({ r, index }))
             .sort((a, b) => rulePriority(a.r) - rulePriority(b.r))
-            .slice(0, maxRules)
+            .slice(-maxRules)
             .sort((a, b) => a.index - b.index)
             .map(x => x.r)
         : rules;
