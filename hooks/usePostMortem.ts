@@ -34,6 +34,13 @@ export interface UsePostMortemParams {
     // Trade/memory state
     finalTradeSummary: string | null;
     loggedTrades: LoggedTrade[];
+    /**
+     * Freshest logged-trades array. Capture flows log the trade and start the
+     * post-mortem in the same tick, so the `loggedTrades` prop closure is
+     * stale when the post-mortem resolves — this ref always holds the latest
+     * rows (updated every render by App).
+     */
+    loggedTradesRef: MutableRefObject<LoggedTrade[]>;
     setLoggedTrades: (updater: (prev: LoggedTrade[]) => LoggedTrade[]) => void;
     globalMemory: GlobalMemory | undefined;
     setGlobalMemory: (v: GlobalMemory | undefined) => void;
@@ -67,7 +74,7 @@ export const usePostMortem = (params: UsePostMortemParams) => {
         activeUsernameRef,
         providerConfigs,
         moderatorConfig, moderatorModel,
-        finalTradeSummary, loggedTrades, setLoggedTrades,
+        finalTradeSummary, loggedTrades, loggedTradesRef, setLoggedTrades,
         globalMemory, setGlobalMemory,
         memoryModel, memoryConfig,
         tradeSummaries, setTradeSummaries,
@@ -432,15 +439,22 @@ Please investigate this discrepancy in your analysis.
                 return;
             }
 
-            // Update Trade Log
-            setLoggedTrades(prev => prev.map(t => t.analysis.createdAt === candidate.message.analysis?.createdAt ? {
+            // Update Trade Log. The trade row is matched by the card
+            // (message) id — the analysis createdAt can be shared by two
+            // trades and previously matched the wrong rows (or none).
+            setLoggedTrades(prev => prev.map(t => t.id === candidate.message.id ? {
                 ...t,
                 postMortem: finalPostMortemReport,
                 postMortemCreatedAt: new Date().toISOString(),
                 postMortemImages: imageUrls
             } : t));
 
-            const tradeToUpdate = loggedTrades.find(t => t.analysis.createdAt === candidate.message.analysis?.createdAt);
+            // The trade was logged in the same tick that started this
+            // post-mortem (capture flows: logTradeWithFeedback → setLoggedTrades
+            // → startPostMortemAnalysis), so the `loggedTrades` prop closure
+            // still holds the PRE-log array here. The ref always has the
+            // freshest rows.
+            const tradeToUpdate = loggedTradesRef.current.find(t => t.id === candidate.message.id);
             if (tradeToUpdate) {
                 const summary = await MemoryService.summarizeTrade({ ...tradeToUpdate, postMortem: finalPostMortemReport }, memoryModel, memoryConfig!);
                 // Re-check after the await — the user may have switched during summarizeTrade
@@ -473,7 +487,7 @@ Please investigate this discrepancy in your analysis.
 
                 // Update trading weaknesses
                 try {
-                    const updatedWeaknesses = getTradingWeaknesses(loggedTrades);
+                    const updatedWeaknesses = getTradingWeaknesses(loggedTradesRef.current);
                     console.log('[AI Learning] Updated trading weaknesses analysis');
                 } catch (weaknessError) {
                     console.error('[AI Learning] Failed to update weaknesses:', weaknessError);

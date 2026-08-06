@@ -156,9 +156,35 @@ describe('persistentCache (IndexedDB)', () => {
     expect((await persistentGet('key-204'))?.value).toBe(204);
   });
 
-  it('survives "reloads" (module state persists across calls)', async () => {
-    await persistentSet('persist-me', 'still-here', Date.now());
-    expect((await persistentGet('persist-me'))?.value).toBe('still-here');
+  it('clears BOTH memory and the persisted store on clearAllCaches', async () => {
+    const { cacheResponse, getCachedResponse, clearAllCaches } = await import('../services/infrastructure/responseCache');
+    cacheResponse(['no-images'], 'prompt-one', 'model-a', {
+      thoughtProcess: 'thinking',
+      analysis: { direction: 'Long' },
+    });
+    await clearAllCaches();
+    const afterClear = await getCachedResponse(['no-images'], 'prompt-one', 'model-a');
+    expect(afterClear).toBeUndefined();
+    // The persistent layer must be gone too — a fresh module (empty memory
+    // caches) must NOT be able to rehydrate the cleared entry.
+    vi.resetModules();
+    const fresh = await import('../services/infrastructure/responseCache');
+    const rehydrated = await fresh.getCachedResponse(['no-images'], 'prompt-one', 'model-a');
+    expect(rehydrated).toBeUndefined();
+  });
+
+  it('survives "reloads" (persisted store rehydrates a fresh memory cache)', async () => {
+    const { cacheResponse } = await import('../services/infrastructure/responseCache');
+    cacheResponse(['no-images'], 'prompt-one', 'model-a', {
+      thoughtProcess: 'thinking',
+      analysis: { direction: 'Long' },
+    });
+    // Simulate a tab reload: a fresh module means empty memory caches while
+    // the IndexedDB-backed persistent store stays intact.
+    vi.resetModules();
+    const { getCachedResponse } = await import('../services/infrastructure/responseCache');
+    const afterReload = await getCachedResponse(['no-images'], 'prompt-one', 'model-a');
+    expect(afterReload?.analysis).toEqual({ direction: 'Long' });
   });
 });
 
@@ -178,10 +204,11 @@ describe('responseCache hydration from the persistent store', () => {
     const hit = await getCachedResponse(['no-images'], 'prompt-one', 'model-a');
     expect(hit?.analysis).toEqual({ direction: 'Long' });
 
-    // Simulate a reload: wipe the in-memory cache but keep the persisted store.
-    const { clearAllCaches } = await import('../services/infrastructure/responseCache');
-    clearAllCaches();
-    const afterReload = await getCachedResponse(['no-images'], 'prompt-one', 'model-a');
+    // Simulate a reload: a fresh module wipes the in-memory cache while the
+    // IndexedDB-backed persistent store stays intact.
+    vi.resetModules();
+    const fresh = await import('../services/infrastructure/responseCache');
+    const afterReload = await fresh.getCachedResponse(['no-images'], 'prompt-one', 'model-a');
     expect(afterReload?.analysis).toEqual({ direction: 'Long' });
   });
 

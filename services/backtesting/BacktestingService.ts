@@ -12,37 +12,9 @@
 
 import { TradeAnalysis, BacktestResult } from '../../types';
 import { fetchOHLCV, fetchOHLCVFromTime, Kline } from '../analysis/MarketDataService';
-
-/**
- * Parse price string to number (handles ranges like "3050 - 3060")
- */
-const parsePrice = (priceStr: string): number => {
-    if (!priceStr) return 0;
-    // Remove any non-numeric characters except . and - and whitespace
-    // Handle "to" for ranges like "3000 to 3050"
-    const lower = priceStr.toLowerCase();
-
-    // Check for "market" or "cmp"
-    if (lower.includes('market') || lower.includes('cmp') || lower.includes('current')) {
-        return 0; // Signals invalid/unknown price
-    }
-
-    const cleaned = priceStr.replace(/[^0-9.\-\s]/g, '');
-    // If it's a range with "to" or "-", take the average
-    if ((cleaned.includes('-') || lower.includes('to'))) {
-        const parts = lower.includes('to') ? lower.split('to') : cleaned.split('-');
-        if (parts.length === 2) {
-            const p1 = parseFloat(parts[0].replace(/[^0-9.]/g, ''));
-            const p2 = parseFloat(parts[1].replace(/[^0-9.]/g, ''));
-            if (!isNaN(p1) && !isNaN(p2)) {
-                return (p1 + p2) / 2;
-            }
-        }
-    }
-    // Single number
-    const num = parseFloat(cleaned.replace(/\s+/g, ''));
-    return isNaN(num) ? 0 : num;
-};
+// Single canonical price parser (ranges + annotations). A local copy here
+// stripped annotations differently ("94500 4h" → 945004), skewing SL/TP math.
+import { parsePrice } from '../../utils/analysisUtils';
 
 /**
  * Convert timeframe string to milliseconds
@@ -101,7 +73,9 @@ export const simulateTradeSignal = async (
         const tp3 = analysis.takeProfit?.[2]?.price ? parsePrice(analysis.takeProfit[2].price) : 0;
         const isLong = analysis.direction === 'Long';
 
-        if (entryPrice === 0 || stopLoss === 0) {
+        // NaN (canonical parsePrice) and 0 are both invalid — a falsy check
+        // catches both, where `=== 0` used to miss NaN.
+        if (!entryPrice || !stopLoss) {
             return {
                 wouldHaveTriggered: false,
                 outcome: 'NOT_TRIGGERED',
@@ -486,7 +460,8 @@ export const simulateFromAnalysisTime = async (
             };
         }
 
-        if (entryPrice === 0 || stopLoss === 0) {
+        // Falsy check: NaN (canonical parsePrice) and 0 are both invalid.
+        if (!entryPrice || !stopLoss) {
             return {
                 wouldHaveTriggered: false,
                 outcome: 'NOT_TRIGGERED',
@@ -495,8 +470,8 @@ export const simulateFromAnalysisTime = async (
                 timeToOutcome: 0,
                 priceAtExit: 0,
                 simulationDetails: ` Cannot backtest: Invalid trade parameters.\n\n` +
-                    `Entry: ${entryPrice === 0 ? ' Missing' : ` $${entryPrice.toLocaleString()}`}\n` +
-                    `Stop Loss: ${stopLoss === 0 ? ' Missing' : ` $${stopLoss.toLocaleString()}`}`,
+                    `Entry: ${!entryPrice ? ' Missing' : ` $${entryPrice.toLocaleString()}`}\n` +
+                    `Stop Loss: ${!stopLoss ? ' Missing' : ` $${stopLoss.toLocaleString()}`}`,
                 analysisTime: analysisTimestamp,
                 candlesEvaluated: klines.length,
                 leverage
@@ -1240,7 +1215,8 @@ export const validateTradeOutcome = async (
             };
         }
 
-        if (entryPrice === 0 || stopLoss === 0) {
+        // Falsy check: NaN (canonical parsePrice) and 0 are both invalid.
+        if (!entryPrice || !stopLoss) {
             return {
                 entryTriggered: false,
                 outcome: 'ENTRY_NOT_HIT',

@@ -52,6 +52,8 @@ import {
     PatternFamily
 } from './PatternClassificationService';
 
+import { parsePrice as canonicalParsePrice } from '../../utils/analysisUtils';
+
 import { getSessionContext, generateSessionSummary, SessionContext } from '../infrastructure/SessionService';
 import { ConfidenceCalibration } from '../../types';
 import {
@@ -921,23 +923,12 @@ const buildMonteCarloConfig = (
             takeProfit: analysis.takeProfit
         });
 
-        // Extract numeric values from analysis - UPDATED to handle ranges
-        const parsePrice = (str: string | undefined): number | null => {
-            if (!str) return null;
-
-            // Handle ranges like "3210 - 3220"
-            if (str.includes('-')) {
-                const parts = str.split('-').map(p => parseFloat(p.replace(/[^0-9.]/g, '')));
-                const validParts = parts.filter(p => !isNaN(p));
-                if (validParts.length === 2) {
-                    return (validParts[0] + validParts[1]) / 2; // Return average
-                }
-                if (validParts.length > 0) return validParts[0];
-            }
-
-            const cleaned = str.replace(/[^0-9.]/g, '');
-            const num = parseFloat(cleaned);
-            return isNaN(num) ? null : num;
+        // Extract numeric values from analysis — canonical parser handles
+        // ranges ("3210 - 3220" → midpoint) and annotated prices ("94500 4h");
+        // a local copy used to glue annotation digits onto the number.
+        const parsePrice = (str: string | undefined): number => {
+            if (!str) return NaN;
+            return canonicalParsePrice(str);
         };
 
         const entry = parsePrice(analysis.entryPoints?.[0]?.price);
@@ -946,7 +937,7 @@ const buildMonteCarloConfig = (
         // Extract take profits
         const tps = (analysis.takeProfit || [])
             .map(tp => parsePrice(tp.price))
-            .filter((p): p is number => p !== null);
+            .filter((p): p is number => !isNaN(p));
 
         // Debug: Log parsed values
         console.log('[MonteCarloForSetup] Parsed values:', {

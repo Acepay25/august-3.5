@@ -4,7 +4,7 @@ import { isValidUserProfile } from '../utils/profileUtils';
 import { exportDataAsFile, exportPreferencesData } from '../services/infrastructure/ExportService';
 
 export interface UseUserProfilesParams {
-    resetAppState: () => Promise<void>;
+    resetAppState: (usernameToSave?: string | null) => Promise<void>;
     setIsUserModalOpen: (v: boolean) => void;
     setIsSettingsVisible: (v: boolean) => void;
     toast: { success: (t: string, m?: string) => void; error: (t: string, m?: string) => void; info: (t: string, m?: string) => void };
@@ -45,7 +45,10 @@ export const useUserProfiles = (params: UseUserProfilesParams) => {
             setExistingUsernames(prev => prev.filter(u => u !== username));
             if (activeUsername === username) {
                 setActiveUsername(null);
-                resetAppState();
+                // resetAppState(null): do NOT persist — the closure's
+                // activeUsername still holds the deleted name, and saving
+                // would resurrect the user as a blank profile.
+                resetAppState(null);
                 setIsUserModalOpen(true);
             }
         }

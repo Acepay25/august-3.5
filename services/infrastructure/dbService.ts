@@ -105,14 +105,21 @@ export const initDatabase = async (): Promise<void> => {
             await migrateLocalStorageToPreferences();
 
             // Migrate IndexedDB to SQLite
-            await migrateFromIndexedDB(
+            const migrationResult = await migrateFromIndexedDB(
               idbGetUserProfile,
               idbGetAllUsernames
             );
 
-            // Mark as migrated
-            await setSqliteMigrated();
-            console.log('[dbService] Migration complete!');
+            // Only mark the migration as done when it actually succeeded —
+            // migrateFromIndexedDB returns migrated:false on any error. Marking
+            // it anyway meant a failed/partial migration was never retried and
+            // the user's data was permanently lost on native.
+            if (migrationResult.migrated) {
+              await setSqliteMigrated();
+              console.log('[dbService] Migration complete!');
+            } else {
+              console.error('[dbService] Migration FAILED — will retry on next launch');
+            }
           }
         }
       } else {

@@ -8,6 +8,8 @@ import { ThinkingRecordCard, getProviderColor } from './ThinkingRecordCard';
 interface ReasoningPanelProps {
   tradeId: string;
   outcome?: TradeOutcome;
+  /** Scopes the record lookup to a user (tradeId keys are timestamp-derived). */
+  username?: string;
 }
 
 const OUTCOME_BADGE: Record<string, string> = {
@@ -22,7 +24,7 @@ const OUTCOME_BADGE: Record<string, string> = {
  * Expandable reasoning panel for a trade (History tab).
  * Shows per-analyst reasoning + final output, moderator synthesis, and debate turns.
  */
-export const ReasoningPanel: React.FC<ReasoningPanelProps> = ({ tradeId, outcome }) => {
+export const ReasoningPanel: React.FC<ReasoningPanelProps> = ({ tradeId, outcome, username }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [records, setRecords] = useState<ThinkingRecord[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -30,7 +32,7 @@ export const ReasoningPanel: React.FC<ReasoningPanelProps> = ({ tradeId, outcome
   useEffect(() => {
     if (!isExpanded || records.length > 0) return;
     setIsLoading(true);
-    getThinkingByTrade(tradeId)
+    getThinkingByTrade(tradeId, username)
       .then(data => {
         setRecords(data);
         setIsLoading(false);
@@ -39,7 +41,7 @@ export const ReasoningPanel: React.FC<ReasoningPanelProps> = ({ tradeId, outcome
         console.warn('[ReasoningPanel] Failed to load:', err);
         setIsLoading(false);
       });
-  }, [isExpanded, tradeId]);
+  }, [isExpanded, tradeId, username]);
 
   const analysts = records.filter(r => r.role === 'analyst');
   const moderator = records.find(r => r.role === 'moderator');
