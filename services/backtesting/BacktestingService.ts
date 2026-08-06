@@ -944,12 +944,25 @@ export const batchBacktest = async (
     avgDrawdown: number;
     results: BacktestResult[];
 }> => {
-    const results: BacktestResult[] = [];
+    const results: BacktestResult[] = new Array(analyses.length);
 
-    for (const analysis of analyses) {
-        const result = await simulateTradeSignal(analysis, symbol, timeframe);
-        results.push(result);
-    }
+    // Parallelize with a small concurrency pool: the old strictly-sequential
+    // loop paid N × network latency (every simulation fetches klines; a
+    // shared 30s cache in MarketDataService dedupes the fetches). Each
+    // simulation isolates its own errors internally, so workers never abort
+    // the batch. Indexed writes keep the original order.
+    const CONCURRENCY = 3;
+    let nextIndex = 0;
+    const runWorker = async (): Promise<void> => {
+        for (;;) {
+            const i = nextIndex++;
+            if (i >= analyses.length) return;
+            results[i] = await simulateTradeSignal(analyses[i], symbol, timeframe);
+        }
+    };
+    await Promise.all(
+        Array.from({ length: Math.min(CONCURRENCY, Math.max(1, analyses.length)) }, runWorker)
+    );
 
     // Calculate statistics
     const triggeredTrades = results.filter(r => r.wouldHaveTriggered);

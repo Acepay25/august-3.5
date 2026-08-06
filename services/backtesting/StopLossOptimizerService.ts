@@ -161,7 +161,10 @@ export const calculateOptimalSL = (
 
     // If we widen SL, R:R decreases proportionally
     // e.g., 1.5x SL means R:R becomes 2.0 / 1.5 = 1.33
-    const optimizedMultiplier = Math.max(1.0, avgMultiplierNeeded * 1.1); // Add 10% buffer
+    // NOTE: no extra buffer here — minSlDistanceNeeded already includes a
+    // 10% safety margin per trade; a second 1.1x compounded to ~21% of
+    // over-widening bias in the Kelly recommendation.
+    const optimizedMultiplier = Math.max(1.0, avgMultiplierNeeded);
     const potentialRR = currentRR / optimizedMultiplier;
 
     // Compare Kelly Scores

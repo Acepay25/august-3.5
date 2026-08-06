@@ -66,7 +66,10 @@ export const parsePrice = (priceStr: string): number => {
     if (!priceStr) return NaN;
     // Remove commas (e.g. 69,000 -> 69000); whitespace stays intact.
     const cleanStr = priceStr.replace(/,/g, '');
-    const range = cleanStr.match(/(\d+(?:\.\d+)?)\s*(?:-|to)\s*(\d+(?:\.\d+)?)/i);
+    // The trailing lookahead stops a timeframe-annotated price with a dash
+    // ("94500 - 4h") from matching as a range — greedy matching turned it
+    // into the midpoint of 94500 and 4.
+    const range = cleanStr.match(/(\d+(?:\.\d+)?)\s*(?:-|to)\s*(\d+(?:\.\d+)?)(?!\s*[a-zA-Z])/i);
     if (range) {
         return (parseFloat(range[1]) + parseFloat(range[2])) / 2;
     }

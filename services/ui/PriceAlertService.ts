@@ -50,6 +50,10 @@ class PriceAlertServiceClass {
     private subscribers: Set<AlertCallback> = new Set();
     private pollingInterval: ReturnType<typeof setInterval> | null = null;
     private wsReconnectAttempts = 0;
+    // Tracked so pause()/stopMonitoring() can cancel a pending reconnect —
+    // an untracked timer would reopen the socket (and its monitoring loop)
+    // after the user disabled alerts or backgrounded the app.
+    private wsReconnectTimer: ReturnType<typeof setTimeout> | null = null;
     private maxReconnectAttempts = 5;
     private isPaused = false; // P1-10: true when app is backgrounded
     private nativeListenersRegistered = false;
@@ -102,6 +106,10 @@ class PriceAlertServiceClass {
             clearInterval(this.pollingInterval);
             this.pollingInterval = null;
         }
+        if (this.wsReconnectTimer) {
+            clearTimeout(this.wsReconnectTimer);
+            this.wsReconnectTimer = null;
+        }
     }
 
     /**
@@ -125,13 +133,22 @@ class PriceAlertServiceClass {
     }
 
     /**
-     * Create a new price alert for a trade
+     * Create a new price alert for a trade.
+     * Deduplicates by tradeId: the card's "Set alerts" button and the
+     * LiveMarket toggle can both fire for the same trade — two alerts would
+     * trigger duplicate notifications for the same levels.
      */
     createAlert(
         tradeId: string,
         analysis: TradeAnalysis,
         thresholdPercent: number = 0.5
     ): PriceAlert {
+        const existing = this.getAlertForTrade(tradeId);
+        if (existing) {
+            console.log(`[PriceAlertService] Alert already exists for trade ${tradeId}, returning existing`);
+            return existing;
+        }
+
         const coinName = analysis.coinName || 'UNKNOWN';
         const symbol = this.normalizeSymbol(coinName);
 
@@ -282,7 +299,10 @@ class PriceAlertServiceClass {
                 // Attempt reconnect
                 if (this.alerts.size > 0 && this.wsReconnectAttempts < this.maxReconnectAttempts) {
                     this.wsReconnectAttempts++;
-                    setTimeout(() => this.connectWebSocket(), 5000 * this.wsReconnectAttempts);
+                    this.wsReconnectTimer = setTimeout(() => {
+                        this.wsReconnectTimer = null;
+                        this.connectWebSocket();
+                    }, 5000 * this.wsReconnectAttempts);
                 }
             };
         } catch (error) {
@@ -325,6 +345,11 @@ class PriceAlertServiceClass {
             clearInterval(this.pollingInterval);
             this.pollingInterval = null;
         }
+        if (this.wsReconnectTimer) {
+            clearTimeout(this.wsReconnectTimer);
+            this.wsReconnectTimer = null;
+        }
+        this.wsReconnectAttempts = 0;
     }
 
     /**

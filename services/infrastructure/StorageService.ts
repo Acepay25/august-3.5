@@ -104,19 +104,30 @@ class UnifiedStorageService {
      */
     loadLearningRules(): { rules: LearningRule[]; lastUpdated: string; version: number } {
         const scoped = this.scopedKey(StorageKey.LEARNING_RULES);
-        let data = this.loadSetting<{ rules: LearningRule[]; lastUpdated: string; version: number } | null>(scoped, null);
-        if (!data) {
-            // Legacy (pre-multi-user) key — migrate once for the current user.
-            data = this.loadSetting(StorageKey.LEARNING_RULES, {
-                version: 2,
-                rules: [],
-                lastUpdated: new Date().toISOString()
-            });
-            if (data.rules.length > 0 || data.lastUpdated) {
-                this.saveSetting(scoped, data);
-            }
+        const stored = this.loadSetting<{ rules: LearningRule[]; lastUpdated: string; version?: number } | null>(scoped, null);
+        if (stored) {
+            return { version: stored.version ?? 2, rules: stored.rules ?? [], lastUpdated: stored.lastUpdated };
         }
-        return data;
+
+        // Legacy (pre-multi-user) key — migrate ONCE: the legacy value is
+        // removed after the copy so a later-created user can't inherit a
+        // stale snapshot of the first user's pre-upgrade rules.
+        const legacy = this.loadSetting<{ rules?: LearningRule[]; lastUpdated?: string } | null>(StorageKey.LEARNING_RULES, null);
+        if (legacy && (legacy.rules?.length || legacy.lastUpdated)) {
+            const migrated = {
+                version: 2,
+                rules: legacy.rules ?? [],
+                lastUpdated: legacy.lastUpdated ?? new Date().toISOString(),
+            };
+            this.saveSetting(scoped, migrated);
+            try {
+                localStorage.removeItem(StorageKey.LEARNING_RULES);
+            } catch (e) {
+                console.warn('[StorageService] Failed to remove legacy learning rules:', e);
+            }
+            return migrated;
+        }
+        return { version: 2, rules: [], lastUpdated: new Date().toISOString() };
     }
 
     /**

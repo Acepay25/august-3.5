@@ -2,8 +2,8 @@
  * Zod schemas for runtime validation at provider → pipeline boundaries.
  *
  * Two layers:
- *  - STRICT schemas (TradeAnalysisSchema & friends): exact shape, used as an
- *    audit gate (validateTradeAnalysis).
+ *  - STRICT schema (TradeAnalysisSchema): exact shape, used by the lenient
+ *    pipeline below as the final normalization target.
  *  - LENIENT pipeline (SanitizedTradeAnalysisSchema): accepts messy AI output
  *    (synonyms, "75%", objects-where-strings-belong) and normalizes it into a
  *    valid TradeAnalysis. This is the live boundary used by
@@ -208,37 +208,6 @@ export const TradeAnalysisSchema = z.object({
   evidence: z.array(EvidenceClaimSchema).optional(),
   invalidationCriteria: z.array(InvalidationCriterionSchema).optional(),
 });
-
-// Inferred type from schema (should match TradeAnalysis interface)
-export type ValidatedTradeAnalysis = z.infer<typeof TradeAnalysisSchema>;
-
-// =============================================================================
-// MODERATOR JSON PLAN (embedded in debate stream)
-// =============================================================================
-
-export const ModeratorPlanSchema = z.object({
-  analysis: TradeAnalysisSchema,
-  thoughtProcess: z.string().optional(),
-});
-
-// =============================================================================
-// HELPER: Validate with friendly error messages
-// =============================================================================
-
-export function validateTradeAnalysis(data: unknown): {
-  success: boolean;
-  data?: ValidatedTradeAnalysis;
-  errors?: string[];
-} {
-  const result = TradeAnalysisSchema.safeParse(data);
-  if (result.success) {
-    return { success: true, data: result.data };
-  }
-  const errors = result.error.issues.map(
-    (issue) => `${issue.path.join('.')}: ${issue.message}`
-  );
-  return { success: false, errors };
-}
 
 // =============================================================================
 // LENIENT AI-BOUNDARY PIPELINE

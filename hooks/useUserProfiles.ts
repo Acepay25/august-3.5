@@ -49,6 +49,14 @@ export const useUserProfiles = (params: UseUserProfilesParams) => {
                 // activeUsername still holds the deleted name, and saving
                 // would resurrect the user as a blank profile.
                 resetAppState(null);
+                // Same singleton resets as loadUserData: the autopilot loop
+                // must stop kline-verifying the deleted user's registrations,
+                // and the insights cache / last_active_user must not point at
+                // a deleted profile until the next user loads.
+                const { OutcomeAutopilotService } = await import('../services/ui/OutcomeAutopilotService');
+                OutcomeAutopilotService.reset();
+                const { setAttributedInsightsUser } = await import('../services/learning/PatternMemorySynthesisService');
+                setAttributedInsightsUser(null);
                 setIsUserModalOpen(true);
             }
         }

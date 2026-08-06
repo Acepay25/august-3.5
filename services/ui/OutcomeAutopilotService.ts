@@ -76,6 +76,7 @@ class OutcomeAutopilotServiceClass {
             if (stored) {
                 (stored.processed || []).forEach(id => this.processed.add(id));
                 (stored.dismissed || []).forEach(id => this.dismissed.add(id));
+                this.pruneIdSets();
             }
         } catch (err) {
             console.warn('[OutcomeAutopilot] Failed to load state:', err);
@@ -107,6 +108,7 @@ class OutcomeAutopilotServiceClass {
     /** User dismissed the banner for this message. */
     dismiss(messageId: string): void {
         this.dismissed.add(messageId);
+        this.pruneIdSets();
         this.resolutions.delete(messageId);
         this.registrations.delete(messageId);
         this.stopLoopIfEmpty();
@@ -116,10 +118,29 @@ class OutcomeAutopilotServiceClass {
     /** Called after the user confirms/logs — prevents re-detection forever. */
     markProcessed(messageId: string): void {
         this.processed.add(messageId);
+        this.pruneIdSets();
         this.resolutions.delete(messageId);
         this.registrations.delete(messageId);
         this.stopLoopIfEmpty();
         void this.persist();
+    }
+
+    /**
+     * Cap the persisted processed/dismissed id lists — they grew unbounded
+     * (one entry per resolved analysis, forever). Old entries are only used
+     * to suppress re-detection of messages that no longer exist anyway, so
+     * the most recent window is sufficient.
+     */
+    private pruneIdSets(): void {
+        const MAX_TRACKED_IDS = 2000;
+        const trim = (set: Set<string>): void => {
+            if (set.size <= MAX_TRACKED_IDS) return;
+            const entries = [...set];
+            set.clear();
+            entries.slice(-MAX_TRACKED_IDS).forEach(id => set.add(id));
+        };
+        trim(this.processed);
+        trim(this.dismissed);
     }
 
     getResolution(messageId: string): AutopilotResolution | undefined {
@@ -305,7 +326,9 @@ class OutcomeAutopilotServiceClass {
     ): boolean {
         if (!result.slHit || result.tpHits?.length !== 1 || result.tpHits[0].level !== 'TP1') return false;
         const entry = parsePrice(reg.analysis.entryPoints?.[0]?.price || '');
-        return !isNaN(entry) && entry > 0 && Math.abs((result.slHit.price ?? 0) - entry) / entry < 0.001;
+        // 5 bps tolerance — tight enough that a genuine stop within 0.1% of
+        // entry isn't misread as a breakeven-managed exit (which halves PnL).
+        return !isNaN(entry) && entry > 0 && Math.abs((result.slHit.price ?? 0) - entry) / entry < 0.0005;
     }
 
     private buildWinResolution(
@@ -318,7 +341,8 @@ class OutcomeAutopilotServiceClass {
         // REGISTERED leverage (the analysis-time percentage may carry a
         // stale leverage and ignores scale-outs).
         const hitPrice = result.priceAtHit ?? NaN;
-        const scaleOut = this.isBreakevenScaleOut(reg, result) ? 0.5 : 1;
+        const scaleOutDetected = this.isBreakevenScaleOut(reg, result);
+        const scaleOut = scaleOutDetected ? 0.5 : 1;
         const recomputed = this.computePnLFromPrice(reg, hitPrice, scaleOut);
         let pnlPercent = recomputed;
         if (pnlPercent === undefined) {
@@ -333,8 +357,9 @@ class OutcomeAutopilotServiceClass {
             hitLevel: result.priceAtHit !== undefined ? String(result.priceAtHit) : undefined,
             hitTarget,
             // Confidence tier: a win where the SL was touched first is weaker
-            // than a clean run to the TP (the verifier records slHit on touch).
-            recoveredAfterSlTouch: !!result.slHit,
+            // than a clean run to the TP — but a breakeven scale-out (TP1
+            // then entry-priced stop) is NOT an SL touch; exclude it.
+            recoveredAfterSlTouch: !!result.slHit && !scaleOutDetected,
             detail: `${hitTarget} hit${result.priceAtHit !== undefined ? ` @ ${result.priceAtHit}` : ''}${result.slHit ? ' · recovered after SL touch' : ' · clean'}${scaleOut < 1 ? ' · TP1 scale-out to breakeven' : ''}${result.timeToOutcome ? ` · ${result.timeToOutcome} after analysis` : ''}`,
             detectedAt: new Date().toISOString(),
             timeToOutcome: result.timeToOutcome,

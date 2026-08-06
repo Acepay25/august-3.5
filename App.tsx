@@ -1150,13 +1150,14 @@ const App: React.FC = () => {
     // buildProfileSnapshot changes identity on every conversationHistory
     // mutation — using it directly in deps would re-arm this interval every
     // frame during a run (the exact bug this heartbeat exists to fix). Keep
-    // the freshest snapshot in a ref instead. The ref must be declared at
-    // component level — useRef inside the effect body throws "Invalid hook
-    // call" the moment the effect re-runs (i.e. at the start of every run).
+    // the freshest snapshot in a ref instead. The ref is synced during RENDER
+    // (like loggedTradesRef): the effect body only runs when the run starts,
+    // so an assignment inside it would freeze the snapshot at run-start data
+    // and the mid-run flush would overwrite the profile with stale state.
     const heartbeatSnapshotRef = useRef(buildProfileSnapshot);
+    heartbeatSnapshotRef.current = buildProfileSnapshot;
     useEffect(() => {
         if (!activeUsername || (!isAnalysisInProgress && !isPostMortemInProgress)) return;
-        heartbeatSnapshotRef.current = buildProfileSnapshot;
         const interval = setInterval(async () => {
             try {
                 const snapshot = heartbeatSnapshotRef.current();

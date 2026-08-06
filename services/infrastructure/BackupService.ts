@@ -114,7 +114,11 @@ export const createBackup = async (username: string): Promise<BackupMetadata | n
             return null;
         }
 
-        const backupId = `backup-${username}-${Date.now()}`;
+        // The id embeds the SANITIZED username — the raw name can contain
+        // characters that collide after filename sanitization ("a.b" vs "a_b"
+        // both become "a_b"), letting one user list/delete the other's backups.
+        const safeUser = username.replace(/[^a-zA-Z0-9_-]/g, '_');
+        const backupId = `backup-${safeUser}-${Date.now()}`;
         const timestamp = new Date().toISOString();
         const profileJson = JSON.stringify(profile);
         const sizeBytes = new Blob([profileJson]).size;
@@ -135,8 +139,7 @@ export const createBackup = async (username: string): Promise<BackupMetadata | n
             // Write the profile + a sidecar metadata file. We encode the
             // metadata in the filename so list operations don't need to read
             // every full backup just to show metadata.
-            const safeName = (s: string) => s.replace(/[^a-zA-Z0-9_-]/g, '_');
-            const baseName = `${safeName(username)}_${backupId}`;
+            const baseName = `${safeUser}_${backupId}`;
             // CRITICAL: encoding: Encoding.UTF8 is required when passing a
             // string. Without it, Capacitor treats data as base64 binary and
             // throws on native (silently caught → backup returns null).
@@ -199,7 +202,10 @@ export const getBackups = async (username: string): Promise<BackupMetadata[]> =>
             });
             const safeUser = (s: string) => s.replace(/[^a-zA-Z0-9_-]/g, '_');
             const prefix = `${safeUser(username)}_`;
-            // Read only the .meta.json sidecar files for this user.
+            // Read only the .meta.json sidecar files for this user. The
+            // prefix is a cheap pre-filter — the AUTHORITATIVE check is the
+            // username stored in the metadata (usernames sharing a sanitized
+            // prefix, e.g. "bob" vs "bob_2", must not see each other's).
             const metaFiles = result.files
                 .map(f => f.name)
                 .filter(name => name.startsWith(prefix) && name.endsWith('.meta.json'));
@@ -211,7 +217,8 @@ export const getBackups = async (username: string): Promise<BackupMetadata[]> =>
                         directory: Directory.Documents,
                         encoding: Encoding.UTF8,
                     });
-                    metas.push(JSON.parse(await readFileAsString(data)));
+                    const meta = JSON.parse(await readFileAsString(data)) as BackupMetadata;
+                    if (meta.username === username) metas.push(meta);
                 } catch (err) {
                     console.warn(`[BackupService] Failed to read native meta ${metaFile}:`, err);
                 }
@@ -307,7 +314,11 @@ export const deleteBackup = async (backupId: string): Promise<boolean> => {
                 path: NATIVE_BACKUP_DIR,
                 directory: Directory.Documents,
             });
-            const toDelete = result.files.filter(f => f.name.includes(backupId));
+            // Match the id followed by the extension separator — a bare
+            // `includes(backupId)` also matched OTHER backups whose ids share
+            // the string as a prefix ("backup-bob-1000" matched
+            // "backup-bob-10000"), deleting the wrong user's/version's data.
+            const toDelete = result.files.filter(f => f.name.includes(`${backupId}.`));
             for (const f of toDelete) {
                 await Filesystem.deleteFile({
                     path: `${NATIVE_BACKUP_DIR}/${f.name}`,

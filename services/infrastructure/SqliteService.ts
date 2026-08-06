@@ -11,7 +11,7 @@
 import { Capacitor } from '@capacitor/core';
 import { CapacitorSQLite, SQLiteConnection, SQLiteDBConnection } from '@capacitor-community/sqlite';
 import { LoggedTrade, UserProfile, Conversation, TradeSummary, GlobalMemory, UserSettings, Message } from '../../types';
-import { setSqliteDb } from './SqliteServiceHelpers';
+import { setSqliteDb, runExclusiveWrite } from './SqliteServiceHelpers';
 import { DEFAULT_LEVERAGE } from '../../utils/conversationUtils';
 
 /**
@@ -469,6 +469,9 @@ const serializeConversationMessages = (messages: Message[]): string => JSON.stri
  * Delete rows of a collection that are absent from the profile being saved.
  * INSERT OR REPLACE can't remove rows; without this, deletions never
  * propagate to SQLite (stale snapshots and imports resurrected deleted rows).
+ * The IN list is chunked: SQLite's default variable limit is 999 and large
+ * profiles (1000+ trades) would otherwise throw "too many SQL variables"
+ * inside the caller's transaction, rolling back the whole save.
  */
 const deleteAbsentRows = async (
     table: string,
@@ -480,11 +483,15 @@ const deleteAbsentRows = async (
         await db.run(`DELETE FROM ${table} WHERE username = ?`, [username]);
         return;
     }
-    const placeholders = presentIds.map(() => '?').join(',');
-    await db.run(
-        `DELETE FROM ${table} WHERE username = ? AND id NOT IN (${placeholders})`,
-        [username, ...presentIds]
-    );
+    const CHUNK_SIZE = 400;
+    for (let i = 0; i < presentIds.length; i += CHUNK_SIZE) {
+        const chunk = presentIds.slice(i, i + CHUNK_SIZE);
+        const placeholders = chunk.map(() => '?').join(',');
+        await db.run(
+            `DELETE FROM ${table} WHERE username = ? AND id NOT IN (${placeholders})`,
+            [username, ...chunk]
+        );
+    }
 };
 
 export const sqliteSaveUserProfile = async (profile: UserProfile): Promise<void> => {
@@ -704,14 +711,39 @@ export const sqliteDeleteTrade = async (tradeId: string): Promise<void> => {
 /**
  * Delete a user and all associated data across all tables
  */
+/**
+ * Delete a user and all associated data across all tables.
+ * Serialized through the write mutex and wrapped in one transaction: an
+ * in-flight save (heartbeat/debounce/unload) reading the profile, then
+ * re-inserting it after these DELETEs, would resurrect the deleted user.
+ */
 export const sqliteDeleteUser = async (username: string): Promise<void> => {
     if (!db) return;
-    await db.run('DELETE FROM trades WHERE username = ?', [username]);
-    await db.run('DELETE FROM conversations WHERE username = ?', [username]);
-    await db.run('DELETE FROM trade_summaries WHERE username = ?', [username]);
-    await db.run('DELETE FROM saved_analyses WHERE username = ?', [username]);
-    await db.run('DELETE FROM thinking_records WHERE username = ?', [username]);
-    await db.run('DELETE FROM users WHERE username = ?', [username]);
+    // Narrow the module-level connection inside the closure (it's mutable).
+    const connection = db;
+    await runExclusiveWrite(async () => {
+        await connection.execute('BEGIN TRANSACTION');
+        let transactionOpen = true;
+        try {
+            await connection.run('DELETE FROM trades WHERE username = ?', [username]);
+            await connection.run('DELETE FROM conversations WHERE username = ?', [username]);
+            await connection.run('DELETE FROM trade_summaries WHERE username = ?', [username]);
+            await connection.run('DELETE FROM saved_analyses WHERE username = ?', [username]);
+            await connection.run('DELETE FROM thinking_records WHERE username = ?', [username]);
+            await connection.run('DELETE FROM users WHERE username = ?', [username]);
+            await connection.execute('COMMIT');
+            transactionOpen = false;
+        } catch (error) {
+            if (transactionOpen) {
+                try {
+                    await connection.execute('ROLLBACK');
+                } catch (rollbackError) {
+                    console.error('[SqliteService] Delete ROLLBACK failed:', rollbackError);
+                }
+            }
+            throw error;
+        }
+    });
 };
 
 /**
@@ -845,7 +877,11 @@ export const migrateFromIndexedDB = async (
             // Get from IndexedDB
             const profile = await getUserProfile(username);
             if (profile) {
-                await sqliteSaveUserProfile(profile);
+                // Serialized like every other writer — the migration opens
+                // BEGIN/COMMIT on the shared connection.
+                await runExclusiveWrite(async () => {
+                    await sqliteSaveUserProfile(profile);
+                });
                 totalTrades += profile.tradeLog?.length || 0;
                 console.log(`[SqliteService] Migrated user ${username} with ${profile.tradeLog?.length || 0} trades`);
             }

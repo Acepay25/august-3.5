@@ -53,6 +53,20 @@ export const exportTradesCSV = (trades: LoggedTrade[]): void => {
 };
 
 /**
+ * Escape a value for safe interpolation into the report HTML — coin names,
+ * strategies and directions come from AI output and can contain markup.
+ */
+const escapeHtml = (value: unknown): string => {
+    const str = value === null || value === undefined ? '' : String(value);
+    return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+};
+
+/**
  * Export the trade log as a printable HTML report (monochrome, print
  * stylesheet included — open it and use the browser's print-to-PDF).
  */
@@ -69,16 +83,16 @@ export const exportTradesHTML = (trades: LoggedTrade[]): void => {
     const rows = trades.map(t => `
         <tr>
             <td>${new Date(t.timestamp).toLocaleDateString()}</td>
-            <td>${t.analysis.coinName || '—'}</td>
-            <td>${t.analysis.direction || '—'}</td>
-            <td>${t.outcome}</td>
-            <td>${t.analysis.entryPoints?.[0]?.price || '—'}</td>
-            <td>${t.analysis.stopLoss || '—'}</td>
-            <td>${(t.analysis.takeProfit || []).map(tp => tp.price).join(' / ') || '—'}</td>
-            <td>${t.leverage ?? '—'}x</td>
+            <td>${escapeHtml(t.analysis.coinName) || '—'}</td>
+            <td>${escapeHtml(t.analysis.direction) || '—'}</td>
+            <td>${escapeHtml(t.outcome)}</td>
+            <td>${escapeHtml(t.analysis.entryPoints?.[0]?.price) || '—'}</td>
+            <td>${escapeHtml(t.analysis.stopLoss) || '—'}</td>
+            <td>${escapeHtml((t.analysis.takeProfit || []).map(tp => tp.price).join(' / ')) || '—'}</td>
+            <td>${escapeHtml(t.leverage) || '—'}x</td>
             <td>${t.pnlAmount !== undefined ? t.pnlAmount.toFixed(2) : (t.pnlPercent !== undefined ? `${t.pnlPercent >= 0 ? '+' : ''}${t.pnlPercent.toFixed(1)}%` : '—')}</td>
-            <td>${t.analysis.detectedPatternFamily || '—'}</td>
-            <td>${t.analysis.strategy || '—'}</td>
+            <td>${escapeHtml(t.analysis.detectedPatternFamily) || '—'}</td>
+            <td>${escapeHtml(t.analysis.strategy) || '—'}</td>
         </tr>`).join('');
 
     const html = `<!doctype html>
