@@ -1100,8 +1100,84 @@ ${summariesText}
 Return ONLY the structured summary.
 `;
 
-    const result = await sendChatRequest(config, [{ role: 'user', content: prompt }], { signal });
-    return sanitizeAIResponse(result || "Final summary generation failed.");
+    const result = sanitizeAIResponse(await sendChatRequest(config, [{ role: 'user', content: prompt }], { signal }) || '');
+    // Reasoning-capable models (DeepSeek-R1, etc.) often prefix the answer
+    // with their chain of thought — either inline or because the gateway
+    // omits the final content field and the client salvages reasoning as the
+    // response text. The answer is the block starting at the LAST standalone
+    // "Executive Summary" heading that still contains the other mandated
+    // headings. Never store the thinking as pattern memory.
+    const structured = extractStructuredSummary(result);
+    if (!structured) {
+        console.warn('[FinalSummary] Model returned its chain of thought instead of a structured summary — not storing the thinking.');
+        return 'The AI returned its reasoning instead of a structured pattern-memory summary. Regenerate the review to try again.';
+    }
+    return structured;
+}
+
+/**
+ * The pattern-memory prompt mandates the exact heading list (see
+ * generateFinalSummary). When a reasoning model leaks its chain of thought
+ * into the response — inline, or via the reasoning-only fallback in the
+ * provider layer — the real answer is the block that starts at the LAST
+ * line beginning with the first required heading AND still contains a
+ * quorum of the remaining headings (the CoT only *mentions* headings
+ * inside prose; the draft emits them as standalone lines).
+ *
+ * Returns the extracted answer, or null when the response contains no
+ * structured answer (pure reasoning / unusable output).
+ */
+export function extractStructuredSummary(
+    response: string,
+    headings: string[] = [
+        'Executive Summary',
+        'Missed Win Analysis',
+        'Extended SL Zone Breach Analysis',
+        'Pattern Family Performance',
+        'Confidence Calibration',
+        'Winning Patterns',
+        'Failure Patterns',
+        'Behavioral Biases',
+        'Statistical Tendencies',
+        'Actionable Rules',
+        'Conclusion',
+    ]
+): string | null {
+    if (!response || typeof response !== 'string') return null;
+    const lines = response.split('\n');
+    const [firstHeading, ...otherHeadings] = headings;
+    if (!firstHeading) return null;
+
+    // A real heading line is EXACTLY the heading (optionally decorated with
+    // markdown and/or a trailing colon). Prose like "Executive Summary
+    // heading should include…" or planning fragments ("Missed Win Analysis:
+    // count 0.") are NOT heading lines — they only mention the headings.
+    const isHeadingLine = (line: string, heading: string): boolean => {
+        const stripped = line
+            .replace(/^[\s#>*_\-~`]+/, '')
+            .replace(/[\s#>*_\-~`]+$/, '')
+            .replace(/[:：]+$/, '')
+            .trim();
+        return stripped.toLowerCase() === heading.toLowerCase();
+    };
+
+    // Iterate from the END: the final output of a reasoning model always
+    // follows its thinking, so the last candidate is the answer itself.
+    for (let i = lines.length - 1; i >= 0; i--) {
+        if (!isHeadingLine(lines[i], firstHeading)) continue;
+        const tail = lines.slice(i).join('\n');
+        const tailHeadingLines = lines
+            .slice(i)
+            .map(l => l.replace(/^[\s#>*_\-~`]+/, '').replace(/[\s#>*_\-~`]+$/, '').replace(/[:：]+$/, '').trim().toLowerCase());
+        const matched = otherHeadings.filter(h => tailHeadingLines.includes(h.toLowerCase())).length;
+        // The prompt mandates all headings, so a real answer carries most of
+        // them as standalone lines. A thinking fragment can't pass unless it
+        // literally emitted several exact heading lines.
+        if (matched >= 3) {
+            return tail.trim();
+        }
+    }
+    return null;
 }
 
 export async function compressChatHistory(
