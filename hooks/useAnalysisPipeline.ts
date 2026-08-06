@@ -193,10 +193,21 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         // recent insights, global memory, and thread context. Hashing keeps the
         // key short. Without this a 10-minute-TTL hit serves an analysis
         // computed under DIFFERENT instructions for the same chart.
+        // OCR image summaries (rest[0]), the recent chat-history tail
+        // (rest[1], bounded — full-history hashing would run on every call)
+        // and the provider identity (config.id) are folded in too: two
+        // providers exposing the same model id, or a re-analysis after a
+        // different vision model re-OCR'd the chart, must not share entries.
+        const historyFingerprint = hashString(JSON.stringify(
+            (rest[1] as Message[] | undefined)?.slice(-10).map(m => `${m.id}:${m.role}:${(m.text || '').slice(0, 200)}`) || []
+        ));
         const modeContext = hashString(JSON.stringify([
             rest[5], rest[8], rest[13], rest[14],  // deepen, submode, rolePrompt, customPrompt
             rest[2], rest[3], rest[6], rest[7],    // pattern memory, insights, global memory, thread
             rest[9], rest[10], rest[11], rest[12], // instructions, playbook, families, memory flags
+            rest[0],                               // OCR image summaries
+            historyFingerprint,                    // recent chat history (bounded)
+            config.id,                             // provider identity
         ]));
 
         const cached = await getCachedResponse(cacheKey, prompt, model, modeContext);
@@ -455,6 +466,19 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         const isCurrentRequest = (): boolean =>
             analysisAbortController.current === currentAbortController && !currentAbortController.signal.aborted;
 
+        // Throw when the request goes stale (user cancel or conversation
+        // switch). Plain early-returns/breaks bypassed the catch block's
+        // message cleanup, leaving the debate placeholder stuck with
+        // isDebating:true — and with the abort controller already nulled by
+        // the finally, the Stop button couldn't even abort it again.
+        const assertCurrentRequest = (): void => {
+            if (!isCurrentRequest()) {
+                const abortError = new Error('Analysis aborted');
+                abortError.name = 'AbortError';
+                throw abortError;
+            }
+        };
+
         if (imagesToUse.length > 0) {
             const visionData = imagesToUse.map(img => img.fullAnalysisText || `Chart ${imagesToUse.indexOf(img) + 1}: No analysis text available.`);
             setCurrentVisionData(visionData);
@@ -580,7 +604,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                         GlobalLearningService.getCalibration(),
                         learningRules
                     );
-                    if (!isCurrentRequest()) return;
+                    if (!isCurrentRequest()) assertCurrentRequest();
                     setIsHybridLoading(false);
                     if (hybridResult) {
                         bayesianConfidenceCap = hybridResult.adjustedConfidence;
@@ -602,7 +626,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                         console.log('[Hybrid Intelligence] FAILED - No symbol detected in prompt');
                     }
                 } catch (hybridError) {
-                    if (!isCurrentRequest()) return;
+                    if (!isCurrentRequest()) assertCurrentRequest();
                     setIsHybridLoading(false);
                     console.error('[Hybrid Intelligence] ERROR fetching market data:', hybridError);
                 }
@@ -1084,7 +1108,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     });
 
                     const settledResults = await Promise.allSettled(analysisPromises);
-                    if (!isCurrentRequest()) return;
+                    if (!isCurrentRequest()) assertCurrentRequest();
                     if (isStagedEnsemble) {
                         updateEnsembleProgress(progress => ({
                             ...progress,
@@ -1133,7 +1157,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     // synchronous fallback) so 1000 simulations per analyst
                     // never block the debate UI.
                     for (const [index, settled] of settledResults.entries()) {
-                        if (!isCurrentRequest()) return;
+                        if (!isCurrentRequest()) assertCurrentRequest();
                         if (settled.status !== 'fulfilled') continue; // failed analyst has no analysis
                         const providerName = enabledProviders[index]?.name || `Unknown-${index}`;
                         const analysis = settled.value?.analysis;
@@ -1159,7 +1183,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                                     takeProfit: analysis.takeProfit
                                 }, hybridDataForMC);
 
-                                if (!isCurrentRequest()) return;
+                                if (!isCurrentRequest()) assertCurrentRequest();
                                 if (mcResult) {
                                     perAIMC.push({
                                         provider: providerName,
@@ -1287,8 +1311,10 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             },
                             (speaker: string, reasoning: string) => {
                                 // Rebuttal and clarification reasoning is keyed by speaker
-                                // so the debate chat can show it live.
-                                reasoningMapRef.current[speaker] = reasoning;
+                                // so the debate chat can show it live. Deltas ACCUMULATE
+                                // (same as the analyst/moderator callbacks) — replacing
+                                // wiped everything but the last delta of the last round.
+                                reasoningMapRef.current[speaker] = (reasoningMapRef.current[speaker] || '') + reasoning;
                             },
                             (speaker: string, round: number, active: boolean) => {
                                 if (active) {
@@ -1326,7 +1352,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                         const turnRegex = new RegExp(`(?:^|\\n)\\s*(?:[*_~]*)(${speakerPattern})[^\\n]*?(?:[*_~]*)\\s*:\\s*([\\s\\S]*?)(?=(?:^|\\n)\\s*(?:[*_~]*)(${speakerPattern})[^\\n]*?(?:[*_~]*)\\s*:|$)`, 'gi');
 
                         for await (const chunk of debateStream as AsyncGenerator<string, void, unknown>) {
-                            if (!isCurrentRequest()) break;
+                            if (!isCurrentRequest()) assertCurrentRequest();
                             fullResponseText += chunk;
 
                             const startTagRegex = /(?:<|\*\*<|`|< \*\*|_\*<)?DEBATE_START(?:>|>\*\*|`|\*\* >|>\*_)*/i;
@@ -1417,7 +1443,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                         let moderatorRound = 0;
 
                         for await (const event of debateStream as AsyncGenerator<ensembleService.RealDebateTurnEvent, void, unknown>) {
-                            if (!isCurrentRequest()) break;
+                            if (!isCurrentRequest()) assertCurrentRequest();
                             if (!event || typeof event.text !== 'string') continue;
 
                             const key = `${event.round}::${event.speaker}`;
@@ -1510,7 +1536,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     // Flush the final pending update synchronously so the
                     // last chunk's state is committed before downstream parsing.
                     throttledDebateUpdate.flush();
-                    if (!isCurrentRequest()) return;
+                    if (!isCurrentRequest()) assertCurrentRequest();
 
                     let finalAnalysis: TradeAnalysis;
                     try {
@@ -1828,7 +1854,7 @@ ${accuracyVerificationNote}`
                             // multi path uses the same append pattern.
                             (reasoning: string) => { soloRawReasoning += reasoning; }
                         );
-                    if (!isCurrentRequest()) return;
+                    if (!isCurrentRequest()) assertCurrentRequest();
                     const soloAiMessage: Message = {
                         id: `ai-${Date.now()}`, role: MessageRole.AI, text: result.thoughtProcess, createdAt: new Date().toISOString(), analysis: processNewAnalysis(result.analysis), sources: result.sources || [], outcome: TradeOutcome.PENDING, ocrModelUsed: userMessage.ocrModelUsed,
                         imageSummaries: userMessage.imageSummaries,
@@ -1904,7 +1930,7 @@ ${accuracyVerificationNote}`
                     currentAbortController.signal,
                     reasoning => { reasoningContent = reasoning; }
                 );
-                if (!isCurrentRequest()) return;
+                if (!isCurrentRequest()) assertCurrentRequest();
                 // Casual chat is a single-model conversation. Do not store the
                 // answer as an individual insight; that creates an oversized
                 // "Individual AI Insights" section under ordinary replies.

@@ -42,14 +42,6 @@ export interface ConfluenceHistoricalStats {
 
 const TIMEFRAMES = ['5m', '15m', '1h', '4h', '1d'] as const;
 
-const CONFLUENCE_WEIGHTS = {
-    '5m': 10,
-    '15m': 15,
-    '1h': 20,
-    '4h': 30,
-    '1d': 25,
-};
-
 // In-memory cache
 let _confluenceCache: ConfluenceHistoricalStats | null = null;
 let _isInitialized = false;
@@ -95,77 +87,69 @@ export function calculateConfluenceScore(
     analysis: TradeAnalysis,
     direction: 'Long' | 'Short'
 ): ConfluenceScore {
+    const tradeBias: 'bullish' | 'bearish' = direction === 'Long' ? 'bullish' : 'bearish';
     const breakdown: TimeframeAlignment[] = [];
-    let totalScore = 0;
-    let alignedCount = 0;
-
-    // Extract timeframe data from analysis
     const marketConditions = analysis.marketConditions;
     const prices = marketConditions?.prices || {};
 
-    // Parse timeframeAlignment if available (e.g., "3 of 4 bullish")
+    // The AI's stated timeframe alignment ("3 of 4 bullish") is the only
+    // per-timeframe structural signal available. It must not be combined
+    // with the per-timeframe weight loop — the old code pre-set the score
+    // from the text AND added weights on top (scores could reach 200), and
+    // derived every timeframe's direction from the analysis direction
+    // itself, making "alignment" circular. RSI and MACD contribute
+    // independent market-data agreement instead.
     const timeframeAlignmentStr = marketConditions?.timeframeAlignment || '';
     const alignmentMatch = timeframeAlignmentStr.match(/(\d+)\s*of\s*(\d+)/i);
-
+    let alignedCount = 0;
+    let alignmentRatio = 0;
     if (alignmentMatch) {
         alignedCount = parseInt(alignmentMatch[1], 10);
         const total = parseInt(alignmentMatch[2], 10);
-        totalScore = Math.round((alignedCount / total) * 100);
+        if (total > 0) alignmentRatio = alignedCount / total;
     }
 
-    // Parse RSI for additional context
+    // RSI agreement (0..1): overbought (>70) favors shorts, oversold (<30)
+    // favors longs; the value in between gives a mild directional read.
     const rsiStr = marketConditions?.rsi || '';
     const rsiValue = parseFloat(rsiStr);
-    let rsiDirection: 'bullish' | 'bearish' | 'neutral' = 'neutral';
+    let rsiAgreement = 0.5; // missing/unparsable RSI → neutral
     if (!isNaN(rsiValue)) {
-        if (rsiValue > 70) rsiDirection = direction === 'Short' ? 'bullish' : 'bearish'; // Overbought favors shorts
-        else if (rsiValue < 30) rsiDirection = direction === 'Long' ? 'bullish' : 'bearish'; // Oversold favors longs
-        else if (rsiValue > 50) rsiDirection = 'bullish';
-        else rsiDirection = 'bearish';
+        if (rsiValue > 70) rsiAgreement = direction === 'Short' ? 1 : 0;
+        else if (rsiValue < 30) rsiAgreement = direction === 'Long' ? 1 : 0;
+        else if (rsiValue > 50) rsiAgreement = 0.5 + ((rsiValue - 50) / 50) * 0.5;
+        else rsiAgreement = 0.5 - ((50 - rsiValue) / 50) * 0.5;
     }
 
-    // Parse MACD
+    // MACD agreement (0..1)
     const macdStr = (marketConditions?.macd || '').toLowerCase();
-    let macdDirection: 'bullish' | 'bearish' | 'neutral' = 'neutral';
-    if (macdStr.includes('bullish') || macdStr.includes('cross up')) macdDirection = 'bullish';
-    else if (macdStr.includes('bearish') || macdStr.includes('cross down')) macdDirection = 'bearish';
+    let macdAgreement = 0.5; // missing MACD → neutral
+    if (macdStr.includes('bullish') || macdStr.includes('cross up')) macdAgreement = tradeBias === 'bullish' ? 1 : 0;
+    else if (macdStr.includes('bearish') || macdStr.includes('cross down')) macdAgreement = tradeBias === 'bearish' ? 1 : 0;
 
-    // Build timeframe breakdown from available data
+    // Single coherent formula: 60% structural alignment, 20% RSI, 20% MACD.
+    // Clamped to 0-100.
+    const totalScore = alignmentRatio * 60 + rsiAgreement * 20 + macdAgreement * 20;
+    const normalizedScore = Math.max(0, Math.min(100, Math.round(totalScore)));
+
+    // Per-timeframe breakdown (informational — no consumer branches on it).
+    // Without per-timeframe indicator data the direction can't be honestly
+    // attributed per timeframe, so entries stay neutral unless the stated
+    // alignment is strong; strength mirrors the stated alignment.
     for (const tf of TIMEFRAMES) {
         const priceKey = tf as keyof typeof prices;
-        const hasPrice = prices[priceKey] !== undefined;
-
-        // Infer direction from price relationship or use overall analysis direction
-        let tfDirection: 'bullish' | 'bearish' | 'neutral' = 'neutral';
-
-        if (hasPrice && analysis.direction) {
-            // Check if this timeframe aligns with trade direction
-            const isBullishSetup = analysis.direction.toLowerCase() === 'long';
-            tfDirection = isBullishSetup ? 'bullish' : 'bearish';
-        }
-
-        // Calculate if aligned with trade direction
-        const tradeDirectionBias = direction === 'Long' ? 'bullish' : 'bearish';
-        const isAligned = tfDirection === tradeDirectionBias;
-
         breakdown.push({
             timeframe: tf,
-            direction: tfDirection,
-            strength: isAligned ? 75 : 25,
+            direction: prices[priceKey] !== undefined && alignmentRatio >= 0.75 ? tradeBias : 'neutral',
+            strength: Math.round(alignmentRatio * 100),
             indicators: {
-                rsi: rsiDirection,
-                macd: macdDirection,
+                rsi: !isNaN(rsiValue)
+                    ? (rsiValue > 70 ? 'overbought' : rsiValue < 30 ? 'oversold' : tradeBias)
+                    : undefined,
+                macd: macdAgreement > 0.5 ? tradeBias : macdAgreement < 0.5 ? (tradeBias === 'bullish' ? 'bearish' : 'bullish') : undefined,
             }
         });
-
-        if (isAligned) {
-            totalScore += CONFLUENCE_WEIGHTS[tf];
-        }
     }
-
-    // Normalize score to 0-100
-    const maxPossibleScore = Object.values(CONFLUENCE_WEIGHTS).reduce((a, b) => a + b, 0);
-    const normalizedScore = Math.round((totalScore / maxPossibleScore) * 100);
 
     // Determine recommendation
     let recommendation: 'strong' | 'moderate' | 'weak' | 'conflicting';

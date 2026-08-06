@@ -19,6 +19,8 @@ interface TradeLogContentProps {
     isSummarizing?: boolean;
     currentInsightIds: string[];
     onUpdateTradeLeverage: (id: string, leverage: number) => void;
+    /** Active user — scopes the reasoning-record lookup per trade. */
+    username?: string;
 }
 
 const OutcomeBadge: React.FC<{ outcome: TradeOutcome }> = ({ outcome }) => {
@@ -65,7 +67,8 @@ const TradeLogRow: React.FC<{
     ocrModelIdToName: Record<string, string>;
     isInsight: boolean;
     onUpdateLeverage: (id: string, leverage: number) => void;
-}> = ({ trade, onToggle, isExpanded, isSelected, onSelect, onViewImage, modelIdToName, ocrModelIdToName, isInsight, onUpdateLeverage }) => {
+    username?: string;
+}> = ({ trade, onToggle, isExpanded, isSelected, onSelect, onViewImage, modelIdToName, ocrModelIdToName, isInsight, onUpdateLeverage, username }) => {
     const { analysis, outcome, timestamp, postMortem, postMortemImages, correctedEntry, correctedStopLoss, correctedTakeProfit, pnlAmount, pnlPercent, modelsUsed, geminiModelUsed, deepseekModelUsed, zhipuModelUsed, groqModelUsed, groqNewModelUsed, groqAlt2ModelUsed, openrouterModelUsed, moderatorModel, leverage, isAccuracyMode, accuracySubMode } = trade;
     const { direction, stopLoss, stopLossPercentage, entryPoints, takeProfit, activeStrategies, coinName, invalidationCriteria } = analysis;
     const [isInsightsVisible, setIsInsightsVisible] = useState(false);
@@ -314,7 +317,7 @@ const TradeLogRow: React.FC<{
 
                         {/* Reasoning Panel — per-analyst reasoning + debate transcript */}
                         <div className="col-span-2">
-                            <ReasoningPanel tradeId={getThinkingTradeId(trade.analysis?.createdAt, trade.id)} outcome={trade.outcome} />
+                            <ReasoningPanel tradeId={getThinkingTradeId(trade.analysis?.createdAt, trade.id)} outcome={trade.outcome} username={username} />
                         </div>
                     </div>
                 </div>
@@ -323,7 +326,7 @@ const TradeLogRow: React.FC<{
     );
 };
 
-const TradeLogContent: React.FC<TradeLogContentProps> = ({ trades, onDeleteTrades, onClearAllTrades, modelIdToName, ocrModelIdToName, onUpdateInsights, isSummarizing, currentInsightIds, onUpdateTradeLeverage }) => {
+const TradeLogContent: React.FC<TradeLogContentProps> = ({ trades, onDeleteTrades, onClearAllTrades, modelIdToName, ocrModelIdToName, onUpdateInsights, isSummarizing, currentInsightIds, onUpdateTradeLeverage, username }) => {
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [viewerImageUrl, setViewerImageUrl] = useState<string | null>(null);
@@ -467,6 +470,7 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({ trades, onDeleteTrade
                                     ocrModelIdToName={ocrModelIdToName}
                                     isInsight={currentInsightIds.includes(trade.id)}
                                     onUpdateLeverage={onUpdateTradeLeverage}
+                                    username={username}
                                 />
                             </div>
                         )}

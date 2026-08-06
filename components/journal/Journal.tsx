@@ -21,6 +21,8 @@ interface JournalProps {
     initialTradeId?: string;
     /** Called once the deep-linked trade has been consumed by the dashboard. */
     onInitialTradeConsumed?: () => void;
+    /** Active user — scopes reasoning-record lookups (falls back to localStorage). */
+    username?: string;
 
     // Trade Log Props
     trades: LoggedTrade[];
@@ -188,7 +190,7 @@ const TABS: TabConfig[] = [
 
 const JournalInner: React.FC<JournalProps> = ({
     isVisible, onClose, initialTab, isEmbedded = false,
-    initialTradeId, onInitialTradeConsumed,
+    initialTradeId, onInitialTradeConsumed, username,
     // Trade Log Pass-through
     trades, onDeleteTrades, onClearAllTrades, modelIdToName, ocrModelIdToName, onUpdateInsights, isSummarizing, currentInsightIds, onUpdateTradeLeverage,
     // Performance Review Pass-through
@@ -204,6 +206,11 @@ const JournalInner: React.FC<JournalProps> = ({
     onRewriteInsightsWithAI = () => {} // NEW
 }) => {
     const [activeTab, setActiveTab] = useState<TabId>(initialTab);
+
+    // Active user for reasoning-record lookups. Threaded from App; falls back
+    // to the legacy localStorage key the analysis pipeline writes.
+    const activeUsername = username
+        || (typeof localStorage !== 'undefined' ? (localStorage.getItem('last_active_user') || 'default') : 'default');
 
     // Derive enabled providers from dynamic configs when not passed explicitly
     const effectiveEnabledProviders: AIProvider[] = enabledProviders
@@ -231,6 +238,7 @@ const JournalInner: React.FC<JournalProps> = ({
                 isSummarizing={isSummarizing}
                 currentInsightIds={currentInsightIds}
                 onUpdateTradeLeverage={onUpdateTradeLeverage}
+                username={activeUsername}
             />
         ) : activeTab === 'performance' ? (
             <PerformanceReviewContent
@@ -268,7 +276,7 @@ const JournalInner: React.FC<JournalProps> = ({
         ) : activeTab === 'reasoning' ? (
             <div className="p-4 sm:p-6 overflow-y-auto h-full">
                 <ReasoningDashboard
-                    username={typeof localStorage !== 'undefined' ? (localStorage.getItem('last_active_user') || 'default') : 'default'}
+                    username={activeUsername}
                     initialTradeId={initialTradeId}
                     onInitialTradeConsumed={onInitialTradeConsumed}
                 />
@@ -384,6 +392,7 @@ const JournalInner: React.FC<JournalProps> = ({
                             isSummarizing={isSummarizing}
                             currentInsightIds={currentInsightIds}
                             onUpdateTradeLeverage={onUpdateTradeLeverage}
+                            username={activeUsername}
                         />
                     ) : activeTab === 'performance' ? (
                         <PerformanceReviewContent
@@ -422,7 +431,7 @@ const JournalInner: React.FC<JournalProps> = ({
                     ) : activeTab === 'reasoning' ? (
                         <div className="p-4 sm:p-6 overflow-y-auto h-full">
                             <ReasoningDashboard
-                                username={typeof localStorage !== 'undefined' ? (localStorage.getItem('last_active_user') || 'default') : 'default'}
+                                username={activeUsername}
                                 initialTradeId={initialTradeId}
                                 onInitialTradeConsumed={onInitialTradeConsumed}
                             />

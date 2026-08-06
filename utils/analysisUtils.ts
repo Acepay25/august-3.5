@@ -55,16 +55,18 @@ export const formatAnalysisForDisplay = (analysis: any): string => {
 };
 
 /**
- * Extract a numeric price from a string. Range entries ("3210 - 3220") resolve
- * to their midpoint so entry-relative SL/zone math uses one consistent value —
- * a second, range-unaware copy in AutoCaptureService used to differ by import
- * site ("3210 - 3220" → 3210 vs 3215), silently skewing SL-distance math.
+ * Extract a numeric price from a string. Range entries ("3210 - 3220",
+ * "3000 to 3050") resolve to their midpoint so entry-relative SL/zone math
+ * uses one consistent value — range-unaware copies elsewhere used to differ
+ * by import site, silently skewing SL-distance math. Whitespace is preserved
+ * so a trailing annotation ("94500 4h") can't glue its digits onto the number
+ * (→ 945004).
  */
 export const parsePrice = (priceStr: string): number => {
     if (!priceStr) return NaN;
-    // Remove commas (e.g. 69,000 -> 69000) and whitespace so ranges parse.
-    const cleanStr = priceStr.replace(/,/g, '').replace(/\s+/g, '');
-    const range = cleanStr.match(/(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)/);
+    // Remove commas (e.g. 69,000 -> 69000); whitespace stays intact.
+    const cleanStr = priceStr.replace(/,/g, '');
+    const range = cleanStr.match(/(\d+(?:\.\d+)?)\s*(?:-|to)\s*(\d+(?:\.\d+)?)/i);
     if (range) {
         return (parseFloat(range[1]) + parseFloat(range[2])) / 2;
     }

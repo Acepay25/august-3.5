@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { VirtuosoHandle } from 'react-virtuoso';
-import { Message, MessageRole, TradeOutcome, ImageMetadata, AIProvider, Conversation, UserProfile, SavedAnalysis, TradeSummary, GlobalMemory, AccuracySubMode, CustomInstructionsMap, AnalystLensConfig } from './types';
+import { Message, MessageRole, TradeOutcome, ImageMetadata, AIProvider, Conversation, UserProfile, SavedAnalysis, TradeSummary, GlobalMemory, AccuracySubMode, CustomInstructionsMap, AnalystLensConfig, LoggedTrade } from './types';
 import * as ensembleService from './services/providers/ensembleService';
 import { generateFinalSummary } from './services/providers/GenericAnalysisService';
 import * as dbService from './services/infrastructure/dbService';
@@ -477,6 +477,13 @@ const App: React.FC = () => {
     const activeUsernameRef = useRef<string | null>(sessionStorage.getItem('activeUsername'));
     activeUsernameRef.current = sessionStorage.getItem('activeUsername') || null;
 
+    // Freshest logged-trades array for the post-mortem hook. Capture flows
+    // call setLoggedTrades and startPostMortemAnalysis in the same tick, so
+    // the `loggedTrades` prop closure is stale by the time the post-mortem
+    // resolves — the ref (updated every render) always holds the latest rows.
+    const loggedTradesRef = useRef<LoggedTrade[]>(loggedTrades);
+    loggedTradesRef.current = loggedTrades;
+
     // Post-mortem analysis state and handlers (extracted to hooks/usePostMortem.ts)
     const {
         mismatchData, setMismatchData,
@@ -503,6 +510,7 @@ const App: React.FC = () => {
         moderatorModel,
         finalTradeSummary,
         loggedTrades,
+        loggedTradesRef,
         setLoggedTrades,
         globalMemory,
         setGlobalMemory,
@@ -647,7 +655,12 @@ const App: React.FC = () => {
     // }, [messages.length, activeConversationId]);
 
     // ... (resetAppState, loadUserData) ...
-    const resetAppState = async () => {
+    // resetAppState(usernameToSave): persists the blank profile under an
+    // EXPLICIT username. The caller decides the save target — reading
+    // `activeUsername` from the closure here is wrong: on user deletion the
+    // closure still holds the deleted name, so the save resurrected a blank
+    // profile for the user we just deleted. Pass null to skip persisting.
+    const resetAppState = async (usernameToSave?: string | null) => {
         handleCancelAnalysis();
         const newConv = createNewConversation();
         setConversationHistory([newConv]);
@@ -677,8 +690,8 @@ const App: React.FC = () => {
         setImages([]);
         setExpandedPostMortems({});
 
-        if (activeUsername) {
-            await dbService.saveUserProfile(activeUsername, {
+        if (usernameToSave) {
+            await dbService.saveUserProfile(usernameToSave, {
                 conversations: [newConv],
                 tradeLog: [],
                 savedAnalyses: [],
@@ -707,25 +720,32 @@ const App: React.FC = () => {
         toast,
     });
 
-    // Keep the activeUsernameRef (read by usePostMortem above) in sync with
-    // the canonical activeUsername state before dependent hooks render.
-    const previousActiveUsername = activeUsernameRef.current;
+    // Keep the activeUsernameRef (read by usePostMortem's run-staleness
+    // checks) in sync with the canonical activeUsername state before
+    // dependent hooks render.
     activeUsernameRef.current = activeUsername ?? null;
-    useEffect(() => {
-        const previous = previousActiveUsername;
 
-        // P1-4: Clear the AI response cache on user switch so one user's
-        // cached analyses are never served to another user.
-        if (previous !== null && previous !== activeUsername) {
+    // P1-4/P1-9: Track the previous active user in a ref mutated by this
+    // effect itself. (A render-phase read of activeUsernameRef made
+    // `previous` equal the NEW username right after a switch — the
+    // cache-clear and backup-stop below never fired, so one user's cached
+    // AI responses and 30-min backup scheduler leaked into the next user's
+    // session. The ref initializes from the session user so a same-user boot
+    // is a no-op.)
+    const previousUsernameRef = useRef<string | null>(activeUsernameRef.current);
+    useEffect(() => {
+        const previous = previousUsernameRef.current;
+        const current = activeUsername ?? null;
+        if (previous !== current) {
+            // P1-9: Stop the old user's backup scheduler; loadUserData starts
+            // a fresh one for the new user.
+            if (previous !== null) stopAutoBackup();
+            // P1-4: Clear the AI response cache (memory + persisted layers)
+            // so one user's cached analyses are never served to another user.
             clearAllCaches();
             console.log('[App] Cleared response cache on user switch');
         }
-        // P1-9: Stop the auto-backup scheduler when the active user changes
-        // (loadUserData starts a fresh one for the new user). Also stops it
-        // on unmount of the last user.
-        if (previous !== null && previous !== activeUsername) {
-            stopAutoBackup();
-        }
+        previousUsernameRef.current = current;
     }, [activeUsername]);
 
     // P1-9: Final cleanup — stop the auto-backup scheduler when the app unmounts.
@@ -735,14 +755,27 @@ const App: React.FC = () => {
         };
     }, []);
 
+    // ─── Command palette (Ctrl/Cmd+K) ─────────────────────────────────────
+    // Declared here (before the Esc handler) because the handler gates on
+    // these overlay flags.
+    const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+
+    // ─── Saved analyses gallery ────────────────────────────────────────────
+    const [isSavedGalleryOpen, setIsSavedGalleryOpen] = useState(false);
+
     // Esc cancels an in-progress analysis (including the debate phase). Never
-    // fires while the user is typing in an input/textarea/contenteditable.
+    // fires while the user is typing in an input/textarea/contenteditable, and
+    // never while an overlay is open — overlays close themselves on Esc (their
+    // own keydown handlers), and one Esc must not both close an overlay AND
+    // cancel a running analysis.
     useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {
             if (e.key !== 'Escape') return;
             const target = e.target as HTMLElement | null;
             const isTyping = !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable);
             if (isTyping) return;
+            const anyOverlayOpen = journalState.isOpen || isSettingsMenuVisible || isLiveMarketVisible || isCommandPaletteOpen || isSavedGalleryOpen || isUserModalOpen;
+            if (anyOverlayOpen) return;
             if (isAnalysisInProgress && !isPostMortemInProgress) {
                 handleCancelAnalysis();
                 toast.info('Analysis cancelled', 'The partial debate was preserved in the chat.');
@@ -750,10 +783,7 @@ const App: React.FC = () => {
         };
         document.addEventListener('keydown', onKeyDown);
         return () => document.removeEventListener('keydown', onKeyDown);
-    }, [isAnalysisInProgress, isPostMortemInProgress, handleCancelAnalysis, toast]);
-
-    // ─── Command palette (Ctrl/Cmd+K) ─────────────────────────────────────
-    const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+    }, [isAnalysisInProgress, isPostMortemInProgress, handleCancelAnalysis, toast, journalState.isOpen, isSettingsMenuVisible, isLiveMarketVisible, isCommandPaletteOpen, isSavedGalleryOpen, isUserModalOpen]);
 
     // ─── Side-by-side compare ──────────────────────────────────────────────
     const [compareState, setCompareState] = useState<{ primaryId: string; secondaryId: string | null } | null>(null);
@@ -774,13 +804,15 @@ const App: React.FC = () => {
         let tradeId: string | undefined;
         try {
             const { getThinkingByMessage } = await import('./services/infrastructure/ThinkingStoreService');
-            const records = await getThinkingByMessage(messageId);
+            // Scoped to the active user — message ids can otherwise collide
+            // across profiles.
+            const records = await getThinkingByMessage(messageId, activeUsername || undefined);
             tradeId = records[0]?.tradeId;
         } catch (err) {
             console.warn('[App] Failed to resolve reasoning records for card:', err);
         }
         setJournalState({ isOpen: true, tab: 'reasoning', focusTradeId: tradeId });
-    }, [setJournalState]);
+    }, [setJournalState, activeUsername]);
 
     // Stable identity for the Journal's deep-link consumer. An inline arrow
     // here would change on every render and refire ReasoningDashboard's load
@@ -791,7 +823,6 @@ const App: React.FC = () => {
     }, [setJournalState]);
 
     // ─── Saved analyses gallery ────────────────────────────────────────────
-    const [isSavedGalleryOpen, setIsSavedGalleryOpen] = useState(false);
     const handleLocateMessage = useCallback((messageId: string) => {
         const index = messages.findIndex(m => m.id === messageId);
         if (index >= 0) {
@@ -978,7 +1009,10 @@ const App: React.FC = () => {
                 toast.info(message);
             }
         } else {
-            resetAppState();
+            // Fresh (never-saved) user: persist the blank profile under the
+            // NEW username — the closure's activeUsername is the PREVIOUS
+            // user, and saving under it would wipe their data on web.
+            resetAppState(username);
         }
         setActiveUsername(username);
         sessionStorage.setItem('activeUsername', username);
@@ -1110,17 +1144,19 @@ const App: React.FC = () => {
     // RAF-throttled debate updates keep resetting it). A native kill or
     // background termination mid-run then loses the whole run. Flush every
     // 15s while a run is active instead.
+    // buildProfileSnapshot changes identity on every conversationHistory
+    // mutation — using it directly in deps would re-arm this interval every
+    // frame during a run (the exact bug this heartbeat exists to fix). Keep
+    // the freshest snapshot in a ref instead. The ref must be declared at
+    // component level — useRef inside the effect body throws "Invalid hook
+    // call" the moment the effect re-runs (i.e. at the start of every run).
+    const heartbeatSnapshotRef = useRef(buildProfileSnapshot);
     useEffect(() => {
         if (!activeUsername || (!isAnalysisInProgress && !isPostMortemInProgress)) return;
-        // buildProfileSnapshot changes identity on every conversationHistory
-        // mutation — using it directly in deps would re-arm this interval every
-        // frame during a run (the exact bug this heartbeat exists to fix). Keep
-        // the freshest snapshot in a ref instead.
-        const snapshotRef = useRef(buildProfileSnapshot);
-        snapshotRef.current = buildProfileSnapshot;
+        heartbeatSnapshotRef.current = buildProfileSnapshot;
         const interval = setInterval(async () => {
             try {
-                const snapshot = snapshotRef.current();
+                const snapshot = heartbeatSnapshotRef.current();
                 await dbService.saveUserProfile(activeUsername, snapshot);
                 lastSavedSnapshotRef.current = snapshot;
             } catch (err) {
@@ -2128,6 +2164,7 @@ const App: React.FC = () => {
                 onClose={() => setJournalState(prev => ({ ...prev, isOpen: false }))}
                 initialTab={journalState.tab}
                 initialTradeId={journalState.focusTradeId}
+                username={activeUsername || undefined}
                 onInitialTradeConsumed={handleReasoningTradeConsumed}
                 trades={loggedTrades}
                 enabledProviders={readyProviders.map(p => p.id)}

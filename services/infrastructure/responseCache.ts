@@ -121,7 +121,7 @@ export const hashImage = (dataURL: string): string => {
 // CACHE INSTANCES
 // =============================================================================
 
-import { persistentGet, persistentSet } from './persistentCache';
+import { persistentGet, persistentSet, persistentClear } from './persistentCache';
 
 const contextCache = new SimpleCache<string>(CONTEXT_CACHE_TTL);
 const imageHashCache = new SimpleCache<string>(IMAGE_CACHE_TTL);
@@ -214,11 +214,19 @@ export const cacheResponse = (
 
 /**
  * Clear all caches (e.g., on user switch or manual reset).
+ * Async: also clears the IndexedDB-backed persistent layer — without this a
+ * "clear" only emptied memory and the next identical analysis rehydrated
+ * stale (possibly another user's) entries from the persistent store.
  */
-export const clearAllCaches = (): void => {
+export const clearAllCaches = async (): Promise<void> => {
   contextCache.clear();
   imageHashCache.clear();
   responseCache.clear();
+  try {
+    await persistentClear();
+  } catch (err) {
+    console.warn('[ResponseCache] Failed to clear persistent cache:', err);
+  }
 };
 
 /**

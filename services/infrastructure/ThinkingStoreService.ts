@@ -257,22 +257,27 @@ const saveThinkingRecordSqlite = async (record: ThinkingRecord): Promise<void> =
 
 /**
  * Get all thinking records for a specific trade.
+ * When `username` is provided, results are scoped to that user — tradeId
+ * keys are timestamp-derived and can theoretically collide across users.
  */
-export const getThinkingByTrade = async (tradeId: string): Promise<ThinkingRecord[]> => {
+export const getThinkingByTrade = async (tradeId: string, username?: string): Promise<ThinkingRecord[]> => {
     if (isNativePlatform()) {
         const { getSqliteDb } = await import('./SqliteServiceHelpers');
         const db = await getSqliteDb();
         if (!db) return [];
 
         const result = await db.query(
-            'SELECT * FROM thinking_records WHERE tradeId = ? ORDER BY COALESCE(debateTurnIndex, -1) ASC, createdAt ASC',
-            [tradeId]
+            username
+                ? 'SELECT * FROM thinking_records WHERE tradeId = ? AND username = ? ORDER BY COALESCE(debateTurnIndex, -1) ASC, createdAt ASC'
+                : 'SELECT * FROM thinking_records WHERE tradeId = ? ORDER BY COALESCE(debateTurnIndex, -1) ASC, createdAt ASC',
+            username ? [tradeId, username] : [tradeId]
         );
         return (result.values || []).map(rowToRecord);
     } else {
         const db = await initIndexedDB();
         const all = await db.getAllFromIndex(STORE_NAME, 'tradeId', tradeId);
-        return all.sort(compareThinkingRecords);
+        const scoped = username ? all.filter((r: ThinkingRecord) => r.username === username) : all;
+        return scoped.sort(compareThinkingRecords);
     }
 };
 
@@ -280,21 +285,24 @@ export const getThinkingByTrade = async (tradeId: string): Promise<ThinkingRecor
  * Get all thinking records for a specific analysis card (message id).
  * Links a prediction card directly to its reasoning set.
  */
-export const getThinkingByMessage = async (messageId: string): Promise<ThinkingRecord[]> => {
+export const getThinkingByMessage = async (messageId: string, username?: string): Promise<ThinkingRecord[]> => {
     if (isNativePlatform()) {
         const { getSqliteDb } = await import('./SqliteServiceHelpers');
         const db = await getSqliteDb();
         if (!db) return [];
 
         const result = await db.query(
-            'SELECT * FROM thinking_records WHERE messageId = ? ORDER BY COALESCE(debateTurnIndex, -1) ASC, createdAt ASC',
-            [messageId]
+            username
+                ? 'SELECT * FROM thinking_records WHERE messageId = ? AND username = ? ORDER BY COALESCE(debateTurnIndex, -1) ASC, createdAt ASC'
+                : 'SELECT * FROM thinking_records WHERE messageId = ? ORDER BY COALESCE(debateTurnIndex, -1) ASC, createdAt ASC',
+            username ? [messageId, username] : [messageId]
         );
         return (result.values || []).map(rowToRecord);
     } else {
         const db = await initIndexedDB();
         const all = await db.getAllFromIndex(STORE_NAME, 'messageId', messageId);
-        return all.sort(compareThinkingRecords);
+        const scoped = username ? all.filter((r: ThinkingRecord) => r.username === username) : all;
+        return scoped.sort(compareThinkingRecords);
     }
 };
 
@@ -512,22 +520,25 @@ export const getProviderReasoningStats = async (
 export const updateThinkingOutcome = async (
     tradeId: string,
     outcome: TradeOutcome,
-    messageId?: string
+    messageId?: string,
+    username?: string
 ): Promise<void> => {
     if (isNativePlatform()) {
         const { getSqliteDb } = await import('./SqliteServiceHelpers');
         const db = await getSqliteDb();
         if (!db) return;
 
+        const scopeSql = username ? ' AND username = ?' : '';
+        const scopeParams = username ? [username] : [];
         if (messageId) {
             await db.run(
-                'UPDATE thinking_records SET outcome = ? WHERE tradeId = ? OR messageId = ?',
-                [outcome, tradeId, messageId]
+                `UPDATE thinking_records SET outcome = ? WHERE (tradeId = ? OR messageId = ?)${scopeSql}`,
+                [outcome, tradeId, messageId, ...scopeParams]
             );
         } else {
             await db.run(
-                'UPDATE thinking_records SET outcome = ? WHERE tradeId = ?',
-                [outcome, tradeId]
+                `UPDATE thinking_records SET outcome = ? WHERE tradeId = ?${scopeSql}`,
+                [outcome, tradeId, ...scopeParams]
             );
         }
     } else {
@@ -542,7 +553,7 @@ export const updateThinkingOutcome = async (
             if (seen.has(r.id)) return false;
             seen.add(r.id);
             return true;
-        });
+        }).filter(r => !username || r.username === username);
         const tx = db.transaction(STORE_NAME, 'readwrite');
         for (const record of all) {
             record.outcome = outcome;

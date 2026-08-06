@@ -44,9 +44,14 @@ async function encryptKey(apiKey: string): Promise<string> {
 async function decryptKey(stored: string): Promise<string> {
     if (!stored || !isEncrypted(stored)) return stored;
     const bridge = getCryptoBridge();
-    if (!bridge) return '';
+    // Fail open: when the bridge is unavailable (web/Capacitor) or the OS
+    // keychain can't decrypt (fresh OS session, changed DPAPI/keyring
+    // credentials), return the stored payload as-is. Returning '' here made
+    // the next save re-encrypt an empty key and permanently destroy the
+    // stored secret — unrecoverable key loss.
+    if (!bridge) return stored;
     const decrypted = await bridge.decryptSecret(stored);
-    return decrypted || '';
+    return decrypted || stored;
 }
 
 // ─── Provider Configuration Service ───────────────────────────────────────

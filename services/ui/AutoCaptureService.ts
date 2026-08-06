@@ -270,6 +270,10 @@ export const verifyHistoricalOutcome = async (
         let highestTpHit: 'TP1' | 'TP2' | 'TP3' | undefined;
         let slTouched = false; // Track if initial SL was touched
         let extendedSlExceeded = false; // Track if price exceeded 150% SL zone
+        // Candle where the INITIAL stop loss filled (not the extended zone,
+        // not the post-TP1 breakeven). Used to detect same-candle SL+TP hits
+        // where the hard stop must have closed the position first.
+        let initialSlFillCandleIndex: number | undefined;
         // Partial-TP realism: once TP1 is hit the position is scaled out and
         // the stop moves to breakeven (entry). A later touch of the entry is a
         // MANAGED exit, not a failed SL — it must not count as a loss or flag
@@ -424,6 +428,7 @@ export const verifyHistoricalOutcome = async (
                             candleTime: candleTimeStr,
                             timeAfterAnalysis
                         };
+                        initialSlFillCandleIndex = i;
                     }
                 }
 
@@ -508,6 +513,7 @@ export const verifyHistoricalOutcome = async (
                             candleTime: candleTimeStr,
                             timeAfterAnalysis
                         };
+                        initialSlFillCandleIndex = i;
                     }
                 }
 
@@ -561,13 +567,31 @@ export const verifyHistoricalOutcome = async (
 
         // TPs take priority - if any TP was hit (even after SL touch), it's a WIN
         if (tpHits.length > 0) {
-            outcome = 'TP_HIT';
-            hitTarget = highestTpHit;
-            const lastTp = tpHits[tpHits.length - 1];
-            priceAtHit = lastTp.price;
-            hitCandleTime = lastTp.candleTime;
-            candlesFromAnalysis = lastTp.candleIndex;
-            timeToOutcome = lastTp.timeAfterAnalysis;
+            // Exchange fill semantics: a hard SL is a resting order. When the
+            // initial SL and a TP are both touched by the SAME candle, the
+            // stop filled first and closed the position — the TP was never
+            // realized, so this is a LOSS (a TP on a LATER candle after an SL
+            // wick is the documented "recovery" case and stays a WIN).
+            const firstTp = tpHits[0];
+            const sameCandleSlFill = initialSlFillCandleIndex !== undefined
+                && firstTp.candleIndex === initialSlFillCandleIndex;
+            if (sameCandleSlFill && slHit) {
+                outcome = 'SL_HIT';
+                hitTarget = 'SL';
+                priceAtHit = slHit.price;
+                hitCandleTime = slHit.candleTime;
+                candlesFromAnalysis = slHit.candleIndex;
+                timeToOutcome = slHit.timeAfterAnalysis;
+                console.warn(`[AutoCapture] Same-candle SL+TP at candle #${slHit.candleIndex} — classified as SL_HIT (stop filled before TP).`);
+            } else {
+                outcome = 'TP_HIT';
+                hitTarget = highestTpHit;
+                const lastTp = tpHits[tpHits.length - 1];
+                priceAtHit = lastTp.price;
+                hitCandleTime = lastTp.candleTime;
+                candlesFromAnalysis = lastTp.candleIndex;
+                timeToOutcome = lastTp.timeAfterAnalysis;
+            }
             // If SL was touched but TP was hit, clear slHit for cleaner output
             if (slTouched) {
                 // Keep slHit for reference but outcome is WIN

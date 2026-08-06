@@ -13,6 +13,25 @@ import { CapacitorSQLite, SQLiteConnection, SQLiteDBConnection } from '@capacito
 import { LoggedTrade, UserProfile, Conversation, TradeSummary, GlobalMemory, UserSettings, Message } from '../../types';
 import { setSqliteDb } from './SqliteServiceHelpers';
 
+/**
+ * Parse a stored JSON blob defensively. A single corrupt cell (e.g. from an
+ * interrupted native write) must not abort the entire profile load — the row
+ * is skipped with a warning instead of throwing (which previously also broke
+ * every subsequent save, since saves read the profile first).
+ * Returns `any` to mirror the original `JSON.parse(...)` inference at the
+ * call sites (fallbacks of `{}`/`[]`/`undefined` would otherwise narrow the
+ * generic and break LoggedTrade/Conversation assignability).
+ */
+const safeParseJson = (json: string | null | undefined, fallback: any): any => {
+    if (!json) return fallback;
+    try {
+        return JSON.parse(json);
+    } catch (e) {
+        console.warn('[SqliteService] Corrupt JSON row skipped:', e instanceof Error ? e.message : e);
+        return fallback;
+    }
+};
+
 // Database configuration
 const DB_NAME = 'futuresai_db';
 const DB_VERSION = 5;
@@ -350,7 +369,7 @@ export const sqliteGetUserProfile = async (username: string): Promise<UserProfil
         [username]
     );
     const trades: LoggedTrade[] = (tradesResult.values || []).map(row => {
-        const meta = row.meta ? JSON.parse(row.meta) : {};
+        const meta = safeParseJson(row.meta, {});
         // Ensure tradeType is restored cleanly if missing
         const tradeType = row.tradeType || meta.tradeType || undefined;
 
@@ -358,12 +377,12 @@ export const sqliteGetUserProfile = async (username: string): Promise<UserProfil
             id: row.id,
             timestamp: row.timestamp,
             outcome: row.outcome,
-            analysis: row.analysis ? JSON.parse(row.analysis) : undefined,
+            analysis: safeParseJson(row.analysis, undefined),
             postMortem: row.postMortem,
             pnlAmount: row.pnlAmount,
             investmentAmount: row.investmentAmount,
             leverage: row.leverage,
-            slOptimizationData: row.slOptimizationData ? JSON.parse(row.slOptimizationData) : undefined,
+            slOptimizationData: safeParseJson(row.slOptimizationData, undefined),
             tradeType,
             ...meta // Spread metadata to restore extended fields
         };
@@ -375,13 +394,13 @@ export const sqliteGetUserProfile = async (username: string): Promise<UserProfil
         [username]
     );
     const conversations: Conversation[] = (convResult.values || []).map(row => {
-        const settings = row.settings ? JSON.parse(row.settings) : {};
+        const settings = safeParseJson(row.settings, {});
 
         return {
             id: row.id,
             title: row.title,
             timestamp: new Date(row.createdAt).getTime(),
-            messages: row.messages ? JSON.parse(row.messages) : [],
+            messages: safeParseJson(row.messages, []),
             // Defaults for current Conversation fields; saved settings override.
             ocrModel: '',
             moderatorProviderId: settings.moderatorProvider || '', // legacy column name compat
@@ -409,11 +428,11 @@ export const sqliteGetUserProfile = async (username: string): Promise<UserProfil
         [username]
     );
     const savedAnalyses = (analysesResult.values || []).map(row => {
-        const meta = row.meta ? JSON.parse(row.meta) : {};
+        const meta = safeParseJson(row.meta, {});
 
         return {
             id: row.id,
-            analysis: row.analysis ? JSON.parse(row.analysis) : null,
+            analysis: safeParseJson(row.analysis, null),
             userPrompt: row.userPrompt || '',
             timestamp: row.timestamp,
             ...meta // Restore extended fields (models used, etc)
@@ -424,12 +443,12 @@ export const sqliteGetUserProfile = async (username: string): Promise<UserProfil
         username: userData.username,
         createdAt: userData.createdAt,
         updatedAt: userData.updatedAt,
-        globalMemory: userData.globalMemory ? JSON.parse(userData.globalMemory) : undefined,
-        settings: userData.settings ? JSON.parse(userData.settings) : { activeFrameworks: [] },
+        globalMemory: safeParseJson(userData.globalMemory, undefined),
+        settings: safeParseJson(userData.settings, { activeFrameworks: [] }),
         finalTradeSummary: userData.finalTradeSummary,
-        tradingWeaknesses: userData.tradingWeaknesses ? JSON.parse(userData.tradingWeaknesses) : undefined,
-        insightKnowledgeBase: userData.insightKnowledgeBase ? JSON.parse(userData.insightKnowledgeBase) : undefined,
-        learningRules: userData.learningRules ? JSON.parse(userData.learningRules) : undefined,
+        tradingWeaknesses: safeParseJson(userData.tradingWeaknesses, undefined),
+        insightKnowledgeBase: safeParseJson(userData.insightKnowledgeBase, undefined),
+        learningRules: safeParseJson(userData.learningRules, undefined),
         lastActiveConversationId: userData.lastActiveConversationId, // Restore state
         tradeLog: trades,
         conversations,
@@ -594,7 +613,7 @@ export const sqliteGetTrades = async (username: string): Promise<LoggedTrade[]> 
     );
 
     return (result.values || []).map(row => {
-        const meta = row.meta ? JSON.parse(row.meta) : {};
+        const meta = safeParseJson(row.meta, {});
         // Ensure tradeType is restored cleanly if missing
         const tradeType = row.tradeType || meta.tradeType || undefined;
 
@@ -602,12 +621,12 @@ export const sqliteGetTrades = async (username: string): Promise<LoggedTrade[]> 
             id: row.id,
             timestamp: row.timestamp,
             outcome: row.outcome,
-            analysis: row.analysis ? JSON.parse(row.analysis) : undefined,
+            analysis: safeParseJson(row.analysis, undefined),
             postMortem: row.postMortem,
             pnlAmount: row.pnlAmount,
             investmentAmount: row.investmentAmount,
             leverage: row.leverage,
-            slOptimizationData: row.slOptimizationData ? JSON.parse(row.slOptimizationData) : undefined,
+            slOptimizationData: safeParseJson(row.slOptimizationData, undefined),
             tradeType,
             ...meta // Restore extended fields
         };
@@ -659,19 +678,19 @@ export const sqliteGetTrade = async (tradeId: string): Promise<LoggedTrade | nul
     if (!result.values || result.values.length === 0) return null;
 
     const row = result.values[0];
-    const meta = row.meta ? JSON.parse(row.meta) : {};
+    const meta = safeParseJson(row.meta, {});
     const tradeType = row.tradeType || meta.tradeType || undefined;
 
     return {
         id: row.id,
         timestamp: row.timestamp,
         outcome: row.outcome,
-        analysis: row.analysis ? JSON.parse(row.analysis) : undefined,
+        analysis: safeParseJson(row.analysis, undefined),
         postMortem: row.postMortem,
         pnlAmount: row.pnlAmount,
         investmentAmount: row.investmentAmount,
         leverage: row.leverage,
-        slOptimizationData: row.slOptimizationData ? JSON.parse(row.slOptimizationData) : undefined,
+        slOptimizationData: safeParseJson(row.slOptimizationData, undefined),
         tradeType,
         ...meta
     };
@@ -700,12 +719,12 @@ export const sqliteListConversations = async (
 
     const result = await db.query(query, params);
     return (result.values || []).map(row => {
-        const settings = row.settings ? JSON.parse(row.settings) : {};
+        const settings = safeParseJson(row.settings, {});
         return {
             id: row.id,
             title: row.title,
             timestamp: new Date(row.createdAt).getTime(),
-            messages: row.messages ? JSON.parse(row.messages) : [],
+            messages: safeParseJson(row.messages, []),
             ...settings
         } as Conversation;
     });

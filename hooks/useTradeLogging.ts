@@ -185,7 +185,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             const tradeId = getThinkingTradeId(loggedTrade.analysis?.createdAt, loggedTrade.id);
             // Pass the card (message) id so the outcome reaches the records
             // even if the timestamp key diverges from the logged trade.
-            updateThinkingOutcome(tradeId, outcome, message.id).catch(err => {
+            updateThinkingOutcome(tradeId, outcome, message.id, localStorage.getItem('last_active_user') || 'default').catch(err => {
                 console.warn('[ThinkingStore] Failed to update outcome:', err);
             });
         } catch (err) {
@@ -423,7 +423,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
     // ─── Entry Not Hit Capture Handlers ───────────────────────────────────
 
     // Helper to log Entry Not Hit trade (called when user confirms capture choice)
-    const logEntryNotHitTrade = useCallback((candidate: { message: Message; correctedEntry?: string }) => {
+    const logEntryNotHitTrade = useCallback(async (candidate: { message: Message; correctedEntry?: string }) => {
         if (!candidate.message.analysis) return;
 
         // Update message outcome
@@ -446,6 +446,20 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             accuracySubMode: candidate.message.accuracySubMode
         };
         setLoggedTrades(prev => [loggedTrade, ...prev]);
+
+        // === ThinkingStore: Update outcome for all thinking records of this trade ===
+        // ENTRY_NOT_HIT resolves the reasoning set the same way a WIN/LOSS
+        // does — without this the training records stayed PENDING forever and
+        // the per-trade browser never showed the entry was missed.
+        try {
+            const { updateThinkingOutcome, getThinkingTradeId } = await import('../services/infrastructure/ThinkingStoreService');
+            const tradeId = getThinkingTradeId(loggedTrade.analysis?.createdAt, loggedTrade.id);
+            updateThinkingOutcome(tradeId, TradeOutcome.ENTRY_NOT_HIT, candidate.message.id, localStorage.getItem('last_active_user') || 'default').catch(err => {
+                console.warn('[ThinkingStore] Failed to update outcome:', err);
+            });
+        } catch (err) {
+            console.warn('[ThinkingStore] Failed to import updateThinkingOutcome:', err);
+        }
 
         // Auto-add to Recent Insights with FIFO enforcement
         (async () => {

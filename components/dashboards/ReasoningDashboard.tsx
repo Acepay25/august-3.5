@@ -68,7 +68,7 @@ export const ReasoningDashboard: React.FC<ReasoningDashboardProps> = ({ username
     let cancelled = false;
     (async () => {
       try {
-        const deepRecords = await getThinkingByTrade(initialTradeId);
+        const deepRecords = await getThinkingByTrade(initialTradeId, username);
         if (cancelled) return;
         setSelectedTradeId(initialTradeId);
         setRecords(deepRecords);
@@ -85,7 +85,7 @@ export const ReasoningDashboard: React.FC<ReasoningDashboardProps> = ({ username
     setSelectedTradeId(tradeId);
     setIsLoadingRecords(true);
     try {
-      const tradeRecords = await getThinkingByTrade(tradeId);
+      const tradeRecords = await getThinkingByTrade(tradeId, username);
       setRecords(tradeRecords);
     } catch (err) {
       console.warn('[ReasoningDashboard] Failed to load records:', err);
@@ -93,7 +93,7 @@ export const ReasoningDashboard: React.FC<ReasoningDashboardProps> = ({ username
     } finally {
       setIsLoadingRecords(false);
     }
-  }, []);
+  }, [username]);
 
   const handleExport = async () => {
     setIsExporting(true);
