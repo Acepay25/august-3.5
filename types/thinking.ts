@@ -26,6 +26,12 @@ export interface ThinkingRecord {
   modelName?: string;
   /** The reasoning/thought process text */
   reasoning: string;
+  /** The model's final output section (analyst <FINAL_OUTPUT>, moderator verdict prose) */
+  finalOutput?: string;
+  /** Raw provider-streamed chain of thought (reasoning_content / thinking blocks), when available */
+  rawReasoning?: string;
+  /** The analysis card (message) this reasoning belongs to — links to the prediction card */
+  messageId?: string;
   /** The structured TradeAnalysis JSON (for analysts and moderator) */
   analysisJson?: string;
   /** For debate turns: the turn index in the debate */
@@ -54,6 +60,20 @@ export interface ThinkingRecordStats {
 }
 
 /**
+ * One analysis run (trade/card) in the reasoning browser — groups the
+ * thinking records written for a single prediction.
+ */
+export interface ThinkingTradeSummary {
+  /** The trade key all records of this run share (analysis.createdAt) */
+  tradeId: string;
+  /** Latest record createdAt (≈ when the analysis ran) */
+  createdAt: string;
+  recordCount: number;
+  /** Outcome of the trade (WIN/LOSS/PENDING/…) — filled when logged */
+  outcome?: TradeOutcome;
+}
+
+/**
  * Export format for model training — one line per record (JSONL).
  * Each record is a complete (reasoning → outcome) training example.
  */
@@ -62,6 +82,9 @@ export interface ThinkingExportRow {
   modelName?: string;
   role: ThinkingRole;
   reasoning: string;
+  finalOutput?: string;
+  rawReasoning?: string;
+  messageId?: string;
   analysis: unknown;
   confidence?: string;
   probability?: number;

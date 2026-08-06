@@ -15,7 +15,7 @@ import { setSqliteDb } from './SqliteServiceHelpers';
 
 // Database configuration
 const DB_NAME = 'futuresai_db';
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 
 // SQLite connection singleton
 let sqliteConnection: SQLiteConnection | null = null;
@@ -178,6 +178,9 @@ const createTables = async (): Promise<void> => {
             role TEXT,
             modelName TEXT,
             reasoning TEXT,
+            finalOutput TEXT,
+            rawReasoning TEXT,
+            messageId TEXT,
             analysisJson TEXT,
             debateTurnIndex INTEGER,
             debateTurnSpeaker TEXT,
@@ -191,6 +194,7 @@ const createTables = async (): Promise<void> => {
         CREATE INDEX IF NOT EXISTS idx_thinking_provider ON thinking_records(provider);
         CREATE INDEX IF NOT EXISTS idx_thinking_outcome ON thinking_records(outcome);
         CREATE INDEX IF NOT EXISTS idx_thinking_username ON thinking_records(username);
+        CREATE INDEX IF NOT EXISTS idx_thinking_message ON thinking_records(messageId);
     `);
 
     // VERSION 2 MIGRATION: Add userPrompt if missing
@@ -237,6 +241,32 @@ const createTables = async (): Promise<void> => {
             await db.execute(`ALTER TABLE saved_analyses ADD COLUMN meta TEXT;`);
         } catch (e) {
             swallowDuplicateColumn(e, 'v4 saved_analyses.meta');
+        }
+    }
+
+    // VERSION 5 MIGRATION: Enrich thinking_records with final output, raw
+    // chain-of-thought, and the analysis card (message) id so each reasoning
+    // set is linked to its trade/card prediction.
+    if (DB_VERSION >= 5) {
+        try {
+            await db.execute(`ALTER TABLE thinking_records ADD COLUMN finalOutput TEXT;`);
+        } catch (e) {
+            swallowDuplicateColumn(e, 'v5 thinking_records.finalOutput');
+        }
+        try {
+            await db.execute(`ALTER TABLE thinking_records ADD COLUMN rawReasoning TEXT;`);
+        } catch (e) {
+            swallowDuplicateColumn(e, 'v5 thinking_records.rawReasoning');
+        }
+        try {
+            await db.execute(`ALTER TABLE thinking_records ADD COLUMN messageId TEXT;`);
+        } catch (e) {
+            swallowDuplicateColumn(e, 'v5 thinking_records.messageId');
+        }
+        try {
+            await db.execute(`CREATE INDEX IF NOT EXISTS idx_thinking_message ON thinking_records(messageId);`);
+        } catch (e) {
+            console.warn('[SqliteService] Migration "v5 thinking_records.messageId index" failed:', e);
         }
     }
 

@@ -44,6 +44,8 @@ interface AnalysisResultProps {
     onDismissAutopilot?: (messageId: string) => void;
     /** Opens the side-by-side compare picker for this card. */
     onCompare?: (messageId: string) => void;
+    /** Opens the Trading Journal Think tab focused on this card's reasoning. */
+    onViewReasoning?: (messageId: string) => void;
 }
 
 const AnalysisResult: React.FC<AnalysisResultProps> = ({
@@ -72,7 +74,8 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
     autopilotResolution,
     onConfirmAutopilot,
     onDismissAutopilot,
-    onCompare
+    onCompare,
+    onViewReasoning
 }) => {
     // One-click price alerts for entry/SL/TP levels (PriceAlertService).
     const [alertsSet, setAlertsSet] = React.useState(false);
@@ -1417,6 +1420,12 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                              {isSaved ? <BookmarkSolidIcon className="w-4 h-4" /> : <BookmarkIcon className="w-4 h-4" />}
                              <span className="hidden sm:inline text-[10px] font-bold uppercase tracking-wider">{isSaved ? 'Saved' : 'Save'}</span>
                          </button>
+                        {onViewReasoning && (
+                            <button onClick={() => onViewReasoning(messageId)} className="px-3 py-2 rounded-lg border border-white/10 bg-zinc-700/80 text-zinc-300 hover:border-cyan-400/30 hover:bg-cyan-500/10 hover:text-cyan-200 transition-colors flex items-center justify-center gap-1.5" title="View model reasoning in the Trading Journal Think tab">
+                                <BrainIcon className="w-4 h-4" />
+                                <span className="hidden sm:inline text-[10px] font-bold uppercase tracking-wider">Think</span>
+                            </button>
+                        )}
                         {/* Price Alert Toggle */}
                         <PriceAlertToggle analysis={analysis} messageId={messageId} />
                         {/* Share Button */}

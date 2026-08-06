@@ -180,7 +180,9 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         try {
             const { updateThinkingOutcome } = await import('../services/infrastructure/ThinkingStoreService');
             const tradeId = loggedTrade.analysis.createdAt || loggedTrade.id;
-            updateThinkingOutcome(tradeId, outcome).catch(err => {
+            // Pass the card (message) id so the outcome reaches the records
+            // even if the timestamp key diverges from the logged trade.
+            updateThinkingOutcome(tradeId, outcome, message.id).catch(err => {
                 console.warn('[ThinkingStore] Failed to update outcome:', err);
             });
         } catch (err) {

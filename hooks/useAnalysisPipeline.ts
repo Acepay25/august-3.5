@@ -1701,6 +1701,15 @@ ${accuracyVerificationNote}`
                                 role: 'analyst',
                                 modelName: provider.model,
                                 reasoning: thoughtMap[providerKey] || '',
+                                // The <FINAL_OUTPUT> section — the analyst's final
+                                // answer, kept separate from its reasoning.
+                                finalOutput: analystResult.finalOutput || undefined,
+                                // Raw provider-streamed chain of thought
+                                // (reasoning_content / thinking blocks) keyed by
+                                // provider display name in reasoningMapRef.
+                                rawReasoning: reasoningMapRef.current[provider.name] || undefined,
+                                // Card linkage: the message id of this prediction.
+                                messageId: debateMessageId,
                                 analysisJson: analystResult.analysis ? JSON.stringify(analystResult.analysis) : undefined,
                                 confidence: analystResult.analysis?.confidence,
                                 probability: analystResult.analysis?.probability,
@@ -1717,6 +1726,21 @@ ${accuracyVerificationNote}`
                             role: 'moderator',
                             modelName: activeModModel,
                             reasoning: fullResponseText,
+                            // The moderator's verdict prose — the full stream
+                            // cleaned of control markers and the JSON plan (the
+                            // plan itself lives in analysisJson).
+                            finalOutput: fullResponseText
+                                .replace(/<CLARIFICATION_(?:DONE|SATISFIED|UNSATISFIED)>/gi, '')
+                                .replace(/<MODERATOR_RETRY>/gi, '')
+                                .replace(/<MODERATOR_ERROR>[\s\S]*?<\/MODERATOR_ERROR>/gi, '')
+                                .replace(/<\/?DEBATE_END>/gi, '')
+                                .replace(/<JSON_PLAN>[\s\S]*/i, '')
+                                .replace(/<\/?DEBATE_START>/gi, '')
+                                .trim() || undefined,
+                            // Raw streamed chain of thought from the moderator's
+                            // final verdict call.
+                            rawReasoning: reasoningMapRef.current.moderator || undefined,
+                            messageId: debateMessageId,
                             analysisJson: JSON.stringify(finalAnalysis),
                             confidence: finalAnalysis.confidence,
                             probability: finalAnalysis.probability,
@@ -1740,6 +1764,7 @@ ${accuracyVerificationNote}`
                                 debateTurnIndex: idx,
                                 debateTurnSpeaker: turn.speaker,
                                 reasoning: turn.text,
+                                messageId: debateMessageId,
                                 createdAt: now,
                             });
                         });

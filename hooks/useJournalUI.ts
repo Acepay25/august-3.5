@@ -6,8 +6,15 @@
 import { useState } from 'react';
 import { PostMortemCandidate } from '../components/modals/PostTradeUploadModal';
 
+/** Journal panel state. focusTradeId deep-links the Think tab to one analysis. */
+export interface JournalUIState {
+    isOpen: boolean;
+    tab: 'log' | 'performance' | 'analytics' | 'learning' | 'memory' | 'models' | 'reasoning';
+    focusTradeId?: string;
+}
+
 export function useJournalUI() {
-    const [journalState, setJournalState] = useState<{ isOpen: boolean, tab: 'log' | 'performance' | 'analytics' | 'learning' | 'memory' }>({ isOpen: false, tab: 'log' });
+    const [journalState, setJournalState] = useState<JournalUIState>({ isOpen: false, tab: 'log' });
 
     const [selectedProbabilityMessageId, setSelectedProbabilityMessageId] = useState<string | null>(null);
     const [strategyToView, setStrategyToView] = useState<string | null>(null);

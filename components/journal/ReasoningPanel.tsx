@@ -1,30 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Brain, ChevronDown, Download, Loader2, MessageSquare } from 'lucide-react';
+import { Brain, ChevronDown, Loader2, MessageSquare } from 'lucide-react';
 import { getThinkingByTrade } from '../../services/infrastructure/ThinkingStoreService';
 import { ThinkingRecord } from '../../types/thinking';
 import { TradeOutcome } from '../../types';
+import { ThinkingRecordCard, getProviderColor } from './ThinkingRecordCard';
 
 interface ReasoningPanelProps {
   tradeId: string;
   outcome?: TradeOutcome;
 }
-
-const PROVIDER_COLORS: Record<string, { bg: string; border: string; text: string }> = {
-  gemini: { bg: 'bg-blue-950/20', border: 'border-blue-500/20', text: 'text-blue-400' },
-  deepseek: { bg: 'bg-emerald-950/20', border: 'border-emerald-500/20', text: 'text-emerald-400' },
-  zhipu: { bg: 'bg-orange-950/20', border: 'border-orange-500/20', text: 'text-orange-400' },
-  groq: { bg: 'bg-yellow-950/20', border: 'border-yellow-500/20', text: 'text-yellow-400' },
-  moderator: { bg: 'bg-cyan-950/20', border: 'border-cyan-500/20', text: 'text-cyan-400' },
-  openrouter: { bg: 'bg-emerald-950/20', border: 'border-emerald-500/20', text: 'text-emerald-400' },
-  openai: { bg: 'bg-emerald-950/20', border: 'border-emerald-500/20', text: 'text-emerald-400' },
-  grok: { bg: 'bg-zinc-800', border: 'border-zinc-500/20', text: 'text-zinc-300' },
-};
-
-const getColor = (provider: string) => PROVIDER_COLORS[provider.toLowerCase()] || {
-  bg: 'bg-zinc-800',
-  border: 'border-white/10',
-  text: 'text-zinc-400',
-};
 
 const OUTCOME_BADGE: Record<string, string> = {
   [TradeOutcome.WIN]: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
@@ -35,8 +19,8 @@ const OUTCOME_BADGE: Record<string, string> = {
 };
 
 /**
- * Expandable reasoning panel for a trade.
- * Shows per-analyst reasoning, moderator synthesis, and debate turns.
+ * Expandable reasoning panel for a trade (History tab).
+ * Shows per-analyst reasoning + final output, moderator synthesis, and debate turns.
  */
 export const ReasoningPanel: React.FC<ReasoningPanelProps> = ({ tradeId, outcome }) => {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -91,55 +75,14 @@ export const ReasoningPanel: React.FC<ReasoningPanelProps> = ({ tradeId, outcome
             </p>
           ) : (
             <>
-              {/* Analyst reasoning */}
-              {analysts.map((record, idx) => {
-                const colors = getColor(record.provider);
-                return (
-                  <div key={record.id} className={`rounded-lg border ${colors.border} ${colors.bg} p-3`}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className={`text-xs font-bold ${colors.text} uppercase tracking-wider`}>
-                        {record.provider}
-                        {record.modelName && <span className="ml-2 text-[10px] font-mono text-zinc-500">{record.modelName}</span>}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        {record.confidence && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-black/30 text-zinc-400">{record.confidence}</span>
-                        )}
-                        {record.probability != null && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-black/30 text-zinc-400">{record.probability}%</span>
-                        )}
-                      </div>
-                    </div>
-                    <p className="text-xs text-zinc-400 whitespace-pre-wrap leading-relaxed">
-                      {record.reasoning.slice(0, 500)}
-                      {record.reasoning.length > 500 && '...'}
-                    </p>
-                  </div>
-                );
-              })}
+              {/* Analyst reasoning + final output */}
+              {analysts.map(record => (
+                <ThinkingRecordCard key={record.id} record={record} />
+              ))}
 
               {/* Moderator synthesis */}
               {moderator && (
-                <div className={`rounded-lg border ${getColor('moderator').border} ${getColor('moderator').bg} p-3`}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-bold text-cyan-400 uppercase tracking-wider">
-                      Moderator Synthesis
-                      {moderator.modelName && <span className="ml-2 text-[10px] font-mono text-zinc-500">{moderator.modelName}</span>}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      {moderator.confidence && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-black/30 text-zinc-400">{moderator.confidence}</span>
-                      )}
-                      {moderator.probability != null && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-black/30 text-cyan-400">{moderator.probability}%</span>
-                      )}
-                    </div>
-                  </div>
-                  <p className="text-xs text-zinc-400 whitespace-pre-wrap leading-relaxed">
-                    {moderator.reasoning.slice(0, 800)}
-                    {moderator.reasoning.length > 800 && '...'}
-                  </p>
-                </div>
+                <ThinkingRecordCard key={moderator.id} record={moderator} />
               )}
 
               {/* Debate turns (collapsible) */}
@@ -151,7 +94,7 @@ export const ReasoningPanel: React.FC<ReasoningPanelProps> = ({ tradeId, outcome
                   </summary>
                   <div className="mt-2 space-y-1.5 max-h-60 overflow-y-auto custom-scrollbar">
                     {debateTurns.map((turn, idx) => {
-                      const colors = getColor(turn.provider);
+                      const colors = getProviderColor(turn.provider);
                       return (
                         <div key={turn.id} className="text-xs">
                           <span className={`font-bold ${colors.text}`}>{turn.debateTurnSpeaker || turn.provider}:</span>{' '}
