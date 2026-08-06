@@ -766,6 +766,22 @@ const App: React.FC = () => {
     const comparePrimary = compareState ? messages.find(m => m.id === compareState.primaryId) ?? null : null;
     const compareSecondary = compareState?.secondaryId ? messages.find(m => m.id === compareState.secondaryId) ?? null : null;
 
+    // ─── View model reasoning (Think tab deep link) ────────────────────────
+    // Opens the Trading Journal's Think tab focused on the reasoning records
+    // of the clicked analysis card. The reasoning set is keyed by the
+    // analysis createdAt, so resolve it via the card (message) id.
+    const handleViewReasoning = useCallback(async (messageId: string) => {
+        let tradeId: string | undefined;
+        try {
+            const { getThinkingByMessage } = await import('./services/infrastructure/ThinkingStoreService');
+            const records = await getThinkingByMessage(messageId);
+            tradeId = records[0]?.tradeId;
+        } catch (err) {
+            console.warn('[App] Failed to resolve reasoning records for card:', err);
+        }
+        setJournalState({ isOpen: true, tab: 'reasoning', focusTradeId: tradeId });
+    }, [setJournalState]);
+
     // ─── Saved analyses gallery ────────────────────────────────────────────
     const [isSavedGalleryOpen, setIsSavedGalleryOpen] = useState(false);
     const handleLocateMessage = useCallback((messageId: string) => {
@@ -1926,8 +1942,9 @@ const App: React.FC = () => {
         autopilotResolutions, // Outcome autopilot detected resolutions
         onConfirmAutopilot: handleConfirmAutopilot,
         onDismissAutopilot: handleDismissAutopilot,
-        onCompareAnalysis: handleCompareAnalysis
-    }), [typingMessageState, highlightedAnalysisId, expandedPostMortems, expandedPostMortemImages, savedAnalyses, loggingTradeId, activeFrameworks, activeConversation, copiedMessageId, modelIdToName, providerNameToId, handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy, handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, confidenceCalibration, handleRetryPostMortem, lensConfig, leverageInput, autopilotResolutions, handleConfirmAutopilot, handleDismissAutopilot, handleCompareAnalysis]);
+        onCompareAnalysis: handleCompareAnalysis,
+        onViewReasoning: handleViewReasoning
+    }), [typingMessageState, highlightedAnalysisId, expandedPostMortems, expandedPostMortemImages, savedAnalyses, loggingTradeId, activeFrameworks, activeConversation, copiedMessageId, modelIdToName, providerNameToId, handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy, handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, confidenceCalibration, handleRetryPostMortem, lensConfig, leverageInput, autopilotResolutions, handleConfirmAutopilot, handleDismissAutopilot, handleCompareAnalysis, handleViewReasoning]);
 
     // ... (Rest of component remains unchanged) ...
     return (
@@ -2102,6 +2119,8 @@ const App: React.FC = () => {
                 isVisible={journalState.isOpen}
                 onClose={() => setJournalState(prev => ({ ...prev, isOpen: false }))}
                 initialTab={journalState.tab}
+                initialTradeId={journalState.focusTradeId}
+                onInitialTradeConsumed={() => setJournalState(prev => ({ ...prev, focusTradeId: undefined }))}
                 trades={loggedTrades}
                 enabledProviders={readyProviders.map(p => p.id)}
                 selectedModels={Object.fromEntries(readyProviders.map(p => [p.id, p.selectedModel]))}

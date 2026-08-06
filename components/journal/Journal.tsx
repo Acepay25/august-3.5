@@ -17,6 +17,10 @@ interface JournalProps {
     onClose: () => void;
     initialTab: 'log' | 'performance' | 'analytics' | 'learning' | 'memory' | 'models' | 'reasoning';
     isEmbedded?: boolean;
+    /** Deep link: auto-select this analysis run in the Think (reasoning) tab. */
+    initialTradeId?: string;
+    /** Called once the deep-linked trade has been consumed by the dashboard. */
+    onInitialTradeConsumed?: () => void;
 
     // Trade Log Props
     trades: LoggedTrade[];
@@ -184,6 +188,7 @@ const TABS: TabConfig[] = [
 
 const JournalInner: React.FC<JournalProps> = ({
     isVisible, onClose, initialTab, isEmbedded = false,
+    initialTradeId, onInitialTradeConsumed,
     // Trade Log Pass-through
     trades, onDeleteTrades, onClearAllTrades, modelIdToName, ocrModelIdToName, onUpdateInsights, isSummarizing, currentInsightIds, onUpdateTradeLeverage,
     // Performance Review Pass-through
@@ -262,7 +267,11 @@ const JournalInner: React.FC<JournalProps> = ({
             </div>
         ) : activeTab === 'reasoning' ? (
             <div className="p-4 sm:p-6 overflow-y-auto h-full">
-                <ReasoningDashboard username={typeof localStorage !== 'undefined' ? (localStorage.getItem('last_active_user') || 'default') : 'default'} />
+                <ReasoningDashboard
+                    username={typeof localStorage !== 'undefined' ? (localStorage.getItem('last_active_user') || 'default') : 'default'}
+                    initialTradeId={initialTradeId}
+                    onInitialTradeConsumed={onInitialTradeConsumed}
+                />
             </div>
         ) : (
             <MemoryContent
@@ -412,7 +421,11 @@ const JournalInner: React.FC<JournalProps> = ({
                         </div>
                     ) : activeTab === 'reasoning' ? (
                         <div className="p-4 sm:p-6 overflow-y-auto h-full">
-                            <ReasoningDashboard username={typeof localStorage !== 'undefined' ? (localStorage.getItem('last_active_user') || 'default') : 'default'} />
+                            <ReasoningDashboard
+                                username={typeof localStorage !== 'undefined' ? (localStorage.getItem('last_active_user') || 'default') : 'default'}
+                                initialTradeId={initialTradeId}
+                                onInitialTradeConsumed={onInitialTradeConsumed}
+                            />
                         </div>
                     ) : (
                         <MemoryContent

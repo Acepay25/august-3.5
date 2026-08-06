@@ -47,6 +47,8 @@ export interface ChatContextProps {
     onSelectMessageForProbability?: (id: string) => void;
     // Side-by-side compare of two analysis cards.
     onCompareAnalysis?: (messageId: string) => void;
+    /** Opens the Trading Journal Think tab focused on this card's reasoning. */
+    onViewReasoning?: (messageId: string) => void;
     // Selection Mode Props
     isSelectionMode?: boolean;
     selectedMessageIds?: Set<string>;
@@ -124,7 +126,8 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
         confidenceCalibration, onRetryPostMortem, lensConfig, leverage, onViewImage,
         autopilotResolutions, onConfirmAutopilot, onDismissAutopilot,
         onSelectMessageForProbability,
-        onCompareAnalysis
+        onCompareAnalysis,
+        onViewReasoning
     } = context;
 
     const isHighlighted = highlightedAnalysisId === message.id;
@@ -380,7 +383,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                             )}
 
                             {/* Main Analysis Result */}
-                            {message.analysis && <AnalysisResult analysis={message.analysis} messageId={message.id} onLogTrade={handleInitiateLogTrade} onInitiateSkip={handleInitiateSkipTrade} onViewStrategy={handleViewStrategyDetails} onSaveAnalysis={handleSaveAnalysis} onUpdateTrade={handleInitiateUpdateTrade} onSimulate={handleInitiateSimulator} isSaved={savedAnalyses.some(sa => sa.id === message.id)} outcome={message.outcome} isLogging={loggingTradeId === message.id} activeFrameworks={activeFrameworks} onApplyStrategy={handleApplyStrategy} imageSummaries={message.imageSummaries} isAccuracyMode={message.isAccuracyMode} accuracySubMode={message.accuracySubMode} confidenceCalibration={confidenceCalibration} confluenceData={message.confluenceData} leverage={leverage} isLensMode={message.isLensMode} tradingStyle={message.tradingStyle} onSelectForProbability={onSelectMessageForProbability} autopilotResolution={autopilotResolutions?.[message.id]} onConfirmAutopilot={onConfirmAutopilot} onDismissAutopilot={onDismissAutopilot} onCompare={onCompareAnalysis} />}
+                            {message.analysis && <AnalysisResult analysis={message.analysis} messageId={message.id} onLogTrade={handleInitiateLogTrade} onInitiateSkip={handleInitiateSkipTrade} onViewStrategy={handleViewStrategyDetails} onSaveAnalysis={handleSaveAnalysis} onUpdateTrade={handleInitiateUpdateTrade} onSimulate={handleInitiateSimulator} isSaved={savedAnalyses.some(sa => sa.id === message.id)} outcome={message.outcome} isLogging={loggingTradeId === message.id} activeFrameworks={activeFrameworks} onApplyStrategy={handleApplyStrategy} imageSummaries={message.imageSummaries} isAccuracyMode={message.isAccuracyMode} accuracySubMode={message.accuracySubMode} confidenceCalibration={confidenceCalibration} confluenceData={message.confluenceData} leverage={leverage} isLensMode={message.isLensMode} tradingStyle={message.tradingStyle} onSelectForProbability={onSelectMessageForProbability} autopilotResolution={autopilotResolutions?.[message.id]} onConfirmAutopilot={onConfirmAutopilot} onDismissAutopilot={onDismissAutopilot} onCompare={onCompareAnalysis} onViewReasoning={onViewReasoning} />}
 
                             {!message.isDebating && debateTurns.length > 0 && !message.analysis && (
                                 <DebateChat
