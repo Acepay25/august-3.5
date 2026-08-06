@@ -90,28 +90,50 @@ class UnifiedStorageService {
     // ========================================================================
 
     /**
-     * Load Learning Rules
+     * User-scoped storage key. Learning state is per-profile (GlobalLearningService
+     * keys calibration the same way) — a global key let user A's loss-rules
+     * inject into user B's analyses.
      */
-    loadLearningRules(): { rules: LearningRule[]; lastUpdated: string; version: number } {
-        return this.loadSetting(StorageKey.LEARNING_RULES, {
-            version: 2,
-            rules: [],
-            lastUpdated: new Date().toISOString()
-        });
+    private scopedKey(key: string): string {
+        const username = localStorage.getItem('last_active_user') || 'default';
+        return `${key}_${username}`;
     }
 
     /**
-     * Save Learning Rules
+     * Load Learning Rules (per active user)
+     */
+    loadLearningRules(): { rules: LearningRule[]; lastUpdated: string; version: number } {
+        const scoped = this.scopedKey(StorageKey.LEARNING_RULES);
+        let data = this.loadSetting<{ rules: LearningRule[]; lastUpdated: string; version: number } | null>(scoped, null);
+        if (!data) {
+            // Legacy (pre-multi-user) key — migrate once for the current user.
+            data = this.loadSetting(StorageKey.LEARNING_RULES, {
+                version: 2,
+                rules: [],
+                lastUpdated: new Date().toISOString()
+            });
+            if (data.rules.length > 0 || data.lastUpdated) {
+                this.saveSetting(scoped, data);
+            }
+        }
+        return data;
+    }
+
+    /**
+     * Save Learning Rules (per active user)
      */
     saveLearningRules(data: { rules: LearningRule[]; lastUpdated: string; version: number }): void {
-        this.saveSetting(StorageKey.LEARNING_RULES, data);
+        this.saveSetting(this.scopedKey(StorageKey.LEARNING_RULES), data);
     }
 
     /**
      * Helper: Get Trade Logs for current user (for dashboard stats)
      */
     async getTradeLogs(): Promise<LoggedTrade[]> {
-        const username = this.loadSetting(StorageKey.LAST_USER, 'default_user');
+        // read via getItem — the value is a RAW string (App writes it with
+        // setItem); loadSetting's JSON.parse threw and fell back to the
+        // default user, so dashboards always showed the default user's trades.
+        const username = localStorage.getItem('last_active_user') || 'default';
         const profile = await this.getUserProfile(username);
         return profile?.tradeLog || [];
     }

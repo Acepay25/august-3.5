@@ -14,7 +14,10 @@ export const sanitizeAIResponse = (text: string): string => {
   let cleaned = text
     .replace(/^#+\s/gm, '') // Headings
     .replace(/(\*\*|__)(.*?)\1/g, '$2') // Bold
-    .replace(/(\*|_)(.*?)\1/g, '$2')   // Italic
+    .replace(/(\*)(.*?)\1/g, '$2')   // Italic (*)
+    // Underscore-italic only at word boundaries — a bare `_` pair would
+    // otherwise corrupt tickers/timeframes ("BTCUSDT_4h" → "BTCUSDT4h").
+    .replace(/(?<!\w)_([^_\n]*)_(?!\w)/g, '$1')
     .replace(/^\s*[*-]\s/gm, '')     // List items
     .replace(/`/g, '');                 // Code ticks
 

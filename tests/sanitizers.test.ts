@@ -28,6 +28,19 @@ describe('sanitizers', () => {
     });
   });
 
+    it('preserves underscores inside tickers/timeframes', () => {
+      // A bare _ pair used to be stripped as italic markup: BTCUSDT_4h → BTCUSDT4h
+      const result = sanitizeAIResponse('Watch BTCUSDT_4h and 15m_1h_4h structure');
+      expect(result).toContain('BTCUSDT_4h');
+      expect(result).toContain('15m_1h_4h');
+    });
+
+    it('still strips word-boundary underscore italics', () => {
+      const result = sanitizeAIResponse('This is _italic_ text');
+      expect(result).not.toContain('_');
+      expect(result).toContain('italic');
+    });
+
   describe('sanitizeJSONString', () => {
     it('removes control characters from JSON', () => {
       const input = '{"key": "value\u0000with\u001Fcontrol"}';

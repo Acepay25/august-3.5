@@ -20,6 +20,7 @@ import {
   sqliteDeleteUser,
   migrateFromIndexedDB
 } from './SqliteService';
+import { runExclusiveWrite } from './SqliteServiceHelpers';
 import {
   isSqliteMigrated,
   setSqliteMigrated,
@@ -213,24 +214,29 @@ export const getUserProfile = async (username: string): Promise<UserProfile | un
  */
 export const saveUserProfile = async (username: string, data: Partial<Omit<UserProfile, 'username'>>): Promise<void> => {
   if (await ensureDbReady()) {
-    // For SQLite, we need to get existing and merge
-    const existing = await sqliteGetUserProfile(username);
-    const updatedProfile: UserProfile = {
-      username,
-      conversations: [],
-      tradeLog: [],
-      savedAnalyses: [],
-      tradeSummaries: [],
-      finalTradeSummary: null,
-      settings: { activeFrameworks: [] },
-      ...existing,
-      ...data,
-      updatedAt: new Date().toISOString(),
-    };
-    if (!updatedProfile.createdAt) {
-      updatedProfile.createdAt = new Date().toISOString();
-    }
-    await sqliteSaveUserProfile(updatedProfile);
+    // The read-modify-write must be atomic: overlapping saves (data debounce,
+    // settings debounce, heartbeat, unload flush) each read the whole profile
+    // before writing; without serialization the earlier save's fields could
+    // be lost to a stale snapshot, and the SQLite BEGIN/COMMIT could not nest.
+    await runExclusiveWrite(async () => {
+      const existing = await sqliteGetUserProfile(username);
+      const updatedProfile: UserProfile = {
+        username,
+        conversations: [],
+        tradeLog: [],
+        savedAnalyses: [],
+        tradeSummaries: [],
+        finalTradeSummary: null,
+        settings: { activeFrameworks: [] },
+        ...existing,
+        ...data,
+        updatedAt: new Date().toISOString(),
+      };
+      if (!updatedProfile.createdAt) {
+        updatedProfile.createdAt = new Date().toISOString();
+      }
+      await sqliteSaveUserProfile(updatedProfile);
+    });
     return;
   }
   return idbSaveUserProfile(username, data);
@@ -241,7 +247,9 @@ export const saveUserProfile = async (username: string, data: Partial<Omit<UserP
  */
 export const overwriteUserProfile = async (profile: UserProfile): Promise<void> => {
   if (await ensureDbReady()) {
-    await sqliteSaveUserProfile(profile);
+    await runExclusiveWrite(async () => {
+      await sqliteSaveUserProfile(profile);
+    });
     return;
   }
   return idbOverwriteUserProfile(profile);
@@ -255,7 +263,14 @@ export const deleteUserProfile = async (username: string): Promise<void> => {
     await sqliteDeleteUser(username);
     return;
   }
-  return idbDeleteUserProfile(username);
+  await idbDeleteUserProfile(username);
+  // Clean the reasoning store too (separate IndexedDB database — the
+  // profile delete above cannot reach it; on SQLite, sqliteDeleteUser
+  // already removed the rows and this becomes a harmless no-op).
+  const { deleteThinkingForUser } = await import('./ThinkingStoreService');
+  await deleteThinkingForUser(username).catch(err => {
+    console.warn('[dbService] Failed to delete thinking records:', err);
+  });
 };
 
 /**

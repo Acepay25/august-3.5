@@ -55,7 +55,7 @@ import CommandPalette, { PaletteAction } from './components/shared/CommandPalett
 const AnalysisProgress = React.lazy(() => import('./components/analysis/AnalysisProgress'));
 import { DEFAULT_FRAMEWORKS } from './constants/models';
 import { buildModelIdToName, buildProviderNameToId, getFirstReadyProvider } from './utils/providerUtils';
-import { createNewConversation } from './utils/conversationUtils';
+import { createNewConversation, DEFAULT_LEVERAGE } from './utils/conversationUtils';
 import { recalculateAnalysisMetrics } from './utils/analysisUtils';
 import { processImagesForSummarization } from './utils/imageProcessor';
 import { extractLastJson } from './utils/jsonUtils';
@@ -90,7 +90,7 @@ import { OutcomeAutopilotService, AutopilotResolution } from './services/ui/Outc
 import { clearAllCaches } from './services/infrastructure/responseCache';
 import { initNativeStatusBar } from './services/infrastructure/NativeStatusBar';
 import { initConfluenceService, syncConfluenceFromTradeLog } from './services/analysis/TimeframeConfluenceService';
-import { initPatternMemoryService } from './services/learning/PatternMemorySynthesisService';
+import { initPatternMemoryService, setAttributedInsightsUser } from './services/learning/PatternMemorySynthesisService';
 import GlobalLearningService from './services/learning/GlobalLearningService';
 const VersionHistoryDashboard = React.lazy(() => import('./components/dashboards/VersionHistoryDashboard').then(m => ({ default: m.VersionHistoryDashboard })));
 
@@ -888,11 +888,14 @@ const App: React.FC = () => {
         await initConfluenceService();
         await initPatternMemoryService();
         await GlobalLearningService.setActiveUser(username);
+        // Same per-user treatment for the attributed-insights knowledge base —
+        // resets the module cache so the next read loads THIS user's insights.
+        setAttributedInsightsUser(username);
 
         const profile = await dbService.getUserProfile(username);
         if (profile) {
             const correctedConvs = (profile.conversations || []).map(conv => {
-                const leverage = conv.leverage || 100;
+                const leverage = conv.leverage || DEFAULT_LEVERAGE;
                 const correctedMessages = (conv.messages || []).map(msg => {
                     // A restored message can never be mid-stream: the abort
                     // controller and the debate status callbacks died with the
@@ -914,7 +917,7 @@ const App: React.FC = () => {
             const convs = correctedConvs.length > 0 ? correctedConvs : [createNewConversation()];
 
             setConversationHistory(convs);
-            const loadedTrades = (profile.tradeLog || []).map(t => ({ ...t, leverage: t.leverage || 100 }));
+            const loadedTrades = (profile.tradeLog || []).map(t => ({ ...t, leverage: t.leverage || DEFAULT_LEVERAGE }));
             setLoggedTrades(loadedTrades);
             // Rebuild confluence historical stats from the loaded log (was
             // never wired — getConfluenceInsight always returned empty).
@@ -973,7 +976,7 @@ const App: React.FC = () => {
             setInsightKnowledgeBase(profile.insightKnowledgeBase);
 
             // Sync model performance data from trade log
-            const tradeLogData = (profile.tradeLog || []).map(t => ({ ...t, leverage: t.leverage || 100 }));
+            const tradeLogData = (profile.tradeLog || []).map(t => ({ ...t, leverage: t.leverage || DEFAULT_LEVERAGE }));
             syncFromTradeLog(tradeLogData);
             syncRollingWindowFromTradeLog(tradeLogData);
             console.log('[App] Synced model performance data from trade log');
@@ -1901,7 +1904,7 @@ const App: React.FC = () => {
     }, [toast]);
 
     useEffect(() => {
-        const leverage = activeConversation?.leverage || 100;
+        const leverage = activeConversation?.leverage || DEFAULT_LEVERAGE;
         messages.forEach(m => {
             const trackable = m.outcome === TradeOutcome.PENDING
                 && !!m.analysis
@@ -2050,7 +2053,7 @@ const App: React.FC = () => {
                 <ScenarioSimulator
                     message={simulatorCandidate}
                     loggedTrades={loggedTrades}
-                    leverage={activeConversation?.leverage || 100}
+                    leverage={activeConversation?.leverage || DEFAULT_LEVERAGE}
                     onClose={() => setSimulatorCandidate(null)}
                 />
             )}

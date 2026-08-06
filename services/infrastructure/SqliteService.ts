@@ -12,6 +12,7 @@ import { Capacitor } from '@capacitor/core';
 import { CapacitorSQLite, SQLiteConnection, SQLiteDBConnection } from '@capacitor-community/sqlite';
 import { LoggedTrade, UserProfile, Conversation, TradeSummary, GlobalMemory, UserSettings, Message } from '../../types';
 import { setSqliteDb } from './SqliteServiceHelpers';
+import { DEFAULT_LEVERAGE } from '../../utils/conversationUtils';
 
 /**
  * Parse a stored JSON blob defensively. A single corrupt cell (e.g. from an
@@ -405,7 +406,7 @@ export const sqliteGetUserProfile = async (username: string): Promise<UserProfil
             ocrModel: '',
             moderatorProviderId: settings.moderatorProvider || '', // legacy column name compat
             moderatorModel: '',
-            leverage: 100,
+            leverage: DEFAULT_LEVERAGE,
             ...settings // Override defaults with saved settings
         } as Conversation;
 
@@ -464,6 +465,28 @@ const serializeConversationMessages = (messages: Message[]): string => JSON.stri
     messages.map(({ activeDebateSpeakers, ensembleProgress, ...message }) => message)
 );
 
+/**
+ * Delete rows of a collection that are absent from the profile being saved.
+ * INSERT OR REPLACE can't remove rows; without this, deletions never
+ * propagate to SQLite (stale snapshots and imports resurrected deleted rows).
+ */
+const deleteAbsentRows = async (
+    table: string,
+    username: string,
+    presentIds: string[]
+): Promise<void> => {
+    if (!db) return;
+    if (presentIds.length === 0) {
+        await db.run(`DELETE FROM ${table} WHERE username = ?`, [username]);
+        return;
+    }
+    const placeholders = presentIds.map(() => '?').join(',');
+    await db.run(
+        `DELETE FROM ${table} WHERE username = ? AND id NOT IN (${placeholders})`,
+        [username, ...presentIds]
+    );
+};
+
 export const sqliteSaveUserProfile = async (profile: UserProfile): Promise<void> => {
     if (!db) throw new Error('Database not initialized');
 
@@ -472,7 +495,10 @@ export const sqliteSaveUserProfile = async (profile: UserProfile): Promise<void>
     // Wrap all writes in a single transaction for performance.
     // Without this, each INSERT is a separate native-bridge round trip
     // (100 trades + 20 conversations = 120+ sequential awaits).
+    // Callers serialize via runExclusiveWrite (dbService), so BEGIN can no
+    // longer collide with another open transaction on this connection.
     await db.execute('BEGIN TRANSACTION');
+    let transactionOpen = true;
     try {
         // Upsert user
         await db.run(`
@@ -497,6 +523,15 @@ export const sqliteSaveUserProfile = async (profile: UserProfile): Promise<void>
         for (const trade of profile.tradeLog || []) {
             await sqliteSaveTrade(profile.username, trade);
         }
+        // INSERT OR REPLACE only upserts — rows deleted from the profile
+        // (deleted trades, imported-over data) must be removed explicitly,
+        // or they'd resurrect on the next full load (and web/native would
+        // diverge: IndexedDB replaces the whole record, SQLite did not).
+        await deleteAbsentRows(
+            'trades',
+            profile.username,
+            (profile.tradeLog || []).map(t => t.id)
+        );
 
         // Sync conversations
         for (const conv of profile.conversations || []) {
@@ -515,6 +550,11 @@ export const sqliteSaveUserProfile = async (profile: UserProfile): Promise<void>
                 JSON.stringify(settings) // Save extended flags and models
             ]);
         }
+        await deleteAbsentRows(
+            'conversations',
+            profile.username,
+            (profile.conversations || []).map(c => c.id)
+        );
 
         // Sync trade summaries
         for (const summary of profile.tradeSummaries || []) {
@@ -523,6 +563,11 @@ export const sqliteSaveUserProfile = async (profile: UserProfile): Promise<void>
                 VALUES (?, ?, ?, ?)
             `, [summary.id, profile.username, summary.summaryText, summary.timestamp]);
         }
+        await deleteAbsentRows(
+            'trade_summaries',
+            profile.username,
+            (profile.tradeSummaries || []).map(s => s.id)
+        );
 
         // Sync saved analyses
         for (const analysis of profile.savedAnalyses || []) {
@@ -541,10 +586,25 @@ export const sqliteSaveUserProfile = async (profile: UserProfile): Promise<void>
                 JSON.stringify(meta) // Save extended fields like modelUsed
             ]);
         }
+        await deleteAbsentRows(
+            'saved_analyses',
+            profile.username,
+            (profile.savedAnalyses || []).map(a => a.id)
+        );
 
         await db.execute('COMMIT');
+        transactionOpen = false;
     } catch (error) {
-        await db.execute('ROLLBACK');
+        // Only roll back when we own an open transaction — a failed BEGIN or
+        // an already-rolled-back transaction would make this ROLLBACK throw
+        // and mask the original error.
+        if (transactionOpen) {
+            try {
+                await db.execute('ROLLBACK');
+            } catch (rollbackError) {
+                console.error('[SqliteService] ROLLBACK failed:', rollbackError);
+            }
+        }
         console.error('[SqliteService] Save failed, transaction rolled back:', error);
         throw error;
     }
@@ -650,6 +710,7 @@ export const sqliteDeleteUser = async (username: string): Promise<void> => {
     await db.run('DELETE FROM conversations WHERE username = ?', [username]);
     await db.run('DELETE FROM trade_summaries WHERE username = ?', [username]);
     await db.run('DELETE FROM saved_analyses WHERE username = ?', [username]);
+    await db.run('DELETE FROM thinking_records WHERE username = ?', [username]);
     await db.run('DELETE FROM users WHERE username = ?', [username]);
 };
 

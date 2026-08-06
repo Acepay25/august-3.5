@@ -5,7 +5,7 @@
  * Clean, modern design with real-time R:R calculation and Monte Carlo integration.
  */
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Message, LoggedTrade, TradeOutcome } from '../../types';
 import { CloseIcon } from '../shared/Icons';
 import {
@@ -110,14 +110,26 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
         return compareScenarios(originalConfig, currentScenarioConfig);
     }, [originalConfig, currentScenarioConfig]);
 
+    // Track the inner computation timer so rapid edits can't leave two runs
+    // in flight where the OLDER config's result resolves last and overwrites
+    // the newer one (the 300ms debounce only cleared the outer timer).
+    const simulationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
     // Run full analysis with Monte Carlo (debounced)
     const runFullAnalysis = useCallback(() => {
         if (!currentScenarioConfig) return;
 
         setIsCalculating(true);
 
+        // Cancel any pending inner run from a previous debounce firing.
+        if (simulationTimerRef.current) {
+            clearTimeout(simulationTimerRef.current);
+            simulationTimerRef.current = null;
+        }
+
         // Use setTimeout to allow UI to update before heavy computation
-        setTimeout(() => {
+        simulationTimerRef.current = setTimeout(() => {
+            simulationTimerRef.current = null;
             const historicalMatches = findHistoricalMatches(currentScenarioConfig, loggedTrades);
             const monteCarlo = runScenarioMonteCarlo(currentScenarioConfig, 300);
             const metrics = calculateMetrics(currentScenarioConfig);
@@ -133,6 +145,16 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
             setIsCalculating(false);
         }, 50);
     }, [currentScenarioConfig, loggedTrades]);
+
+    // Clear any pending computation on unmount.
+    useEffect(() => {
+        return () => {
+            if (simulationTimerRef.current) {
+                clearTimeout(simulationTimerRef.current);
+                simulationTimerRef.current = null;
+            }
+        };
+    }, []);
 
     // Run analysis when scenario changes
     useEffect(() => {

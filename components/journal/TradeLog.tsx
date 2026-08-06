@@ -8,6 +8,7 @@ import ImageViewerModal from '../modals/ImageViewerModal';
 import { EmptyState } from '../ui/EmptyState';
 import { ReasoningPanel } from './ReasoningPanel';
 import { getThinkingTradeId } from '../../services/infrastructure/ThinkingStoreService';
+import { DEFAULT_LEVERAGE } from '../../utils/conversationUtils';
 
 interface TradeLogContentProps {
     trades: LoggedTrade[];
@@ -74,7 +75,7 @@ const TradeLogRow: React.FC<{
     const [isInsightsVisible, setIsInsightsVisible] = useState(false);
     const [isPostMortemVisible, setIsPostMortemVisible] = useState(false);
     const [isScreenshotsVisible, setIsScreenshotsVisible] = useState(false);
-    const [localLeverage, setLocalLeverage] = useState<string>(String(leverage || 100));
+    const [localLeverage, setLocalLeverage] = useState<string>(String(leverage || DEFAULT_LEVERAGE));
 
     const safeDirection = direction || 'Neutral';
 

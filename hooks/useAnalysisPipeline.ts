@@ -26,6 +26,7 @@ import { ThinkingRecord } from '../types/thinking';
 import { extractLastJson } from '../utils/jsonUtils';
 import { sanitizeAIResponse } from '../utils/sanitizers';
 import { buildModelIdToName, isProviderReady } from '../utils/providerUtils';
+import { DEFAULT_LEVERAGE } from '../utils/conversationUtils';
 import { loadLearningRules } from '../services/learning/LearningRulesService';
 import { StructuredRule } from '../types';
 import {
@@ -1003,7 +1004,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     }
                     // ========== END VALIDATION GATE ==========
 
-                    return recalculateAnalysisMetrics(finalAnalysis, activeConversation?.leverage || 100);
+                    return recalculateAnalysisMetrics(finalAnalysis, activeConversation?.leverage || DEFAULT_LEVERAGE);
                 };
 
                 if (enabledProviders.length > 1) {

@@ -85,13 +85,18 @@ const calculateRSI = (data: number[], period: number = 14): number | null => {
 };
 
 const calculateMACD = (data: number[], fast: number = 12, slow: number = 26, signal: number = 9) => {
-    if (data.length < slow + signal) return { dif: null, dea: null, hist: null };
+    // Require enough history for the EMAs to converge (~2×slow). The old
+    // values[0] seed plus a slow+signal gate displayed still-converging lines.
+    if (data.length < slow * 2) return { dif: null, dea: null, hist: null };
     const getEMAArray = (values: number[], period: number) => {
         const k = 2 / (period + 1);
         const emas = [];
-        let ema = values[0];
+        // SMA seed — same convention as calculateEMA above. Seeding with
+        // values[0] skews the whole series until it slowly converges.
+        const seed = values.slice(0, period).reduce((a, b) => a + b, 0) / period;
+        let ema = seed;
         emas.push(ema);
-        for (let i = 1; i < values.length; i++) {
+        for (let i = period; i < values.length; i++) {
             ema = values[i] * k + ema * (1 - k);
             emas.push(ema);
         }
@@ -99,11 +104,16 @@ const calculateMACD = (data: number[], fast: number = 12, slow: number = 26, sig
     };
     const emaFast = getEMAArray(data, fast);
     const emaSlow = getEMAArray(data, slow);
-    const difLine = emaFast.map((f, i) => f - emaSlow[i]);
+    // Both series have different lengths after the SMA seed (the fast series
+    // starts earlier) — align on the slow series so indices match.
+    const offset = slow - fast;
+    const difLine = emaSlow.map((s, i) => emaFast[i + offset] - s);
     const deaLine = getEMAArray(difLine, signal);
     const currentDif = difLine[difLine.length - 1];
     const currentDea = deaLine[deaLine.length - 1];
-    const currentHist = 2 * (currentDif - currentDea);
+    // Single histogram convention (DIF − DEA) — matches TechnicalAnalysisService;
+    // the doubled value made the same market show 2× different histograms.
+    const currentHist = currentDif - currentDea;
     return { dif: parseFloat(currentDif.toFixed(4)), dea: parseFloat(currentDea.toFixed(4)), hist: parseFloat(currentHist.toFixed(4)) };
 };
 
@@ -698,7 +708,7 @@ ${JSON.stringify(marketData, null, 2)}
                         </div>
 
                         {/* Connection Status Badge */}
-                        <div className={`hidden xs:flex items-center gap-1.5 px-2.5 py-1 rounded-full border transition-colors ${connectionState.status === 'connected'
+                        <div className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full border transition-colors ${connectionState.status === 'connected'
                             ? (connectionState.source === 'socket' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-yellow-500/10 border-yellow-500/20 text-yellow-400')
                             : connectionState.status === 'reconnecting' ? 'bg-rose-500/10 border-rose-500/20 text-rose-400'
                                 : 'bg-zinc-500/10 border-zinc-500/20 text-zinc-400'

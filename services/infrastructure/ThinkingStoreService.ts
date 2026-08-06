@@ -144,54 +144,58 @@ export const saveThinkingBatch = async (records: ThinkingRecord[]): Promise<void
     if (isNativePlatform()) {
         // SQLite path — use the same db connection as SqliteService
         // We import dynamically to avoid circular dependency
-        const { getSqliteDb } = await import('./SqliteServiceHelpers');
+        const { getSqliteDb, runExclusiveWrite } = await import('./SqliteServiceHelpers');
         const db = await getSqliteDb();
         if (!db) throw new Error('SQLite database not initialized');
 
-        await db.execute('BEGIN TRANSACTION');
-        try {
-            for (const record of records) {
-                await db.run(`
-                    INSERT OR REPLACE INTO thinking_records (
-                        id, tradeId, username, provider, role, modelName,
-                        reasoning, finalOutput, rawReasoning, messageId,
-                        analysisJson, debateTurnIndex, debateTurnSpeaker,
-                        confidence, probability, outcome, createdAt
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                `, [
-                    record.id,
-                    record.tradeId,
-                    record.username,
-                    record.provider,
-                    record.role,
-                    record.modelName || null,
-                    record.reasoning,
-                    record.finalOutput || null,
-                    record.rawReasoning || null,
-                    record.messageId || null,
-                    record.analysisJson || null,
-                    record.debateTurnIndex ?? null,
-                    record.debateTurnSpeaker || null,
-                    record.confidence || null,
-                    record.probability ?? null,
-                    record.outcome || null,
-                    record.createdAt,
-                ]);
-            }
-            await db.execute('COMMIT');
-            // Prune the oldest records beyond the cap (best-effort).
+        // Serialized with all other writers: the shared connection cannot
+        // nest BEGIN TRANSACTION (profile saves run their own transaction).
+        await runExclusiveWrite(async () => {
+            await db.execute('BEGIN TRANSACTION');
             try {
-                await db.run(
-                    `DELETE FROM thinking_records WHERE id NOT IN (SELECT id FROM thinking_records ORDER BY createdAt DESC LIMIT ?)`,
-                    [MAX_THINKING_RECORDS]
-                );
-            } catch (e) {
-                console.warn('[ThinkingStore] Prune failed:', e);
+                for (const record of records) {
+                    await db.run(`
+                        INSERT OR REPLACE INTO thinking_records (
+                            id, tradeId, username, provider, role, modelName,
+                            reasoning, finalOutput, rawReasoning, messageId,
+                            analysisJson, debateTurnIndex, debateTurnSpeaker,
+                            confidence, probability, outcome, createdAt
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    `, [
+                        record.id,
+                        record.tradeId,
+                        record.username,
+                        record.provider,
+                        record.role,
+                        record.modelName || null,
+                        record.reasoning,
+                        record.finalOutput || null,
+                        record.rawReasoning || null,
+                        record.messageId || null,
+                        record.analysisJson || null,
+                        record.debateTurnIndex ?? null,
+                        record.debateTurnSpeaker || null,
+                        record.confidence || null,
+                        record.probability ?? null,
+                        record.outcome || null,
+                        record.createdAt,
+                    ]);
+                }
+                await db.execute('COMMIT');
+                // Prune the oldest records beyond the cap (best-effort).
+                try {
+                    await db.run(
+                        `DELETE FROM thinking_records WHERE id NOT IN (SELECT id FROM thinking_records ORDER BY createdAt DESC LIMIT ?)`,
+                        [MAX_THINKING_RECORDS]
+                    );
+                } catch (e) {
+                    console.warn('[ThinkingStore] Prune failed:', e);
+                }
+            } catch (error) {
+                await db.execute('ROLLBACK');
+                throw error;
             }
-        } catch (error) {
-            await db.execute('ROLLBACK');
-            throw error;
-        }
+        });
     } else {
         const db = await initIndexedDB();
         const tx = db.transaction(STORE_NAME, 'readwrite');
@@ -219,36 +223,38 @@ export const saveThinkingBatch = async (records: ThinkingRecord[]): Promise<void
  * SQLite-specific save (used when db is already available).
  */
 const saveThinkingRecordSqlite = async (record: ThinkingRecord): Promise<void> => {
-    const { getSqliteDb } = await import('./SqliteServiceHelpers');
+    const { getSqliteDb, runExclusiveWrite } = await import('./SqliteServiceHelpers');
     const db = await getSqliteDb();
     if (!db) throw new Error('SQLite database not initialized');
 
-    await db.run(`
-        INSERT OR REPLACE INTO thinking_records (
-            id, tradeId, username, provider, role, modelName,
-            reasoning, finalOutput, rawReasoning, messageId,
-            analysisJson, debateTurnIndex, debateTurnSpeaker,
-            confidence, probability, outcome, createdAt
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-        record.id,
-        record.tradeId,
-        record.username,
-        record.provider,
-        record.role,
-        record.modelName || null,
-        record.reasoning,
-        record.finalOutput || null,
-        record.rawReasoning || null,
-        record.messageId || null,
-        record.analysisJson || null,
-        record.debateTurnIndex ?? null,
-        record.debateTurnSpeaker || null,
-        record.confidence || null,
-        record.probability ?? null,
-        record.outcome || null,
-        record.createdAt,
-    ]);
+    await runExclusiveWrite(async () => {
+        await db.run(`
+            INSERT OR REPLACE INTO thinking_records (
+                id, tradeId, username, provider, role, modelName,
+                reasoning, finalOutput, rawReasoning, messageId,
+                analysisJson, debateTurnIndex, debateTurnSpeaker,
+                confidence, probability, outcome, createdAt
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+            record.id,
+            record.tradeId,
+            record.username,
+            record.provider,
+            record.role,
+            record.modelName || null,
+            record.reasoning,
+            record.finalOutput || null,
+            record.rawReasoning || null,
+            record.messageId || null,
+            record.analysisJson || null,
+            record.debateTurnIndex ?? null,
+            record.debateTurnSpeaker || null,
+            record.confidence || null,
+            record.probability ?? null,
+            record.outcome || null,
+            record.createdAt,
+        ]);
+    });
 };
 
 // =============================================================================
@@ -618,6 +624,28 @@ const recordToExportRow = (r: ThinkingRecord): ThinkingExportRow => ({
     tradeId: r.tradeId,
     createdAt: r.createdAt,
 });
+
+/**
+ * Delete all thinking records for a user (profile deletion). The SQLite
+ * path is also covered by sqliteDeleteUser; this keeps the IndexedDB store
+ * from leaking deleted users' reasoning on disk.
+ */
+export const deleteThinkingForUser = async (username: string): Promise<void> => {
+    if (isNativePlatform()) {
+        const { getSqliteDb } = await import('./SqliteServiceHelpers');
+        const db = await getSqliteDb();
+        if (!db) return;
+        await db.run('DELETE FROM thinking_records WHERE username = ?', [username]);
+    } else {
+        const db = await initIndexedDB();
+        const all: ThinkingRecord[] = await db.getAllFromIndex(STORE_NAME, 'username', username);
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        for (const record of all) {
+            await tx.store.delete(record.id);
+        }
+        await tx.done;
+    }
+};
 
 /**
  * Generate a unique record ID.
