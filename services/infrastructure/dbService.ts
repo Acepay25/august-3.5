@@ -57,7 +57,28 @@ const initIndexedDB = () => {
         db.createObjectStore(STORE_NAME, { keyPath: 'username' });
       }
     },
+  }).catch(async (err: unknown) => {
+    // Repair: an older WIP build had ThinkingStoreService open this same
+    // database at a higher version, which makes a v1 request fail with a
+    // VersionError. Open at the current version instead — the userProfiles
+    // store is unaffected.
+    if ((err as { name?: string })?.name === 'VersionError') {
+      console.warn('[dbService] Database version conflict detected, opening at current version');
+      dbPromise = null;
+      return initIndexedDBRepair();
+    }
+    throw err;
   });
+  return dbPromise;
+};
+
+/**
+ * Fallback opener used only after a VersionError: opens the existing
+ * database at its current (higher) version without an upgrade request.
+ */
+const initIndexedDBRepair = () => {
+  if (dbPromise) return dbPromise;
+  dbPromise = openDB(DB_NAME);
   return dbPromise;
 };
 

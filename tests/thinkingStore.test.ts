@@ -22,6 +22,7 @@ import {
     getThinkingTrades,
     updateThinkingOutcome,
     getAllThinkingForExport,
+    getProviderReasoningStats,
 } from '../services/infrastructure/ThinkingStoreService';
 import { ThinkingRecord } from '../types/thinking';
 import { TradeOutcome } from '../types';
@@ -83,12 +84,51 @@ class FakeSqliteDb {
                 if (!byTrade.has(r.tradeId)) byTrade.set(r.tradeId, []);
                 byTrade.get(r.tradeId)!.push(r);
             }
-            const values = [...byTrade.entries()].map(([tradeId, recs]) => ({
-                tradeId,
-                createdAt: recs.reduce((mx, r) => (r.createdAt > mx ? r.createdAt : mx), ''),
-                recordCount: recs.length,
-                outcome: recs.reduce((o, r) => r.outcome || o, undefined),
-            }));
+            const values = [...byTrade.entries()].map(([tradeId, recs]) => {
+                // Mirrors the COALESCE(CASE…) priority in the real query:
+                // resolved WIN/LOSS first, then ENTRY_NOT_HIT/SKIPPED, then
+                // any remaining non-null outcome.
+                const resolved = recs.find(r => r.outcome === 'WIN' || r.outcome === 'LOSS');
+                const secondary = resolved
+                    ? undefined
+                    : recs.find(r => r.outcome === 'ENTRY_NOT_HIT' || r.outcome === 'SKIPPED');
+                return {
+                    tradeId,
+                    createdAt: recs.reduce((mx, r) => (r.createdAt > mx ? r.createdAt : mx), ''),
+                    recordCount: recs.length,
+                    outcome: resolved?.outcome ?? secondary?.outcome ?? recs.reduce((o, r) => r.outcome || o, undefined),
+                };
+            });
+            return { values };
+        }
+        if (/GROUP BY provider/i.test(sql)) {
+            const analysts = this.rows.filter(r => r.username === params[0] && r.role === 'analyst');
+            const byProvider = new Map<string, any[]>();
+            for (const r of analysts) {
+                if (!byProvider.has(r.provider)) byProvider.set(r.provider, []);
+                byProvider.get(r.provider)!.push(r);
+            }
+            const CONFIDENCE_SCORE: Record<string, number> = { High: 4, Medium: 3, Low: 2, Avoid: 1 };
+            const values = [...byProvider.entries()].map(([provider, recs]) => {
+                const wins = recs.filter(r => r.outcome === 'WIN').length;
+                const losses = recs.filter(r => r.outcome === 'LOSS').length;
+                const pending = recs.filter(r => !r.outcome || r.outcome === 'PENDING').length;
+                const probs = recs.map(r => r.probability).filter((p): p is number => typeof p === 'number');
+                const scores = recs
+                    .map(r => (r.confidence ? CONFIDENCE_SCORE[r.confidence] : undefined))
+                    .filter((s): s is number => s !== undefined);
+                return {
+                    provider,
+                    total: recs.length,
+                    wins,
+                    losses,
+                    pending,
+                    avgProbability: probs.length > 0 ? probs.reduce((s, p) => s + p, 0) / probs.length : null,
+                    avgConfidence: scores.length > 0 ? scores.reduce((s, v) => s + v, 0) / scores.length : null,
+                };
+            });
+            // Matches ORDER BY total DESC in the real query.
+            values.sort((a, b) => b.total - a.total);
             return { values };
         }
         if (/SELECT \* FROM thinking_records/i.test(sql)) {
@@ -222,5 +262,67 @@ describe('ThinkingStoreService (SQLite path)', () => {
         expect(rows[0].rawReasoning).toBe('cot deltas');
         expect(rows[0].messageId).toBe('msg-42');
         expect(rows[0].analysis).toEqual({ direction: 'Long' });
+    });
+
+    it('export survives a corrupted analysis JSON blob', async () => {
+        await saveThinkingBatch([
+            makeRecord({ id: 'think-bad', analysisJson: '{not-valid-json' }),
+            makeRecord({ id: 'think-ok', analysisJson: JSON.stringify({ direction: 'Long' }) }),
+        ]);
+
+        const rows = await getAllThinkingForExport('test-user');
+        // Corrupt blob falls back to the raw string instead of aborting the export.
+        const bad = rows.find(r => r.analysis === '{not-valid-json');
+        expect(bad).toBeDefined();
+        const ok = rows.find(r => r.analysis && typeof r.analysis === 'object');
+        expect(ok?.analysis).toEqual({ direction: 'Long' });
+    });
+
+    it('computes per-provider stats with resolved-only winRate and confidence average', async () => {
+        await saveThinkingBatch([
+            makeRecord({ id: 'a1', provider: 'gemini', outcome: TradeOutcome.WIN, confidence: 'High', probability: 80 }),
+            makeRecord({ id: 'a2', provider: 'gemini', outcome: TradeOutcome.WIN, confidence: 'Medium', probability: 60 }),
+            makeRecord({ id: 'a3', provider: 'gemini', outcome: TradeOutcome.LOSS, confidence: 'High', probability: 90 }),
+            makeRecord({ id: 'a4', provider: 'gemini', outcome: TradeOutcome.PENDING, confidence: undefined, probability: undefined }),
+            makeRecord({ id: 'a5', provider: 'gemini', outcome: undefined, confidence: 'Avoid', probability: 30 }),
+            // Non-analyst records are excluded from the per-provider stats.
+            makeRecord({ id: 'm1', provider: 'gemini', role: 'moderator', outcome: TradeOutcome.WIN }),
+            makeRecord({ id: 'b1', provider: 'deepseek', outcome: TradeOutcome.LOSS }),
+        ]);
+
+        const stats = await getProviderReasoningStats('test-user');
+        expect(stats).toHaveLength(2);
+        const gemini = stats.find(s => s.provider === 'gemini');
+        expect(gemini?.total).toBe(5);
+        expect(gemini?.wins).toBe(2);
+        expect(gemini?.losses).toBe(1);
+        expect(gemini?.pending).toBe(2); // PENDING + null outcome
+        // Win rate counts resolved outcomes only — pending records don't dilute it.
+        expect(gemini?.winRate).toBe(66.7);
+        // (4 + 3 + 4 + 1) / 4 over records that carry a confidence level.
+        expect(gemini?.avgConfidence).toBe(3);
+        // (80 + 60 + 90 + 30) / 4 — NULL probabilities excluded, like SQLite AVG.
+        expect(gemini?.avgProbability).toBe(65);
+        // No resolved outcomes → win rate 0, not 100.
+        const deepseek = stats.find(s => s.provider === 'deepseek');
+        expect(deepseek?.winRate).toBe(0);
+        // ORDER BY total DESC
+        expect(stats[0].provider).toBe('gemini');
+    });
+
+    it('prefers resolved outcomes over pending when grouping trades', async () => {
+        await saveThinkingBatch([
+            makeRecord({ id: 't1-a', tradeId: 'trade-1', outcome: TradeOutcome.WIN }),
+            makeRecord({ id: 't1-b', tradeId: 'trade-1', outcome: TradeOutcome.PENDING }),
+            makeRecord({ id: 't2-a', tradeId: 'trade-2', outcome: TradeOutcome.PENDING }),
+            makeRecord({ id: 't2-b', tradeId: 'trade-2', outcome: TradeOutcome.LOSS }),
+            makeRecord({ id: 't3-a', tradeId: 'trade-3', outcome: TradeOutcome.PENDING }),
+            makeRecord({ id: 't3-b', tradeId: 'trade-3', outcome: TradeOutcome.SKIPPED }),
+        ]);
+
+        const trades = await getThinkingTrades('test-user');
+        expect(trades.find(t => t.tradeId === 'trade-1')?.outcome).toBe(TradeOutcome.WIN);
+        expect(trades.find(t => t.tradeId === 'trade-2')?.outcome).toBe(TradeOutcome.LOSS);
+        expect(trades.find(t => t.tradeId === 'trade-3')?.outcome).toBe(TradeOutcome.SKIPPED);
     });
 });

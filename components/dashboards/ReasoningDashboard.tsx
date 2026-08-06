@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Brain, ChevronDown, ChevronRight, Download, Loader2, TrendingUp, TrendingDown } from 'lucide-react';
 import { getProviderReasoningStats, getAllThinkingForExport, getThinkingByTrade, getThinkingTrades } from '../../services/infrastructure/ThinkingStoreService';
 import { ThinkingRecordStats, ThinkingTradeSummary, ThinkingRecord } from '../../types/thinking';
@@ -31,8 +31,14 @@ export const ReasoningDashboard: React.FC<ReasoningDashboardProps> = ({ username
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingRecords, setIsLoadingRecords] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  // Deep link is consumed once per target — a new initialTradeId re-triggers
+  // it, but App re-renders (new callback identity every render) must not.
+  const lastConsumedInitialTradeId = useRef<string | null>(null);
 
-  // Load stats + trade list. Then honor the deep link (initialTradeId).
+  // Load stats + trade list. `onInitialTradeConsumed` is deliberately absent
+  // from the deps: it is an inline arrow in App that changes identity on
+  // every render, which would refire this effect (and re-query the store)
+  // on each App re-render while the tab is open.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -45,24 +51,35 @@ export const ReasoningDashboard: React.FC<ReasoningDashboardProps> = ({ username
         setStats(statsData);
         setTrades(tradesData);
         setIsLoading(false);
-
-        if (initialTradeId) {
-          // The deep-linked trade may or may not appear in the grouped list
-          // (records exist either way) — select it regardless.
-          setSelectedTradeId(initialTradeId);
-          const deepRecords = await getThinkingByTrade(initialTradeId);
-          if (!cancelled) {
-            setRecords(deepRecords);
-            onInitialTradeConsumed?.();
-          }
-        }
       } catch (err) {
         console.warn('[ReasoningDashboard] Failed to load reasoning data:', err);
         if (!cancelled) setIsLoading(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [username, initialTradeId, onInitialTradeConsumed]);
+  }, [username]);
+
+  // Deep link: auto-select the requested analysis run. The trade may or may
+  // not appear in the grouped list (records exist either way) — select it
+  // regardless, then notify the caller once.
+  useEffect(() => {
+    if (!initialTradeId || lastConsumedInitialTradeId.current === initialTradeId) return;
+    lastConsumedInitialTradeId.current = initialTradeId;
+    let cancelled = false;
+    (async () => {
+      try {
+        const deepRecords = await getThinkingByTrade(initialTradeId);
+        if (cancelled) return;
+        setSelectedTradeId(initialTradeId);
+        setRecords(deepRecords);
+        onInitialTradeConsumed?.();
+      } catch (err) {
+        console.warn('[ReasoningDashboard] Failed to load deep-linked reasoning:', err);
+        if (!cancelled) onInitialTradeConsumed?.();
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [initialTradeId, onInitialTradeConsumed]);
 
   const handleSelectTrade = useCallback(async (tradeId: string) => {
     setSelectedTradeId(tradeId);

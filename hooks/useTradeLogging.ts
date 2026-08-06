@@ -178,8 +178,11 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         // This correlates the stored reasoning with the actual outcome (WIN/LOSS),
         // enabling outcome-conditioned training data.
         try {
-            const { updateThinkingOutcome } = await import('../services/infrastructure/ThinkingStoreService');
-            const tradeId = loggedTrade.analysis.createdAt || loggedTrade.id;
+            const { updateThinkingOutcome, getThinkingTradeId } = await import('../services/infrastructure/ThinkingStoreService');
+            // Canonical trade key — same formula as the save side, so the
+            // outcome update lands on the records even when the analysis
+            // createdAt is missing.
+            const tradeId = getThinkingTradeId(loggedTrade.analysis?.createdAt, loggedTrade.id);
             // Pass the card (message) id so the outcome reaches the records
             // even if the timestamp key diverges from the logged trade.
             updateThinkingOutcome(tradeId, outcome, message.id).catch(err => {
