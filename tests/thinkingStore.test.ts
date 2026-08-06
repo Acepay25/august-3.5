@@ -12,6 +12,7 @@ vi.mock('@capacitor-community/sqlite', () => ({
 vi.mock('../services/infrastructure/SqliteServiceHelpers', () => ({
     getSqliteDb: vi.fn(),
     setSqliteDb: vi.fn(),
+    runExclusiveWrite: (fn: () => Promise<any>) => fn(),
 }));
 
 import { getSqliteDb } from '../services/infrastructure/SqliteServiceHelpers';

@@ -91,7 +91,10 @@ describe('OutcomeAutopilotService', () => {
 
     const resolution = OutcomeAutopilotService.getResolution(id);
     expect(resolution?.outcome).toBe(TradeOutcome.WIN);
-    expect(resolution?.pnlPercent).toBe(100);
+    // Recomputed from the hit price (96000) vs entry (95000) at 100x:
+    // (1000/95000)*100*100 = 105.3 — the fixture's stored '+100.0%' was a
+    // rounded analysis-time value.
+    expect(resolution?.pnlPercent).toBe(105.3);
     expect(resolution?.hitTarget).toBe('TP1');
     expect(resolution?.detail).toContain('TP1 hit');
     expect(resolution?.slOptimizationData).toBeDefined();
@@ -119,7 +122,7 @@ describe('OutcomeAutopilotService', () => {
 
     const resolution = OutcomeAutopilotService.getResolution(id);
     expect(resolution?.outcome).toBe(TradeOutcome.LOSS);
-    expect(resolution?.pnlPercent).toBe(-100);
+    expect(resolution?.pnlPercent).toBe(-105.3);
     expect(resolution?.hitLevel).toBe('94000');
 
     OutcomeAutopilotService.markProcessed(id);

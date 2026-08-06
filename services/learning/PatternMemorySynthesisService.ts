@@ -557,13 +557,37 @@ let _insightsCache: AttributedInsight[] | null = null;
 let _isInitialized = false;
 
 /**
+ * User-scoped preference key. Insights are learning state — like
+ * GlobalLearningService's calibration, they must not leak across profiles.
+ */
+const insightsPrefKey = (): string => {
+    const username = typeof localStorage !== 'undefined'
+        ? (localStorage.getItem('last_active_user') || 'default')
+        : 'default';
+    return `${PREF_KEYS.ATTRIBUTED_INSIGHTS}_${username}`;
+};
+
+/**
+ * Switch the active user (called from App.loadUserData). Resets the
+ * one-shot init guard + cache so the next load reads the new user's data
+ * instead of the previous user's in-session cache.
+ */
+export const setAttributedInsightsUser = (username: string | null): void => {
+    _insightsCache = null;
+    _isInitialized = false;
+    if (username) {
+        localStorage.setItem('last_active_user', username);
+    }
+};
+
+/**
  * Initialize service - load insights into memory
  */
 export const initPatternMemoryService = async (): Promise<void> => {
     if (_isInitialized) return;
 
     try {
-        const stored = await getPreferenceObject<AttributedInsight[]>(PREF_KEYS.ATTRIBUTED_INSIGHTS);
+        const stored = await getPreferenceObject<AttributedInsight[]>(insightsPrefKey());
         if (stored) {
             _insightsCache = stored;
         } else {
@@ -578,9 +602,6 @@ export const initPatternMemoryService = async (): Promise<void> => {
 };
 
 /**
- * Load attributed insights from storage
- */
-/**
  * Load attributed insights from memory
  */
 export function loadAttributedInsights(): AttributedInsight[] {
@@ -588,7 +609,7 @@ export function loadAttributedInsights(): AttributedInsight[] {
 
     // Fallback for non-initialized state
     try {
-        const stored = localStorage.getItem(PREF_KEYS.ATTRIBUTED_INSIGHTS);
+        const stored = localStorage.getItem(insightsPrefKey());
         return stored ? JSON.parse(stored) : [];
     } catch (e) {
         console.warn('[PatternMemorySynthesis] Failed to load insights:', e);
@@ -599,16 +620,13 @@ export function loadAttributedInsights(): AttributedInsight[] {
 /**
  * Save attributed insights to storage
  */
-/**
- * Save attributed insights to storage
- */
 export function saveAttributedInsights(insights: AttributedInsight[]): void {
     // Keep only most recent 200 insights
     const trimmed = insights.slice(-200);
     _insightsCache = trimmed;
 
     // Fire and forget
-    setPreferenceObject(PREF_KEYS.ATTRIBUTED_INSIGHTS, trimmed).catch(e =>
+    setPreferenceObject(insightsPrefKey(), trimmed).catch(e =>
         console.warn('[PatternMemorySynthesis] Failed to save insights:', e)
     );
 }

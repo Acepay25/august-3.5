@@ -114,7 +114,11 @@ export const simulateTradeSignal = async (
                         triggerCandle = i;
                     }
                 }
-                continue;
+                // If the entry triggered on THIS candle, fall through so a
+                // same-candle SL touch is not missed (the other outcome
+                // engines scan the entry candle; this `continue` used to skip
+                // it, so entry+SL-same-candle resolved NOT_TRIGGERED).
+                if (!triggered) continue;
             }
 
             // Trade is active, check for SL/TP
@@ -569,8 +573,32 @@ export const simulateFromAnalysisTime = async (
                 const dd = (entryPrice - candle.low) / entryPrice * 100;
                 maxDrawdown = Math.max(maxDrawdown, dd);
 
-                // CHECK TPs FIRST - if TP is hit, we skip SL checking entirely for this candle
-                // This ensures that if TP is hit first, we don't look for SL
+                // SL-first ordering (matches AutoCaptureService, simulateTradeSignal
+                // and Monte Carlo): a resting stop fills before any TP is realized
+                // when both are touched by the same candle. The old code checked
+                // TPs first and skipped SL entirely on any TP hit, so same-candle
+                // SL+TP resolved WIN where the other engines resolved SL.
+                // Check if price exceeded 150% extended SL zone - hard stop
+                if (candle.low <= extendedSlPrice) {
+                    slHitPrice = extendedSlPrice;
+                    slHitIndex = i;
+                    slHitTime = candleTimeStr;
+                    extendedSlExceeded = true;
+                    break; // Loss exceeded 150% threshold - end scan
+                }
+
+                // Check if initial SL was touched (but not exceeded 150%).
+                // Record for reference but DON'T break - allow recovery.
+                if (!slTouched && candle.low <= stopLoss) {
+                    slTouched = true;
+                    if (!slHitIndex) {
+                        slHitPrice = stopLoss;
+                        slHitIndex = i;
+                        slHitTime = candleTimeStr;
+                    }
+                }
+
+                // Check TPs - these count as REAL hits even after SL touch (within 150% zone)
                 if (!tp1Hit && tp1 > 0 && candle.high >= tp1) {
                     tp1Hit = true;
                     tpHits.push({
@@ -602,15 +630,14 @@ export const simulateFromAnalysisTime = async (
                     });
                     break; // All TPs hit - exit loop
                 }
+            } else {
+                // Short position
+                const dd = (candle.high - entryPrice) / entryPrice * 100;
+                maxDrawdown = Math.max(maxDrawdown, dd);
 
-                // If any TP was hit on this candle, skip SL checking entirely
-                const anyTpHit = tp1Hit || tp2Hit || tp3Hit;
-                if (anyTpHit) {
-                    continue; // TP hit first, don't check SL
-                }
-
+                // SL-first ordering — see the long branch above.
                 // Check if price exceeded 150% extended SL zone - hard stop
-                if (candle.low <= extendedSlPrice) {
+                if (candle.high >= extendedSlPrice) {
                     slHitPrice = extendedSlPrice;
                     slHitIndex = i;
                     slHitTime = candleTimeStr;
@@ -619,30 +646,16 @@ export const simulateFromAnalysisTime = async (
                 }
 
                 // Check if initial SL was touched (but not exceeded 150%)
-                if (!slTouched && candle.low <= stopLoss) {
+                if (!slTouched && candle.high >= stopLoss) {
                     slTouched = true;
-                    // DEBUG: Log the exact candle that triggered SL detection
-                    console.log(`[BacktestingService]  SL TOUCHED at candle ${i}:`, {
-                        candleTime: candleTimeStr,
-                        candleOHLC: { open: candle.open, high: candle.high, low: candle.low, close: candle.close },
-                        stopLoss: stopLoss,
-                        condition: `candle.low (${candle.low}) <= stopLoss (${stopLoss})`,
-                        timeAfterAnalysis: timeAfterAnalysis
-                    });
-                    // Record for reference but DON'T break - allow recovery
                     if (!slHitIndex) {
                         slHitPrice = stopLoss;
                         slHitIndex = i;
                         slHitTime = candleTimeStr;
                     }
                 }
-            } else {
-                // Short position
-                const dd = (candle.high - entryPrice) / entryPrice * 100;
-                maxDrawdown = Math.max(maxDrawdown, dd);
 
-                // CHECK TPs FIRST - if TP is hit, we skip SL checking entirely for this candle
-                // This ensures that if TP is hit first, we don't look for SL
+                // Check TPs - these count as REAL hits even after SL touch (within 150% zone)
                 if (!tp1Hit && tp1 > 0 && candle.low <= tp1) {
                     tp1Hit = true;
                     tpHits.push({
@@ -674,39 +687,6 @@ export const simulateFromAnalysisTime = async (
                     });
                     break; // All TPs hit - exit loop
                 }
-
-                // If any TP was hit on this candle, skip SL checking entirely
-                const anyTpHitShort = tp1Hit || tp2Hit || tp3Hit;
-                if (anyTpHitShort) {
-                    continue; // TP hit first, don't check SL
-                }
-
-                // Check if price exceeded 150% extended SL zone - hard stop
-                if (candle.high >= extendedSlPrice) {
-                    slHitPrice = extendedSlPrice;
-                    slHitIndex = i;
-                    slHitTime = candleTimeStr;
-                    extendedSlExceeded = true;
-                    break; // Loss exceeded 150% threshold - end scan
-                }
-
-                // Check if initial SL was touched (but not exceeded 150%)
-                if (!slTouched && candle.high >= stopLoss) {
-                    slTouched = true;
-                    // DEBUG: Log the exact candle that triggered SL detection
-                    console.log(`[BacktestingService]  SL TOUCHED (SHORT) at candle ${i}:`, {
-                        candleTime: candleTimeStr,
-                        candleOHLC: { open: candle.open, high: candle.high, low: candle.low, close: candle.close },
-                        stopLoss: stopLoss,
-                        condition: `candle.high (${candle.high}) >= stopLoss (${stopLoss})`,
-                        timeAfterAnalysis: timeAfterAnalysis
-                    });
-                    if (!slHitIndex) {
-                        slHitPrice = stopLoss;
-                        slHitIndex = i;
-                        slHitTime = candleTimeStr;
-                    }
-                }
             }
         }
 
@@ -719,14 +699,39 @@ export const simulateFromAnalysisTime = async (
 
         // TPs win if any were hit (even after SL touch, within 150% zone)
         if (tpHits.length > 0) {
-            outcome = 'WIN';
-            const lastTp = tpHits[tpHits.length - 1];
-            hitTarget = lastTp.level;
-            hitCandleIndex = lastTp.candleIndex;
-            hitCandleTime = lastTp.candleTime;
-            exitPrice = lastTp.price;
+            const firstTp = tpHits[0];
+            // Exchange fill semantics (matches AutoCaptureService): when the
+            // initial SL and a TP are touched by the SAME candle, the resting
+            // stop filled first and closed the position — the TP was never
+            // realized. A TP on a LATER candle after an SL wick is the
+            // documented recovery case and stays a WIN.
+            const sameCandleSlFill = slHitIndex !== undefined && firstTp.candleIndex === slHitIndex;
+            if (sameCandleSlFill) {
+                outcome = 'LOSS';
+                hitTarget = 'SL';
+                hitCandleIndex = slHitIndex;
+                hitCandleTime = slHitTime;
+                exitPrice = slHitPrice;
+            } else {
+                outcome = 'WIN';
+                const lastTp = tpHits[tpHits.length - 1];
+                hitTarget = lastTp.level;
+                hitCandleIndex = lastTp.candleIndex;
+                hitCandleTime = lastTp.candleTime;
+                exitPrice = lastTp.price;
+            }
         } else if (slHitIndex !== undefined && extendedSlExceeded) {
             // SL exceeded 150% - definite LOSS
+            outcome = 'LOSS';
+            hitTarget = 'SL';
+            hitCandleIndex = slHitIndex;
+            hitCandleTime = slHitTime;
+            exitPrice = slHitPrice;
+        } else if (slTouched && slHitIndex !== undefined) {
+            // Initial SL was physically touched, price stayed inside the 150%
+            // zone and no TP followed — the stop still filled. This is a
+            // LOSS (it was previously left as NOT_TRIGGERED, silently
+            // dropping real losing trades from backtest stats).
             outcome = 'LOSS';
             hitTarget = 'SL';
             hitCandleIndex = slHitIndex;

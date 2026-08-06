@@ -86,13 +86,33 @@ export const extractAndParseJson = (text: string): any => {
     // Deep scan for the first valid JSON block
     // We iterate through the string to find opening brackets/braces and try to match them.
     // This allows us to skip over initial garbage text like "[System Error]" if it fails parsing.
+    // String literals are tracked so braces/quote-like chars INSIDE strings
+    // never count toward nesting (a valid object whose last string ends in
+    // "}" used to fail the balance scan entirely).
 
     let startIndex = -1;
     let nesting = 0;
     let startChar = '';
+    let inString = false;
 
     for (let i = 0; i < text.length; i++) {
         const char = text[i];
+
+        if (inString) {
+            // Count preceding backslashes: an even count means this quote is
+            // unescaped and closes the string.
+            if (char === '"') {
+                let backslashes = 0;
+                for (let j = i - 1; j >= 0 && text[j] === '\\'; j--) backslashes++;
+                if (backslashes % 2 === 0) inString = false;
+            }
+            continue;
+        }
+
+        if (char === '"') {
+            inString = true;
+            continue;
+        }
 
         if (startIndex === -1) {
             // Found a potential start
@@ -118,6 +138,7 @@ export const extractAndParseJson = (text: string): any => {
                         // We reset 'i' to startIndex to resume scan for nested or subsequent structures properly
                         i = startIndex;
                         startIndex = -1;
+                        inString = false;
                     }
                 }
             }
@@ -164,12 +185,27 @@ export const extractLastJson = (text: string): any => {
     // 3. Scan backwards for the last balanced JSON object
     // Note: This logic targets objects primarily. 
     // If the output is purely an array and not markdown wrapped, step 4 will handle it.
+    // String literals are tracked (same rationale as the forward scan).
     let idx = text.lastIndexOf('}');
     while (idx !== -1) {
         let balance = 0;
+        let inString = false;
         for (let i = idx; i >= 0; i--) {
-            if (text[i] === '}') balance++;
-            else if (text[i] === '{') balance--;
+            const char = text[i];
+            if (inString) {
+                if (char === '"') {
+                    let backslashes = 0;
+                    for (let j = i - 1; j >= 0 && text[j] === '\\'; j--) backslashes++;
+                    if (backslashes % 2 === 0) inString = false;
+                }
+                continue;
+            }
+            if (char === '"') {
+                inString = true;
+                continue;
+            }
+            if (char === '}') balance++;
+            else if (char === '{') balance--;
 
             if (balance === 0) {
                 try {

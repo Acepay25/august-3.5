@@ -4,6 +4,7 @@ import { TradeAnalysis, TradeOutcome, AccuracySubMode, ConfidenceCalibration, Co
 import { ChevronDownIcon, BookmarkIcon, BookmarkSolidIcon, BrainIcon, UpdateIcon, ActivityIcon, SkipIcon } from '../shared/Icons';
 import { FAMILY_UI_DATA } from '../../constants/models';
 import { ConfidenceLevel } from '../../services/validation/ConfidenceCalibrationService';
+import { DEFAULT_LEVERAGE } from '../../utils/conversationUtils';
 import { simulateFromAnalysisTime } from '../../services/backtesting/BacktestingService';
 import { AutopilotResolution } from '../../services/ui/OutcomeAutopilotService';
 import { PriceAlertService } from '../../services/ui/PriceAlertService';
@@ -67,7 +68,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
     accuracySubMode,
     confidenceCalibration,
     confluenceData,
-    leverage = 100, // Default to 100x leverage for futures
+    leverage = DEFAULT_LEVERAGE, // Default to 100x leverage for futures
     isLensMode,
     tradingStyle,
     onSelectForProbability,

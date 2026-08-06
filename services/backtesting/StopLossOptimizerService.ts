@@ -104,19 +104,32 @@ export const calculateOptimalSL = (
     const missedWins = losses.filter(t => t.slOptimizationData?.missedWinDueToTightSL);
     const missedWinRate = losses.length > 0 ? (missedWins.length / losses.length) * 100 : 0;
 
-    // Calculate average extra distance needed
+    // SL-widening analysis for missed wins. Two metrics from the same samples:
+    // - avgMultiplierNeeded: needed/original RATIO — drives the Kelly decision.
+    //   (The old code treated the extra distance in percentage POINTS as a
+    //   fraction: 1.0 + extra/100 — widening 1.5%→2.5% needs 1.67× but the
+    //   formula yielded ~1.01×, so the recommendation never moved off 1.0×.)
+    // - avgExtraDistance: percentage-point gap (display metric only).
+    let avgMultiplierNeeded = 1.0;
     let avgExtraDistance = 0;
     if (missedWins.length > 0) {
-        const extraDistances = missedWins
+        const samples = missedWins
             .filter(t => t.slOptimizationData?.minSlDistanceNeeded)
             .map(t => {
                 const originalDistance = parseSlDistance(t);
                 const neededDistance = t.slOptimizationData!.minSlDistanceNeeded!;
-                return neededDistance - originalDistance;
+                return { originalDistance, neededDistance };
             });
 
-        if (extraDistances.length > 0) {
-            avgExtraDistance = extraDistances.reduce((a, b) => a + b, 0) / extraDistances.length;
+        if (samples.length > 0) {
+            avgMultiplierNeeded = samples.reduce(
+                (a, s) => a + (s.originalDistance > 0 ? s.neededDistance / s.originalDistance : 1.0),
+                0
+            ) / samples.length;
+            avgExtraDistance = samples.reduce(
+                (a, s) => a + (s.neededDistance - s.originalDistance),
+                0
+            ) / samples.length;
         }
     }
 
@@ -148,7 +161,6 @@ export const calculateOptimalSL = (
 
     // If we widen SL, R:R decreases proportionally
     // e.g., 1.5x SL means R:R becomes 2.0 / 1.5 = 1.33
-    const avgMultiplierNeeded = 1.0 + (avgExtraDistance / 100);
     const optimizedMultiplier = Math.max(1.0, avgMultiplierNeeded * 1.1); // Add 10% buffer
     const potentialRR = currentRR / optimizedMultiplier;
 

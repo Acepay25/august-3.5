@@ -119,7 +119,9 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
                     outcome: 'LOSS',
                     coin: analysis.coinName,
                     pattern: analysis.detectedPatternFamily,
-                    direction: analysis.direction as 'Long' | 'Short',
+                    // Neutral/undefined directions can never match a rule —
+                    // guard like createRule does instead of casting blindly.
+                    direction: (analysis.direction === 'Long' || analysis.direction === 'Short') ? analysis.direction : undefined,
                     createdAt: new Date().toISOString(),
                     useCount: 0
                 };
@@ -171,7 +173,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             moderatorSynthesis: message.text,
         };
 
-        setLoggedTrades(prev => [loggedTrade, ...prev]);
+        setLoggedTrades(prev => prev.some(t => t.id === loggedTrade.id) ? prev : [loggedTrade, ...prev]);
         updateMessages(prev => prev.map(m => m.id === message.id ? { ...m, outcome } : m));
 
         // === ThinkingStore: Update outcome for all thinking records of this trade ===
@@ -445,7 +447,10 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             isAccuracyMode: candidate.message.isAccuracyMode,
             accuracySubMode: candidate.message.accuracySubMode
         };
-        setLoggedTrades(prev => [loggedTrade, ...prev]);
+        // Dedupe by id — a double-confirm (e.g. retrying after a capture
+        // failure that actually logged) previously appended a second row
+        // with the same id, skewing every dashboard stat.
+        setLoggedTrades(prev => prev.some(t => t.id === loggedTrade.id) ? prev : [loggedTrade, ...prev]);
 
         // === ThinkingStore: Update outcome for all thinking records of this trade ===
         // ENTRY_NOT_HIT resolves the reasoning set the same way a WIN/LOSS

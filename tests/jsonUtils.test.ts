@@ -38,4 +38,25 @@ describe('jsonUtils', () => {
       expect(result).toEqual({ b: 2 });
     });
   });
+
+  describe('extractLastJson string-literal safety', () => {
+    it('handles braces inside string values (backward scan)', () => {
+      // A valid JSON whose last string ends in } used to fail both scans.
+      const input = 'Moderator: {"thoughtProcess": "expect } here", "direction": "Long"}';
+      const result = extractLastJson(input);
+      expect(result.direction).toBe('Long');
+    });
+
+    it('handles braces inside string values (forward scan)', () => {
+      const input = '{"note": "a { b } c", "strategy": "hold"} trailing';
+      const result = extractAndParseJson(input);
+      expect(result.strategy).toBe('hold');
+    });
+
+    it('handles escaped quotes inside string values', () => {
+      const input = '{"msg": "say "hi" then }", "ok": true}';
+      const result = extractLastJson(input);
+      expect(result.ok).toBe(true);
+    });
+  });
 });

@@ -382,15 +382,16 @@ export const verifyHistoricalOutcome = async (
                 // Check if price exceeded 150% extended SL zone - hard stop
                 // (disabled after TP1 — the breakeven stop manages the remainder)
                 if (!breakevenActive && candle.low <= extendedSlPrice) {
-                    if (!slHit) {
-                        slHit = {
-                            price: extendedSlPrice,
-                            candleIndex: i,
-                            candleTime: candleTimeStr,
-                            timeAfterAnalysis
-                        };
-                        finalOutcomeIndex = i;
-                    }
+                    // The 150% level is the real fill — overwrite any earlier
+                    // initial-SL record so the reported exit price matches the
+                    // actual hard-stop fill.
+                    slHit = {
+                        price: extendedSlPrice,
+                        candleIndex: i,
+                        candleTime: candleTimeStr,
+                        timeAfterAnalysis
+                    };
+                    finalOutcomeIndex = i;
                     extendedSlExceeded = true;
                     break; // Loss exceeded 150% threshold - end scan
                 }
@@ -476,15 +477,16 @@ export const verifyHistoricalOutcome = async (
                 // Check if price exceeded 150% extended SL zone - hard stop
                 // (disabled after TP1 — the breakeven stop manages the remainder)
                 if (!breakevenActive && candle.high >= extendedSlPrice) {
-                    if (!slHit) {
-                        slHit = {
-                            price: extendedSlPrice,
-                            candleIndex: i,
-                            candleTime: candleTimeStr,
-                            timeAfterAnalysis
-                        };
-                        finalOutcomeIndex = i;
-                    }
+                    // The 150% level is the real fill — overwrite any earlier
+                    // initial-SL record so the reported exit price matches the
+                    // actual hard-stop fill.
+                    slHit = {
+                        price: extendedSlPrice,
+                        candleIndex: i,
+                        candleTime: candleTimeStr,
+                        timeAfterAnalysis
+                    };
+                    finalOutcomeIndex = i;
                     extendedSlExceeded = true;
                     break; // Loss exceeded 150% threshold - end scan
                 }

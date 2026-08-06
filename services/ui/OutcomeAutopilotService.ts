@@ -20,6 +20,7 @@ import { getPreferenceObject, setPreferenceObject, PREF_KEYS } from '../infrastr
 import { verifyHistoricalOutcome, extractSymbolFromAnalysis } from './AutoCaptureService';
 import { trackSLOutcome, SLOptimizationData } from '../backtesting/StopLossOptimizerService';
 import { parsePrice } from '../../utils/analysisUtils';
+import { DEFAULT_LEVERAGE } from '../../utils/conversationUtils';
 
 export interface AutopilotResolution {
     /** Resolved outcome (EXPIRED_OPEN uses expiredOpen flag with WIN/LOSS-neutral handling). */
@@ -91,7 +92,7 @@ class OutcomeAutopilotServiceClass {
         this.registrations.set(messageId, {
             messageId,
             analysis,
-            leverage: leverage || 100,
+            leverage: leverage || DEFAULT_LEVERAGE,
             registeredAt: new Date().toISOString(),
         });
         this.ensureLoop();
@@ -273,16 +274,58 @@ class OutcomeAutopilotServiceClass {
         return Date.now() > expiry;
     }
 
+    /**
+     * Realized leveraged PnL % from price levels. Recomputing from the hit
+     * price and the REGISTERED leverage is authoritative — the analysis-time
+     * `percentage` fields were computed at analysis time with that session's
+     * leverage and can be stale. Returns undefined when prices don't parse
+     * (callers fall back to the stored percentages).
+     */
+    private computePnLFromPrice(
+        reg: Registration,
+        exitPrice: number,
+        scaleOutFactor: number
+    ): number | undefined {
+        const entry = parsePrice(reg.analysis.entryPoints?.[0]?.price || '');
+        if (isNaN(entry) || entry <= 0 || isNaN(exitPrice) || exitPrice <= 0) return undefined;
+        const rawMove = Math.abs(exitPrice - entry) / entry;
+        const leveraged = rawMove * reg.leverage * 100 * scaleOutFactor;
+        return Math.round(leveraged * 10) / 10;
+    }
+
+    /**
+     * Detect a TP1 → breakeven-managed scale-out: the verifier records an
+     * entry-priced stop fill (breakeven) alongside exactly one TP hit (TP1).
+     * In that case only the TP1 leg realized the full move — the remainder
+     * exited flat at entry, so the realized PnL is ~half of TP1%.
+     */
+    private isBreakevenScaleOut(
+        reg: Registration,
+        result: Awaited<ReturnType<typeof verifyHistoricalOutcome>>
+    ): boolean {
+        if (!result.slHit || result.tpHits?.length !== 1 || result.tpHits[0].level !== 'TP1') return false;
+        const entry = parsePrice(reg.analysis.entryPoints?.[0]?.price || '');
+        return !isNaN(entry) && entry > 0 && Math.abs((result.slHit.price ?? 0) - entry) / entry < 0.001;
+    }
+
     private buildWinResolution(
         reg: Registration,
         result: Awaited<ReturnType<typeof verifyHistoricalOutcome>>
     ): AutopilotResolution {
         const { analysis } = reg;
         const hitTarget = result.hitTarget || 'TP1';
-        // Leveraged % from the analysis TP list (fallback: first TP).
-        const tpIndex = hitTarget === 'TP2' ? 1 : hitTarget === 'TP3' ? 2 : 0;
-        const pctRaw = analysis.takeProfit?.[tpIndex]?.percentage || analysis.takeProfit?.[0]?.percentage || '';
-        const pnlPercent = this.parsePercent(pctRaw);
+        // Leveraged % recomputed from the actual hit price with the
+        // REGISTERED leverage (the analysis-time percentage may carry a
+        // stale leverage and ignores scale-outs).
+        const hitPrice = result.priceAtHit ?? NaN;
+        const scaleOut = this.isBreakevenScaleOut(reg, result) ? 0.5 : 1;
+        const recomputed = this.computePnLFromPrice(reg, hitPrice, scaleOut);
+        let pnlPercent = recomputed;
+        if (pnlPercent === undefined) {
+            // Fallback: analysis-time percentage.
+            const tpIndex = hitTarget === 'TP2' ? 1 : hitTarget === 'TP3' ? 2 : 0;
+            pnlPercent = this.parsePercent(analysis.takeProfit?.[tpIndex]?.percentage || analysis.takeProfit?.[0]?.percentage || '');
+        }
         return {
             outcome: TradeOutcome.WIN,
             expiredOpen: false,
@@ -292,7 +335,7 @@ class OutcomeAutopilotServiceClass {
             // Confidence tier: a win where the SL was touched first is weaker
             // than a clean run to the TP (the verifier records slHit on touch).
             recoveredAfterSlTouch: !!result.slHit,
-            detail: `${hitTarget} hit${result.priceAtHit !== undefined ? ` @ ${result.priceAtHit}` : ''}${result.slHit ? ' · recovered after SL touch' : ' · clean'}${result.timeToOutcome ? ` · ${result.timeToOutcome} after analysis` : ''}`,
+            detail: `${hitTarget} hit${result.priceAtHit !== undefined ? ` @ ${result.priceAtHit}` : ''}${result.slHit ? ' · recovered after SL touch' : ' · clean'}${scaleOut < 1 ? ' · TP1 scale-out to breakeven' : ''}${result.timeToOutcome ? ` · ${result.timeToOutcome} after analysis` : ''}`,
             detectedAt: new Date().toISOString(),
             timeToOutcome: result.timeToOutcome,
             slOptimizationData: this.computeSLOptimization(reg, result),
@@ -304,7 +347,15 @@ class OutcomeAutopilotServiceClass {
         result: Awaited<ReturnType<typeof verifyHistoricalOutcome>>
     ): AutopilotResolution {
         const { analysis } = reg;
-        const pnlPercent = this.parsePercent(analysis.stopLossPercentage || '');
+        // Exit price: the 150% hard-stop fill when the zone was breached,
+        // otherwise the touched stop level.
+        const slPrice = result.slHit?.price !== undefined
+            ? result.slHit.price
+            : parsePrice(analysis.stopLoss || '');
+        const recomputed = this.computePnLFromPrice(reg, slPrice, 1);
+        const pnlPercent = recomputed !== undefined
+            ? -Math.abs(recomputed)
+            : this.parsePercent(analysis.stopLossPercentage || '');
         return {
             outcome: TradeOutcome.LOSS,
             expiredOpen: false,
