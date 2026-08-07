@@ -163,6 +163,14 @@ export const analyzeDisagreements = (
         const numericEntries = entries.map(e => e.numeric!);
         const max = Math.max(...numericEntries);
         const min = Math.min(...numericEntries);
+        if (min === 0) {
+            disagreements.push({
+                aspect: 'entry',
+                models: entries.map(e => ({ model: e.model, value: e.value })),
+                severity: 'high',
+                description: `Entry price of 0 detected — cannot compute percentage difference`
+            });
+        } else {
         const pctDiff = ((max - min) / min) * 100;
 
         if (pctDiff > 1) {
@@ -172,6 +180,7 @@ export const analyzeDisagreements = (
                 severity: pctDiff > 3 ? 'high' : 'medium',
                 description: `Entry prices vary by ${pctDiff.toFixed(1)}%: ${entries.map(e => `${e.model}=${e.value}`).join(', ')}`
             });
+        }
         }
     }
 

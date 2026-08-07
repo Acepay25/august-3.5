@@ -342,7 +342,7 @@ const App: React.FC = () => {
         setConfidenceCalibration,
     });
 
-    const [leverageInput, setLeverageInput] = useState<string>('100');
+    const [leverageInput, setLeverageInput] = useState<string>(String(DEFAULT_LEVERAGE));
     const appRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const virtuosoRef = useRef<VirtuosoHandle>(null);
@@ -425,6 +425,7 @@ const App: React.FC = () => {
         customLensPrompts,
         selectedChatModel,
         toast,
+        confirmDialog,
     });
 
     // Warn when ensemble is switched on without the required configuration
@@ -718,6 +719,7 @@ const App: React.FC = () => {
         setIsUserModalOpen,
         setIsSettingsVisible: setIsSettingsMenuVisible,
         toast,
+        confirmDialog,
     });
 
     // Keep the activeUsernameRef (read by usePostMortem's run-staleness
@@ -2058,6 +2060,12 @@ const App: React.FC = () => {
                     onClose={() => setSimulatorCandidate(null)}
                 />
             )}
+            {/* Per-component Suspense: isolates a suspending lazy overlay from
+                the rest of the app. fallback={null} — these overlays mount at
+                boot, so their chunks preload during startup; a visible
+                full-screen fallback here caused a triple overlay flash on
+                every launch. */}
+            <React.Suspense fallback={null}>
             <SettingsMenu
                 isVisible={isSettingsMenuVisible}
                 onClose={() => setIsSettingsMenuVisible(false)}
@@ -2134,6 +2142,7 @@ const App: React.FC = () => {
                 globalMemory={globalMemory}
                 threadSummary={activeConversation?.threadSummary}
             />
+            </React.Suspense>
             <VisionDataViewer isVisible={isVisionDataVisible} onClose={() => setIsVisionDataVisible(false)} visionData={currentVisionData} />
 
 
@@ -2165,6 +2174,7 @@ const App: React.FC = () => {
                 onLoadConversation={handleLoadConversation}
             />
 
+            <React.Suspense fallback={null}>
             <Journal
                 isVisible={journalState.isOpen}
                 onClose={() => setJournalState(prev => ({ ...prev, isOpen: false }))}
@@ -2208,8 +2218,11 @@ const App: React.FC = () => {
                 onToggleAlgorithmicInsights={setUseAlgorithmicInsights}
                 onRewriteInsightsWithAI={handleRewriteInsightsWithAI}
             />
+            </React.Suspense>
 
+            <React.Suspense fallback={null}>
             <StrategySearch isVisible={isStrategySearchVisible} onClose={() => { setIsStrategySearchVisible(false); setStrategyToView(null); }} onApplyStrategy={handleApplyStrategy} onRemoveStrategy={handleRemoveStrategy} providerConfig={readyProviders[0] || moderatorConfig} activeFrameworks={activeFrameworks} defaultFrameworks={DEFAULT_FRAMEWORKS} initialViewStrategy={strategyToView} onQuotaExceeded={handleQuotaExceeded} familyWinRates={familyWinRates} />
+            </React.Suspense>
             <SavedAnalyses analyses={savedAnalyses} isVisible={isSavedAnalysesVisible} onClose={() => setIsSavedAnalysesVisible(false)} onDelete={handleDeleteSavedAnalyses} onClearAll={handleClearAllSavedAnalyses} modelIdToName={modelIdToName} ocrModelIdToName={ocrModelIdToName} />
             {skipCandidate && <SkipTradeModal onClose={() => setSkipCandidate(null)} onConfirm={handleConfirmSkipTrade} skipReason={skipReason} setSkipReason={setSkipReason} correctedEntry={correctedEntry} setCorrectedEntry={setCorrectedEntry} />}
             {showMismatchModal && mismatchData && (

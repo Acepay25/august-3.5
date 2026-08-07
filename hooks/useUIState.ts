@@ -1,4 +1,4 @@
-import { useReducer, useCallback } from 'react';
+import { useReducer, useCallback, useMemo } from 'react';
 
 // =============================================================================
 // STATE SHAPE
@@ -77,6 +77,7 @@ const initialState: UIStateShape = {
 
 type UIAction =
     | { type: 'SET'; key: keyof UIStateShape; value: boolean }
+    | { type: 'SET_FUNCTIONAL'; key: keyof UIStateShape; fn: (prev: boolean) => boolean }
     | { type: 'TOGGLE'; key: keyof UIStateShape }
     | { type: 'CLOSE_ALL_OVERLAYS' }
     | { type: 'RESET_PROGRESS' };
@@ -117,6 +118,9 @@ function uiReducer(state: UIStateShape, action: UIAction): UIStateShape {
         case 'SET':
             return { ...state, [action.key]: action.value };
 
+        case 'SET_FUNCTIONAL':
+            return { ...state, [action.key]: action.fn(state[action.key]) };
+
         case 'TOGGLE':
             return { ...state, [action.key]: !state[action.key] };
 
@@ -154,20 +158,30 @@ function uiReducer(state: UIStateShape, action: UIAction): UIStateShape {
 export function useUIState() {
     const [state, dispatch] = useReducer(uiReducer, initialState);
 
-    // Generate setter functions that match the old useState API
-    const setters = {} as { [K in keyof UIStateShape as `set${Capitalize<string & K>}`]: (value: boolean | ((prev: boolean) => boolean)) => void };
-
-    for (const key of Object.keys(initialState) as (keyof UIStateShape)[]) {
-        const setterName = `set${key.charAt(0).toUpperCase()}${key.slice(1)}` as keyof typeof setters;
-        setters[setterName] = (value: boolean | ((prev: boolean) => boolean)) => {
-            if (typeof value === 'function') {
-                // Functional update: read current state and compute
-                dispatch({ type: 'SET', key, value: value(state[key]) });
-            } else {
-                dispatch({ type: 'SET', key, value });
-            }
-        };
-    }
+    // Generate setter functions that match the old useState API.
+    // Built once via useMemo (the setters depend only on the stable
+    // dispatch) — a useCallback-per-key loop would call a hook inside a
+    // loop, which only works while initialState stays a compile-time
+    // constant and trips react-hooks linting.
+    // Functional updates dispatch SET_FUNCTIONAL so the reducer computes
+    // the new value from its OWN latest state — avoiding the stale closure
+    // bug where render-time `state[key]` was used instead.
+    const setters = useMemo(() => {
+        const map = {} as { [K in keyof UIStateShape as `set${Capitalize<string & K>}`]: (value: boolean | ((prev: boolean) => boolean)) => void };
+        for (const key of Object.keys(initialState) as (keyof UIStateShape)[]) {
+            const setterName = `set${key.charAt(0).toUpperCase()}${key.slice(1)}` as keyof typeof map;
+            // The cast is required: the mapped type keys can't be narrowed to
+            // a concrete call signature per setter.
+            map[setterName] = ((value: boolean | ((prev: boolean) => boolean)) => {
+                if (typeof value === 'function') {
+                    dispatch({ type: 'SET_FUNCTIONAL', key, fn: value });
+                } else {
+                    dispatch({ type: 'SET', key, value });
+                }
+            }) as any;
+        }
+        return map;
+    }, [dispatch]);
 
     // Convenience actions
     const closeAllOverlays = useCallback(() => dispatch({ type: 'CLOSE_ALL_OVERLAYS' }), []);

@@ -6,6 +6,7 @@ import * as MemoryService from '../services/learning/MemoryService';
 import { ProviderConfig } from '../types/provider';
 import GlobalLearningService from '../services/learning/GlobalLearningService';
 import { storeRule, loadLearningRules, saveLearningRules } from '../services/learning/LearningRulesService';
+import { DEFAULT_LEVERAGE } from '../utils/conversationUtils';
 import { trackTradeOutcome, mapRegimeToKey } from '../services/backtesting/ModelPerformanceService';
 import { trackConfluenceOutcome, calculateConfluenceScore } from '../services/analysis/TimeframeConfluenceService';
 import { SLOptimizationData } from '../services/backtesting/StopLossOptimizerService';
@@ -216,7 +217,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             analysis: message.analysis!,
             outcome: outcome,
             timestamp: new Date().toISOString(),
-            leverage: activeConversationLeverage || 100,
+            leverage: activeConversationLeverage || DEFAULT_LEVERAGE,
             investmentAmount: undefined,
             pnlAmount: feedback.pnlAmount,
             pnlPercent: feedback.pnlPercent,
@@ -459,7 +460,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             analysis: candidate.message.analysis,
             outcome: TradeOutcome.ENTRY_NOT_HIT,
             timestamp: new Date().toISOString(),
-            leverage: activeConversationLeverage || 100,
+            leverage: activeConversationLeverage || DEFAULT_LEVERAGE,
             correctedEntry: candidate.correctedEntry,
             modelsUsed: candidate.message.modelsUsed,
             isAccuracyMode: candidate.message.isAccuracyMode,

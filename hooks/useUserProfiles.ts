@@ -8,6 +8,8 @@ export interface UseUserProfilesParams {
     setIsUserModalOpen: (v: boolean) => void;
     setIsSettingsVisible: (v: boolean) => void;
     toast: { success: (t: string, m?: string) => void; error: (t: string, m?: string) => void; info: (t: string, m?: string) => void };
+    /** Non-blocking styled confirmation dialog (replaces native window.confirm). */
+    confirmDialog?: (opts: { title: string; message?: string; destructive?: boolean }) => Promise<boolean>;
 }
 
 /**
@@ -15,7 +17,7 @@ export interface UseUserProfilesParams {
  * Extracted from App.tsx to reduce component complexity.
  */
 export const useUserProfiles = (params: UseUserProfilesParams) => {
-    const { resetAppState, setIsUserModalOpen, setIsSettingsVisible, toast } = params;
+    const { resetAppState, setIsUserModalOpen, setIsSettingsVisible, toast, confirmDialog } = params;
 
     // ─── State ────────────────────────────────────────────────────────────
     const [activeUsername, setActiveUsername] = useState<string | null>(null);
@@ -40,7 +42,10 @@ export const useUserProfiles = (params: UseUserProfilesParams) => {
     };
 
     const handleDeleteUser = async (username: string) => {
-        if (confirm(`Are you sure you want to delete user "${username}"? This cannot be undone.`)) {
+        const ok = confirmDialog
+            ? await confirmDialog({ title: `Delete user "${username}"?`, message: 'This cannot be undone.', destructive: true })
+            : confirm(`Are you sure you want to delete user "${username}"? This cannot be undone.`);
+        if (ok) {
             await dbService.deleteUserProfile(username);
             setExistingUsernames(prev => prev.filter(u => u !== username));
             if (activeUsername === username) {

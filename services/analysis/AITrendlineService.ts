@@ -158,7 +158,13 @@ RESPOND IN THIS EXACT JSON FORMAT:
 
     // Parse a raw response into the analysis shape (shared by all providers)
     const parseResponse = (responseText: string, providerName: string): AITrendlineAnalysis => {
-        const parsed = JSON.parse(extractJson(responseText));
+        const jsonStr = extractJson(responseText);
+        let parsed: any;
+        try {
+            parsed = JSON.parse(jsonStr);
+        } catch (e) {
+            throw new Error(`[AITrendlineService] ${providerName} returned invalid JSON: ${(e as Error).message}`);
+        }
 
         // Convert index-based trendlines to time/price based
         const trendlines: TrendlineResult[] = (parsed.trendlines || []).map((tl: any) => {

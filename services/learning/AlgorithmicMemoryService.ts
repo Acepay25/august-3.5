@@ -80,13 +80,24 @@ export const updateGlobalMemoryAlgorithmically = (
         }
     }
 
-    // Merge Family Stats into text format
-    // Note: This replaces old strings for these families with new batch stats.
-    // In a real DB we'd sum them, but here we only have the string "75% WR".
-    // We will prefix with [RECENT] to indicate it's the latest batch data.
-    for (const [family, stats] of Object.entries(familyStats)) {
-        const wr = ((stats.wins / stats.total) * 100).toFixed(0);
-        memory.familyPerformance[family] = `${wr}% WR (${stats.wins}/${stats.total} recent)`;
+    // Merge Family Stats: parse existing "75% WR (12/16)" strings, combine
+    // with the new batch counts, and write back cumulative stats.
+    for (const [family, batch] of Object.entries(familyStats)) {
+        const existing = memory.familyPerformance[family];
+        let prevWins = 0;
+        let prevTotal = 0;
+        if (existing) {
+            // Parse "75% WR (12/16 recent)" or "75% WR (12/16)"
+            const match = existing.match(/\((\d+)\/(\d+)/);
+            if (match) {
+                prevWins = parseInt(match[1], 10);
+                prevTotal = parseInt(match[2], 10);
+            }
+        }
+        const totalWins = prevWins + batch.wins;
+        const totalCount = prevTotal + batch.total;
+        const wr = totalCount > 0 ? ((totalWins / totalCount) * 100).toFixed(0) : '0';
+        memory.familyPerformance[family] = `${wr}% WR (${totalWins}/${totalCount})`;
     }
 
     // 4. Update AI Pattern Memory (Using MistakePatternService)

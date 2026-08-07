@@ -8,6 +8,7 @@
 
 import { TradeAnalysis, LoggedTrade, TradeOutcome } from '../../types';
 import { runSimulation, MonteCarloResult, SimulationConfig } from '../analysis/MonteCarloService';
+import { parsePrice } from '../../utils/analysisUtils';
 
 // =============================================================================
 // TYPES
@@ -353,30 +354,8 @@ export function extractConfigFromAnalysis(
     }
 }
 
-/**
- * Parse price string to number (handles ranges like "3050 - 3060")
- */
-function parsePrice(priceStr: string): number {
-    if (typeof priceStr === 'number') return priceStr;
-    if (!priceStr || typeof priceStr !== 'string') return 0;
-
-    // Remove $ and commas
-    let cleaned = priceStr.replace(/[$,]/g, '').trim();
-
-    // Handle ranges - take the middle value
-    if (cleaned.includes('-')) {
-        const parts = cleaned.split('-').map(p => parseFloat(p.trim()));
-        if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-            return (parts[0] + parts[1]) / 2;
-        }
-    }
-
-    // Handle "~" approximate values
-    cleaned = cleaned.replace(/[~≈]/g, '');
-
-    const num = parseFloat(cleaned);
-    return isNaN(num) ? 0 : num;
-}
+// parsePrice imported from utils/analysisUtils — canonical version handles
+// ranges ("3050 - 3060"), "to" ranges, and trailing annotations ("94500 4h").
 
 /**
  * Run complete scenario analysis

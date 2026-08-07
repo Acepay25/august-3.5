@@ -26,6 +26,7 @@ import { parseLiveMarketData } from '../../utils/liveMarketParser';
 import {
     sendChatRequest, streamChatRequest, ChatMessage, ContentPart, ChatRequestOptions,
 } from './GenericProviderService';
+import { isVisionModel } from '../../utils/modelUtils';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -35,19 +36,6 @@ const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reje
     reader.onerror = reject;
     reader.readAsDataURL(file);
 });
-
-/** Heuristic: does this model accept vision/image inputs? */
-function isVisionModel(modelId: string): boolean {
-    const m = modelId.toLowerCase();
-    return m.includes('llama-4')
-        || m.includes('vision')
-        || m.includes('gpt-4o')
-        || m.includes('gpt-4.1')
-        || m.includes('gpt-5')
-        || m.includes('glm-4.5v')
-        || m.includes('glm-4.6v')
-        || m.includes('gemini');
-}
 
 /** Small-context models need aggressively truncated prompts. */
 function isSmallContextModel(modelId: string): boolean {

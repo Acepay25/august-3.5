@@ -32,7 +32,14 @@ import { StructuredRule } from '../types';
 import {
     getCachedResponse, cacheResponse, getImageHash, hashString,
 } from '../services/infrastructure/responseCache';
+import { COMMON_WORDS } from '../constants/commonWords';
 import { useRafThrottle } from './useRafThrottle';
+
+// ─── Dev-only logging ─────────────────────────────────────────────────────
+// console.log calls are gated behind the Vite dev flag so production builds
+// stay clean. console.error / console.warn are kept unconditionally (genuine
+// faults must always surface).
+const devLog = (...args: unknown[]) => { if ((import.meta as any).env?.DEV) console.log(...args); };
 
 // Learning services
 import { generateLearningFromPrompt, isLearningEnabled } from '../services/learning/LearningPromptService';
@@ -118,6 +125,8 @@ export interface UseAnalysisPipelineParams {
 
     // Toast:
     toast: { warning: (t: string, m?: string) => void; error: (t: string, m?: string) => void };
+    /** Non-blocking styled confirmation dialog (replaces native window.confirm). */
+    confirmDialog?: (opts: { title: string; message?: string; destructive?: boolean }) => Promise<boolean>;
 }
 
 // Best-effort pattern-family detection from the user prompt, so the
@@ -163,6 +172,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         isEnsembleEnabled,
         selectedChatModel,
         toast,
+        confirmDialog,
     } = params;
 
     // ─── P1-4: Response cache wrapper ─────────────────────────────────────
@@ -171,6 +181,28 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     // 10 minutes returns the cached result instantly instead of re-OCRing,
     // re-encoding images to base64, and re-calling the API. Cache hits are
     // logged so they're visible during debugging.
+    /** Named parameters for cachedAnalyzeTradingView — replaces the fragile
+     *  `...rest: any[]` positional access. Every caller passes these by name
+     *  so adding/removing/renrolling fields is caught at compile time. */
+    interface CacheableAnalysisParams {
+        imageSummaries: string[];
+        chatHistory: Message[];
+        finalTradeSummary: string | null;
+        recentInsights: string | null;
+        activeFrameworks: string[];
+        deepenAnalysis: boolean;
+        globalMemory: GlobalMemory | undefined;
+        threadSummary: string | undefined;
+        subMode: AccuracySubMode | undefined;
+        customInstructions: string;
+        isPlaybookEnabledInPureAI: boolean;
+        isFamiliesEnabledInPureAI: boolean;
+        isMemoryEnabledInPureAI: boolean;
+        rolePrompt: string | undefined;
+        systemPromptOverride: string | undefined;
+        onReasoning: (reasoning: string) => void;
+    }
+
     const cachedAnalyzeTradingView = useCallback(async (
         config: ProviderConfig,
         model: string,
@@ -178,8 +210,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         imageFiles: File[],
         dataURLs: string[],
         signal: AbortSignal | undefined,
-        // The remaining args are passed through unchanged.
-        ...rest: any[]
+        params: CacheableAnalysisParams,
     ): Promise<{ thoughtProcess: string; finalOutput: string; analysis: any; sources?: any[] }> => {
         // Build cache key from image hashes + prompt + model. The hash comes
         // from the actual image BYTES (the dataURLs) — keying by File
@@ -195,31 +226,37 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         // recent insights, global memory, and thread context. Hashing keeps the
         // key short. Without this a 10-minute-TTL hit serves an analysis
         // computed under DIFFERENT instructions for the same chart.
-        // OCR image summaries (rest[0]), the recent chat-history tail
-        // (rest[1], bounded — full-history hashing would run on every call)
-        // and the provider identity (config.id) are folded in too: two
-        // providers exposing the same model id, or a re-analysis after a
-        // different vision model re-OCR'd the chart, must not share entries.
+        // OCR image summaries, the recent chat-history tail (bounded —
+        // full-history hashing would run on every call) and the provider
+        // identity (config.id) are folded in too: two providers exposing the
+        // same model id, or a re-analysis after a different vision model
+        // re-OCR'd the chart, must not share entries.
         // Message IDs are deliberately excluded from the history fingerprint:
         // every send creates a fresh `user-<Date.now()>` id, so including ids
         // made the tail differ on EVERY run — the same-chart repeat (the
         // whole point of the 10-min TTL) could never hit the cache.
         const historyFingerprint = hashString(JSON.stringify(
-            (rest[1] as Message[] | undefined)?.slice(-10).map(m => `${m.role}:${(m.text || '').slice(0, 200)}`) || []
+            params.chatHistory?.slice(-10).map(m => `${m.role}:${(m.text || '').slice(0, 200)}`) || []
         ));
         const modeContext = hashString(JSON.stringify([
-            rest[5], rest[8], rest[13], rest[14],  // deepen, submode, rolePrompt, customPrompt
-            rest[2], rest[3], rest[6], rest[7],    // pattern memory, insights, global memory, thread
-            rest[9], rest[10], rest[11], rest[12], // instructions, playbook, families, memory flags
-            rest[4],                               // active frameworks (injected into the system prompt)
-            rest[0],                               // OCR image summaries
+            params.deepenAnalysis, params.subMode, params.rolePrompt, params.systemPromptOverride,
+            params.finalTradeSummary, params.recentInsights, params.globalMemory, params.threadSummary,
+            params.customInstructions, params.isPlaybookEnabledInPureAI, params.isFamiliesEnabledInPureAI, params.isMemoryEnabledInPureAI,
+            params.activeFrameworks,
+            params.imageSummaries,
             historyFingerprint,                    // recent chat history (bounded)
             config.id,                             // provider identity
         ]));
 
         const cached = await getCachedResponse(imageHashes, prompt, model, modeContext);
         if (cached) {
-            console.log(`[ResponseCache] HIT for ${config.name || model} (${model})`);
+            devLog(`[ResponseCache] HIT for ${config.name || model} (${model})`);
+            // Replay the stored reasoning through onReasoning — a cache hit
+            // otherwise left the live reasoning views and the thinking
+            // record's rawReasoning empty for this run.
+            if (cached.thoughtProcess) {
+                params.onReasoning?.(cached.thoughtProcess);
+            }
             return {
                 thoughtProcess: cached.thoughtProcess,
                 finalOutput: cached.finalOutput || cached.thoughtProcess,
@@ -231,23 +268,23 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         const result = await analyzeTradingView(config, {
             prompt,
             images: imageFiles,
-            imageSummaries: rest[0] as string[],
-            chatHistory: rest[1] as Message[],
-            finalTradeSummary: rest[2] as string | null,
-            recentInsights: rest[3] as string | null,
-            activeFrameworks: rest[4] as string[],
-            deepenAnalysis: rest[5] as boolean,
-            globalMemory: rest[6] as GlobalMemory | undefined,
-            threadSummary: rest[7] as string | undefined,
-            subMode: rest[8] as AccuracySubMode | undefined,
-            customInstructions: rest[9] as string,
-            isPlaybookEnabledInPureAI: rest[10] as boolean,
-            isFamiliesEnabledInPureAI: rest[11] as boolean,
-            isMemoryEnabledInPureAI: rest[12] as boolean,
-            rolePrompt: rest[13] as string | undefined,
+            imageSummaries: params.imageSummaries ?? [],
+            chatHistory: params.chatHistory ?? [],
+            finalTradeSummary: params.finalTradeSummary ?? null,
+            recentInsights: params.recentInsights ?? null,
+            activeFrameworks: params.activeFrameworks ?? [],
+            deepenAnalysis: params.deepenAnalysis ?? false,
+            globalMemory: params.globalMemory,
+            threadSummary: params.threadSummary,
+            subMode: params.subMode,
+            customInstructions: params.customInstructions,
+            isPlaybookEnabledInPureAI: params.isPlaybookEnabledInPureAI,
+            isFamiliesEnabledInPureAI: params.isFamiliesEnabledInPureAI,
+            isMemoryEnabledInPureAI: params.isMemoryEnabledInPureAI,
+            rolePrompt: params.rolePrompt,
             signal,
-            systemPromptOverride: rest[14] as string | undefined,
-            onReasoning: rest[15] as ((reasoning: string) => void) | undefined,
+            systemPromptOverride: params.systemPromptOverride,
+            onReasoning: params.onReasoning,
         });
 
         // Only cache successful, non-empty results.
@@ -258,7 +295,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 analysis: result.analysis,
                 sources: result.sources,
             }, modeContext);
-            console.log(`[ResponseCache] STORED for ${config.name || model} (${model})`);
+            devLog(`[ResponseCache] STORED for ${config.name || model} (${model})`);
         }
 
         return result;
@@ -592,17 +629,17 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
             // Skip fetching if preset data was already passed (from auto-capture)
             let hybridDataInjection = '';
-            console.log('[Hybrid Intelligence] ======= START =======');
-            console.log('[Hybrid Intelligence] Enabled:', isHybridIntelligenceEnabled);
-            console.log('[Hybrid Intelligence] HasPresetData:', !!options?.presetHybridData);
-            console.log('[Hybrid Intelligence] User prompt:', effectiveInput);
+            devLog('[Hybrid Intelligence] ======= START =======');
+            devLog('[Hybrid Intelligence] Enabled:', isHybridIntelligenceEnabled);
+            devLog('[Hybrid Intelligence] HasPresetData:', !!options?.presetHybridData);
+            devLog('[Hybrid Intelligence] User prompt:', effectiveInput);
             // The toggle gates the fetch: with Hybrid Intelligence OFF no data
             // is fetched and nothing is injected into the analyst prompts.
             // Preset data (auto-capture) always wins — it was explicitly
             // fetched for this analysis, so it is injected below regardless.
             if (isEnsembleEnabled && isHybridIntelligenceEnabled && !options?.presetHybridData) {
                 try {
-                    console.log('[Hybrid Intelligence] Attempting to fetch data for prompt:', effectiveInput);
+                    devLog('[Hybrid Intelligence] Attempting to fetch data for prompt:', effectiveInput);
                     setLoadingMessage('Fetching real-time market data...');
                     startStep('market-data');
                     const learningRules = loadLearningRules();
@@ -622,29 +659,30 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
                         // Store correlation risk if available - helpful for UI later
                         if (hybridResult.correlationRisk) {
-                            console.log('[Hybrid Intelligence] Correlation Risk Score:', hybridResult.correlationRisk.correlationRiskScore);
+                            devLog('[Hybrid Intelligence] Correlation Risk Score:', hybridResult.correlationRisk.correlationRiskScore);
                         }
 
-                        console.log('[Hybrid Intelligence] SUCCESS - Got data for:', hybridResult.data.symbol);
+                        devLog('[Hybrid Intelligence] SUCCESS - Got data for:', hybridResult.data.symbol);
 
-                        console.log('[Hybrid Intelligence] Injection length:', hybridDataInjection.length);
-                        console.log('[Hybrid Intelligence] Injection preview:', hybridDataInjection.substring(0, 500));
+                        devLog('[Hybrid Intelligence] Injection length:', hybridDataInjection.length);
+                        devLog('[Hybrid Intelligence] Injection preview:', hybridDataInjection.substring(0, 500));
                     } else {
-                        console.log('[Hybrid Intelligence] FAILED - No symbol detected in prompt');
+                        devLog('[Hybrid Intelligence] FAILED - No symbol detected in prompt');
                     }
                 } catch (hybridError) {
                     if (!isCurrentRequest()) assertCurrentRequest();
                     setIsHybridLoading(false);
                     console.error('[Hybrid Intelligence] ERROR fetching market data:', hybridError);
+                    toast.warning('Hybrid data unavailable', 'Market data fetch failed — analysis will proceed without real-time data.');
                 }
             } else if (options?.presetHybridData) {
                 // Auto-capture flow: the data was already fetched upstream —
                 // build the same injection so the three analysts still receive
                 // the hybrid market data in their prompts.
                 hybridDataInjection = generateHybridPromptInjection(options.presetHybridData);
-                console.log('[Hybrid Intelligence] SKIPPED - Using preset data from auto-capture');
+                devLog('[Hybrid Intelligence] SKIPPED - Using preset data from auto-capture');
             } else {
-                console.log('[Hybrid Intelligence] SKIPPED - Feature not enabled');
+                devLog('[Hybrid Intelligence] SKIPPED - Feature not enabled');
             }
 
             // AI LEARNING: Generate UNIFIED learning context from all 6 learning services
@@ -654,7 +692,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             // Coin detection for learning context: match only uppercase tickers (no /i flag,
             // which would match any word) and exclude common command words, mirroring the
             // GateKeeper commonWords exclusion list further below.
-            const learningCommonWords = ['ANALYZE', 'CHECK', 'LOOK', 'REVIEW', 'SHOW', 'TELL', 'GIVE', 'WHAT', 'HOW', 'WHEN', 'WHERE', 'SHOULD', 'COULD', 'WOULD', 'PLEASE', 'HELP', 'FIND', 'GET', 'SET', 'RUN', 'TEST', 'TRADE', 'LONG', 'SHORT', 'BUY', 'SELL', 'SETUP', 'ENTRY', 'EXIT', 'STOP', 'TAKE', 'PROFIT', 'LOSS', 'CHART', 'PRICE', 'MARKET', 'UPDATE', 'THIS', 'THAT', 'WITH', 'FROM', 'INTO', 'ABOUT', 'LIKE', 'JUST', 'SOME', 'MORE', 'VERY', 'ALSO', 'EVEN', 'ONLY', 'SUCH', 'HERE', 'THERE', 'WELL', 'THAN', 'THEM', 'THEN', 'BEEN', 'HAVE', 'WILL', 'DOES', 'DONE', 'MAKE', 'MADE', 'WANT', 'NEED', 'MUST', 'TIME', 'DATA', 'INFO'];
+            const learningCommonWords = COMMON_WORDS;
             const detectedCoinRaw = effectiveInput.match(/\b([A-Z]{2,10})(?:USDT?)?/)?.[1]?.toUpperCase();
             const detectedLearningCoin = detectedCoinRaw && !learningCommonWords.includes(detectedCoinRaw) ? detectedCoinRaw : undefined;
 
@@ -674,7 +712,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             if (!unifiedLearning.isEmpty) {
                 learningInjection = unifiedLearning.forAnalysts;
                 moderatorLearningContext = unifiedLearning.forModerator; // Store for moderator
-                console.log('[AI Learning] Unified context generated - Analyst:', learningInjection.length, 'chars, Moderator:', moderatorLearningContext.length, 'chars');
+                devLog('[AI Learning] Unified context generated - Analyst:', learningInjection.length, 'chars, Moderator:', moderatorLearningContext.length, 'chars');
             } else if (loggedTrades.length >= 3) {
                 // Fallback to legacy personalized injection if unified fails
                 try {
@@ -685,7 +723,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             effectiveInput.toLowerCase().includes('short') ? 'Short' : 'Neutral'
                     );
                     if (learningInjection) {
-                        console.log('[AI Learning] Fallback: personalized injection, length:', learningInjection.length);
+                        devLog('[AI Learning] Fallback: personalized injection, length:', learningInjection.length);
                     }
                 } catch (learningError) {
                     console.error('[AI Learning] Failed to generate personalized context:', learningError);
@@ -699,7 +737,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                         insightKnowledgeBase
                     );
                     if (learningInjection) {
-                        console.log('[AI Learning] Fallback: legacy injection, length:', learningInjection.length);
+                        devLog('[AI Learning] Fallback: legacy injection, length:', learningInjection.length);
                     }
                 } catch (learningError) {
                     console.error('[AI Learning] Failed to generate learning context:', learningError);
@@ -714,7 +752,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             if (tradeSummaries && tradeSummaries.length > 0) {
                 const top10Summaries = tradeSummaries.slice(0, 10);
                 recentInsightsString = top10Summaries.map((s, idx) => `${idx + 1}. [${new Date(s.timestamp).toLocaleDateString()}] ${s.summaryText}`).join('\n\n');
-                console.log('[Recent Insights] Generated from tradeSummaries array, length:', recentInsightsString.length);
+                devLog('[Recent Insights] Generated from tradeSummaries array, length:', recentInsightsString.length);
             }
 
             // Enhance prompt with hybrid data AND learning context if available
@@ -729,7 +767,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             // ========== GATE KEEPER: Two-Stage Gate Scan ==========
             // Extract symbol from prompt for Gate analysis
             // Exclude common command words that might be mistaken for symbols
-            const commonWords = ['ANALYZE', 'CHECK', 'LOOK', 'REVIEW', 'SHOW', 'TELL', 'GIVE', 'WHAT', 'HOW', 'WHEN', 'WHERE', 'SHOULD', 'COULD', 'WOULD', 'PLEASE', 'HELP', 'FIND', 'GET', 'SET', 'RUN', 'TEST', 'TRADE', 'LONG', 'SHORT', 'BUY', 'SELL', 'SETUP', 'ENTRY', 'EXIT', 'STOP', 'TAKE', 'PROFIT', 'LOSS', 'CHART', 'PRICE', 'MARKET', 'UPDATE', 'THIS', 'THAT', 'WITH', 'FROM', 'INTO', 'ABOUT', 'LIKE', 'JUST', 'SOME', 'MORE', 'VERY', 'ALSO', 'EVEN', 'ONLY', 'SUCH', 'HERE', 'THERE', 'WELL', 'THAN', 'THEM', 'THEN', 'BEEN', 'HAVE', 'WILL', 'DOES', 'DONE', 'MAKE', 'MADE', 'WANT', 'NEED', 'MUST', 'TIME', 'DATA', 'INFO'];
+            const commonWords = COMMON_WORDS;
             // Match crypto symbols: prioritize those ending in USDT/PERP, then standalone 2-5 letter symbols
             const symbolMatches = effectiveInput.match(/\b([A-Z]{2,10})(?:USDT?|PERP)\b/gi) ||
                 effectiveInput.match(/\b([A-Z]{2,5})\b/gi) || [];
@@ -742,7 +780,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             let capturedGateResult: typeof currentGateResult = null; // Local variable to avoid state closure issue
             if (finalSymbol && isEnsembleEnabled) {
                 try {
-                    console.log(`[GateKeeper] Running Gate check for ${finalSymbol}...`);
+                    devLog(`[GateKeeper] Running Gate check for ${finalSymbol}...`);
                     setLoadingMessage('Running Gate Scan...');
                     completeStep('market-data'); startStep('gate-scan');
 
@@ -752,32 +790,33 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
                     if (gateResult.shouldProceed) {
                         gateInjection = gateResult.promptPrefix;
-                        console.log(`[GateKeeper] ✅ Gate PASSED: Confidence cap ${(gateResult.gateOutput.confidenceCap * 100).toFixed(0)}%`);
+                        devLog(`[GateKeeper] ✅ Gate PASSED: Confidence cap ${(gateResult.gateOutput.confidenceCap * 100).toFixed(0)}%`);
                         if (gateResult.gateOutput.suggestedDirection) {
-                            console.log(`[GateKeeper] Pattern Memory suggests: ${gateResult.gateOutput.suggestedDirection}`);
+                            devLog(`[GateKeeper] Pattern Memory suggests: ${gateResult.gateOutput.suggestedDirection}`);
                         }
                     } else {
-                        console.log(`[GateKeeper] ⚠️ Gate BLOCKED: ${gateResult.rejectionReason}`);
+                        devLog(`[GateKeeper] ⚠️ Gate BLOCKED: ${gateResult.rejectionReason}`);
                         // Even if blocked, still proceed but with max penalty applied
                         gateInjection = `\n⚠️ GATE WARNING: ${gateResult.rejectionReason}\n`;
                     }
                 } catch (gateError) {
                     console.error('[GateKeeper] Gate check failed:', gateError);
                     // Fail-open: proceed without Gate constraints
+                    toast.warning('Gate check skipped', 'Quality constraints could not be applied — analysis will proceed without gate validation.');
                 }
             }
 
             // Prepend Gate injection to enhanced prompt if available
             if (gateInjection) {
                 enhancedPrompt = `${gateInjection}${enhancedPrompt}`;
-                console.log('[GateKeeper] Gate constraints injected into prompt');
+                devLog('[GateKeeper] Gate constraints injected into prompt');
             }
             // ========== END GATE KEEPER ==========
 
-            console.log('[Hybrid Intelligence] Enhanced prompt length:', enhancedPrompt.length);
-            console.log('[Hybrid Intelligence] Has injection:', hybridDataInjection.length > 0);
+            devLog('[Hybrid Intelligence] Enhanced prompt length:', enhancedPrompt.length);
+            devLog('[Hybrid Intelligence] Has injection:', hybridDataInjection.length > 0);
             console.warn('[AI Learning] Has learning injection:', learningInjection.length > 0);
-            console.log('[Hybrid Intelligence] ======= END =======');
+            devLog('[Hybrid Intelligence] ======= END =======');
 
             // Check if it's an update request via hiddenContext or other triggers
             const isUpdate = !!hiddenContext;
@@ -825,7 +864,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             warnings: capturedGateResult.warnings.slice(0, 3),
                             insights: capturedGateResult.insights.slice(0, 2)
                         };
-                        console.log(`[GateKeeper] Result stored in analysis: cap=${(capturedGateResult.confidenceCap * 100).toFixed(0)}%`);
+                        devLog(`[GateKeeper] Result stored in analysis: cap=${(capturedGateResult.confidenceCap * 100).toFixed(0)}%`);
                     }
                     // ========== END GATE KEEPER RESULT ==========
 
@@ -845,7 +884,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                         if (validationResult.confidenceWasAdjusted) {
                             finalAnalysis.originalConfidence = validationResult.originalConfidence;
                             finalAnalysis.confidence = validationResult.adjustedConfidence;
-                            console.log(`[ValidationGate] Confidence adjusted: ${validationResult.originalConfidence} → ${validationResult.adjustedConfidence}`);
+                            devLog(`[ValidationGate] Confidence adjusted: ${validationResult.originalConfidence} → ${validationResult.adjustedConfidence}`);
                         }
 
                         // Bayesian cap from the hybrid fetch: the calibration
@@ -858,14 +897,14 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             if (cap !== undefined && current !== undefined && current > cap) {
                                 finalAnalysis.originalConfidence = finalAnalysis.originalConfidence ?? finalAnalysis.confidence;
                                 finalAnalysis.confidence = bayesianConfidenceCap;
-                                console.log(`[Bayesian] Confidence capped: ${current} → ${bayesianConfidenceCap}`);
+                                devLog(`[Bayesian] Confidence capped: ${current} → ${bayesianConfidenceCap}`);
                             }
                         }
 
                         // Store validation warnings
                         if (validationResult.warnings.length > 0) {
                             finalAnalysis.validationWarnings = validationResult.warnings;
-                            console.log(`[ValidationGate] ${validationResult.warnings.length} warnings added to analysis`);
+                            devLog(`[ValidationGate] ${validationResult.warnings.length} warnings added to analysis`);
                         }
 
                         // Store Devil's Advocate data if available
@@ -885,7 +924,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                                 timingQuality: validationResult.entryTiming.timing,
                                 suggestedEntry: validationResult.entryTiming.suggestedEntry
                             };
-                            console.log(`[ValidationGate] Entry Timing Score: ${validationResult.entryTiming.score}/100 (${validationResult.entryTiming.timing})`);
+                            devLog(`[ValidationGate] Entry Timing Score: ${validationResult.entryTiming.score}/100 (${validationResult.entryTiming.timing})`);
 
                             // Store Entry Timing Score for HybridDataPanel display
                             setCurrentEntryTimingScore({
@@ -897,26 +936,26 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             // Store suggested entry price for HybridDataPanel SL Optimization display
                             if (validationResult.entryTiming.suggestedEntry?.price) {
                                 setCurrentSuggestedEntryPrice(validationResult.entryTiming.suggestedEntry.price);
-                                console.log(`[ValidationGate] Suggested Entry Price: $${validationResult.entryTiming.suggestedEntry.price}`);
+                                devLog(`[ValidationGate] Suggested Entry Price: $${validationResult.entryTiming.suggestedEntry.price}`);
                             }
                         }
 
                         // Store SL Optimization for HybridDataPanel display
                         if (validationResult.slOptimization) {
                             setCurrentSlOptimization(validationResult.slOptimization);
-                            console.log(`[ValidationGate] SL Optimization: Recommended multiplier ${(validationResult.slOptimization.recommendedMultiplier * 100).toFixed(0)}%, Missed wins: ${validationResult.slOptimization.missedWinRate.toFixed(0)}%`);
+                            devLog(`[ValidationGate] SL Optimization: Recommended multiplier ${(validationResult.slOptimization.recommendedMultiplier * 100).toFixed(0)}%, Missed wins: ${validationResult.slOptimization.missedWinRate.toFixed(0)}%`);
                         }
 
                         // Log validation report (for debugging)
                         const modeStr = isAccuracyModeEnabled
                             ? (accuracySubMode === 'pure_ai' ? 'Pure AI' : 'Accuracy Original')
                             : 'Standard';
-                        console.log(`[ValidationGate] Mode: ${modeStr} | Hybrid: ${isHybridIntelligenceEnabled}`);
-                        console.log('[ValidationGate] Full Report:\n', validationResult.validationReport);
+                        devLog(`[ValidationGate] Mode: ${modeStr} | Hybrid: ${isHybridIntelligenceEnabled}`);
+                        devLog('[ValidationGate] Full Report:\n', validationResult.validationReport);
 
                         // ========== MONTE CARLO SIMULATION ==========
                         // Run simulation if we have hybrid data and a trade setup
-                        console.log('[MonteCarlo] Conditions check:', {
+                        devLog('[MonteCarlo] Conditions check:', {
                             hasHybridData: !!freshHybridData,
                             hybridDataSymbol: freshHybridData?.symbol || 'none',
                             hybridData1hATR: freshHybridData?.indicators?.['1h']?.atr || 'none',
@@ -955,15 +994,15 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                                             isModeratorFinal: true
                                         }
                                     ]);
-                                    console.log(`[MonteCarlo] Simulation complete: WinRate=${mcResult.winRate}%, EV=${mcResult.expectedValue}%`);
+                                    devLog(`[MonteCarlo] Simulation complete: WinRate=${mcResult.winRate}%, EV=${mcResult.expectedValue}%`);
                                 } else {
-                                    console.log('[MonteCarlo] Simulation returned null - insufficient trade data');
+                                    devLog('[MonteCarlo] Simulation returned null - insufficient trade data');
                                 }
                             }).catch(mcError => {
                                 console.error('[MonteCarlo] Simulation failed:', mcError);
                             });
                         } else {
-                            console.log('[MonteCarlo] Skipped - missing conditions:', {
+                            devLog('[MonteCarlo] Skipped - missing conditions:', {
                                 needsEntryPoints: !finalAnalysis.entryPoints?.length ? 'No entry points in analysis' : 'present',
                                 needsStopLoss: !finalAnalysis.stopLoss ? 'No stop loss in analysis' : 'present'
                             });
@@ -972,7 +1011,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
                         // ========== LIVE BACKTEST ==========
                         // Run backtest if we have trade history
-                        console.log('[LiveBacktest] Conditions check:', {
+                        devLog('[LiveBacktest] Conditions check:', {
                             loggedTradesCount: loggedTrades.length,
                             needsMinTrades: 3,
                             hasCoinName: !!finalAnalysis.coinName,
@@ -990,15 +1029,15 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
                                 if (btResult && btResult.totalMatches > 0) {
                                     setLatestBacktestResult(btResult);
-                                    console.log(`[LiveBacktest] ✅ Found ${btResult.totalMatches} matches: WinRate=${btResult.winRate.toFixed(1)}%, EV=${btResult.expectedValue.toFixed(2)}%`);
+                                    devLog(`[LiveBacktest] ✅ Found ${btResult.totalMatches} matches: WinRate=${btResult.winRate.toFixed(1)}%, EV=${btResult.expectedValue.toFixed(2)}%`);
                                 } else {
-                                    console.log('[LiveBacktest] ⚠️ No similar trades found in history');
+                                    devLog('[LiveBacktest] ⚠️ No similar trades found in history');
                                 }
                             } catch (btError) {
                                 console.error('[LiveBacktest] ❌ Backtest failed:', btError);
                             }
                         } else {
-                            console.log('[LiveBacktest] ⏭️ Skipped - missing conditions:', {
+                            devLog('[LiveBacktest] ⏭️ Skipped - missing conditions:', {
                                 needsMoreTrades: loggedTrades.length < 3 ? `Need ${3 - loggedTrades.length} more logged trades` : '✓',
                                 needsCoinName: !finalAnalysis.coinName ? 'No coin detected in analysis' : '✓'
                             });
@@ -1043,84 +1082,84 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             imageFiles,
                             dataURLs,
                             currentAbortController.signal,
-                            summaries,
-                            currentMessages,
-                            enhancedFinalTradeSummary, // Pattern Memory (Synthesis)
-                            recentInsightsString,      // Recent Insights (Individual)
-                            // provider.model removed from rest (now param 2)
-                            activeFrameworks,
-                            isDeepAnalysis,
-                            memoryToInject,
-                            currentThreadSummary,
-                            isAccuracyModeEnabled ? accuracySubMode : undefined,
-                            instructionsToUse,
-                            isPlaybookEnabledInPureAI,
-                            isFamiliesEnabledInPureAI,
-                            isMemoryEnabledInPureAI,
-                            // Analyst Lens: pass role-specific prompt based on trading style.
-                            // Custom overrides from the prompt editor win over built-ins.
-                            lensConfig.enabled && provider.thoughtsKey
-                                ? (customLensPrompts?.[getRoleForProvider(`${provider.config.id}::${provider.model}`, lensConfig.assignments)]
-                                    || getLensPromptForStyle(
-                                        `${provider.config.id}::${provider.model}`,
-                                        lensConfig.assignments,
-                                        // For auto mode, use swing as default (will be detected per-call with hybrid data)
-                                        lensConfig.tradingStyle === 'auto' ? 'swing' : lensConfig.tradingStyle
-                                    ))
-                                : undefined,
-                            // Normal mode (Lenses off): custom base prompt override.
-                            lensConfig.enabled ? undefined : (customEnsemblePrompt || undefined),
-                            // Streamed chain-of-thought deltas accumulate — the
-                            // latest full string is pushed to the live cards.
-                             (reasoning: string) => {
-                                 reasoningMapRef.current[provider.name] = (reasoningMapRef.current[provider.name] || '') + reasoning;
-                                 if (isStagedEnsemble) {
-                                     updateEnsembleProgress(progress => ({
-                                         ...progress,
-                                         analysts: progress.analysts.map(analyst => analyst.key === provider.thoughtsKey
-                                             ? { ...analyst, reasoning: reasoningMapRef.current[provider.name] }
-                                             : analyst),
-                                     }));
-                                 }
-                             }
-                         )
-                             .then(result => {
-                                 if (isStagedEnsemble) {
-                                     updateEnsembleProgress(progress => ({
-                                         ...progress,
-                                         analysts: progress.analysts.map(analyst => analyst.key === provider.thoughtsKey
-                                             ? {
-                                                 ...analyst,
-                                                 status: 'complete',
-                                                 finalOutput: result.finalOutput || result.thoughtProcess,
-                                                 thoughtProcess: result.thoughtProcess,
-                                                 reasoning: reasoningMapRef.current[provider.name],
-                                             }
-                                             : analyst),
-                                     }));
-                                 }
-                                 return result;
-                             })
-                             .catch((err: any) => {
-                                 const errorMsg = err instanceof Error ? err.message : String(err);
-                                 if (isStagedEnsemble) {
-                                     updateEnsembleProgress(progress => ({
-                                         ...progress,
-                                         analysts: progress.analysts.map(analyst => analyst.key === provider.thoughtsKey
-                                             ? { ...analyst, status: 'error', error: errorMsg }
-                                             : analyst),
-                                     }));
-                                 }
-                                 throw err;
-                             });
+                            {
+                                imageSummaries: summaries,
+                                chatHistory: currentMessages,
+                                finalTradeSummary: enhancedFinalTradeSummary,
+                                recentInsights: recentInsightsString,
+                                activeFrameworks,
+                                deepenAnalysis: isDeepAnalysis,
+                                globalMemory: memoryToInject,
+                                threadSummary: currentThreadSummary,
+                                subMode: isAccuracyModeEnabled ? accuracySubMode : undefined,
+                                customInstructions: instructionsToUse,
+                                isPlaybookEnabledInPureAI,
+                                isFamiliesEnabledInPureAI,
+                                isMemoryEnabledInPureAI,
+                                // Analyst Lens: pass role-specific prompt based on trading style.
+                                // Custom overrides from the prompt editor win over built-ins.
+                                rolePrompt: lensConfig.enabled && provider.thoughtsKey
+                                    ? (customLensPrompts?.[getRoleForProvider(`${provider.config.id}::${provider.model}`, lensConfig.assignments)]
+                                        || getLensPromptForStyle(
+                                            `${provider.config.id}::${provider.model}`,
+                                            lensConfig.assignments,
+                                            // For auto mode, use swing as default (will be detected per-call with hybrid data)
+                                            lensConfig.tradingStyle === 'auto' ? 'swing' : lensConfig.tradingStyle
+                                        ))
+                                    : undefined,
+                                // Normal mode (Lenses off): custom base prompt override.
+                                systemPromptOverride: lensConfig.enabled ? undefined : (customEnsemblePrompt || undefined),
+                                // Streamed chain-of-thought deltas accumulate — the
+                                // latest full string is pushed to the live cards.
+                                onReasoning: (reasoning: string) => {
+                                     reasoningMapRef.current[provider.name] = (reasoningMapRef.current[provider.name] || '') + reasoning;
+                                     if (isStagedEnsemble) {
+                                         updateEnsembleProgress(progress => ({
+                                             ...progress,
+                                             analysts: progress.analysts.map(analyst => analyst.key === provider.thoughtsKey
+                                                 ? { ...analyst, reasoning: reasoningMapRef.current[provider.name] }
+                                                 : analyst),
+                                         }));
+                                     }
+                                 },
+                         })
+                                 .then(result => {
+                                     if (isStagedEnsemble) {
+                                         updateEnsembleProgress(progress => ({
+                                             ...progress,
+                                             analysts: progress.analysts.map(analyst => analyst.key === provider.thoughtsKey
+                                                 ? {
+                                                     ...analyst,
+                                                     status: 'complete',
+                                                     finalOutput: result.finalOutput || result.thoughtProcess,
+                                                     thoughtProcess: result.thoughtProcess,
+                                                     reasoning: reasoningMapRef.current[provider.name],
+                                                 }
+                                                 : analyst),
+                                         }));
+                                     }
+                                     return result;
+                                 })
+                                 .catch((err: any) => {
+                                     const errorMsg = err instanceof Error ? err.message : String(err);
+                                     if (isStagedEnsemble) {
+                                         updateEnsembleProgress(progress => ({
+                                             ...progress,
+                                             analysts: progress.analysts.map(analyst => analyst.key === provider.thoughtsKey
+                                                 ? { ...analyst, status: 'error', error: errorMsg }
+                                                 : analyst),
+                                         }));
+                                     }
+                                     throw err;
+                                 });
                     });
 
                     const settledResults = await Promise.allSettled(analysisPromises);
                     if (!isCurrentRequest()) assertCurrentRequest();
                     if (isStagedEnsemble) {
                         updateEnsembleProgress(progress => ({
-                            ...progress,
-                            moderator: { status: 'reviewing' },
+                                ...progress,
+                                moderator: { status: 'reviewing' },
                         }));
                     }
                     setLoadingMessage(null);
@@ -1132,7 +1171,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     // (The old re-indexed `results` array caused exactly that.)
                     settledResults.forEach((settled, index) => {
                         if (settled.status === 'rejected') {
-                            console.warn(`[Ensemble] Analyst "${enabledProviders[index]?.name || `#${index}`}" failed:`, settled.reason);
+                                console.warn(`[Ensemble] Analyst "${enabledProviders[index]?.name || `#${index}`}" failed:`, settled.reason);
                         }
                     });
 
@@ -1143,9 +1182,9 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     // data) to be attributed to enabledProviders[0].thoughtsKey.
                     settledResults.forEach((settled, index) => {
                         if (settled.status === 'fulfilled') {
-                            const providerKey = enabledProviders[index].thoughtsKey;
-                            thoughtMap[providerKey] = settled.value.thoughtProcess;
-                            thoughtMap[enabledProviders[index].name] = settled.value.thoughtProcess;
+                                const providerKey = enabledProviders[index].thoughtsKey;
+                                thoughtMap[providerKey] = settled.value.thoughtProcess;
+                                thoughtMap[enabledProviders[index].name] = settled.value.thoughtProcess;
                         }
                     });
 
@@ -1170,11 +1209,11 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                         const providerName = enabledProviders[index]?.name || `Unknown-${index}`;
                         const analysis = settled.value?.analysis;
 
-                        console.log(`[PerAI-MonteCarlo] Checking ${providerName}...`);
+                        devLog(`[PerAI-MonteCarlo] Checking ${providerName}...`);
 
                         if (!analysis) {
-                            console.warn(`[PerAI-MonteCarlo] ${providerName} - Missing analysis object`);
-                            continue;
+                                console.warn(`[PerAI-MonteCarlo] ${providerName} - Missing analysis object`);
+                                continue;
                         }
 
                         // Validate specific fields
@@ -1183,58 +1222,58 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                         const hasTP = analysis.takeProfit && analysis.takeProfit.length > 0;
 
                         if (hasEntry && hasSL && hasTP) {
-                            try {
-                                const mcResult = await runMonteCarloForSetupAsync({
-                                    direction: analysis.direction,
-                                    entryPoints: analysis.entryPoints,
-                                    stopLoss: analysis.stopLoss,
-                                    takeProfit: analysis.takeProfit
-                                }, hybridDataForMC);
+                                try {
+                                    const mcResult = await runMonteCarloForSetupAsync({
+                                        direction: analysis.direction,
+                                        entryPoints: analysis.entryPoints,
+                                        stopLoss: analysis.stopLoss,
+                                        takeProfit: analysis.takeProfit
+                                    }, hybridDataForMC);
 
-                                if (!isCurrentRequest()) assertCurrentRequest();
-                                if (mcResult) {
-                                    perAIMC.push({
-                                        provider: providerName,
-                                        result: mcResult,
-                                        isModeratorFinal: false
-                                    });
-                                    console.log(`[PerAI-MonteCarlo] ${providerName}: Success (WinRate=${mcResult.winRate}%)`);
+                                    if (!isCurrentRequest()) assertCurrentRequest();
+                                    if (mcResult) {
+                                        perAIMC.push({
+                                            provider: providerName,
+                                            result: mcResult,
+                                            isModeratorFinal: false
+                                        });
+                                        devLog(`[PerAI-MonteCarlo] ${providerName}: Success (WinRate=${mcResult.winRate}%)`);
+                                    }
+                                } catch (err) {
+                                    // A user cancel must abort the whole run, not
+                                    // just this simulation — swallowing it wrote
+                                    // partial post-cancel state (per-AI results +
+                                    // an isDebating placeholder) before the debate
+                                    // loop noticed the aborted signal.
+                                    if ((err as { name?: string })?.name === 'AbortError') throw err;
+                                    console.error(`[PerAI-MonteCarlo] ${providerName} failed execution:`, err);
                                 }
-                            } catch (err) {
-                                // A user cancel must abort the whole run, not
-                                // just this simulation — swallowing it wrote
-                                // partial post-cancel state (per-AI results +
-                                // an isDebating placeholder) before the debate
-                                // loop noticed the aborted signal.
-                                if ((err as { name?: string })?.name === 'AbortError') throw err;
-                                console.error(`[PerAI-MonteCarlo] ${providerName} failed execution:`, err);
-                            }
                         } else {
-                            console.warn(`[PerAI-MonteCarlo] ${providerName} - Skipped (Missing components: Entry=${hasEntry}, SL=${hasSL}, TP=${hasTP})`);
+                                console.warn(`[PerAI-MonteCarlo] ${providerName} - Skipped (Missing components: Entry=${hasEntry}, SL=${hasSL}, TP=${hasTP})`);
                         }
                     }
 
                     // Store per-AI Monte Carlo results
                     if (perAIMC.length > 0) {
                         setPerAIMonteCarloResults(perAIMC);
-                        console.log(`[PerAI-MonteCarlo] Completed ${perAIMC.length} simulations`);
+                        devLog(`[PerAI-MonteCarlo] Completed ${perAIMC.length} simulations`);
                     }
                     // ========== END PER-AI MONTE CARLO ==========
 
                     const debateMessageId = ensemblePlaceholder?.id || `debate-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
                     const debatePlaceholder: Message = {
                         ...(ensemblePlaceholder || {
-                            id: debateMessageId,
-                            role: MessageRole.AI,
-                            text: '',
-                            createdAt: new Date().toISOString(),
+                                id: debateMessageId,
+                                role: MessageRole.AI,
+                                text: '',
+                                createdAt: new Date().toISOString(),
                         }),
                         isDebating: true,
                         debateTurns: [],
                         // Non-staged runs never carried modelsUsed — the chat's
                         // per-bubble model line was blank for them.
                         modelsUsed: ensemblePlaceholder?.modelsUsed
-                            || Object.fromEntries(enabledProviders.map(p => [p.config.id, p.model])),
+                                || Object.fromEntries(enabledProviders.map(p => [p.config.id, p.model])),
                         thoughtProcesses: { ...(ensemblePlaceholder?.thoughtProcesses || {}), ...thoughtMap },
                         reasoningProcesses: { ...(ensemblePlaceholder?.reasoningProcesses || {}), ...reasoningMapRef.current },
                         activeDebateSpeakers: {},
@@ -1263,65 +1302,65 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     if (isAccuracyModeEnabled) {
                         // ACCURACY MODE
                         debateStream = ensembleService.conductDebate(
-                            fulfilledAnalysts.map(a => a.result),
-                            fulfilledAnalysts.map(a => a.provider.name),
-                            enhancedPrompt,
-                            finalTradeSummary,
-                            accuracySubMode,
-                            instructionsToUse,
-                            moderatorConfig,
-                            activeModModel,
-                            isFamiliesEnabledInPureAI,
-                            isMemoryEnabledInPureAI,
-                            capturedGateResult, // Gate result for reconciliation (local, not stale state)
-                            tradeSummaries, // Recent Insights
-                            moderatorLearningContext, // Unified learning context for moderator
-                            currentAbortController.signal, // Cancellation for the moderator stream
-                            (reasoning: string) => {
-                                // Streamed moderator chain-of-thought accumulates
-                                // (deltas replace nothing — they append).
-                                reasoningMapRef.current.moderator = (reasoningMapRef.current.moderator || '') + reasoning;
-                                thoughtMap.moderator = reasoningMapRef.current.moderator;
-                            }
+                                fulfilledAnalysts.map(a => a.result),
+                                fulfilledAnalysts.map(a => a.provider.name),
+                                enhancedPrompt,
+                                finalTradeSummary,
+                                accuracySubMode,
+                                instructionsToUse,
+                                moderatorConfig,
+                                activeModModel,
+                                isFamiliesEnabledInPureAI,
+                                isMemoryEnabledInPureAI,
+                                capturedGateResult, // Gate result for reconciliation (local, not stale state)
+                                tradeSummaries, // Recent Insights
+                                moderatorLearningContext, // Unified learning context for moderator
+                                currentAbortController.signal, // Cancellation for the moderator stream
+                                (reasoning: string) => {
+                                    // Streamed moderator chain-of-thought accumulates
+                                    // (deltas replace nothing — they append).
+                                    reasoningMapRef.current.moderator = (reasoningMapRef.current.moderator || '') + reasoning;
+                                    thoughtMap.moderator = reasoningMapRef.current.moderator;
+                                }
                         );
                     } else {
                         // STANDARD MODE — REAL inter-model debate. Each analyst
                         // is re-invoked on its own provider for the rebuttal
                         // rounds; only the moderator produces the JSON plan.
                         if (fulfilledAnalysts.length < 2) {
-                            // Enrich the bare engine error with the per-analyst
-                            // failure reasons (or the enabled count) so the user
-                            // can see exactly why the debate could not start
-                            // instead of a cryptic "1 provided".
-                            const failureReport = buildAnalystFailureReport(settledResults, enabledProviders);
-                            const detail = failureReport
-                                ? `\n\nFailed analysts:\n${failureReport}`
-                                : `\n\nOnly ${fulfilledAnalysts.length} analyst${fulfilledAnalysts.length === 1 ? ' was' : 's were'} enabled and all of them succeeded. Enable at least 2 models (Settings → AI Models or the Debate Models picker) to run the debate.`;
-                            throw new Error(`Real debate requires at least 2 analysts (${fulfilledAnalysts.length} provided).${detail}`);
+                                // Enrich the bare engine error with the per-analyst
+                                // failure reasons (or the enabled count) so the user
+                                // can see exactly why the debate could not start
+                                // instead of a cryptic "1 provided".
+                                const failureReport = buildAnalystFailureReport(settledResults, enabledProviders);
+                                const detail = failureReport
+                                    ? `\n\nFailed analysts:\n${failureReport}`
+                                    : `\n\nOnly ${fulfilledAnalysts.length} analyst${fulfilledAnalysts.length === 1 ? ' was' : 's were'} enabled and all of them succeeded. Enable at least 2 models (Settings → AI Models or the Debate Models picker) to run the debate.`;
+                                throw new Error(`Real debate requires at least 2 analysts (${fulfilledAnalysts.length} provided).${detail}`);
                         }
                         debateStream = ensembleService.conductRealDebate(
-                            fulfilledAnalysts.map(a => ({
-                                provider: a.provider,
-                                result: a.result,
-                            })),
-                            enhancedPrompt,
-                            finalTradeSummary,
-                            moderatorConfig,
-                            activeModModel,
-                            instructionsToUse,
-                            perAIMC,   // monteCarloResults
-                            lensConfig.enabled ? lensConfig : undefined, // lensConfig
-                            lensConfig.enabled ? fulfilledAnalysts.map(a => a.provider.config.id) : undefined, // analystProviders
-                            activeFrameworks, // playbook
-                            tradeSummaries, // recent insights for pattern matching
-                            capturedGateResult, // Gate result (current run, not stale state)
-                            moderatorLearningContext, // Unified learning context for moderator
-                            currentAbortController.signal, // Cancellation for the moderator stream
-                            (reasoning: string) => {
-                                // Streamed moderator chain-of-thought accumulates
-                                // (deltas replace nothing — they append).
-                                reasoningMapRef.current.moderator = (reasoningMapRef.current.moderator || '') + reasoning;
-                                thoughtMap.moderator = reasoningMapRef.current.moderator;
+                                fulfilledAnalysts.map(a => ({
+                                    provider: a.provider,
+                                    result: a.result,
+                                })),
+                                enhancedPrompt,
+                                finalTradeSummary,
+                                moderatorConfig,
+                                activeModModel,
+                                instructionsToUse,
+                                perAIMC,   // monteCarloResults
+                                lensConfig.enabled ? lensConfig : undefined, // lensConfig
+                                lensConfig.enabled ? fulfilledAnalysts.map(a => a.provider.config.id) : undefined, // analystProviders
+                                activeFrameworks, // playbook
+                                tradeSummaries, // recent insights for pattern matching
+                                capturedGateResult, // Gate result (current run, not stale state)
+                                moderatorLearningContext, // Unified learning context for moderator
+                                currentAbortController.signal, // Cancellation for the moderator stream
+                                (reasoning: string) => {
+                                    // Streamed moderator chain-of-thought accumulates
+                                    // (deltas replace nothing — they append).
+                                    reasoningMapRef.current.moderator = (reasoningMapRef.current.moderator || '') + reasoning;
+                                    thoughtMap.moderator = reasoningMapRef.current.moderator;
                             },
                             (speaker: string, reasoning: string) => {
                                 // Rebuttal and clarification reasoning is keyed by speaker
@@ -1843,35 +1882,36 @@ ${accuracyVerificationNote}`
                             imageFiles,
                             dataURLs,
                             currentAbortController.signal,
-                            summaries,
-                            currentMessages,
-                            finalTradeSummary,
-                            recentInsightsString,      // Recent Insights (Individual) - must match multi-provider arg order
-                            // provider.model removed from rest (now param 2)
-                            activeFrameworks,
-                            isDeepAnalysis,
-                            memoryToInject,
-                            currentThreadSummary,
-                            isAccuracyModeEnabled ? accuracySubMode : undefined,
-                            instructionsToUse,
-                            isPlaybookEnabledInPureAI,
-                            isFamiliesEnabledInPureAI,
-                            isMemoryEnabledInPureAI,
-                            // Analyst Lens: pass role-specific prompt based on trading style
-                            // (custom prompt overrides from the prompt editor win).
-                            lensConfig.enabled && provider.thoughtsKey
-                                ? (customLensPrompts?.[getRoleForProvider(`${provider.config.id}::${provider.model}`, lensConfig.assignments)]
-                                    || getLensPromptForStyle(
-                                        `${provider.config.id}::${provider.model}`,
-                                        lensConfig.assignments,
-                                        lensConfig.tradingStyle === 'auto' ? 'swing' : lensConfig.tradingStyle
-                                    ))
-                                : undefined,
-                            // Normal mode (Lenses off): custom base prompt override.
-                            lensConfig.enabled ? undefined : (customEnsemblePrompt || undefined),
-                            // Streamed chain-of-thought deltas accumulate — the
-                            // multi path uses the same append pattern.
-                            (reasoning: string) => { soloRawReasoning += reasoning; }
+                            {
+                                imageSummaries: summaries,
+                                chatHistory: currentMessages,
+                                finalTradeSummary,
+                                recentInsights: recentInsightsString,
+                                activeFrameworks,
+                                deepenAnalysis: isDeepAnalysis,
+                                globalMemory: memoryToInject,
+                                threadSummary: currentThreadSummary,
+                                subMode: isAccuracyModeEnabled ? accuracySubMode : undefined,
+                                customInstructions: instructionsToUse,
+                                isPlaybookEnabledInPureAI,
+                                isFamiliesEnabledInPureAI,
+                                isMemoryEnabledInPureAI,
+                                // Analyst Lens: pass role-specific prompt based on trading style
+                                // (custom prompt overrides from the prompt editor win).
+                                rolePrompt: lensConfig.enabled && provider.thoughtsKey
+                                    ? (customLensPrompts?.[getRoleForProvider(`${provider.config.id}::${provider.model}`, lensConfig.assignments)]
+                                        || getLensPromptForStyle(
+                                            `${provider.config.id}::${provider.model}`,
+                                            lensConfig.assignments,
+                                            lensConfig.tradingStyle === 'auto' ? 'swing' : lensConfig.tradingStyle
+                                        ))
+                                    : undefined,
+                                // Normal mode (Lenses off): custom base prompt override.
+                                systemPromptOverride: lensConfig.enabled ? undefined : (customEnsemblePrompt || undefined),
+                                // Streamed chain-of-thought deltas accumulate — the
+                                // multi path uses the same append pattern.
+                                onReasoning: (reasoning: string) => { soloRawReasoning += reasoning; },
+                            },
                         );
                     if (!isCurrentRequest()) assertCurrentRequest();
                     const soloAiMessage: Message = {
@@ -2056,16 +2096,18 @@ ${accuracyVerificationNote}`
     };
 
     // ─── Chat Management ───────────────────────────────────────────────────
-    const handleClearChat = () => {
-        if (confirm('Clear current chat messages?')) {
-            updateMessages(() => []);
-        }
+    const handleClearChat = async () => {
+        const ok = confirmDialog
+            ? await confirmDialog({ title: 'Clear chat?', message: 'Clear current chat messages?', destructive: true })
+            : confirm('Clear current chat messages?');
+        if (ok) updateMessages(() => []);
     };
 
-    const handleDeleteMessages = (ids: string[]) => {
-        if (confirm(`Delete ${ids.length} messages?`)) {
-            updateMessages(prev => prev.filter(m => !ids.includes(m.id)));
-        }
+    const handleDeleteMessages = async (ids: string[]) => {
+        const ok = confirmDialog
+            ? await confirmDialog({ title: 'Delete messages?', message: `Delete ${ids.length} messages?`, destructive: true })
+            : confirm(`Delete ${ids.length} messages?`);
+        if (ok) updateMessages(prev => prev.filter(m => !ids.includes(m.id)));
     };
 
     return {

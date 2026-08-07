@@ -94,19 +94,6 @@ function createOpenAIClient(config: ProviderConfig): OpenAI {
     });
 }
 
-/** Heuristic: does this model accept vision/image inputs? */
-function isVisionModel(modelId: string): boolean {
-    const m = modelId.toLowerCase();
-    return m.includes('llama-4')
-        || m.includes('vision')
-        || m.includes('gpt-4o')
-        || m.includes('gpt-4.1')
-        || m.includes('gpt-5')
-        || m.includes('glm-4.5v')
-        || m.includes('glm-4.6v')
-        || m.includes('gemini');
-}
-
 // ─── Timeout & Retry Helpers ────────────────────────────────────────────────
 
 /** Abort a request if it exceeds this wall-clock duration (per attempt). */
@@ -484,7 +471,12 @@ export async function sendChatRequest(
                             if (result.status !== undefined) (error as any).status = result.status;
                             throw error;
                         }
-                        const data = result.body ? JSON.parse(result.body) : {};
+                        let data: any = {};
+                        try {
+                            data = result.body ? JSON.parse(result.body) : {};
+                        } catch (e) {
+                            throw new Error(`Provider proxy returned invalid JSON: ${(e as Error).message}. Body: ${(result.body || '').slice(0, 200)}`);
+                        }
                         const reasoning = result.reasoning || data.choices?.[0]?.message?.reasoning_content || data.choices?.[0]?.message?.reasoning;
                         if (typeof reasoning === 'string' && reasoning.trim()) options?.onReasoning?.(reasoning.trim());
                         if (effectiveConfig.apiFormat === 'messages') {

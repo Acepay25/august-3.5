@@ -5,6 +5,7 @@ import { ChevronDownIcon, BookmarkIcon, BookmarkSolidIcon, BrainIcon, UpdateIcon
 import { FAMILY_UI_DATA } from '../../constants/models';
 import { ConfidenceLevel } from '../../services/validation/ConfidenceCalibrationService';
 import { DEFAULT_LEVERAGE } from '../../utils/conversationUtils';
+import { parsePrice } from '../../utils/analysisUtils';
 import { simulateFromAnalysisTime } from '../../services/backtesting/BacktestingService';
 import { AutopilotResolution } from '../../services/ui/OutcomeAutopilotService';
 import { PriceAlertService } from '../../services/ui/PriceAlertService';
@@ -651,22 +652,6 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                             {/* Extended SL (150% Zone) */}
                             {(() => {
                                 // Parse entry and SL to calculate extended SL
-                                const parsePrice = (priceStr: string): number => {
-                                    if (!priceStr || priceStr === 'N/A') return 0;
-                                    const cleaned = priceStr.replace(/[$,\s]/g, '');
-                                    const lower = cleaned.toLowerCase();
-                                    if (cleaned.includes('-') || lower.includes('to')) {
-                                        const parts = lower.includes('to') ? lower.split('to') : cleaned.split('-');
-                                        if (parts.length === 2) {
-                                            const p1 = parseFloat(parts[0].replace(/[^0-9.]/g, ''));
-                                            const p2 = parseFloat(parts[1].replace(/[^0-9.]/g, ''));
-                                            if (!isNaN(p1) && !isNaN(p2)) return (p1 + p2) / 2;
-                                        }
-                                    }
-                                    const num = parseFloat(cleaned.replace(/\s+/g, ''));
-                                    return isNaN(num) ? 0 : num;
-                                };
-
                                 const entryPrice = entryPoints?.[0]?.price ? parsePrice(String(entryPoints[0].price)) : 0;
                                 const slPrice = parsePrice(String(stopLoss));
                                 const isLong = direction === 'Long';
