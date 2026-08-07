@@ -7,14 +7,18 @@
  * - Model list container with model ID rows, context badges, SVG edit/delete/link actions, and "+ Add model" button
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { ProviderConfig, ApiFormat, API_FORMAT_LABELS } from '../../types/provider';
 import { testConnection } from '../../services/providers/GenericProviderService';
 import { getProviderHealth } from '../../services/infrastructure/ProviderHealthService';
 import { validateProviderUrl } from '../../utils/providerUrlValidation';
+import { useConfirmDialog } from '../shared/ConfirmDialog';
 
 interface ProviderManagerProps {
     configs: ProviderConfig[];
+    /** False while the provider configs are still being loaded from storage —
+     *  prevents the "No providers configured" empty state from flashing. */
+    isLoaded?: boolean;
     onUpdateProvider: (id: string, updates: Partial<Omit<ProviderConfig, 'id' | 'isBuiltIn'>>) => Promise<void>;
     onAddCustomProvider: (provider: {
         name: string; baseUrl: string; apiKey: string; apiFormat: ApiFormat;
@@ -110,6 +114,7 @@ function getContextBadge(modelId: string): string {
 
 const ProviderManager: React.FC<ProviderManagerProps> = ({
     configs,
+    isLoaded = true,
     onUpdateProvider,
     onAddCustomProvider,
     onRemoveProvider,
@@ -118,6 +123,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
     onRemoveModel,
     onUpdateModel,
 }) => {
+    const { confirm, ConfirmDialogComponent } = useConfirmDialog();
     const [selectedId, setSelectedId] = useState<string>(configs[0]?.id || '');
     const [isEditingName, setIsEditingName] = useState(false);
     const [nameDraft, setNameDraft] = useState('');
@@ -148,6 +154,10 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
     const [newKey, setNewKey] = useState('');
     const [newFormat, setNewFormat] = useState<ApiFormat>('chat_completions');
     const [newModels, setNewModels] = useState('');
+    const [addError, setAddError] = useState('');
+
+    // Track the "saved" badge timer so it's cleared on unmount / next save.
+    const saveStateTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
     const selected = useMemo(() => configs.find(c => c.id === selectedId) || configs[0], [configs, selectedId]);
 
@@ -197,12 +207,16 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
             await onUpdateProvider(selected.id, updates);
             setIsEditingName(false);
             setSaveState('saved');
+            // Track the timer so it's cleared on unmount / next save — a bare
+            // setTimeout here could setState after unmount.
+            clearTimeout(saveStateTimerRef.current);
+            saveStateTimerRef.current = setTimeout(() => setSaveState('idle'), 1800);
         } catch (error) {
+            clearTimeout(saveStateTimerRef.current);
             setSaveState('idle');
             setTestResult({ success: false, message: error instanceof Error ? error.message : 'Provider settings could not be saved.' });
             return;
         }
-        setTimeout(() => setSaveState('idle'), 1800);
     }, [selected, draftKey, draftUrl, draftFormat, draftModel, nameDraft, draftUrlValidation, onUpdateProvider]);
 
     const handleTest = useCallback(async () => {
@@ -234,13 +248,20 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
     const handleAddProvider = useCallback(async () => {
         if (!newName.trim() || !newUrlValidation.valid) return;
         const models = newModels.split(',').map(m => m.trim()).filter(Boolean);
+        // No fake 'default-model' entries — a provider without models is
+        // unusable and the user would have to discover/delete the stub row.
+        if (models.length === 0) {
+            setAddError('Add at least one model ID (comma-separated) before creating the provider.');
+            return;
+        }
+        setAddError('');
         await onAddCustomProvider({
             name: newName.trim(),
             baseUrl: newUrl.trim(),
             apiKey: newKey.trim(),
             apiFormat: newFormat,
-            models: models.length > 0 ? models : ['default-model'],
-            selectedModel: models[0] || 'default-model',
+            models,
+            selectedModel: models[0],
         });
         setNewName(''); setNewUrl(''); setNewKey(''); setNewFormat('chat_completions'); setNewModels('');
         setShowAddProvider(false);
@@ -286,6 +307,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
 
     return (
         <div className="space-y-4">
+            {ConfirmDialogComponent}
             {/* Top Bar / Subtitle */}
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800/60">
                 <p className="text-xs text-zinc-400 font-medium">
@@ -337,7 +359,9 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                 </div>
                             ) : (
                                 <div className="px-2 py-4 text-xs text-zinc-500 text-center">
-                                    No providers configured. Click "+ Add provider" below to create one.
+                                    {isLoaded
+                                        ? 'No providers configured. Click "+ Add provider" below to create one.'
+                                        : 'Loading providers…'}
                                 </div>
                             )}
                         </div>
@@ -421,10 +445,11 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                 <input
                                     type="text"
                                     value={newModels}
-                                    onChange={(e) => setNewModels(e.target.value)}
+                                    onChange={(e) => { setNewModels(e.target.value); setAddError(''); }}
                                     placeholder="deepseek-v4-flash-free, nemotron-3-ultra-free"
                                     className={inputBase}
                                 />
+                                {addError && <p className="mt-1 text-xs text-red-300">{addError}</p>}
                             </div>
 
                             <div className="flex gap-2 pt-2">
@@ -501,7 +526,13 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
 
                                 {/* Delete Provider Icon */}
                                 <button
-                                    onClick={() => {
+                                    onClick={async () => {
+                                        const ok = await confirm({
+                                            title: `Delete ${selected.name}?`,
+                                            message: 'This removes the provider, its API key, and its models. Analyses already logged are unaffected.',
+                                            confirmLabel: 'Delete',
+                                        });
+                                        if (!ok) return;
                                         onRemoveProvider(selected.id);
                                         const remaining = configs.filter(c => c.id !== selected.id);
                                         if (remaining.length > 0) setSelectedId(remaining[0].id);
@@ -745,8 +776,30 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
 const HealthStrip: React.FC<{ providerId: string }> = ({ providerId }) => {
     const [tick, setTick] = useState(0);
     useEffect(() => {
-        const interval = setInterval(() => setTick(t => t + 1), 5000);
-        return () => clearInterval(interval);
+        // Pause the 5s health poll while the tab is backgrounded — no point
+        // re-rendering the strip (and burning the health cache) when nobody
+        // can see it.
+        if (typeof document === 'undefined') return;
+        let interval: ReturnType<typeof setInterval> | null = null;
+        const start = (): void => {
+            if (interval) return;
+            interval = setInterval(() => setTick(t => t + 1), 5000);
+        };
+        const stop = (): void => {
+            if (interval) {
+                clearInterval(interval);
+                interval = null;
+            }
+        };
+        start();
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') start();
+            else stop();
+        });
+        return () => {
+            stop();
+            document.removeEventListener('visibilitychange', start);
+        };
     }, []);
     const health = getProviderHealth(providerId);
     if (!health || health.requestCount === 0) {

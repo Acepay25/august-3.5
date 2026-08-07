@@ -7,6 +7,10 @@ interface EnsembleProgressChatProps {
     progress: EnsembleProgress;
     modelIdToName?: Record<string, string>;
     isLive?: boolean;
+    /** Re-run affordance for failed analysts — wired by the host app (the
+     *  pipeline has no per-analyst re-dispatch; the host re-runs the analysis
+     *  with the same prompt context). */
+    onRetryAnalyst?: (analystKey: string) => void;
 }
 
 const ACCENTS = [
@@ -37,7 +41,7 @@ const getAnalystDetails = (analyst: EnsembleAnalystProgress): string | undefined
     analyst.reasoning || analyst.thoughtProcess || analyst.finalOutput
 );
 
-const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({ progress, modelIdToName = {}, isLive = false }) => {
+const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({ progress, modelIdToName = {}, isLive = false, onRetryAnalyst }) => {
     const [expandedKey, setExpandedKey] = useState<string | null>(null);
     const [isLiveExpanded, setIsLiveExpanded] = useState(false);
     const [typingIndex, setTypingIndex] = useState(0);
@@ -107,7 +111,21 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({ progress, m
 
                     {analyst.status === 'analyzing' && <div className="mt-2 flex items-center gap-2 text-xs text-zinc-500"><TypingDots />Generating final output</div>}
                     {analyst.status === 'waiting' && <div className="mt-2 text-xs text-zinc-600">Waiting to start</div>}
-                    {analyst.status === 'error' && <div className="mt-2 text-xs text-zinc-500">{analyst.error || 'This analyst was unavailable.'}</div>}
+                    {analyst.status === 'error' && (
+                        <div className="mt-2 flex items-center gap-2">
+                            <div className="min-w-0 flex-1 text-xs text-zinc-500">{analyst.error || 'This analyst was unavailable.'}</div>
+                            {onRetryAnalyst && (
+                                <button
+                                    type="button"
+                                    onClick={() => onRetryAnalyst(analyst.key)}
+                                    className="shrink-0 rounded-md border border-white/10 px-2 py-1 text-[9px] uppercase tracking-wider text-zinc-400 transition-colors hover:border-cyan-400/30 hover:text-cyan-300"
+                                    title="Re-run the analysis with this analyst included"
+                                >
+                                    ↺ Retry
+                                </button>
+                            )}
+                        </div>
+                    )}
 
                     {expanded && (
                         <div className="mt-3 border-t border-white/5 pt-3">

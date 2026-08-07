@@ -456,7 +456,7 @@ export const trackTradeOutcome = (
     family: string,
     regime: string,
     confidence: string,
-    trade?: { direction?: string; entryPrice?: number }
+    trade?: { direction?: string; entryPrice?: number; id?: string }
 ): void => {
     const data = loadPerformanceData();
     const modelData = ensureProviderEntry(data, provider);
@@ -481,15 +481,33 @@ export const trackTradeOutcome = (
     // Update timestamp
     modelData.lastUpdated = new Date().toISOString();
 
-    // Calculate recent trend (based on last 10 trades)
-    // This is simplified - in a real implementation, you'd track individual trades
-    const recentWinRate = modelData.overallStats.winRate;
-    if (recentWinRate > 60) {
-        modelData.recentTrend = 'improving';
-    } else if (recentWinRate < 40) {
-        modelData.recentTrend = 'declining';
+    // Calculate recent trend from the rolling window (last 10 trades), NOT the
+    // all-time win rate — a model in a current slump with good history used to
+    // be reported 'improving' and handed the +5 weight bonus.
+    const recentEntries = loadRollingWindowData().entries
+        .filter(e => e.provider === provider)
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+        .slice(0, 10);
+    if (recentEntries.length >= 5) {
+        const recentWins = recentEntries.filter(e => e.isWin).length;
+        const recentWinRate = (recentWins / recentEntries.length) * 100;
+        if (recentWinRate > 60) {
+            modelData.recentTrend = 'improving';
+        } else if (recentWinRate < 40) {
+            modelData.recentTrend = 'declining';
+        } else {
+            modelData.recentTrend = 'stable';
+        }
     } else {
-        modelData.recentTrend = 'stable';
+        // Not enough recent data — fall back to all-time as a rough baseline.
+        const recentWinRate = modelData.overallStats.winRate;
+        if (recentWinRate > 60) {
+            modelData.recentTrend = 'improving';
+        } else if (recentWinRate < 40) {
+            modelData.recentTrend = 'declining';
+        } else {
+            modelData.recentTrend = 'stable';
+        }
     }
 
     data[provider] = modelData;
@@ -499,7 +517,11 @@ export const trackTradeOutcome = (
 
     // NEW: Record Reinforcement Learning Signal (Item 1.1)
     ReinforcementSignalService.recordSignal(
-        `trade_${Date.now()}`, // Temporary trade ID generation if not passed
+        // Use the REAL trade id when available — the fabricated Date.now() id
+        // never matched the dedupe in ReinforcementSignalService (keyed by
+        // tradeId+provider), so re-logging the same trade emitted duplicate
+        // RL signals.
+        trade?.id || `trade_${Date.now()}`, // Fallback id generation if not passed
         provider,
         isWin ? 'WIN' : 'LOSS',
         {

@@ -20,11 +20,15 @@ const MistakeWarningBanner: React.FC<MistakeWarningBannerProps> = ({
 }) => {
     const [isVisible, setIsVisible] = useState(true);
 
-    // Memoize weakness analysis — avoids recalculating on every parent render
+    // Memoize weakness analysis — avoids recalculating on every parent render.
+    // Gated on isVisible instead of an early return above the hooks: a
+    // conditional early return before useMemo would make dismissal re-render
+    // with fewer hooks than before — a hooks-order violation that unmounts
+    // the whole tree.
     const weaknesses = useMemo<TradingWeaknesses | null>(() => {
-        if (!tradeLog || tradeLog.length === 0) return null;
+        if (!isVisible || !tradeLog || tradeLog.length === 0) return null;
         return getTradingWeaknesses(tradeLog);
-    }, [tradeLog]);
+    }, [isVisible, tradeLog]);
 
     // Memoize derived values
     const matchingSetup = useMemo(() => {
@@ -41,6 +45,9 @@ const MistakeWarningBanner: React.FC<MistakeWarningBannerProps> = ({
             .slice(0, 2);
     }, [weaknesses]);
 
+    // Dismissed → nothing to compute or show.
+    if (!isVisible) return null;
+
     // No data or no warnings
     if (!weaknesses || (weaknesses.mistakes.length === 0 && weaknesses.worstPerformingSetups.length === 0)) {
         return null;
@@ -55,8 +62,6 @@ const MistakeWarningBanner: React.FC<MistakeWarningBannerProps> = ({
         setIsVisible(false);
         onDismiss?.();
     };
-
-    if (!isVisible) return null;
 
     return (
         <div className="status-surface relative overflow-hidden rounded-xl bg-zinc-900 border border-amber-500/30 p-4 mb-4 shadow-lg animate-fade-in">
@@ -108,7 +113,7 @@ const MistakeWarningBanner: React.FC<MistakeWarningBannerProps> = ({
                             className={`flex items-center gap-2 text-xs ${mistake.severity === 'high' ? 'text-rose-400' : 'text-amber-400'
                                 }`}
                         >
-                            <span>{mistake.severity === 'high' ? '' : ''}</span>
+                            
                             <span>{mistake.description}</span>
                             <span className="text-zinc-600">({mistake.occurrences}x)</span>
                         </div>

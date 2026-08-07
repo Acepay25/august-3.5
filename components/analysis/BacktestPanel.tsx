@@ -110,7 +110,12 @@ const BacktestPanel: React.FC<BacktestPanelProps> = ({
             setBacktestResult(result);
         } catch (error) {
             console.error('[AnalysisResult] Backtest failed:', error);
-            setBacktestError('Backtest failed - check console for details');
+            const message = error instanceof Error ? error.message : '';
+            setBacktestError(
+                message && !message.includes('check console')
+                    ? `Backtest failed: ${message}`
+                    : 'Backtest failed. This usually means price history for this symbol is unavailable — check the symbol and try again.'
+            );
         } finally {
             setIsBacktesting(false);
         }
@@ -321,7 +326,18 @@ const BacktestPanel: React.FC<BacktestPanelProps> = ({
                         </div>
                     )}
 
-                    {backtestError && <div className="mt-1 text-rose-400">{backtestError}</div>}
+                    {backtestError && (
+                        <div className="mt-1 text-rose-400 text-xs">
+                            {backtestError}
+                            <button
+                                onClick={handleBacktest}
+                                disabled={isBacktesting}
+                                className="ml-2 px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[10px] font-bold uppercase tracking-wider transition-colors disabled:opacity-50"
+                            >
+                                Retry
+                            </button>
+                        </div>
+                    )}
                 </div>
             )}
 

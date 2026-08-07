@@ -31,8 +31,10 @@ const DebateSummary: React.FC<DebateSummaryProps> = ({ debateTurns, analysis }) 
         const analystTurns = debateTurns.filter(t => t.speaker !== 'Moderator' && t.round === 1);
         const directions = analystTurns.map(t => {
             const upper = t.text.toUpperCase();
-            if (upper.includes('LONG') || upper.includes('BULLISH')) return 'Long';
-            if (upper.includes('SHORT') || upper.includes('BEARISH')) return 'Short';
+            // Word-boundary matching so "PROLONGED" isn't a LONG and
+            // "SHORT-TERM" isn't a SHORT — only actual position words count.
+            if (/\b(?:LONG|BULLISH)\b/.test(upper)) return 'Long';
+            if (/\b(?:SHORT|BEARISH)\b/.test(upper)) return 'Short';
             return 'Neutral';
         });
         const uniqueDirections = [...new Set(directions)];
@@ -71,7 +73,7 @@ const DebateSummary: React.FC<DebateSummaryProps> = ({ debateTurns, analysis }) 
             : 'text-rose-400';
 
     return (
-        <div className="mb-3 rounded-xl border border-white/5 bg-zinc-900/80 overflow-hidden">
+        <div className="status-surface mb-3 rounded-xl border border-white/5 bg-zinc-900/80 overflow-hidden">
             <button
                 type="button"
                 onClick={() => setIsExpanded(p => !p)}

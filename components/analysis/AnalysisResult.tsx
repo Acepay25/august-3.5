@@ -16,6 +16,31 @@ import BacktestPanel from './BacktestPanel';
 import PriceAlertToggle from './PriceAlertToggle';
 import ShareMenu from './ShareMenu';
 
+// ─── Shared countdown ticker ────────────────────────────────────────────────
+// Every PENDING analysis card used to run its own setInterval(60s) + re-render
+// its heavy body; with N pending trades that's N redundant re-renders per
+// minute. One module-level interval fans out to subscribed cards and stops
+// when the last card unsubscribes.
+const countdownListeners = new Set<(now: number) => void>();
+let countdownInterval: ReturnType<typeof setInterval> | null = null;
+
+const subscribeCountdownTick = (listener: (now: number) => void): (() => void) => {
+    countdownListeners.add(listener);
+    if (!countdownInterval) {
+        countdownInterval = setInterval(() => {
+            const t = Date.now();
+            countdownListeners.forEach(l => l(t));
+        }, 60000);
+    }
+    return () => {
+        countdownListeners.delete(listener);
+        if (countdownListeners.size === 0 && countdownInterval) {
+            clearInterval(countdownInterval);
+            countdownInterval = null;
+        }
+    };
+};
+
 
 interface AnalysisResultProps {
     analysis: TradeAnalysis;
@@ -28,6 +53,9 @@ interface AnalysisResultProps {
     onSaveAnalysis: (messageId: string) => void;
     onUpdateTrade?: (messageId: string) => void;
     onSimulate?: (messageId: string) => void; // Scenario Simulator
+    /** F4: re-run the debate for this card with the same setup (also the
+     *  retry path for failed debates / dropped analysts). */
+    onReRunAnalysis?: (messageId: string) => void;
     isSaved: boolean;
     outcome?: TradeOutcome;
     isLogging?: boolean;
@@ -59,6 +87,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
     onSaveAnalysis,
     onUpdateTrade,
     onSimulate,
+    onReRunAnalysis,
     isSaved,
     outcome,
     isLogging,
@@ -234,8 +263,9 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
 
     useEffect(() => {
         if (!showValidityTimer) return;
-        const interval = setInterval(() => setNow(Date.now()), 60000); // Update every minute
-        return () => clearInterval(interval);
+        // Shared ticker (module-level, fan-out) — see subscribeCountdownTick.
+        // N pending cards no longer run N setInterval(60s) re-renders.
+        return subscribeCountdownTick(setNow);
     }, [showValidityTimer]);
 
     // Additional validity UI values (reusing calculated expiry values)
@@ -483,7 +513,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                                     ${tradingStyle === 'scalp'
                                         ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
                                         : 'bg-violet-500/10 text-violet-400 border-violet-500/30'}`}>
-                                    <span>{tradingStyle === 'scalp' ? '' : ''}</span>
+                                    
                                     <span>{tradingStyle.toUpperCase()}</span>
                                     {tradeTypeManualOverride && (
                                         <span className="absolute -top-1 -right-1 w-2 h-2 bg-cyan-500 rounded-full animate-pulse shadow-[0_0_5px_rgba(176, 176, 182,0.8)]" title="Manually overridden by user"></span>
@@ -743,7 +773,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                                         pattern.type === 'Bearish' ? 'bg-rose-500/10 border-rose-500/20 text-rose-300' :
                                             'bg-zinc-500/10 border-zinc-500/20 text-zinc-300'}`}>
                                     <div className="font-bold flex items-center gap-1.5">
-                                        <span>{pattern.type === 'Bullish' ? '' : pattern.type === 'Bearish' ? '' : ''}</span>
+                                        
                                         {pattern.name}
                                     </div>
                                     <div className="text-[10px] opacity-70 mt-0.5">
@@ -990,7 +1020,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                                 : 'bg-rose-950/30 border-rose-500/20'
                                 }`}>
                                 <div className="flex items-center gap-2">
-                                    <span className="text-base">{analysis.gateResult.suggestedDirection === 'Long' ? '' : ''}</span>
+                                    
                                     <span className={`text-xs font-bold ${analysis.gateResult.suggestedDirection === 'Long' ? 'text-emerald-400' : 'text-rose-400'
                                         }`}>
                                         Pattern Memory suggests {analysis.gateResult.suggestedDirection}
@@ -1400,6 +1430,15 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                                 title="Scenario Simulator"
                             >
                                  <ActivityIcon className="w-3.5 h-3.5" /><span className="hidden sm:inline">Simulate</span><span className="sm:hidden">Sim</span>
+                            </button>
+                        )}
+                        {onReRunAnalysis && (
+                            <button
+                                onClick={() => onReRunAnalysis(messageId)}
+                                className="flex-1 min-w-[60px] px-3 py-2 rounded-lg border border-white/10 bg-zinc-700/80 text-zinc-300 transition-colors hover:border-cyan-400/30 hover:bg-cyan-500/10 hover:text-cyan-200 text-xs font-medium flex items-center justify-center gap-1.5"
+                                title="Re-run the debate with the same setup"
+                            >
+                                <ActivityIcon className="w-3.5 h-3.5 rotate-180" /><span className="hidden sm:inline">Re-run</span><span className="sm:hidden">Run</span>
                             </button>
                         )}
                         <button onClick={() => onSaveAnalysis(messageId)} disabled={isSaved} className={`px-3 py-2 rounded-lg border transition-colors flex items-center justify-center gap-1.5 ${isSaved ? 'border-cyan-400/30 bg-cyan-500/15 text-cyan-200' : 'border-white/10 bg-zinc-700/80 text-zinc-300 hover:border-cyan-400/30 hover:bg-cyan-500/10 hover:text-cyan-200'}`} title="Save Analysis">

@@ -407,6 +407,9 @@ export const calculateRuinRisk = (
     // Risk per trade as fraction of account
     const riskPerTrade = (positionSize / accountBalance) * (avgLossPercent / 100) * leverage;
 
+    // Win/loss ratio for the fixed-fractional sizing model below
+    const winLossRatio = avgLossPercent > 0 ? avgWinPercent / avgLossPercent : 0;
+
     // Simulate 1000 sequences of 100 trades
     const sequenceCount = 1000;
     const tradesPerSequence = 100;
@@ -424,10 +427,15 @@ export const calculateRuinRisk = (
         for (let trade = 0; trade < tradesPerSequence; trade++) {
             const isWin = Math.random() < winRate;
 
+            // Fixed-fractional model: risk riskPerTrade of the CURRENT equity
+            // per trade (win → equity × (1 + b·f), loss → equity × (1 − f)).
+            // This makes the drawdown probabilities account-aware — the old
+            // loop applied the absolute positionSize and never used the
+            // computed riskPerTrade, so the account balance didn't matter.
             if (isWin) {
-                equity += (positionSize * (avgWinPercent / 100) * leverage);
+                equity *= 1 + winLossRatio * riskPerTrade;
             } else {
-                equity -= (positionSize * (avgLossPercent / 100) * leverage);
+                equity *= 1 - riskPerTrade;
             }
 
             maxEquity = Math.max(maxEquity, equity);

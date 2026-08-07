@@ -197,6 +197,13 @@ const calculateSimilarity = (
  * Calculate PnL percent from trade
  */
 const calculatePnlPercent = (trade: LoggedTrade): number => {
+    // Prefer the autopilot-verified leveraged percent when available — it was
+    // computed from the actual resolution price (TP/SL hit), so level-based
+    // re-estimation below would skew the backtest stats.
+    if (typeof trade.pnlPercent === 'number' && isFinite(trade.pnlPercent)) {
+        return trade.pnlPercent;
+    }
+
     if (trade.pnlAmount && trade.investmentAmount && trade.investmentAmount > 0) {
         return (trade.pnlAmount / trade.investmentAmount) * 100;
     }

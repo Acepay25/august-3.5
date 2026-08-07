@@ -9,6 +9,7 @@ interface PerformanceReviewContentProps {
     individualSummaries: TradeSummary[];
     isLoading: boolean;
     isInsightGenerating?: boolean; // Loading state for auto-insight generation
+    insightProgress?: { done: number; total: number } | null; // (i/n) for manual insight loops
     newlyAddedInsightIds?: Set<string>; // IDs of newly added insights for animation
     summarizationProvider: AIProvider;
     summarizationModel: string;
@@ -34,6 +35,7 @@ const PerformanceReviewContent: React.FC<PerformanceReviewContentProps> = ({
     individualSummaries,
     isLoading,
     isInsightGenerating = false,
+    insightProgress = null,
     newlyAddedInsightIds = new Set(),
     summarizationProvider,
     summarizationModel,
@@ -322,10 +324,14 @@ const PerformanceReviewContent: React.FC<PerformanceReviewContentProps> = ({
 
                     <div className={`collapsible-content ${isRecentInsightsVisible ? 'expanded' : ''}`}>
                         {/* Loading indicator for insight generation */}
-                        {isInsightGenerating && (
+                        {(isInsightGenerating || insightProgress) && (
                             <div className="flex items-center gap-2 px-3 py-2 mb-3 bg-cyan-500/10 border border-cyan-500/20 rounded-lg animate-pulse">
                                 <LoadingIcon className="w-4 h-4 text-cyan-400" />
-                                <span className="text-xs text-cyan-300 font-medium">Adding trade to Recent Insights...</span>
+                                <span className="text-xs text-cyan-300 font-medium">
+                                    {insightProgress
+                                        ? `Generating insights… ${insightProgress.done}/${insightProgress.total}`
+                                        : 'Adding trade to Recent Insights...'}
+                                </span>
                             </div>
                         )}
                         <div className="space-y-2 sm:space-y-3">

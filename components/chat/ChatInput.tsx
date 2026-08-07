@@ -172,9 +172,15 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
         const separator = value.indexOf('::');
         const assignedProvider = separator >= 0 ? value.slice(0, separator) : value;
         const assignedModel = separator >= 0 ? value.slice(separator + 2) : undefined;
+        const provider = providers.find(p => p.id === assignedProvider);
+        // Mirror AnalystLensSettings semantics: a model that doesn't exist on
+        // the chosen provider must not survive the assignment — keeping it
+        // rendered a blank dropdown in the lens editor while the pipeline
+        // still ran the stale model.
+        const modelIsValid = !!assignedModel && !!provider && provider.models.includes(assignedModel);
         const assignments = [...(lensConfig.assignments || [])];
         const index = assignments.findIndex(item => item.role === role);
-        const assignment = { assignedProvider: assignedProvider || null, ...(assignedModel ? { assignedModel } : {}) };
+        const assignment = { assignedProvider: assignedProvider || null, ...(modelIsValid ? { assignedModel } : {}) };
         if (index >= 0) {
             assignments[index] = { ...assignments[index], ...assignment };
         }
@@ -270,11 +276,14 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                     {/* Main Input Row */}
                     <div className="flex items-end gap-2">
                         <textarea
+                            id="chat-composer"
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing ? (e.preventDefault(), handleSendMessage()) : null}
+                            // Enter sends (Shift+Enter = newline); Ctrl/Cmd+Enter
+                            // also sends as an alternative.
+                            onKeyDown={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && (!e.shiftKey || e.ctrlKey || e.metaKey) ? (e.preventDefault(), handleSendMessage()) : null}
                             placeholder={images.length > 0 ? "Analyze charts..." : "Write a message..."}
-                            className="flex-1 min-w-0 bg-transparent px-2 py-2 text-base text-white placeholder-zinc-500 focus:outline-none focus-visible:outline-none focus-visible:ring-0 transition-all min-h-[44px] lg:min-h-[48px] max-h-32 resize-none leading-relaxed"
+                            className="flex-1 min-w-0 bg-transparent px-2 py-2 text-base text-white placeholder-zinc-500 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/40 focus-visible:rounded-md transition-all min-h-[44px] lg:min-h-[48px] max-h-32 resize-none leading-relaxed"
                             rows={1}
                             // Always typeable — sending (not typing) is what
                             // requires a ready provider.
@@ -441,6 +450,9 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                                 <option value="">Select provider/model</option>
                                                 {lensModelOptionsForRole('macro_volatility').map(option => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}{option.disabled ? ' (assigned)' : ''}</option>)}
                                             </select>
+                                            {lensAssignmentValue('macro_volatility') === '' && (
+                                                <div className="mt-0.5 text-[9px] italic text-zinc-600">Unassigned — required to start the ensemble.</div>
+                                            )}
                                         </div>
 
                                         {/* Technical Analyst */}
@@ -457,6 +469,9 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                                 <option value="">Select provider/model</option>
                                                 {lensModelOptionsForRole('technical_analyst').map(option => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}{option.disabled ? ' (assigned)' : ''}</option>)}
                                             </select>
+                                            {lensAssignmentValue('technical_analyst') === '' && (
+                                                <div className="mt-0.5 text-[9px] italic text-zinc-600">Unassigned — required to start the ensemble.</div>
+                                            )}
                                         </div>
 
                                         {/* Risk Manager */}
@@ -473,6 +488,23 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                                 <option value="">Select provider/model</option>
                                                 {lensModelOptionsForRole('risk_execution').map(option => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}{option.disabled ? ' (assigned)' : ''}</option>)}
                                             </select>
+                                            {lensAssignmentValue('risk_execution') === '' && (
+                                                <div className="mt-0.5 text-[9px] italic text-zinc-600">Unassigned — required to start the ensemble.</div>
+                                            )}
+                                        </div>
+                                        <div className="border-t border-white/10 px-3 py-2">
+                                            <div className="text-[9px] leading-relaxed text-zinc-600">
+                                                {(() => {
+                                                    const missing = [
+                                                        lensAssignmentValue('macro_volatility') ? null : 'Macro',
+                                                        lensAssignmentValue('technical_analyst') ? null : 'Technical',
+                                                        lensAssignmentValue('risk_execution') ? null : 'Risk',
+                                                    ].filter(Boolean) as string[];
+                                                    return missing.length > 0
+                                                        ? `Missing: ${missing.join(', ')} — the ensemble can't start until every role has a model.`
+                                                        : 'All roles assigned — ready to start the ensemble.';
+                                                })()}
+                                            </div>
                                         </div>
                                             </>
                                         ) : (

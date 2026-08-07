@@ -208,7 +208,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
     }
 
     return (
-        <div role="dialog" aria-modal="true" aria-label="Scenario simulator" className="fixed inset-0 z-50 flex items-center justify-center bg-black/90">
+            <div role="dialog" aria-modal="true" aria-label="Scenario simulator" className="status-surface fixed inset-0 z-50 flex items-center justify-center bg-black/90">
             {/* Modal Container */}
             <div className="relative w-full max-w-5xl h-[90vh] mx-4 bg-zinc-950 rounded-2xl border border-purple-500/30 shadow-2xl shadow-purple-500/10 overflow-hidden flex flex-col">
 

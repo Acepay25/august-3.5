@@ -83,8 +83,12 @@ export const cleanPriceField = (val: unknown): string => {
   if (!val) return '';
   let str = String(val);
 
-  // Remove content inside parentheses (e.g. " (options strategy)")
+  // Remove content inside parentheses (e.g. " (options strategy)").
   str = str.replace(/\([^)]*\)/g, '');
+
+  // Strip square brackets but KEEP the price inside ("[94500]" → "94500",
+  // "94500 [call]" → "94500 call" — the jargon pass then removes "call").
+  str = str.replace(/[\[\]]/g, '');
 
   // Remove specific jargon words often hallucinated by AI
   const jargon = ['straddle', 'strangle', 'spread', 'condor', 'iron', 'call', 'put', 'option', 'breakeven', 'credit', 'debit', 'halves', 'profit'];
@@ -93,7 +97,9 @@ export const cleanPriceField = (val: unknown): string => {
 
   // Clean up extra whitespace and punctuation left behind
   str = str.replace(/\s+/g, ' ').trim();
-  str = str.replace(/^[;,\-\s]+|[;,\-\s]+$/g, ''); // Trim leading/trailing punctuation
+  // Trim leading/trailing punctuation — but preserve a leading minus so
+  // negative percentages ("-0.5%") and negative prices keep their sign.
+  str = str.replace(/^[;,\[\s]+|[;,\[\]\-\s]+$/g, '');
 
   return sanitizeJSONString(str);
 };

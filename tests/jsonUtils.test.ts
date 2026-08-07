@@ -58,5 +58,18 @@ describe('jsonUtils', () => {
       const result = extractLastJson(input);
       expect(result.ok).toBe(true);
     });
+
+    it('preserves URLs with // inside string values', () => {
+      // The old comment-strip regex `\/\/.*` corrupted "https://x" → "https:".
+      const input = '{"coinName": "BTC", "source": "https://binance.com/api", "ok": true}';
+      const result = extractAndParseJson(input);
+      expect(result.source).toBe('https://binance.com/api');
+    });
+
+    it('still strips real line comments outside strings', () => {
+      const input = '{\n  // this is a comment\n  "coinName": "BTC"\n}';
+      const result = extractAndParseJson(input);
+      expect(result.coinName).toBe('BTC');
+    });
   });
 });

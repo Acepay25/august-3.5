@@ -211,6 +211,23 @@ export const exportPreferencesData = async (): Promise<Record<string, any>> => {
         }
     }
 
+    // Per-user scoped keys (learning_rules_v2_<user>, attributed_insights_kb_<user>,
+    // global_learning_state_<user>, rl_signals_data) are NOT in PREF_KEYS —
+    // sweep every remaining localStorage key so backups/exports cover them
+    // too (F6: previously they were silently lost on WebView data clears).
+    try {
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (!key || keysToBackup.includes(key)) continue;
+            const value = await getPreferenceObject(key);
+            if (value !== null) {
+                backup[key] = value;
+            }
+        }
+    } catch (e) {
+        console.warn('[ExportService] Per-user key sweep failed:', e);
+    }
+
     return backup;
 };
 

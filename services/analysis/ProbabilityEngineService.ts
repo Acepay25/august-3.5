@@ -11,10 +11,8 @@ interface FeatureVector {
     rsi: number;
     adx: number;
     macdHist: number;
-    btcDominance: number;
     fundingRate: number;
-    volumeZScore?: number;
-    regime: string; // "trending", "ranging", "volatile"
+    regime: string; // MarketRegime: 'strong_trend_up' | 'ranging' | 'volatile_chop' | ...
 }
 
 interface SimilarityMatch {
@@ -92,24 +90,32 @@ function extractFeatures(snapshot: any): FeatureVector {
     if (!indicators) return getDefaultFeatures();
 
     return {
-        rsi: indicators.rsi?.value || 50,
-        adx: indicators.adx?.value || 25,
-        macdHist: indicators.macd?.histogram || 0,
-        btcDominance: snapshot.marketData?.btcDominance || 0,
+        // Real indicator shapes (TechnicalAnalysisService): RSI lives at
+        // indicators.rsi.rsi14, MACD at indicators.macd.histogram, and ADX is
+        // NOT part of TechnicalIndicators — it lives on RegimeAnalysis
+        // (snapshot.regime.adx). The old reads always fell back to the
+        // defaults, so similarity matching degenerated to a pure confluence
+        // prior. BTC dominance is not part of the snapshot at all (it lives
+        // only in CorrelationRiskService), so it is not a feature here.
+        rsi: indicators.rsi?.rsi14 ?? 50,
+        adx: snapshot.regime?.adx ?? 25,
+        macdHist: indicators.macd?.histogram ?? 0,
         fundingRate: snapshot.fundingRate || 0,
-        regime: snapshot.regime?.primaryRegime || 'ranging'
+        // RegimeAnalysis: { regime: MarketRegime, trendDirection, ... } —
+        // the string lives at .regime (primaryRegime kept as a legacy fallback).
+        regime: snapshot.regime?.regime || snapshot.regime?.primaryRegime || 'ranging'
     };
 }
 
 function getDefaultFeatures(): FeatureVector {
-    return { rsi: 50, adx: 25, macdHist: 0, btcDominance: 50, fundingRate: 0, regime: 'ranging' };
+    return { rsi: 50, adx: 25, macdHist: 0, fundingRate: 0, regime: 'ranging' };
 }
 
 /**
  * Finds top K similar trades based on Euclidean distance of features.
  */
 function findSimilarTrades(target: FeatureVector, history: LoggedTrade[], direction: string): SimilarityMatch[] {
-    const validHistory = history.filter(t => t.outcome !== TradeOutcome.PENDING && t.analysis.direction === direction && t.marketSnapshot);
+    const validHistory = history.filter(t => t.analysis && t.outcome !== TradeOutcome.PENDING && t.analysis.direction === direction && t.marketSnapshot);
 
     // If no snapshot history, fallback to simple filtering? 
     // For now, we only match trades that HAVE snapshots.
@@ -131,13 +137,11 @@ function euclideanDistance(a: FeatureVector, b: FeatureVector): number {
     const wRSI = 1 / 20;
     const wADX = 1 / 20;
     const wMACD = 1 / 50; // Hist can be large
-    const wDom = 1 / 5;
 
     return Math.sqrt(
         Math.pow((a.rsi - b.rsi) * wRSI, 2) +
         Math.pow((a.adx - b.adx) * wADX, 2) +
-        Math.pow((a.macdHist - b.macdHist) * wMACD, 2) +
-        Math.pow((a.btcDominance - b.btcDominance) * wDom, 2)
+        Math.pow((a.macdHist - b.macdHist) * wMACD, 2)
     );
 }
 
@@ -169,15 +173,33 @@ function calculateLikelihoodMultipliers(snapshot: any, features: FeatureVector, 
     else if (confluence < 40) multipliers.push({ name: 'Low Confluence', val: 0.85 });
 
     // 2. Regime Alignment
-    // If direction is Long and Regime is Bullish Trend
-    const isRegimeAligned = (direction === 'Long' && snapshot.regime?.primaryRegime.includes('Bull')) ||
-        (direction === 'Short' && snapshot.regime?.primaryRegime.includes('Bear'));
+    // snapshot.regime is a RegimeAnalysis { regime: MarketRegime,
+    // trendDirection: 'bullish'|'bearish'|'neutral', ... }. The old read of
+    // `primaryRegime` was always undefined, so the 0.90 'Regime Conflict'
+    // multiplier fired on nearly every trade and 'Regime Aligned' was
+    // unreachable. Chop/compression regimes are NOT a conflict either —
+    // only an opposing trend direction is.
+    const regimeAnalysis = snapshot.regime;
+    const regimeLabel: string = regimeAnalysis?.regime ?? regimeAnalysis?.primaryRegime ?? 'ranging';
+    const trendDirection: string | undefined = regimeAnalysis?.trendDirection;
+    const regimeIsTrendUp = regimeLabel.includes('trend_up');
+    const regimeIsTrendDown = regimeLabel.includes('trend_down');
 
-    if (isRegimeAligned) multipliers.push({ name: 'Regime Aligned', val: 1.10 });
-    else if (snapshot.regime?.primaryRegime !== 'ranging') multipliers.push({ name: 'Regime Conflict', val: 0.90 });
+    if (direction === 'Long' && (trendDirection === 'bullish' || regimeIsTrendUp)) {
+        multipliers.push({ name: 'Regime Aligned', val: 1.10 });
+    } else if (direction === 'Short' && (trendDirection === 'bearish' || regimeIsTrendDown)) {
+        multipliers.push({ name: 'Regime Aligned', val: 1.10 });
+    } else if (
+        (direction === 'Long' && (trendDirection === 'bearish' || regimeIsTrendDown)) ||
+        (direction === 'Short' && (trendDirection === 'bullish' || regimeIsTrendUp))
+    ) {
+        multipliers.push({ name: 'Regime Conflict', val: 0.90 });
+    }
+    // ranging / volatile_chop / compression / neutral trend → no regime multiplier
 
-    // 3. VolumeDelta (CVD)
-    const cvd = snapshot.advancedVolume?.delta?.['1h'] || 0;
+    // 3. Volume Delta (CVD — AdvancedVolumeAnalysis.cvd is a single number,
+    // not a per-timeframe delta map)
+    const cvd = snapshot.advancedVolume?.cvd || 0;
     const cvdAligned = (direction === 'Long' && cvd > 0) || (direction === 'Short' && cvd < 0);
     if (cvdAligned) multipliers.push({ name: 'Vol Delta Support', val: 1.05 });
 

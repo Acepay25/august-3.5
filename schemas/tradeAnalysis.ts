@@ -327,19 +327,41 @@ export const CoercedTradeAnalysisSchema = z.object({
   ),
   strategy: coercedString(),
   activeStrategies: coercedStringArray(),
-  entryPoints: z.any().optional().transform((v) =>
-    Array.isArray(v)
-      ? v.map((ep) => CoercedEntryPointSchema.parse(ep)).filter((ep) => ep.price !== '')
-      : []
-  ),
-  stopLoss: z.any().optional().transform((v) => cleanPriceField(v)),
+  entryPoints: z.any().optional().transform((v) => {
+    if (Array.isArray(v)) {
+      return v.map((ep) => CoercedEntryPointSchema.parse(ep)).filter((ep) => ep.price !== '');
+    }
+    // A bare price ("95000") or object ({ price: 95000 }) — wrap into a
+    // single entry instead of silently dropping the value to [].
+    if (v !== undefined && v !== null && v !== '') {
+      return [CoercedEntryPointSchema.parse({ price: v })].filter((ep) => ep.price !== '');
+    }
+    return [];
+  }),
+  stopLoss: z.any().optional().transform((v): string => {
+    // Objects ("{level: 94500}") used to become the literal string
+    // "[object Object]" — extract the level/price field before cleaning.
+    if (v && typeof v === 'object') {
+      const obj = v as Record<string, unknown>;
+      const extracted = obj.level ?? obj.price ?? obj.value ?? obj.text;
+      if (typeof extracted === 'number' || typeof extracted === 'string') {
+        return cleanPriceField(extracted);
+      }
+    }
+    return cleanPriceField(v);
+  }),
   stopLossPercentage: coercedString(),
   originalStopLossPercentage: coercedString(),
-  takeProfit: z.any().optional().transform((v) =>
-    Array.isArray(v)
-      ? v.map((tp) => CoercedTakeProfitSchema.parse(tp)).filter((tp) => tp.price !== '')
-      : []
-  ),
+  takeProfit: z.any().optional().transform((v) => {
+    if (Array.isArray(v)) {
+      return v.map((tp) => CoercedTakeProfitSchema.parse(tp)).filter((tp) => tp.price !== '');
+    }
+    // A bare price ("96000") — wrap into a single TP.
+    if (v !== undefined && v !== null && v !== '') {
+      return [CoercedTakeProfitSchema.parse({ price: v })].filter((tp) => tp.price !== '');
+    }
+    return [];
+  }),
   marketConditions: CoercedMarketConditionsSchema,
   historicalCorrelation: coercedString(),
   createdAt: z.any().optional().transform((v) => (typeof v === 'string' && v ? v : new Date().toISOString())),
@@ -520,17 +542,22 @@ export const applySemanticFixups = (raw: CoercedTradeAnalysis): TradeAnalysis =>
 
   // Treat 0 or negative as missing/invalid to avoid the "always 15%" bug.
   if (!isNaN(probValue) && probValue > 0) {
-    if (probValue <= 1) probValue = probValue * 100; // Normalize decimals (0.85 → 85)
+    // Normalize decimals (0.85 → 85). STRICT less-than: a bare "1" means 1%
+    // on the 0-100 scale (100% would be written 100) — the old `<= 1` rule
+    // turned every "probability: 1" into 100%.
+    if (probValue < 1) probValue = probValue * 100;
     if (probValue > 100) probValue = 100;
     analysis.probability = Math.round(probValue);
 
-    if (analysis.probability >= 80) analysis.confidence = 'High';
+    // An EXPLICIT 'Avoid' from the model stays an Avoid — the old code
+    // force-fitted any number under 40 into Avoid/15, discarding genuine
+    // low-confidence signals (e.g. a real 35% estimate).
+    if (raw.confidence === 'Avoid') {
+      analysis.confidence = 'Avoid';
+    } else if (analysis.probability >= 80) analysis.confidence = 'High';
     else if (analysis.probability >= 60) analysis.confidence = 'Medium';
     else if (analysis.probability >= 40) analysis.confidence = 'Low';
-    else {
-      analysis.confidence = 'Avoid';
-      analysis.probability = 15; // Force 15 in the Avoid bucket
-    }
+    else analysis.confidence = 'Low'; // genuine 1-39% → Low, not Avoid
   } else {
     // Fallback: derive probability from the confidence string.
     const conf = (['High', 'Medium', 'Low', 'Avoid'].includes(raw.confidence)

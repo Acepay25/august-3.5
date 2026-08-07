@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { Conversation, MessageRole } from '../../types';
 import {
     ActivityIcon,
@@ -66,12 +66,24 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
     onNavigate,
     collapsed = false,
 }) => {
-    const recentConversations = conversations.slice(0, 8);
-
     const getPreview = (conv: Conversation): string => {
         const firstUserMessage = (conv.messages || []).find(m => m.role === MessageRole.USER && m.text.trim());
         return firstUserMessage ? firstUserMessage.text : 'New Conversation';
     };
+
+    // F5: conversation search — typing a query searches the FULL history
+    // (the recent list only shows the first 8).
+    const [searchQuery, setSearchQuery] = useState('');
+    const previews = useMemo(() => {
+        const map = new Map<string, string>();
+        for (const conv of conversations) map.set(conv.id, getPreview(conv));
+        return map;
+    }, [conversations]);
+    const recentConversations = useMemo(() => {
+        const q = searchQuery.trim().toLowerCase();
+        if (!q) return conversations.slice(0, 8);
+        return conversations.filter(conv => (previews.get(conv.id) ?? '').toLowerCase().includes(q));
+    }, [conversations, searchQuery, previews]);
 
     const act = (fn: () => void) => () => {
         fn();
@@ -113,9 +125,21 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
             {!collapsed && <div className="px-5 pb-1 pt-5">
                 <span className="text-[10px] font-medium text-zinc-400 uppercase tracking-widest">Recent</span>
             </div>}
+            {!collapsed && (
+                <div className="px-3 pb-2">
+                    <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="Search conversations…"
+                        aria-label="Search conversations"
+                        className="w-full rounded-lg border border-white/10 bg-zinc-900/60 px-2.5 py-1.5 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-cyan-400/40"
+                    />
+                </div>
+            )}
             <div className="flex-1 min-h-0 overflow-y-auto px-2 pb-2 space-y-0.5">
                 {recentConversations.length === 0 ? (
-                    !collapsed && <div className="px-3 py-2 text-xs text-zinc-400">No conversations yet</div>
+                    !collapsed && <div className="px-3 py-2 text-xs text-zinc-400">{searchQuery.trim() ? 'No matching conversations' : 'No conversations yet'}</div>
                 ) : (
                     recentConversations.map(conv => (
                         <div

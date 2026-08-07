@@ -14,21 +14,12 @@ interface LiveStreamViewProps {
   /** Model-level participants — one panel per selected ensemble model. */
   providers: Array<Pick<ProviderConfig, 'id' | 'name' | 'isEnabled' | 'apiKey'> & { modelName?: string }>;
   onAllTypingComplete: () => void;
-  /** 'analysis' for live analysis, 'postmortem' for post-trade forensics */
-  variant: 'analysis' | 'postmortem';
-  /** Debate mode of the current run — shown as a badge (analysis variant only). */
-  mode?: 'lenses' | 'normal';
+  /** 'postmortem' — the only live view still in use (the analysis variant was
+   *  dead; the analysis phase streams in-chat instead). */
+  variant: 'postmortem';
 }
 
 const VARIANT_CONFIG = {
-  analysis: {
-    title: 'Live Neural Analysis',
-    subtitle: 'Multiple LLMs are analyzing market structures in real-time.',
-    dotColor: 'bg-cyan-500',
-    dotShadow: 'shadow-[0_0_10px_#b0b0b6]',
-    loadingIdle: 'Initializing Neural Net...',
-    loadingStreaming: 'Decoding Output...',
-  },
   postmortem: {
     title: 'Live Post-Mortem Forensics',
     subtitle: 'Ensemble models are dissecting trade performance and verifying outcomes.',
@@ -142,7 +133,7 @@ const AnalystPanel: React.FC<{
 
 const LiveStreamView: React.FC<LiveStreamViewProps> = ({
   isVisible, onClose, thoughts, outputs, reasoning = {}, providers,
-  onAllTypingComplete, variant, mode = 'normal',
+  onAllTypingComplete, variant,
 }) => {
   const [completedTyping, setCompletedTyping] = useState<Set<string>>(new Set());
   const config = VARIANT_CONFIG[variant];
@@ -202,15 +193,6 @@ const LiveStreamView: React.FC<LiveStreamViewProps> = ({
             <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-3">
               <span className={`w-3 h-3 rounded-full ${config.dotColor} animate-pulse ${config.dotShadow}`}></span>
               {config.title}
-              {variant === 'analysis' && (
-                <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-1 rounded-full border ${
-                  mode === 'lenses'
-                    ? 'bg-zinc-700/60 border-white/15 text-zinc-200'
-                    : 'bg-zinc-900/80 border-white/10 text-zinc-400'
-                }`}>
-                  {mode === 'lenses' ? 'Lenses · Role-based' : 'Normal · Same prompt'}
-                </span>
-              )}
             </h2>
             <p className="text-zinc-500 text-xs sm:text-sm mt-1 font-medium">{config.subtitle}</p>
           </div>

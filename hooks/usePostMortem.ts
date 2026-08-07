@@ -44,7 +44,6 @@ export interface UsePostMortemParams {
     setLoggedTrades: (updater: (prev: LoggedTrade[]) => LoggedTrade[]) => void;
     globalMemory: GlobalMemory | undefined;
     setGlobalMemory: (v: GlobalMemory | undefined) => void;
-    memoryModel: string;
     memoryConfig: ProviderConfig | null;
     tradeSummaries: TradeSummary[];
     setTradeSummaries: (updater: (prev: TradeSummary[]) => TradeSummary[]) => void;
@@ -76,7 +75,7 @@ export const usePostMortem = (params: UsePostMortemParams) => {
         moderatorConfig, moderatorModel,
         finalTradeSummary, loggedTrades, loggedTradesRef, setLoggedTrades,
         globalMemory, setGlobalMemory,
-        memoryModel, memoryConfig,
+        memoryConfig,
         tradeSummaries, setTradeSummaries,
         setIsPostMortemInProgress, setIsLivePostMortemVisible,
         setLoadingMessage, setIsPostMortemTypingComplete,
@@ -88,7 +87,7 @@ export const usePostMortem = (params: UsePostMortemParams) => {
     // ─── State ────────────────────────────────────────────────────────────
     const [mismatchData, setMismatchData] = useState<{ candidate: PostMortemCandidate; validation: TradeOutcomeValidation } | null>(null);
     const [typingMessageState, setTypingMessageState] = useState<{ id: string; fullText: string; field: 'postMortem' } | null>(null);
-    const [livePostMortemThoughts, setLivePostMortemThoughts] = useState<LiveThoughts>({ gemini: null, deepseek: null, zhipu: null, groq: null, groqNew: null, groqAlt2: null, openrouter: null, openai: null, grokNative: null });
+    const [livePostMortemThoughts, setLivePostMortemThoughts] = useState<LiveThoughts>({});
 
     // ─── P0-2: Cancellation guard for in-flight post-mortem work ──────────
     // When the user switches accounts, any async post-mortem analysis still
@@ -147,7 +146,9 @@ export const usePostMortem = (params: UsePostMortemParams) => {
         setLoadingMessage("Thinking...");
         startStep('validation');
         setIsLivePostMortemVisible(true);
-        setLivePostMortemThoughts({ gemini: null, deepseek: null, zhipu: null, groq: null, groqNew: null, groqAlt2: null, openrouter: null, openai: null, grokNative: null });
+        // Keyed by provider id — LiveStreamView panels use the same keys, so
+        // each analyst's report lands in its own panel as it resolves.
+        setLivePostMortemThoughts({});
         setIsPostMortemTypingComplete(false);
 
         const postMortemMessageId = `pm-${Date.now()}`;
@@ -167,10 +168,14 @@ export const usePostMortem = (params: UsePostMortemParams) => {
         setExpandedPostMortems(prev => ({ ...prev, [postMortemMessageId]: true }));
         updatePostMortemMessages(prev => [...prev, placeholderMsg]);
 
+        // Tracks whether the run finished successfully — the finally block marks
+        // still-running steps 'complete' on success but 'error' on failure
+        // (mirroring useAnalysisPipeline, which never force-completes failures).
+        let postMortemSucceeded = true;
         try {
             const history: Message[] = [...messagesRef.current];
             const enabledProviders = providerConfigs
-                .filter(config => config.isEnabled && config.apiKey)
+                .filter(config => config.isEnabled && config.apiKey && config.selectedModel)
                 .map(config => ({ config, name: config.name, model: config.selectedModel }));
 
             // Guard: no providers → nothing can run (accurate for ALL modes,
@@ -216,6 +221,11 @@ export const usePostMortem = (params: UsePostMortemParams) => {
 
                         if (priceValidation.isMismatch) {
                             console.log('[PostMortem] Outcome Mismatch Detected. Pausing for user resolution.');
+                            // Remove the empty placeholder bubble — the user's
+                            // resolution starts a fresh run (with its own
+                            // placeholder). Leaving this one behind produced a
+                            // permanently blank post-mortem bubble in the chat.
+                            updatePostMortemMessages(prev => prev.filter(m => m.id !== postMortemMessageId));
                             setMismatchData({ candidate, validation: priceValidation });
                             setShowMismatchModal(true);
                             setLoadingMessage(null);
@@ -279,13 +289,34 @@ Please investigate this discrepancy in your analysis.
                             correctedTakeProfit: candidate.feedback.correctedTakeProfit,
                         } : undefined,
                         postTradeImageSummaries: enhancedSummaries,
+                        // Wire the abort controller so account/conversation
+                        // switches actually cancel in-flight API calls instead
+                        // of only suppressing their state writes.
+                        signal: currentAbortController.signal,
                     }
                 ).then((res: string) => {
+                    if (!isRunStale(myRunId)) {
+                        // Feed the live overlay panel as each analyst report lands.
+                        setLivePostMortemThoughts(prev => ({ ...prev, [p.config.id]: res }));
+                    }
                     return { provider: p.name, result: res };
                 })
             );
 
-            const results = await Promise.all(analysisPromises);
+            // allSettled: one provider failing (quota/network) must not fail
+            // the whole post-mortem — the debate continues with whoever
+            // succeeded (mirrors the analysis pipeline's N-1 handling).
+            const settled = await Promise.allSettled(analysisPromises);
+            const results = settled
+                .filter((r): r is PromiseFulfilledResult<{ provider: string; result: string }> => r.status === 'fulfilled')
+                .map(r => r.value);
+
+            // Re-check after the await — the user may have switched during the analyst calls.
+            if (isRunStale(myRunId)) return;
+
+            if (results.length === 0) {
+                throw new Error('All AI providers failed during post-mortem analysis. Please check your provider configuration and try again.');
+            }
 
             if (results.length > 1) {
                 setLoadingMessage("Ensemble Debate in progress...");
@@ -295,12 +326,12 @@ Please investigate this discrepancy in your analysis.
                 let debateStream;
 
                 if (results.length === 2) {
-                    debateStream = ensembleService.conductTwoWayPostMortemDebate(candidate.message, candidate.outcome, results[0].result, results[1].result, results[0].provider, results[1].provider, finalTradeSummary, moderatorConfig, moderatorModel, imageUrls);
+                    debateStream = ensembleService.conductTwoWayPostMortemDebate(candidate.message, candidate.outcome, results[0].result, results[1].result, results[0].provider, results[1].provider, finalTradeSummary, moderatorConfig, moderatorModel, imageUrls, undefined, currentAbortController.signal);
                 } else {
                     const r1 = results[0];
                     const r2 = results[1];
                     const r3 = results[2] || results[0];
-                    debateStream = ensembleService.conductThreeWayPostMortemDebate(candidate.message, candidate.outcome, r1.result, r2.result, r3.result, r1.provider, r2.provider, r3.provider, finalTradeSummary, moderatorConfig, moderatorModel, imageUrls);
+                    debateStream = ensembleService.conductThreeWayPostMortemDebate(candidate.message, candidate.outcome, r1.result, r2.result, r3.result, r1.provider, r2.provider, r3.provider, finalTradeSummary, moderatorConfig, moderatorModel, imageUrls, currentAbortController.signal);
                 }
 
                 let fullDebateText = "";
@@ -456,25 +487,36 @@ Please investigate this discrepancy in your analysis.
             // freshest rows.
             const tradeToUpdate = loggedTradesRef.current.find(t => t.id === candidate.message.id);
             if (tradeToUpdate) {
-                const summary = await MemoryService.summarizeTrade({ ...tradeToUpdate, postMortem: finalPostMortemReport }, memoryModel, memoryConfig!);
-                // Re-check after the await — the user may have switched during summarizeTrade
-                if (isRunStale(myRunId)) {
-                    console.log('[PostMortem] Discarding summary — user switched during summarizeTrade');
-                    return;
-                }
-                setTradeSummaries(prev => {
-                    const newSummary = { id: tradeToUpdate.id, summaryText: summary, timestamp: new Date().toISOString() };
-                    const updated = [...prev, newSummary];
-                    return updated.slice(-MAX_TRADE_SUMMARIES);
-                });
+                // Memory/learning steps are BEST-EFFORT: the report is already
+                // written to the chat + trade log above, so a failure here must
+                // never turn a completed post-mortem into "Post-Mortem Failed".
+                try {
+                    if (memoryConfig) {
+                        const summary = await MemoryService.summarizeTrade({ ...tradeToUpdate, postMortem: finalPostMortemReport }, memoryConfig.selectedModel, memoryConfig);
+                        // Re-check after the await — the user may have switched during summarizeTrade
+                        if (isRunStale(myRunId)) {
+                            console.log('[PostMortem] Discarding summary — user switched during summarizeTrade');
+                            return;
+                        }
+                        setTradeSummaries(prev => {
+                            const newSummary = { id: tradeToUpdate.id, summaryText: summary, timestamp: new Date().toISOString() };
+                            const updated = [...prev, newSummary];
+                            return updated.slice(-MAX_TRADE_SUMMARIES);
+                        });
 
-                const newMemory = await MemoryService.updateGlobalMemory([{ ...tradeToUpdate, postMortem: finalPostMortemReport }], globalMemory, memoryConfig!);
-                // Re-check after the await
-                if (isRunStale(myRunId)) {
-                    console.log('[PostMortem] Discarding global memory update — user switched');
-                    return;
+                        const newMemory = await MemoryService.updateGlobalMemory([{ ...tradeToUpdate, postMortem: finalPostMortemReport }], globalMemory, memoryConfig);
+                        // Re-check after the await
+                        if (isRunStale(myRunId)) {
+                            console.log('[PostMortem] Discarding global memory update — user switched');
+                            return;
+                        }
+                        setGlobalMemory(newMemory);
+                    } else {
+                        console.warn('[PostMortem] No memory provider configured — skipping trade summary + global memory update (non-fatal).');
+                    }
+                } catch (memoryError) {
+                    console.warn('[PostMortem] Memory/learning step failed (non-fatal):', memoryError);
                 }
-                setGlobalMemory(newMemory);
 
                 // AI LEARNING: Extract insights and rules in BACKGROUND
                 try {
@@ -495,6 +537,7 @@ Please investigate this discrepancy in your analysis.
             }
 
         } catch (e: any) {
+            postMortemSucceeded = false;
             if (isRunStale(myRunId)) return;
             console.error("Post Mortem Failed", e);
             // P2-15: Keep the role as AI (not SYSTEM) so the message renders
@@ -519,8 +562,13 @@ Please investigate this discrepancy in your analysis.
             if (!isRunStale(myRunId)) {
                 setIsPostMortemInProgress(false);
                 setLoadingMessage(null);
+                // Fail-safe close: the overlay must never stay up forever even
+                // if typing-complete never fires (e.g. all analysts failed).
+                setIsLivePostMortemVisible(false);
                 completeStep('debate');
-                setAnalysisSteps(prev => prev.map(s => s.status === 'running' ? { ...s, status: 'complete' as const, endTime: Date.now() } : s));
+                setAnalysisSteps(prev => prev.map(s => s.status === 'running'
+                    ? { ...s, status: postMortemSucceeded ? ('complete' as const) : ('error' as const), endTime: Date.now() }
+                    : s));
                 setTypingMessageState(null);
             }
         }
@@ -529,7 +577,10 @@ Please investigate this discrepancy in your analysis.
     // ─── Handlers ─────────────────────────────────────────────────────────
     const handleAllPostMortemTypingComplete = useCallback(() => {
         setIsPostMortemTypingComplete(true);
-    }, [setIsPostMortemTypingComplete]);
+        // All analyst panels finished typing — dismiss the overlay (LiveStreamView
+        // already waited 800ms after the last panel completed).
+        setIsLivePostMortemVisible(false);
+    }, [setIsPostMortemTypingComplete, setIsLivePostMortemVisible]);
 
     const handleRetryPostMortem = useCallback((messageId: string) => {
         const msg = messages.find(m => m.id === messageId);

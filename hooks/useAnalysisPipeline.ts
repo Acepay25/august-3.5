@@ -124,7 +124,11 @@ export interface UseAnalysisPipelineParams {
     selectedChatModel: string;
 
     // Toast:
-    toast: { warning: (t: string, m?: string) => void; error: (t: string, m?: string) => void };
+    toast: {
+        warning: (t: string, m?: string) => void;
+        error: (t: string, m?: string) => void;
+        success?: (t: string, m?: string) => void;
+    };
     /** Non-blocking styled confirmation dialog (replaces native window.confirm). */
     confirmDialog?: (opts: {
         title: string;
@@ -352,14 +356,18 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     const reasoningMapRef = useRef<Record<string, string>>({});
     const activeDebateSpeakersRef = useRef<Record<string, number>>({});
     const debateTurnsRef = useRef<DebateTurn[]>([]);
-    const [currentGateResult, setCurrentGateResult] = useState<GateOutput | null>(null);
     const [currentVisionData, setCurrentVisionData] = useState<string[]>([]);
     const [isDeepAnalysis, setIsDeepAnalysis] = useState<boolean>(false);
-    const [quotaExceededModels, setQuotaExceededModels] = useState<Set<string>>(new Set());
 
     // ─── Refs ──────────────────────────────────────────────────────────────
     const analysisAbortController = useRef<AbortController | null>(null);
     const analysisConversationIdRef = useRef<string | null>(null);
+    // Synchronous double-submit guard: `isAnalysisInProgress` (state) is only
+    // flipped deep inside the async run, so a second Enter in the window
+    // between submit and the first await passed both guards, appended a
+    // duplicate user message and aborted run #1. Set synchronously before any
+    // await; cleared in the finally.
+    const analysisInFlightRef = useRef(false);
     // Which pipeline phase is running — used to fail the CORRECT step when a
     // run errors (the old catch hardcoded failStep('analysis'), so debate-phase
     // failures marked the wrong step and the finally force-completed everything).
@@ -438,7 +446,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     const handleSendMessage = useCallback(async (customPrompt?: string, customImages?: ImageMetadata[], hiddenContext?: string, options?: { isUpdate?: boolean; updateInterval?: string; presetHybridData?: HybridDataPacket | null }) => {
         const isSummarizing = images.some(img => img.isLoading);
 
-        if (isAnalysisInProgress) return;
+        if (isAnalysisInProgress || analysisInFlightRef.current) return;
 
         // --- ROUTING LOGIC: Standard vs Accuracy Mode ---
         // Ensemble participants are model-level entries, not just provider
@@ -454,7 +462,10 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             isEnsembleEnabled
         );
 
-        const isStagedEnsemble = isEnsembleEnabled && !isAccuracyModeEnabled && enabledProviders.length > 1;
+        // Accuracy mode runs the same per-analyst analysis phase, so the
+        // staged analyst cards (status + live reasoning) apply there too —
+        // previously the user only saw the single moderator stream.
+        const isStagedEnsemble = isEnsembleEnabled && enabledProviders.length > 1;
 
         let effectiveInput = '';
         if (typeof customPrompt === 'string') {
@@ -508,6 +519,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         const currentAbortController = new AbortController();
         analysisAbortController.current = currentAbortController;
         analysisConversationIdRef.current = activeConversationId;
+        // Synchronous in-flight marker — see analysisInFlightRef above.
+        analysisInFlightRef.current = true;
         // Bind every async message write to the conversation that started the
         // request. This remains correct even if the user switches conversations
         // before a provider response or stream chunk arrives.
@@ -580,7 +593,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             ensembleProgress,
             ocrModelUsed: userMessage.ocrModelUsed,
             imageSummaries: userMessage.imageSummaries,
-            modelsUsed: Object.fromEntries(enabledProviders.map(provider => [provider.thoughtsKey, provider.model])),
+            modelsUsed: Object.fromEntries(enabledProviders.map(provider => [provider.config.id, provider.model])),
             isAccuracyMode: isAccuracyModeEnabled,
             isLensMode: lensConfig?.enabled ?? false,
             accuracySubMode: isAccuracyModeEnabled ? accuracySubMode : undefined,
@@ -598,7 +611,10 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 : message));
         };
 
-        if (isEnsembleEnabled && !currentHybridData && !options?.presetHybridData) {
+        // Only claim the hybrid fetch when the feature is ON — the old
+        // condition spun the HybridDataPanel for the whole run even with the
+        // toggle off (the skip path never reset it).
+        if (isEnsembleEnabled && isHybridIntelligenceEnabled && !currentHybridData && !options?.presetHybridData) {
             setHybridConnectionStatus(prev => (prev === 'connected' ? 'connected' : 'connecting'));
             setIsHybridLoading(true);
             setCurrentHybridData(null);
@@ -680,6 +696,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 } catch (hybridError) {
                     if (!isCurrentRequest()) assertCurrentRequest();
                     setIsHybridLoading(false);
+                    completeStep('market-data');
                     console.error('[Hybrid Intelligence] ERROR fetching market data:', hybridError);
                     toast.warning('Hybrid data unavailable', 'Market data fetch failed — analysis will proceed without real-time data.');
                 }
@@ -689,8 +706,10 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 // the hybrid market data in their prompts.
                 hybridDataInjection = generateHybridPromptInjection(options.presetHybridData);
                 devLog('[Hybrid Intelligence] SKIPPED - Using preset data from auto-capture');
+                completeStep('market-data');
             } else {
                 devLog('[Hybrid Intelligence] SKIPPED - Feature not enabled');
+                completeStep('market-data');
             }
 
             // AI LEARNING: Generate UNIFIED learning context from all 6 learning services
@@ -785,7 +804,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             const finalSymbol = detectedSymbol ? `${detectedSymbol}USDT` : null;
 
             let gateInjection = '';
-            let capturedGateResult: typeof currentGateResult = null; // Local variable to avoid state closure issue
+            let capturedGateResult: GateOutput | null = null; // Local variable to avoid state closure issue
             if (finalSymbol && isEnsembleEnabled) {
                 try {
                     devLog(`[GateKeeper] Running Gate check for ${finalSymbol}...`);
@@ -794,7 +813,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
                     const gateResult = await getGateAnalysis(finalSymbol, loggedTrades);
                     capturedGateResult = gateResult.gateOutput; // Capture locally for processNewAnalysis
-                    setCurrentGateResult(gateResult.gateOutput);
 
                     if (gateResult.shouldProceed) {
                         gateInjection = gateResult.promptPrefix;
@@ -810,9 +828,14 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 } catch (gateError) {
                     console.error('[GateKeeper] Gate check failed:', gateError);
                     // Fail-open: proceed without Gate constraints
+                    failStep('gate-scan');
                     toast.warning('Gate check skipped', 'Quality constraints could not be applied — analysis will proceed without gate validation.');
                 }
             }
+
+            // No symbol → the gate block never ran, so the market-data step
+            // (completed inside it) would stay 'pending' for the whole run.
+            if (!finalSymbol) completeStep('market-data');
 
             // Prepend Gate injection to enhanced prompt if available
             if (gateInjection) {
@@ -823,7 +846,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
             devLog('[Hybrid Intelligence] Enhanced prompt length:', enhancedPrompt.length);
             devLog('[Hybrid Intelligence] Has injection:', hybridDataInjection.length > 0);
-            console.warn('[AI Learning] Has learning injection:', learningInjection.length > 0);
+            devLog('[AI Learning] Has learning injection:', learningInjection.length > 0);
             devLog('[Hybrid Intelligence] ======= END =======');
 
             // Check if it's an update request via hiddenContext or other triggers
@@ -1308,7 +1331,18 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                         .filter((x): x is { provider: (typeof enabledProviders)[number]; result: { thoughtProcess: string; finalOutput: string; analysis: any } } => x !== null);
 
                     if (isAccuracyModeEnabled) {
-                        // ACCURACY MODE
+                        // ACCURACY MODE — the moderator autoplays the whole
+                        // simulated transcript. Guard: with zero fulfilled
+                        // analysts the moderator would be invoked with an
+                        // empty analyst list and fabricate a Neutral card
+                        // (standard mode has the ≥2 guard; this one was missing).
+                        if (fulfilledAnalysts.length < 1) {
+                                const failureReport = buildAnalystFailureReport(settledResults, enabledProviders);
+                                const detail = failureReport
+                                    ? `\n\nFailed analysts:\n${failureReport}`
+                                    : '\n\nNo analyst succeeded. Enable at least one model (Settings → AI Models or the Debate Models picker) to run the debate.';
+                                throw new Error(`Accuracy-mode debate requires at least 1 analyst (${fulfilledAnalysts.length} provided).${detail}`);
+                        }
                         debateStream = ensembleService.conductDebate(
                                 fulfilledAnalysts.map(a => a.result),
                                 fulfilledAnalysts.map(a => a.provider.name),
@@ -1665,7 +1699,11 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             // A user cancel must stay a cancel — it was being
                             // swallowed here, so the run continued and emitted
                             // the card after the user pressed stop.
-                            if (err?.name === 'AbortError' || err?.code === 'ABORT_ERR' || err?.name === 'TimeoutError' || !isCurrentRequest()) {
+                            // A TIMEOUT is NOT a cancel: the debate + plan already
+                            // completed, so a slow verification pass must never
+                            // abort the finished run — keep the original plan
+                            // (mirrors verifyAccuracyPlan's own fail-safe).
+                            if ((err?.name === 'AbortError' || err?.code === 'ABORT_ERR') || !isCurrentRequest()) {
                                 throw verifyError;
                             }
                             console.warn('[AccuracyVerification] Skipped (kept original plan):', err?.message || verifyError);
@@ -1925,8 +1963,8 @@ ${accuracyVerificationNote}`
                     const soloAiMessage: Message = {
                         id: `ai-${Date.now()}`, role: MessageRole.AI, text: result.thoughtProcess, createdAt: new Date().toISOString(), analysis: processNewAnalysis(result.analysis), sources: result.sources || [], outcome: TradeOutcome.PENDING, ocrModelUsed: userMessage.ocrModelUsed,
                         imageSummaries: userMessage.imageSummaries,
-                        modelsUsed: { [provider.thoughtsKey]: provider.model },
-                        thoughtProcesses: { [provider.thoughtsKey]: result.thoughtProcess },
+                        modelsUsed: { [provider.config.id]: provider.model },
+                        thoughtProcesses: { [provider.config.id]: result.thoughtProcess },
                         isAccuracyMode: isAccuracyModeEnabled,
                         isLensMode: lensConfig?.enabled ?? false,
                         // Always set tradingStyle regardless of Lens mode
@@ -2061,7 +2099,6 @@ ${accuracyVerificationNote}`
                 let flaggedModel = '';
                 enabledProviders.forEach(p => {
                     if (error.message.toLowerCase().includes(p.name.toLowerCase()) || error.model === p.model) {
-                        setQuotaExceededModels(prev => new Set(prev).add(quotaModelNames[p.model] || p.model));
                         flaggedModel = quotaModelNames[p.model] || p.model;
                     }
                 });
@@ -2088,6 +2125,7 @@ ${accuracyVerificationNote}`
                 analysisAbortController.current = null;
                 analysisConversationIdRef.current = null;
                 setIsAnalysisInProgress(false);
+                analysisInFlightRef.current = false;
             }
         }
     }, [input, images, loadingMessage, finalTradeSummary, activeFrameworks, isRateLimited, providerConfigs, isDeepAnalysis, selectedOcrModel, updateMessages, moderatorConfig, moderatorModel, activeConversationId, activeConversation, isAnalysisInProgress, globalMemory, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, lensConfig, isHybridIntelligenceEnabled, isEnsembleEnabled, selectedChatModel, loggedTrades, confidenceCalibration, insightKnowledgeBase, currentHybridData, tradeSummaries, customEnsemblePrompt, customLensPrompts]);
@@ -2100,6 +2138,7 @@ ${accuracyVerificationNote}`
             setIsAnalysisInProgress(false);
             setIsPostMortemInProgress(false);
             setIsLivePostMortemVisible(false);
+            analysisInFlightRef.current = false;
         }
     };
 
@@ -2112,8 +2151,20 @@ ${accuracyVerificationNote}`
     };
 
     const handleDeleteMessages = async (ids: string[]) => {
+        // F1: message deletion gets a 5s undo like every other destructive
+        // clear in the app (conversations, trade history, analyses).
+        const prevMessages = messagesRef.current;
         const ok = confirmDialog
-            ? await confirmDialog({ title: 'Delete messages?', message: `Delete ${ids.length} messages?`, destructive: true })
+            ? await confirmDialog({
+                title: 'Delete messages?',
+                message: `Delete ${ids.length} messages?`,
+                destructive: true,
+                undoGraceMs: 5000,
+                onUndo: () => {
+                    updateMessages(() => [...prevMessages]);
+                    toast.success?.('Messages restored');
+                },
+            })
             : confirm(`Delete ${ids.length} messages?`);
         if (ok) updateMessages(prev => prev.filter(m => !ids.includes(m.id)));
     };
@@ -2124,10 +2175,8 @@ ${accuracyVerificationNote}`
         images, setImages,
         loadingMessage, setLoadingMessage,
         analysisSteps, setAnalysisSteps,
-        currentGateResult, setCurrentGateResult,
         currentVisionData, setCurrentVisionData,
         isDeepAnalysis, setIsDeepAnalysis,
-        quotaExceededModels, setQuotaExceededModels,
 
         // Refs
         analysisAbortController,

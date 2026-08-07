@@ -37,7 +37,14 @@ async function encryptKey(apiKey: string): Promise<string> {
     const bridge = getCryptoBridge();
     if (!bridge) return apiKey;
     const encrypted = await bridge.encryptSecret(apiKey);
-    if (!encrypted) throw new Error('Desktop key encryption is unavailable. Provider settings were not saved.');
+    if (!encrypted) {
+        // Fail open (matching decryptKey): on systems without a working OS
+        // keyring (e.g. Linux without gnome-keyring/kwallet) encryptSecret
+        // returns null — throwing here made EVERY provider save fail with no
+        // recovery path. Store plaintext so the app stays usable.
+        console.warn('[ProviderConfigService] safeStorage unavailable — storing API key as plaintext.');
+        return apiKey;
+    }
     return encrypted;
 }
 

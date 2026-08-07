@@ -197,6 +197,8 @@ const DebateChat: React.FC<DebateChatProps> = ({
     const getModelKey = (speaker: string): string | undefined => {
         const providerId = getProviderId(speaker);
         if (!providerId) return undefined;
+        // Producers write bare provider-id keys today; the `providerId:model`
+        // composite form is tolerated for historical rows only.
         return Object.keys(modelsUsed).find(key => key === providerId || key.startsWith(`${providerId}:`));
     };
     const getModelName = (speaker: string): string => {
@@ -229,7 +231,31 @@ const DebateChat: React.FC<DebateChatProps> = ({
         return reasoningProcesses[speaker] || thoughtProcesses[speaker] || (providerId ? reasoningProcesses[providerId] || thoughtProcesses[providerId] : '') || '';
     };
 
-    if (!debateTurns.length && !isDebating) return null;
+    if (!debateTurns.length && !isDebating) {
+        // Completed debate with no parsed transcript (e.g. an accuracy-mode
+        // stream that yielded zero turns): keep the verdict consensus visible
+        // instead of silently dropping the whole card.
+        if (!analysis) return null;
+        return (
+            <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-zinc-950/80">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-white/10 bg-zinc-900/80 px-3 py-2 text-[10px]">
+                    <span className="font-black uppercase tracking-widest text-cyan-300">Consensus</span>
+                    <span className={`font-bold ${analysis.direction === 'Long' ? 'text-emerald-400' : analysis.direction === 'Short' ? 'text-rose-400' : 'text-zinc-400'}`}>{analysis.direction}</span>
+                    <span className="text-zinc-500">Entry</span><span className="font-mono text-zinc-200">{analysis.entryPoints?.[0]?.price || '—'}</span>
+                    <span className="text-zinc-500">SL</span><span className="font-mono text-zinc-200">{analysis.stopLoss || '—'}</span>
+                    <span className="text-zinc-500">TP</span><span className="font-mono text-zinc-200">{analysis.takeProfit?.[0]?.price || '—'}</span>
+                    <span className="text-zinc-500">Confidence</span><span className="font-mono text-zinc-200">{analysis.confidence}</span>
+                </div>
+                <div className="px-3 py-4 text-center text-[11px] text-zinc-600">
+                    The debate transcript is unavailable for this analysis.
+                </div>
+            </div>
+        );
+    }
+
+    // Replay slices the transcript once (P7: the old code re-sliced inside the
+    // per-turn map — O(n²) array copies on every replay tick).
+    const displayedTurns = isReplaying ? visibleTurns.slice(0, replayIndex) : visibleTurns;
 
     return (
         <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-zinc-950/80">
@@ -317,8 +343,19 @@ const DebateChat: React.FC<DebateChatProps> = ({
                 {!isDebating && analysis && debateTurns.length > 0 && (
                     <DebateSummary debateTurns={debateTurns} analysis={analysis} />
                 )}
-                {(isReplaying ? visibleTurns.slice(0, replayIndex) : visibleTurns).map((turn, index) => {
-                    const previousRound = (isReplaying ? visibleTurns.slice(0, replayIndex) : visibleTurns)[index - 1]?.round;
+                {displayedTurns.map((turn, index) => {
+                    // 'System' turns carry drop-out / time-budget notices from
+                    // the debate engine — render centered, not as an analyst bubble.
+                    if (turn.speaker === 'System') {
+                        return (
+                            <div key={`${turn.speaker}-${turn.round ?? 'legacy'}-${index}`} className="flex justify-center px-2">
+                                <div className="rounded-lg border border-white/10 bg-zinc-800/80 px-3 py-1.5 text-center text-[11px] italic leading-relaxed text-zinc-500">
+                                    {turn.text}
+                                </div>
+                            </div>
+                        );
+                    }
+                    const previousRound = displayedTurns[index - 1]?.round;
                     const hasRoundSeparator = typeof turn.round === 'number' && turn.round !== previousRound;
                     const isVerdictRound = turn.speaker === 'Moderator' && turn.round === latestModeratorRound;
                     const isVerdict = isVerdictRound && !isDebating;

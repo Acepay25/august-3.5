@@ -62,10 +62,21 @@ describe('parseTradeAnalysis — probability/confidence coupling', () => {
     expect(parseTradeAnalysis(rawAnalysis({ probability: 150 })).probability).toBe(100);
   });
 
-  it('forces Avoid → 15 (the documented 15% bug fix)', () => {
+  it('treats a bare 1 as 1% (not 100%)', () => {
+    const r = parseTradeAnalysis(rawAnalysis({ probability: 1 }));
+    expect(r.probability).toBe(1);
+    expect(r.confidence).toBe('Low');
+  });
+
+  it('keeps genuine low probabilities as Low instead of discarding into Avoid', () => {
     const r = parseTradeAnalysis(rawAnalysis({ probability: 30 }));
+    expect(r.confidence).toBe('Low');
+    expect(r.probability).toBe(30);
+  });
+
+  it('honors an explicit Avoid from the model', () => {
+    const r = parseTradeAnalysis(rawAnalysis({ probability: 20, confidence: 'Avoid' }));
     expect(r.confidence).toBe('Avoid');
-    expect(r.probability).toBe(15);
   });
 
   it('falls back to the confidence string when probability is missing/zero', () => {
@@ -279,5 +290,35 @@ describe('applySemanticFixups is pure', () => {
     const snapshot = JSON.stringify(coerced);
     applySemanticFixups(coerced);
     expect(JSON.stringify(coerced)).toBe(snapshot);
+  });
+});
+
+describe('CoercedTradeAnalysisSchema — object/bare price coercion (B9)', () => {
+  it('extracts a number from an object-shaped stopLoss instead of "[object Object]"', () => {
+    const result = CoercedTradeAnalysisSchema.parse(rawAnalysis({ stopLoss: { level: 94500 } }));
+    expect(result.stopLoss).toBe('94500');
+  });
+
+  it('extracts from stopLoss objects with a price key', () => {
+    const result = CoercedTradeAnalysisSchema.parse(rawAnalysis({ stopLoss: { price: '94000' } }));
+    expect(result.stopLoss).toBe('94000');
+  });
+
+  it('wraps a bare-string entryPoints into a single entry', () => {
+    const result = CoercedTradeAnalysisSchema.parse(rawAnalysis({ entryPoints: '95000' }));
+    expect(result.entryPoints).toHaveLength(1);
+    expect(result.entryPoints[0].price).toBe('95000');
+  });
+
+  it('wraps a bare-number takeProfit into a single TP', () => {
+    const result = CoercedTradeAnalysisSchema.parse(rawAnalysis({ takeProfit: 96000 }));
+    expect(result.takeProfit).toHaveLength(1);
+    expect(result.takeProfit[0].price).toBe('96000');
+  });
+
+  it('still returns [] for empty/undefined price fields', () => {
+    const result = CoercedTradeAnalysisSchema.parse(rawAnalysis({ entryPoints: undefined, takeProfit: undefined }));
+    expect(result.entryPoints).toEqual([]);
+    expect(result.takeProfit).toEqual([]);
   });
 });

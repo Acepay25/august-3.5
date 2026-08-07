@@ -195,6 +195,27 @@ export const migrateLocalStorageToPreferences = async (): Promise<number> => {
         }
     }
 
+    // Per-user scoped keys (learning_rules_v2_<user>, attributed_insights_kb_<user>,
+    // global_learning_state_<user>, rl_signals_data) are NOT in PREF_KEYS, so the
+    // loop above skips them and they silently die on an Android WebView data
+    // clear. Sweep every remaining localStorage key so none is left behind.
+    try {
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (!key || keysToMigrate.includes(key)) continue;
+            const existing = await getPreference(key);
+            if (existing) continue;
+            const localValue = localStorage.getItem(key);
+            if (localValue) {
+                await setPreference(key, localValue);
+                migratedCount++;
+                console.log(`[PreferencesService] Migrated key: ${key}`);
+            }
+        }
+    } catch (e) {
+        console.warn('[PreferencesService] Per-user key sweep failed:', e);
+    }
+
     console.log(`[PreferencesService] Migrated ${migratedCount} keys to Preferences`);
     return migratedCount;
 };
