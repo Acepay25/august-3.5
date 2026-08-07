@@ -1,7 +1,24 @@
 import { describe, it, expect } from 'vitest';
-import { sanitizeAIResponse, sanitizeJSONString } from '../utils/sanitizers';
+import { sanitizeAIResponse, sanitizeJSONString, cleanPriceField } from '../utils/sanitizers';
 
 describe('sanitizers', () => {
+  describe('cleanPriceField', () => {
+    it('preserves a leading minus sign (negative percentages/prices)', () => {
+      expect(cleanPriceField('-0.5%')).toBe('-0.5%');
+      expect(cleanPriceField('-94500')).toBe('-94500');
+    });
+
+    it('strips bracketed asides (the old regex only handled parentheses)', () => {
+      expect(cleanPriceField('[94500]')).toBe('94500');
+      expect(cleanPriceField('94500 [call]')).toBe('94500');
+    });
+
+    it('still strips parenthesized asides and jargon', () => {
+      expect(cleanPriceField('94500 (call)')).toBe('94500');
+      expect(cleanPriceField('94500 (options strategy)')).toBe('94500');
+    });
+  });
+
   describe('sanitizeAIResponse', () => {
     it('strips script tags', () => {
       const input = 'Hello <script>alert("xss")</script> world';

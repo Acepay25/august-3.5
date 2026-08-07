@@ -343,7 +343,6 @@ export const generateLensContext = (
     }
 
     // Style-specific context
-    const styleEmoji = tradingStyle === 'scalp' ? '' : '';
     const styleName = tradingStyle === 'scalp' ? 'SCALP' : 'SWING';
     const styleTimeframes = tradingStyle === 'scalp' ? '1m/5m/15m' : '15m/1H/4H/Daily';
     const styleMinRR = tradingStyle === 'scalp' ? '1.5:1' : '1.2:1';
@@ -352,7 +351,7 @@ export const generateLensContext = (
     // MINIMAL: Bare essentials only (~15 lines)
     if (verbosity === 'minimal') {
         return `
-**🎭 LENS MODE** ${styleEmoji} **${styleName}** | TFs: ${styleTimeframes} | Min R:R: ${styleMinRR}
+**🎭 LENS MODE** **${styleName}** | TFs: ${styleTimeframes} | Min R:R: ${styleMinRR}
 Roles: ${macroAnalyst ? `${macroAnalyst}` : ''} ${techAnalyst ? `${techAnalyst}` : ''} ${riskAnalyst ? `${riskAnalyst}` : ''}
  MANDATORY: Output complete JSON_PLAN with coinName, direction, entryPoints, stopLoss, takeProfit.
 `;
@@ -361,7 +360,7 @@ Roles: ${macroAnalyst ? `${macroAnalyst}` : ''} ${techAnalyst ? `${techAnalyst}`
     // MEDIUM: Condensed (~40 lines)
     if (verbosity === 'medium') {
         return `
-**🎭 ANALYST LENS MODE ACTIVE** ${styleEmoji} **${styleName} TRADING**
+**🎭 ANALYST LENS MODE ACTIVE** **${styleName} TRADING**
 
 **TRADING STYLE:** ${styleName} MODE
 - Timeframes: ${styleTimeframes}
@@ -399,7 +398,7 @@ ${riskAnalyst ? `-  ${riskAnalyst}: "What's the R:R? Top 3 failure scenarios? Ca
     // FULL: Complete detailed context (~100 lines)
     return `
 **🎭 ANALYST LENS MODE ACTIVE — SPECIALIZED ROLE-BASED EVALUATION**
-${styleEmoji} **TRADING STYLE: ${styleName}**
+**TRADING STYLE: ${styleName}**
 
 **STYLE PARAMETERS:**
 - Focus Timeframes: ${styleTimeframes}
@@ -1055,11 +1054,6 @@ export const conductTwoWayDebate = async function* (
 ): AsyncGenerator<string, void, unknown> {
 
     // Format Monte Carlo context
-    // ... (code truncated - I will rely on context matching to only replace the signature and return)
-    // Actually I need to be precise. I will target the signature and the return statement separately.
-
-
-    // Format Monte Carlo context
     let mcContext = "No Monte Carlo simulation data available.";
     if (monteCarloResults && monteCarloResults.length > 0) {
         mcContext = "**MONTE CARLO STATISTICAL VALIDATION:**\n";
@@ -1082,8 +1076,8 @@ export const conductTwoWayDebate = async function* (
 
     // Apply calibration to analyst results
     const calibratedAnalysts = [
-        { name: analyst1Name, result: analyst1Result },
-        { name: analyst2Name, result: analyst2Result }
+        { name: analyst1Name, providerId: analystProviders?.[0], result: analyst1Result },
+        { name: analyst2Name, providerId: analystProviders?.[1], result: analyst2Result }
     ].map(item => {
         const rawConf = item.result.analysis.confidence as ConfidenceLevel;
         const rawProb = item.result.analysis.probability || 0;
@@ -1094,7 +1088,11 @@ export const conductTwoWayDebate = async function* (
         if (calibrationData) {
             calibratedProb = getBayesianCalibratedConfidence(
                 calibrationData,
-                item.name, // Provider/Analyst name
+                // byProvider is keyed by PROVIDER ID (see
+                // syncConfidenceCalibrationFromTradeLog); display names almost
+                // never match, so calibration silently never applied. Prefer
+                // the id, fall back to the display name.
+                item.providerId || item.name,
                 rawConf,
                 rawProb
             );
@@ -1372,7 +1370,7 @@ export const conductTwoWayDebate = async function* (
           *   ${analyst2Name} counter-challenges ${analyst1Name} → ${analyst1Name} defends
           *   **Keep each exchange concise (max 80 words each).**
       
-      3.  **ROUND 3: REFINEMENT LOOP (CONDITIONAL — REQUIRED IF GRADE < A/B)**
+      3.5 **ROUND 3: REFINEMENT LOOP (CONDITIONAL — REQUIRED IF GRADE < A/B)**
           *   **TRIGGER:** If the current consensus is Grade C, D, or F (Low/Medium confidence, weak R:R, unclear invalidation):
           *   Moderator: "This setup is currently Grade [C/D/F]. I will NOT proceed until it is upgraded. Answer these:"
               - "What SPECIFIC price action would upgrade this to Grade A?"
@@ -1442,9 +1440,9 @@ export const conductTwoWayDebate = async function* (
           - Swing / multi-timeframe: 6h - 24h
           - Position trades: 24h - 72h
       
-      9.  **</DEBATE_END>**
+      10.  **</DEBATE_END>**
 
-      7.  **MODERATOR FINAL VERDICT (REQUIRED & STRUCTURED)**
+      11.  **MODERATOR FINAL VERDICT (REQUIRED & STRUCTURED)**
           *   IMMEDIATELY after the </DEBATE_END> tag, write a section titled "Moderator Final Verdict:".
           *   **CRITICAL:** Your verdict must reflect the WEIGHT OF EVIDENCE, not just the majority opinion.
           *   You **MUST** provide the final trade plan in this **EXACT TEXT FORMAT**:
@@ -1460,7 +1458,7 @@ export const conductTwoWayDebate = async function* (
               **Verdict Rationale:**
               [Complete synthesis explaining: 1) Which evidence was most compelling, 2) How disagreements were resolved, 3) Family Classification, 4) Pattern Memory alignment. Do not stop mid-sentence.]
 
-      9.  **JSON PLAN (CRITICAL - FAILURE WILL BREAK THE SYSTEM)**
+      12.  **JSON PLAN (CRITICAL - FAILURE WILL BREAK THE SYSTEM)**
           
            YOU MUST OUTPUT VALID, COMPLETE JSON OR THE SYSTEM WILL FAIL 
           
@@ -1567,7 +1565,6 @@ export const conductThreeWayDebate = async function* (
     }
 
     // Increase token limits for less truncation - full debate visibility
-    // Increase token limits for less truncation - full debate visibility
     const tradeHistoryContext = finalTradeSummary ? `This is your Pattern Memory Library (a pre-processed summary of recent trades)...\n${truncateTextToTokens(finalTradeSummary, 3000)}` : "No past trades logged.";
 
     // --- BAYESIAN CONFIDENCE CALIBRATION ---
@@ -1578,9 +1575,9 @@ export const conductThreeWayDebate = async function* (
     const calibrationData = GlobalLearningService.getCalibration();
 
     const calibratedAnalysts = [
-        { name: analyst1Name, result: analyst1Result },
-        { name: analyst2Name, result: analyst2Result },
-        { name: analyst3Name, result: analyst3Result }
+        { name: analyst1Name, providerId: analystProviders?.[0], result: analyst1Result },
+        { name: analyst2Name, providerId: analystProviders?.[1], result: analyst2Result },
+        { name: analyst3Name, providerId: analystProviders?.[2], result: analyst3Result }
     ].map(item => {
         const rawConf = item.result.analysis.confidence as ConfidenceLevel;
         const rawProb = item.result.analysis.probability || 0;
@@ -1591,7 +1588,8 @@ export const conductThreeWayDebate = async function* (
         if (calibrationData) {
             calibratedProb = getBayesianCalibratedConfidence(
                 calibrationData,
-                item.name,
+                // byProvider is keyed by PROVIDER ID — see conductTwoWayDebate.
+                item.providerId || item.name,
                 rawConf,
                 rawProb
             );
@@ -2037,7 +2035,7 @@ If analysts STILL disagree on DIRECTION or KEY LEVELS:
 
 ---
 
-### 9. ROUND 9 — SETUP VALIDITY WINDOW (MANDATORY)
+### 8. ROUND 7 — SETUP VALIDITY WINDOW (MANDATORY)
 **Moderator:** "How long does this setup remain valid? Consider: (1) timeframe analyzed, (2) current volatility, (3) proximity to key events, (4) pattern decay rate."
 **${analyst1Name}:** Propose validity (e.g., "4h 30m because...") (max 40 words)
 **${analyst2Name}:** Agree/disagree with counter-reasoning (max 40 words)
@@ -2056,7 +2054,7 @@ If analysts STILL disagree on DIRECTION or KEY LEVELS:
 Close with:
 </DEBATE_END>
 
-##  8. MODERATOR FINAL VERDICT (REQUIRED)
+##  10. MODERATOR FINAL VERDICT (REQUIRED)
 Immediately after </DEBATE_END>, write:
 
 ### **Moderator Final Verdict:**
@@ -2076,7 +2074,7 @@ Immediately after </DEBATE_END>, write:
 
 ---
 
-##  9. JSON PLAN (CRITICAL - FAILURE WILL BREAK THE SYSTEM)
+##  11. JSON PLAN (CRITICAL - FAILURE WILL BREAK THE SYSTEM)
 
  YOU MUST OUTPUT VALID, COMPLETE JSON OR THE SYSTEM WILL FAIL 
 
@@ -2181,6 +2179,9 @@ Start with <DEBATE_START> now.
  * autoplaying the entire transcript.
  */
 export const REAL_DEBATE_RESPONSE_ROUNDS = 2;
+
+/** Wall-clock budget for the whole real debate — see conductRealDebate. */
+export const DEBATE_DEFAULT_TIMEOUT_MS = 8 * 60_000;
 
 /**
  * Maximum number of moderator clarification cycles that run AFTER the rebuttal
@@ -2313,15 +2314,27 @@ export const conductRealDebate = async function* (
     onReasoning?: (reasoning: string) => void,
     onAnalystReasoning?: (speaker: string, reasoning: string) => void,
     onSpeakerStatus?: (speaker: string, round: number, active: boolean) => void,
-    hybridContext?: string
+    hybridContext?: string,
+    /** Wall-clock budget for the whole debate (rebuttals + clarification
+     *  cycles). On expiry the debate skips remaining rounds and proceeds
+     *  straight to the moderator verdict. */
+    timeoutMs?: number
 ): AsyncGenerator<RealDebateTurnEvent, void, unknown> {
 
     if (analysts.length < 2) {
         throw new Error(`Real debate requires at least 2 analysts (${analysts.length} provided).`);
     }
 
+    // Per-stream timeouts multiply with retries; without a global budget a
+    // stuck analyst can hold a round open for minutes. Deadline bounds the
+    // whole debate so the user always gets a verdict.
+    const deadline = Date.now() + (timeoutMs ?? DEBATE_DEFAULT_TIMEOUT_MS);
+
     const names = analysts.map(a => a.provider.name);
     const activeAnalystNames = new Set(names);
+    // Analysts that dropped mid-round (stream failure) — their partial text is
+    // purged from the transcript and a visible notice is emitted.
+    const droppedThisRound = new Set<string>();
     // Speaker labels the moderator may use when addressing analysts: provider
     // names plus lens role short names (Macro / Technical / Risk). Used to
     // split the clarification question block per analyst.
@@ -2371,6 +2384,12 @@ export const conductRealDebate = async function* (
     const totalRounds = REAL_DEBATE_RESPONSE_ROUNDS + 1;
     for (let round = 2; round <= totalRounds; round++) {
         if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+
+        // Global budget: skip remaining rebuttals and head to the verdict.
+        if (Date.now() > deadline) {
+            yield { speaker: 'System', round, text: 'Debate time budget reached — skipping remaining rebuttal rounds and proceeding to the verdict.' };
+            break;
+        }
 
         // Context is snapshotted BEFORE the round starts, so every analyst
         // responds to the others' previous round — never to themselves.
@@ -2440,6 +2459,11 @@ export const conductRealDebate = async function* (
                         console.warn(`[RealDebate] ${task.name} failed Round ${round}:`, e?.message || e);
                         // Analyst drops out of the debate — remaining rounds continue.
                         activeAnalystNames.delete(task.name);
+                        // Purge any partial text already accumulated this round so
+                        // the clarification/verdict transcripts never treat a
+                        // failed turn as a complete position.
+                        if (roundTexts[task.name]) delete roundTexts[task.name][round];
+                        droppedThisRound.add(task.name);
                     }
                 })
                 .finally(() => {
@@ -2456,10 +2480,20 @@ export const conductRealDebate = async function* (
             }
             const item = queue.shift()!;
             if (item.name === '__done__') continue;
+            // Deltas arriving after the drop are discarded (partial text was
+            // already purged in the catch) — still yielded nothing further.
+            if (droppedThisRound.has(item.name)) continue;
             roundTexts[item.name][round] = (roundTexts[item.name][round] || '') + item.delta;
             yield { speaker: item.name, round, text: item.delta };
         }
         for (const task of tasks) onSpeakerStatus?.(task.name, round, false);
+
+        // Visible drop-out notice — the consumer renders 'System' turns as
+        // notices in the debate chat instead of a silent console.warn.
+        for (const name of droppedThisRound) {
+            yield { speaker: 'System', round, text: `${name} dropped out during Round ${round} (provider stream failed) — the debate continues without them.` };
+        }
+        droppedThisRound.clear();
     }
 
     // --- CLARIFICATION LOOP ---
@@ -2478,6 +2512,12 @@ export const conductRealDebate = async function* (
 
     for (let cycle = 1; cycle <= MAX_CLARIFICATION_CYCLES; cycle++) {
         if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+
+        // Global budget: skip clarification and proceed to the verdict.
+        if (Date.now() > deadline) {
+            yield { speaker: 'System', round: lastRebuttalRound, text: 'Debate time budget reached — skipping remaining clarification rounds and proceeding to the verdict.' };
+            break;
+        }
 
         // -- MODERATOR QUESTIONS (streamed once, ~100 tokens/turn cap) --
         const questionRound = lastRebuttalRound + 1;
@@ -2586,6 +2626,8 @@ export const conductRealDebate = async function* (
                         console.warn(`[RealDebate] ${task.name} clarification answer failed:`, e?.message || e);
                         // Drop-out semantics mirror the rebuttal rounds.
                         activeAnalystNames.delete(task.name);
+                        if (roundTexts[task.name]) delete roundTexts[task.name][answerRound];
+                        droppedThisRound.add(task.name);
                     }
                 })
                 .finally(() => {
@@ -2601,12 +2643,17 @@ export const conductRealDebate = async function* (
             }
             const item = answerQueue.shift()!;
             if (item.name === '__done__') continue;
+            if (droppedThisRound.has(item.name)) continue;
             roundTexts[item.name][answerRound] = (roundTexts[item.name][answerRound] || '') + item.delta;
             yield { speaker: item.name, round: answerRound, text: item.delta };
         }
         for (const task of answerTasks) {
             onSpeakerStatus?.(task.name, answerRound, false);
         }
+        for (const name of droppedThisRound) {
+            yield { speaker: 'System', round: answerRound, text: `${name} dropped out while answering the clarification question (provider stream failed).` };
+        }
+        droppedThisRound.clear();
 
         // -- Cap: on cycle 3 there is no judgment — proceed to verdict --
         if (cycle === MAX_CLARIFICATION_CYCLES) {
@@ -2793,7 +2840,8 @@ export const conductTwoWayPostMortemDebate = (
     moderatorConfig: ProviderConfig,
     moderatorModel: string,
     postTradeImageSummaries?: string[],
-    trades?: LoggedTrade[] // NEW: Pass trades for synthesis
+    trades?: LoggedTrade[], // NEW: Pass trades for synthesis
+    signal?: AbortSignal // Cancellation for the moderator stream
 ): AsyncGenerator<string, void, unknown> => {
 
     const imageContext = postTradeImageSummaries?.length ? `** VERIFIED TRADE OUTCOME DATA (HIGHEST PRIORITY):**\n${postTradeImageSummaries.join('\n---\n')}` : `No post-trade data was provided.`;
@@ -2968,7 +3016,7 @@ You MUST:
 
     Start with <DEBATE_START> now.`;
 
-    return getModeratorAnalysisStream(moderatorConfig, moderatorModel, moderatorPrompt);
+    return getModeratorAnalysisStream(moderatorConfig, moderatorModel, moderatorPrompt, signal);
 };
 
 /**
@@ -3021,7 +3069,8 @@ export const conductThreeWayPostMortemDebate = (
     finalTradeSummary: string | null,
     moderatorConfig: ProviderConfig,
     moderatorModel: string,
-    postTradeImageSummaries?: string[]
+    postTradeImageSummaries?: string[],
+    signal?: AbortSignal // Cancellation for the moderator stream
 ): AsyncGenerator<string, void, unknown> => {
 
     const imageContext = postTradeImageSummaries?.length ? `** VERIFIED TRADE OUTCOME DATA (HIGHEST PRIORITY):**\n${postTradeImageSummaries.join('\n---\n')}` : `No post-trade data was provided.`;
@@ -3182,5 +3231,5 @@ You MUST:
 
     Start with <DEBATE_START> now.`;
 
-    return getModeratorAnalysisStream(moderatorConfig, moderatorModel, moderatorPrompt);
+    return getModeratorAnalysisStream(moderatorConfig, moderatorModel, moderatorPrompt, signal);
 };

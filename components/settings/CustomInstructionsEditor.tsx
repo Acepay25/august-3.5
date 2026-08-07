@@ -12,6 +12,8 @@
 import React, { useState, useMemo } from 'react';
 import { CustomInstructionsMap, CustomInstruction } from '../../types';
 import { ChevronDownIcon, TrashIcon } from '../shared/Icons';
+import { ToggleSwitch } from '../shared/ToggleSwitch';
+import { useConfirmDialog } from '../shared/ConfirmDialog';
 
 // Instruction tabs (Standard / Strict Mode / Pure AI)
 export type InstructionTab = 'general' | 'accuracyOriginal' | 'accuracyPure';
@@ -26,6 +28,7 @@ const InstructionCard: React.FC<{
     onDelete: (id: string) => void;
 }> = ({ instruction, onUpdate, onDelete }) => {
     const [isExpanded, setIsExpanded] = useState(false);
+    const { confirm: confirmDelete, ConfirmDialogComponent } = useConfirmDialog();
 
     return (
         <div className={`rounded-2xl border transition-all duration-300 ${instruction.isActive ? 'bg-zinc-900 border-cyan-500/30 shadow-[0_0_15px_-5px_rgba(176, 176, 182,0.1)]' : 'bg-zinc-800 border-white/5 opacity-80 hover:opacity-100'}`}>
@@ -57,18 +60,17 @@ const InstructionCard: React.FC<{
                 </div>
 
                 <div className="flex items-center gap-2">
-                    <label className="relative inline-flex items-center cursor-pointer" title={instruction.isActive ? "Deactivate" : "Activate"}>
-                        <input
-                            type="checkbox"
-                            className="sr-only peer"
-                            checked={instruction.isActive}
-                            onChange={(e) => onUpdate(instruction.id, { isActive: e.target.checked })}
-                        />
-                        <div className="w-8 h-4 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-zinc-400 after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-cyan-600"></div>
-                    </label>
+                    <ToggleSwitch
+                        checked={instruction.isActive}
+                        onChange={() => onUpdate(instruction.id, { isActive: !instruction.isActive })}
+                        label={instruction.isActive ? 'Deactivate instruction' : 'Activate instruction'}
+                    />
 
                     <button
-                        onClick={() => { if (confirm('Delete this instruction?')) onDelete(instruction.id); }}
+                        onClick={async () => {
+                            const ok = await confirmDelete({ title: 'Delete this instruction?', message: 'This cannot be undone.', confirmLabel: 'Delete' });
+                            if (ok) onDelete(instruction.id);
+                        }}
                         className="p-1.5 text-zinc-600 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
                         title="Delete"
                     >
@@ -76,6 +78,7 @@ const InstructionCard: React.FC<{
                     </button>
                 </div>
             </div>
+            {ConfirmDialogComponent}
 
             {isExpanded && (
                 <div className="px-3 pb-3 animate-fade-in border-t border-white/5 pt-3">

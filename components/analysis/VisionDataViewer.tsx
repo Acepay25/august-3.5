@@ -20,7 +20,7 @@ const VisionDataViewer: React.FC<VisionDataViewerProps> = ({ isVisible, onClose,
             <CodeIcon />
             <h2 className="text-lg font-bold tracking-tight">Raw Vision Telemetry</h2>
           </div>
-          <button onClick={onClose} className="p-2 rounded-lg text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors">
+          <button onClick={onClose} className="p-2 rounded-lg text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors" aria-label="Close vision telemetry">
             <CloseIcon />
           </button>
         </header>

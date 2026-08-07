@@ -6,6 +6,7 @@ import { Kline } from '../../types';
 import { detectChartPatterns, detectKeyZones, DetectedPattern } from '../../utils/patternDetection';
 import { analyzeWithAI, AITrendlineAnalysis, MarketInsights } from '../../services/analysis/AITrendlineService';
 import { fetchKlines } from '../../services/analysis/KlineService';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
 import { CandlestickData, Time } from 'lightweight-charts';
 
 interface LiveMarketProps {
@@ -191,6 +192,8 @@ const identifyCandlePattern = (klines: Kline[]) => {
 };
 
 const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze }) => {
+    // Esc closes the overlay (was a navigation dead-end).
+    useEscapeClose(isVisible, onClose);
     const [symbol, setSymbol] = useState('ETHUSDT');
     const [interval, setInterval] = useState('15m');
     const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -696,7 +699,7 @@ ${JSON.stringify(marketData, null, 2)}
     if (!isVisible) return null;
 
     return (
-        <div className="fixed inset-0 bg-zinc-950 z-50 flex flex-col animate-fade-in pb-[env(safe-area-inset-bottom)]">
+        <div className="status-surface fixed inset-0 bg-zinc-950 z-50 flex flex-col animate-fade-in pb-[env(safe-area-inset-bottom)]">
             {/* Header - 2 rows on mobile for spacious feel */}
             <div className="bg-zinc-900 border-b border-white/10 flex-shrink-0 shadow-lg shadow-black/20">
                 {/* Top Row - Title, Price & Close */}

@@ -1,13 +1,60 @@
 
 import { sanitizeJSONString } from './sanitizers';
 
+/**
+ * Strips // and /* *\/ comments but ONLY outside JSON string literals, so
+ * values like "https://x" or "//div" survive intact.
+ */
+const stripJsonComments = (input: string): string => {
+    let result = '';
+    let inString = false;
+    let i = 0;
+    while (i < input.length) {
+        const char = input[i];
+        const next = input[i + 1];
+        if (inString) {
+            result += char;
+            if (char === '\\') {
+                // Keep the escape sequence verbatim (skip the escaped char).
+                result += next ?? '';
+                i += 2;
+                continue;
+            }
+            if (char === '"') inString = false;
+            i++;
+            continue;
+        }
+        if (char === '"') {
+            inString = true;
+            result += char;
+            i++;
+            continue;
+        }
+        if (char === '/' && next === '*') {
+            const end = input.indexOf('*/', i + 2);
+            i = end === -1 ? input.length : end + 2;
+            continue;
+        }
+        if (char === '/' && next === '/') {
+            const end = input.indexOf('\n', i + 2);
+            i = end === -1 ? input.length : end + 1;
+            continue;
+        }
+        result += char;
+        i++;
+    }
+    return result;
+};
+
 export const robustJsonParse = (jsonString: string): any => {
     if (!jsonString || typeof jsonString !== 'string') {
         throw new Error('Invalid input to robustJsonParse. Expected a non-empty string.');
     }
 
-    // 1. Remove comments
-    let cleanedString = jsonString.trim().replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, '');
+    // 1. Remove comments — STRING-AWARE: the old regex `\/\/.*` stripped
+    // anything after `//` inside string values too, corrupting URLs
+    // ("url": "https://x" → "https:").
+    let cleanedString = stripJsonComments(jsonString.trim());
 
     // 2. Escape invalid backslashes (Fix for "Bad escaped character" errors)
     // Case A: Backslash not followed by valid escape char (excluding u for now)

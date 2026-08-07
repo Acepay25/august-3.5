@@ -10,6 +10,10 @@ const BINANCE_FUTURES_API = 'https://fapi.binance.com';
 // Simple in-memory cache with eviction
 const cache: Map<string, { data: any; timestamp: number }> = new Map();
 const CACHE_TTL = 30000; // 30 seconds
+
+// In-flight dedupe for fetchOHLCVFromTime — concurrent identical requests
+// share one promise instead of fanning out N identical Binance calls.
+const inFlightOHLCV: Map<string, Promise<Kline[]>> = new Map();
 const MAX_CACHE_SIZE = 100; // Maximum number of cached entries
 
 export interface Kline {
@@ -391,29 +395,49 @@ export const fetchOHLCVFromTime = async (
     const normalizedSymbol = normalizeSymbol(symbol);
     const actualEndTime = endTime || Date.now();
 
-    // Don't cache historical queries as they're specific to timestamps
+    // Historical queries were never cached ("specific to timestamps") — with
+    // several PENDING cards + the autopilot's 60s loop that's N×4-tier Binance
+    // calls per minute for the SAME range. Key by minute-bucket so the 30s
+    // cache actually dedupes poll cycles (a minute-old end time is immaterial
+    // for 1m/15m/1h verification), and coalesce concurrent identical requests
+    // through one shared promise.
+    const endBucket = Math.floor(actualEndTime / 60_000) * 60_000;
+    const cacheKey = `ohlcvfrom_${normalizedSymbol}_${timeframe}_${startTime}_${endBucket}`;
+
+    const cached = getCached<Kline[]>(cacheKey);
+    if (cached) return cached;
+    const inFlight = inFlightOHLCV.get(cacheKey);
+    if (inFlight) return inFlight;
+
     console.log(`[MarketDataService] Fetching historical klines for ${normalizedSymbol} from ${new Date(startTime).toISOString()} to ${new Date(actualEndTime).toISOString()}`);
 
-    try {
-        const url = `/api/v3/klines?symbol=${normalizedSymbol}&interval=${timeframe}&startTime=${startTime}&endTime=${actualEndTime}&limit=1000`;
-        const response = await robustBinanceFetch(url);
-        const data = await response.json();
+    const promise = (async () => {
+        try {
+            const url = `/api/v3/klines?symbol=${normalizedSymbol}&interval=${timeframe}&startTime=${startTime}&endTime=${actualEndTime}&limit=1000`;
+            const response = await robustBinanceFetch(url);
+            const data = await response.json();
 
-        const klines: Kline[] = data.map((k: any[]) => ({
-            time: k[0],
-            open: parseFloat(k[1]),
-            high: parseFloat(k[2]),
-            low: parseFloat(k[3]),
-            close: parseFloat(k[4]),
-            volume: parseFloat(k[5])
-        }));
+            const klines: Kline[] = data.map((k: any[]) => ({
+                time: k[0],
+                open: parseFloat(k[1]),
+                high: parseFloat(k[2]),
+                low: parseFloat(k[3]),
+                close: parseFloat(k[4]),
+                volume: parseFloat(k[5])
+            }));
 
-        console.log(`[MarketDataService] Fetched ${klines.length} historical candles for ${normalizedSymbol}`);
-        return klines;
-    } catch (error) {
-        console.error(`Failed to fetch historical OHLCV for ${normalizedSymbol}:`, error);
-        throw error;
-    }
+            console.log(`[MarketDataService] Fetched ${klines.length} historical candles for ${normalizedSymbol}`);
+            setCache(cacheKey, klines);
+            return klines;
+        } catch (error) {
+            console.error(`Failed to fetch historical OHLCV for ${normalizedSymbol}:`, error);
+            throw error;
+        } finally {
+            inFlightOHLCV.delete(cacheKey);
+        }
+    })();
+    inFlightOHLCV.set(cacheKey, promise);
+    return promise;
 };
 
 /**

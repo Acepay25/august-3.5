@@ -15,6 +15,7 @@ import { HybridDataPacket } from '../analysis/HybridIntelligenceService';
 import { CONFIDENCE_RULES } from './LearningRulesService';
 import { StructuredRule } from '../../types';
 import { checkTradeAgainstRules as checkInvalidationRules, RuleCheckResult } from '../validation/InvalidationRuleService';
+import { parsePrice } from '../../utils/analysisUtils';
 
 export interface RuleValidationResult {
     isValid: boolean;
@@ -45,20 +46,23 @@ export const validateAllRules = (
 
     // --- 1. CORE CONFIG ENFORCEMENT (Hard Safety Rails) ---
     const confLevel = analysis.confidence as 'High' | 'Medium' | 'Low';
+    let coreConfigViolated = false;
     if (CONFIDENCE_RULES[confLevel]) {
         const requirements = CONFIDENCE_RULES[confLevel];
 
-        // Parse numeric values
-        const entry = parseFloat(analysis.entryPoints[0]?.price?.replace(/[^0-9.-]/g, '') || '0');
-        const sl = parseFloat(analysis.stopLoss?.replace(/[^0-9.-]/g, '') || '0');
-        const tp = parseFloat(analysis.takeProfit[0]?.price?.replace(/[^0-9.-]/g, '') || '0');
+        // parsePrice (not a digit-stripping parseFloat) — comma-formatted
+        // prices ("69,000") and annotations ("94500 4h") parse correctly.
+        const entry = parsePrice(analysis.entryPoints[0]?.price || '');
+        const sl = parsePrice(analysis.stopLoss || '');
+        const tp = parsePrice(analysis.takeProfit[0]?.price || '');
 
-        if (entry > 0 && sl > 0 && tp > 0) {
+        if (isFinite(entry) && isFinite(sl) && isFinite(tp) && entry > 0 && sl > 0 && tp > 0) {
             const risk = Math.abs(entry - sl);
             const reward = Math.abs(tp - entry);
             const rr = risk > 0 ? reward / risk : 0;
 
             if (rr < requirements.minRR) {
+                coreConfigViolated = true;
                 warnings.push(`⚠️ CORE CONFIG: ${confLevel} confidence requires >${requirements.minRR} R:R (Current: ${rr.toFixed(2)}). Downgrading.`);
 
                 // Downgrade logic
@@ -77,9 +81,9 @@ export const validateAllRules = (
 
             // Check Min R:R
             if (rule.constraints.minRR) {
-                const entry = parseFloat(analysis.entryPoints[0]?.price?.replace(/[^0-9.-]/g, '') || '0');
-                const sl = parseFloat(analysis.stopLoss?.replace(/[^0-9.-]/g, '') || '0');
-                const tp = parseFloat(analysis.takeProfit[0]?.price?.replace(/[^0-9.-]/g, '') || '0');
+                const entry = parsePrice(analysis.entryPoints[0]?.price || '');
+                const sl = parsePrice(analysis.stopLoss || '');
+                const tp = parsePrice(analysis.takeProfit[0]?.price || '');
                 const risk = Math.abs(entry - sl);
                 const reward = Math.abs(tp - entry);
                 const rr = risk > 0 ? reward / risk : 0;
@@ -135,7 +139,10 @@ export const validateAllRules = (
         errors,
         blockingViolations,
         ruleBreakdown: {
-            coreConfigCorrect: true, // simplified, assumes strictly false if checked above
+            // Real result of the core R:R rail — was hardcoded `true` even
+            // when the confidence requirement was violated, so consumers saw
+            // a false all-clear.
+            coreConfigCorrect: !coreConfigViolated,
             structuredRulesViolated: structuredViolations,
             invalidationRulesViolated: invalidationResult?.violations.length || 0
         },

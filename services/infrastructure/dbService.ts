@@ -148,40 +148,51 @@ const idbGetUserProfile = async (username: string): Promise<UserProfile | undefi
 };
 
 const idbSaveUserProfile = async (username: string, data: Partial<Omit<UserProfile, 'username'>>): Promise<void> => {
-  const db = await initIndexedDB();
-  const tx = db.transaction(STORE_NAME, 'readwrite');
-  const store = tx.objectStore(STORE_NAME);
-  const existingProfile = await store.get(username) || {};
+  // Serialize web writes through the same queue as the SQLite path — the
+  // read-modify-write here is NOT atomic, and overlapping debounced saves
+  // (data 1500ms + settings 2500ms + 15s heartbeat + unload flush) could
+  // interleave and drop fields via stale snapshots.
+  await runExclusiveWrite(async () => {
+    const db = await initIndexedDB();
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    const existingProfile = await store.get(username) || {};
 
-  const updatedProfile: UserProfile = {
-    username,
-    conversations: [],
-    tradeLog: [],
-    savedAnalyses: [],
-    tradeSummaries: [],
-    finalTradeSummary: null,
-    settings: { activeFrameworks: [] },
-    ...existingProfile,
-    ...data,
-    updatedAt: new Date().toISOString(),
-  };
+    const updatedProfile: UserProfile = {
+      username,
+      conversations: [],
+      tradeLog: [],
+      savedAnalyses: [],
+      tradeSummaries: [],
+      finalTradeSummary: null,
+      settings: { activeFrameworks: [] },
+      ...existingProfile,
+      ...data,
+      updatedAt: new Date().toISOString(),
+    };
 
-  if (!updatedProfile.createdAt) {
-    updatedProfile.createdAt = new Date().toISOString();
-  }
+    if (!updatedProfile.createdAt) {
+      updatedProfile.createdAt = new Date().toISOString();
+    }
 
-  await store.put(updatedProfile);
-  await tx.done;
+    await store.put(updatedProfile);
+    await tx.done;
+  });
 };
 
 const idbOverwriteUserProfile = async (profile: UserProfile): Promise<void> => {
-  const db = await initIndexedDB();
-  await db.put(STORE_NAME, profile);
+  // Queued too — a concurrent save must not interleave with a restore/import.
+  await runExclusiveWrite(async () => {
+    const db = await initIndexedDB();
+    await db.put(STORE_NAME, profile);
+  });
 };
 
 const idbDeleteUserProfile = async (username: string): Promise<void> => {
-  const db = await initIndexedDB();
-  await db.delete(STORE_NAME, username);
+  await runExclusiveWrite(async () => {
+    const db = await initIndexedDB();
+    await db.delete(STORE_NAME, username);
+  });
 };
 
 // ============================================================================

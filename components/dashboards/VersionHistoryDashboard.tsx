@@ -343,7 +343,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-8">
+        <div className="status-surface fixed inset-0 z-50 flex items-center justify-center p-4 md:p-8">
             {/* Backdrop */}
             <div className="absolute inset-0 bg-black/60" onClick={onClose} />
 

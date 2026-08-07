@@ -197,13 +197,25 @@ async function* chatCompletionsStream(
 // ─── Messages Format (Anthropic-style) ──────────────────────────────────────
 
 /** Convert a ChatMessage's content to Anthropic message content blocks. */
-function toAnthropicContent(content: string | ContentPart[]): any[] {
+export function toAnthropicContent(content: string | ContentPart[]): any[] {
     if (typeof content === 'string') {
         return [{ type: 'text', text: content }];
     }
     return content.map(part => {
         if (part.type === 'text') return { type: 'text', text: part.text };
-        return { type: 'image', source: { type: 'base64', media_type: 'image/png', data: part.image_url.url.split(',')[1] || '' } };
+        const url = part.image_url.url;
+        const commaIdx = url.indexOf(',');
+        if (url.startsWith('data:') && commaIdx !== -1) {
+            // data:image/png;base64,<payload> — carry the real media type
+            // (JPEG/WebP screenshots were previously hardcoded as PNG).
+            const header = url.slice(5, commaIdx);
+            const mimeMatch = header.match(/^image\/(png|jpeg|webp|gif)\b/i);
+            const mediaType = mimeMatch ? mimeMatch[1].toLowerCase() : 'png';
+            return { type: 'image', source: { type: 'base64', media_type: `image/${mediaType}`, data: url.slice(commaIdx + 1) } };
+        }
+        // Non-data URL — pass through as a URL source instead of silently
+        // emitting an empty base64 payload.
+        return { type: 'image', source: { type: 'url', url } };
     });
 }
 
@@ -265,8 +277,11 @@ async function messagesCall(
 
 // ─── Responses Format (OpenAI Responses API) ────────────────────────────────
 
-function toResponsesInput(messages: ChatMessage[]): any[] {
-    return messages.map(m => ({
+export function toResponsesInput(messages: ChatMessage[]): any[] {
+    // The Responses API only accepts user/assistant roles in `input` — system
+    // content belongs in the top-level `instructions` field (see responsesCall).
+    // Passing role:'system' here gets a 400-class rejection.
+    return messages.filter(m => m.role !== 'system').map(m => ({
         role: m.role,
         content: typeof m.content === 'string'
             ? m.content
@@ -280,6 +295,12 @@ async function responsesCall(
     options?: ChatRequestOptions
 ): Promise<string> {
     const url = `${normalizeBaseUrl(config.baseUrl, 'responses')}/responses`;
+    const systemMsg = messages.find(m => m.role === 'system');
+    const instructions = systemMsg
+        ? typeof systemMsg.content === 'string'
+            ? systemMsg.content
+            : (systemMsg.content as ContentPart[]).map(p => p.type === 'text' ? p.text : '').join('')
+        : undefined;
     const response = await fetch(url, {
         method: 'POST',
         headers: {
@@ -289,6 +310,7 @@ async function responsesCall(
         body: JSON.stringify({
             model: config.selectedModel,
             input: toResponsesInput(messages),
+            ...(instructions ? { instructions } : {}),
             max_output_tokens: options?.maxTokens ?? 4096,
             temperature: options?.temperature ?? 0.7,
         }),

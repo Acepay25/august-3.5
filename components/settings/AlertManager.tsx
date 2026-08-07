@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { PriceAlertService, PriceAlert } from '../../services/ui/PriceAlertService';
 import { TrashIcon, LoadingIcon } from '../shared/Icons';
 import { useConfirmDialog } from '../shared/ConfirmDialog';
+import { ToggleSwitch } from '../shared/ToggleSwitch';
 
 interface AlertManagerProps {
   /** Called when the user toggles/removes an alert — lets callers refresh in-place state. */
@@ -90,16 +91,12 @@ export const AlertManager: React.FC<AlertManagerProps> = ({ onChanged }) => {
         <div className="divide-y divide-white/5 border border-white/5 rounded-xl overflow-hidden">
           {alerts.map(alert => (
             <div key={alert.id} className="flex items-center gap-3 px-4 py-3 bg-zinc-900/60 hover:bg-zinc-900 transition-colors">
-              <button
-                onClick={() => handleToggle(alert.id)}
+              <ToggleSwitch
+                checked={alert.enabled}
+                onChange={() => handleToggle(alert.id)}
                 disabled={busyId === alert.id}
-                role="switch"
-                aria-checked={alert.enabled}
-                aria-label={`${alert.enabled ? 'Disable' : 'Enable'} alert for ${alert.symbol}`}
-                className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${alert.enabled ? 'bg-emerald-500/80' : 'bg-zinc-700'}`}
-              >
-                <span className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all" style={{ left: alert.enabled ? '18px' : '2px' }} />
-              </button>
+                label={`${alert.enabled ? 'Disable' : 'Enable'} alert for ${alert.symbol}`}
+              />
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-medium text-zinc-200">
                   {alert.symbol} <span className="text-zinc-500">· {alert.direction}</span>

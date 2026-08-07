@@ -7,6 +7,7 @@ import { ProviderConfig } from '../types/provider';
 import GlobalLearningService from '../services/learning/GlobalLearningService';
 import { storeRule, loadLearningRules, saveLearningRules } from '../services/learning/LearningRulesService';
 import { DEFAULT_LEVERAGE } from '../utils/conversationUtils';
+import { parsePrice } from '../utils/analysisUtils';
 import { trackTradeOutcome, mapRegimeToKey } from '../services/backtesting/ModelPerformanceService';
 import { trackConfluenceOutcome, calculateConfluenceScore } from '../services/analysis/TimeframeConfluenceService';
 import { SLOptimizationData } from '../services/backtesting/StopLossOptimizerService';
@@ -59,7 +60,6 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
     const [savedAnalyses, setSavedAnalyses] = useState<SavedAnalysis[]>([]);
     const [tradeSummaries, setTradeSummaries] = useState<TradeSummary[]>([]);
     const [finalTradeSummary, setFinalTradeSummary] = useState<string | null>(null);
-    const [loggingTradeId, setLoggingTradeId] = useState<string | null>(null);
     const [skipCandidate, setSkipCandidate] = useState<Message | null>(null);
     const [updateCandidate, setUpdateCandidate] = useState<Message | null>(null);
     const [simulatorCandidate, setSimulatorCandidate] = useState<Message | null>(null);
@@ -104,7 +104,12 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         providers.forEach(p => {
             trackTradeOutcome(p, isWin, analysis.detectedPatternFamily || '', trade.marketRegime || 'ranging', analysis.confidence || 'Medium', {
                 direction: analysis.direction,
-                entryPrice: parseFloat(String(analysis.entryPoints?.[0]?.price || 0).replace(/[^0-9.-]/g, '')) || 0,
+                // parsePrice handles commas + annotations; the old digit-strip
+                // regex turned "94500 4h" into 945004 in the RL training signal.
+                entryPrice: parsePrice(analysis.entryPoints?.[0]?.price || '') || 0,
+                // Real trade id so ReinforcementSignalService can dedupe
+                // re-logged/updated trades.
+                id: trade.id,
             });
         });
 
@@ -786,7 +791,6 @@ ${result.comparisonBlock}
         savedAnalyses, setSavedAnalyses,
         tradeSummaries, setTradeSummaries,
         finalTradeSummary, setFinalTradeSummary,
-        loggingTradeId, setLoggingTradeId,
         skipCandidate, setSkipCandidate,
         updateCandidate, setUpdateCandidate,
         simulatorCandidate, setSimulatorCandidate,

@@ -1,8 +1,9 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import TradeLogContent from './TradeLog';
 import PerformanceReviewContent from './PerformanceReview';
 import WinRateDashboard from '../dashboards/WinRateDashboard';
+import EquityCurveDashboard from '../dashboards/EquityCurveDashboard';
 import LearningDashboard from '../dashboards/LearningDashboard';
 import ModelPerformanceDashboard from '../dashboards/ModelPerformanceDashboard';
 import ReasoningDashboard from '../dashboards/ReasoningDashboard';
@@ -11,6 +12,7 @@ import { exportTradesCSV, exportTradesHTML } from '../../utils/reportExport';
 import { AIProvider, LoggedTrade, TradeSummary, GlobalMemory } from '../../types';
 import { computeJournalStats } from '../../utils/journalAnalytics';
 import { ProviderConfig } from '../../types/provider';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
 
 interface JournalProps {
     isVisible: boolean;
@@ -33,6 +35,8 @@ interface JournalProps {
     onUpdateInsights: (ids: string[]) => void;
     isSummarizing?: boolean;
     currentInsightIds: string[];
+    /** (i/n) progress for manual insight-generation loops. */
+    insightProgress?: { done: number; total: number } | null;
     onUpdateTradeLeverage: (id: string, leverage: number) => void;
 
     // PerformanceReview Props
@@ -194,7 +198,7 @@ const JournalInner: React.FC<JournalProps> = ({
     // Trade Log Pass-through
     trades, onDeleteTrades, onClearAllTrades, modelIdToName, ocrModelIdToName, onUpdateInsights, isSummarizing, currentInsightIds, onUpdateTradeLeverage,
     // Performance Review Pass-through
-    finalSummary, individualSummaries, isLoading, isInsightGenerating, newlyAddedInsightIds, summarizationProvider, summarizationModel, onSetSummarizationProvider, onSetSummarizationModel, providers = [], summaryCharLimit = 1000, onUpdateSummaryCharLimit = () => {}, onRegenerateSummary = () => {}, onDeleteInsight, useAlgorithmicSummary = false, onToggleAlgorithmicSummary = () => {},
+    finalSummary, individualSummaries, isLoading, isInsightGenerating, insightProgress, newlyAddedInsightIds, summarizationProvider, summarizationModel, onSetSummarizationProvider, onSetSummarizationModel, providers = [], summaryCharLimit = 1000, onUpdateSummaryCharLimit = () => {}, onRegenerateSummary = () => {}, onDeleteInsight, useAlgorithmicSummary = false, onToggleAlgorithmicSummary = () => {},
     // Analytics Pass-through
     familyWinRates = {},
     // Memory Pass-through
@@ -216,8 +220,16 @@ const JournalInner: React.FC<JournalProps> = ({
     const effectiveEnabledProviders: AIProvider[] = enabledProviders
         ?? providers.filter(p => p.isEnabled && p.apiKey.trim().length > 0).map(p => p.id);
 
+    // Esc closes the overlay (the biggest navigation dead-end in the app).
+    useEscapeClose(isVisible, onClose);
+
+    // Remember the last active tab across opens. Only re-apply `initialTab`
+    // when it actually CHANGES (a deep-link), not on every visibility flip —
+    // the old effect dumped users back to History every time they reopened.
+    const lastInitialTabRef = useRef<TabId>(initialTab);
     useEffect(() => {
-        if (isVisible) {
+        if (isVisible && initialTab !== lastInitialTabRef.current) {
+            lastInitialTabRef.current = initialTab;
             setActiveTab(initialTab);
         }
     }, [isVisible, initialTab]);
@@ -246,6 +258,7 @@ const JournalInner: React.FC<JournalProps> = ({
                 individualSummaries={individualSummaries || []}
                 isLoading={isLoading}
                 isInsightGenerating={isInsightGenerating}
+                insightProgress={insightProgress}
                 newlyAddedInsightIds={newlyAddedInsightIds}
                 summarizationProvider={summarizationProvider}
                 summarizationModel={summarizationModel}
@@ -264,7 +277,12 @@ const JournalInner: React.FC<JournalProps> = ({
                 onRewriteInsightsWithAI={onRewriteInsightsWithAI}
             />
         ) : activeTab === 'analytics' ? (
-            <WinRateDashboard trades={trades} />
+            <div className="h-full overflow-y-auto">
+                <div className="p-3 sm:p-4 md:p-5">
+                    <EquityCurveDashboard trades={trades} />
+                    <WinRateDashboard trades={trades} />
+                </div>
+            </div>
         ) : activeTab === 'learning' ? (
             <div className="h-full overflow-y-auto">
                 <LearningDashboard trades={trades} />
@@ -340,7 +358,7 @@ const JournalInner: React.FC<JournalProps> = ({
             />
 
             {/* Main Panel - Full screen on mobile, side panel on desktop */}
-            <aside className="fixed inset-0 sm:inset-y-0 sm:right-0 sm:left-auto sm:w-[480px] bg-zinc-950 z-50 flex flex-col animate-slide-up sm:animate-slide-left">
+            <aside className="status-surface fixed inset-0 sm:inset-y-0 sm:right-0 sm:left-auto sm:w-[480px] bg-zinc-950 z-50 flex flex-col animate-slide-up sm:animate-slide-left">
 
                 {/* Modern Header */}
                 <header className="shrink-0 relative">
@@ -372,6 +390,7 @@ const JournalInner: React.FC<JournalProps> = ({
                             <button
                                 onClick={onClose}
                                 className="p-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white transition-all"
+                                aria-label="Close journal"
                             >
                                 <CloseIcon />
                             </button>
@@ -379,69 +398,12 @@ const JournalInner: React.FC<JournalProps> = ({
                     </div>
                 </header>
 
-                {/* Content Area */}
-                <div className="flex-1 overflow-hidden">
-                    {activeTab === 'log' ? (
-                        <TradeLogContent
-                            trades={trades}
-                            onDeleteTrades={onDeleteTrades}
-                            onClearAllTrades={onClearAllTrades}
-                            modelIdToName={modelIdToName}
-                            ocrModelIdToName={ocrModelIdToName}
-                            onUpdateInsights={onUpdateInsights}
-                            isSummarizing={isSummarizing}
-                            currentInsightIds={currentInsightIds}
-                            onUpdateTradeLeverage={onUpdateTradeLeverage}
-                            username={activeUsername}
-                        />
-                    ) : activeTab === 'performance' ? (
-                        <PerformanceReviewContent
-                            finalSummary={finalSummary}
-                            individualSummaries={individualSummaries}
-                            isLoading={isLoading}
-                            isInsightGenerating={isInsightGenerating}
-                            newlyAddedInsightIds={newlyAddedInsightIds}
-                            summarizationProvider={summarizationProvider}
-                            summarizationModel={summarizationModel}
-                            onSetSummarizationProvider={onSetSummarizationProvider}
-                            onSetSummarizationModel={onSetSummarizationModel}
-                            providers={providers}
+                {/* Analytics summary — streaks, expectancy, win rate, top strategy */}
+                <JournalAnalyticsSummary trades={trades} />
 
-                            summaryCharLimit={summaryCharLimit}
-                            onUpdateSummaryCharLimit={onUpdateSummaryCharLimit}
-                            onManageInsights={() => setActiveTab('log')}
-                            onRegenerateSummary={onRegenerateSummary}
-                            onDeleteInsight={onDeleteInsight}
-                            useAlgorithmicSummary={useAlgorithmicSummary}
-                            onToggleAlgorithmicSummary={onToggleAlgorithmicSummary}
-                            useAlgorithmicInsights={useAlgorithmicInsights}
-                            onToggleAlgorithmicInsights={onToggleAlgorithmicInsights}
-                            onRewriteInsightsWithAI={onRewriteInsightsWithAI}
-                        />
-                    ) : activeTab === 'analytics' ? (
-                        <WinRateDashboard trades={trades} />
-                    ) : activeTab === 'learning' ? (
-                        <div className="h-full overflow-y-auto">
-                            <LearningDashboard trades={trades} />
-                        </div>
-                    ) : activeTab === 'models' ? (
-                        <div className="p-4 sm:p-6 overflow-y-auto h-full">
-                            <ModelPerformanceDashboard enabledProviders={effectiveEnabledProviders} trades={trades} selectedModels={selectedModels} />
-                        </div>
-                    ) : activeTab === 'reasoning' ? (
-                        <div className="p-4 sm:p-6 overflow-y-auto h-full">
-                            <ReasoningDashboard
-                                username={activeUsername}
-                                initialTradeId={initialTradeId}
-                                onInitialTradeConsumed={onInitialTradeConsumed}
-                            />
-                        </div>
-                    ) : (
-                        <MemoryContent
-                            threadSummary={threadSummary}
-                            globalMemory={globalMemory}
-                        />
-                    )}
+                {/* Content Area — same renderContent as the embedded variant */}
+                <div className="flex-1 overflow-hidden">
+                    {renderContent()}
                 </div>
 
                 {/* Bottom Navigation Bar - Mobile Optimized */}

@@ -26,9 +26,7 @@ export interface ChatContextProps {
     expandedPostMortemImages: Record<string, boolean>;
     setExpandedPostMortemImages: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
     savedAnalyses: SavedAnalysis[];
-    loggingTradeId: string | null;
     activeFrameworks: string[];
-    activeConversation: Conversation | undefined;
     copiedMessageId: string | null;
     modelIdToName: Record<string, string>;
     ocrModelIdToName: Record<string, string>;
@@ -49,6 +47,8 @@ export interface ChatContextProps {
     onCompareAnalysis?: (messageId: string) => void;
     /** Opens the Trading Journal Think tab focused on this card's reasoning. */
     onViewReasoning?: (messageId: string) => void;
+    /** F4: re-run the debate for a completed analysis card with the same setup. */
+    onReRunAnalysis?: (messageId: string) => void;
     // Selection Mode Props
     isSelectionMode?: boolean;
     selectedMessageIds?: Set<string>;
@@ -118,8 +118,8 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
     const {
         typingMessageState, highlightedAnalysisId, expandedPostMortems, setExpandedPostMortems,
         expandedPostMortemImages, setExpandedPostMortemImages,
-        savedAnalyses, loggingTradeId,
-        activeFrameworks, activeConversation, modelIdToName, providerNameToId,
+        savedAnalyses,
+        activeFrameworks, modelIdToName, providerNameToId,
         handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy,
         handleSaveAnalysis, handleInitiateUpdateTrade, handleInitiateSimulator,
         isSelectionMode, selectedMessageIds, onToggleMessageSelection,
@@ -127,7 +127,8 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
         autopilotResolutions, onConfirmAutopilot, onDismissAutopilot,
         onSelectMessageForProbability,
         onCompareAnalysis,
-        onViewReasoning
+        onViewReasoning,
+        onReRunAnalysis,
     } = context;
 
     const isHighlighted = highlightedAnalysisId === message.id;
@@ -299,8 +300,10 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                             </div>
 
 
-                            {/* Retry button for failed post-mortem analysis */}
-                            {message.role === MessageRole.SYSTEM && message.postMortemFailedCandidate && onRetryPostMortem && (
+                            {/* Retry button for failed post-mortem analysis.
+                                The failed message is persisted as role AI (P2-15),
+                                so gate on the candidate flag alone, not the role. */}
+                            {message.postMortemFailedCandidate && onRetryPostMortem && (
                                 <button
                                     onClick={() => onRetryPostMortem(message.id)}
                                     className="mt-3 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-md text-sm font-medium transition-colors flex items-center gap-2"
@@ -347,7 +350,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
 
                             {/* Analyst requests appear in chat before the moderator debate starts. */}
                             {!message.isDebating && !message.analysis && message.ensembleProgress && (
-                                <EnsembleProgressChat progress={message.ensembleProgress} modelIdToName={modelIdToName} isLive />
+                                <EnsembleProgressChat progress={message.ensembleProgress} modelIdToName={modelIdToName} isLive onRetryAnalyst={onReRunAnalysis ? () => onReRunAnalysis(message.id) : undefined} />
                             )}
 
                             {/* Live debates stay visible; completed cards default to the result only. */}
@@ -383,7 +386,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                             )}
 
                             {/* Main Analysis Result */}
-                            {message.analysis && <AnalysisResult analysis={message.analysis} messageId={message.id} onLogTrade={handleInitiateLogTrade} onInitiateSkip={handleInitiateSkipTrade} onViewStrategy={handleViewStrategyDetails} onSaveAnalysis={handleSaveAnalysis} onUpdateTrade={handleInitiateUpdateTrade} onSimulate={handleInitiateSimulator} isSaved={savedAnalyses.some(sa => sa.id === message.id)} outcome={message.outcome} isLogging={loggingTradeId === message.id} activeFrameworks={activeFrameworks} onApplyStrategy={handleApplyStrategy} imageSummaries={message.imageSummaries} isAccuracyMode={message.isAccuracyMode} accuracySubMode={message.accuracySubMode} confidenceCalibration={confidenceCalibration} confluenceData={message.confluenceData} leverage={leverage} isLensMode={message.isLensMode} tradingStyle={message.tradingStyle} onSelectForProbability={onSelectMessageForProbability} autopilotResolution={autopilotResolutions?.[message.id]} onConfirmAutopilot={onConfirmAutopilot} onDismissAutopilot={onDismissAutopilot} onCompare={onCompareAnalysis} onViewReasoning={onViewReasoning} />}
+                            {message.analysis && <AnalysisResult analysis={message.analysis} messageId={message.id} onLogTrade={handleInitiateLogTrade} onInitiateSkip={handleInitiateSkipTrade} onViewStrategy={handleViewStrategyDetails} onSaveAnalysis={handleSaveAnalysis} onUpdateTrade={handleInitiateUpdateTrade} onSimulate={handleInitiateSimulator} onReRunAnalysis={onReRunAnalysis} isSaved={savedAnalyses.some(sa => sa.id === message.id)} outcome={message.outcome} activeFrameworks={activeFrameworks} onApplyStrategy={handleApplyStrategy} imageSummaries={message.imageSummaries} isAccuracyMode={message.isAccuracyMode} accuracySubMode={message.accuracySubMode} confidenceCalibration={confidenceCalibration} confluenceData={message.confluenceData} leverage={leverage} isLensMode={message.isLensMode} tradingStyle={message.tradingStyle} onSelectForProbability={onSelectMessageForProbability} autopilotResolution={autopilotResolutions?.[message.id]} onConfirmAutopilot={onConfirmAutopilot} onDismissAutopilot={onDismissAutopilot} onCompare={onCompareAnalysis} onViewReasoning={onViewReasoning} />}
 
                             {!message.isDebating && debateTurns.length > 0 && !message.analysis && (
                                 <DebateChat
@@ -413,7 +416,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     </button>
                                     {isAnalystOutputsExpanded && (
                                         <div id={`analyst-outputs-${message.id}`}>
-                                            <EnsembleProgressChat progress={message.ensembleProgress} modelIdToName={modelIdToName} />
+                                            <EnsembleProgressChat progress={message.ensembleProgress} modelIdToName={modelIdToName} onRetryAnalyst={onReRunAnalysis ? () => onReRunAnalysis(message.id) : undefined} />
                                         </div>
                                     )}
                                 </div>

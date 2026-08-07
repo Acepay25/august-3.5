@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import * as dbService from '../services/infrastructure/dbService';
 import { isValidUserProfile } from '../utils/profileUtils';
-import { exportDataAsFile, exportPreferencesData } from '../services/infrastructure/ExportService';
+import { exportDataAsFile, exportPreferencesData, importPreferencesData } from '../services/infrastructure/ExportService';
 
 export interface UseUserProfilesParams {
     resetAppState: (usernameToSave?: string | null) => Promise<void>;
@@ -38,7 +38,22 @@ export const useUserProfiles = (params: UseUserProfilesParams) => {
             const data = JSON.parse(fileContent);
             if (isValidUserProfile(data)) {
                 await dbService.overwriteUserProfile(data);
-                toast.success("Profile Imported", "Please select the user to log in.");
+                // Restore the preferences backup (providers, lens config,
+                // alerts, model performance) that handleExportData captures —
+                // it was silently dropped before, so imports lost every
+                // provider setup and API key.
+                const prefsBackup = (data as unknown as Record<string, unknown>)?._preferencesBackup;
+                if (prefsBackup && typeof prefsBackup === 'object') {
+                    try {
+                        await importPreferencesData(prefsBackup as Record<string, any>);
+                        toast.success("Profile Imported", "Profile and provider settings restored. Please select the user to log in.");
+                    } catch (prefsError) {
+                        console.warn('[Import] Preferences restore failed (non-fatal):', prefsError);
+                        toast.info("Profile Imported", "Profile restored, but provider settings could not be restored.");
+                    }
+                } else {
+                    toast.success("Profile Imported", "Please select the user to log in.");
+                }
                 const users = await dbService.getAllUsernames();
                 setExistingUsernames(users);
             } else {
@@ -97,6 +112,11 @@ export const useUserProfiles = (params: UseUserProfilesParams) => {
 
             if (!result.success) {
                 toast.error("Export Failed", result.error);
+            } else {
+                // The backup embeds the preferences (incl. provider API keys —
+                // encrypted on desktop, plaintext on web). Say so explicitly so
+                // users treat the file as sensitive.
+                toast.success("Export Complete", "Backup saved. It includes your provider API keys — keep the file private.");
             }
         }
     };

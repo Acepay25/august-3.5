@@ -7,6 +7,7 @@
 
 import { LoggedTrade, AIProvider } from '../../types';
 import { getPreferenceObject, setPreferenceObject, PREF_KEYS } from '../infrastructure/PreferencesService';
+import { parsePrice } from '../../utils/analysisUtils';
 
 // ========================= INTERFACES =========================
 
@@ -218,25 +219,34 @@ function calculatePnlR(trade: LoggedTrade): number | undefined {
     const analysis = trade.analysis;
     if (!analysis) return undefined;
 
-    const entry = parseFloat(analysis.entryPoints?.[0]?.price || '0');
-    const sl = parseFloat(analysis.stopLoss || '0');
+    // parsePrice (not parseFloat) — handles comma-formatted prices ("69,000")
+    // and timeframe annotations ("94500 4h") without gluing digits together.
+    const entry = parsePrice(analysis.entryPoints?.[0]?.price || '');
+    const sl = parsePrice(analysis.stopLoss || '');
     const outcome = trade.outcome;
 
-    if (!entry || !sl || entry === sl) return undefined;
+    if (!isFinite(entry) || !isFinite(sl) || entry === sl) return undefined;
 
     const risk = Math.abs(entry - sl);
 
     // For wins, estimate based on typical TP (1.5-2R)
-    // For losses, typically -1R
     if (outcome === 'WIN') {
         // Check if we have corrected values
-        const tp = parseFloat(trade.correctedTakeProfit || analysis.takeProfit?.[0]?.price || '0');
-        if (tp && entry) {
+        const tp = parsePrice(trade.correctedTakeProfit || analysis.takeProfit?.[0]?.price || '');
+        if (isFinite(tp) && entry) {
             const reward = Math.abs(tp - entry);
             return +(reward / risk).toFixed(2);
         }
         return 1.5; // Default estimate for wins
     } else if (outcome === 'LOSS') {
+        // A stop-loss exit is -1R against the PLANNED stop; scale by the ACTUAL
+        // stop used (correctedStopLoss) so widened stops register as extended
+        // losses. The old hardcoded -1.0 made the `worstR <= -1.5` REDUCE_SIZE
+        // gate in generateMandatoryPatternCheck unreachable.
+        const actualSl = parsePrice(trade.correctedStopLoss || analysis.stopLoss || '');
+        if (isFinite(actualSl) && actualSl !== entry && risk > 0) {
+            return -Math.abs(entry - actualSl) / risk;
+        }
         return -1.0;
     }
 

@@ -11,6 +11,7 @@
 import { Capacitor } from '@capacitor/core';
 import { getUserProfile, saveUserProfile, overwriteUserProfile } from './dbService';
 import { isValidUserProfile } from '../../utils/profileUtils';
+import { exportPreferencesData, importPreferencesData } from './ExportService';
 
 export interface BackupMetadata {
     id: string;
@@ -122,6 +123,10 @@ export const createBackup = async (username: string): Promise<BackupMetadata | n
         const backupId = `backup-${safeUser}-${Date.now()}`;
         const timestamp = new Date().toISOString();
         const profileJson = JSON.stringify(profile);
+        // F6: preferences sidecar — provider configs (with keys), learning
+        // rules, price alerts, autopilot state. Restoring a backup previously
+        // only restored the profile, silently dropping all of these.
+        const preferencesJson = JSON.stringify(await exportPreferencesData());
         const sizeBytes = new Blob([profileJson]).size;
         const metadata: BackupMetadata = {
             id: backupId,
@@ -156,6 +161,12 @@ export const createBackup = async (username: string): Promise<BackupMetadata | n
                 directory: Directory.Documents,
                 encoding: Encoding.UTF8,
             });
+            await Filesystem.writeFile({
+                path: `${NATIVE_BACKUP_DIR}/${baseName}.prefs.json`,
+                data: preferencesJson,
+                directory: Directory.Documents,
+                encoding: Encoding.UTF8,
+            });
         } else {
             // Web fallback: IndexedDB (subject to eviction under storage
             // pressure, but acceptable on desktop browsers).
@@ -169,6 +180,7 @@ export const createBackup = async (username: string): Promise<BackupMetadata | n
                     timestamp,
                     version: 1,
                     profile: profileJson,
+                    preferences: preferencesJson,
                     sizeBytes,
                     conversationCount: metadata.conversationCount,
                     tradeCount: metadata.tradeCount,
@@ -260,7 +272,7 @@ export const getBackups = async (username: string): Promise<BackupMetadata[]> =>
  * Read the full profile JSON for a backup (from either storage backend).
  * Used by exportBackupToFile.
  */
-const readBackupProfile = async (backupId: string): Promise<{ username: string; timestamp: string; profileJson: string } | null> => {
+const readBackupProfile = async (backupId: string): Promise<{ username: string; timestamp: string; profileJson: string; preferencesJson?: string | null } | null> => {
     if (useNativeStorage()) {
         const { Filesystem, Directory, Encoding } = await getFilesystem();
         // Find the .json (non-meta) file whose name ends with the backupId.
@@ -289,7 +301,17 @@ const readBackupProfile = async (backupId: string): Promise<{ username: string; 
             username = meta.username || '';
             timestamp = meta.timestamp || timestamp;
         } catch { /* meta missing — best effort */ }
-        return { username, timestamp, profileJson };
+        // Preferences sidecar (F6) — old backups don't have one.
+        let preferencesJson: string | null = null;
+        try {
+            const prefsResult = await Filesystem.readFile({
+                path: `${NATIVE_BACKUP_DIR}/${match.name.replace('.json', '.prefs.json')}`,
+                directory: Directory.Documents,
+                encoding: Encoding.UTF8,
+            });
+            preferencesJson = await readFileAsString(prefsResult.data);
+        } catch { /* prefs sidecar missing — pre-F6 backup */ }
+        return { username, timestamp, profileJson, preferencesJson };
     }
 
     const db = await initBackupDB();
@@ -301,7 +323,7 @@ const readBackupProfile = async (backupId: string): Promise<{ username: string; 
         request.onerror = () => reject(request.error);
     });
     if (!backup) return null;
-    return { username: backup.username, timestamp: backup.timestamp, profileJson: backup.profile };
+    return { username: backup.username, timestamp: backup.timestamp, profileJson: backup.profile, preferencesJson: backup.preferences ?? null };
 };
 
 /**
@@ -393,6 +415,19 @@ export const restoreBackup = async (
             return { success: false, error: 'Backup contains an invalid profile' };
         }
         await overwriteUserProfile(profile);
+        // F6: restore the preferences sidecar (provider configs, learning
+        // rules, alerts, autopilot state). Old backups don't have one — the
+        // profile restore still succeeds without it.
+        if (record.preferencesJson) {
+            try {
+                const preferences = JSON.parse(record.preferencesJson);
+                if (preferences && typeof preferences === 'object') {
+                    await importPreferencesData(preferences);
+                }
+            } catch (e) {
+                console.warn('[BackupService] Preferences sidecar could not be restored:', e);
+            }
+        }
         return { success: true, username: profile.username };
     } catch (error) {
         console.error('[BackupService] Restore failed:', error);

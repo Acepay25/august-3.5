@@ -939,26 +939,24 @@ const buildMonteCarloConfig = (
             .map(tp => parsePrice(tp.price))
             .filter((p): p is number => !isNaN(p));
 
-        // Debug: Log parsed values
-        console.log('[MonteCarloForSetup] Parsed values:', {
-            entry,
-            stopLoss,
-            tps,
-            rawEntryPrice: analysis.entryPoints?.[0]?.price,
-            rawStopLoss: analysis.stopLoss,
-            rawTakeProfits: analysis.takeProfit?.map(tp => tp.price)
-        });
-
         // Validate we have required data
         if (!entry || !stopLoss || tps.length === 0) {
             console.log('[MonteCarloForSetup] Insufficient trade data - entry:', entry, 'stopLoss:', stopLoss, 'tps:', tps);
             return null;
         }
 
-        const direction = (analysis.direction?.toLowerCase().includes('long') ||
-            analysis.direction?.toLowerCase().includes('buy'))
-            ? 'Long' as const
-            : 'Short' as const;
+        const dirLower = (analysis.direction || '').toLowerCase();
+        const isLong = dirLower.includes('long') || dirLower.includes('buy');
+        const isShort = dirLower.includes('short') || dirLower.includes('sell');
+
+        // Neutral / unknown direction: don't simulate a direction the card
+        // never claimed — the old fallback silently simulated every non-long
+        // analysis as SHORT.
+        if (!isLong && !isShort) {
+            console.log('[MonteCarloForSetup] Neutral direction — skipping simulation.');
+            return null;
+        }
+        const direction = isLong ? 'Long' as const : 'Short' as const;
 
         // Get ATR from hybrid data - average all available timeframes for balanced volatility
         const availableAtrs = [
@@ -969,32 +967,16 @@ const buildMonteCarloConfig = (
         ].filter((v): v is number => v !== undefined && v > 0);
 
         let atr: number;
-        let atrSource: string;
 
         if (availableAtrs.length > 0) {
             // Average all available ATRs
             atr = availableAtrs.reduce((sum, val) => sum + val, 0) / availableAtrs.length;
-            atrSource = `avg of ${availableAtrs.length} TF`;
         } else {
             // Fallback: Calculate ATR from stop loss distance
             const slDistance = Math.abs(entry - stopLoss);
             atr = slDistance * 2; // Assume SL is ~0.5 ATR
-            atrSource = 'fallback from SL';
             console.log('[MonteCarloForSetup] Using fallback ATR from SL distance:', atr);
         }
-
-        // Debug: Log simulation parameters
-        console.log('[MonteCarloForSetup] Simulation params:', {
-            entry,
-            stopLoss,
-            tps,
-            direction,
-            atr,
-            atrSource,
-            availableAtrs,
-            hybridIndicators: Object.keys(hybridData.indicators || {}),
-            trendBias: hybridData.regime?.trendDirection
-        });
 
         // Determine trend bias from regime
         let trendBias = 0;

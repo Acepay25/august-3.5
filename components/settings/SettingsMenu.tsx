@@ -12,6 +12,7 @@ import { DiagnosticsPanel } from './DiagnosticsPanel';
 import { BackupManager } from './BackupManager';
 import { AlertManager } from './AlertManager';
 import { Journal } from '../journal/Journal';
+import { ToggleSwitch } from '../shared/ToggleSwitch';
 import { ActivityIcon, AISettingsIcon, BrainIcon, CloseIcon, EditIcon, HistoryIcon, BookmarkIcon, SettingsIcon, UserIcon, ExportIcon, SearchIcon, SwitchUserIcon } from '../shared/Icons';
 
 export type SettingsTab = 'general' | 'models' | 'journal' | 'lenses' | 'instructions' | 'memory' | 'actions';
@@ -24,7 +25,6 @@ interface SettingsMenuProps {
     isAccuracyModeEnabled: boolean;
     onToggleAccuracyMode: () => void;
     accuracySubMode: AccuracySubMode;
-    onSelectAccuracySubMode?: (subMode: AccuracySubMode) => void;
     setAccuracySubMode?: (subMode: AccuracySubMode) => void;
     // Hybrid & Capturing
     isHybridIntelligenceEnabled: boolean;
@@ -41,8 +41,6 @@ interface SettingsMenuProps {
     setIsGlobalMemoryEnabled?: (enabled: boolean) => void;
     memoryConfig?: ProviderConfig | null;
     onMemoryConfigChange?: (config: ProviderConfig | null) => void;
-    memoryModel?: string;
-    setMemoryModel?: (model: string) => void;
     // Pure AI options
     isPlaybookEnabledInPureAI?: boolean;
     setIsPlaybookEnabledInPureAI?: (enabled: boolean) => void;
@@ -103,6 +101,9 @@ interface SettingsMenuProps {
     onSetModeratorModel?: (model: string) => void;
     // Dynamic Providers
     providerConfigs?: ProviderConfig[];
+    /** False while provider configs are still loading — avoids the
+     *  "No providers configured" empty-state flash. */
+    providerConfigsLoaded?: boolean;
     onUpdateProvider?: (id: string, updates: Partial<Omit<ProviderConfig, 'id' | 'isBuiltIn'>>) => Promise<void>;
     onAddCustomProvider?: (provider: { name: string; baseUrl: string; apiKey: string; apiFormat: ApiFormat; models?: string[]; selectedModel?: string }) => Promise<void>;
     onRemoveProvider?: (id: string) => Promise<void>;
@@ -113,24 +114,6 @@ interface SettingsMenuProps {
 }
 
 // ─── Shared UI Helpers ────────────────────────────────────────────────────────
-
-const ToggleSwitch: React.FC<{ checked: boolean; onChange: () => void; label?: string }> = ({ checked, onChange, label = 'Toggle setting' }) => (
-    <button
-        type="button"
-        onClick={onChange}
-        aria-label={label}
-        aria-pressed={checked}
-        className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors duration-200 ease-in-out ${
-            checked ? 'bg-cyan-500' : 'bg-zinc-700'
-        }`}
-    >
-        <div
-            className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${
-                checked ? 'translate-x-5' : 'translate-x-0'
-            }`}
-        />
-    </button>
-);
 
 const NavTabButton: React.FC<{
     id: SettingsTab;
@@ -170,7 +153,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
         isAccuracyModeEnabled,
         onToggleAccuracyMode,
         accuracySubMode,
-        onSelectAccuracySubMode,
+        setAccuracySubMode,
         customInstructions,
         setCustomInstructions,
         lensConfig,
@@ -208,6 +191,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
         memoryConfig = null,
         onMemoryConfigChange = () => {},
         providerConfigs,
+        providerConfigsLoaded,
         onUpdateProvider,
         onAddCustomProvider,
         onRemoveProvider,
@@ -217,7 +201,15 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
         onUpdateModel,
     } = props;
 
-    const [activeTab, setActiveTab] = useState<SettingsTab>('models');
+    // Land on the friendliest tab: General when a provider is already
+    // configured, otherwise the Get Started provider setup (the onboarding
+    // card points beginners there anyway). The old default was the most
+    // technical tab (provider CRUD).
+    const [activeTab, setActiveTab] = useState<SettingsTab>(() => {
+        const hasReadyProvider = (providerConfigs ?? []).some(c => c.isEnabled && c.apiKey.trim().length > 0);
+        return hasReadyProvider ? 'general' : 'models';
+    });
+    const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
     const [activeInstructionTab, setActiveInstructionTab] = useState<InstructionTab>('general');
     const dialogRef = useRef<HTMLDivElement>(null);
     useEffect(() => {
@@ -297,6 +289,10 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                         {/* Left Tab Navigation Sidebar */}
                         <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-zinc-800/80 bg-zinc-950 p-4 space-y-1 shrink-0 flex flex-col justify-between">
                             <div className="space-y-1">
+                                {/* Get Started — what a new user needs first */}
+                                <p className="px-3.5 pt-1 pb-0.5 text-[9px] font-bold uppercase tracking-widest text-zinc-600">
+                                    Get Started
+                                </p>
                                 <NavTabButton
                                     id="models"
                                     activeTab={activeTab}
@@ -304,14 +300,10 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                     icon={<AISettingsIcon className="w-4 h-4" />}
                                     label="AI Models & Providers"
                                 />
-                                <NavTabButton
-                                    id="journal"
-                                    activeTab={activeTab}
-                                    onClick={() => setActiveTab('journal')}
-                                    icon={<HistoryIcon className="w-4 h-4" />}
-                                    label="Trading Journal"
-                                    badge={props.loggedTrades && props.loggedTrades.length > 0 ? `${props.loggedTrades.length}` : undefined}
-                                />
+                                {/* Analysis — how analyses behave */}
+                                <p className="px-3.5 pt-3 pb-0.5 text-[9px] font-bold uppercase tracking-widest text-zinc-600">
+                                    Analysis
+                                </p>
                                 <NavTabButton
                                     id="general"
                                     activeTab={activeTab}
@@ -340,18 +332,41 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                     icon={<ActivityIcon className="w-4 h-4" />}
                                     label="Memory & Learning"
                                 />
+                                {/* Account & Data — journal, profile, backups */}
+                                <p className="px-3.5 pt-3 pb-0.5 text-[9px] font-bold uppercase tracking-widest text-zinc-600">
+                                    Account & Data
+                                </p>
+                                <NavTabButton
+                                    id="journal"
+                                    activeTab={activeTab}
+                                    onClick={() => setActiveTab('journal')}
+                                    icon={<HistoryIcon className="w-4 h-4" />}
+                                    label="Trading Journal"
+                                    badge={props.loggedTrades && props.loggedTrades.length > 0 ? `${props.loggedTrades.length}` : undefined}
+                                />
                                 <NavTabButton
                                     id="actions"
                                     activeTab={activeTab}
                                     onClick={() => setActiveTab('actions')}
                                     icon={<SwitchUserIcon className="w-4 h-4" />}
-                                    label="Profile & Quick Actions"
+                                    label="Profile & Data"
                                 />
                             </div>
 
-                            {/* Diagnostics & Version at bottom of nav */}
+                            {/* Diagnostics & Version at bottom of nav — developer
+                                tooling tucked behind a collapsible so it doesn't
+                                sit on a user-facing screen. */}
                             <div className="pt-4 border-t border-zinc-800/80 space-y-2">
-                                <DiagnosticsPanel />
+                                <details className="group">
+                                    <summary className="text-[10px] text-zinc-600 hover:text-zinc-400 cursor-pointer select-none font-mono list-none flex items-center justify-between">
+                                        <span>Developer</span>
+                                        <span className="text-zinc-700 group-open:hidden">▸</span>
+                                        <span className="text-zinc-700 hidden group-open:inline">▾</span>
+                                    </summary>
+                                    <div className="mt-2">
+                                        <DiagnosticsPanel />
+                                    </div>
+                                </details>
                                 <p className="text-[10px] text-zinc-600 text-center font-mono">
                                     {APP_NAME} v{APP_VERSION}
                                 </p>
@@ -432,7 +447,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                                 <div>
                                                     <label className="text-[10px] text-zinc-500 font-bold uppercase mb-1 block">Provider</label>
                                                     <select
-                                                        value={moderatorProvider || (providerConfigs && providerConfigs[0]?.id) || ''}
+                                                        value={moderatorProvider || ''}
                                                         onChange={(e) => {
                                                             const newProviderId = e.target.value;
                                                             onSetModeratorProvider?.(newProviderId);
@@ -443,6 +458,9 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                                         }}
                                                         className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 text-sm text-zinc-100 focus:outline-none focus:border-cyan-500/60 focus:ring-1 focus:ring-cyan-500/20 transition-all duration-200 appearance-none cursor-pointer bg-no-repeat bg-[right_0.9rem_center] bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2371717a%22%20stroke-width%3D%222.5%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22/%3E%3C/svg%3E')] text-xs"
                                                     >
+                                                        {/* Show the saved state only — the old `|| providers[0]` fake
+                                                            a selection that was never persisted. */}
+                                                        {!moderatorProvider && <option value="" disabled>Select provider</option>}
                                                         {(providerConfigs ?? []).length > 0 ? (
                                                             (providerConfigs ?? []).map(c => (
                                                                 <option key={c.id} value={c.id}>{c.name}</option>
@@ -460,8 +478,8 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                                         className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 text-sm text-zinc-100 focus:outline-none focus:border-cyan-500/60 focus:ring-1 focus:ring-cyan-500/20 transition-all duration-200 appearance-none cursor-pointer bg-no-repeat bg-[right_0.9rem_center] bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2371717a%22%20stroke-width%3D%222.5%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22/%3E%3C/svg%3E')] text-xs"
                                                     >
                                                         {(() => {
-                                                            const activeProvId = moderatorProvider || (providerConfigs && providerConfigs[0]?.id);
-                                                            const selectedCfg = (providerConfigs ?? []).find(c => c.id === activeProvId);
+                                                            const activeProvId = moderatorProvider;
+                                                            const selectedCfg = activeProvId ? (providerConfigs ?? []).find(c => c.id === activeProvId) : undefined;
                                                             if (selectedCfg && selectedCfg.models.length > 0) {
                                                                 return selectedCfg.models.map(m => <option key={m} value={m}>{m}</option>);
                                                             }
@@ -477,6 +495,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                     {providerConfigs && onUpdateProvider && onAddCustomProvider && onRemoveProvider && onToggleProviderConfig ? (
                                         <ProviderManager
                                             configs={providerConfigs}
+                                            isLoaded={providerConfigsLoaded}
                                             onUpdateProvider={onUpdateProvider}
                                             onAddCustomProvider={onAddCustomProvider}
                                             onRemoveProvider={onRemoveProvider}
@@ -496,117 +515,140 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                 <div className="space-y-6 max-w-3xl animate-fade-in">
                                     <div className="border-b border-zinc-800 pb-3">
                                         <h3 className="text-base font-bold text-white">General & Analysis Modes</h3>
-                                        <p className="text-xs text-zinc-500 mt-1">Configure accuracy protocol, real-time market feeds, and automated data capture.</p>
+                                        <p className="text-xs text-zinc-500 mt-1">Core analysis modes first; fine-tuning options are tucked under Advanced.</p>
                                     </div>
 
-                                    {/* Accuracy Mode */}
-                                    <div className="p-5 rounded-2xl bg-zinc-800 border border-zinc-800 space-y-4">
-                                        <div className="flex items-center justify-between">
-                                            <div>
-                                                <h4 className="text-sm font-bold text-white">Accuracy Mode</h4>
-                                                <p className="text-xs text-zinc-400 mt-0.5">
-                                                    {isAccuracyModeEnabled
-                                                        ? (accuracySubMode === 'original' ? 'Strict Protocol enabled' : 'Pure AI enabled')
-                                                        : 'Standard speed mode'}
-                                                </p>
+                                    {/* CORE — the two modes that change how analyses behave */}
+                                    <div className="space-y-4">
+                                        {/* Accuracy Mode */}
+                                        <div className="p-5 rounded-2xl bg-zinc-800 border border-zinc-800 space-y-4">
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <h4 className="text-sm font-bold text-white">Accuracy Mode</h4>
+                                                    <p className="text-xs text-zinc-400 mt-0.5">
+                                                        {isAccuracyModeEnabled
+                                                            ? (accuracySubMode === 'original' ? 'Strict Protocol enabled' : 'Pure AI enabled')
+                                                            : 'Standard speed mode'}
+                                                    </p>
+                                                </div>
+                                                <ToggleSwitch checked={isAccuracyModeEnabled} onChange={onToggleAccuracyMode} label="Toggle Accuracy Mode" />
                                             </div>
-                                            <ToggleSwitch checked={isAccuracyModeEnabled} onChange={onToggleAccuracyMode} label="Toggle Accuracy Mode" />
+
+                                            {isAccuracyModeEnabled && (
+                                                <div className="grid grid-cols-2 gap-3 pt-2">
+                                                    <button
+                                                        onClick={() => setAccuracySubMode?.('original')}
+                                                        className={`p-3 rounded-xl border text-left transition-all ${
+                                                            accuracySubMode === 'original'
+                                                                ? 'bg-cyan-500/10 border-cyan-500/60 text-cyan-300'
+                                                                : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-zinc-200'
+                                                        }`}
+                                                    >
+                                                        <div className="text-xs font-bold">Strict Protocol</div>
+                                                        <div className="text-[11px] text-zinc-500 mt-1">Validated multi-step analysis with consensus checks. Slower but more thorough.</div>
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setAccuracySubMode?.('pure_ai')}
+                                                        className={`p-3 rounded-xl border text-left transition-all ${
+                                                            accuracySubMode === 'pure_ai'
+                                                                ? 'bg-cyan-500/10 border-cyan-500/60 text-cyan-300'
+                                                                : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-zinc-200'
+                                                        }`}
+                                                    >
+                                                        <div className="text-xs font-bold">Pure AI</div>
+                                                        <div className="text-[11px] text-zinc-500 mt-1">Faster, unfiltered reasoning with fewer formatting checks.</div>
+                                                    </button>
+                                                </div>
+                                            )}
                                         </div>
 
-                                        {isAccuracyModeEnabled && (
-                                            <div className="grid grid-cols-2 gap-3 pt-2">
-                                                <button
-                                                    onClick={() => (onSelectAccuracySubMode || props.setAccuracySubMode)?.('original')}
-                                                    className={`p-3 rounded-xl border text-left transition-all ${
-                                                        accuracySubMode === 'original'
-                                                            ? 'bg-cyan-500/10 border-cyan-500/60 text-cyan-300'
-                                                            : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-zinc-200'
-                                                    }`}
-                                                >
-                                                    <div className="text-xs font-bold">Strict Protocol</div>
-                                                    <div className="text-[11px] text-zinc-500 mt-1">Multi-stage validation and strict consensus</div>
-                                                </button>
-                                                <button
-                                                    onClick={() => (onSelectAccuracySubMode || props.setAccuracySubMode)?.('pure_ai')}
-                                                    className={`p-3 rounded-xl border text-left transition-all ${
-                                                        accuracySubMode === 'pure_ai'
-                                                            ? 'bg-cyan-500/10 border-cyan-500/60 text-cyan-300'
-                                                            : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-zinc-200'
-                                                    }`}
-                                                >
-                                                    <div className="text-xs font-bold">Pure AI</div>
-                                                    <div className="text-[11px] text-zinc-500 mt-1">Unfiltered AI reasoning without strict formatting gates</div>
-                                                </button>
+                                        {/* Hybrid Intelligence */}
+                                        <div className="p-5 rounded-2xl bg-zinc-800 border border-zinc-800 flex items-center justify-between">
+                                            <div>
+                                                <h4 className="text-sm font-bold text-white">Hybrid Intelligence</h4>
+                                                <p className="text-xs text-zinc-400 mt-0.5">Adds real-time market data (price, RSI, MACD, EMAs) to give the AI live context. Default: off.</p>
                                             </div>
-                                        )}
+                                            <ToggleSwitch checked={isHybridIntelligenceEnabled} onChange={() => {
+                                                if (onToggleHybridIntelligence) onToggleHybridIntelligence();
+                                                else if (props.setIsHybridIntelligenceEnabled) props.setIsHybridIntelligenceEnabled(!isHybridIntelligenceEnabled);
+                                            }} label="Toggle Hybrid Intelligence" />
+                                        </div>
                                     </div>
 
-                                    {/* Pure AI Context — only relevant in Accuracy Mode → Pure AI */}
-                                    {isAccuracyModeEnabled && accuracySubMode === 'pure_ai' && (setIsPlaybookEnabledInPureAI || setIsFamiliesEnabledInPureAI || setIsMemoryEnabledInPureAI) && (
-                                        <div className="p-5 rounded-2xl bg-zinc-800 border border-zinc-800 space-y-4 animate-fade-in">
-                                            <div>
-                                                <h4 className="text-sm font-bold text-white">Pure AI Context</h4>
-                                                <p className="text-xs text-zinc-400 mt-0.5">Choose which structured context is injected during Pure AI analysis.</p>
-                                            </div>
-                                            <div className="space-y-3">
-                                                {setIsPlaybookEnabledInPureAI && (
-                                                    <div className="flex items-center justify-between">
-                                                        <span className="text-xs text-zinc-300">Strategy Playbook</span>
-                                                    <ToggleSwitch checked={!!isPlaybookEnabledInPureAI} onChange={() => setIsPlaybookEnabledInPureAI(!isPlaybookEnabledInPureAI)} label="Toggle Strategy Playbook in Pure AI" />
+                                    {/* ADVANCED — fine-tuning; most users never touch these */}
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsAdvancedOpen(p => !p)}
+                                        className="w-full flex items-center justify-between p-4 rounded-2xl bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition-colors"
+                                        aria-expanded={isAdvancedOpen}
+                                    >
+                                        <div className="text-left">
+                                            <h4 className="text-sm font-bold text-white">Advanced</h4>
+                                            <p className="text-xs text-zinc-500 mt-0.5">Prompt injection and capture behavior — most users can leave these as-is.</p>
+                                        </div>
+                                        <span className={`text-zinc-500 text-sm transition-transform ${isAdvancedOpen ? 'rotate-180' : ''}`}>▾</span>
+                                    </button>
+                                    {isAdvancedOpen && (
+                                        <div className="space-y-4 animate-fade-in">
+                                            {/* Pure AI Context — only relevant in Accuracy Mode → Pure AI */}
+                                            {isAccuracyModeEnabled && accuracySubMode === 'pure_ai' && (setIsPlaybookEnabledInPureAI || setIsFamiliesEnabledInPureAI || setIsMemoryEnabledInPureAI) && (
+                                                <div className="p-5 rounded-2xl bg-zinc-800 border border-zinc-800 space-y-4 animate-fade-in">
+                                                    <div>
+                                                        <h4 className="text-sm font-bold text-white">Pure AI Context</h4>
+                                                        <p className="text-xs text-zinc-400 mt-0.5">Choose which structured context is injected during Pure AI analysis. All default: off.</p>
                                                     </div>
-                                                )}
-                                                {setIsFamiliesEnabledInPureAI && (
-                                                    <div className="flex items-center justify-between">
-                                                        <span className="text-xs text-zinc-300">Pattern Families</span>
-                                                    <ToggleSwitch checked={!!isFamiliesEnabledInPureAI} onChange={() => setIsFamiliesEnabledInPureAI(!isFamiliesEnabledInPureAI)} label="Toggle Pattern Families in Pure AI" />
+                                                    <div className="space-y-3">
+                                                        {setIsPlaybookEnabledInPureAI && (
+                                                            <div className="flex items-center justify-between">
+                                                                <span className="text-xs text-zinc-300">Strategy Playbook</span>
+                                                            <ToggleSwitch checked={!!isPlaybookEnabledInPureAI} onChange={() => setIsPlaybookEnabledInPureAI(!isPlaybookEnabledInPureAI)} label="Toggle Strategy Playbook in Pure AI" />
+                                                            </div>
+                                                        )}
+                                                        {setIsFamiliesEnabledInPureAI && (
+                                                            <div className="flex items-center justify-between">
+                                                                <span className="text-xs text-zinc-300">Pattern Families</span>
+                                                            <ToggleSwitch checked={!!isFamiliesEnabledInPureAI} onChange={() => setIsFamiliesEnabledInPureAI(!isFamiliesEnabledInPureAI)} label="Toggle Pattern Families in Pure AI" />
+                                                            </div>
+                                                        )}
+                                                        {setIsMemoryEnabledInPureAI && (
+                                                            <div className="flex items-center justify-between">
+                                                                <span className="text-xs text-zinc-300">Historical Memory</span>
+                                                            <ToggleSwitch checked={!!isMemoryEnabledInPureAI} onChange={() => setIsMemoryEnabledInPureAI(!isMemoryEnabledInPureAI)} label="Toggle Historical Memory in Pure AI" />
+                                                            </div>
+                                                        )}
                                                     </div>
-                                                )}
-                                                {setIsMemoryEnabledInPureAI && (
-                                                    <div className="flex items-center justify-between">
-                                                        <span className="text-xs text-zinc-300">Historical Memory</span>
-                                                    <ToggleSwitch checked={!!isMemoryEnabledInPureAI} onChange={() => setIsMemoryEnabledInPureAI(!isMemoryEnabledInPureAI)} label="Toggle Historical Memory in Pure AI" />
-                                                    </div>
-                                                )}
+                                                </div>
+                                            )}
+
+                                            {/* Auto-Capture Options */}
+                                            <div className="p-5 rounded-2xl bg-zinc-800 border border-zinc-800 space-y-4">
+                                                <div>
+                                                    <h4 className="text-sm font-bold text-white">Automated Capture Prompts</h4>
+                                                    <p className="text-xs text-zinc-400 mt-0.5">Ask for trade results automatically. All default: off.</p>
+                                                </div>
+                                                <div className="space-y-3">
+                                                    {onToggleAutoCapturing && (
+                                                        <div className="flex items-center justify-between">
+                                                            <span className="text-xs text-zinc-300">Prompt for post-trade result capture</span>
+                                                            <ToggleSwitch checked={!!isAutoCapturing} onChange={onToggleAutoCapturing} label="Toggle post-trade result capture" />
+                                                        </div>
+                                                    )}
+                                                    {onToggleUpdateAutoCapturing && (
+                                                        <div className="flex items-center justify-between">
+                                                            <span className="text-xs text-zinc-300">Prompt for active trade updates</span>
+                                                            <ToggleSwitch checked={!!isUpdateAutoCapturing} onChange={onToggleUpdateAutoCapturing} label="Toggle active trade update capture" />
+                                                        </div>
+                                                    )}
+                                                    {onToggleEntryNotHitCapturing && (
+                                                        <div className="flex items-center justify-between">
+                                                            <span className="text-xs text-zinc-300">Prompt when entry price is not hit</span>
+                                                            <ToggleSwitch checked={!!isEntryNotHitCapturing} onChange={onToggleEntryNotHitCapturing} label="Toggle entry not hit capture" />
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     )}
-
-                                    {/* Hybrid Intelligence */}
-                                    <div className="p-5 rounded-2xl bg-zinc-800 border border-zinc-800 flex items-center justify-between">
-                                        <div>
-                                            <h4 className="text-sm font-bold text-white">Hybrid Intelligence</h4>
-                                            <p className="text-xs text-zinc-400 mt-0.5">Fetches real-time Binance OHLCV data and calculates RSI, MACD, and EMAs for AI context.</p>
-                                        </div>
-                                        <ToggleSwitch checked={isHybridIntelligenceEnabled} onChange={() => {
-                                            if (onToggleHybridIntelligence) onToggleHybridIntelligence();
-                                            else if (props.setIsHybridIntelligenceEnabled) props.setIsHybridIntelligenceEnabled(!isHybridIntelligenceEnabled);
-                                        }} label="Toggle Hybrid Intelligence" />
-                                    </div>
-
-                                    {/* Auto-Capture Options */}
-                                    <div className="p-5 rounded-2xl bg-zinc-800 border border-zinc-800 space-y-4">
-                                        <h4 className="text-sm font-bold text-white">Automated Capture Prompts</h4>
-                                        <div className="space-y-3">
-                                            {onToggleAutoCapturing && (
-                                                <div className="flex items-center justify-between">
-                                                    <span className="text-xs text-zinc-300">Prompt for post-trade result capture</span>
-                                                    <ToggleSwitch checked={!!isAutoCapturing} onChange={onToggleAutoCapturing} label="Toggle post-trade result capture" />
-                                                </div>
-                                            )}
-                                            {onToggleUpdateAutoCapturing && (
-                                                <div className="flex items-center justify-between">
-                                                    <span className="text-xs text-zinc-300">Prompt for active trade updates</span>
-                                                    <ToggleSwitch checked={!!isUpdateAutoCapturing} onChange={onToggleUpdateAutoCapturing} label="Toggle active trade update capture" />
-                                                </div>
-                                            )}
-                                            {onToggleEntryNotHitCapturing && (
-                                                <div className="flex items-center justify-between">
-                                                    <span className="text-xs text-zinc-300">Prompt when entry price is not hit</span>
-                                                    <ToggleSwitch checked={!!isEntryNotHitCapturing} onChange={onToggleEntryNotHitCapturing} label="Toggle entry not hit capture" />
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
                                 </div>
                             )}
 
@@ -654,11 +696,11 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         <div className="p-5 rounded-2xl bg-zinc-800 border border-zinc-800 space-y-3">
                                             <div className="flex items-center justify-between">
                                                 <div>
-                                                    <h4 className="text-sm font-bold text-white">Global Memory (Layer 3)</h4>
+                                                    <h4 className="text-sm font-bold text-white">Global Memory</h4>
                                                     <p className="text-xs text-zinc-400 mt-0.5">
                                                         {isGlobalMemoryEnabled
-                                                            ? 'Synthesized learning from all trades is injected into analysis.'
-                                                            : 'Only per-thread memory (Layers 1 & 2) is active.'}
+                                                            ? 'On — lessons from all your trades are injected into future analyses. Default: off.'
+                                                            : 'Off — only this chat\'s own context is used. Default: off.'}
                                                     </p>
                                                 </div>
                                                 <ToggleSwitch checked={!!isGlobalMemoryEnabled} onChange={() => setIsGlobalMemoryEnabled(!isGlobalMemoryEnabled)} label="Toggle Global Memory" />
@@ -677,8 +719,8 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                             {activeTab === 'actions' && (
                                 <div className="space-y-6 max-w-3xl animate-fade-in">
                                     <div className="border-b border-zinc-800 pb-3">
-                                        <h3 className="text-base font-bold text-white">Profile & Quick Actions</h3>
-                                        <p className="text-xs text-zinc-500 mt-1">Access saved analyses, trading playbook, user profiles, and data exports.</p>
+                                        <h3 className="text-base font-bold text-white">Profile & Data</h3>
+                                        <p className="text-xs text-zinc-500 mt-1">Quick access to saved work, plus backups and price alerts (moved here so they no longer crowd every tab).</p>
                                     </div>
 
                                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -737,20 +779,20 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                             </button>
                                         )}
                                     </div>
+
+                                    {/* Backups — list/export/restore/delete the 30-min auto-backups */}
+                                    {username && onProfileRestored && (
+                                        <div className="border-t border-zinc-800 pt-6">
+                                            <BackupManager username={username} onProfileRestored={onProfileRestored} />
+                                        </div>
+                                    )}
+
+                                    {/* Price alerts — list/toggle/delete */}
+                                    <div className="border-t border-zinc-800 pt-6">
+                                        <AlertManager />
+                                    </div>
                                 </div>
                             )}
-
-                            {/* Backups — list/export/restore/delete the 30-min auto-backups */}
-                            {username && onProfileRestored && (
-                                <div className="border-t border-zinc-800 pt-6">
-                                    <BackupManager username={username} onProfileRestored={onProfileRestored} />
-                                </div>
-                            )}
-
-                            {/* Price alerts — list/toggle/delete */}
-                            <div className="border-t border-zinc-800 pt-6">
-                                <AlertManager />
-                            </div>
 
                         </div>
                     </div>

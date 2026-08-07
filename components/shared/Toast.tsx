@@ -36,6 +36,9 @@ export const useToast = () => {
     return context;
 };
 
+/** Max toasts stacked in the top-right column before the "+N more" cap kicks in. */
+const MAX_VISIBLE_TOASTS = 4;
+
 // Convenience methods
 export const useToastActions = () => {
     const { addToast } = useToast();
@@ -82,10 +85,24 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
 const ToastContainer: React.FC = () => {
     const { toasts, removeToast } = useToast();
+    // F7: cap the STACKED column at 4 visible toasts with a "+N more" expander
+    // — autopilot confirmations and backtest toasts used to pile up unbounded.
+    const [expanded, setExpanded] = useState(false);
+    const visibleToasts = expanded ? toasts : toasts.slice(-MAX_VISIBLE_TOASTS);
+    const hiddenCount = toasts.length - visibleToasts.length;
 
     return (
         <div className="fixed top-4 right-4 z-[100] flex flex-col gap-2 max-w-sm w-full pointer-events-none">
-            {toasts.map(toast => (
+            {hiddenCount > 0 && !expanded && (
+                <button
+                    type="button"
+                    onClick={() => setExpanded(true)}
+                    className="pointer-events-auto ml-auto rounded-full border border-white/10 bg-zinc-900/90 px-2.5 py-1 text-[10px] font-semibold text-zinc-400 shadow-lg transition-colors hover:text-zinc-200"
+                >
+                    +{hiddenCount} more
+                </button>
+            )}
+            {visibleToasts.map(toast => (
                 <ToastItem key={toast.id} toast={toast} onDismiss={() => removeToast(toast.id)} />
             ))}
         </div>
@@ -119,7 +136,9 @@ const ToastItem: React.FC<{ toast: Toast; onDismiss: () => void }> = ({ toast, o
     return (
         <div
             className={`pointer-events-auto status-surface p-4 rounded-xl border shadow-xl animate-slide-in-right ${typeStyles[toast.type]}`}
-            role="alert"
+            // Errors announce assertively; everything else announces politely
+            // so a burst of toasts doesn't shout over the screen reader.
+            role={toast.type === 'error' ? 'alert' : 'status'}
             aria-live="polite"
         >
             <div className="flex items-start gap-3">

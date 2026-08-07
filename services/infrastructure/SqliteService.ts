@@ -42,6 +42,15 @@ let sqliteConnection: SQLiteConnection | null = null;
 let db: SQLiteDBConnection | null = null;
 let isInitialized = false;
 
+// Per-user fingerprints of the last persisted profile sections (see
+// sqliteSaveUserProfile) so no-op saves skip the per-row native writes.
+const lastSavedSections = new Map<string, {
+    trades?: string;
+    conversations?: string;
+    tradeSummaries?: string;
+    savedAnalyses?: string;
+}>();
+
 /**
  * Check if running on native platform (Android/iOS)
  */
@@ -526,78 +535,104 @@ export const sqliteSaveUserProfile = async (profile: UserProfile): Promise<void>
             profile.lastActiveConversationId
         ]);
 
-        // Sync trades
-        for (const trade of profile.tradeLog || []) {
-            await sqliteSaveTrade(profile.username, trade);
-        }
-        // INSERT OR REPLACE only upserts — rows deleted from the profile
-        // (deleted trades, imported-over data) must be removed explicitly,
-        // or they'd resurrect on the next full load (and web/native would
-        // diverge: IndexedDB replaces the whole record, SQLite did not).
-        await deleteAbsentRows(
-            'trades',
-            profile.username,
-            (profile.tradeLog || []).map(t => t.id)
-        );
+        // ─── Dirty-section skipping ───────────────────────────────────────
+        // The 15s heartbeat re-saves the FULL profile during every run even
+        // when only the streaming message changed. Comparing each section's
+        // JSON locally (cheap) and skipping its per-row native-bridge writes
+        // when unchanged turns a 120+ await save into a single users-row
+        // update for no-op saves. JSON round-trips are deterministic, so the
+        // re-parsed existing profile stringifies identically.
+        const key = profile.username;
+        const prev = lastSavedSections.get(key) ?? {};
 
-        // Sync conversations
-        for (const conv of profile.conversations || []) {
-            // Extract settings (everything that is not a core column)
-            const { id, title, timestamp, messages, ...settings } = conv;
-
-            await db.run(`
-                INSERT OR REPLACE INTO conversations (id, username, title, createdAt, messages, settings)
-                VALUES (?, ?, ?, ?, ?, ?)
-            `, [
-                conv.id,
+        const tradesJson = JSON.stringify(profile.tradeLog || []);
+        if (prev.trades !== tradesJson) {
+            // Sync trades
+            for (const trade of profile.tradeLog || []) {
+                await sqliteSaveTrade(profile.username, trade);
+            }
+            // INSERT OR REPLACE only upserts — rows deleted from the profile
+            // (deleted trades, imported-over data) must be removed explicitly,
+            // or they'd resurrect on the next full load (and web/native would
+            // diverge: IndexedDB replaces the whole record, SQLite did not).
+            await deleteAbsentRows(
+                'trades',
                 profile.username,
-                conv.title,
-                new Date(conv.timestamp).toISOString(),
-                 serializeConversationMessages(conv.messages),
-                JSON.stringify(settings) // Save extended flags and models
-            ]);
+                (profile.tradeLog || []).map(t => t.id)
+            );
+            lastSavedSections.set(key, { ...prev, trades: tradesJson });
         }
-        await deleteAbsentRows(
-            'conversations',
-            profile.username,
-            (profile.conversations || []).map(c => c.id)
-        );
 
-        // Sync trade summaries
-        for (const summary of profile.tradeSummaries || []) {
-            await db.run(`
-                INSERT OR REPLACE INTO trade_summaries (id, username, summaryText, timestamp)
-                VALUES (?, ?, ?, ?)
-            `, [summary.id, profile.username, summary.summaryText, summary.timestamp]);
-        }
-        await deleteAbsentRows(
-            'trade_summaries',
-            profile.username,
-            (profile.tradeSummaries || []).map(s => s.id)
-        );
+        const conversationsJson = JSON.stringify(profile.conversations || []);
+        if (prev.conversations !== conversationsJson) {
+            // Sync conversations
+            for (const conv of profile.conversations || []) {
+                // Extract settings (everything that is not a core column)
+                const { id, title, timestamp, messages, ...settings } = conv;
 
-        // Sync saved analyses
-        for (const analysis of profile.savedAnalyses || []) {
-            // Extract meta (everything not in core columns)
-            const { id, analysis: content, userPrompt, timestamp, ...meta } = analysis;
-
-            await db.run(`
-                INSERT OR REPLACE INTO saved_analyses (id, username, analysis, userPrompt, timestamp, meta)
-                VALUES (?, ?, ?, ?, ?, ?)
-            `, [
-                id,
+                await db.run(`
+                    INSERT OR REPLACE INTO conversations (id, username, title, createdAt, messages, settings)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                `, [
+                    conv.id,
+                    profile.username,
+                    conv.title,
+                    new Date(conv.timestamp).toISOString(),
+                     serializeConversationMessages(conv.messages),
+                    JSON.stringify(settings) // Save extended flags and models
+                ]);
+            }
+            await deleteAbsentRows(
+                'conversations',
                 profile.username,
-                JSON.stringify(content),
-                userPrompt,
-                timestamp,
-                JSON.stringify(meta) // Save extended fields like modelUsed
-            ]);
+                (profile.conversations || []).map(c => c.id)
+            );
+            lastSavedSections.set(key, { ...lastSavedSections.get(key), conversations: conversationsJson });
         }
-        await deleteAbsentRows(
-            'saved_analyses',
-            profile.username,
-            (profile.savedAnalyses || []).map(a => a.id)
-        );
+
+        const summariesJson = JSON.stringify(profile.tradeSummaries || []);
+        if (prev.tradeSummaries !== summariesJson) {
+            // Sync trade summaries
+            for (const summary of profile.tradeSummaries || []) {
+                await db.run(`
+                    INSERT OR REPLACE INTO trade_summaries (id, username, summaryText, timestamp)
+                    VALUES (?, ?, ?, ?)
+                `, [summary.id, profile.username, summary.summaryText, summary.timestamp]);
+            }
+            await deleteAbsentRows(
+                'trade_summaries',
+                profile.username,
+                (profile.tradeSummaries || []).map(s => s.id)
+            );
+            lastSavedSections.set(key, { ...lastSavedSections.get(key), tradeSummaries: summariesJson });
+        }
+
+        const analysesJson = JSON.stringify(profile.savedAnalyses || []);
+        if (prev.savedAnalyses !== analysesJson) {
+            // Sync saved analyses
+            for (const analysis of profile.savedAnalyses || []) {
+                // Extract meta (everything not in core columns)
+                const { id, analysis: content, userPrompt, timestamp, ...meta } = analysis;
+
+                await db.run(`
+                    INSERT OR REPLACE INTO saved_analyses (id, username, analysis, userPrompt, timestamp, meta)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                `, [
+                    id,
+                    profile.username,
+                    JSON.stringify(content),
+                    userPrompt,
+                    timestamp,
+                    JSON.stringify(meta) // Save extended fields like modelUsed
+                ]);
+            }
+            await deleteAbsentRows(
+                'saved_analyses',
+                profile.username,
+                (profile.savedAnalyses || []).map(a => a.id)
+            );
+            lastSavedSections.set(key, { ...lastSavedSections.get(key), savedAnalyses: analysesJson });
+        }
 
         await db.execute('COMMIT');
         transactionOpen = false;
@@ -719,6 +754,9 @@ export const sqliteDeleteTrade = async (tradeId: string): Promise<void> => {
  */
 export const sqliteDeleteUser = async (username: string): Promise<void> => {
     if (!db) return;
+    // A deleted profile must not leave stale fingerprints behind — otherwise
+    // recreating the user could skip section writes based on pre-delete state.
+    lastSavedSections.delete(username);
     // Narrow the module-level connection inside the closure (it's mutable).
     const connection = db;
     await runExclusiveWrite(async () => {

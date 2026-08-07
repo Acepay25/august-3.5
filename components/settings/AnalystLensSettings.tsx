@@ -8,6 +8,7 @@
 import React from 'react';
 import { AIProvider, AnalystRole, AnalystRoleAssignment, AnalystLensConfig, TradingStyle } from '../../types';
 import { ProviderConfig } from '../../types/provider';
+import { ToggleSwitch } from '../shared/ToggleSwitch';
 import {
   ANALYST_ROLE_DEFINITIONS,
   validateLensConfig,
@@ -84,14 +85,7 @@ export const AnalystLensSettings: React.FC<Props> = ({ config, providers, onChan
           <span className="lens-icon"></span>
           <h4>Analyst Lenses</h4>
         </div>
-        <label className="toggle-switch">
-          <input
-            type="checkbox"
-            checked={config.enabled}
-            onChange={handleToggle}
-          />
-          <span className="toggle-slider"></span>
-        </label>
+        <ToggleSwitch checked={config.enabled} onChange={handleToggle} label="Toggle Analyst Lenses" />
       </div>
 
       <p className="lens-description">
@@ -300,7 +294,7 @@ export const AnalystLensSettings: React.FC<Props> = ({ config, providers, onChan
         }
 
         .style-button.active {
-          background: linear-gradient(135deg, #8a8a92 0%, #b0b0b6 100%);
+          background: #8a8a92;
           border-color: #8a8a92;
           color: #fff;
         }
@@ -322,7 +316,7 @@ export const AnalystLensSettings: React.FC<Props> = ({ config, providers, onChan
         .lens-error-banner {
           background: rgba(239, 68, 68, 0.2);
           border: 1px solid rgba(239, 68, 68, 0.4);
-          color: #8a8a92;
+          color: rgba(255, 255, 255, 0.9);
           padding: 10px 14px;
           border-radius: 8px;
           font-size: 13px;
@@ -406,51 +400,6 @@ export const AnalystLensSettings: React.FC<Props> = ({ config, providers, onChan
 
         .provider-select option:disabled {
           color: rgba(255, 255, 255, 0.3);
-        }
-
-        .toggle-switch {
-          position: relative;
-          display: inline-block;
-          width: 44px;
-          height: 24px;
-        }
-
-        .toggle-switch input {
-          opacity: 0;
-          width: 0;
-          height: 0;
-        }
-
-        .toggle-slider {
-          position: absolute;
-          cursor: pointer;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background-color: rgba(60, 60, 80, 0.8);
-          transition: 0.3s;
-          border-radius: 24px;
-        }
-
-        .toggle-slider:before {
-          position: absolute;
-          content: "";
-          height: 18px;
-          width: 18px;
-          left: 3px;
-          bottom: 3px;
-          background-color: white;
-          transition: 0.3s;
-          border-radius: 50%;
-        }
-
-        .toggle-switch input:checked + .toggle-slider {
-          background-color: #8a8a92;
-        }
-
-        .toggle-switch input:checked + .toggle-slider:before {
-          transform: translateX(20px);
         }
 
         .lens-info {

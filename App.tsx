@@ -35,7 +35,7 @@ const UserProfileManager = React.lazy(() => import('./components/settings/UserPr
 const SavedAnalyses = React.lazy(() => import('./components/journal/SavedAnalyses'));
 const SettingsMenu = React.lazy(() => import('./components/settings/SettingsMenu'));
 const LiveStreamView = React.lazy(() => import('./components/analysis/LiveStreamView'));
-const LogTradeModal = React.lazy(() => import('./components/journal/LogTradeModal').then(m => ({ default: m.LogTradeModal })));
+// (LogTradeModal was removed — the capture flow uses DataCaptureModal.)
 const PostTradeUploadModal = React.lazy(() => import('./components/modals/PostTradeUploadModal').then(m => ({ default: m.PostTradeUploadModal })));
 const SkipTradeModal = React.lazy(() => import('./components/modals/SkipTradeModal').then(m => ({ default: m.SkipTradeModal })));
 const DataCaptureModal = React.lazy(() => import('./components/modals/DataCaptureModal').then(m => ({ default: m.DataCaptureModal })));
@@ -83,7 +83,8 @@ import { syncFromTradeLog, syncRollingWindowFromTradeLog, initModelPerformanceSe
 import { saveLensConfig, initAnalystLensService, loadLensConfig, saveEnsembleModelSelection, EnsembleModelSelection, saveCustomEnsemblePrompt, saveCustomLensPrompts } from './services/ui/AnalystLensService';
 import { detectTradingStyle, getEffectiveStyle, generateMasterPromptStyleInjection } from './services/ui/TradingStyleDetector';
 import { checkDataIntegrity, createStartupBackup, updateTradeCount, logIntegrityEvent, runMigrations } from './services/validation/DataIntegrityService';
-import { startAutoBackup, stopAutoBackup } from './services/infrastructure/BackupService';
+import { startAutoBackup, stopAutoBackup, createBackup } from './services/infrastructure/BackupService';
+import { storageService } from './services/infrastructure/StorageService';
 import { initInvalidationRuleService, loadInvalidationRules } from './services/validation/InvalidationRuleService';
 import { PriceAlertService } from './services/ui/PriceAlertService';
 import { OutcomeAutopilotService, AutopilotResolution } from './services/ui/OutcomeAutopilotService';
@@ -93,6 +94,21 @@ import { initConfluenceService, syncConfluenceFromTradeLog } from './services/an
 import { initPatternMemoryService, setAttributedInsightsUser } from './services/learning/PatternMemorySynthesisService';
 import GlobalLearningService from './services/learning/GlobalLearningService';
 const VersionHistoryDashboard = React.lazy(() => import('./components/dashboards/VersionHistoryDashboard').then(m => ({ default: m.VersionHistoryDashboard })));
+
+/**
+ * Rebuilds a File from a data URL so persisted chart images can be
+ * re-dispatched through the vision pipeline (F4 re-run).
+ */
+const dataUrlToFile = (dataUrl: string, filename: string): File => {
+    const commaIdx = dataUrl.indexOf(',');
+    const meta = commaIdx >= 0 ? dataUrl.slice(0, commaIdx) : '';
+    const mime = meta.match(/data:(.*?);/)?.[1] || 'image/png';
+    const b64 = commaIdx >= 0 ? dataUrl.slice(commaIdx + 1) : dataUrl;
+    const byteString = atob(b64);
+    const bytes = new Uint8Array(byteString.length);
+    for (let i = 0; i < byteString.length; i++) bytes[i] = byteString.charCodeAt(i);
+    return new File([bytes], filename, { type: mime });
+};
 
 const App: React.FC = () => {
     const toast = useToastActions();
@@ -243,10 +259,15 @@ const App: React.FC = () => {
         }
     }, [isSidebarCollapsed]);
     const ensembleInitializedRef = useRef(false);
+    // Persisted per-profile ensemble choice (loaded by loadUserData, possibly
+    // after this effect fires on first mount — the ref bridges that race).
+    const persistedEnsembleModeRef = useRef<boolean | null>(null);
     useEffect(() => {
         if (!ensembleInitializedRef.current && readyProviders.length > 0) {
             ensembleInitializedRef.current = true;
-            setIsEnsembleEnabled(ensembleModelCount > 1);
+            // The saved mode wins; the derived provider count is only the
+            // fallback for profiles that predate the setting.
+            setIsEnsembleEnabled(persistedEnsembleModeRef.current ?? (ensembleModelCount > 1));
         }
     }, [ensembleModelCount]);
 
@@ -292,7 +313,6 @@ const App: React.FC = () => {
         savedAnalyses, setSavedAnalyses,
         tradeSummaries, setTradeSummaries,
         finalTradeSummary, setFinalTradeSummary,
-        loggingTradeId, setLoggingTradeId,
         skipCandidate, setSkipCandidate,
         updateCandidate, setUpdateCandidate,
         simulatorCandidate, setSimulatorCandidate,
@@ -343,6 +363,9 @@ const App: React.FC = () => {
     });
 
     const [leverageInput, setLeverageInput] = useState<string>(String(DEFAULT_LEVERAGE));
+    // (i/n) progress for the manual insight-generation loops (App only shows
+    // a boolean spinner otherwise; a 50-trade rewrite runs for minutes).
+    const [insightProgress, setInsightProgress] = useState<{ done: number; total: number } | null>(null);
     const appRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const virtuosoRef = useRef<VirtuosoHandle>(null);
@@ -387,10 +410,8 @@ const App: React.FC = () => {
         images, setImages,
         loadingMessage, setLoadingMessage,
         analysisSteps, setAnalysisSteps,
-        currentGateResult, setCurrentGateResult,
         currentVisionData, setCurrentVisionData,
         isDeepAnalysis, setIsDeepAnalysis,
-        quotaExceededModels, setQuotaExceededModels,
         analysisAbortController,
         initAnalysisSteps, startStep, completeStep, failStep, addSubStep,
         handleSendMessage,
@@ -515,7 +536,6 @@ const App: React.FC = () => {
         setLoggedTrades,
         globalMemory,
         setGlobalMemory,
-        memoryModel,
         memoryConfig,
         tradeSummaries,
         setTradeSummaries,
@@ -845,6 +865,10 @@ const App: React.FC = () => {
         return () => document.removeEventListener('keydown', onKey);
     }, []);
 
+    // F3: Ctrl/Cmd+N = new conversation; "/" focuses the composer (unless
+    // already typing or an overlay is open).
+    // (Ctrl+N + "/" handler lives next to handleNewConversation below.)
+
 
     const loadUserData = async (username: string) => {
         handleCancelAnalysis();
@@ -966,6 +990,12 @@ const App: React.FC = () => {
             setIsFamiliesEnabledInPureAI(profile.settings?.isFamiliesEnabledInPureAI ?? false);
             setIsMemoryEnabledInPureAI(profile.settings?.isMemoryEnabledInPureAI ?? false);
             setIsHybridIntelligenceEnabled(profile.settings?.isHybridIntelligenceEnabled ?? false);
+            // Persisted ensemble mode wins; the derived provider count is the
+            // fallback for profiles that predate the setting. The ref bridges
+            // the race with the one-time init effect above (loadUserData can
+            // run before or after providers finish loading).
+            persistedEnsembleModeRef.current = profile.settings?.isEnsembleEnabled ?? null;
+            setIsEnsembleEnabled(profile.settings?.isEnsembleEnabled ?? (ensembleModelCount > 1));
             setIsAutoCapturing(profile.settings?.isAutoCapturing ?? false);
             setIsUpdateAutoCapturing(profile.settings?.isUpdateAutoCapturing ?? false);
             setIsEntryNotHitCapturing(profile.settings?.isEntryNotHitCapturing ?? false);
@@ -976,6 +1006,21 @@ const App: React.FC = () => {
 
             // AI Learning: Load knowledge base
             setInsightKnowledgeBase(profile.insightKnowledgeBase);
+
+            // Restored/migrated profiles carry learning rules in the snapshot.
+            // Write them back into the local store when it's empty (e.g. after
+            // restoring a backup onto a fresh WebView) — in the normal flow the
+            // local store already holds the same (possibly newer) rules.
+            if (profile.learningRules && (profile.learningRules.rules?.length ?? 0) > 0) {
+                const localRules = storageService.loadLearningRules();
+                if ((localRules.rules?.length ?? 0) === 0) {
+                    storageService.saveLearningRules({
+                        rules: profile.learningRules.rules,
+                        lastUpdated: profile.learningRules.lastUpdated,
+                        version: 2,
+                    });
+                }
+            }
 
             // Sync model performance data from trade log
             const tradeLogData = (profile.tradeLog || []).map(t => ({ ...t, leverage: t.leverage || DEFAULT_LEVERAGE }));
@@ -1080,11 +1125,16 @@ const App: React.FC = () => {
         tradeSummaries: tradeSummaries,
         finalTradeSummary: finalTradeSummary,
         globalMemory: globalMemory,
-        settings: { activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, confidenceCalibration, memoryProvider: memoryConfig?.id || '', memoryModel },
+        settings: { activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, confidenceCalibration, memoryProvider: memoryConfig?.id || '' },
         lastActiveConversationId: activeConversationId || undefined,
         // AI Learning data
         insightKnowledgeBase: insightKnowledgeBase,
-    }), [conversationHistory, loggedTrades, activeFrameworks, activeConversationId, savedAnalyses, tradeSummaries, finalTradeSummary, globalMemory, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, confidenceCalibration, insightKnowledgeBase, memoryConfig, memoryModel]);
+        // Learning rules used to live ONLY in WebView localStorage — they were
+        // excluded from SQLite, backups and migrations, so a WebView data
+        // clear silently destroyed them. Snapshotting them here populates the
+        // users.learningRules column and BackupService payload.
+        learningRules: storageService.loadLearningRules(),
+    }), [conversationHistory, loggedTrades, activeFrameworks, activeConversationId, savedAnalyses, tradeSummaries, finalTradeSummary, globalMemory, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, confidenceCalibration, insightKnowledgeBase, memoryConfig]);
 
     // ─── P1-6: Split save into DATA (heavy) + SETTINGS (light) ───────────
     // Previously a single effect re-serialized ALL conversations (with base64
@@ -1127,22 +1177,30 @@ const App: React.FC = () => {
     useEffect(() => {
         if (!activeUsername) return;
 
+        // Surface settings saves in the header status too — the old path
+        // failed silently (console.error only), so a broken write looked
+        // like a successful toggle.
+        setSaveStatus('SAVING');
+
         const handler = setTimeout(async () => {
             try {
                 // Only the settings sub-object — no conversations, no trades,
                 // no base64 images. This is a cheap write.
                 await dbService.saveUserProfile(activeUsername, {
-                    settings: { activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, confidenceCalibration, memoryProvider: memoryConfig?.id || '', memoryModel },
+                    settings: { activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, confidenceCalibration, memoryProvider: memoryConfig?.id || '' },
                 });
+                setSaveStatus('SAVED');
             } catch (err) {
                 console.error("Failed to save user profile (settings):", err);
+                setSaveStatus('ERROR');
+                toast.error('Settings not saved', 'Your changes could not be saved. Check storage permissions and try again.');
             }
         }, 2500);
 
         return () => {
             clearTimeout(handler);
         };
-    }, [activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, confidenceCalibration, memoryConfig, memoryModel, activeUsername]);
+    }, [activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, confidenceCalibration, memoryConfig, activeUsername, toast]);
 
     // (3) SAVE HEARTBEAT — the 1500ms DATA debounce restarts on every message
     // change, so nothing is persisted for the ENTIRE duration of a run (the
@@ -1297,8 +1355,11 @@ const App: React.FC = () => {
         }
     }, [providerConfigs, ensembleModelSelection, handleSetEnsembleModelSelection]);
 
-    const handleQuotaExceeded = useCallback((modelId: string) => {
-        setQuotaExceededModels(prev => new Set(prev).add(modelId));
+    // Quota flagging UI never materialized (the old quotaExceededModels state
+    // was set but never read by any component) — keep the callback for the
+    // modal plumbing; quota errors surface via the OCR error state instead.
+    const handleQuotaExceeded = useCallback((_modelId: string) => {
+        // Intentional no-op.
     }, []);
 
     // Update ref for useTradeLogging (breaks circular dependency)
@@ -1364,15 +1425,19 @@ const App: React.FC = () => {
         try {
             // Generate summaries for each new trade
             const newSummaries: TradeSummary[] = [];
+            let done = 0;
+            setInsightProgress({ done: 0, total: newTrades.length });
 
             for (const trade of newTrades) {
                 // Use the user's preference for Algo vs AI insight generation
-                const summary = await MemoryService.summarizeTrade(trade, memoryModel, memoryConfig || moderatorConfig, useAlgorithmicInsights);
+                const summary = await MemoryService.summarizeTrade(trade, memoryConfig?.selectedModel || '', memoryConfig || moderatorConfig, useAlgorithmicInsights);
                 newSummaries.push({
                     id: trade.id,
                     summaryText: summary,
                     timestamp: new Date().toISOString()
                 });
+                done++;
+                setInsightProgress({ done, total: newTrades.length });
             }
 
             // Add new summaries with FIFO enforcement and robust deduplication
@@ -1414,6 +1479,7 @@ const App: React.FC = () => {
             console.error('[ManualInsights] Failed to generate summaries:', e);
         } finally {
             setIsSummaryInProgress(false);
+            setInsightProgress(null);
         }
     };
 
@@ -1438,6 +1504,8 @@ const App: React.FC = () => {
 
         try {
             const updatedSummaries: TradeSummary[] = [];
+            let done = 0;
+            setInsightProgress({ done: 0, total: targetIds.length });
 
             for (const id of targetIds) {
                 const trade = loggedTrades.find(t => t.id === id);
@@ -1457,6 +1525,8 @@ const App: React.FC = () => {
                 } else {
                     console.warn(`[AIRewrite] Trade not found for id: ${id}. Available trade ids:`, loggedTrades.map(t => t.id));
                 }
+                done++;
+                setInsightProgress({ done, total: targetIds.length });
             }
 
             // Replace existing summaries with AI-generated ones
@@ -1484,6 +1554,7 @@ const App: React.FC = () => {
             console.error('[AIRewrite] Failed to rewrite insights:', e);
         } finally {
             setIsSummaryInProgress(false);
+            setInsightProgress(null);
         }
     };
 
@@ -1543,6 +1614,36 @@ const App: React.FC = () => {
             setActiveConversationId(newConv.id);
         }
     };
+
+    // F3: New conversation (Ctrl/Cmd+N shortcut + palette action).
+    const handleNewConversation = useCallback(() => {
+        handleCancelAnalysis();
+        invalidatePostMortemRuns();
+        const newConv = createNewConversation();
+        setConversationHistory(prev => [newConv, ...prev]);
+        setActiveConversationId(newConv.id);
+    }, [handleCancelAnalysis, invalidatePostMortemRuns]);
+
+    // F3: Ctrl/Cmd+N = new conversation; "/" focuses the composer (unless
+    // already typing or an overlay is open).
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') {
+                e.preventDefault();
+                handleNewConversation();
+                return;
+            }
+            if (e.key === '/' && !isCommandPaletteOpen) {
+                const target = e.target as HTMLElement | null;
+                const isTyping = !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable);
+                if (isTyping) return;
+                const composer = document.getElementById('chat-composer') as HTMLTextAreaElement | null;
+                composer?.focus();
+            }
+        };
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
+    }, [handleNewConversation, isCommandPaletteOpen]);
 
     const handleLoadConversation = (id: string) => {
         if (id !== activeConversationId) {
@@ -1712,7 +1813,19 @@ const App: React.FC = () => {
             hint: 'Backups',
             run: () => setIsVersionHistoryVisible(true),
         },
-    ], [handleScrollToBottom, input, stableHandleSendMessage, setJournalState, setIsLiveMarketVisible, setIsSettingsMenuVisible, setIsStrategySearchVisible, setIsVersionHistoryVisible, isEnsembleEnabled, handleSetEnsembleEnabled, lensConfig, handleSetLensConfig, savedAnalyses, setIsSavedGalleryOpen]);
+        {
+            id: 'accuracy-mode',
+            label: isAccuracyModeEnabled ? 'Accuracy Mode: ON — view settings' : 'Enable Accuracy Mode',
+            hint: 'Validation',
+            run: () => setShowAccuracyModal(true),
+        },
+        {
+            id: 'clear-chat',
+            label: 'Clear current chat',
+            hint: 'Messages',
+            run: () => { void handleClearChat(); },
+        },
+    ], [handleScrollToBottom, input, stableHandleSendMessage, setJournalState, setIsLiveMarketVisible, setIsSettingsMenuVisible, setIsStrategySearchVisible, setIsVersionHistoryVisible, isEnsembleEnabled, handleSetEnsembleEnabled, lensConfig, handleSetLensConfig, savedAnalyses, setIsSavedGalleryOpen, isAccuracyModeEnabled, setShowAccuracyModal, handleClearChat]);
 
     const removeImage = (index: number) => {
         setImages(prev => prev.filter((_, i) => i !== index));
@@ -1791,6 +1904,33 @@ const App: React.FC = () => {
         }
     }, []);
 
+    // F4: "Re-run debate" — re-dispatches the original prompt + chart images
+    // through the normal pipeline so the user gets a fresh debate for the
+    // same setup (also the missing retry path for failed analyst slots).
+    const handleReRunAnalysis = useCallback((messageId: string) => {
+        const index = messages.findIndex(m => m.id === messageId);
+        const card = index >= 0 ? messages[index] : undefined;
+        if (!card) return;
+        let userMsg: Message | undefined;
+        for (let i = index - 1; i >= 0; i--) {
+            if (messages[i].role === MessageRole.USER) { userMsg = messages[i]; break; }
+        }
+        const prompt = userMsg?.text?.trim();
+        if (!prompt) {
+            toast.warning('Cannot re-run', 'No original prompt found for this analysis.');
+            return;
+        }
+        // Rebuild ImageMetadata from the persisted dataURLs (the pipeline's
+        // vision payload needs File objects).
+        const images: ImageMetadata[] = (userMsg?.images ?? []).map((url, i) => ({
+            file: dataUrlToFile(url, `chart-${i + 1}.png`),
+            dataURL: url,
+            summary: userMsg?.imageSummaries?.[i],
+            isLoading: false,
+        }));
+        stableHandleSendMessage(prompt, images, `Re-run requested for analysis card ${messageId}.`);
+    }, [messages, stableHandleSendMessage, toast]);
+
     const handleViewStrategyDetails = useCallback((name: string) => {
         setStrategyToView(name);
         setIsStrategySearchVisible(true);
@@ -1834,18 +1974,24 @@ const App: React.FC = () => {
         // Algo Mode Logic
         if (mode === 'Algo') {
             if (msg.analysis.marketSnapshot) {
-                const algoProbs = ProbabilityEngineService.calculateAlgoProbabilities(
-                    msg.analysis.marketSnapshot,
-                    loggedTrades,
-                    msg.analysis.direction as 'Long' | 'Short' | 'Neutral'
-                );
-                updateMessages(prev => prev.map(m =>
-                    m.id === messageId
-                        ? { ...m, analysis: { ...m.analysis!, levelProbabilities: algoProbs } }
-                        : m
-                ));
+                try {
+                    const algoProbs = ProbabilityEngineService.calculateAlgoProbabilities(
+                        msg.analysis.marketSnapshot,
+                        loggedTrades,
+                        msg.analysis.direction as 'Long' | 'Short' | 'Neutral'
+                    );
+                    updateMessages(prev => prev.map(m =>
+                        m.id === messageId
+                            ? { ...m, analysis: { ...m.analysis!, levelProbabilities: algoProbs } }
+                            : m
+                    ));
+                } catch (error) {
+                    console.error('Algo probability calculation failed:', error);
+                    toast.error('Probability calculation failed', 'The algo engine hit an error with this trade\'s data. Try the AI mode instead.');
+                }
             } else {
                 console.warn('Cannot run Algo mode: No snapshot available for trade', messageId);
+                toast.warning('No market data', 'This trade has no saved market snapshot, so the algo engine cannot run. Use AI mode instead.');
             }
             return;
         }
@@ -1882,12 +2028,15 @@ const App: React.FC = () => {
                     console.log('Successfully updated AI probabilities for:', messageId);
                 } else {
                     console.warn('Parsed JSON did not contain expected probability fields:', parsed);
+                    toast.warning('Probability update failed', 'The AI response was missing the expected probability fields. No changes were applied.');
                 }
             } else {
                 console.warn('Failed to extract valid JSON from AI response:', fullJson);
+                toast.warning('Probability update failed', 'The AI response could not be parsed. No changes were applied.');
             }
         } catch (error) {
             console.error('Failed to calculate AI probabilities:', error);
+            toast.error('Probability update failed', 'An error occurred while recalculating probabilities. Please try again.');
         } finally {
             setIsCalculatingAIProbabilities(false);
         }
@@ -1906,8 +2055,21 @@ const App: React.FC = () => {
         return unsubscribe;
     }, [toast]);
 
+    // P5: diff ids instead of re-registering every message on every stream
+    // chunk — register() re-arms the 60s detection loop, so the old effect
+    // perpetually reset the timers while a debate streamed.
+    const autopilotRegisteredRef = useRef<Set<string>>(new Set());
+    const autopilotLeverageRef = useRef<number>(DEFAULT_LEVERAGE);
+
     useEffect(() => {
         const leverage = activeConversation?.leverage || DEFAULT_LEVERAGE;
+        if (autopilotLeverageRef.current !== leverage) {
+            // Leverage changed — re-register everything with the new value.
+            autopilotRegisteredRef.current.clear();
+            autopilotLeverageRef.current = leverage;
+        }
+
+        const trackableIds = new Set<string>();
         messages.forEach(m => {
             const trackable = m.outcome === TradeOutcome.PENDING
                 && !!m.analysis
@@ -1916,11 +2078,23 @@ const App: React.FC = () => {
                 && !!m.analysis.stopLoss
                 && !!m.analysis.createdAt;
             if (trackable) {
-                OutcomeAutopilotService.register(m.id, m.analysis!, leverage);
-            } else {
+                trackableIds.add(m.id);
+                if (!autopilotRegisteredRef.current.has(m.id)) {
+                    OutcomeAutopilotService.register(m.id, m.analysis!, leverage);
+                    autopilotRegisteredRef.current.add(m.id);
+                }
+            } else if (autopilotRegisteredRef.current.has(m.id)) {
                 OutcomeAutopilotService.unregister(m.id);
+                autopilotRegisteredRef.current.delete(m.id);
             }
         });
+        // Messages removed from the conversation entirely.
+        for (const id of [...autopilotRegisteredRef.current]) {
+            if (!trackableIds.has(id)) {
+                OutcomeAutopilotService.unregister(id);
+                autopilotRegisteredRef.current.delete(id);
+            }
+        }
     }, [messages, activeConversation?.leverage]);
 
     // Startup catch-up: once messages load, verify pending trades once
@@ -1932,6 +2106,26 @@ const App: React.FC = () => {
             void OutcomeAutopilotService.checkNow();
         }
     }, [messages]);
+
+    // F6: best-effort backup when the desktop app closes — the unload flush
+    // protects the DB, but a fresh snapshot guards against IndexedDB
+    // eviction/corruption between the 30-minute auto-backups. Throttled to
+    // once per 10 minutes so quick relaunches don't churn backup files.
+    const lastExitBackupRef = useRef(0);
+    useEffect(() => {
+        const onBeforeUnload = () => {
+            if (typeof (window as any).electronAPI === 'undefined') return;
+            if (Date.now() - lastExitBackupRef.current < 10 * 60 * 1000) return;
+            lastExitBackupRef.current = Date.now();
+            if (activeUsernameRef.current) {
+                // Best-effort: IndexedDB transactions started in beforeunload
+                // usually complete in Chromium; a failed write is non-fatal.
+                void createBackup(activeUsernameRef.current).catch(() => {});
+            }
+        };
+        window.addEventListener('beforeunload', onBeforeUnload);
+        return () => window.removeEventListener('beforeunload', onBeforeUnload);
+    }, []);
 
     const handleConfirmAutopilot = useCallback((messageId: string) => {
         const msg = messages.find(m => m.id === messageId);
@@ -1960,6 +2154,11 @@ const App: React.FC = () => {
         });
     }, []);
 
+    // P1-6b: leverage as a primitive — deriving it inside the memo with
+    // `activeConversation` in the dep list made chatContext (and therefore
+    // every visible MessageItem) re-created on every stream chunk.
+    const chatLeverage = parseInt(leverageInput, 10) || activeConversation?.leverage || DEFAULT_LEVERAGE;
+
     const chatContext: ChatContextProps = useMemo(() => ({
         typingMessageState,
         setTypingMessageState,
@@ -1970,9 +2169,7 @@ const App: React.FC = () => {
         expandedPostMortemImages,
         setExpandedPostMortemImages,
         savedAnalyses,
-        loggingTradeId,
         activeFrameworks,
-        activeConversation,
         copiedMessageId,
         modelIdToName,
         ocrModelIdToName,
@@ -1988,13 +2185,14 @@ const App: React.FC = () => {
         confidenceCalibration, // Confidence calibration stats
         onRetryPostMortem: handleRetryPostMortem, // Retry failed post-mortem
         lensConfig, // Analyst lens configuration for debate visualization
-        leverage: parseInt(leverageInput, 10) || 100, // Leverage for backtest P&L calculations
+        leverage: chatLeverage, // Leverage for backtest P&L calculations
         autopilotResolutions, // Outcome autopilot detected resolutions
         onConfirmAutopilot: handleConfirmAutopilot,
         onDismissAutopilot: handleDismissAutopilot,
         onCompareAnalysis: handleCompareAnalysis,
-        onViewReasoning: handleViewReasoning
-    }), [typingMessageState, highlightedAnalysisId, expandedPostMortems, expandedPostMortemImages, savedAnalyses, loggingTradeId, activeFrameworks, activeConversation, copiedMessageId, modelIdToName, providerNameToId, handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy, handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, confidenceCalibration, handleRetryPostMortem, lensConfig, leverageInput, autopilotResolutions, handleConfirmAutopilot, handleDismissAutopilot, handleCompareAnalysis, handleViewReasoning]);
+        onViewReasoning: handleViewReasoning,
+        onReRunAnalysis: handleReRunAnalysis,
+    }), [typingMessageState, highlightedAnalysisId, expandedPostMortems, expandedPostMortemImages, savedAnalyses, activeFrameworks, copiedMessageId, modelIdToName, providerNameToId, handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy, handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, confidenceCalibration, handleRetryPostMortem, lensConfig, chatLeverage, autopilotResolutions, handleConfirmAutopilot, handleDismissAutopilot, handleCompareAnalysis, handleViewReasoning, handleReRunAnalysis]);
 
     // ... (Rest of component remains unchanged) ...
     return (
@@ -2103,8 +2301,6 @@ const App: React.FC = () => {
                 setIsGlobalMemoryEnabled={setIsGlobalMemoryEnabled}
                 memoryConfig={memoryConfig}
                 onMemoryConfigChange={setMemoryConfig}
-                memoryModel={memoryModel}
-                setMemoryModel={setMemoryModel}
                 isPlaybookEnabledInPureAI={isPlaybookEnabledInPureAI}
                 setIsPlaybookEnabledInPureAI={setIsPlaybookEnabledInPureAI}
                 isFamiliesEnabledInPureAI={isFamiliesEnabledInPureAI}
@@ -2116,6 +2312,7 @@ const App: React.FC = () => {
                 lensConfig={lensConfig}
                 onSetLensConfig={handleSetLensConfig}
                 providerConfigs={providerConfigs}
+                providerConfigsLoaded={providerConfigsLoaded}
                 selectedOcrModel={selectedOcrModel}
                 onSetOcrModel={handleSetSelectedOcrModel}
                 moderatorProvider={moderatorProviderId as AIProvider}
@@ -2201,6 +2398,7 @@ const App: React.FC = () => {
                 individualSummaries={tradeSummaries}
                 isLoading={isSummaryInProgress}
                 isInsightGenerating={isInsightGenerating}
+                insightProgress={insightProgress}
                 newlyAddedInsightIds={newlyAddedInsightIds}
                 summarizationProvider={summarizationProvider}
                 summarizationModel={summarizationModel}

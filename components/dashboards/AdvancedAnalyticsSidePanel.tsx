@@ -119,7 +119,7 @@ const AdvancedAnalyticsSidePanel: React.FC<AdvancedAnalyticsSidePanelProps> = ({
         <>
             {/* Modern Side Panel */}
             <div
-                className={`fixed right-0 top-0 h-full w-80 sm:w-[340px] transform transition-all duration-500 ease-out z-30 ${isOpen ? 'translate-x-0' : 'translate-x-full'
+                className={`status-surface fixed right-0 top-0 h-full w-80 sm:w-[340px] transform transition-all duration-500 ease-out z-30 ${isOpen ? 'translate-x-0' : 'translate-x-full'
                     }`}
             >
                 {/* Glassmorphic Background */}

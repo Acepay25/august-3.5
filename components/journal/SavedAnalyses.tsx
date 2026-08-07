@@ -139,7 +139,7 @@ const SavedAnalyses: React.FC<SavedAnalysesProps> = ({ analyses, onClose, isVisi
       <aside className="fixed top-0 right-0 h-full w-full sm:max-w-2xl bg-zinc-900 shadow-2xl z-50 transform transition-transform duration-300 ease-in-out flex flex-col">
         <header className="flex items-center justify-between p-4 border-b border-white/10">
           <h2 className="text-lg font-bold text-cyan-400">Saved Analyses for Review</h2>
-          <button onClick={onClose} className="p-1 rounded-full text-zinc-400 hover:bg-zinc-800 hover:text-white">
+          <button onClick={onClose} className="p-1 rounded-full text-zinc-400 hover:bg-zinc-800 hover:text-white" aria-label="Close saved analyses">
             <CloseIcon />
           </button>
         </header>

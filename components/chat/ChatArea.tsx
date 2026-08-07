@@ -226,15 +226,20 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         setSelectedIds(new Set());
     }, []);
 
+    // P1-6b: depend on the LAST MESSAGE ID (a primitive) instead of the whole
+    // `messages` array — a streaming chunk grows the last message's text but
+    // not its id, so enhancedContext (and every memoized MessageItem) stays
+    // stable and only the streaming card re-renders.
+    const latestMessageId = messages[messages.length - 1]?.id ?? null;
     const enhancedContext = useMemo(() => ({
         ...chatContext,
-        latestMessageId: messages[messages.length - 1]?.id ?? null,
+        latestMessageId,
         isSelectionMode,
         selectedMessageIds: selectedIds,
         onToggleMessageSelection: handleToggleSelection,
         onViewImage: (url: string) => setViewerImageUrl(url),
         onSelectMessageForProbability
-    }), [chatContext, messages, isSelectionMode, selectedIds, handleToggleSelection, onSelectMessageForProbability]);
+    }), [chatContext, latestMessageId, isSelectionMode, selectedIds, handleToggleSelection, onSelectMessageForProbability]);
 
     // Fresh sessions start with zero messages (no hardcoded intro bubble),
     // so no intro-text substitution is needed — messages pass through as-is.
@@ -307,7 +312,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                         <button
                             onClick={handleDeleteSelected}
                             disabled={selectedIds.size === 0}
-                            className="status-surface status-surface flex items-center gap-2 px-4 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                            className="status-surface flex items-center gap-2 px-4 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                         >
                             <TrashIcon className="w-4 h-4" />
                             <span className="text-xs font-bold uppercase tracking-wider">Delete</span>
@@ -364,7 +369,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 </div>
             )}
 
-            {isRateLimited && <div className="absolute top-16 left-4 right-4 z-20 bg-red-500/10 border border-red-500/20 text-red-200 p-4 rounded-xl flex items-center justify-between mb-6 animate-fade-in" role="alert"><span><strong>Rate Limit Exceeded:</strong> Please wait a moment.</span><button onClick={() => setIsRateLimited(false)} className="text-red-200 hover:text-white ml-4"><CloseIcon /></button></div>}
+            {isRateLimited && <div className="status-surface absolute top-16 left-4 right-4 z-20 bg-red-500/10 border border-red-500/20 text-red-200 p-4 rounded-xl flex items-center justify-between mb-6 animate-fade-in" role="alert"><span><strong>Rate Limit Exceeded:</strong> Please wait a moment.</span><button onClick={() => setIsRateLimited(false)} aria-label="Dismiss rate limit notice" className="text-red-200 hover:text-white ml-4"><CloseIcon /></button></div>}
 
             <div className="fixed bottom-40 right-6 z-30 flex flex-col gap-2">
                 {showScrollUp && !isSelectionMode && (
