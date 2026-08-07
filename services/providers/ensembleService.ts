@@ -1430,7 +1430,7 @@ export const conductTwoWayDebate = async function* (
           *   ${analyst1Name}: Failure scenario (max 40 words)
           *   ${analyst2Name}: Failure scenario (max 40 words)
       
-      8.  **ROUND 7: SETUP VALIDITY WINDOW (MANDATORY)**
+      9.  **ROUND 9: SETUP VALIDITY WINDOW (MANDATORY)**
           *   Moderator: "How long does this setup remain valid? Consider: (1) timeframe analyzed, (2) current volatility, (3) proximity to key events, (4) pattern decay rate."
           *   ${analyst1Name}: Propose validity (e.g., "4h 30m because...") (max 40 words)
           *   ${analyst2Name}: Agree/disagree with counter-reasoning (max 40 words)
@@ -2037,7 +2037,7 @@ If analysts STILL disagree on DIRECTION or KEY LEVELS:
 
 ---
 
-### 8. ROUND 7 — SETUP VALIDITY WINDOW (MANDATORY)
+### 9. ROUND 9 — SETUP VALIDITY WINDOW (MANDATORY)
 **Moderator:** "How long does this setup remain valid? Consider: (1) timeframe analyzed, (2) current volatility, (3) proximity to key events, (4) pattern decay rate."
 **${analyst1Name}:** Propose validity (e.g., "4h 30m because...") (max 40 words)
 **${analyst2Name}:** Agree/disagree with counter-reasoning (max 40 words)

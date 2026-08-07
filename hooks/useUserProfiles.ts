@@ -9,7 +9,15 @@ export interface UseUserProfilesParams {
     setIsSettingsVisible: (v: boolean) => void;
     toast: { success: (t: string, m?: string) => void; error: (t: string, m?: string) => void; info: (t: string, m?: string) => void };
     /** Non-blocking styled confirmation dialog (replaces native window.confirm). */
-    confirmDialog?: (opts: { title: string; message?: string; destructive?: boolean }) => Promise<boolean>;
+    confirmDialog?: (opts: {
+        title: string;
+        message?: string;
+        confirmLabel?: string;
+        cancelLabel?: string;
+        destructive?: boolean;
+        undoGraceMs?: number;
+        onUndo?: () => void | Promise<void>;
+    }) => Promise<boolean>;
 }
 
 /**

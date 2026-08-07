@@ -16,10 +16,8 @@ interface UIStateShape {
     isLivePostMortemVisible: boolean;
     isMobileMenuOpen: boolean;
     showMismatchModal: boolean;
-    isFullscreen: boolean;
     isLeverageDropdownOpen: boolean;
     isVisionDataVisible: boolean;
-    showUpdateNotification: boolean;
     showAccuracyModal: boolean;
     showScrollDown: boolean;
     showScrollUp: boolean;
@@ -50,10 +48,8 @@ const initialState: UIStateShape = {
     isLivePostMortemVisible: false,
     isMobileMenuOpen: false,
     showMismatchModal: false,
-    isFullscreen: false,
     isLeverageDropdownOpen: false,
     isVisionDataVisible: false,
-    showUpdateNotification: false,
     showAccuracyModal: false,
     showScrollDown: false,
     showScrollUp: false,

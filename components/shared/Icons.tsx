@@ -62,6 +62,14 @@ export {
   TrendingDown as TrendDownIcon,
   AlertTriangle as AlertTriangleIcon,
   Square as StopIcon,
+  Sparkles as SparklesIcon,
+  Zap as ZapIcon,
+  Server as ServerIcon,
+  AreaChart as AreaChartIcon,
+  BrainCircuit as BrainCircuitIcon,
+  Cpu as CpuIcon,
+  MessageSquare as MessageSquareIcon,
+  Circle as CircleIcon,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------

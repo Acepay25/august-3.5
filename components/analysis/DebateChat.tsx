@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { DebateTurn, AnalystLensConfig, TradeAnalysis } from '../../types';
 import { BotIcon, ChevronDownIcon } from '../shared/Icons';
 import { getRoleDisplayForProvider } from '../../services/ui/AnalystLensService';
+import DebateSummary from './DebateSummary';
 
 interface DebateChatProps {
     debateTurns: DebateTurn[];
@@ -37,11 +38,13 @@ const SpeakerAvatar: React.FC<{ speaker: string; moderator?: boolean; small?: bo
     );
 };
 
-const getRoundLabel = (round: number, isVerdictRound = false): string => {
+const getRoundLabel = (round: number, isVerdictRound = false, speaker?: string): string => {
     if (isVerdictRound) return `Round ${round} · Final Verdict`;
     if (round === 1) return 'Round 1 · Openings';
     if (round === 2 || round === 3) return `Round ${round} · Rebuttals`;
-    return `Round ${round} · Clarification`;
+    // Clarification rounds: moderator asks questions, analysts answer
+    if (speaker === 'Moderator') return `Round ${round} · Clarification Questions`;
+    return `Round ${round} · Analyst Responses`;
 };
 
 /** Human phase name for the thinking indicator (instead of a raw round number). */
@@ -101,6 +104,7 @@ const DebateChat: React.FC<DebateChatProps> = ({
     const [isScrolledUp, setIsScrolledUp] = useState(false);
     const [isReplaying, setIsReplaying] = useState(false);
     const [replayIndex, setReplayIndex] = useState(0);
+    const [replaySpeed, setReplaySpeed] = useState(1);
     const scrollRef = useRef<HTMLDivElement>(null);
     const thinkingControlRef = useRef<HTMLDivElement>(null);
     const userScrolledUpRef = useRef(false);
@@ -136,6 +140,7 @@ const DebateChat: React.FC<DebateChatProps> = ({
     useEffect(() => {
         setReplayIndex(0);
         setIsReplaying(false);
+        setReplaySpeed(1);
     }, [turnsFingerprint, isDebating]);
 
     useEffect(() => {
@@ -144,9 +149,23 @@ const DebateChat: React.FC<DebateChatProps> = ({
             setIsReplaying(false);
             return;
         }
-        const timer = setTimeout(() => setReplayIndex(i => i + 1), 1100);
+        const delay = Math.round(1100 / replaySpeed);
+        const timer = setTimeout(() => setReplayIndex(i => i + 1), delay);
         return () => clearTimeout(timer);
-    }, [isReplaying, replayIndex, debateTurns.length]);
+    }, [isReplaying, replayIndex, debateTurns.length, replaySpeed]);
+
+    // Compute round boundaries for jump-to-round
+    const roundStartIndices = useMemo(() => {
+        const map = new Map<number, number>();
+        debateTurns.forEach((turn, index) => {
+            if (typeof turn.round === 'number' && !map.has(turn.round)) {
+                map.set(turn.round, index);
+            }
+        });
+        return map;
+    }, [debateTurns]);
+
+    const availableRounds = useMemo(() => [...roundStartIndices.keys()].sort((a, b) => a - b), [roundStartIndices]);
 
     const jumpToLatest = () => {
         userScrolledUpRef.current = false;
@@ -246,6 +265,39 @@ const DebateChat: React.FC<DebateChatProps> = ({
                                 {replayIndex >= debateTurns.length ? '↺ Restart' : '⏸ Pause'}
                             </button>
                             <button type="button" onClick={() => setReplayIndex(i => Math.min(debateTurns.length, i + 1))} className="rounded-md border border-white/10 px-2 py-1 text-[9px] uppercase tracking-wider text-zinc-400">⏭ Step</button>
+                            {/* Speed controls */}
+                            <span className="flex items-center gap-0.5 border-l border-white/10 pl-1.5">
+                                {[0.5, 1, 2].map(speed => (
+                                    <button
+                                        key={speed}
+                                        type="button"
+                                        onClick={() => setReplaySpeed(speed)}
+                                        className={`rounded px-1.5 py-0.5 text-[9px] font-medium transition-colors ${replaySpeed === speed ? 'bg-cyan-500/15 text-cyan-300' : 'text-zinc-500 hover:text-zinc-300'}`}
+                                    >
+                                        {speed}x
+                                    </button>
+                                ))}
+                            </span>
+                            {/* Jump to round */}
+                            {availableRounds.length > 1 && (
+                                <span className="flex items-center gap-0.5 border-l border-white/10 pl-1.5">
+                                    {availableRounds.map(round => {
+                                        const startIdx = roundStartIndices.get(round) ?? 0;
+                                        const currentRound = debateTurns[replayIndex]?.round;
+                                        return (
+                                            <button
+                                                key={round}
+                                                type="button"
+                                                onClick={() => setReplayIndex(startIdx)}
+                                                className={`rounded px-1.5 py-0.5 text-[9px] font-medium transition-colors ${currentRound === round ? 'bg-cyan-500/15 text-cyan-300' : 'text-zinc-500 hover:text-zinc-300'}`}
+                                                title={`Jump to round ${round}`}
+                                            >
+                                                R{round}
+                                            </button>
+                                        );
+                                    })}
+                                </span>
+                            )}
                             <button type="button" onClick={() => setIsReplaying(false)} className="rounded-md border border-white/10 px-2 py-1 text-[9px] uppercase tracking-wider text-zinc-500">Exit</button>
                         </span>
                     )}
@@ -262,6 +314,9 @@ const DebateChat: React.FC<DebateChatProps> = ({
                 }}
                 className="relative max-h-[520px] space-y-3 overflow-y-auto px-3 py-4 custom-scrollbar"
             >
+                {!isDebating && analysis && debateTurns.length > 0 && (
+                    <DebateSummary debateTurns={debateTurns} analysis={analysis} />
+                )}
                 {(isReplaying ? visibleTurns.slice(0, replayIndex) : visibleTurns).map((turn, index) => {
                     const previousRound = (isReplaying ? visibleTurns.slice(0, replayIndex) : visibleTurns)[index - 1]?.round;
                     const hasRoundSeparator = typeof turn.round === 'number' && turn.round !== previousRound;
@@ -277,7 +332,7 @@ const DebateChat: React.FC<DebateChatProps> = ({
                             {hasRoundSeparator && (
                                 <div className="flex items-center gap-2 py-1 text-[10px] font-medium uppercase tracking-widest text-zinc-600">
                                     <span className="h-px flex-1 bg-white/5" />
-                                    <span>{getRoundLabel(turn.round!, isVerdictRound)}</span>
+                                    <span>{getRoundLabel(turn.round!, isVerdictRound, turn.speaker)}</span>
                                     <span className="h-px flex-1 bg-white/5" />
                                 </div>
                             )}

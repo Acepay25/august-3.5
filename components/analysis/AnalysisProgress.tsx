@@ -13,13 +13,13 @@ import { Task, TaskTrigger, TaskContent, TaskItem, TaskItemFile } from '../ui/ta
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '../ui/collapsible';
 import {
   ChevronDownIcon,
-  LoaderIcon,
+  LoadingIcon,
   CheckIcon,
-  XIcon,
+  CloseIcon,
   CircleIcon,
   EyeIcon,
-  BanIcon,
-} from 'lucide-react';
+  SkipIcon,
+} from '../shared/Icons';
 
 // ─── Status Icon ────────────────────────────────────────────────────────────
 
@@ -31,11 +31,11 @@ const StepStatusIcon: React.FC<{ status: AnalysisStep['status']; isPostMortem?: 
 
   switch (status) {
     case 'running':
-      return <LoaderIcon className={`size-4 ${accent} animate-spin`} />;
+      return <LoadingIcon className={`size-4 ${accent}`} />;
     case 'complete':
       return <CheckIcon className={`size-4 ${isPostMortem ? 'text-purple-400' : 'text-emerald-400'}`} />;
     case 'error':
-      return <XIcon className="size-4 text-rose-400" />;
+      return <CloseIcon className="size-4 text-rose-400" />;
     default:
       return <CircleIcon className="size-3 text-zinc-600" />;
   }
@@ -219,7 +219,7 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({
               onClick={onCancel}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 transition-colors ml-auto"
             >
-              <BanIcon className="size-3.5" />
+              <SkipIcon className="size-3.5" />
               Stop generating
             </button>
           </div>
