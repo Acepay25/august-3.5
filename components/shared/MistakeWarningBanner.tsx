@@ -1,7 +1,7 @@
 // MistakeWarningBanner.tsx
 // Dismissible alert that warns users about recurring mistake patterns
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { LoggedTrade, TradingWeaknesses } from '../../types';
 import { getTradingWeaknesses } from '../../services/learning/MistakePatternService';
 
@@ -19,31 +19,32 @@ const MistakeWarningBanner: React.FC<MistakeWarningBannerProps> = ({
     onDismiss
 }) => {
     const [isVisible, setIsVisible] = useState(true);
-    const [weaknesses, setWeaknesses] = useState<TradingWeaknesses | null>(null);
 
-    useEffect(() => {
-        if (tradeLog && tradeLog.length > 0) {
-            const result = getTradingWeaknesses(tradeLog);
-            setWeaknesses(result);
-        }
+    // Memoize weakness analysis — avoids recalculating on every parent render
+    const weaknesses = useMemo<TradingWeaknesses | null>(() => {
+        if (!tradeLog || tradeLog.length === 0) return null;
+        return getTradingWeaknesses(tradeLog);
     }, [tradeLog]);
+
+    // Memoize derived values
+    const matchingSetup = useMemo(() => {
+        if (!weaknesses || !currentCoin || currentDirection === 'Neutral') return null;
+        return weaknesses.worstPerformingSetups.find(
+            s => s.setup.toLowerCase().includes(currentCoin.toLowerCase())
+        ) ?? null;
+    }, [weaknesses, currentCoin, currentDirection]);
+
+    const topMistakes = useMemo(() => {
+        if (!weaknesses) return [];
+        return weaknesses.mistakes
+            .filter(m => m.severity === 'high' || m.severity === 'medium')
+            .slice(0, 2);
+    }, [weaknesses]);
 
     // No data or no warnings
     if (!weaknesses || (weaknesses.mistakes.length === 0 && weaknesses.worstPerformingSetups.length === 0)) {
         return null;
     }
-
-    // Check if current setup matches a bad performer
-    const matchingSetup = currentCoin && currentDirection !== 'Neutral'
-        ? weaknesses.worstPerformingSetups.find(
-            s => s.setup.toLowerCase().includes(currentCoin.toLowerCase())
-        )
-        : null;
-
-    // Get top 2 high-severity mistakes
-    const topMistakes = weaknesses.mistakes
-        .filter(m => m.severity === 'high' || m.severity === 'medium')
-        .slice(0, 2);
 
     // Nothing relevant to show
     if (!matchingSetup && topMistakes.length === 0) {
@@ -58,7 +59,7 @@ const MistakeWarningBanner: React.FC<MistakeWarningBannerProps> = ({
     if (!isVisible) return null;
 
     return (
-        <div className="relative overflow-hidden rounded-xl bg-zinc-900 border border-amber-500/30 p-4 mb-4 shadow-lg animate-fade-in" status-surface>
+        <div className="status-surface relative overflow-hidden rounded-xl bg-zinc-900 border border-amber-500/30 p-4 mb-4 shadow-lg animate-fade-in">
             {/* Dismiss Button */}
             <button
                 onClick={handleDismiss}
@@ -72,7 +73,7 @@ const MistakeWarningBanner: React.FC<MistakeWarningBannerProps> = ({
 
             {/* Header */}
             <div className="flex items-center gap-2 mb-3">
-                
+
                 <span className="text-sm font-bold text-amber-400 uppercase tracking-wide">
                     Personal Trading Alert
                 </span>
@@ -118,4 +119,4 @@ const MistakeWarningBanner: React.FC<MistakeWarningBannerProps> = ({
     );
 };
 
-export default MistakeWarningBanner;
+export default React.memo(MistakeWarningBanner);

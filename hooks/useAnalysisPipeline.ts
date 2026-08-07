@@ -126,7 +126,15 @@ export interface UseAnalysisPipelineParams {
     // Toast:
     toast: { warning: (t: string, m?: string) => void; error: (t: string, m?: string) => void };
     /** Non-blocking styled confirmation dialog (replaces native window.confirm). */
-    confirmDialog?: (opts: { title: string; message?: string; destructive?: boolean }) => Promise<boolean>;
+    confirmDialog?: (opts: {
+        title: string;
+        message?: string;
+        confirmLabel?: string;
+        cancelLabel?: string;
+        destructive?: boolean;
+        undoGraceMs?: number;
+        onUndo?: () => void | Promise<void>;
+    }) => Promise<boolean>;
 }
 
 // Best-effort pattern-family detection from the user prompt, so the

@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { getBackups, createBackup, deleteBackup, exportBackupToFile, restoreBackup, BackupMetadata } from '../../services/infrastructure/BackupService';
 import { ExportIcon, TrashIcon, RefreshIcon, LoadingIcon, PlusIcon } from '../shared/Icons';
+import { useConfirmDialog } from '../shared/ConfirmDialog';
 
 interface BackupManagerProps {
   /** Active user whose backups are listed. */
@@ -15,6 +16,7 @@ interface BackupManagerProps {
  * (The service was fully built but had no UI — backups were invisible.)
  */
 export const BackupManager: React.FC<BackupManagerProps> = ({ username, onProfileRestored }) => {
+  const { confirm, ConfirmDialogComponent } = useConfirmDialog();
   const [backups, setBackups] = useState<BackupMetadata[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
@@ -72,10 +74,12 @@ export const BackupManager: React.FC<BackupManagerProps> = ({ username, onProfil
   };
 
   const handleRestore = async (id: string, backupUsername: string) => {
-    if (!window.confirm(
-      `Restore the backup from ${new Date(backups.find(b => b.id === id)?.timestamp || '').toLocaleString()}?\n\n` +
-      `This REPLACES the profile of "${backupUsername}" with the backed-up snapshot. This cannot be undone.`
-    )) return;
+    if (!await confirm({
+      title: 'Restore Backup',
+      message: `Restore the backup from ${new Date(backups.find(b => b.id === id)?.timestamp || '').toLocaleString()}?\n\nThis REPLACES the profile of "${backupUsername}" with the backed-up snapshot. This cannot be undone.`,
+      confirmLabel: 'Restore',
+      destructive: true,
+    })) return;
     setBusyId(id);
     setStatus(null);
     try {
@@ -95,7 +99,7 @@ export const BackupManager: React.FC<BackupManagerProps> = ({ username, onProfil
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Delete this backup permanently?')) return;
+    if (!await confirm({ title: 'Delete Backup', message: 'Delete this backup permanently?', destructive: true })) return;
     setBusyId(id);
     setStatus(null);
     try {
@@ -119,6 +123,7 @@ export const BackupManager: React.FC<BackupManagerProps> = ({ username, onProfil
   };
 
   return (
+    <>
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
@@ -201,6 +206,8 @@ export const BackupManager: React.FC<BackupManagerProps> = ({ username, onProfil
         </div>
       )}
     </div>
+    {ConfirmDialogComponent}
+    </>
   );
 };
 

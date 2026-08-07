@@ -384,14 +384,21 @@ code,
   display: none;
 }
 
+/* Grid-based collapse transition — avoids the max-height hack which
+   causes layout thrashing on mobile (browser still computes 30000px). */
 .collapsible-content {
-  max-height: 0;
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
-  transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.collapsible-content > * {
+  min-height: 0;
 }
 
 .collapsible-content.expanded {
-  max-height: 30000px;
+  grid-template-rows: 1fr;
 }
 
 /* ===== SOLID SURFACES ===== */

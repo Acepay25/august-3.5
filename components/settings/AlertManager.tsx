@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { PriceAlertService, PriceAlert } from '../../services/ui/PriceAlertService';
 import { TrashIcon, LoadingIcon } from '../shared/Icons';
+import { useConfirmDialog } from '../shared/ConfirmDialog';
 
 interface AlertManagerProps {
   /** Called when the user toggles/removes an alert — lets callers refresh in-place state. */
@@ -13,6 +14,7 @@ interface AlertManagerProps {
  * panel surfaces PriceAlertService.getAllAlerts with toggle + delete.
  */
 export const AlertManager: React.FC<AlertManagerProps> = ({ onChanged }) => {
+  const { confirm, ConfirmDialogComponent } = useConfirmDialog();
   const [alerts, setAlerts] = useState<PriceAlert[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -44,8 +46,8 @@ export const AlertManager: React.FC<AlertManagerProps> = ({ onChanged }) => {
     }
   };
 
-  const handleDelete = (id: string) => {
-    if (!window.confirm('Remove this price alert?')) return;
+  const handleDelete = async (id: string) => {
+    if (!await confirm({ title: 'Remove Alert', message: 'Remove this price alert?', destructive: true })) return;
     setBusyId(id);
     try {
       PriceAlertService.removeAlert(id);
@@ -65,6 +67,7 @@ export const AlertManager: React.FC<AlertManagerProps> = ({ onChanged }) => {
   };
 
   return (
+    <>
     <div className="space-y-4">
       <div>
         <h4 className="text-sm font-bold text-white">Price Alerts</h4>
@@ -120,6 +123,8 @@ export const AlertManager: React.FC<AlertManagerProps> = ({ onChanged }) => {
         </div>
       )}
     </div>
+    {ConfirmDialogComponent}
+    </>
   );
 };
 
