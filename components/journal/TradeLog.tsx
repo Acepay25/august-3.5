@@ -81,7 +81,7 @@ const TradeLogRow: React.FC<{
 
     const handleLeverageBlur = () => {
         let val = parseInt(localLeverage, 10);
-        if (isNaN(val)) val = 100;
+        if (isNaN(val)) val = DEFAULT_LEVERAGE;
         val = Math.max(1, Math.min(125, val));
         setLocalLeverage(String(val));
         if (val !== leverage) {

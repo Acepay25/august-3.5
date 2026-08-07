@@ -72,7 +72,7 @@ export const updateGlobalMemory = async (
  * Summarize trade using the selected provider
  */
 export const summarizeTrade = async (
-    trade: any, // LoggedTrade with postMortem
+    trade: LoggedTrade,
     modelName: string,
     config: ProviderConfig,
     useAlgorithmic: boolean = true // New param to toggle between Algo and AI
@@ -81,7 +81,7 @@ export const summarizeTrade = async (
     if (useAlgorithmic) {
         console.log('[MemoryService] Using Algorithmic Summary (Token Saver Active)');
         try {
-            const summary = generateAlgorithmicTradeSummary(trade as LoggedTrade);
+            const summary = generateAlgorithmicTradeSummary(trade);
             return summary;
         } catch (e) {
             console.error('[MemoryService] Algorithmic summary failed, falling back to AI:', e);
@@ -93,5 +93,5 @@ export const summarizeTrade = async (
 
     console.log(`[MemoryService] summarizeTrade using provider: ${config.name}`);
 
-    return genericSummarizeTrade(config, trade as LoggedTrade);
+    return genericSummarizeTrade(config, trade);
 };

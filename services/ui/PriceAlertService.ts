@@ -16,6 +16,7 @@
 import { Capacitor } from '@capacitor/core';
 import { TradeAnalysis } from '../../types';
 import { getPreferenceObject, setPreferenceObject, PREF_KEYS } from '../infrastructure/PreferencesService';
+import { parsePrice as canonicalParsePrice } from '../../utils/analysisUtils';
 
 export interface PriceAlert {
     id: string;
@@ -497,22 +498,12 @@ class PriceAlertServiceClass {
     }
 
     /**
-     * Parse price string to number
+     * Parse price string to number — delegates to canonical parsePrice
+     * (handles ranges, "to" ranges, and trailing annotations).
      */
     private parsePrice(priceStr: string | undefined): number {
         if (!priceStr || priceStr === 'N/A') return 0;
-        const cleaned = priceStr.replace(/[$,\s]/g, '');
-
-        // Handle ranges (e.g., "95000 - 95500")
-        if (cleaned.includes('-')) {
-            const parts = cleaned.split('-').map(p => parseFloat(p.trim()));
-            if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-                return (parts[0] + parts[1]) / 2;
-            }
-        }
-
-        const num = parseFloat(cleaned);
-        return isNaN(num) ? 0 : num;
+        return canonicalParsePrice(priceStr);
     }
 
     /**

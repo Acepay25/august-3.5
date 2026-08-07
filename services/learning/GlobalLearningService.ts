@@ -17,6 +17,11 @@ class GlobalLearningService {
     // Per-user state: calibration is keyed by the active profile so switching
     // users doesn't leak one user's calibration into another's analysis.
     private _activeUser: string | null = null;
+    // Generation counter: incremented on every setActiveUser call. When an
+    // in-flight initialize() resolves, it checks whether the generation has
+    // advanced — if so, a newer profile switch superseded it and the stale
+    // results must be discarded.
+    private _initGeneration: number = 0;
 
     private get stateFile(): string {
         return this._activeUser ? `learning_state_${this._activeUser}.json` : LEARNING_STATE_FILE;
@@ -43,12 +48,17 @@ class GlobalLearningService {
     public async initialize(): Promise<void> {
         if (this._isInitialized) return;
 
+        const gen = this._initGeneration;
         try {
             await this.loadLearningState();
+            // A newer setActiveUser() call has superseded this one — discard
+            // the results so we don't overwrite the newer user's state.
+            if (this._initGeneration !== gen) return;
             this._isInitialized = true;
             console.log('[GlobalLearningService] Initialized and loaded state.');
         } catch (error) {
             console.error('[GlobalLearningService] Failed to initialize:', error);
+            if (this._initGeneration !== gen) return;
             // Even if load fails, we have initialized empty state in constructor
             this._isInitialized = true;
         }
@@ -61,6 +71,7 @@ class GlobalLearningService {
     public async setActiveUser(username: string | null): Promise<void> {
         this._activeUser = username;
         this._isInitialized = false;
+        this._initGeneration++;
         await this.initialize();
     }
 

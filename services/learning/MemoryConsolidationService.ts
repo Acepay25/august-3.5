@@ -134,7 +134,7 @@ export const aggregateSimilarInsights = (insights: TradeInsight[]): TradeInsight
 /**
  * Main Orchestrator
  */
-export const consolidateMemory = async (knowledgeBase: InsightKnowledgeBase): Promise<InsightKnowledgeBase> => {
+export const consolidateMemory = (knowledgeBase: InsightKnowledgeBase): InsightKnowledgeBase => {
     // 1. Prune
     const prunedInsights = pruneOutdatedInsights(knowledgeBase);
 
