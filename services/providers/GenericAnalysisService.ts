@@ -27,6 +27,7 @@ import { parseLiveMarketData } from '../../utils/liveMarketParser';
 import {
     sendChatRequest, streamChatRequest, ChatMessage, ContentPart, ChatRequestOptions,
 } from './GenericProviderService';
+import { TASK_BUDGETS } from './taskBudgets';
 import { isVisionModel } from '../../utils/modelUtils';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -434,7 +435,7 @@ export async function analyzeTradingView(
     // deltas) flows to onReasoning in real-time and the live cards can render
     // it harness-style, THEN present the final output. Non-chat_completions
     // formats and Electron fall back to non-streaming inside streamChatRequest.
-    const options: ChatRequestOptions = { jsonMode: false, maxTokens: 8192, signal, onReasoning };
+    const options: ChatRequestOptions = { jsonMode: false, maxTokens: TASK_BUDGETS.analysis, signal, onReasoning };
     let responseText = '';
     let reasoningAccumulated = '';
     try {
@@ -751,7 +752,7 @@ Answer **all** of the following **MANDATORY LOSS ANALYSIS QUESTIONS**:
     const result = await sendChatRequest(
         config,
         [{ role: 'user', content: analysisPrompt }],
-        { signal, onReasoning: params.onReasoning }
+        { signal, onReasoning: params.onReasoning, maxTokens: TASK_BUDGETS.postMortem }
     );
     return sanitizeAIResponse(result || "Post-mortem analysis failed.");
 }
@@ -874,7 +875,7 @@ export async function getQuickResponse(
         messages.push({ role: 'user', content: prompt });
     }
 
-    const result = await sendChatRequest(config, messages, { maxTokens: 2048, signal, onReasoning });
+    const result = await sendChatRequest(config, messages, { maxTokens: TASK_BUDGETS.chat, signal, onReasoning });
     // Chat replies render via MarkdownRenderer — the light sanitizer keeps the
     // model's markdown (bold/lists/code) instead of flattening it to plain text.
     return sanitizeAIResponseLight(result || "I am sorry, I could not generate a response.");
@@ -979,7 +980,7 @@ export async function summarizeChartImage(
             ],
         }];
 
-        const fullSummary = await sendChatRequest(config, messages, { maxTokens: 2560, signal });
+        const fullSummary = await sendChatRequest(config, messages, { maxTokens: TASK_BUDGETS.ocr, signal });
 
         const timeframeMatch = fullSummary.match(/Timeframe:\s*(.*?)(?:\n|$)/i);
         const priceMatch = fullSummary.match(/(?:Current )?Price:\s*(.*?)(?:\n|$)/i);

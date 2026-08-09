@@ -12,6 +12,11 @@ import { Capacitor } from '@capacitor/core';
 import { CapacitorSQLite, SQLiteConnection, SQLiteDBConnection } from '@capacitor-community/sqlite';
 import { LoggedTrade, UserProfile, Conversation, TradeSummary, GlobalMemory, UserSettings, Message } from '../../types';
 import { setSqliteDb, runExclusiveWrite } from './SqliteServiceHelpers';
+// Dynamic import inside migrateFromIndexedDB would be cleaner, but the
+// thinking store's save path dynamically imports SqliteServiceHelpers — a
+// static import here is safe (no cycle: ThinkingStoreService never imports
+// SqliteService itself).
+import { getAllThinkingRecordsByUser, saveThinkingBatch } from './ThinkingStoreService';
 import { DEFAULT_LEVERAGE } from '../../utils/conversationUtils';
 import { parsePrice } from '../../utils/analysisUtils';
 
@@ -910,6 +915,22 @@ export const migrateFromIndexedDB = async (
                 });
                 totalTrades += profile.tradeLog?.length || 0;
                 console.log(`[SqliteService] Migrated user ${username} with ${profile.tradeLog?.length || 0} trades`);
+            }
+
+            // The thinking store lives in a SEPARATE IndexedDB database
+            // (FuturesAI-Thinking-DB) that the profile migration never
+            // touched — on first native run after a web install the SQLite
+            // thinking_records table started empty and the old reasoning
+            // corpus was orphaned. Upsert by id, so re-running the migration
+            // for an already-migrated user is idempotent.
+            try {
+                const thinkingRecords = await getAllThinkingRecordsByUser(username);
+                if (thinkingRecords.length > 0) {
+                    await saveThinkingBatch(thinkingRecords);
+                    console.log(`[SqliteService] Migrated ${thinkingRecords.length} thinking records for ${username}`);
+                }
+            } catch (thinkingError) {
+                console.warn(`[SqliteService] Thinking migration failed for ${username}:`, thinkingError);
             }
         }
 

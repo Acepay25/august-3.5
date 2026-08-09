@@ -89,6 +89,7 @@ describe('validateTradeOutcome — engine parity with simulateFromAnalysisTime/A
       [95200, 95300, 94900, 95100], // entry triggered
       [95000, 95100, 93950, 94500], // SL wick (touches 94000, holds 150% zone)
       [94500, 96200, 94300, 96000], // TP1 on a later candle
+      [96000, 96100, 95500, 95800], // trailing completed candle
     ];
     const result = await validateTradeOutcome(makeAnalysis(), 'BTCUSDT', new Date(BASE_TIME).toISOString());
     expect(result.outcome).toBe('WIN');
@@ -100,6 +101,7 @@ describe('validateTradeOutcome — engine parity with simulateFromAnalysisTime/A
     scripted1m = [
       [95200, 95300, 94900, 95100], // entry triggered
       [95500, 96200, 93400, 94000], // TP1 AND extended SL (93500) — hard stop wins
+      [94000, 94200, 93600, 93800], // trailing completed candle
     ];
     const result = await validateTradeOutcome(makeAnalysis(), 'BTCUSDT', new Date(BASE_TIME).toISOString());
     expect(result.outcome).toBe('LOSS');
@@ -122,6 +124,7 @@ describe('validateTradeOutcome — engine parity with simulateFromAnalysisTime/A
     scripted1m = [
       [95200, 95300, 94900, 95100], // entry triggered
       [95100, 97100, 95000, 96900], // TP1 + TP2
+      [96900, 97000, 96500, 96700], // trailing completed candle
     ];
     const result = await validateTradeOutcome(makeAnalysis(), 'BTCUSDT', new Date(BASE_TIME).toISOString());
     expect(result.outcome).toBe('WIN');
@@ -157,6 +160,7 @@ describe('validateTradeOutcome — engine parity with simulateFromAnalysisTime/A
     scripted1m = [
       [95200, 95300, 94900, 95100],
       [95500, 96200, 93900, 95600], // same-candle SL+TP → LOSS
+      [95600, 95800, 95000, 95400], // trailing completed candle
     ];
     const result = await validateTradeOutcome(
       makeAnalysis(), 'BTCUSDT', new Date(BASE_TIME).toISOString(), 'WIN'
@@ -169,6 +173,7 @@ describe('validateTradeOutcome — engine parity with simulateFromAnalysisTime/A
     scripted1m = [
       [95200, 95300, 94900, 95100],
       [95100, 96100, 95000, 95900], // clean TP1
+      [95900, 96000, 95500, 95700], // trailing completed candle
     ];
     const result = await validateTradeOutcome(
       makeAnalysis(), 'BTCUSDT', new Date(BASE_TIME).toISOString(), 'LOSS'
@@ -181,6 +186,7 @@ describe('validateTradeOutcome — engine parity with simulateFromAnalysisTime/A
     scripted1m = [
       [95200, 95300, 94900, 95100],
       [95100, 96100, 95000, 95900], // clean TP1
+      [95900, 96000, 95500, 95700], // trailing completed candle
     ];
     const result = await validateTradeOutcome(
       makeAnalysis(), 'BTCUSDT', new Date(BASE_TIME).toISOString(), 'WIN'
@@ -201,6 +207,7 @@ describe('validateTradeOutcome — engine parity with simulateFromAnalysisTime/A
     scripted1m = [
       [94800, 95000, 94700, 94900], // entry triggered
       [94900, 96100, 93900, 95000], // SL + TP1 same candle
+      [95000, 95200, 94600, 94800], // trailing completed candle
     ];
     const result = await validateTradeOutcome(shortAnalysis, 'BTCUSDT', new Date(BASE_TIME).toISOString());
     expect(result.outcome).toBe('LOSS');
