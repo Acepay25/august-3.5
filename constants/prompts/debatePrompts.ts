@@ -71,12 +71,6 @@ You must generate the **ENTIRE** interaction in a single response, following the
 - **Lists/Tables:** Use bullet points or tables ONLY when necessary for data density or clear comparison. Do NOT force every section into a list.
 - **Tone:** Professional, direct, and concise. Focus exactly on what the user asks for.
 
-**QUALITY ENFORCEMENT MANDATE:**
-- **Quality Checkpoint:** Rate output quality (1-10) after each turn.
-- **Retry Protocol:** If quality is < 7 (vague/shallow), DEMAND clarification immediately.
-- **Stop Condition:** Do NOT accept outputs until Score > 8.
-- **Direct Challenges:** "This is not specific enough. Provide exact price levels."
-
 **⚠️ CROSS-PROVIDER FACT-CHECKING (MANDATORY):**
 Every analyst MUST actively verify and challenge other analysts' claims:
 - If an analyst detects MISLEADING INFORMATION from another provider, they MUST flag it immediately
@@ -184,7 +178,7 @@ Assign the confidence grade the evidence supports; do not inflate confidence to 
 
 9. **Moderator Final Verdict** (Text)
 
-9.5. Immediately after your verdict text, on its own line, output exactly: </DEBATE_END>
+Immediately after your verdict text, on its own line, output exactly: </DEBATE_END>
 
 10. **MANDATORY JSON OUTPUT** (Last — must come AFTER </DEBATE_END>)
 

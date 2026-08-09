@@ -12,6 +12,7 @@ import { Capacitor } from '@capacitor/core';
 import { getUserProfile, saveUserProfile, overwriteUserProfile } from './dbService';
 import { isValidUserProfile } from '../../utils/profileUtils';
 import { exportPreferencesData, importPreferencesData } from './ExportService';
+import { getAllThinkingRecordsByUser, saveThinkingBatch } from './ThinkingStoreService';
 
 export interface BackupMetadata {
     id: string;
@@ -127,6 +128,10 @@ export const createBackup = async (username: string): Promise<BackupMetadata | n
         // rules, price alerts, autopilot state. Restoring a backup previously
         // only restored the profile, silently dropping all of these.
         const preferencesJson = JSON.stringify(await exportPreferencesData());
+        // Thinking sidecar — the outcome-correlated reasoning corpus lives in
+        // its own store that is NOT part of UserProfile; a restore without it
+        // silently dropped every reasoning record.
+        const thinkingJson = JSON.stringify(await getAllThinkingRecordsByUser(username));
         const sizeBytes = new Blob([profileJson]).size;
         const metadata: BackupMetadata = {
             id: backupId,
@@ -167,6 +172,12 @@ export const createBackup = async (username: string): Promise<BackupMetadata | n
                 directory: Directory.Documents,
                 encoding: Encoding.UTF8,
             });
+            await Filesystem.writeFile({
+                path: `${NATIVE_BACKUP_DIR}/${baseName}.thinking.json`,
+                data: thinkingJson,
+                directory: Directory.Documents,
+                encoding: Encoding.UTF8,
+            });
         } else {
             // Web fallback: IndexedDB (subject to eviction under storage
             // pressure, but acceptable on desktop browsers).
@@ -181,6 +192,7 @@ export const createBackup = async (username: string): Promise<BackupMetadata | n
                     version: 1,
                     profile: profileJson,
                     preferences: preferencesJson,
+                    thinking: thinkingJson,
                     sizeBytes,
                     conversationCount: metadata.conversationCount,
                     tradeCount: metadata.tradeCount,
@@ -272,7 +284,7 @@ export const getBackups = async (username: string): Promise<BackupMetadata[]> =>
  * Read the full profile JSON for a backup (from either storage backend).
  * Used by exportBackupToFile.
  */
-const readBackupProfile = async (backupId: string): Promise<{ username: string; timestamp: string; profileJson: string; preferencesJson?: string | null } | null> => {
+const readBackupProfile = async (backupId: string): Promise<{ username: string; timestamp: string; profileJson: string; preferencesJson?: string | null; thinkingJson?: string | null } | null> => {
     if (useNativeStorage()) {
         const { Filesystem, Directory, Encoding } = await getFilesystem();
         // Find the .json (non-meta) file whose name ends with the backupId.
@@ -311,7 +323,17 @@ const readBackupProfile = async (backupId: string): Promise<{ username: string; 
             });
             preferencesJson = await readFileAsString(prefsResult.data);
         } catch { /* prefs sidecar missing — pre-F6 backup */ }
-        return { username, timestamp, profileJson, preferencesJson };
+        // Thinking sidecar — old backups don't have one.
+        let thinkingJson: string | null = null;
+        try {
+            const thinkingResult = await Filesystem.readFile({
+                path: `${NATIVE_BACKUP_DIR}/${match.name.replace('.json', '.thinking.json')}`,
+                directory: Directory.Documents,
+                encoding: Encoding.UTF8,
+            });
+            thinkingJson = await readFileAsString(thinkingResult.data);
+        } catch { /* thinking sidecar missing — pre-thinking backup */ }
+        return { username, timestamp, profileJson, preferencesJson, thinkingJson };
     }
 
     const db = await initBackupDB();
@@ -323,7 +345,7 @@ const readBackupProfile = async (backupId: string): Promise<{ username: string; 
         request.onerror = () => reject(request.error);
     });
     if (!backup) return null;
-    return { username: backup.username, timestamp: backup.timestamp, profileJson: backup.profile, preferencesJson: backup.preferences ?? null };
+    return { username: backup.username, timestamp: backup.timestamp, profileJson: backup.profile, preferencesJson: backup.preferences ?? null, thinkingJson: backup.thinking ?? null };
 };
 
 /**
@@ -436,6 +458,19 @@ export const restoreBackup = async (
                 }
             } catch (e) {
                 console.warn('[BackupService] Preferences sidecar could not be restored:', e);
+            }
+        }
+        // Restore the thinking sidecar (reasoning corpus). Old backups don't
+        // have one — the profile restore still succeeds without it.
+        if (record.thinkingJson) {
+            try {
+                const parsed = JSON.parse(record.thinkingJson);
+                if (Array.isArray(parsed)) {
+                    await saveThinkingBatch(parsed);
+                    console.log(`[BackupService] Restored ${parsed.length} thinking records`);
+                }
+            } catch (e) {
+                console.warn('[BackupService] Thinking sidecar could not be restored:', e);
             }
         }
         return { success: true, username: profile.username };

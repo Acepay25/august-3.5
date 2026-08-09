@@ -10,6 +10,7 @@ import { TradeAnalysis } from '../../types';
 import { parsePrice } from '../../utils/analysisUtils';
 import { fetchHybridData, generateHybridPromptInjection, HybridDataPacket } from '../analysis/HybridIntelligenceService';
 import { fetchFuturesOHLCVFromTime, Kline } from '../analysis/MarketDataService';
+import { scanTradeOutcome, resolveOutcomeFromScan } from '../backtesting/outcomeEngine';
 import {
     calculateIndicators,
     calculateVWAP,
@@ -265,25 +266,6 @@ export const verifyHistoricalOutcome = async (
         const analysisSnapshotIndex = 0;
         const analysisSnapshot = calculateSnapshotAtCandle(klines, analysisSnapshotIndex);
 
-        // Track all TP levels hit and SL
-        const tpHits: TPHitInfo[] = [];
-        let slHit: HistoricalOutcomeResult['slHit'] | undefined;
-        let tp1Hit = false, tp2Hit = false, tp3Hit = false;
-        let finalOutcomeIndex: number | null = null;
-        let highestTpHit: 'TP1' | 'TP2' | 'TP3' | undefined;
-        let slTouched = false; // Track if initial SL was touched
-        let extendedSlExceeded = false; // Track if price exceeded 150% SL zone
-        // Candle where the INITIAL stop loss filled (not the extended zone,
-        // not the post-TP1 breakeven). Used to detect same-candle SL+TP hits
-        // where the hard stop must have closed the position first.
-        let initialSlFillCandleIndex: number | undefined;
-        // Partial-TP realism: once TP1 is hit the position is scaled out and
-        // the stop moves to breakeven (entry). A later touch of the entry is a
-        // MANAGED exit, not a failed SL — it must not count as a loss or flag
-        // the SL as "too tight".
-        let breakevenActive = false;
-        let breakevenHit = false;
-
         // Helper to determine timeframe of a candle index
         const getTimeframe = (idx: number): string => {
             if (idx < tier1EndIndex) return '1m';
@@ -332,17 +314,9 @@ export const verifyHistoricalOutcome = async (
         // Use the triggered entry's price for SL/TP calculations
         const entryPrice = triggeredEntryPrice || entriesToCheck[0].price;
 
-        // Calculate the 150% extended SL zone from the ACTUALLY TRIGGERED entry.
-        // Multi-entry setups used to anchor the zone to the FIRST entry (the
-        // old comment claimed a recalculation that never happened), which could
-        // mis-place the hard stop — and even flip SL_HIT vs TP_HIT — by the
-        // full entry distance when a later entry filled.
-        // For Long: Extended SL = entry - 1.5 * distance = SL - 0.5 * distance
-        // For Short: Extended SL = entry + 1.5 * distance = SL + 0.5 * distance
-        const triggeredSlDistance = Math.abs(entryPrice - stopLoss);
-        const extendedSlPrice = isLong
-            ? stopLoss - (triggeredSlDistance * 0.5)
-            : stopLoss + (triggeredSlDistance * 0.5);
+        // The 150% extended-SL price is computed inside the shared scan from
+        // the ACTUALLY TRIGGERED entry (multi-entry setups anchor the zone to
+        // the entry that filled, not the first entry on the list).
 
         // If entry hasn't been triggered yet, return early with ENTRY_NOT_TRIGGERED
         if (entryTriggeredAtIndex === -1) {
@@ -369,200 +343,62 @@ export const verifyHistoricalOutcome = async (
             };
         }
 
-        // === ENTRY CONFIRMED - START SIMULATION FROM ENTRY CANDLE ===
+        // === ENTRY CONFIRMED - OUTCOME RESOLUTION (shared engine) ===
         const entryTimeAfterAnalysis = formatDuration(klines[entryTriggeredAtIndex].time - analysisTime);
         console.log(`[AutoCapture] Entry triggered at candle #${entryTriggeredAtIndex} (${entryTimeAfterAnalysis} after analysis)`);
 
-        // Iterate through ALL candles in sequence: 1m first (500), then 15m (250), then 1h (250)
-        // STARTING FROM ENTRY CANDLE - provides ~8 hours precision, then ~2.6 days, then ~10 days of coverage
-        for (let i = entryTriggeredAtIndex; i < klines.length; i++) {
-            const candle = klines[i];
-            const candleTimeStr = new Date(candle.time).toISOString();
-            const timeAfterAnalysis = formatDuration(candle.time - analysisTime);
+        // Shared canonical scan — identical semantics to validateTradeOutcome
+        // and simulateFromAnalysisTime: TP1 arms a breakeven stop (TP2/TP3 are
+        // only realized before it), the 150% zone is disarmed after TP1, and
+        // the final (still-forming) candle is excluded from live scans.
+        const scan = scanTradeOutcome(klines, entryPrice, stopLoss, [tp1, tp2, tp3], isLong, { startIndex: entryTriggeredAtIndex, excludeFormingCandle: true });
+        const resolution = resolveOutcomeFromScan(scan);
 
+        const slTouched = scan.slTouched;
+        const extendedSlExceeded = scan.extendedSlExceeded;
+        const breakevenHit = scan.breakevenHit;
+        const extendedSlPrice = scan.extendedSlPrice;
+        const finalOutcomeIndex: number | null = resolution.exitCandleIndex ?? null;
 
-            if (isLong) {
-                // Check if price exceeded 150% extended SL zone - hard stop
-                // (disabled after TP1 — the breakeven stop manages the remainder)
-                if (!breakevenActive && candle.low <= extendedSlPrice) {
-                    // The 150% level is the real fill — overwrite any earlier
-                    // initial-SL record so the reported exit price matches the
-                    // actual hard-stop fill.
-                    slHit = {
-                        price: extendedSlPrice,
-                        candleIndex: i,
-                        candleTime: candleTimeStr,
-                        timeAfterAnalysis
-                    };
-                    finalOutcomeIndex = i;
-                    extendedSlExceeded = true;
-                    break; // Loss exceeded 150% threshold - end scan
-                }
+        // Map shared hits onto the TPHitInfo shape (analysis-relative labels).
+        const tpHits: TPHitInfo[] = scan.tpHits.map(h => ({
+            level: h.level,
+            price: h.price,
+            candleIndex: h.candleIndex,
+            candleTime: h.candleTime,
+            timeAfterAnalysis: formatDuration(klines[h.candleIndex].time - analysisTime),
+        }));
 
-                // Check if initial SL was touched (but not exceeded 150%).
-                // After TP1 the effective stop is breakeven (entry): touching it
-                // is a managed scale-out exit, recorded separately from slTouched.
-                if (breakevenActive) {
-                    if (!breakevenHit && candle.low <= entryPrice) {
-                        breakevenHit = true;
-                        if (!slHit) {
-                            slHit = {
-                                price: entryPrice,
-                                candleIndex: i,
-                                candleTime: candleTimeStr,
-                                timeAfterAnalysis
-                            };
-                        }
-                    }
-                } else if (!slTouched && candle.low <= stopLoss) {
-                    slTouched = true;
-                    // DEBUG: Log the exact candle that triggered SL detection
-                    console.log(`[AutoCapture]  SL TOUCHED at candle ${i}:`, {
-                        candleTime: candleTimeStr,
-                        candleOHLC: { open: candle.open, high: candle.high, low: candle.low, close: candle.close },
-                        stopLoss: stopLoss,
-                        condition: `candle.low (${candle.low}) <= stopLoss (${stopLoss})`,
-                        timeAfterAnalysis: timeAfterAnalysis
-                    });
-                    // Record SL touch for reference, but DON'T break - allow recovery
-                    if (!slHit) {
-                        slHit = {
-                            price: stopLoss,
-                            candleIndex: i,
-                            candleTime: candleTimeStr,
-                            timeAfterAnalysis
-                        };
-                        initialSlFillCandleIndex = i;
-                    }
-                }
-
-                // Check TPs - these count as REAL hits even after SL touch (within 150% zone)
-                if (!tp1Hit && tp1 > 0 && candle.high >= tp1) {
-                    tp1Hit = true;
-                    breakevenActive = true; // TP1 hit → scale out, stop to breakeven
-                    highestTpHit = 'TP1';
-                    tpHits.push({
-                        level: 'TP1',
-                        price: tp1,
-                        candleIndex: i,
-                        candleTime: candleTimeStr,
-                        timeAfterAnalysis
-                    });
-                }
-                // After the breakeven exit the remainder is FLAT — a later rally
-                // to TP2/TP3 was never realized by a live position.
-                if (!tp2Hit && tp2 > 0 && !breakevenHit && candle.high >= tp2) {
-                    tp2Hit = true;
-                    highestTpHit = 'TP2';
-                    tpHits.push({
-                        level: 'TP2',
-                        price: tp2,
-                        candleIndex: i,
-                        candleTime: candleTimeStr,
-                        timeAfterAnalysis
-                    });
-                }
-                if (!tp3Hit && tp3 > 0 && !breakevenHit && candle.high >= tp3) {
-                    tp3Hit = true;
-                    highestTpHit = 'TP3';
-                    tpHits.push({
-                        level: 'TP3',
-                        price: tp3,
-                        candleIndex: i,
-                        candleTime: candleTimeStr,
-                        timeAfterAnalysis
-                    });
-                    finalOutcomeIndex = i;
-                    break; // All TPs hit
-                }
-            } else {
-                // Short position
-                // Check if price exceeded 150% extended SL zone - hard stop
-                // (disabled after TP1 — the breakeven stop manages the remainder)
-                if (!breakevenActive && candle.high >= extendedSlPrice) {
-                    // The 150% level is the real fill — overwrite any earlier
-                    // initial-SL record so the reported exit price matches the
-                    // actual hard-stop fill.
-                    slHit = {
-                        price: extendedSlPrice,
-                        candleIndex: i,
-                        candleTime: candleTimeStr,
-                        timeAfterAnalysis
-                    };
-                    finalOutcomeIndex = i;
-                    extendedSlExceeded = true;
-                    break; // Loss exceeded 150% threshold - end scan
-                }
-
-                // Check if initial SL was touched (but not exceeded 150%).
-                // After TP1 the effective stop is breakeven (entry).
-                if (breakevenActive) {
-                    if (!breakevenHit && candle.high >= entryPrice) {
-                        breakevenHit = true;
-                        if (!slHit) {
-                            slHit = {
-                                price: entryPrice,
-                                candleIndex: i,
-                                candleTime: candleTimeStr,
-                                timeAfterAnalysis
-                            };
-                        }
-                    }
-                } else if (!slTouched && candle.high >= stopLoss) {
-                    slTouched = true;
-                    // Record SL touch for reference, but DON'T break - allow recovery
-                    if (!slHit) {
-                        slHit = {
-                            price: stopLoss,
-                            candleIndex: i,
-                            candleTime: candleTimeStr,
-                            timeAfterAnalysis
-                        };
-                        initialSlFillCandleIndex = i;
-                    }
-                }
-
-                // Check TPs - these count as REAL hits even after SL touch (within 150% zone)
-                if (!tp1Hit && tp1 > 0 && candle.low <= tp1) {
-                    tp1Hit = true;
-                    breakevenActive = true; // TP1 hit → scale out, stop to breakeven
-                    highestTpHit = 'TP1';
-                    tpHits.push({
-                        level: 'TP1',
-                        price: tp1,
-                        candleIndex: i,
-                        candleTime: candleTimeStr,
-                        timeAfterAnalysis
-                    });
-                }
-                if (!tp2Hit && tp2 > 0 && !breakevenHit && candle.low <= tp2) {
-                    tp2Hit = true;
-                    highestTpHit = 'TP2';
-                    tpHits.push({
-                        level: 'TP2',
-                        price: tp2,
-                        candleIndex: i,
-                        candleTime: candleTimeStr,
-                        timeAfterAnalysis
-                    });
-                }
-                if (!tp3Hit && tp3 > 0 && !breakevenHit && candle.low <= tp3) {
-                    tp3Hit = true;
-                    highestTpHit = 'TP3';
-                    tpHits.push({
-                        level: 'TP3',
-                        price: tp3,
-                        candleIndex: i,
-                        candleTime: candleTimeStr,
-                        timeAfterAnalysis
-                    });
-                    finalOutcomeIndex = i;
-                    break; // All TPs hit
-                }
-            }
+        // SL record for reporting: initial-SL fill first; the 150% hard-stop
+        // fill overwrites it (real exit price); the post-TP1 breakeven exit is
+        // a managed scale-out recorded only when nothing else filled.
+        let slHit: HistoricalOutcomeResult['slHit'] | undefined;
+        if (scan.slTouched && scan.slTouchIndex !== undefined) {
+            slHit = {
+                price: scan.slTouchPrice ?? stopLoss,
+                candleIndex: scan.slTouchIndex,
+                candleTime: scan.slTouchTime ?? '',
+                timeAfterAnalysis: formatDuration(klines[scan.slTouchIndex].time - analysisTime),
+            };
+        }
+        if (scan.extendedSlExceeded && scan.slExceededIndex !== undefined) {
+            slHit = {
+                price: scan.extendedSlPrice,
+                candleIndex: scan.slExceededIndex,
+                candleTime: scan.slExceededTime ?? '',
+                timeAfterAnalysis: formatDuration(klines[scan.slExceededIndex].time - analysisTime),
+            };
+        } else if (scan.breakevenHit && scan.breakevenIndex !== undefined && !slHit) {
+            slHit = {
+                price: entryPrice,
+                candleIndex: scan.breakevenIndex,
+                candleTime: scan.breakevenTime ?? '',
+                timeAfterAnalysis: formatDuration(klines[scan.breakevenIndex].time - analysisTime),
+            };
         }
 
-        // Determine outcome - NEW LOGIC: TP wins if hit before 150% exceeded
+        // Determine outcome from the shared resolution — TP wins if hit before
+        // 150% exceeded; same-candle SL+TP is a hard-stop LOSS (canonical).
         let outcome: HistoricalOutcomeResult['outcome'];
         let hitTarget: HistoricalOutcomeResult['hitTarget'];
         let priceAtHit: number | undefined;
@@ -570,58 +406,23 @@ export const verifyHistoricalOutcome = async (
         let candlesFromAnalysis: number | undefined;
         let timeToOutcome: string | undefined;
 
-        // TPs take priority - if any TP was hit (even after SL touch), it's a WIN
-        if (tpHits.length > 0) {
-            // Exchange fill semantics: a hard SL is a resting order. When the
-            // initial SL and a TP are both touched by the SAME candle, the
-            // stop filled first and closed the position — the TP was never
-            // realized, so this is a LOSS (a TP on a LATER candle after an SL
-            // wick is the documented "recovery" case and stays a WIN).
-            const firstTp = tpHits[0];
-            const sameCandleSlFill = initialSlFillCandleIndex !== undefined
-                && firstTp.candleIndex === initialSlFillCandleIndex;
-            if (sameCandleSlFill && slHit) {
-                outcome = 'SL_HIT';
-                hitTarget = 'SL';
-                priceAtHit = slHit.price;
-                hitCandleTime = slHit.candleTime;
-                candlesFromAnalysis = slHit.candleIndex;
-                timeToOutcome = slHit.timeAfterAnalysis;
-                console.warn(`[AutoCapture] Same-candle SL+TP at candle #${slHit.candleIndex} — classified as SL_HIT (stop filled before TP).`);
-            } else {
-                outcome = 'TP_HIT';
-                hitTarget = highestTpHit;
-                const lastTp = tpHits[tpHits.length - 1];
-                priceAtHit = lastTp.price;
-                hitCandleTime = lastTp.candleTime;
-                candlesFromAnalysis = lastTp.candleIndex;
-                timeToOutcome = lastTp.timeAfterAnalysis;
-            }
-            // If SL was touched but TP was hit, clear slHit for cleaner output
-            if (slTouched) {
-                // Keep slHit for reference but outcome is WIN
-            }
-        } else if (slHit && extendedSlExceeded) {
-            // SL was exceeded beyond 150% - definite LOSS and failed extended thesis
+        if (resolution.outcome === 'WIN') {
+            outcome = 'TP_HIT';
+            hitTarget = resolution.hitTarget === 'NONE' ? undefined : resolution.hitTarget;
+            priceAtHit = resolution.exitPrice;
+            hitCandleTime = resolution.exitTime;
+            candlesFromAnalysis = resolution.exitCandleIndex;
+            timeToOutcome = candlesFromAnalysis !== undefined ? formatDuration(klines[candlesFromAnalysis].time - analysisTime) : undefined;
+        } else if (resolution.outcome === 'LOSS') {
             outcome = 'SL_HIT';
             hitTarget = 'SL';
-            priceAtHit = slHit.price;
-            hitCandleTime = slHit.candleTime;
-            candlesFromAnalysis = slHit.candleIndex;
-            timeToOutcome = slHit.timeAfterAnalysis;
-        } else if (slTouched && !extendedSlExceeded) {
-            // SL was physically touched (so it's a loss for PnL), BUT price is still inside 150% zone
-            // We report this as SL_HIT because the trade failed, but we include context about the 150% zone.
-            outcome = 'SL_HIT';
-            hitTarget = 'SL';
-            if (slHit) {
-                priceAtHit = slHit.price;
-                hitCandleTime = slHit.candleTime;
-                candlesFromAnalysis = slHit.candleIndex;
-                timeToOutcome = slHit.timeAfterAnalysis;
-            }
+            priceAtHit = resolution.exitPrice;
+            hitCandleTime = resolution.exitTime;
+            candlesFromAnalysis = resolution.exitCandleIndex;
+            timeToOutcome = candlesFromAnalysis !== undefined ? formatDuration(klines[candlesFromAnalysis].time - analysisTime) : undefined;
         } else {
             outcome = 'STILL_OPEN';
+            hitTarget = undefined;
         }
 
         // Build verification details

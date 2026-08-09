@@ -9,7 +9,7 @@
 
 import { isNativePlatform } from './SqliteService';
 import { openDB } from 'idb';
-import { ThinkingRecord, ThinkingRecordStats, ThinkingExportRow, ThinkingTradeSummary } from '../../types/thinking';
+import { ThinkingRecord, ThinkingRecordStats, ThinkingExportRow, ThinkingTradeSummary, ThinkingRole } from '../../types/thinking';
 import { TradeOutcome } from '../../types';
 
 // =============================================================================
@@ -183,11 +183,22 @@ export const saveThinkingBatch = async (records: ThinkingRecord[]): Promise<void
                 }
                 await db.execute('COMMIT');
                 // Prune the oldest records beyond the cap (best-effort).
+                // Scoped PER USERNAME — the cap used to be global, so one
+                // heavy user's analyses evicted another user's reasoning.
+                // Only runs when the store exceeds cap + margin, and the
+                // ORDER BY tie-breaks on id so eviction order is stable.
                 try {
-                    await db.run(
-                        `DELETE FROM thinking_records WHERE id NOT IN (SELECT id FROM thinking_records ORDER BY createdAt DESC LIMIT ?)`,
-                        [MAX_THINKING_RECORDS]
-                    );
+                    const username = records[0].username;
+                    const countResult = await db.query('SELECT COUNT(*) AS c FROM thinking_records WHERE username = ?', [username]);
+                    const count = Number(countResult?.values?.[0]?.c ?? 0);
+                    if (count > MAX_THINKING_RECORDS + 50) {
+                        await db.run(
+                            `DELETE FROM thinking_records WHERE username = ? AND id NOT IN (
+                                SELECT id FROM thinking_records WHERE username = ? ORDER BY createdAt DESC, id DESC LIMIT ?
+                            )`,
+                            [username, username, MAX_THINKING_RECORDS]
+                        );
+                    }
                 } catch (e) {
                     console.warn('[ThinkingStore] Prune failed:', e);
                 }
@@ -211,10 +222,15 @@ export const saveThinkingBatch = async (records: ThinkingRecord[]): Promise<void
         await tx.done;
 
         // Prune the oldest records beyond the cap (best-effort).
+        // Scoped per username (see the SQLite path); sort tie-breaks on id.
         try {
+            const username = records[0].username;
             const cleanupTx = db.transaction(STORE_NAME, 'readwrite');
             const all = await cleanupTx.store.getAll();
-            const sorted = all.sort((a: ThinkingRecord, b: ThinkingRecord) => (a.createdAt < b.createdAt ? 1 : -1));
+            const mine: ThinkingRecord[] = all.filter((r: ThinkingRecord) => r.username === username);
+            const sorted = mine.sort((a, b) =>
+                a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : (a.id < b.id ? 1 : -1)
+            );
             for (const rec of sorted.slice(MAX_THINKING_RECORDS)) {
                 await cleanupTx.store.delete(rec.id);
             }
@@ -681,4 +697,35 @@ export const deleteThinkingByTrade = async (tradeId: string, username: string): 
  */
 export const generateThinkingId = (): string => {
     return `think-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+};
+
+/**
+ * Deterministic record id for the (trade × provider × role × turn) slot.
+ * saveThinkingBatch upserts by id (INSERT OR REPLACE / put), so re-running
+ * an analysis with the same slot OVERWRITES instead of appending a fresh set
+ * of duplicate records — the old random ids multiplied records on every
+ * re-run and retry.
+ */
+export const buildThinkingRecordId = (
+    tradeId: string,
+    provider: string,
+    role: ThinkingRole,
+    debateTurnIndex?: number
+): string => `think-${tradeId}-${provider}-${role}${debateTurnIndex !== undefined ? `-${debateTurnIndex}` : ''}`;
+
+/**
+ * Get ALL thinking records for a user (backup + IDB→SQLite migration).
+ * Unlike the export rows, these carry the full record (id included) so
+ * restore/migration can upsert them verbatim.
+ */
+export const getAllThinkingRecordsByUser = async (username: string): Promise<ThinkingRecord[]> => {
+    if (isNativePlatform()) {
+        const { getSqliteDb } = await import('./SqliteServiceHelpers');
+        const db = await getSqliteDb();
+        if (!db) return [];
+        const result = await db.query('SELECT * FROM thinking_records WHERE username = ? ORDER BY createdAt ASC', [username]);
+        return (result.values || []).map(rowToRecord);
+    }
+    const db = await initIndexedDB();
+    return db.getAllFromIndex(STORE_NAME, 'username', username);
 };

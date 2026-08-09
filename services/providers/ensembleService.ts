@@ -2,6 +2,7 @@
 import { TradeAnalysis, Message, TradeOutcome, AccuracySubMode, LoggedTrade, AnalystLensConfig, AnalystRole, AnalystConsensus } from '../../types';
 import { ProviderConfig } from '../../types/provider';
 import { streamChatRequest, ChatMessage } from './GenericProviderService';
+import { TASK_BUDGETS } from './taskBudgets';
 import { extractAndParseJson, extractLastJson } from '../../utils/jsonUtils';
 import {
     MODERATOR_SYSTEM_PROMPT_V2,
@@ -2474,6 +2475,44 @@ const buildDebateTranscript = (
  * `onSpeakerStatus` is invoked with (speaker, round, active) around every
  * stream so the UI can show exactly which models are currently generating.
  */
+
+/**
+ * Stream a provider call with ONE bounded retry for transient failures
+ * (429 / 5xx / network) that occur BEFORE any content was emitted. A
+ * rate-limited request must not permanently drop an analyst mid-debate —
+ * the drop path removes them and forces a replacement pick for what is
+ * often a momentary blip. Failures AFTER partial output are not retried:
+ * the caller's drop path purges the partial transcript, and re-streaming
+ * from scratch would duplicate the visible text.
+ */
+async function streamWithTransientRetry(
+    runOnce: () => AsyncGenerator<string, void, unknown>,
+    onEmit: (delta: string) => void,
+    label: string,
+): Promise<void> {
+    let emittedAny = false;
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 2; attempt++) {
+        if (attempt > 0) await new Promise(r => setTimeout(r, 2000));
+        try {
+            for await (const chunk of runOnce()) {
+                if (chunk) { emittedAny = true; onEmit(chunk); }
+            }
+            return;
+        } catch (e: any) {
+            const isAbort = e?.name === 'AbortError' || e?.code === 'ABORT_ERR' || e?.name === 'TimeoutError';
+            const transient = !isAbort && !emittedAny && (
+                e?.status === 429 || e?.status === 502 || e?.status === 503 || e?.status === 504 ||
+                /network|econnrefused|failed to fetch|fetch failed|socket hang up/i.test(e?.message || '')
+            );
+            lastError = e;
+            if (!transient) throw e;
+            console.warn(`[RealDebate] ${label} attempt ${attempt + 1} failed transiently (${e?.status ?? e?.message ?? e}); retrying once.`);
+        }
+    }
+    throw lastError;
+}
+
 export const conductRealDebate = async function* (
     analysts: RealDebateAnalyst[],
     userPrompt: string,
@@ -2647,13 +2686,19 @@ export const conductRealDebate = async function* (
                     name: analyst.provider.name,
                     thoughtsKey: analyst.provider.thoughtsKey,
                     run: async (emit: (delta: string) => void) => {
-                        for await (const chunk of streamChatRequest(analyst.provider.config, messages, {
+                        // Bounded retry: a transient 429/network blip before
+                        // any output must not permanently drop the analyst
+                        // (the drop path asks the user to pick a replacement).
+                    await streamWithTransientRetry(
+                        () => streamChatRequest(analyst.provider.config, messages, {
                             temperature: 0.4,
                             signal,
+                            maxTokens: TASK_BUDGETS.rebuttal,
                             onReasoning: (reasoning: string) => onAnalystReasoning?.(analyst.provider.name, reasoning),
-                        })) {
-                            if (chunk) emit(chunk);
-                        }
+                        }),
+                        emit,
+                        `${analyst.provider.name} Round ${round} rebuttal`,
+                    );
                     },
                 };
             });
@@ -2853,14 +2898,18 @@ export const conductRealDebate = async function* (
             return {
                 name: analyst.provider.name,
                 run: async (emit: (delta: string) => void) => {
-                    for await (const chunk of streamChatRequest(analyst.provider.config, messages, {
-                        temperature: 0.3,
-                        signal,
-                        maxTokens: 300,
-                        onReasoning: (reasoning: string) => onAnalystReasoning?.(analyst.provider.name, reasoning),
-                    })) {
-                        if (chunk) emit(chunk);
-                    }
+                    // Bounded retry — same transient-failure semantics as the
+                    // rebuttal rounds (see streamWithTransientRetry).
+                    await streamWithTransientRetry(
+                        () => streamChatRequest(analyst.provider.config, messages, {
+                            temperature: 0.3,
+                            signal,
+                            maxTokens: TASK_BUDGETS.clarification,
+                            onReasoning: (reasoning: string) => onAnalystReasoning?.(analyst.provider.name, reasoning),
+                        }),
+                        emit,
+                        `${analyst.provider.name} clarification answer`,
+                    );
                 },
             };
         });

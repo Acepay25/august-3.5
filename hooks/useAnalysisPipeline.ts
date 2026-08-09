@@ -22,7 +22,7 @@ import { getGateAnalysis, GateOutput } from '../services/validation/GateKeeperSe
 // Utils
 import { isQuotaError } from '../utils/errorUtils';
 import { recalculateAnalysisMetrics, sanitizeTradeAnalysis, clampProbabilityToGate } from '../utils/analysisUtils';
-import { saveThinkingBatch, generateThinkingId, getThinkingTradeId } from '../services/infrastructure/ThinkingStoreService';
+import { saveThinkingBatch, buildThinkingRecordId, getThinkingTradeId } from '../services/infrastructure/ThinkingStoreService';
 import { offlineQueue } from '../services/infrastructure/OfflineQueueService';
 import { notifyAnalysisComplete } from '../services/infrastructure/CompletionNotifications';
 import { ThinkingRecord } from '../types/thinking';
@@ -2035,7 +2035,7 @@ ${accuracyVerificationNote}`
                             const providerKey = provider.thoughtsKey;
                             const analystResult = settled.value;
                             thinkingRecords.push({
-                                id: generateThinkingId(),
+                                id: buildThinkingRecordId(tradeId, providerKey, 'analyst'),
                                 tradeId,
                                 username,
                                 provider: providerKey,
@@ -2060,7 +2060,7 @@ ${accuracyVerificationNote}`
 
                         // Save moderator synthesis (the full debate response)
                         thinkingRecords.push({
-                            id: generateThinkingId(),
+                            id: buildThinkingRecordId(tradeId, 'moderator', 'moderator'),
                             tradeId,
                             username,
                             provider: 'moderator',
@@ -2096,11 +2096,12 @@ ${accuracyVerificationNote}`
                         const debateTurns = debateTurnsRef.current;
 
                         debateTurns.forEach((turn, idx) => {
+                            const turnProvider = turn.speaker.toLowerCase().includes('moderator') ? 'moderator' : turn.speaker.toLowerCase();
                             thinkingRecords.push({
-                                id: generateThinkingId(),
+                                id: buildThinkingRecordId(tradeId, turnProvider, 'debate_turn', idx),
                                 tradeId,
                                 username,
-                                provider: turn.speaker.toLowerCase().includes('moderator') ? 'moderator' : turn.speaker.toLowerCase(),
+                                provider: turnProvider,
                                 role: 'debate_turn',
                                 debateTurnIndex: idx,
                                 debateTurnSpeaker: turn.speaker,
@@ -2202,7 +2203,7 @@ ${accuracyVerificationNote}`
                         const username = localStorage.getItem('last_active_user') || 'default';
                         const now = new Date().toISOString();
                         persistThinkingRecords([{
-                            id: generateThinkingId(),
+                            id: buildThinkingRecordId(getThinkingTradeId(soloAiMessage.analysis?.createdAt, soloAiMessage.id), provider.thoughtsKey, 'analyst'),
                             tradeId: getThinkingTradeId(soloAiMessage.analysis?.createdAt, soloAiMessage.id),
                             username,
                             provider: provider.thoughtsKey,

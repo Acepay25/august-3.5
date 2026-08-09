@@ -8,7 +8,7 @@ import * as ensembleService from '../services/providers/ensembleService';
 import * as MemoryService from '../services/learning/MemoryService';
 import { jobQueue, JobType } from '../services/infrastructure/JobQueueService';
 import { MAX_TRADE_SUMMARIES } from './useTradeLogging';
-import { saveThinkingBatch, generateThinkingId, getThinkingTradeId } from '../services/infrastructure/ThinkingStoreService';
+import { saveThinkingBatch, buildThinkingRecordId, getThinkingTradeId } from '../services/infrastructure/ThinkingStoreService';
 import { ProviderConfig } from '../types/provider';
 import { conductPostMortem, summarizeTrade, conductTodayReassessment } from '../services/providers/GenericAnalysisService';
 import { fetchMarketData, normalizeSymbol } from '../services/analysis/MarketDataService';
@@ -467,7 +467,7 @@ Please investigate this discrepancy in your analysis.
                     const username = localStorage.getItem('last_active_user') || 'default';
                     const now = new Date().toISOString();
                     const turnRecords = postMortemTurns.map((turn, idx) => ({
-                        id: generateThinkingId(),
+                        id: buildThinkingRecordId(postMortemTradeId, turn.speaker.toLowerCase().includes('moderator') ? 'moderator' : turn.speaker.toLowerCase(), 'debate_turn', idx),
                         tradeId: postMortemTradeId,
                         username,
                         provider: turn.speaker.toLowerCase().includes('moderator') ? 'moderator' : turn.speaker.toLowerCase(),

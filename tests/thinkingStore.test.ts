@@ -100,6 +100,10 @@ class FakeSqliteDb {
                     outcome: resolved?.outcome ?? secondary?.outcome ?? recs.reduce((o, r) => r.outcome || o, undefined),
                 };
             });
+            // Matches the real query's ORDER BY createdAt DESC (the old
+            // always-run prune DELETE happened to sort rows as a side effect,
+            // which masked this missing ordering).
+            values.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
             return { values };
         }
         if (/GROUP BY provider/i.test(sql)) {
