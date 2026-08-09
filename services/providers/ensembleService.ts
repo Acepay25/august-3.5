@@ -3,6 +3,8 @@ import { TradeAnalysis, Message, TradeOutcome, AccuracySubMode, LoggedTrade, Ana
 import { ProviderConfig } from '../../types/provider';
 import { streamChatRequest, ChatMessage } from './GenericProviderService';
 import { TASK_BUDGETS } from './taskBudgets';
+import { getPrompt } from '../infrastructure/PromptOverrideService';
+
 import { extractAndParseJson, extractLastJson } from '../../utils/jsonUtils';
 import {
     MODERATOR_SYSTEM_PROMPT_V2,
@@ -1024,13 +1026,13 @@ export const conductDebate = (
 
     let systemPrompt: string;
     if (subMode === 'pure_ai') {
-        systemPrompt = PURE_AI_MODERATOR_PROMPT;
+        systemPrompt = getPrompt('debate.moderator_pure_ai', PURE_AI_MODERATOR_PROMPT);
 
         if (isFamiliesEnabledInPureAI) {
-            systemPrompt += `\n\n**IMPORTANT EXCEPTION:**\nThe user has explicitly ENABLED "Market Classification Families" for this Pure AI session.\nEven though this is Pure AI mode, you MUST classify the final trade setup into one of the following Families:\n${TRADING_FAMILIES_PROMPT}\nEnsure the JSON output's 'detectedPatternFamily' field is set to 'Family A', 'Family B', 'Family C', or 'Family Omega'.\n`;
+            systemPrompt += `\n\n**IMPORTANT EXCEPTION:**\nThe user has explicitly ENABLED "Market Classification Families" for this Pure AI session.\nEven though this is Pure AI mode, you MUST classify the final trade setup into one of the following Families:\n${getPrompt('analysis.families', TRADING_FAMILIES_PROMPT)}\nEnsure the JSON output's 'detectedPatternFamily' field is set to 'Family A', 'Family B', 'Family C', or 'Family Omega'.\n`;
         }
     } else {
-        systemPrompt = MODERATOR_SYSTEM_PROMPT_V2;
+        systemPrompt = getPrompt('debate.moderator_autoplay', MODERATOR_SYSTEM_PROMPT_V2);
     }
 
     // Replace placeholders
@@ -1080,7 +1082,7 @@ ${gateReconciliationContext}
 
 ${AI_CORE_SKILL_INJECTION}
 
-${PROBABILITY_ESTIMATION_PROMPT}
+${getPrompt('debate.probability_estimation', PROBABILITY_ESTIMATION_PROMPT)}
 
 ${learningContext || ''}
 
@@ -1088,7 +1090,7 @@ ${divergenceContext}
 
 ${calibrationContext}
 
-${STRESS_TEST_PROTOCOL}
+${getPrompt('debate.stress_test', STRESS_TEST_PROTOCOL)}
 
 **SIMULATION INPUT DATA:**
 User Request: "${safeUserPrompt}"
@@ -1321,13 +1323,13 @@ export const conductTwoWayDebate = async function* (
 
       ${learningContext || ''}
 
-      ${STRESS_TEST_PROTOCOL}
+      ${getPrompt('debate.stress_test', STRESS_TEST_PROTOCOL)}
 
       ${SCENARIO_EVALUATION_PROTOCOL}
 
-      ${MODERATOR_VERIFICATION_ENFORCEMENT_PROMPT}
+      ${getPrompt('debate.verification', MODERATOR_VERIFICATION_ENFORCEMENT_PROMPT)}
 
-      ${PROBABILITY_ESTIMATION_PROMPT}
+      ${getPrompt('debate.probability_estimation', PROBABILITY_ESTIMATION_PROMPT)}
 
       **OBJECTIVE:**
       Orchestrate a rigorous, multi-turn debate where EACH AI provider gets their own dedicated turn in every round. You must remain completely unbiased - questioning all perspectives equally until the most accurate and validated setup emerges.
@@ -1396,7 +1398,7 @@ export const conductTwoWayDebate = async function* (
       - Demand clear justification from EACH analyst for their classification.
       
       **FAMILY DEFINITIONS REFERENCE:**
-      ${TRADING_FAMILIES_PROMPT}
+      ${getPrompt('analysis.families', TRADING_FAMILIES_PROMPT)}
 
       **MANDATORY RISK/REWARD RULE (ABSOLUTE):**
       - **R:R < 1.2 = MAX CONFIDENCE 54% (Grade D)**. NO EXCEPTIONS.
@@ -1884,13 +1886,13 @@ ${AI_CORE_SKILL_INJECTION}
 
 ${learningContext || ''}
 
-${STRESS_TEST_PROTOCOL}
+${getPrompt('debate.stress_test', STRESS_TEST_PROTOCOL)}
 
 ${SCENARIO_EVALUATION_PROTOCOL}
 
-${MODERATOR_VERIFICATION_ENFORCEMENT_PROMPT}
+${getPrompt('debate.verification', MODERATOR_VERIFICATION_ENFORCEMENT_PROMPT)}
 
-${PROBABILITY_ESTIMATION_PROMPT}
+${getPrompt('debate.probability_estimation', PROBABILITY_ESTIMATION_PROMPT)}
 
 ${mcContext}
 
@@ -1964,7 +1966,7 @@ Strictly enforce "Market Classification Families" (A, B, C, Omega).
 - Require evidence from ALL analysts, not just one.
 
 **FAMILY DEFINITIONS:**
-${TRADING_FAMILIES_PROMPT}
+${getPrompt('analysis.families', TRADING_FAMILIES_PROMPT)}
 
  **MANDATORY RISK/REWARD RULE:**
 Final trade MUST offer R:R of at least 1:1.2. If RR < 1.2, mark as **CONDITIONAL**.
@@ -2664,7 +2666,7 @@ export const conductRealDebate = async function* (
                     .map(o => `**${o.provider.name} (Round ${round - 1}):**\n${roundTexts[o.provider.name][round - 1]}`)
                     .join('\n\n') || 'No other analyst has spoken yet.';
 
-                const systemPrompt = DEBATE_RESPONSE_PROMPT
+                const systemPrompt = getPrompt('debate.rebuttal', DEBATE_RESPONSE_PROMPT)
                     .replace('{{NAME}}', analyst.provider.name)
                     .replace('{{ROUND}}', String(round));
                 // Snapshot the live price ONCE per round so every analyst in
@@ -2822,7 +2824,7 @@ export const conductRealDebate = async function* (
         // -- MODERATOR QUESTIONS (streamed once, ~100 tokens/turn cap) --
         const questionRound = lastRebuttalRound + 1;
         const priorQATranscript = buildDebateTranscript(names, roundTexts, lastRebuttalRound, 100, 1500);
-        const questionSystemPrompt = MODERATOR_CLARIFICATION_QUESTIONS_PROMPT.replace('{{ANALYSTS}}', names.join(', '));
+        const questionSystemPrompt = getPrompt('debate.clarification_questions', MODERATOR_CLARIFICATION_QUESTIONS_PROMPT).replace('{{ANALYSTS}}', names.join(', '));
         const questionUserContent =
             `**THE DEBATE TRANSCRIPT (rounds 1-${lastRebuttalRound}):**\n${priorQATranscript}` +
             buildLivePriceRefreshBlock(getLivePrice?.() ?? null, 'before the clarification questions');
@@ -2884,7 +2886,7 @@ export const conductRealDebate = async function* (
             1500,
         );
         const answerTasks = liveAnalysts.map((analyst) => {
-            const answerSystemPrompt = ANALYST_CLARIFICATION_RESPONSE_PROMPT
+            const answerSystemPrompt = getPrompt('debate.clarification_answer', ANALYST_CLARIFICATION_RESPONSE_PROMPT)
                 .replace('{{NAME}}', analyst.provider.name)
                 .replace('{{QUESTION}}', getAnalystClarificationQuestion(questionText, targetAliasesFor(analyst.provider.name), speakerLabels));
             const answerUserContent =
@@ -3006,7 +3008,7 @@ export const conductRealDebate = async function* (
         try {
             for await (const chunk of getModeratorAnalysisStream(
                 moderatorConfig, moderatorModel,
-                `${MODERATOR_CLARIFICATION_JUDGMENT_PROMPT}\n\n**THE CYCLE Q&A:**\n${judgmentTranscript}`,
+                `${getPrompt('debate.clarification_judgment', MODERATOR_CLARIFICATION_JUDGMENT_PROMPT)}\n\n**THE CYCLE Q&A:**\n${judgmentTranscript}`,
                 signal,
             )) {
                 if (chunk) judgmentText += chunk;
@@ -3098,7 +3100,7 @@ export const conductRealDebate = async function* (
     );
 
     const moderatorPrompt = [
-        MODERATOR_FINAL_VERDICT_PROMPT.replace('{{ANALYSTS}}', names.join(', ')),
+        getPrompt('debate.final_verdict', MODERATOR_FINAL_VERDICT_PROMPT).replace('{{ANALYSTS}}', names.join(', ')),
         `\n\n**THE DEBATE TRANSCRIPT (COMPLETE):**\n${transcriptBlock}`,
         `\n\n**TRADING REQUEST:**\n${truncateTextToTokens(userPrompt, 350)}`,
         marketDataOverride,
@@ -3124,7 +3126,7 @@ export const conductRealDebate = async function* (
     // attempt errors or produces no JSON plan (long prompts are the usual
     // culprit on reasoning-heavy models).
     const compactModeratorPrompt = [
-        MODERATOR_FINAL_VERDICT_PROMPT_COMPACT.replace('{{ANALYSTS}}', names.join(', ')),
+        getPrompt('debate.final_verdict_compact', MODERATOR_FINAL_VERDICT_PROMPT_COMPACT).replace('{{ANALYSTS}}', names.join(', ')),
         `\n\n**THE DEBATE TRANSCRIPT (COMPACT):**\n${transcriptBlock}`,
     ].join('\n');
 
@@ -3214,7 +3216,7 @@ export const conductTwoWayPostMortemDebate = (
     const tradeHistoryContext = structuredMemoryContext ||
         (finalTradeSummary ? `**PATTERN MEMORY LIBRARY (Historical Context):**\n${truncateTextToTokens(finalTradeSummary, 1500)}` : "No past trades logged.");
 
-    const extendedSLZoneContext = EXTENDED_SL_ZONE_DEBATE_CONTEXT;
+    const extendedSLZoneContext = getPrompt('postmortem.extended_sl_zone', EXTENDED_SL_ZONE_DEBATE_CONTEXT);
 
     const moderatorPrompt = `
     You are a **Master Trading Strategist** conducting a rigorous 5-round post-mortem debate.
@@ -3235,7 +3237,7 @@ export const conductTwoWayPostMortemDebate = (
 
     **PROBABILITY ASSESSMENT:** Include a prose assessment of the probability that the SL and TP levels would have been hit — no JSON structure.
 
-    ${MODERATOR_FINAL_AUTHORITY_PROTOCOL}
+    ${getPrompt('debate.moderator_authority', MODERATOR_FINAL_AUTHORITY_PROTOCOL)}
 
     ------------------------------------------
     DEBATE PROTOCOL (5 ROUNDS)
@@ -3354,7 +3356,7 @@ export const recalculateProbabilities = async function* (
         **ORIGINAL ANALYSIS:**
         ${JSON.stringify(analysis, null, 2)}
         
-        ${PROBABILITY_ESTIMATION_PROMPT}
+        ${getPrompt('debate.probability_estimation', PROBABILITY_ESTIMATION_PROMPT)}
 
         **CRITICAL:** 
         1. Parse the "takeProfit" array in the ORIGINAL ANALYSIS to see how many TPs exist.
@@ -3386,7 +3388,7 @@ export const conductThreeWayPostMortemDebate = (
     const imageContext = postTradeImageSummaries?.length ? `** VERIFIED TRADE OUTCOME DATA (HIGHEST PRIORITY):**\n${postTradeImageSummaries.join('\n---\n')}` : `No post-trade data was provided.`;
     const tradeHistoryContext = finalTradeSummary ? `**PATTERN MEMORY LIBRARY (Historical Context):**\n${truncateTextToTokens(finalTradeSummary, 1500)}` : "No past trades logged.";
 
-    const extendedSLZoneContext = EXTENDED_SL_ZONE_DEBATE_CONTEXT;
+    const extendedSLZoneContext = getPrompt('postmortem.extended_sl_zone', EXTENDED_SL_ZONE_DEBATE_CONTEXT);
 
     const moderatorPrompt = `
     You are a **Master Trading Strategist** conducting a rigorous 5-round post-mortem debate with three analysts.  
@@ -3407,7 +3409,7 @@ export const conductThreeWayPostMortemDebate = (
 
     **PROBABILITY ASSESSMENT:** Include a prose assessment of the probability that the SL and TP levels would have been hit — no JSON structure.
 
-    ${MODERATOR_FINAL_AUTHORITY_PROTOCOL}
+    ${getPrompt('debate.moderator_authority', MODERATOR_FINAL_AUTHORITY_PROTOCOL)}
 
     ------------------------------------------
     DEBATE PROTOCOL (5 ROUNDS)

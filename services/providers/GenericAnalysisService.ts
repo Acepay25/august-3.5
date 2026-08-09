@@ -28,6 +28,8 @@ import {
     sendChatRequest, streamChatRequest, ChatMessage, ContentPart, ChatRequestOptions,
 } from './GenericProviderService';
 import { TASK_BUDGETS } from './taskBudgets';
+import { getPrompt } from '../infrastructure/PromptOverrideService';
+
 import { isVisionModel } from '../../utils/modelUtils';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -170,13 +172,13 @@ export async function analyzeTradingView(
             ? `**PLAYBOOK REFERENCE (ENABLED BY USER):**\nAlthough this is Pure AI Mode, the user has enabled access to the following frameworks as a reference:\n${frameworksList}\nYou may use these if they align with your reasoning.`
             : "";
         const familiesContext = isFamiliesEnabledInPureAI
-            ? `**MARKET CLASSIFICATION FAMILIES (ENABLED BY USER):**\nAlthough this is Pure AI Mode, the user has explicitly requested that you classify the setup into one of the following Families:\n${TRADING_FAMILIES_PROMPT}\nYou MUST assign a 'detectedPatternFamily' (Family A, B, C, or Omega) based on your reasoning.`
+            ? `**MARKET CLASSIFICATION FAMILIES (ENABLED BY USER):**\nAlthough this is Pure AI Mode, the user has explicitly requested that you classify the setup into one of the following Families:\n${getPrompt('analysis.families', TRADING_FAMILIES_PROMPT)}\nYou MUST assign a 'detectedPatternFamily' (Family A, B, C, or Omega) based on your reasoning.`
             : "";
         const memoryContextPrompt = isMemoryEnabledInPureAI
             ? `\n\n**PATTERN MEMORY REFERENCE (ENABLED BY USER):**\nAlthough this is Pure AI Mode, the user has enabled access to your historical Pattern Memory. You may use this as a reference to identify recurring patterns from the user's past trades.\n`
             : "";
 
-        systemPrompt = `${PURE_AI_MODE_PROMPT}
+        systemPrompt = `${getPrompt('analysis.pure_ai', PURE_AI_MODE_PROMPT)}
 
       ${visionDeepDive}
 
@@ -188,7 +190,7 @@ export async function analyzeTradingView(
 
       ${memoryContextPrompt}
 
-      ${RISK_MANAGEMENT_RULES}
+      ${getPrompt('analysis.risk_rules', RISK_MANAGEMENT_RULES)}
 
       **SYNTHESIS & OUTPUT:**
       Do NOT output JSON. Present your readable trade proposal with direction,
@@ -196,9 +198,9 @@ export async function analyzeTradingView(
       arrays, XML tags, or section labels.
     `;
     } else if (isAccuracyMode) {
-        systemPrompt = `${ACCURACY_MODE_PROMPT}
+        systemPrompt = `${getPrompt('analysis.accuracy', ACCURACY_MODE_PROMPT)}
 
-      ${MASTER_ANALYSIS_PROMPT}
+      ${getPrompt('analysis.master', MASTER_ANALYSIS_PROMPT)}
 
       ${visionDeepDive}
 
@@ -211,7 +213,7 @@ export async function analyzeTradingView(
       **CRITICAL: PATTERN MEMORY INTEGRATION (SECTION 4):**
       Use the **PATTERN MEMORY** and **RECENT INSIGHTS** provided below for user-specific patterns. Do NOT use Layer 3 Global Memory for past trade references.
 
-      ${RISK_MANAGEMENT_RULES}
+      ${getPrompt('analysis.risk_rules', RISK_MANAGEMENT_RULES)}
 
       **SYNTHESIS & OUTPUT:**
       Do NOT output JSON. Present your readable trade proposal with direction,
@@ -221,14 +223,14 @@ export async function analyzeTradingView(
     } else {
         // Standard mode — full master prompt with formatting rules and lens support.
         const basePrompt = rolePrompt
-            ? LENS_MODE_BASE_PROMPT
-            : (systemPromptOverride || MASTER_ANALYSIS_PROMPT);
+            ? getPrompt('analysis.lens', LENS_MODE_BASE_PROMPT)
+            : (systemPromptOverride || getPrompt('analysis.master', MASTER_ANALYSIS_PROMPT));
 
         systemPrompt = `${rolePrompt ? ' **SPECIALIZED ANALYST ROLE ACTIVE**\n\n' + rolePrompt + '\n\n---\n\n' : ''}${basePrompt}
 
       ${rolePrompt ? '' : visionDeepDive}
 
-      ${AI_PROVIDER_MEMORY_ENFORCEMENT_PROMPT}
+      ${getPrompt('analysis.memory_enforcement', AI_PROVIDER_MEMORY_ENFORCEMENT_PROMPT)}
 
       ${userOverride}
 
@@ -242,7 +244,7 @@ export async function analyzeTradingView(
       **CRITICAL: PATTERN MEMORY INTEGRATION (SECTION 4):**
       Use the **PATTERN MEMORY** and **RECENT INSIGHTS** provided below as your source of truth for user-specific patterns and corrections. Do NOT use Layer 3 Global Memory for past trade references.
 
-      ${RISK_MANAGEMENT_RULES}
+      ${getPrompt('analysis.risk_rules', RISK_MANAGEMENT_RULES)}
 
       **SYNTHESIS & OUTPUT (READABLE TEXT ONLY):**
 
@@ -393,7 +395,7 @@ export async function analyzeTradingView(
             : "\n\n** RECENT INSIGHTS:** No recent trade insights available.\n";
 
         if (isSmallContextModel(modelName)) {
-            const effectiveSystemPrompt = COMPACT_ANALYSIS_PROMPT;
+            const effectiveSystemPrompt = getPrompt('analysis.compact', COMPACT_ANALYSIS_PROMPT);
             const minimalPattern = patternMemoryContext.length > 400 ? patternMemoryContext.substring(0, 400) + '...[truncated]' : patternMemoryContext;
             const minimalInsights = recentInsightsContext.length > 200 ? recentInsightsContext.substring(0, 200) + '...[truncated]' : recentInsightsContext;
             const minimalImages = imageSummaryContext.length > 500 ? imageSummaryContext.substring(0, 500) + '...[truncated]' : imageSummaryContext;
@@ -649,7 +651,7 @@ If this trade hit the 150% extended zone or is a missed win, FLAG THIS PATTERN c
 
     if (outcome === TradeOutcome.ENTRY_NOT_HIT) {
         const userFeedbackBlock = correctedEntry ? `**USER FEEDBACK: CORRECTED ENTRY** The user provided a corrected entry: **${correctedEntry}**.` : '';
-        analysisPrompt = `${ENTRY_NOT_HIT_ANALYSIS_PROMPT}
+        analysisPrompt = `${getPrompt('postmortem.entry_not_hit', ENTRY_NOT_HIT_ANALYSIS_PROMPT)}
 
 **PREVIOUS ANALYSIS:**
 ${JSON.stringify(previousMessage.analysis, null, 2)}
@@ -664,7 +666,7 @@ ${tradeHistoryContext}
 
 ${groundingDirective}
 
-${ENTRY_NOT_HIT_ANALYSIS_QUESTIONS}`;
+${getPrompt('postmortem.entry_not_hit_questions', ENTRY_NOT_HIT_ANALYSIS_QUESTIONS)}`;
     } else if (outcome === TradeOutcome.WIN) {
         const feedbackBlock = `**USER FEEDBACK (TRADE OUTCOME):**
 ${correctedStopLoss ? `- Corrected SL: ${correctedStopLoss}` : ''}

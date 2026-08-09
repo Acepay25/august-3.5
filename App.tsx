@@ -5,6 +5,7 @@ import { Message, MessageRole, TradeOutcome, ImageMetadata, AIProvider, Conversa
 import * as ensembleService from './services/providers/ensembleService';
 import { generateFinalSummary } from './services/providers/GenericAnalysisService';
 import * as dbService from './services/infrastructure/dbService';
+import { initPromptOverrides } from './services/infrastructure/PromptOverrideService';
 import { ANALYST_ROLE_DEFINITIONS, getRoleForProvider } from './services/ui/AnalystLensService';
 import { AnalystRole } from './types/enums';
 import { ProbabilityEngineService } from './services/analysis/ProbabilityEngineService';
@@ -983,6 +984,9 @@ const App: React.FC = () => {
         // Initialize service caches
         await initModelPerformanceService();
         await initAnalystLensService();
+        // Prompt overrides are per-user — load the active user's edits into
+        // the sync cache so prompt assembly (getPrompt) sees them.
+        await initPromptOverrides(username);
         // Native (Capacitor) loads the lens config asynchronously, after the
         // useAppSettings lazy initializer already ran with an empty default —
         // push the cached config into React state so the lens dropdowns don't

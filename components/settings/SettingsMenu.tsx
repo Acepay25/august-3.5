@@ -14,9 +14,10 @@ import { BackupManager } from './BackupManager';
 import { AlertManager } from './AlertManager';
 import { Journal } from '../journal/Journal';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
-import { ActivityIcon, AISettingsIcon, BrainIcon, CloseIcon, EditIcon, HistoryIcon, BookmarkIcon, SettingsIcon, UserIcon, ExportIcon, SearchIcon, SwitchUserIcon } from '../shared/Icons';
+import { ActivityIcon, AISettingsIcon, BrainIcon, CloseIcon, EditIcon, HistoryIcon, BookmarkIcon, SettingsIcon, UserIcon, ExportIcon, SearchIcon, SwitchUserIcon, CodeIcon } from '../shared/Icons';
+import PromptManager from './PromptManager';
 
-export type SettingsTab = 'general' | 'models' | 'journal' | 'lenses' | 'instructions' | 'memory' | 'actions';
+export type SettingsTab = 'general' | 'models' | 'journal' | 'lenses' | 'instructions' | 'memory' | 'actions' | 'prompts';
 
 interface SettingsMenuProps {
     isVisible: boolean;
@@ -352,6 +353,13 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                     onClick={() => setActiveTab('instructions')}
                                     icon={<EditIcon className="w-4 h-4" />}
                                     label="Response preferences"
+                                />
+                                <NavTabButton
+                                    id="prompts"
+                                    activeTab={activeTab}
+                                    onClick={() => setActiveTab('prompts')}
+                                    icon={<CodeIcon className="w-4 h-4" />}
+                                    label="Prompts"
                                 />
                                 <NavTabButton
                                     id="memory"
@@ -722,7 +730,14 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                 </div>
                             )}
 
-                            {/* TAB 5: Memory & Learning */}
+                            {/* TAB 5: Prompts — browse + edit every prompt the app sends */}
+                            {activeTab === 'prompts' && (
+                                <div className="h-full min-h-0 animate-fade-in">
+                                    <PromptManager username={props.username} />
+                                </div>
+                            )}
+
+                            {/* TAB 6: Memory & Learning */}
                             {activeTab === 'memory' && (
                                 <div className="space-y-4 max-w-3xl animate-fade-in">
                                     <div className="border-b border-zinc-800 pb-3">
