@@ -62,6 +62,93 @@ export interface ChatRequestOptions {
     onReasoning?: (reasoning: string) => void;
 }
 
+// ─── Thinking / Chain-of-Thought Extraction ──────────────────────────────────
+
+/**
+ * Normalize a provider reasoning payload to a string. OpenAI-compatible
+ * gateways disagree on the shape: `reasoning_content` (DeepSeek), `reasoning`
+ * (Qwen/Kimi), sometimes as an array of strings (`reasoning: ["..."]`).
+ * Every variant funnels into the same onReasoning side channel.
+ */
+export function extractReasoning(value: unknown): string {
+    if (typeof value === 'string') return value;
+    if (Array.isArray(value)) {
+        return value.filter((part): part is string => typeof part === 'string').join('\n');
+    }
+    return '';
+}
+
+/**
+ * Extract the chain of thought from an Anthropic-style messages response.
+ * Thinking arrives as `{type:'thinking', thinking, signature}` content blocks
+ * (returned only when the request enabled extended thinking); redacted blocks
+ * are surfaced as a marker so the user knows the provider withheld part of it.
+ */
+export function extractMessagesThinking(content: unknown): string {
+    if (!Array.isArray(content)) return '';
+    const parts: string[] = [];
+    for (const block of content) {
+        if (block?.type === 'thinking' && typeof block.thinking === 'string' && block.thinking.trim()) {
+            parts.push(block.thinking.trim());
+        } else if (block?.type === 'redacted_thinking') {
+            parts.push('[Thinking redacted by provider]');
+        }
+    }
+    return parts.join('\n');
+}
+
+/**
+ * Extract the chain of thought from an OpenAI Responses API payload.
+ * Reasoning arrives as `output` items of type `reasoning` — full text in
+ * `content` (output_text blocks), the public summary in `summary`
+ * (summary_text blocks). Both are captured; some gateways emit only one.
+ */
+export function extractResponsesReasoning(output: unknown): string {
+    if (!Array.isArray(output)) return '';
+    const parts: string[] = [];
+    for (const item of output) {
+        if (item?.type !== 'reasoning') continue;
+        if (Array.isArray(item.content)) {
+            for (const block of item.content) {
+                if (block?.type === 'output_text' && typeof block.text === 'string') parts.push(block.text);
+            }
+        }
+        if (Array.isArray(item.summary)) {
+            for (const block of item.summary) {
+                if (block?.type === 'summary_text' && typeof block.text === 'string') parts.push(block.text);
+            }
+        }
+    }
+    return parts.join('\n');
+}
+
+// ─── Extended Thinking (request side) ───────────────────────────────────────
+
+/**
+ * Anthropic extended-thinking-capable Claude models. The `thinking` request
+ * block is only valid on these — older Claude models reject it with a 400, so
+ * the gate is model-id based rather than opt-in.
+ */
+const EXTENDED_THINKING_MODEL_RE = /claude-(?:3-7|sonnet-4|opus-4|haiku-4-5)/i;
+
+/** Chain-of-thought budget as a fraction of max_tokens (always kept below it). */
+const THINKING_BUDGET_FRACTION = 0.35;
+
+/**
+ * Whether to request extended thinking on an Anthropic messages call.
+ * Gated on: a thinking-capable Claude model id, a non-trivial token budget
+ * (connection tests use maxTokens 10 — no thinking needed, and Anthropic
+ * requires 1024 <= budget_tokens < max_tokens), and no JSON mode
+ * (structured output and extended thinking are mutually exclusive).
+ */
+export function shouldRequestExtendedThinking(config: ProviderConfig, options?: ChatRequestOptions): boolean {
+    if (config.apiFormat !== 'messages') return false;
+    if (options?.jsonMode) return false;
+    const maxTokens = options?.maxTokens ?? 4096;
+    if (maxTokens < 4096) return false;
+    return EXTENDED_THINKING_MODEL_RE.test(config.selectedModel || '');
+}
+
 // ─── URL Normalization Helper ───────────────────────────────────────────────
 
 /**
@@ -158,7 +245,7 @@ async function chatCompletionsCall(
         }
     }
     const message = response.choices[0]?.message as any;
-    const reasoning = message?.reasoning_content || message?.reasoning;
+    const reasoning = extractReasoning(message?.reasoning_content) || extractReasoning(message?.reasoning);
     const content = Array.isArray(message?.content)
         ? message.content.filter((part: any) => typeof part?.text === 'string').map((part: any) => part.text).join('\n')
         : message?.content;
@@ -171,14 +258,14 @@ async function chatCompletionsCall(
     // Reasoning is forwarded as a separate channel only when the answer text
     // exists — otherwise the reasoning IS the answer and returning it both via
     // onReasoning and as content would make callers accumulate it twice.
-    if (typeof reasoning === 'string' && reasoning.trim() && content) {
+    if (reasoning.trim() && content) {
         options?.onReasoning?.(reasoning.trim());
     }
     // Some reasoning-capable gateways place the generated answer in
     // reasoning_content when the final content field is omitted. Preserve it
     // so the caller can still extract a structured answer instead of seeing
     // a misleading empty-response error.
-    return content || (typeof reasoning === 'string' ? reasoning : '') || '';
+    return content || reasoning || '';
 }
 
 async function* chatCompletionsStream(
@@ -199,8 +286,9 @@ async function* chatCompletionsStream(
     }
     const stream = await client.chat.completions.create(params, options?.signal ? { signal: options.signal } : undefined);
     for await (const chunk of stream) {
-        const reasoning = (chunk.choices[0]?.delta as any)?.reasoning_content || (chunk.choices[0]?.delta as any)?.reasoning;
-        if (typeof reasoning === 'string' && reasoning.trim()) options?.onReasoning?.(reasoning);
+        const delta = chunk.choices[0]?.delta as any;
+        const reasoning = extractReasoning(delta?.reasoning_content) || extractReasoning(delta?.reasoning);
+        if (reasoning.trim()) options?.onReasoning?.(reasoning);
         yield chunk.choices[0]?.delta?.content || '';
     }
 }
@@ -249,6 +337,17 @@ async function messagesCall(
     if (options?.temperature !== undefined) {
         body.temperature = options.temperature;
     }
+    // Extended thinking (thinking-capable Claude models only — older models
+    // reject the `thinking` block with a 400): request a chain-of-thought
+    // budget so `thinking` content blocks come back. Anthropic requires
+    // temperature unset when thinking is enabled, so the explicit value drops.
+    if (shouldRequestExtendedThinking(config, options)) {
+        body.thinking = {
+            type: 'enabled',
+            budget_tokens: Math.max(1024, Math.floor((options?.maxTokens ?? 4096) * THINKING_BUDGET_FRACTION)),
+        };
+        delete body.temperature;
+    }
 
     const url = `${normalizeBaseUrl(config.baseUrl, 'messages')}/messages`;
     const response = await fetch(url, {
@@ -277,6 +376,10 @@ async function messagesCall(
     }
 
     const data = await response.json();
+    // Anthropic chain of thought arrives as `thinking` content blocks — forward
+    // it on the same side channel as chat_completions reasoning_content.
+    const thinking = extractMessagesThinking(data.content);
+    if (thinking) options?.onReasoning?.(thinking);
     if (data.content && Array.isArray(data.content)) {
         return data.content
             .filter((block: any) => block.type === 'text')
@@ -342,6 +445,10 @@ async function responsesCall(
     }
 
     const data = await response.json();
+    // OpenAI Responses API reasoning arrives as `output` items of type
+    // `reasoning` (full text + public summary) — forward on onReasoning.
+    const reasoning = extractResponsesReasoning(data.output);
+    if (reasoning) options?.onReasoning?.(reasoning);
     if (data.output && Array.isArray(data.output)) {
         const texts: string[] = [];
         for (const item of data.output) {
@@ -527,7 +634,19 @@ export async function sendChatRequest(
                             const message = e instanceof Error ? e.message : 'Unknown JSON parsing error';
                             throw new Error(`Provider proxy returned invalid JSON: ${message}. Body: ${(result.body || '').slice(0, 200)}`, { cause: e });
                         }
-                        const reasoning = result.reasoning || data.choices?.[0]?.message?.reasoning_content || data.choices?.[0]?.message?.reasoning;
+                        let reasoning = result.reasoning || '';
+                        if (!reasoning) {
+                            // The localhost proxy returns `reasoning` for
+                            // chat_completions; fall back to a per-format parse
+                            // so messages/responses thinking survives the proxy.
+                            if (effectiveConfig.apiFormat === 'messages') {
+                                reasoning = extractMessagesThinking(data.content);
+                            } else if (effectiveConfig.apiFormat === 'responses') {
+                                reasoning = extractResponsesReasoning(data.output);
+                            } else {
+                                reasoning = extractReasoning(data.choices?.[0]?.message?.reasoning_content) || extractReasoning(data.choices?.[0]?.message?.reasoning);
+                            }
+                        }
                         let text: string;
                         if (effectiveConfig.apiFormat === 'messages') {
                             text = Array.isArray(data.content) ? data.content.filter((block: any) => block?.type === 'text').map((block: any) => block.text).join('\n') : data.text || '';
@@ -543,8 +662,8 @@ export async function sendChatRequest(
                         // Reasoning goes out on its own channel only when the
                         // answer text exists; otherwise it IS the answer and
                         // must not be double-reported as content too.
-                        if (typeof reasoning === 'string' && reasoning.trim() && text) options?.onReasoning?.(reasoning.trim());
-                        return text || (typeof reasoning === 'string' ? reasoning : '') || '';
+                        if (reasoning.trim() && text) options?.onReasoning?.(reasoning.trim());
+                        return text || reasoning || '';
                     });
                 }
                 switch (effectiveConfig.apiFormat) {
@@ -711,8 +830,8 @@ async function* streamViaProxy(
                     throw error;
                 }
                 const delta = chunk?.choices?.[0]?.delta || {};
-                const reasoning = delta.reasoning_content || delta.reasoning;
-                if (typeof reasoning === 'string' && reasoning.trim()) options?.onReasoning?.(reasoning);
+                const reasoning = extractReasoning(delta.reasoning_content) || extractReasoning(delta.reasoning);
+                if (reasoning.trim()) options?.onReasoning?.(reasoning);
                 const content = delta.content;
                 if (typeof content === 'string' && content) yield content;
             }
@@ -737,8 +856,8 @@ async function* streamViaProxy(
                     }
                     if (chunk) {
                         const delta = chunk?.choices?.[0]?.delta || {};
-                        const reasoning = delta.reasoning_content || delta.reasoning;
-                        if (typeof reasoning === 'string' && reasoning.trim()) options?.onReasoning?.(reasoning);
+                        const reasoning = extractReasoning(delta.reasoning_content) || extractReasoning(delta.reasoning);
+                        if (reasoning.trim()) options?.onReasoning?.(reasoning);
                         if (typeof delta.content === 'string' && delta.content) yield delta.content;
                     }
                 }

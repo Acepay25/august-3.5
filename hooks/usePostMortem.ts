@@ -279,6 +279,13 @@ Please investigate this discrepancy in your analysis.
                 ? [...(summaries || []), priceValidationInjection]
                 : summaries;
 
+            // Captured chain-of-thought per analyst (keyed by provider id) —
+            // attached to the post-mortem message like the moderator's debate
+            // reasoning below, so the Thinking modal can show it. Populated in
+            // both the debate and single-report paths (the analyst reports
+            // always run first).
+            const postMortemReasoning: Record<string, string> = {};
+
             const analysisPromises = enabledProviders.map(p =>
                 conductPostMortem(
                     p.config,
@@ -297,6 +304,12 @@ Please investigate this discrepancy in your analysis.
                         // switches actually cancel in-flight API calls instead
                         // of only suppressing their state writes.
                         signal: currentAbortController.signal,
+                        // Capture each analyst's chain of thought (all wire
+                        // formats) so it survives onto the post-mortem message
+                        // alongside the moderator's debate reasoning.
+                        onReasoning: (reasoning: string) => {
+                            postMortemReasoning[p.config.id] = (postMortemReasoning[p.config.id] || '') + reasoning;
+                        },
                     }
                 ).then((res: string) => {
                     if (!isRunStale(myRunId)) {
@@ -481,9 +494,11 @@ Please investigate this discrepancy in your analysis.
                 text: finalPostMortemReport,
                 isDebating: false,
                 postMortemDebateTurns: undefined, // Clear from message (now persisted in ThinkingStore)
-                // Keep the moderator's captured chain of thought on the message
-                // (merging so pre-existing analysis reasoning is preserved).
-                ...(moderatorReasoning ? { reasoningProcesses: { ...(m.reasoningProcesses ?? {}), moderator: moderatorReasoning } } : {}),
+                // Keep captured chain of thought on the message — the
+                // moderator's debate reasoning plus each analyst's post-mortem
+                // reasoning (merging so pre-existing analysis reasoning is
+                // preserved).
+                ...((moderatorReasoning || Object.keys(postMortemReasoning).length > 0) ? { reasoningProcesses: { ...(m.reasoningProcesses ?? {}), ...(moderatorReasoning ? { moderator: moderatorReasoning } : {}), ...postMortemReasoning } } : {}),
             } : m));
 
             // P0-2: If the user switched accounts while the post-mortem was

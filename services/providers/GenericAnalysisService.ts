@@ -14,7 +14,7 @@ import { ProviderConfig } from '../../types/provider';
 import { Message, GroundingChunk, TradeAnalysis, GlobalMemory, AccuracySubMode, TradeOutcome, LoggedTrade, StrategySearchResult, TradeSummary, MessageRole } from '../../types';
 import { extractAndParseJson, extractLastJson } from '../../utils/jsonUtils';
 import { sanitizeAIResponse, sanitizeAIResponseLight, sanitizeJSONString } from '../../utils/sanitizers';
-import { sanitizeTradeAnalysis, truncateTextToTokens, formatAnalysisForDisplay } from '../../utils/analysisUtils';
+import { sanitizeTradeAnalysis, truncateTextToTokens, formatAnalysisForDisplay, parsePrice } from '../../utils/analysisUtils';
 import { parseGlobalMemory, parseStrategySearchResults } from '../../schemas/learning';
 import {
     MASTER_ANALYSIS_PROMPT, DEVILS_ADVOCATE_PROMPT, INVALIDATION_THESIS_PROMPT, CORRELATION_AWARENESS_PROMPT,
@@ -564,6 +564,8 @@ export interface ConductPostMortemParams {
     feedback?: { correctedEntry?: string; correctedStopLoss?: string; correctedTakeProfit?: string };
     postTradeImageSummaries?: string[];
     signal?: AbortSignal;
+    /** Chain-of-thought side channel (reasoning_content / thinking blocks). */
+    onReasoning?: (reasoning: string) => void;
 }
 
 export async function conductPostMortem(
@@ -807,7 +809,7 @@ Answer **all** of the following **MANDATORY LOSS ANALYSIS QUESTIONS**:
     const result = await sendChatRequest(
         config,
         [{ role: 'user', content: analysisPrompt }],
-        { signal }
+        { signal, onReasoning: params.onReasoning }
     );
     return sanitizeAIResponse(result || "Post-mortem analysis failed.");
 }
@@ -1044,8 +1046,8 @@ export async function summarizeChartImage(
         let pattern = patternMatch ? patternMatch[1].trim().replace(/['"]/g, '') : '';
 
         if (price !== 'N/A') {
-            const numericPrice = price.replace(/[^0-9.]/g, '');
-            if (numericPrice) {
+            const numericPrice = parsePrice(price);
+            if (!isNaN(numericPrice)) {
                 price = `₮${numericPrice}`;
             } else {
                 price = 'N/A';

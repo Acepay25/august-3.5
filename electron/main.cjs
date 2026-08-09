@@ -143,6 +143,15 @@ function providerRequestDetails(request) {
         };
         if (system) body.system = contentToText(system.content);
         if (request.temperature !== undefined) body.temperature = request.temperature;
+        // Extended thinking for thinking-capable Claude models (mirrors
+        // GenericProviderService.messagesCall). Older models reject the
+        // `thinking` block with a 400 — gate by model id and skip tiny calls
+        // (connection tests). Anthropic requires temperature unset with
+        // extended thinking, so the explicit value drops.
+        if (!request.jsonMode && /claude-(?:3-7|sonnet-4|opus-4|haiku-4-5)/i.test(model) && (request.maxTokens ?? 4096) >= 4096) {
+            body.thinking = { type: 'enabled', budget_tokens: Math.max(1024, Math.floor((request.maxTokens ?? 4096) * 0.35)) };
+            delete body.temperature;
+        }
     } else if (format === 'responses') {
         url = `${baseUrl}/responses`;
         if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
@@ -276,18 +285,45 @@ async function sendProviderRequest(request) {
         text = Array.isArray(data.content)
             ? data.content.filter(block => block?.type === 'text').map(block => block.text).join('\n')
             : data.text || '';
+        // Anthropic chain of thought arrives as `thinking` content blocks
+        // (only when the request enabled extended thinking); redacted blocks
+        // are surfaced as a marker so the user knows thinking was withheld.
+        if (Array.isArray(data.content)) {
+            const thinkingBlocks = data.content
+                .filter(block => block?.type === 'thinking' && typeof block?.thinking === 'string' && block.thinking.trim())
+                .map(block => block.thinking.trim());
+            if (data.content.some(block => block?.type === 'redacted_thinking')) {
+                thinkingBlocks.push('[Thinking redacted by provider]');
+            }
+            reasoning = thinkingBlocks.join('\n');
+        }
     } else if (request.config.apiFormat === 'responses') {
         if (data.output_text) text = data.output_text;
         if (!text && Array.isArray(data.output)) {
             text = data.output.flatMap(item => item?.content || [])
                 .filter(block => block?.type === 'output_text').map(block => block.text).join('\n');
         }
+        // OpenAI Responses API reasoning arrives as `output` items of type
+        // `reasoning` (full text in `content`, public summary in `summary`).
+        if (Array.isArray(data.output)) {
+            const reasoningParts = data.output
+                .filter(item => item?.type === 'reasoning')
+                .flatMap(item => [
+                    ...(Array.isArray(item?.content) ? item.content.filter(block => block?.type === 'output_text' && typeof block?.text === 'string').map(block => block.text) : []),
+                    ...(Array.isArray(item?.summary) ? item.summary.filter(block => block?.type === 'summary_text' && typeof block?.text === 'string').map(block => block.text) : []),
+                ]);
+            reasoning = reasoningParts.join('\n');
+        }
     } else {
         const content = data.choices?.[0]?.message?.content;
         text = Array.isArray(content)
             ? content.filter(block => typeof block?.text === 'string').map(block => block.text).join('\n')
             : content || '';
-        reasoning = data.choices?.[0]?.message?.reasoning_content || data.choices?.[0]?.message?.reasoning || '';
+        // Qwen/Kimi-style gateways return `reasoning` as an array of strings.
+        const msgReasoning = data.choices?.[0]?.message?.reasoning_content ?? data.choices?.[0]?.message?.reasoning;
+        reasoning = Array.isArray(msgReasoning)
+            ? msgReasoning.filter(part => typeof part === 'string').join('\n')
+            : msgReasoning || '';
     }
     return { text: text || reasoning || '', reasoning };
 }

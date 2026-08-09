@@ -2616,8 +2616,6 @@ const App: React.FC = () => {
                 setJournalState={setJournalState}
                 setIsSettingsVisible={setIsSettingsMenuVisible}
                 setIsLivePostMortemVisible={setIsLivePostMortemVisible}
-                isLoading={isLoading}
-                isRateLimited={isRateLimited}
                 onOpenLiveMarket={handleOpenLiveMarket}
                 onDeleteConversation={handleDeleteConversationFromSidebar}
                 onDeleteConversations={handleDeleteSelectedConversations}
