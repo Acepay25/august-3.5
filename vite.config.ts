@@ -54,6 +54,13 @@ function devProviderProxy() {
             const system = messages.find((message: any) => message?.role === 'system');
             body = { model: config.selectedModel, max_tokens: request.maxTokens ?? 4096, messages: messages.filter((message: any) => message?.role !== 'system').map((message: any) => ({ role: message.role, content: toAnthropicContent(message.content) })) };
             if (system) body.system = contentToText(system.content);
+            // Extended thinking for thinking-capable Claude models (mirrors
+            // GenericProviderService.messagesCall) — request a CoT budget so
+            // `thinking` blocks come back; older models 400 on the block, so
+            // gate by model id and skip tiny calls / JSON mode.
+            if (!request.jsonMode && /claude-(?:3-7|sonnet-4|opus-4|haiku-4-5)/i.test(config.selectedModel) && (request.maxTokens ?? 4096) >= 4096) {
+              body.thinking = { type: 'enabled', budget_tokens: Math.max(1024, Math.floor((request.maxTokens ?? 4096) * 0.35)) };
+            }
           } else if (config.apiFormat === 'responses') {
             url = `${baseUrl}/responses`;
             if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
@@ -151,8 +158,20 @@ function devProviderProxy() {
           let message = '';
           try {
             const parsed = JSON.parse(text);
-            reasoning = parsed.choices?.[0]?.message?.reasoning_content || parsed.choices?.[0]?.message?.reasoning || '';
             message = parsed.error?.message || parsed.error?.error?.message || parsed.message || parsed.detail || '';
+            // Per-format chain-of-thought extraction (mirrors the renderer's
+            // GenericProviderService helpers so the proxy's `reasoning` field
+            // covers all three formats, not just chat_completions).
+            if (config.apiFormat === 'messages') {
+              reasoning = extractMessagesThinking(parsed.content);
+            } else if (config.apiFormat === 'responses') {
+              reasoning = extractResponsesReasoning(parsed.output);
+            } else {
+              const msgReasoning = parsed.choices?.[0]?.message?.reasoning_content ?? parsed.choices?.[0]?.message?.reasoning;
+              reasoning = Array.isArray(msgReasoning)
+                ? msgReasoning.filter((part: any) => typeof part === 'string').join('\n')
+                : (msgReasoning || '');
+            }
           } catch { /* provider returned non-JSON content */ }
           if (!message && !upstream.ok) message = text.replace(/\s+/g, ' ').trim().slice(0, 300);
           // Successful analysis responses can be larger than 2,000 characters;
@@ -191,6 +210,38 @@ function toAnthropicContent(content: unknown): any[] {
     }
     return { type: 'image', source: { type: 'url', url } };
   });
+}
+
+function extractMessagesThinking(content: unknown): string {
+  if (!Array.isArray(content)) return '';
+  const parts: string[] = [];
+  for (const block of content) {
+    if (block?.type === 'thinking' && typeof block.thinking === 'string' && block.thinking.trim()) {
+      parts.push(block.thinking.trim());
+    } else if (block?.type === 'redacted_thinking') {
+      parts.push('[Thinking redacted by provider]');
+    }
+  }
+  return parts.join('\n');
+}
+
+function extractResponsesReasoning(output: unknown): string {
+  if (!Array.isArray(output)) return '';
+  const parts: string[] = [];
+  for (const item of output) {
+    if (item?.type !== 'reasoning') continue;
+    if (Array.isArray(item.content)) {
+      for (const block of item.content) {
+        if (block?.type === 'output_text' && typeof block.text === 'string') parts.push(block.text);
+      }
+    }
+    if (Array.isArray(item.summary)) {
+      for (const block of item.summary) {
+        if (block?.type === 'summary_text' && typeof block.text === 'string') parts.push(block.text);
+      }
+    }
+  }
+  return parts.join('\n');
 }
 
 // Fix for a common issue with Node.js v17+ DNS resolution.

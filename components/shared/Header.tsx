@@ -21,8 +21,6 @@ interface HeaderProps {
     setJournalState: (state: { isOpen: boolean; tab: 'log' | 'performance' | 'analytics' }) => void;
     setIsSettingsVisible: (visible: boolean) => void;
     setIsLivePostMortemVisible: (visible: boolean) => void;
-    isLoading: boolean;
-    isRateLimited: boolean;
     onOpenLiveMarket: () => void;
     onOpenVersionHistory: () => void; // New prop for Changelog
     // Network status
@@ -59,8 +57,6 @@ export const Header: React.FC<HeaderProps> = memo(({
     setJournalState,
     setIsSettingsVisible,
     setIsLivePostMortemVisible,
-    isLoading,
-    isRateLimited,
     onOpenLiveMarket,
     onOpenVersionHistory,
     isOnline = true,
