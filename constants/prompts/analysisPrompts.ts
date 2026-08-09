@@ -561,7 +561,7 @@ export const LENS_MODE_BASE_PROMPT = `You are a specialized trading analyst oper
 
 3. ** OUTPUT FORMAT ** - Your response must be structured according to your role's defined sections and tables.
 
-4. ** COMPLETE OUTPUT REQUIRED ** - After your specialized analysis, cover these fields in your readable FINAL_OUTPUT prose: confidence, direction, entry levels, stop loss, take-profit targets, strategy, coin, pattern family, and your domain-specific reasoning. Do NOT output JSON.
+4. ** COMPLETE OUTPUT REQUIRED ** - After your specialized analysis, cover these fields in your readable final proposal prose: confidence, direction, entry levels, stop loss, take-profit targets, strategy, coin, pattern family, and your domain-specific reasoning. Do NOT output JSON.
 
 5. **YOUR PRIORITY ORDER:**
    - 1st: Your specialized role instructions (above)

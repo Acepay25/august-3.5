@@ -35,6 +35,8 @@ export interface UserSettings {
   isAutoCapturing?: boolean; // Prompt for post-trade result capture
   isUpdateAutoCapturing?: boolean; // Prompt for active trade updates
   isEntryNotHitCapturing?: boolean; // Prompt when entry price is not hit
+  useAlgorithmicSummary?: boolean; // Journal AI Review: false = AI (default), true = algorithmic (free)
+  useAlgorithmicInsights?: boolean; // Trade insight generation: false = AI (default), true = algorithmic
   confidenceCalibration?: ConfidenceCalibration; // Tracks AI confidence vs actual outcomes
   memoryProvider?: string; // Memory core AI provider (e.g., 'gemini', 'groq')
   memoryModel?: string; // Model for memory operations

@@ -996,6 +996,17 @@ export function saveLensConfig(config: AnalystLensConfig): void {
     setPreferenceObject(PREF_KEYS.ANALYST_LENS_CONFIG, config).catch(e =>
         console.warn('[AnalystLens] Failed to save config:', e)
     );
+    // Mirror into localStorage as well: the sync load helpers (loadLensConfig
+    // / loadEnsembleModelSelection) read localStorage directly, but on native
+    // (Capacitor) the Preferences write is async and only restored through
+    // the App startup sync — leaving the pickers empty until it ran. The
+    // WebView always has localStorage, so the mirror makes save and load
+    // symmetric on every platform from the first render.
+    try {
+        localStorage.setItem(PREF_KEYS.ANALYST_LENS_CONFIG, JSON.stringify(config));
+    } catch (e) {
+        console.warn('[AnalystLens] Failed to mirror lens config to localStorage:', e);
+    }
 }
 
 // =============================================================================
@@ -1036,6 +1047,15 @@ export function saveEnsembleModelSelection(selection: EnsembleModelSelection): v
     setPreferenceObject(PREF_KEYS.ENSEMBLE_MODEL_SELECTION, selection.slice(0, 3)).catch(e =>
         console.warn('[AnalystLens] Failed to save ensemble model selection:', e)
     );
+    // localStorage mirror — same rationale as saveLensConfig: the sync load
+    // helpers read localStorage directly, so writes must land there too or a
+    // native (Capacitor) session sees an empty picker until the App startup
+    // sync restores from Preferences.
+    try {
+        localStorage.setItem(PREF_KEYS.ENSEMBLE_MODEL_SELECTION, JSON.stringify(selection.slice(0, 3)));
+    } catch (e) {
+        console.warn('[AnalystLens] Failed to mirror ensemble model selection to localStorage:', e);
+    }
 }
 
 /**

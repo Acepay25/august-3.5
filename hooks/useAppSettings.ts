@@ -57,8 +57,10 @@ export function useAppSettings() {
     // Defaults are empty — App resolves them to the first ready provider once configs load.
     const [summarizationProvider, setSummarizationProvider] = useState<AIProvider>('');
     const [summarizationModel, setSummarizationModel] = useState<string>('');
-    const [useAlgorithmicSummary, setUseAlgorithmicSummary] = useState<boolean>(true);
-    const [useAlgorithmicInsights, setUseAlgorithmicInsights] = useState<boolean>(true);
+    // Journal generation defaults to AI (false = use AI); algorithmic mode
+    // (true, token-free) is an explicit opt-in. Persisted via UserSettings.
+    const [useAlgorithmicSummary, setUseAlgorithmicSummary] = useState<boolean>(false);
+    const [useAlgorithmicInsights, setUseAlgorithmicInsights] = useState<boolean>(false);
 
     return {
         globalMemory, setGlobalMemory,

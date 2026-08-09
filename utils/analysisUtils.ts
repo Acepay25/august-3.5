@@ -23,7 +23,7 @@ export const sanitizeTradeAnalysis = (raw: any): TradeAnalysis => parseTradeAnal
 /**
  * Render a raw trade-plan JSON object as readable multi-line text.
  *
- * Used when a model ignores the <THINKING>/<FINAL_OUTPUT> format and returns a
+ * Used when a model ignores the requested output format and returns a
  * JSON trade plan instead — the card shows this readable summary rather than
  * the raw JSON blob.
  */
