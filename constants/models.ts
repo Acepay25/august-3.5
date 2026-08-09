@@ -103,8 +103,3 @@ export const ENSEMBLE_ROLE_LABELS: Record<string, string> = {
  * Maps roles to specific rules that should be injected.
  * Only role-relevant rules are injected to avoid information overload.
  */
-export const ROLE_RULE_INJECTION: Record<string, string[]> = {
-   technical_structure: [],
-   market_context: ['REGIME_TRADING_RULES', 'STRESS_TEST_PROTOCOL', 'DEVILS_ADVOCATE_PROMPT'],
-   risk_management: ['RISK_MANAGEMENT_RULES', 'STRESS_TEST_PROTOCOL', 'DEVILS_ADVOCATE_PROMPT']
-};

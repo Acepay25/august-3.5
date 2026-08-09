@@ -179,6 +179,10 @@ export interface Message {
     summaries?: string[];
     imageUrls?: string[];
   };
+  /** Failed-run retry: id of the user message whose prompt + charts can
+   *  rebuild and re-dispatch the run (renders a Retry button on the error
+   *  bubble). Undefined on successful runs. */
+  retryOf?: { userMessageId: string };
   // Multi-Timeframe Confluence Score from Hybrid Intelligence
   confluenceData?: ConfluenceData;
   // Per-run execution summary (durations, gate cap, Monte Carlo snapshot)

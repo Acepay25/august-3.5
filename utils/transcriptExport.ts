@@ -7,7 +7,7 @@ import { DebateTurn, TradeAnalysis } from '../types';
  */
 
 const cleanHeading = (s: string): string =>
-  s.replace(/[#*`~\[\]()>|]/g, '').trim().slice(0, 80) || 'Trade';
+  s.replace(/[#*`~[\]()>|]/g, '').trim().slice(0, 80) || 'Trade';
 
 export const buildTranscriptMarkdown = (
   turns: DebateTurn[],

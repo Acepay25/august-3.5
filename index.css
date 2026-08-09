@@ -264,20 +264,9 @@ code,
   animation: fadeIn 0.3s ease-out forwards;
 }
 
-@keyframes slideInRight {
-  from {
-    opacity: 0;
-    transform: translateX(100%);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
 .animate-slide-in-right {
-  animation: slideInRight 0.3s ease-out forwards;
+  /* Identical to slideLeft — shared keyframe (was a byte-for-byte duplicate). */
+  animation: slideLeft 0.3s ease-out forwards;
 }
 
 @keyframes slideDown {
@@ -439,12 +428,6 @@ code,
 
 /* ===== LAYOUT ===== */
 
-/* Mobile specific viewport fix */
-.h-dvh {
-  height: 100vh;
-  height: 100dvh;
-}
-
 html,
 body,
 #root {
@@ -557,15 +540,9 @@ select:focus-visible {
 
 /* ===== MOBILE SCROLLING UTILITIES ===== */
 
-/* Hide scrollbar but keep scroll functionality */
-.no-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
-
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
-}
+/* Hide scrollbar but keep scroll functionality — the app's own
+   .custom-scrollbar / .scrollbar-hide utilities cover this; .no-scrollbar
+   was dead code. */
 
 /* Custom thin scrollbar for content areas */
 .custom-scrollbar {

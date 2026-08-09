@@ -29,7 +29,7 @@ export const UpdateOverlay: React.FC = () => {
 
     return (
         <div
-            className="fixed inset-0 z-[200] flex items-center justify-center bg-zinc-950 animate-fade-in"
+            className="status-surface fixed inset-0 z-[200] flex items-center justify-center bg-zinc-950 animate-fade-in"
             role="dialog"
             aria-modal="true"
             aria-live="assertive"

@@ -57,13 +57,13 @@ const OutcomeMismatchModal: React.FC<OutcomeMismatchModalProps> = ({
                     <div className="grid grid-cols-2 gap-4">
                         <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 text-center">
                             <div className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">You Logged</div>
-                            <div className={`text-xl font-black mt-1 ${userOutcome === 'WIN' ? 'text-green-400' : 'text-red-400'}`}>
+                            <div className={`text-xl font-black mt-1 ${userOutcome === 'WIN' ? 'text-emerald-400' : 'text-red-400'}`}>
                                 {userOutcome}
                             </div>
                         </div>
                         <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 text-center">
                             <div className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">Price Shows</div>
-                            <div className={`text-xl font-black mt-1 ${priceValidation.outcome === 'WIN' ? 'text-green-400' : 'text-red-400'}`}>
+                            <div className={`text-xl font-black mt-1 ${priceValidation.outcome === 'WIN' ? 'text-emerald-400' : 'text-red-400'}`}>
                                 {priceValidation.outcome}
                             </div>
                         </div>
@@ -74,7 +74,7 @@ const OutcomeMismatchModal: React.FC<OutcomeMismatchModalProps> = ({
                         <ul className="list-disc pl-4 space-y-1 text-xs sm:text-sm">
                             {tpFirstTime && (
                                 <li>
-                                    <span className="text-green-400 font-bold">TP Hit</span> at {new Date(tpFirstTime).toLocaleTimeString()}
+                                    <span className="text-emerald-400 font-bold">TP Hit</span> at {new Date(tpFirstTime).toLocaleTimeString()}
                                 </li>
                             )}
                             {slTouchTime && (
@@ -97,7 +97,7 @@ const OutcomeMismatchModal: React.FC<OutcomeMismatchModalProps> = ({
                     <div className="grid grid-cols-2 gap-3">
                         <button
                             onClick={() => onResolve('WIN')}
-                            className="p-3 rounded-xl bg-green-500/10 border border-green-500/50 hover:bg-green-500/20 text-green-400 font-bold transition-all active:scale-95"
+                            className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/50 hover:bg-emerald-500/20 text-emerald-400 font-bold transition-all active:scale-95"
                         >
                             Select WIN
                         </button>

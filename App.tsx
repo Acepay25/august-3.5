@@ -90,6 +90,8 @@ import { initInvalidationRuleService, loadInvalidationRules } from './services/v
 import { PriceAlertService } from './services/ui/PriceAlertService';
 import { SetupWatchService, describeWatchTrigger } from './services/ui/SetupWatchService';
 import { OutcomeAutopilotService, AutopilotResolution } from './services/ui/OutcomeAutopilotService';
+import { getThinkingTradeId, updateThinkingOutcome, deleteThinkingByTrade } from './services/infrastructure/ThinkingStoreService';
+import { removeRulesForTrades } from './services/learning/LearningRulesService';
 import { clearAllCaches } from './services/infrastructure/responseCache';
 import { initNativeStatusBar } from './services/infrastructure/NativeStatusBar';
 import { initConfluenceService, syncConfluenceFromTradeLog } from './services/analysis/TimeframeConfluenceService';
@@ -582,6 +584,14 @@ const App: React.FC = () => {
     // Update ref for useTradeLogging (breaks circular dependency)
     startPostMortemAnalysisRef.current = startPostMortemAnalysis;
 
+    // Cancel BOTH the analysis pipeline and any in-flight post-mortem — the
+    // "Stop generating" affordance must never be a silent no-op for
+    // post-mortems (the pipeline's controller is null during one).
+    const handleCancelAll = useCallback(() => {
+        handleCancelAnalysis();
+        invalidatePostMortemRuns();
+    }, [handleCancelAnalysis, invalidatePostMortemRuns]);
+
     // ... (Rest of existing hooks/functions) ...
     const analysisMessages = useMemo(() => messages.filter(m => m.analysis || m.isDebating), [messages]);
     const currentInsightIds = useMemo(() => tradeSummaries.map(s => s.id), [tradeSummaries]);
@@ -675,11 +685,21 @@ const App: React.FC = () => {
         if (wasOffline && isOnline) {
             console.log('[OfflineQueue] Back online, processing queued requests...');
             offlineQueue.process({
+                onAnalysis: async (payload) => {
+                    // Re-dispatch queued analyses with their original charts
+                    // (dataURLs persisted at enqueue time).
+                    const images = (payload?.images || []).map((url: string, i: number) => ({
+                        file: dataUrlToFile(url, `chart-${i + 1}.png`),
+                        dataURL: url,
+                        isLoading: false,
+                    }));
+                    handleSendMessage(payload?.prompt || '', images);
+                },
                 onItemProcessed: () => updateQueueCount(),
                 onQueueEmpty: () => setPendingQueueCount(0)
             });
         }
-    }, [isOnline, wasOffline]);
+    }, [isOnline, wasOffline, handleSendMessage]);
 
     // --- AUTOMATIC MEMORY COMPRESSION --- DISABLED to save tokens
     // Thread Memory (Layer 2) is no longer used, so no need to compress chat history
@@ -864,14 +884,17 @@ const App: React.FC = () => {
                 if (isVersionHistoryVisible) setIsVersionHistoryVisible(false);
                 return;
             }
-            if (isAnalysisInProgress && !isPostMortemInProgress) {
-                handleCancelAnalysis();
-                toast.info('Analysis cancelled', 'The partial debate was preserved in the chat.');
+            if (isAnalysisInProgress || isPostMortemInProgress) {
+                handleCancelAll();
+                toast.info(
+                    isPostMortemInProgress ? 'Post-mortem cancelled' : 'Analysis cancelled',
+                    isPostMortemInProgress ? 'The trade log was not updated.' : 'The partial debate was preserved in the chat.'
+                );
             }
         };
         document.addEventListener('keydown', onKeyDown);
         return () => document.removeEventListener('keydown', onKeyDown);
-    }, [isAnalysisInProgress, isPostMortemInProgress, handleCancelAnalysis, toast, journalState.isOpen, isSettingsMenuVisible, isLiveMarketVisible, isCommandPaletteOpen, isSavedGalleryOpen, isUserModalOpen, isAdvancedAnalyticsOpen, isVisionDataVisible, isStrategySearchVisible, isSavedAnalysesVisible, isVersionHistoryVisible]);
+    }, [isAnalysisInProgress, isPostMortemInProgress, handleCancelAll, toast, journalState.isOpen, isSettingsMenuVisible, isLiveMarketVisible, isCommandPaletteOpen, isSavedGalleryOpen, isUserModalOpen, isAdvancedAnalyticsOpen, isVisionDataVisible, isStrategySearchVisible, isSavedAnalysesVisible, isVersionHistoryVisible]);
 
     // ─── Side-by-side compare ──────────────────────────────────────────────
     const [compareState, setCompareState] = useState<{ primaryId: string; secondaryId: string | null } | null>(null);
@@ -1487,6 +1510,16 @@ const App: React.FC = () => {
             // it so Pattern Memory never describes deleted trades.
             handleJournalAutoRefresh();
         }
+        // Cascade: reasoning records, learning rules and autopilot watchers
+        // keyed to the deleted trades must not survive — a deleted trade
+        // would otherwise re-trigger "outcome detected" and be re-logged.
+        const username = activeUsernameRef.current || 'default';
+        const deletedTrades = loggedTrades.filter(t => idSet.has(t.id));
+        deletedTrades.forEach(t => {
+            void deleteThinkingByTrade(getThinkingTradeId(t.analysis?.createdAt, t.id), username);
+            OutcomeAutopilotService.unregister(t.id);
+        });
+        removeRulesForTrades(ids);
     };
 
     const handleClearAllTrades = async () => {
@@ -1496,12 +1529,14 @@ const App: React.FC = () => {
         const prevTrades = loggedTrades;
         const prevSummaries = tradeSummaries;
         const prevFinalSummary = finalTradeSummary;
+        let restored = false;
         const ok = await confirmDialog({
             title: 'Delete all trade history?',
             message: `This will remove ${loggedTrades.length} logged trade(s) and their insights. You can undo this for 5 seconds.`,
             confirmLabel: 'Delete All',
             destructive: true,
             onUndo: () => {
+                restored = true;
                 setLoggedTrades(prevTrades);
                 setTradeSummaries(prevSummaries);
                 setFinalTradeSummary(prevFinalSummary);
@@ -1512,6 +1547,18 @@ const App: React.FC = () => {
             setLoggedTrades([]);
             setTradeSummaries([]);
             setFinalTradeSummary(null);
+            // Cascade reasoning records / rules / autopilot watchers only
+            // AFTER the undo grace window — an undo restores the trades, so
+            // their artifacts must survive until the delete is final.
+            window.setTimeout(() => {
+                if (restored || prevTrades.length === 0) return;
+                const username = activeUsernameRef.current || 'default';
+                prevTrades.forEach(t => {
+                    void deleteThinkingByTrade(getThinkingTradeId(t.analysis?.createdAt, t.id), username);
+                    OutcomeAutopilotService.unregister(t.id);
+                });
+                removeRulesForTrades(prevTrades.map(t => t.id));
+            }, 5500);
         }
     };
 
@@ -1681,6 +1728,20 @@ const App: React.FC = () => {
             return t;
         }));
     };
+
+    // Correct a mis-logged outcome (WIN/LOSS/etc.) from the journal card —
+    // previously the only fix was delete + re-log. Backfills the thinking
+    // records so outcome-correlated reasoning stays accurate.
+    const handleUpdateTradeOutcome = useCallback((id: string, outcome: TradeOutcome) => {
+        setLoggedTrades(prev => prev.map(t => t.id === id ? { ...t, outcome } : t));
+        const trade = loggedTradesRef.current.find(t => t.id === id);
+        if (trade) {
+            const tradeId = getThinkingTradeId(trade.analysis?.createdAt, id);
+            void updateThinkingOutcome(tradeId, outcome, id, activeUsernameRef.current || 'default').catch(err => {
+                console.warn('[TradeLog] Failed to update thinking outcome:', err);
+            });
+        }
+    }, [setLoggedTrades, loggedTradesRef]);
 
     const handleRegenerateFinalSummary = async () => {
         // Guard: an auto-refresh may already be running (the debounced
@@ -2049,15 +2110,20 @@ const App: React.FC = () => {
     // through the normal pipeline so the user gets a fresh debate for the
     // same setup (also the missing retry path for failed analyst slots).
     // Shared by the manual Re-run button and price-triggered setup watches.
-    const buildRerunPayload = useCallback((messageId: string): { prompt: string; images: ImageMetadata[] } | null => {
+    const buildRerunPayload = useCallback((messageId: string, isUserMessageId = false): { prompt: string; images: ImageMetadata[] } | null => {
         // P1-6: read via messagesRef for a stable identity (see handleSaveAnalysis).
         const msgs = messagesRef.current;
         const index = msgs.findIndex(m => m.id === messageId);
         const card = index >= 0 ? msgs[index] : undefined;
         if (!card) return null;
         let userMsg: Message | undefined;
-        for (let i = index - 1; i >= 0; i--) {
-            if (msgs[i].role === MessageRole.USER) { userMsg = msgs[i]; break; }
+        if (isUserMessageId) {
+            // Failed-run retry: the id IS the user message that started the run.
+            userMsg = card.role === MessageRole.USER ? card : undefined;
+        } else {
+            for (let i = index - 1; i >= 0; i--) {
+                if (msgs[i].role === MessageRole.USER) { userMsg = msgs[i]; break; }
+            }
         }
         const prompt = userMsg?.text?.trim();
         if (!prompt) return null;
@@ -2079,6 +2145,17 @@ const App: React.FC = () => {
             return;
         }
         stableHandleSendMessage(payload.prompt, payload.images, `Re-run requested for analysis card ${messageId}.`);
+    }, [buildRerunPayload, stableHandleSendMessage, toast]);
+
+    // Failed-run retry: rebuild the exact prompt + charts from the user
+    // message the failed run was sent with (the error bubble carries its id).
+    const handleRetryFailedRun = useCallback((userMessageId: string) => {
+        const payload = buildRerunPayload(userMessageId, true);
+        if (!payload) {
+            toast.warning('Cannot retry', 'No original prompt found for this analysis.');
+            return;
+        }
+        stableHandleSendMessage(payload.prompt, payload.images, 'Retrying the failed analysis.');
     }, [buildRerunPayload, stableHandleSendMessage, toast]);
 
     // ─── Price-triggered re-debate ("watch this setup") ────────────────────
@@ -2590,9 +2667,10 @@ const App: React.FC = () => {
                 onClearAllTrades={handleClearAllTrades}
                 modelIdToName={modelIdToName}
                 onUpdateInsights={handleManualInsightsUpdate}
-                isSummarizing={isSummarizing}
+                isSummarizing={isSummaryInProgress}
                 currentInsightIds={currentInsightIds}
                 onUpdateTradeLeverage={handleUpdateTradeLeverage}
+                onUpdateOutcome={handleUpdateTradeOutcome}
                 familyWinRates={familyWinRates}
                 globalMemory={globalMemory}
                 threadSummary={activeConversation?.threadSummary}
@@ -2643,9 +2721,10 @@ const App: React.FC = () => {
                 onClearAllTrades={handleClearAllTrades}
                 modelIdToName={modelIdToName}
                 onUpdateInsights={handleManualInsightsUpdate}
-                isSummarizing={isSummarizing}
+                isSummarizing={isSummaryInProgress}
                 currentInsightIds={currentInsightIds}
                 onUpdateTradeLeverage={handleUpdateTradeLeverage}
+                onUpdateOutcome={handleUpdateTradeOutcome}
                 familyWinRates={familyWinRates}
                 globalMemory={globalMemory}
                 threadSummary={activeConversation?.threadSummary}
@@ -2789,7 +2868,8 @@ const App: React.FC = () => {
                 isAnalysisInProgress={isAnalysisInProgress}
                 isPostMortemInProgress={isPostMortemInProgress}
                 setIsLivePostMortemVisible={setIsLivePostMortemVisible}
-                handleCancelAnalysis={handleCancelAnalysis}
+                handleCancelAnalysis={handleCancelAll}
+                onRetryFailedRun={handleRetryFailedRun}
                 onDeleteMessages={handleDeleteMessages}
                 // ChatInput props
                 lensConfig={lensConfig}
@@ -2848,7 +2928,7 @@ const App: React.FC = () => {
                     the conversation keeps its full width while the run is live. */}
                 {isAnalysisProgressVisible && (
                     <div className="pointer-events-none fixed right-4 top-24 z-40 hidden w-[min(26rem,calc(100vw-2rem))] max-h-[calc(100vh-7rem)] lg:block">
-                        <div className="pointer-events-auto h-fit max-h-[calc(100vh-7rem)] overflow-y-auto rounded-3xl border border-white/[0.08] bg-[#2a2a2a] p-3 shadow-2xl scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent" aria-label="Analysis progress">
+                        <div className="pointer-events-auto h-fit max-h-[calc(100vh-7rem)] overflow-y-auto rounded-3xl border border-white/[0.08] bg-[#2a2a2a] p-3 shadow-2xl custom-scrollbar scrollbar-track-transparent" aria-label="Analysis progress">
                             <div className="flex items-center justify-between px-1 pb-3">
                                 <div>
                                     <h2 className="text-sm font-medium text-zinc-200">Analysis</h2>

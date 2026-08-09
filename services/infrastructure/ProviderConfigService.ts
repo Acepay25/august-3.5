@@ -115,6 +115,18 @@ export async function saveProviderConfigs(configs: ProviderConfig[]): Promise<vo
     await setPreferenceObject(STORAGE_KEY, encrypted);
 }
 
+// Serialize read-modify-write cycles. Every CRUD op below reloads the full
+// list, mutates, and saves; two overlapping ops (e.g. toggling Enable while a
+// model add is in flight) would both read the same snapshot and the second
+// save would clobber the first op's change (mirrors SqliteService's
+// runExclusiveWrite pattern).
+let providerWriteChain: Promise<unknown> = Promise.resolve();
+function runExclusiveProviderWrite<T>(fn: () => Promise<T>): Promise<T> {
+    const run = providerWriteChain.then(fn, fn);
+    providerWriteChain = run.catch(() => {});
+    return run;
+}
+
 /**
  * Update a single provider config by ID.
  */
@@ -122,17 +134,19 @@ export async function updateProviderConfig(
     id: string,
     updates: Partial<Omit<ProviderConfig, 'id' | 'isBuiltIn'>>
 ): Promise<ProviderConfig[]> {
-    const configs = await loadProviderConfigs();
-    const updated = configs.map(c => {
-        if (c.id !== id) return c;
-        const next = { ...c, ...updates };
-        if (updates.baseUrl !== undefined) {
-            next.baseUrl = assertValidProviderUrl(updates.baseUrl);
-        }
-        return next;
+    return runExclusiveProviderWrite(async () => {
+        const configs = await loadProviderConfigs();
+        const updated = configs.map(c => {
+            if (c.id !== id) return c;
+            const next = { ...c, ...updates };
+            if (updates.baseUrl !== undefined) {
+                next.baseUrl = assertValidProviderUrl(updates.baseUrl);
+            }
+            return next;
+        });
+        await saveProviderConfigs(updated);
+        return updated;
     });
-    await saveProviderConfigs(updated);
-    return updated;
 }
 
 /**
@@ -146,32 +160,36 @@ export async function addCustomProvider(provider: {
     models?: string[];
     selectedModel?: string;
 }): Promise<ProviderConfig[]> {
-    const configs = await loadProviderConfigs();
-    const newConfig: ProviderConfig = {
-        id: `custom-${Date.now()}`,
-        name: provider.name,
-        apiKey: provider.apiKey,
-        baseUrl: assertValidProviderUrl(provider.baseUrl),
-        apiFormat: provider.apiFormat,
-        isEnabled: true,
-        isBuiltIn: false,
-        models: provider.models || ['default'],
-        selectedModel: provider.selectedModel || provider.models?.[0] || 'default',
-        ensembleModels: [provider.selectedModel || provider.models?.[0] || 'default'],
-    };
-    const updated = [...configs, newConfig];
-    await saveProviderConfigs(updated);
-    return updated;
+    return runExclusiveProviderWrite(async () => {
+        const configs = await loadProviderConfigs();
+        const newConfig: ProviderConfig = {
+            id: `custom-${Date.now()}`,
+            name: provider.name,
+            apiKey: provider.apiKey,
+            baseUrl: assertValidProviderUrl(provider.baseUrl),
+            apiFormat: provider.apiFormat,
+            isEnabled: true,
+            isBuiltIn: false,
+            models: provider.models || ['default'],
+            selectedModel: provider.selectedModel || provider.models?.[0] || 'default',
+            ensembleModels: [provider.selectedModel || provider.models?.[0] || 'default'],
+        };
+        const updated = [...configs, newConfig];
+        await saveProviderConfigs(updated);
+        return updated;
+    });
 }
 
 /**
  * Remove a provider (custom or built-in).
  */
 export async function removeCustomProvider(id: string): Promise<ProviderConfig[]> {
-    const configs = await loadProviderConfigs();
-    const updated = configs.filter(c => c.id !== id);
-    await saveProviderConfigs(updated);
-    return updated;
+    return runExclusiveProviderWrite(async () => {
+        const configs = await loadProviderConfigs();
+        const updated = configs.filter(c => c.id !== id);
+        await saveProviderConfigs(updated);
+        return updated;
+    });
 }
 
 /**
@@ -180,35 +198,39 @@ export async function removeCustomProvider(id: string): Promise<ProviderConfig[]
 export async function addModelToProvider(providerId: string, modelId: string): Promise<ProviderConfig[]> {
     const trimmed = modelId.trim();
     if (!trimmed) return await loadProviderConfigs();
-    const configs = await loadProviderConfigs();
-    const updated = configs.map(c => {
-        if (c.id === providerId) {
-            const models = c.models.includes(trimmed) ? c.models : [...c.models, trimmed];
-            const selectedModel = c.selectedModel ? c.selectedModel : trimmed;
-            return { ...c, models, selectedModel };
-        }
-        return c;
+    return runExclusiveProviderWrite(async () => {
+        const configs = await loadProviderConfigs();
+        const updated = configs.map(c => {
+            if (c.id === providerId) {
+                const models = c.models.includes(trimmed) ? c.models : [...c.models, trimmed];
+                const selectedModel = c.selectedModel ? c.selectedModel : trimmed;
+                return { ...c, models, selectedModel };
+            }
+            return c;
+        });
+        await saveProviderConfigs(updated);
+        return updated;
     });
-    await saveProviderConfigs(updated);
-    return updated;
 }
 
 /**
  * Remove a model ID from a provider's model list.
  */
 export async function removeModelFromProvider(providerId: string, modelId: string): Promise<ProviderConfig[]> {
-    const configs = await loadProviderConfigs();
-    const updated = configs.map(c => {
-        if (c.id === providerId) {
-            const models = c.models.filter(m => m !== modelId);
-            const selectedModel = c.selectedModel === modelId ? (models[0] || '') : c.selectedModel;
-            const ensembleModels = (c.ensembleModels || [c.selectedModel]).filter(m => m !== modelId);
-            return { ...c, models, selectedModel, ensembleModels: ensembleModels.length > 0 ? ensembleModels : [selectedModel].filter(Boolean) };
-        }
-        return c;
+    return runExclusiveProviderWrite(async () => {
+        const configs = await loadProviderConfigs();
+        const updated = configs.map(c => {
+            if (c.id === providerId) {
+                const models = c.models.filter(m => m !== modelId);
+                const selectedModel = c.selectedModel === modelId ? (models[0] || '') : c.selectedModel;
+                const ensembleModels = (c.ensembleModels || [c.selectedModel]).filter(m => m !== modelId);
+                return { ...c, models, selectedModel, ensembleModels: ensembleModels.length > 0 ? ensembleModels : [selectedModel].filter(Boolean) };
+            }
+            return c;
+        });
+        await saveProviderConfigs(updated);
+        return updated;
     });
-    await saveProviderConfigs(updated);
-    return updated;
 }
 
 /**
@@ -217,18 +239,20 @@ export async function removeModelFromProvider(providerId: string, modelId: strin
 export async function updateModelInProvider(providerId: string, oldModelId: string, newModelId: string): Promise<ProviderConfig[]> {
     const trimmed = newModelId.trim();
     if (!trimmed) return await loadProviderConfigs();
-    const configs = await loadProviderConfigs();
-    const updated = configs.map(c => {
-        if (c.id === providerId) {
-            const models = c.models.map(m => m === oldModelId ? trimmed : m);
-            const selectedModel = c.selectedModel === oldModelId ? trimmed : c.selectedModel;
-            const ensembleModels = (c.ensembleModels || [c.selectedModel]).map(m => m === oldModelId ? trimmed : m);
-            return { ...c, models, selectedModel, ensembleModels: [...new Set(ensembleModels)].slice(0, 3) };
-        }
-        return c;
+    return runExclusiveProviderWrite(async () => {
+        const configs = await loadProviderConfigs();
+        const updated = configs.map(c => {
+            if (c.id === providerId) {
+                const models = c.models.map(m => m === oldModelId ? trimmed : m);
+                const selectedModel = c.selectedModel === oldModelId ? trimmed : c.selectedModel;
+                const ensembleModels = (c.ensembleModels || [c.selectedModel]).map(m => m === oldModelId ? trimmed : m);
+                return { ...c, models, selectedModel, ensembleModels: [...new Set(ensembleModels)].slice(0, 3) };
+            }
+            return c;
+        });
+        await saveProviderConfigs(updated);
+        return updated;
     });
-    await saveProviderConfigs(updated);
-    return updated;
 }
 
 /**

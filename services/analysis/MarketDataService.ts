@@ -462,31 +462,52 @@ export const fetchFuturesOHLCVFromTime = async (
     const normalizedSymbol = normalizeSymbol(symbol);
     const actualEndTime = endTime || Date.now();
 
+    // Mirror the spot twin's caching: the autopilot's 60s poll verifies every
+    // PENDING trade through this endpoint, so N unresolved trades meant N×3
+    // futures calls per minute against the same ranges — tripping the slot
+    // budget and adding queue latency. Minute-bucket key + in-flight
+    // coalescing dedupes poll cycles (a minute-old end time is immaterial for
+    // 1m/15m/1h verification).
+    const endBucket = Math.floor(actualEndTime / 60_000) * 60_000;
+    const cacheKey = `futures_ohlcvfrom_${normalizedSymbol}_${timeframe}_${startTime}_${endBucket}`;
+
+    const cached = getCached<Kline[]>(cacheKey);
+    if (cached) return cached;
+    const inFlight = inFlightOHLCV.get(cacheKey);
+    if (inFlight) return inFlight;
+
     console.log(`[MarketDataService] Fetching FUTURES historical klines for ${normalizedSymbol} from ${new Date(startTime).toISOString()} to ${new Date(actualEndTime).toISOString()}`);
 
-    try {
-        // Use Binance Futures API for perpetual contract prices
-        const url = `/fapi/v1/klines?symbol=${normalizedSymbol}&interval=${timeframe}&startTime=${startTime}&endTime=${actualEndTime}&limit=1500`;
-        const response = await robustFuturesFetch(url);
-        const data = await response.json();
+    const promise = (async () => {
+        try {
+            // Use Binance Futures API for perpetual contract prices
+            const url = `/fapi/v1/klines?symbol=${normalizedSymbol}&interval=${timeframe}&startTime=${startTime}&endTime=${actualEndTime}&limit=1500`;
+            const response = await robustFuturesFetch(url);
+            const data = await response.json();
 
-        const klines: Kline[] = data.map((k: any[]) => ({
-            time: k[0],
-            open: parseFloat(k[1]),
-            high: parseFloat(k[2]),
-            low: parseFloat(k[3]),
-            close: parseFloat(k[4]),
-            volume: parseFloat(k[5])
-        }));
+            const klines: Kline[] = data.map((k: any[]) => ({
+                time: k[0],
+                open: parseFloat(k[1]),
+                high: parseFloat(k[2]),
+                low: parseFloat(k[3]),
+                close: parseFloat(k[4]),
+                volume: parseFloat(k[5])
+            }));
 
-        console.log(`[MarketDataService] Fetched ${klines.length} FUTURES historical candles for ${normalizedSymbol}`);
-        return klines;
-    } catch (error) {
-        console.error(`Failed to fetch Futures OHLCV for ${normalizedSymbol}:`, error);
-        // Fallback to spot API if futures fails
-        console.log(`[MarketDataService] Falling back to SPOT API...`);
-        return fetchOHLCVFromTime(symbol, timeframe, startTime, endTime);
-    }
+            console.log(`[MarketDataService] Fetched ${klines.length} FUTURES historical candles for ${normalizedSymbol}`);
+            setCache(cacheKey, klines);
+            return klines;
+        } catch (error) {
+            console.error(`Failed to fetch Futures OHLCV for ${normalizedSymbol}:`, error);
+            // Fallback to spot API if futures fails
+            console.log(`[MarketDataService] Falling back to SPOT API...`);
+            return fetchOHLCVFromTime(symbol, timeframe, startTime, endTime);
+        } finally {
+            inFlightOHLCV.delete(cacheKey);
+        }
+    })();
+    inFlightOHLCV.set(cacheKey, promise);
+    return promise;
 };
 
 /**
@@ -1085,10 +1106,10 @@ export const fetchCompleteMarketSnapshot = async (
     // because the packet cannot exist without it.
     const [marketData, klines5m, klines15m, klines1h, klines4h, fundingRate] = await Promise.all([
         fetchMarketData(normalizedSymbol),
-        fetchOHLCV(normalizedSymbol, '5m', 100).catch(err => { console.warn(`[MarketData] 5m klines failed, continuing without them:`, err?.message || err); return []; }),
-        fetchOHLCV(normalizedSymbol, '15m', 100).catch(err => { console.warn(`[MarketData] 15m klines failed, continuing without them:`, err?.message || err); return []; }),
-        fetchOHLCV(normalizedSymbol, '1h', 100).catch(err => { console.warn(`[MarketData] 1h klines failed, continuing without them:`, err?.message || err); return []; }),
-        fetchOHLCV(normalizedSymbol, '4h', 100).catch(err => { console.warn(`[MarketData] 4h klines failed, continuing without them:`, err?.message || err); return []; }),
+        fetchOHLCV(normalizedSymbol, '5m', 300).catch(err => { console.warn(`[MarketData] 5m klines failed, continuing without them:`, err?.message || err); return []; }),
+        fetchOHLCV(normalizedSymbol, '15m', 300).catch(err => { console.warn(`[MarketData] 15m klines failed, continuing without them:`, err?.message || err); return []; }),
+        fetchOHLCV(normalizedSymbol, '1h', 300).catch(err => { console.warn(`[MarketData] 1h klines failed, continuing without them:`, err?.message || err); return []; }),
+        fetchOHLCV(normalizedSymbol, '4h', 300).catch(err => { console.warn(`[MarketData] 4h klines failed, continuing without them:`, err?.message || err); return []; }),
         fetchFundingRate(normalizedSymbol).catch(err => { console.warn(`[MarketData] funding rate failed, defaulting to 0:`, err?.message || err); return 0; })
     ]);
 

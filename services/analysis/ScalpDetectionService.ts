@@ -8,6 +8,7 @@
  */
 
 import { TradeAnalysis, LoggedTrade, TradeOutcome } from '../../types';
+import { parsePrice } from '../../utils/analysisUtils';
 
 // ============================================================================
 // TYPES
@@ -152,15 +153,9 @@ export const validateScalpTrade = (
     let shouldDowngrade = false;
 
     // Parse entry and SL for R:R calculation
-    const entryPrice = parseFloat(
-        analysis.entryPoints[0]?.price?.replace(/[^0-9.-]/g, '') || '0'
-    );
-    const slPrice = parseFloat(
-        analysis.stopLoss?.replace(/[^0-9.-]/g, '') || '0'
-    );
-    const tp1Price = parseFloat(
-        analysis.takeProfit?.[0]?.price?.replace(/[^0-9.-]/g, '') || '0'
-    );
+    const entryPrice = parsePrice(analysis.entryPoints[0]?.price || '') || 0;
+    const slPrice = parsePrice(analysis.stopLoss || '') || 0;
+    const tp1Price = parsePrice(analysis.takeProfit?.[0]?.price || '') || 0;
 
     // Rule 1: Scalp-specific R:R check (relaxed to 1:1)
     if (entryPrice > 0 && slPrice > 0 && tp1Price > 0) {
@@ -168,7 +163,13 @@ export const validateScalpTrade = (
         const risk = isLong ? entryPrice - slPrice : slPrice - entryPrice;
         const reward = isLong ? tp1Price - entryPrice : entryPrice - tp1Price;
 
-        if (risk > 0 && reward > 0) {
+        if (risk <= 0 || reward <= 0) {
+            // Inverted levels: SL/TP on the wrong side of entry must be
+            // flagged, not silently skipped (the old `risk > 0` guard ignored
+            // them entirely, letting inverted-SL scalps pass undowngraded).
+            warnings.push(' INVALID SETUP: Stop loss / take profit on the wrong side of entry');
+            shouldDowngrade = true;
+        } else {
             const rrRatio = reward / risk;
             if (rrRatio < SCALP_THRESHOLDS.minScalpRR) {
                 warnings.push(` SCALP R:R ${rrRatio.toFixed(2)}:1 below minimum 1:1`);
@@ -215,15 +216,9 @@ export const validateSwingTrade = (
     const shouldDowngrade = false;
 
     // Parse prices
-    const entryPrice = parseFloat(
-        analysis.entryPoints[0]?.price?.replace(/[^0-9.-]/g, '') || '0'
-    );
-    const slPrice = parseFloat(
-        analysis.stopLoss?.replace(/[^0-9.-]/g, '') || '0'
-    );
-    const tp1Price = parseFloat(
-        analysis.takeProfit?.[0]?.price?.replace(/[^0-9.-]/g, '') || '0'
-    );
+    const entryPrice = parsePrice(analysis.entryPoints[0]?.price || '') || 0;
+    const slPrice = parsePrice(analysis.stopLoss || '') || 0;
+    const tp1Price = parsePrice(analysis.takeProfit?.[0]?.price || '') || 0;
 
     // Rule 1: Swing requires minimum 1.5:1 R:R
     if (entryPrice > 0 && slPrice > 0 && tp1Price > 0) {

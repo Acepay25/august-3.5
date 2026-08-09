@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useConfirmDialog } from '../shared/ConfirmDialog';
 import { APP_NAME, APP_VERSION } from '../../constants/version';
-import { AIProvider, AccuracySubMode, LoggedTrade, GlobalMemory, TradeSummary } from '../../types';
+import { AIProvider, AccuracySubMode, LoggedTrade, GlobalMemory, TradeSummary, TradeOutcome } from '../../types';
 import { AnalystLensConfig } from '../../types/lens';
 import { CustomInstructionsMap } from '../../types/user';
 import { ProviderConfig, ApiFormat } from '../../types/provider';
@@ -86,6 +87,7 @@ interface SettingsMenuProps {
     isSummarizing?: boolean;
     currentInsightIds?: string[];
     onUpdateTradeLeverage?: (id: string, leverage: number) => void;
+    onUpdateOutcome?: (id: string, outcome: TradeOutcome) => void;
     finalSummary?: string | null;
     individualSummaries?: TradeSummary[];
     familyWinRates?: Record<string, { total: number; wins: number; winRate: number }>;
@@ -146,6 +148,7 @@ const NavTabButton: React.FC<{
 };
 
 const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
+    const { confirm, ConfirmDialogComponent } = useConfirmDialog();
     const {
         isVisible,
         onClose,
@@ -210,13 +213,31 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
     });
     const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
     const [activeInstructionTab, setActiveInstructionTab] = useState<InstructionTab>('general');
+    const [isDirty, setIsDirty] = useState(false);
     const dialogRef = useRef<HTMLDivElement>(null);
     const initialTabResolvedRef = useRef(false);
+
+    // Closing with a staged (unsaved) provider draft would silently discard
+    // the user's edits — confirm first (Escape, backdrop, and the X all route
+    // through here).
+    const requestClose = useCallback(() => {
+        if (!isDirty) {
+            onClose();
+            return;
+        }
+        void confirm({
+            title: 'Discard unsaved changes?',
+            message: 'You have unsaved provider edits. Closing Settings will discard them.',
+            confirmLabel: 'Discard',
+            destructive: true,
+        }).then(ok => { if (ok) onClose(); });
+    }, [isDirty, onClose, confirm]);
+
     useEffect(() => {
         if (!isVisible) return;
         const handleKeyDown = (event: KeyboardEvent) => {
             if (event.key === 'Escape') {
-                onClose();
+                requestClose();
                 return;
             }
             if (event.key !== 'Tab' || !dialogRef.current) return;
@@ -230,7 +251,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
         document.addEventListener('keydown', handleKeyDown);
         requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>('button')?.focus());
         return () => document.removeEventListener('keydown', handleKeyDown);
-    }, [isVisible, onClose]);
+    }, [isVisible, requestClose]);
 
     // Enabled providers list for lens settings —
     // derived from dynamic provider configs (ready = enabled + API key).
@@ -268,7 +289,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
             {/* Backdrop */}
             <div
                 className="fixed inset-0 bg-black/80 z-40 animate-fade-in"
-                onClick={onClose}
+                onClick={requestClose}
             />
 
             {/* Centered Desktop Settings Modal */}
@@ -282,7 +303,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                             <h2 id="settings-title" className="text-lg font-bold text-white tracking-tight">Settings</h2>
                         </div>
                         <button
-                            onClick={onClose}
+                            onClick={requestClose}
                             className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 transition-all"
                             aria-label="Close settings"
                         >
@@ -399,6 +420,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         isSummarizing={props.isSummarizing}
                                         currentInsightIds={props.currentInsightIds || []}
                                         onUpdateTradeLeverage={props.onUpdateTradeLeverage || (() => {})}
+                                        onUpdateOutcome={props.onUpdateOutcome || (() => {})}
                                         finalSummary={props.finalSummary || null}
                                         individualSummaries={props.individualSummaries || []}
                                         isLoading={!!props.isLoading}
@@ -517,6 +539,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                             onAddModel={onAddModel}
                                             onRemoveModel={onRemoveModel}
                                             onUpdateModel={onUpdateModel}
+                                            onDirtyChange={setIsDirty}
                                         />
                                     ) : (
                                         <p className="text-xs text-zinc-500">Provider configuration loading…</p>
@@ -812,6 +835,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                     </div>
                 </div>
             </div>
+            {ConfirmDialogComponent}
         </>
     );
 };

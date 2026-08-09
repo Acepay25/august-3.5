@@ -10,6 +10,7 @@
  */
 
 import { LoggedTrade, TradeAnalysis, TradeOutcome, AIProvider } from '../../types';
+import { parsePrice } from '../../utils/analysisUtils';
 import {
     calculateDynamicWeights,
     calculateDynamicWeightsEnhanced,
@@ -155,7 +156,7 @@ export const analyzeDisagreements = (
     // Entry price disagreement (>1% difference)
     const entries = analyses.map(a => {
         const entryStr = a.analysis.entryPoints?.[0]?.price || '';
-        const entryNum = parseFloat(entryStr.replace(/[^0-9.]/g, ''));
+        const entryNum = parsePrice(entryStr);
         return { model: a.model, value: entryStr, numeric: isNaN(entryNum) ? null : entryNum };
     }).filter(e => e.numeric !== null);
 

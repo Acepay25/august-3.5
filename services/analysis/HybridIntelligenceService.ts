@@ -982,6 +982,17 @@ const buildMonteCarloConfig = (
         }
         const direction = isLong ? 'Long' as const : 'Short' as const;
 
+        // Degenerate setups must never be simulated: entry == SL collapses the
+        // ATR fallback to 0, producing a zero-volatility deterministic drift
+        // that reports a fake ~100% win rate, and an inverted SL (wrong side
+        // of entry) "hits" its stop at step 0 with a profit. Reject both.
+        const slDistance = Math.abs(entry - stopLoss);
+        const slOnCorrectSide = isLong ? stopLoss < entry : stopLoss > entry;
+        if (slDistance <= 0 || !slOnCorrectSide) {
+            console.log('[MonteCarloForSetup] Degenerate stop loss — skipping simulation.', { entry, stopLoss, direction });
+            return null;
+        }
+
         // Get ATR from hybrid data - average all available timeframes for balanced volatility
         const availableAtrs = [
             hybridData.indicators?.['5m']?.atr,
@@ -996,8 +1007,8 @@ const buildMonteCarloConfig = (
             // Average all available ATRs
             atr = availableAtrs.reduce((sum, val) => sum + val, 0) / availableAtrs.length;
         } else {
-            // Fallback: Calculate ATR from stop loss distance
-            const slDistance = Math.abs(entry - stopLoss);
+            // Fallback: Calculate ATR from stop loss distance (slDistance is
+            // validated nonzero above, so atr stays > 0).
             atr = slDistance * 2; // Assume SL is ~0.5 ATR
             console.log('[MonteCarloForSetup] Using fallback ATR from SL distance:', atr);
         }

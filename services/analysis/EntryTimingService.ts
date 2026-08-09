@@ -8,6 +8,7 @@
 
 import { HybridDataPacket } from './HybridIntelligenceService';
 import { TradeAnalysis } from '../../types';
+import { parsePrice } from '../../utils/analysisUtils';
 
 // ============================================================================
 // TYPES
@@ -99,9 +100,7 @@ export const calculateEntryTimingScore = (
     };
 
     // Parse entry price
-    const entryPrice = parseFloat(
-        analysis.entryPoints?.[0]?.price?.replace(/[^0-9.-]/g, '') || '0'
-    );
+    const entryPrice = parsePrice(analysis.entryPoints?.[0]?.price || '') || 0;
     const currentPrice = hybridData.marketData.currentPrice;
     const atr = hybridData.indicators?.['1h']?.atr ?? 0;
     const direction = analysis.direction;
@@ -483,6 +482,13 @@ function simulateLimitOrder(
     else if (trendStrength < -0.3) trendFactor = 1.2; // Easier if trend is weak/reversing
 
     const effectiveRange = projectedRange * trendFactor;
+
+    // Degenerate inputs must not produce NaN: with atr 0 (missing 1h ATR in a
+    // degraded packet) and distance 0, the exponent is 0/0 → NaN, and
+    // Math.min/max propagate NaN into the prompt as "Fill Probability: NaN%".
+    if (effectiveRange <= 0) {
+        return { fillProbability: 50, expectedWaitTime: timeToWait, fomoRisk: 'Medium' };
+    }
 
     // Calibrated decay constant
     const k = 1.2;

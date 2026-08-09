@@ -20,6 +20,8 @@ interface TradeLogContentProps {
     isSummarizing?: boolean;
     currentInsightIds: string[];
     onUpdateTradeLeverage: (id: string, leverage: number) => void;
+    /** Correct a mis-logged outcome from the expanded card. */
+    onUpdateOutcome?: (id: string, outcome: TradeOutcome) => void;
     /** Active user — scopes the reasoning-record lookup per trade. */
     username?: string;
 }
@@ -67,8 +69,9 @@ const TradeLogRow: React.FC<{
     modelIdToName: Record<string, string>;
     isInsight: boolean;
     onUpdateLeverage: (id: string, leverage: number) => void;
+    onUpdateOutcome?: (id: string, outcome: TradeOutcome) => void;
     username?: string;
-}> = ({ trade, onToggle, isExpanded, isSelected, onSelect, onViewImage, modelIdToName, isInsight, onUpdateLeverage, username }) => {
+}> = ({ trade, onToggle, isExpanded, isSelected, onSelect, onViewImage, modelIdToName, isInsight, onUpdateLeverage, onUpdateOutcome, username }) => {
     const { analysis, outcome, timestamp, postMortem, postMortemImages, correctedEntry, correctedStopLoss, correctedTakeProfit, pnlAmount, pnlPercent, modelsUsed, geminiModelUsed, deepseekModelUsed, zhipuModelUsed, groqModelUsed, groqNewModelUsed, groqAlt2ModelUsed, openrouterModelUsed, moderatorModel, leverage, isAccuracyMode, accuracySubMode } = trade;
     const { direction, stopLoss, stopLossPercentage, entryPoints, takeProfit, activeStrategies, coinName, invalidationCriteria } = analysis;
     const [isInsightsVisible, setIsInsightsVisible] = useState(false);
@@ -225,6 +228,24 @@ const TradeLogRow: React.FC<{
                                         </button>
                                     ))}
                                 </div>
+
+                                {/* Outcome correction — the only way to fix a
+                                    mis-logged WIN/LOSS was delete + re-log. */}
+                                {onUpdateOutcome && (
+                                    <div className="flex items-center gap-1.5 ml-2 pl-2 border-l border-white/10">
+                                        <span className="text-[10px] text-zinc-400">Outcome:</span>
+                                        <select
+                                            value={trade.outcome}
+                                            onChange={(e) => onUpdateOutcome(trade.id, e.target.value as TradeOutcome)}
+                                            className="bg-zinc-800 border border-white/10 rounded px-1.5 py-0.5 text-[10px] font-mono text-zinc-300 outline-none focus:border-cyan-500/40 cursor-pointer"
+                                            aria-label="Trade outcome"
+                                        >
+                                            {Object.values(TradeOutcome).map(o => (
+                                                <option key={o} value={o}>{o === TradeOutcome.ENTRY_NOT_HIT ? 'NO ENTRY' : o}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -329,7 +350,7 @@ const TradeLogRow: React.FC<{
     );
 };
 
-const TradeLogContent: React.FC<TradeLogContentProps> = ({ trades, onDeleteTrades, onClearAllTrades, modelIdToName, onUpdateInsights, isSummarizing, currentInsightIds, onUpdateTradeLeverage, username }) => {
+const TradeLogContent: React.FC<TradeLogContentProps> = ({ trades, onDeleteTrades, onClearAllTrades, modelIdToName, onUpdateInsights, isSummarizing, currentInsightIds, onUpdateTradeLeverage, onUpdateOutcome, username }) => {
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [viewerImageUrl, setViewerImageUrl] = useState<string | null>(null);
@@ -367,12 +388,29 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({ trades, onDeleteTrade
 
     // Trade type filter
     const [tradeTypeFilter, setTradeTypeFilter] = useState<'all' | 'scalp' | 'swing'>('all');
+    // Outcome filter + free-text search (coin / strategy / post-mortem)
+    const [outcomeFilter, setOutcomeFilter] = useState<'all' | TradeOutcome>('all');
+    const [searchQuery, setSearchQuery] = useState('');
 
     const filteredTrades = (trades || []).filter(trade => {
-        if (tradeTypeFilter === 'all') return true;
-        const tt = trade.tradeType || trade.analysis.tradeType;
-        if (tradeTypeFilter === 'scalp') return tt === 'scalp';
-        if (tradeTypeFilter === 'swing') return tt === 'swing' || !tt; // Legacy trades default to swing
+        if (tradeTypeFilter !== 'all') {
+            const tt = trade.tradeType || trade.analysis.tradeType;
+            if (tradeTypeFilter === 'scalp') return tt === 'scalp';
+            if (tradeTypeFilter === 'swing') return tt === 'swing' || !tt; // Legacy trades default to swing
+        }
+        if (outcomeFilter !== 'all' && trade.outcome !== outcomeFilter) return false;
+        const q = searchQuery.trim().toLowerCase();
+        if (q) {
+            const haystack = [
+                trade.analysis?.coinName,
+                trade.analysis?.direction,
+                (trade.analysis?.activeStrategies || []).join(' '),
+                trade.analysis?.strategy,
+                trade.tradeType || trade.analysis?.tradeType,
+                trade.postMortem,
+            ].filter(Boolean).join(' ').toLowerCase();
+            if (!haystack.includes(q)) return false;
+        }
         return true;
     });
 
@@ -380,10 +418,20 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({ trades, onDeleteTrade
 
     return (
         <div className="flex flex-col h-full bg-transparent">
-            {/* Trade Type Filter */}
-            <div className="px-4 py-2 border-b border-white/5 bg-zinc-900 shrink-0 flex items-center justify-between">
-                <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-widest">Filter by Type</span>
-                <div className="flex gap-1">
+            {/* Filters: search + trade type + outcome */}
+            <div className="px-4 py-2 border-b border-white/5 bg-zinc-900 shrink-0 space-y-2">
+                <div className="flex items-center gap-2">
+                    <input
+                        type="search"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="Search coin, strategy, post-mortem…"
+                        className="flex-1 min-w-0 bg-zinc-800 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-zinc-200 placeholder-zinc-600 outline-none focus:border-cyan-500/40"
+                        aria-label="Search trades"
+                    />
+                    <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-widest shrink-0">Filter</span>
+                </div>
+                <div className="flex items-center gap-1 flex-wrap">
                     {(['all', 'scalp', 'swing'] as const).map(type => (
                         <button
                             key={type}
@@ -400,8 +448,44 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({ trades, onDeleteTrade
                             {type === 'scalp' ? '◆ ' : type === 'swing' ? '◇ ' : ''}{type}
                         </button>
                     ))}
+                    <span className="w-px h-4 bg-white/10 mx-1" />
+                    {[TradeOutcome.WIN, TradeOutcome.LOSS, TradeOutcome.ENTRY_NOT_HIT, TradeOutcome.SKIPPED].map(o => (
+                        <button
+                            key={o}
+                            onClick={() => setOutcomeFilter(prev => prev === o ? 'all' : o)}
+                            className={`px-2 py-1 text-[9px] font-bold uppercase tracking-wider rounded transition-all border ${
+                                outcomeFilter === o
+                                    ? 'bg-cyan-500/20 border-cyan-500/30 text-cyan-400'
+                                    : 'bg-zinc-800 border-white/10 text-zinc-500 hover:text-zinc-300'
+                            }`}
+                        >
+                            {o === TradeOutcome.ENTRY_NOT_HIT ? 'NO ENTRY' : o}
+                        </button>
+                    ))}
+                    {outcomeFilter !== 'all' && (
+                        <button
+                            onClick={() => setOutcomeFilter('all')}
+                            className="text-[9px] text-zinc-500 hover:text-zinc-300 px-1"
+                            aria-label="Clear outcome filter"
+                        >
+                            ✕
+                        </button>
+                    )}
                 </div>
             </div>
+
+            {trades.length > 0 && (
+                <div className="px-4 py-1.5 border-b border-white/5 bg-zinc-900/60 shrink-0 flex items-center justify-end">
+                    <button
+                        type="button"
+                        onClick={onClearAllTrades}
+                        className="text-[10px] uppercase font-bold tracking-widest text-rose-400/80 hover:text-rose-300 transition-colors flex items-center gap-1.5"
+                        title="Delete all logged trades (with 5s undo)"
+                    >
+                        <TrashIcon className="w-3 h-3" /> Clear all trades
+                    </button>
+                </div>
+            )}
 
             {/* Optional Action Header */}
             {currentInsightIds.length > 0 && (
@@ -472,6 +556,7 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({ trades, onDeleteTrade
                                     modelIdToName={modelIdToName}
                                     isInsight={currentInsightIds.includes(trade.id)}
                                     onUpdateLeverage={onUpdateTradeLeverage}
+                                    onUpdateOutcome={onUpdateOutcome}
                                     username={username}
                                 />
                             </div>

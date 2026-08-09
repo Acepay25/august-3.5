@@ -274,8 +274,16 @@ export default defineConfig(() => {
       rollupOptions: {
         external: ['protobufjs/minimal.js'],
         output: {
-          manualChunks: {
-            'vendor-ai': ['openai'],
+          // Function-form manualChunks: the string form only matched the
+          // package root, so `react-dom/client` (and react-dom's other
+          // subpaths) escaped the vendor chunk and got hoisted into index —
+          // the exact shared-module problem the old comment described.
+          manualChunks(id) {
+            if (id.includes('node_modules/react-dom') || id.includes('node_modules/react') || id.includes('node_modules/scheduler') || id.includes('node_modules/react-virtuoso')) {
+              return 'vendor-react';
+            }
+            if (id.includes('node_modules/openai')) return 'vendor-ai';
+            if (id.includes('node_modules/technicalindicators')) return 'vendor-crypto';
             // NOTE: recharts + lightweight-charts intentionally have NO manual
             // chunk. A fixed 'vendor-charts' entry made rollup link the charts
             // chunk into vendor-react (shared-module hoisting), which put a
@@ -283,8 +291,7 @@ export default defineConfig(() => {
             // it on every launch even though charts are only reachable through
             // lazy components (Journal, LiveMarket, VersionHistoryDashboard).
             // Without the entry they stay in their lazy consumer chunks.
-            'vendor-crypto': ['technicalindicators'],
-            'vendor-react': ['react', 'react-dom', 'react-virtuoso'],
+            return undefined;
           },
         },
       },

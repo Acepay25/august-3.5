@@ -100,6 +100,14 @@ export const recalculateAnalysisMetrics = (analysis: TradeAnalysis, leverage: nu
         const slPrice = parsePrice(slPriceStr);
 
         if (!isNaN(slPrice)) {
+            // An inverted SL (wrong side of entry) must not fabricate a
+            // plausible-looking risk / R:R — it would sail through the
+            // probability gate instead of being flagged. Zero the R:R so the
+            // gate clamps down; keep the display percentage absolute.
+            const slOnCorrectSide = isLong ? slPrice < entryPrice : slPrice > entryPrice;
+            if (!slOnCorrectSide) {
+                newAnalysis.rrRatio = 0;
+            }
             const rawMove = Math.abs(entryPrice - slPrice) / entryPrice;
             const leveragedLoss = rawMove * leverage * 100;
             newAnalysis.stopLossPercentage = `-${leveragedLoss.toFixed(1)}%`;
@@ -141,8 +149,9 @@ export const recalculateAnalysisMetrics = (analysis: TradeAnalysis, leverage: nu
             });
         }
 
-        // 3. Calculate Risk/Reward Ratio (R:R)
-        if (!isNaN(slPrice) && validTakeProfits.length > 0) {
+        // 3. Calculate Risk/Reward Ratio (R:R) — skipped when the SL was
+        // flagged inverted above (rrRatio stays 0 so the gate clamps down).
+        if (!isNaN(slPrice) && validTakeProfits.length > 0 && newAnalysis.rrRatio !== 0) {
             validTakeProfits.sort((a, b) => Math.abs(a - entryPrice) - Math.abs(b - entryPrice));
 
             const nearestTpPrice = validTakeProfits[0];

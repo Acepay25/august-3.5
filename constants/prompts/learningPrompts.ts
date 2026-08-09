@@ -1,145 +1,9 @@
-export const POST_MORTEM_PATTERN_LEARNING_PROMPT = `
-🔍 **PATTERN MEMORY INTEGRATION (MANDATORY)**
+/**
+ * Learning-loop prompts: entry-not-hit post-mortem and the 150% extended-SL
+ * zone contract shared by the post-mortem debate generators.
+ */
 
-**HISTORICAL PATTERN MATCHING:**
-Before finalizing analysis, check if this setup matches known patterns from the user's trade history:
-
-1. **Search Pattern Memory for similar setups:**
-   - Same Family classification?
-   - Similar RSI/MACD conditions?
-   - Same market regime?
-   - Similar entry structure?
-
-2. **If match found:**
-   - State the historical trade outcome (WIN/LOSS)
-   - Apply lessons learned from post-mortem
-   - Adjust confidence if pattern historically failed
-
-3. **Recurring Loss Patterns to Check:**
-   - FOMO entries (chasing after 3+ green candles)
-   - Counter-trend in strong ADX
-   - Breakouts on low volume (Family A traps)
-   - Entries at equal highs/lows (liquidity zones)
-
-4. **Recurring Win Patterns to Leverage:**
-   - Family C continuation after healthy pullback
-   - Breakout + retest with volume confirmation
-   - Trend alignment across 3+ timeframes
-
-**PATTERN MEMORY OUTPUT:**
-- Matched Historical Trade: [ID or "None"]
-- Similarity Score: [0-100%]
-- Historical Outcome: [WIN/LOSS/N/A]
-- Adjustment Applied: [None/Confidence downgraded/Position size reduced]
-`;
-
-export const ROLE_BASED_POSTMORTEM_SPECIALIST_PROMPT = `
-**POST-MORTEM REVIEW: {{ROLE_LABEL}}**
-
-You are reviewing YOUR original analysis for this trade.
-
-**ORIGINAL ANALYSIS:**
-{{ORIGINAL_ANALYSIS}}
-
-**TRADE RESULT:**
-- Outcome: {{OUTCOME}} ({{PNL_R}}R)
-- Entry: {{ENTRY}} → Exit: {{EXIT}}
-{{EXTENDED_SL_CONTEXT}}
-
-**YOUR POST-MORTEM TASK:**
-
-1. **WHAT I GOT RIGHT (from my {{ROLE_NAME}} perspective):**
-   - Identify what your analysis correctly predicted
-
-2. **WHAT I MISSED OR GOT WRONG:**
-   - Be specific about your errors
-   - Example: "I said OB was strong, but volume was declining - I overestimated structure"
-
-3. **WHY I MADE THIS ERROR:**
-   - Root cause analysis
-   - What data did I ignore? What assumption was wrong?
-
-4. **HOW TO IMPROVE (for my {{ROLE_NAME}} analysis next time):**
-   - Specific, actionable improvement
-   - Example: "Always check volume on OB tests before rating strong"
-
-**CONSTRAINTS:**
-- Own YOUR mistakes from YOUR role's perspective
-- Do not blame other specialists
-- Be brutally honest
-- Provide actionable lessons
-`;
-
-export const ROLE_BASED_POSTMORTEM_MODERATOR_PROMPT = `
-**POST-MORTEM MODERATOR SYNTHESIS**
-
-You are synthesizing the post-mortem reviews from 3 specialists.
-
-**SPECIALISTS:**
-{{SPECIALIST_POSTMORTEMS}}
-
-**TRADE RESULT:**
-{{TRADE_RESULT}}
-
-{{EXTENDED_SL_MODERATOR_CHECK}}
-
-**YOUR POST-MORTEM SYNTHESIS:**
-
-1. **PRIMARY FAILURE ATTRIBUTION:**
-   Which specialist's analysis was most responsible for the loss/win?
-   Be specific: "Structure analysis (DeepSeek) overrode valid macro concerns."
-
-2. **SECONDARY FACTORS:**
-   What other analyses contributed to the outcome?
-
-3. **CONFLICT RESOLUTION FAILURE (if applicable):**
-   Did the original debate fail to resolve a conflict that mattered?
-   Example: "Macro vs Structure conflict wasn't resolved - we took the trade anyway."
-
-4. **LESSON FOR ENSEMBLE:**
-   What should the ensemble do differently next time?
-   Example: "When funding is elevated + OB is weak, reduce confidence by 15-20%."
-
-5. **MEMORY UPDATE RECOMMENDATIONS:**
-   - Pattern to add to Failure/Success Signatures
-   - Weakness to flag in AI Learning Profile
-   - Rule adjustment suggestion
-
-**EXTENDED SL ZONE CHECK:**
-{{EXTENDED_SL_MODERATOR_CHECK}}
-
-**OUTPUT:**
-Provide synthesis as a readable post-mortem summary.
-End with specific memory update recommendations.
-`;
-
-export const EXTENDED_SL_CONTEXT = {
-   entered: `
-⚠️ **EXTENDED SL ZONE TRIGGERED**
-Stop-Loss entered the Extended Zone (150% of original SL).
-This may have been a LIQUIDITY SWEEP that recovered.
-Analyze: Was this a stop hunt or legitimate failure?
-`,
-   not_entered: `
-Stop-Loss was hit at standard level (100%).
-This was a clean loss, not a sweep-and-recover scenario.
-`
-};
-
-export const EXTENDED_SL_MODERATOR_CHECK = {
-   entered: `
-⚠️ NOTE: Stop-Loss entered the Extended Zone (150%).
-Determine if this was:
-A) A liquidity sweep that should be counted as WIN
-B) A legitimate failure that recovered by luck
-Adjust your lesson accordingly.
-`,
-   not_entered: `
-NOTE: Stop-Loss was hit at standard level (100%). 
-This was a clean loss/win - no extended zone considerations.
-`
-};
-
+/** Entry-not-hit analysis: setup validity, direction accuracy, opportunity cost. */
 export const ENTRY_NOT_HIT_ANALYSIS_PROMPT = `**Role:**
 You are an advanced trade post-analysis engine focused on execution review and learning optimization.
 
@@ -147,9 +11,10 @@ You are an advanced trade post-analysis engine focused on execution review and l
 Perform a mandatory **ENTRY_NOT_HIT** analysis for a trading setup that did not trigger, identifying whether the setup was valid, whether the directional bias was correct, and what execution or timing factors caused the miss.
 
 **Context:**
-This analysis applies **only** to trades where the entry price was not hit. The goal is to extract actionable learning rules to reduce future missed opportunities without changing the original strategy intent.
+This analysis applies **only** to trades where the entry price was not hit. The goal is to extract actionable learning rules to reduce future missed opportunities without changing the original strategy intent.`;
 
-**Instructions:**
+/** Entry-not-hit questionnaire — appended after the trade context by the caller. */
+export const ENTRY_NOT_HIT_ANALYSIS_QUESTIONS = `**Instructions:**
 Answer **all** of the following **MANDATORY ENTRY_NOT_HIT ANALYSIS QUESTIONS** clearly and objectively:
 
 1. **Setup Validity Check**
@@ -190,3 +55,48 @@ Answer **all** of the following **MANDATORY ENTRY_NOT_HIT ANALYSIS QUESTIONS** c
 
 **Tone / Style:**
 Analytical, precise, execution-focused, and rule-driven.`;
+
+/**
+ * 150% extended-SL zone contract for the post-mortem debate generators
+ * (previously copy-pasted verbatim in each two/three-way generator — a
+ * single source so the semantics can never drift).
+ */
+export const EXTENDED_SL_ZONE_DEBATE_CONTEXT = `** CRITICAL - 150% EXTENDED SL ZONE LOGIC:**
+This system uses an "Extended SL Zone" where the initial Stop Loss is a SOFT limit:
+- Original SL Distance = |Entry - StopLoss|
+- Extended SL = SL + 50% of original distance (total 150% risk from entry)
+- If price touches original SL but stays within 150% zone and then hits TP → WIN
+- **CRITICAL: If price exceeds the 150% extended threshold → DEFINITIVE LOSS**
+
+When the stop-loss touches the 150% extended zone boundary, this MUST be treated as a REAL LOSS:
+1. The original SL was hit AND exceeded by 50%
+2. This represents a failure of the trade thesis
+3. In live trading, this position would have been closed at a significant loss
+
+**⚠️ SPECIAL CASE: MISSED WIN DUE TO TIGHT STOP LOSS:**
+When the ORIGINAL stop-loss is hit, price does NOT reach the 150% extended zone, and then reverses to hit TP:
+1. This is still classified as a **LOSS** (because the SL was triggered in live trading)
+2. However, this MUST be flagged as a **"MISSED WIN DUE TO TIGHT SL"**
+3. The trade COULD have been profitable with a wider stop loss
+
+**MANDATORY CORRECTED SL ANALYSIS (When Missed Win Detected):**
+Each analyst MUST:
+1. Calculate the **exact minimum SL distance** that would have kept the trade alive
+2. Propose a **corrected optimal SL** (typically 10-20% wider than the minimum)
+3. Explain the **rationale** based on:
+   - Market volatility at the time (ATR considerations)
+   - Key structural levels that should have been used as SL anchors
+   - Whether a better entry would have naturally provided more SL room
+
+**MODERATOR RESPONSIBILITY (When 150% Zone Breached):**
+You MUST ensure the final conclusion addresses:
+1. Whether the initial Stop Loss should have been placed wider
+2. Whether the entry timing was optimal
+3. Store this as 'extendedSLZoneBreach: true' for future pattern memory reference
+
+**MODERATOR RESPONSIBILITY (When Missed Win Detected):**
+You MUST:
+1. Synthesize all analyst SL correction proposals
+2. Calculate a **weighted average corrected SL** based on analyst reasoning
+3. Provide a **final recommended SL adjustment percentage** for similar future setups
+4. Store flag 'missedWinTightSL: true' for pattern memory`;

@@ -9,7 +9,7 @@
  * hardcoded provider ids or SDKs.
  */
 
-import { CandlestickData, Time, LineData } from 'lightweight-charts';
+import { ChartCandle, ChartLinePoint } from '../../types/chart';
 import { loadProviderConfigs, getReadyProviders } from '../infrastructure/ProviderConfigService';
 import { sendChatRequest } from '../providers/GenericProviderService';
 
@@ -69,7 +69,7 @@ const extractJson = (responseText: string): string => {
  * Tries each ready provider in order until one returns parseable JSON.
  */
 export const analyzeWithAI = async (
-    candles: CandlestickData<Time>[],
+    candles: ChartCandle[],
     symbol: string,
     interval: string,
     modelName?: string
@@ -240,9 +240,9 @@ RESPOND IN THIS EXACT JSON FORMAT:
  */
 export const convertToLineData = (
     trendline: TrendlineResult
-): LineData<Time>[] => {
+): ChartLinePoint[] => {
     return [
-        { time: trendline.startTime as Time, value: trendline.startPrice },
-        { time: trendline.endTime as Time, value: trendline.endPrice },
+        { time: trendline.startTime, value: trendline.startPrice },
+        { time: trendline.endTime, value: trendline.endPrice },
     ];
 };

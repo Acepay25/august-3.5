@@ -654,6 +654,29 @@ export const deleteThinkingForUser = async (username: string): Promise<void> => 
 };
 
 /**
+ * Delete thinking records for a single trade (trade deletion cascade).
+ * `tradeId` is the resolved thinking key (getThinkingTradeId(createdAt, id)).
+ */
+export const deleteThinkingByTrade = async (tradeId: string, username: string): Promise<void> => {
+    if (isNativePlatform()) {
+        const { getSqliteDb } = await import('./SqliteServiceHelpers');
+        const db = await getSqliteDb();
+        if (!db) return;
+        await db.run('DELETE FROM thinking_records WHERE tradeId = ? AND username = ?', [tradeId, username]);
+    } else {
+        const db = await initIndexedDB();
+        const all: ThinkingRecord[] = await db.getAllFromIndex(STORE_NAME, 'username', username);
+        const targets = all.filter(r => r.tradeId === tradeId);
+        if (targets.length === 0) return;
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        for (const record of targets) {
+            await tx.store.delete(record.id);
+        }
+        await tx.done;
+    }
+};
+
+/**
  * Generate a unique record ID.
  */
 export const generateThinkingId = (): string => {

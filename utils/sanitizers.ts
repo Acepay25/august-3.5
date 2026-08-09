@@ -24,10 +24,11 @@ export const sanitizeAIResponse = (text: string): string => {
     .replace(/^\s*[*-]\s/gm, '')     // List items
     .replace(/`/g, '');                 // Code ticks
 
-  // Remove remaining asterisks that might have been missed or used for decoration
-  // We use a negative lookbehind and lookahead to preserve * if it's between digits (e.g. 5*5)
-  // This removes * if it is NOT preceded by a digit OR NOT followed by a digit.
-  cleaned = cleaned.replace(/(?<!\d)\*|\*(?!\d)/g, '');
+  // Remove remaining asterisks that might have been missed or used for
+  // decoration. Only strip asterisks that are NOT adjacent to a digit on
+  // either side, so math survives ("1.5* ATR", "3x*", "5*6") instead of being
+  // silently mangled.
+  cleaned = cleaned.replace(/(?<!\d)\*(?!\d)/g, '');
 
   // Aggressive XSS prevention: Strip HTML tags (loop until stable to defeat nested-tag bypasses)
   // This prevents <script>, <iframe>, <object>, etc. from being rendered if the UI ever uses dangerous HTML setting.

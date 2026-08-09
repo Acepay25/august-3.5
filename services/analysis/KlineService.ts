@@ -11,6 +11,14 @@
 
 import { Kline } from '../../types';
 
+// --- Short-TTL cache + in-flight coalescing ---
+// Chart mounts/polls re-race up to 4 proxy sources per fetch; a 30s TTL and
+// shared promise dedupe concurrent identical requests (mirrors
+// MarketDataService's pattern).
+const klineCache = new Map<string, { at: number; data: Kline[] }>();
+const klineInFlight = new Map<string, Promise<Kline[]>>();
+const KLINE_CACHE_TTL_MS = 30_000;
+
 // --- Interval mapping per exchange ---
 
 const INTERVAL_MAP: Record<'pdax' | 'coinsph' | 'binance', Record<string, string>> = {
@@ -129,8 +137,24 @@ export const fetchKlines = async (
     interval: string,
     limit: number = 300,
 ): Promise<Kline[]> => {
-    const sources = buildBinanceSources(symbol, interval, limit);
-    return fetchKlinesFromSources(sources, parseBinanceKlines, `${symbol} ${interval}`);
+    const cacheKey = `kline_${symbol}_${interval}_${limit}`;
+    const cached = klineCache.get(cacheKey);
+    if (cached && Date.now() - cached.at < KLINE_CACHE_TTL_MS) return cached.data;
+    const inFlight = klineInFlight.get(cacheKey);
+    if (inFlight) return inFlight;
+
+    const promise = (async () => {
+        try {
+            const sources = buildBinanceSources(symbol, interval, limit);
+            const data = await fetchKlinesFromSources(sources, parseBinanceKlines, `${symbol} ${interval}`);
+            klineCache.set(cacheKey, { at: Date.now(), data });
+            return data;
+        } finally {
+            klineInFlight.delete(cacheKey);
+        }
+    })();
+    klineInFlight.set(cacheKey, promise);
+    return promise;
 };
 
 // --- Philippine exchange sources (PDAX, Coins.ph) ---
@@ -206,22 +230,40 @@ export const fetchMultiExchangeKlines = async (
     interval: string,
     limit: number = 300,
 ): Promise<Kline[]> => {
-    const phAttempts = [
-        fetchFromPDAX(symbol, interval, limit).then(k => {
-            if (k.length === 0) throw new Error('PDAX empty');
-            return k;
-        }),
-        fetchFromCoinsph(symbol, interval, limit).then(k => {
-            if (k.length === 0) throw new Error('Coins.ph empty');
-            return k;
-        }),
-    ];
+    const cacheKey = `kline_multi_${symbol}_${interval}_${limit}`;
+    const cached = klineCache.get(cacheKey);
+    if (cached && Date.now() - cached.at < KLINE_CACHE_TTL_MS) return cached.data;
+    const inFlight = klineInFlight.get(cacheKey);
+    if (inFlight) return inFlight;
 
-    try {
-        return await Promise.any(phAttempts);
-    } catch {
-        // Both PH exchanges unavailable — fall back to Binance via proxy chain.
-        console.log('PH exchanges unavailable, trying Binance fallback...');
-        return fetchKlines(symbol, interval, limit);
-    }
+    const promise = (async () => {
+        try {
+            const phAttempts = [
+                fetchFromPDAX(symbol, interval, limit).then(k => {
+                    if (k.length === 0) throw new Error('PDAX empty');
+                    return k;
+                }),
+                fetchFromCoinsph(symbol, interval, limit).then(k => {
+                    if (k.length === 0) throw new Error('Coins.ph empty');
+                    return k;
+                }),
+            ];
+
+            try {
+                const data = await Promise.any(phAttempts);
+                klineCache.set(cacheKey, { at: Date.now(), data });
+                return data;
+            } catch {
+                // Both PH exchanges unavailable — fall back to Binance via proxy chain.
+                console.log('PH exchanges unavailable, trying Binance fallback...');
+                const data = await fetchKlines(symbol, interval, limit);
+                klineCache.set(cacheKey, { at: Date.now(), data });
+                return data;
+            }
+        } finally {
+            klineInFlight.delete(cacheKey);
+        }
+    })();
+    klineInFlight.set(cacheKey, promise);
+    return promise;
 };

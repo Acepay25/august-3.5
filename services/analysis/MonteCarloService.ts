@@ -414,6 +414,18 @@ export const calculateRuinRisk = (
         : 1; // Default 1% if unknown
 
     // Risk per trade as fraction of account
+    // Guard: a zero/empty account or position size would make riskPerTrade
+    // Infinity and every drawdown/equity stat NaN — report a zero-risk result
+    // instead of poisoning the prompt with NaN percentages.
+    if (!(accountBalance > 0) || !(positionSize > 0)) {
+        return {
+            prob25pctDrawdown: 0,
+            prob50pctDrawdown: 0,
+            prob75pctDrawdown: 0,
+            expectedEquityAfter100: accountBalance > 0 ? Math.round(accountBalance) : 0,
+            kellyOptimalSize: 0,
+        };
+    }
     const riskPerTrade = (positionSize / accountBalance) * (avgLossPercent / 100) * leverage;
 
     // Win/loss ratio for the fixed-fractional sizing model below

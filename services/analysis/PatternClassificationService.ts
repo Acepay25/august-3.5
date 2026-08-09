@@ -147,8 +147,11 @@ export const classifyPattern = (
     }
 
     // CHoCH (Change of Character) logic - hard to detect without swing points
-    // We use a proxy: HTF trend is Neutral or Weak, but LTF is strong
-    if (!regime.includes('strong') && Math.abs(ind1h?.macd?.histogram || 0) > 0) {
+    // We use a proxy: HTF trend is Neutral or Weak, but LTF is strong.
+    // Threshold: the histogram must exceed 20% of 1h ATR — the old `> 0`
+    // fired on any nonzero histogram (noise), making Family B the default
+    // winner in nearly every non-strong regime.
+    if (!regime.includes('strong') && Math.abs(ind1h?.macd?.histogram || 0) > Math.max((ind1h?.atr || 0) * 0.2, 1e-9)) {
         scores.familyB += 30; // Momentum shifting in weak trend
     }
 

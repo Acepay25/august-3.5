@@ -334,9 +334,10 @@ async function messagesCall(
     if (systemMsg) {
         body.system = typeof systemMsg.content === 'string' ? systemMsg.content : (systemMsg.content as ContentPart[]).map(p => p.type === 'text' ? p.text : '').join('');
     }
-    if (options?.temperature !== undefined) {
-        body.temperature = options.temperature;
-    }
+    // Explicit 0.7 default — matches chat_completions/responses. Anthropic's
+    // API default is 1.0, so omitting temperature sampled the same task at a
+    // different value per provider format and polluted calibration data.
+    body.temperature = options?.temperature ?? 0.7;
     // Extended thinking (thinking-capable Claude models only — older models
     // reject the `thinking` block with a 400): request a chain-of-thought
     // budget so `thinking` content blocks come back. Anthropic requires
@@ -927,8 +928,14 @@ export async function testConnection(config: ProviderConfig): Promise<{ success:
         const result = await sendChatRequest(
             testConfig,
             [{ role: 'user', content: 'Reply with exactly: OK' }],
-            { maxTokens: 10, temperature: 0, signal: AbortSignal.timeout(30_000) }
+            { maxTokens: 64, temperature: 0, signal: AbortSignal.timeout(30_000) }
         );
+        // Verify the response actually contains the expected token — a 200
+        // with empty/error content used to report "Connected successfully",
+        // and max_tokens 10 truncated reasoning models into false failures.
+        if (!/OK/i.test(result || '')) {
+            return { success: false, message: `${config.name} responded without the expected 'OK' — check the base URL and model id.` };
+        }
         return { success: true, message: `Connected to ${config.name} successfully` };
     } catch (error: any) {
         return { success: false, message: error.message || 'Connection failed' };

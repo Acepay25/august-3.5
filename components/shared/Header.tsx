@@ -196,7 +196,7 @@ export const Header: React.FC<HeaderProps> = memo(({
 
                                     {/* Session Details Modal */}
                                     {isSessionModalOpen && (
-                                             <div role="dialog" aria-label="Session details" className="absolute top-full left-0 sm:left-auto sm:right-0 mt-4 sm:mt-2 w-80 bg-zinc-900 border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-200">
+                                             <div role="dialog" aria-label="Session details" className="absolute top-full left-0 sm:left-auto sm:right-0 mt-4 sm:mt-2 w-80 bg-zinc-900 border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50 animate-fade-in">
                                             <div className="p-3 bg-zinc-900">
                                                 {/* Live Market Conditions Section */}
                                                 {liveMarketConditions && (
@@ -214,9 +214,9 @@ export const Header: React.FC<HeaderProps> = memo(({
                                                                 }`}>
                                                                  {liveMarketConditions.volatility} Volatility
                                                             </span>
-                                                            <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${liveMarketConditions.liquidation === 'High' ? 'border-purple-500/40 text-purple-400 bg-purple-500/15' :
-                                                                liveMarketConditions.liquidation === 'Medium' ? 'border-blue-500/40 text-blue-400 bg-blue-500/15' :
-                                                                    'border-zinc-500/40 text-zinc-400 bg-zinc-500/15'
+                                                            <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${liveMarketConditions.liquidation === 'High' ? 'border-zinc-300/40 text-zinc-200 bg-zinc-300/15' :
+                                                                liveMarketConditions.liquidation === 'Medium' ? 'border-zinc-500/40 text-zinc-400 bg-zinc-500/15' :
+                                                                    'border-zinc-700/40 text-zinc-500 bg-zinc-700/15'
                                                                 }`}>
                                                                  {liveMarketConditions.liquidation} Liq
                                                             </span>

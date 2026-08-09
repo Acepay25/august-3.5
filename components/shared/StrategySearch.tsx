@@ -5,6 +5,8 @@ import { searchStrategies, discoverStrategies, getStrategyDescription } from '..
 import { ProviderConfig } from '../../types/provider';
 import { CloseIcon, LoadingIcon, BotIcon, CheckIcon, LockIcon, ChevronDownIcon, SearchIcon, BrainIcon } from './Icons';
 import { FAMILY_UI_DATA } from '../../constants/models';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 interface StrategySearchProps {
   isVisible: boolean;
@@ -65,6 +67,11 @@ const StrategySearch: React.FC<StrategySearchProps> = ({
       handleViewFrameworkDetails(initialViewStrategy);
     }
   }, [isVisible, initialViewStrategy]);
+
+  // Keyboard support: Escape closes; focus is trapped + restored (this panel
+  // was previously keyboard-dead — divs-as-buttons and no dismissal path).
+  const drawerRef = useFocusTrap<HTMLElement>(isVisible);
+  useEscapeClose(isVisible, onClose);
 
    const handleSearch = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -156,11 +163,11 @@ const StrategySearch: React.FC<StrategySearchProps> = ({
         onClick={onClose}
       ></div>
 
-      <aside className={`fixed top-0 right-0 h-full w-full sm:w-[480px] bg-zinc-900 border-l border-white/10 shadow-2xl z-50 transform transition-transform duration-300 cubic-bezier(0.16, 1, 0.3, 1) flex flex-col ${isVisible ? 'translate-x-0' : 'translate-x-full'}`}>
+      <aside ref={drawerRef} role="dialog" aria-modal="true" aria-label="Playbook & Strategy Search" className={`fixed top-0 right-0 h-full w-full sm:w-[480px] bg-zinc-900 border-l border-white/10 shadow-2xl z-50 transform transition-transform duration-300 cubic-bezier(0.16, 1, 0.3, 1) flex flex-col ${isVisible ? 'translate-x-0' : 'translate-x-full'}`}>
         <div className="flex flex-col h-full">
           <header className="flex items-center justify-between p-4 sm:p-6 border-b border-white/5 bg-zinc-800">
             <h2 className="text-lg sm:text-xl font-bold text-cyan-400 tracking-tight">Playbook & Discovery</h2>
-            <button onClick={onClose} className="p-2 sm:p-3 rounded-xl text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors">
+            <button onClick={onClose} className="p-2 sm:p-3 rounded-xl text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors" aria-label="Close strategy search">
               <CloseIcon className="w-5 h-5 sm:w-6 sm:h-6" />
             </button>
           </header>
@@ -179,6 +186,7 @@ const StrategySearch: React.FC<StrategySearchProps> = ({
                         type="submit"
                         className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-lg text-zinc-400 hover:text-cyan-400 hover:bg-zinc-800 transition-colors"
                         disabled={isLoading || !searchQuery.trim()}
+                        aria-label="Search strategies"
                     >
                         <SearchIcon className="w-4 h-4 sm:w-5 sm:h-5" />
                     </button>
@@ -228,16 +236,18 @@ const StrategySearch: React.FC<StrategySearchProps> = ({
             
             {/* Market Structure Families Section */}
             <div>
-                <div 
-                    onClick={() => setIsFamiliesVisible(!isFamiliesVisible)} 
-                    className="flex justify-between items-center cursor-pointer py-3 sm:py-4 group"
+                <button
+                    type="button"
+                    onClick={() => setIsFamiliesVisible(!isFamiliesVisible)}
+                    aria-expanded={isFamiliesVisible}
+                    className="w-full flex justify-between items-center cursor-pointer py-3 sm:py-4 group text-left"
                 >
                     <h3 className="text-xs sm:text-sm font-bold text-zinc-500 uppercase tracking-widest group-hover:text-zinc-300 transition-colors flex items-center gap-2">
                         <BrainIcon className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-600" />
                         Market Classification Families
                     </h3>
                     <ChevronDownIcon className={`w-4 h-4 sm:w-5 sm:h-5 text-zinc-600 transition-transform duration-200 ${isFamiliesVisible ? 'rotate-180' : ''}`} />
-                </div>
+                </button>
                 
                 <div className={`collapsible-content ${isFamiliesVisible ? 'expanded' : ''}`}>
                     <div className="mt-2 sm:mt-4 space-y-3 sm:space-y-5">
@@ -285,13 +295,15 @@ const StrategySearch: React.FC<StrategySearchProps> = ({
 
             {/* Core Frameworks Section */}
             <div>
-                <div 
-                    onClick={() => setIsFrameworksVisible(!isFrameworksVisible)} 
-                    className="flex justify-between items-center cursor-pointer py-3 sm:py-4 group"
-                >
-                    <h3 className="text-xs sm:text-sm font-bold text-zinc-500 uppercase tracking-widest group-hover:text-zinc-300 transition-colors">Active Playbook</h3>
-                    <ChevronDownIcon className={`w-4 h-4 sm:w-5 sm:h-5 text-zinc-600 transition-transform duration-200 ${isFrameworksVisible ? 'rotate-180' : ''}`} />
-                </div>
+                    <button
+                        type="button"
+                        onClick={() => setIsFrameworksVisible(!isFrameworksVisible)}
+                        aria-expanded={isFrameworksVisible}
+                        className="w-full flex justify-between items-center cursor-pointer py-3 sm:py-4 group text-left"
+                    >
+                        <h3 className="text-xs sm:text-sm font-bold text-zinc-500 uppercase tracking-widest group-hover:text-zinc-300 transition-colors">Active Playbook</h3>
+                        <ChevronDownIcon className={`w-4 h-4 sm:w-5 sm:h-5 text-zinc-600 transition-transform duration-200 ${isFrameworksVisible ? 'rotate-180' : ''}`} />
+                    </button>
                 
                 <div className={`collapsible-content ${isFrameworksVisible ? 'expanded' : ''}`}>
                     <div className="space-y-2 sm:space-y-3 mt-1 sm:mt-2">
@@ -305,7 +317,10 @@ const StrategySearch: React.FC<StrategySearchProps> = ({
                                 <div key={index} className={`rounded-lg sm:rounded-xl overflow-hidden border transition-all duration-300 ${isViewing ? 'bg-zinc-800 border-cyan-500/30 shadow-lg' : 'bg-zinc-800 border-white/5 hover:border-white/10'}`}>
                                     <div 
                                         className="p-3 sm:p-5 flex items-center justify-between cursor-pointer"
+                                        role="button"
+                                        tabIndex={0}
                                         onClick={() => handleViewFrameworkDetails(framework)}
+                                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleViewFrameworkDetails(framework); } }}
                                     >
                                         <div className="flex items-center gap-3">
                                             {isDefault ? <LockIcon /> : <CheckIcon className="text-cyan-500" />}
@@ -316,6 +331,7 @@ const StrategySearch: React.FC<StrategySearchProps> = ({
                                                 <button 
                                                     onClick={(e) => { e.stopPropagation(); onRemoveStrategy(framework); }}
                                                     className="p-1.5 sm:p-2 text-zinc-600 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                                                    aria-label={`Remove ${framework}`}
                                                 >
                                                     <CloseIcon className="w-3 h-3 sm:w-4 sm:h-4" />
                                                 </button>
