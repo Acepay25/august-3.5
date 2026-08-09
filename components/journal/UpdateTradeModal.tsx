@@ -24,19 +24,38 @@ export const UpdateTradeModal: React.FC<{
     const [updateText, setUpdateText] = useState('');
     const [images, setImages] = useState<ImageMetadata[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    // Mirror of `images` for the upload handler — chart numbering must read
+    // the CURRENT length even if two uploads land within one render (the
+    // closure `images` would be stale). Write-backs from the summarizer only
+    // mutate entries in place, so length stays in sync.
+    const imagesRef = useRef<ImageMetadata[]>([]);
+    const setImagesTracked = (updater: React.SetStateAction<ImageMetadata[]>) => {
+        setImages(prev => {
+            const next = typeof updater === 'function' ? updater(prev) : updater;
+            imagesRef.current = next;
+            return next;
+        });
+    };
 
     const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
         if (event.target.files) {
             const newFiles: File[] = Array.from(event.target.files);
-            const placeholderMetadata: ImageMetadata[] = newFiles.map(file => ({ file, dataURL: '', isLoading: true }));
-            setImages(prev => [...prev, ...placeholderMetadata].slice(0, 5));
-            processImagesForSummarization(newFiles, images.length, visionConfig, setImages, onQuotaExceeded);
+            const startIndex = imagesRef.current.length;
+            // Enforce the 5-image cap BEFORE processing — files past the cap
+            // never get a placeholder, so no vision call is wasted on an
+            // image that will never be displayed.
+            const accepted = newFiles.slice(0, Math.max(0, 5 - startIndex));
+            const placeholderMetadata: ImageMetadata[] = accepted.map(file => ({ file, dataURL: '', isLoading: true }));
+            setImagesTracked(prev => [...prev, ...placeholderMetadata].slice(0, 5));
+            if (accepted.length > 0) {
+                processImagesForSummarization(accepted, startIndex, visionConfig, setImages, onQuotaExceeded);
+            }
             if (event.target) event.target.value = '';
         }
     };
 
     const removeImage = (index: number) => {
-        setImages(prev => prev.filter((_, i) => i !== index));
+        setImagesTracked(prev => prev.filter((_, i) => i !== index));
     };
 
     const isProcessing = images.some(img => img.isLoading);

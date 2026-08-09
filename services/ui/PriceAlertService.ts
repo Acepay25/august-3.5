@@ -59,6 +59,16 @@ class PriceAlertServiceClass {
     private isPaused = false; // P1-10: true when app is backgrounded
     private nativeListenersRegistered = false;
     private nativeNotificationIdCounter = 1000;
+    // SetupWatchService (and future consumers) can hook the same real-time
+    // price feed instead of opening their own socket/poll loop.
+    private priceSubscribers: Set<(symbol: string, price: number) => void> = new Set();
+    // Non-alert consumers that need the feed running even with 0 alerts
+    // (setup watches). Monitoring stops only when alerts AND holders are 0.
+    private externalMonitorHolders = 0;
+    // Symbols that must stay in the feed without owning a price alert
+    // (setup watches, live-price refresh). Merged into the WebSocket stream
+    // list and the polling loop so ticks reach emitPriceTick for them.
+    private trackedSymbols: Set<string> = new Set();
 
     constructor() {
         // P1-10: Wire native app lifecycle (pause/resume) so we stop the
@@ -120,7 +130,7 @@ class PriceAlertServiceClass {
         if (!this.isPaused) return;
         this.isPaused = false;
         console.log('[PriceAlertService] Resumed (foregrounded)');
-        if (this.alerts.size > 0) {
+        if (this.alerts.size > 0 || this.externalMonitorHolders > 0 || this.trackedSymbols.size > 0) {
             this.ensureMonitoring();
         }
     }
@@ -189,12 +199,48 @@ class PriceAlertServiceClass {
         const deleted = this.alerts.delete(alertId);
         this.saveAlerts();
 
-        // Stop monitoring if no alerts left
-        if (this.alerts.size === 0) {
-            this.stopMonitoring();
-        }
+        // Stop monitoring if nothing needs the feed anymore
+        this.maybeStopMonitoring();
 
         return deleted;
+    }
+
+    /**
+     * Subscribe to raw price ticks for every monitored symbol. The callback
+     * receives (symbol, price) on each WebSocket message / polling tick for
+     * any symbol the service is currently tracking. Returns an unsubscribe
+     * function. Consumers that need ticks while no alerts exist must also
+     * hold the feed via acquireMonitor().
+     */
+    subscribePrices(callback: (symbol: string, price: number) => void): () => void {
+        this.priceSubscribers.add(callback);
+        return () => this.priceSubscribers.delete(callback);
+    }
+
+    /**
+     * Declare that an external consumer needs the price feed running even
+     * with zero alerts (e.g. setup watches). Returns a release function —
+     * the feed stops once the last holder releases and no alerts remain.
+     */
+    acquireMonitor(): () => void {
+        this.externalMonitorHolders++;
+        this.ensureMonitoring();
+        let released = false;
+        return () => {
+            if (released) return;
+            released = true;
+            this.externalMonitorHolders = Math.max(0, this.externalMonitorHolders - 1);
+            this.maybeStopMonitoring();
+        };
+    }
+
+    /**
+     * Stop monitoring only when neither alerts nor external holders need it.
+     */
+    private maybeStopMonitoring(): void {
+        if (this.alerts.size === 0 && this.externalMonitorHolders === 0 && this.trackedSymbols.size === 0) {
+            this.stopMonitoring();
+        }
     }
 
     /**
@@ -240,10 +286,34 @@ class PriceAlertServiceClass {
     }
 
     /**
+     * Register a symbol that must stay in the price feed even without a
+     * price alert (setup watches). Starts monitoring when it wasn't running.
+     */
+    trackSymbol(symbol: string): boolean {
+        const normalized = this.normalizeSymbol(symbol);
+        if (!normalized) return false;
+        if (this.trackedSymbols.has(normalized)) return false;
+        this.trackedSymbols.add(normalized);
+        this.ensureMonitoring();
+        return true;
+    }
+
+    /**
+     * Stop tracking a symbol. Monitoring stops only when alerts, holders,
+     * and tracked symbols are all gone.
+     */
+    untrackSymbol(symbol: string): boolean {
+        const normalized = this.normalizeSymbol(symbol);
+        const removed = this.trackedSymbols.delete(normalized);
+        if (removed) this.maybeStopMonitoring();
+        return removed;
+    }
+
+    /**
      * Start monitoring prices via WebSocket
      */
     private ensureMonitoring(): void {
-        if (this.alerts.size === 0) return;
+        if (this.alerts.size === 0 && this.externalMonitorHolders === 0 && this.trackedSymbols.size === 0) return;
         // P1-10: Don't start monitoring while backgrounded — resume() will
         // call this again on foreground.
         if (this.isPaused) return;
@@ -264,7 +334,10 @@ class PriceAlertServiceClass {
      */
     private connectWebSocket(): void {
         try {
-            const symbols = [...new Set(Array.from(this.alerts.values()).map(a => a.symbol.toLowerCase()))];
+            const symbols = [...new Set([
+                ...Array.from(this.alerts.values()).map(a => a.symbol.toLowerCase()),
+                ...Array.from(this.trackedSymbols).map(s => s.toLowerCase()),
+            ])];
             if (symbols.length === 0) return;
 
             const streams = symbols.map(s => `${s}@ticker`).join('/');
@@ -298,7 +371,7 @@ class PriceAlertServiceClass {
             this.ws.onclose = () => {
                 console.log('[PriceAlertService] WebSocket closed');
                 // Attempt reconnect
-                if (this.alerts.size > 0 && this.wsReconnectAttempts < this.maxReconnectAttempts) {
+                if ((this.alerts.size > 0 || this.trackedSymbols.size > 0) && this.wsReconnectAttempts < this.maxReconnectAttempts) {
                     this.wsReconnectAttempts++;
                     this.wsReconnectTimer = setTimeout(() => {
                         this.wsReconnectTimer = null;
@@ -316,7 +389,10 @@ class PriceAlertServiceClass {
      */
     private startPolling(): void {
         this.pollingInterval = setInterval(async () => {
-            const symbols = [...new Set(Array.from(this.alerts.values()).map(a => a.symbol))];
+            const symbols = [...new Set([
+                ...Array.from(this.alerts.values()).map(a => a.symbol),
+                ...Array.from(this.trackedSymbols),
+            ])];
 
             for (const symbol of symbols) {
                 try {
@@ -357,6 +433,9 @@ class PriceAlertServiceClass {
      * Check if price triggers any alerts
      */
     private checkAlerts(symbol: string, currentPrice: number): void {
+        // Fan out the tick to external feed subscribers (setup watches etc.)
+        this.emitPriceTick(symbol, currentPrice);
+
         for (const alert of this.alerts.values()) {
             if (!alert.enabled || alert.symbol !== symbol) continue;
 
@@ -411,6 +490,19 @@ class PriceAlertServiceClass {
                 }
             });
         }
+    }
+
+    /**
+     * Notify external price-feed subscribers of a fresh tick.
+     */
+    private emitPriceTick(symbol: string, price: number): void {
+        this.priceSubscribers.forEach(callback => {
+            try {
+                callback(symbol, price);
+            } catch (e) {
+                console.error('[PriceAlertService] Price subscriber error:', e);
+            }
+        });
     }
 
     /**
@@ -509,7 +601,7 @@ class PriceAlertServiceClass {
     /**
      * Normalize coin symbol to Binance format
      */
-    private normalizeSymbol(coinName: string): string {
+    normalizeSymbol(coinName: string): string {
         const cleaned = coinName.replace(/[^A-Z0-9]/gi, '').toUpperCase();
         return cleaned.includes('USDT') ? cleaned : `${cleaned}USDT`;
     }

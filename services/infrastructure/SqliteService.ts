@@ -13,6 +13,7 @@ import { CapacitorSQLite, SQLiteConnection, SQLiteDBConnection } from '@capacito
 import { LoggedTrade, UserProfile, Conversation, TradeSummary, GlobalMemory, UserSettings, Message } from '../../types';
 import { setSqliteDb, runExclusiveWrite } from './SqliteServiceHelpers';
 import { DEFAULT_LEVERAGE } from '../../utils/conversationUtils';
+import { parsePrice } from '../../utils/analysisUtils';
 
 /**
  * Parse a stored JSON blob defensively. A single corrupt cell (e.g. from an
@@ -248,81 +249,65 @@ const createTables = async (): Promise<void> => {
         );
     };
 
-    // VERSION 2 MIGRATION: Add userPrompt if missing
     // ALTER TABLE ADD COLUMN has no IF NOT EXISTS in SQLite, so "duplicate
-    // column" failures are expected on re-runs — anything else is logged.
+    // column" failures are expected on re-runs — anything else is a real
+    // failure.
     const isDuplicateColumnError = (e: unknown): boolean =>
         e instanceof Error && /duplicate column/i.test(e.message);
-    const swallowDuplicateColumn = (e: unknown, migration: string): void => {
-        if (!isDuplicateColumnError(e)) {
-            console.warn(`[SqliteService] Migration "${migration}" failed:`, e);
+
+    // Run a version's migration statements and record the version ONLY when
+    // every statement applied (duplicate columns count as applied — the
+    // column already exists). Previously recordMigration ran unconditionally,
+    // so a REAL failure (disk full, constraint) marked the migration done,
+    // the column was never added, and every later query against it failed —
+    // with no retry ever.
+    const runMigrations = async (version: number, statements: { label: string; sql: string }[]): Promise<void> => {
+        let allApplied = true;
+        for (const { label, sql } of statements) {
+            try {
+                await db!.execute(sql);
+            } catch (e) {
+                if (isDuplicateColumnError(e)) continue; // already present — effectively applied
+                allApplied = false;
+                console.warn(`[SqliteService] Migration "${label}" failed:`, e);
+            }
         }
+        if (allApplied) await recordMigration(version);
     };
 
+    // VERSION 2 MIGRATION: Add userPrompt if missing
     if (appliedVersion < 2) {
-        try {
-            await db.execute(`ALTER TABLE saved_analyses ADD COLUMN userPrompt TEXT;`);
-        } catch (e) {
-            swallowDuplicateColumn(e, 'v2 saved_analyses.userPrompt');
-        }
-        await recordMigration(2);
+        await runMigrations(2, [
+            { label: 'v2 saved_analyses.userPrompt', sql: 'ALTER TABLE saved_analyses ADD COLUMN userPrompt TEXT;' },
+        ]);
     }
 
     // VERSION 3 MIGRATION: Add settings to conversations and meta to trades
     if (appliedVersion < 3) {
-        try {
-            await db.execute(`ALTER TABLE conversations ADD COLUMN settings TEXT;`);
-        } catch (e) {
-            swallowDuplicateColumn(e, 'v3 conversations.settings');
-        }
-        try {
-            await db.execute(`ALTER TABLE trades ADD COLUMN meta TEXT;`);
-        } catch (e) {
-            swallowDuplicateColumn(e, 'v3 trades.meta');
-        }
-        await recordMigration(3);
+        await runMigrations(3, [
+            { label: 'v3 conversations.settings', sql: 'ALTER TABLE conversations ADD COLUMN settings TEXT;' },
+            { label: 'v3 trades.meta', sql: 'ALTER TABLE trades ADD COLUMN meta TEXT;' },
+        ]);
     }
 
     // VERSION 4 MIGRATION: Add lastActiveConversationId to users and meta to saved_analyses
     if (appliedVersion < 4) {
-        try {
-            await db.execute(`ALTER TABLE users ADD COLUMN lastActiveConversationId TEXT;`);
-        } catch (e) {
-            swallowDuplicateColumn(e, 'v4 users.lastActiveConversationId');
-        }
-        try {
-            await db.execute(`ALTER TABLE saved_analyses ADD COLUMN meta TEXT;`);
-        } catch (e) {
-            swallowDuplicateColumn(e, 'v4 saved_analyses.meta');
-        }
-        await recordMigration(4);
+        await runMigrations(4, [
+            { label: 'v4 users.lastActiveConversationId', sql: 'ALTER TABLE users ADD COLUMN lastActiveConversationId TEXT;' },
+            { label: 'v4 saved_analyses.meta', sql: 'ALTER TABLE saved_analyses ADD COLUMN meta TEXT;' },
+        ]);
     }
 
     // VERSION 5 MIGRATION: Enrich thinking_records with final output, raw
     // chain-of-thought, and the analysis card (message) id so each reasoning
     // set is linked to its trade/card prediction.
     if (appliedVersion < 5) {
-        try {
-            await db.execute(`ALTER TABLE thinking_records ADD COLUMN finalOutput TEXT;`);
-        } catch (e) {
-            swallowDuplicateColumn(e, 'v5 thinking_records.finalOutput');
-        }
-        try {
-            await db.execute(`ALTER TABLE thinking_records ADD COLUMN rawReasoning TEXT;`);
-        } catch (e) {
-            swallowDuplicateColumn(e, 'v5 thinking_records.rawReasoning');
-        }
-        try {
-            await db.execute(`ALTER TABLE thinking_records ADD COLUMN messageId TEXT;`);
-        } catch (e) {
-            swallowDuplicateColumn(e, 'v5 thinking_records.messageId');
-        }
-        try {
-            await db.execute(`CREATE INDEX IF NOT EXISTS idx_thinking_message ON thinking_records(messageId);`);
-        } catch (e) {
-            console.warn('[SqliteService] Migration "v5 thinking_records.messageId index" failed:', e);
-        }
-        await recordMigration(5);
+        await runMigrations(5, [
+            { label: 'v5 thinking_records.finalOutput', sql: 'ALTER TABLE thinking_records ADD COLUMN finalOutput TEXT;' },
+            { label: 'v5 thinking_records.rawReasoning', sql: 'ALTER TABLE thinking_records ADD COLUMN rawReasoning TEXT;' },
+            { label: 'v5 thinking_records.messageId', sql: 'ALTER TABLE thinking_records ADD COLUMN messageId TEXT;' },
+            { label: 'v5 thinking_records.messageId index', sql: 'CREATE INDEX IF NOT EXISTS idx_thinking_message ON thinking_records(messageId);' },
+        ]);
     }
 
     console.log('[SqliteService] Tables created successfully');
@@ -662,11 +647,14 @@ export const sqliteSaveUserProfile = async (profile: UserProfile): Promise<void>
 export const sqliteSaveTrade = async (username: string, trade: LoggedTrade): Promise<void> => {
     if (!db) throw new Error('Database not initialized');
 
+    // Use the canonical parsePrice — the naive digit-strip regex turned
+    // annotated AI prices like "94500 4h" into 945004, corrupting the
+    // stored entry/stopLoss columns used by backtests and range filters.
     const entry = trade.analysis?.entryPoints?.[0]?.price
-        ? parseFloat(trade.analysis.entryPoints[0].price.replace(/[^0-9.]/g, ''))
+        ? (parsePrice(trade.analysis.entryPoints[0].price) || null)
         : null;
     const stopLoss = trade.analysis?.stopLoss
-        ? parseFloat(trade.analysis.stopLoss.replace(/[^0-9.]/g, ''))
+        ? (parsePrice(trade.analysis.stopLoss) || null)
         : null;
 
     // Extract meta fields (everything not in the core columns)

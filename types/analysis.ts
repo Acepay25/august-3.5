@@ -149,6 +149,13 @@ export interface TradeAnalysis {
    * UI can show exactly what kills the trade (price level, time, structure).
    */
   invalidationCriteria?: InvalidationCriterion[];
+  /**
+   * Consensus explainability panel data: each ensemble analyst's structured
+   * call (direction/entry/SL/TP/confidence) plus the pre-debate divergence
+   * analysis, so the verdict can be audited against its own inputs.
+   * App-computed (never AI-generated) — attached after sanitization.
+   */
+  analystConsensus?: AnalystConsensus;
 }
 
 /**
@@ -181,6 +188,37 @@ export interface InvalidationCriterion {
   category?: 'price' | 'time' | 'structure' | 'signal';
   /** Optional consequence/rationale, e.g. "bullish thesis dead, flip to neutral". */
   note?: string;
+}
+
+/** One analyst's structured call, extracted for the consensus breakdown. */
+export interface AnalystConsensusEntry {
+  /** ProviderConfig.id — the key used across modelsUsed/calibration. */
+  providerId: string;
+  /** Display name, e.g. "Gemini 2.0 Pro (Technical)". */
+  displayName: string;
+  direction?: string;
+  /** First entry price, cleaned string. */
+  entry?: string;
+  stopLoss?: string;
+  /** First take-profit price, cleaned string. */
+  takeProfit?: string;
+  confidence?: string;
+  probability?: number;
+}
+
+/** Persisted subset of the pre-debate divergence analysis. */
+export interface ConsensusDivergence {
+  /** 0-100: 0 = complete agreement, 100 = total disagreement. */
+  score: number;
+  isEchoChamber: boolean;
+  divergenceType: 'none' | 'direction' | 'confidence' | 'entry' | 'multiple';
+  details: string[];
+}
+
+/** Full consensus payload attached to the verdict analysis. */
+export interface AnalystConsensus {
+  entries: AnalystConsensusEntry[];
+  divergence: ConsensusDivergence;
 }
 
 /**

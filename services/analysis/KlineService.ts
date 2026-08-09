@@ -76,28 +76,32 @@ const parseBinanceKlines = (data: any): Kline[] => {
 };
 
 /**
- * Try each source in order, returning the first valid Kline[] result.
- * Returns [] if every source fails.
+ * Race all sources in parallel and resolve with the first VALID kline payload.
+ * The old serial chain let a single slow source add its full timeout to the
+ * critical path (worst case 27s+ for the Binance chain); with a parallel race
+ * the fastest healthy source wins and the rest are abandoned (their abort
+ * timers still fire, releasing the sockets). All sources share one parser, so
+ * the first non-empty payload is a valid drop-in result.
  */
 const fetchKlinesFromSources = async (
     sources: FetchSource[],
     parse: (data: any) => Kline[],
     label: string,
 ): Promise<Kline[]> => {
-    for (const source of sources) {
-        try {
-            const data = await fetchJson(source);
-            const klines = parse(data);
-            if (klines.length > 0) {
-                return klines;
-            }
-        } catch (e: any) {
-            // console.warn(`${label} attempt failed`, e?.name === 'AbortError' ? 'timeout' : e?.message);
-        }
-    }
+    const attempts = sources.map(async (source) => {
+        const data = await fetchJson(source);
+        const klines = parse(data);
+        if (klines.length === 0) throw new Error('empty payload');
+        return klines;
+    });
 
-    console.error(`All fetch attempts failed for ${label}`);
-    return [];
+    try {
+        return await Promise.any(attempts);
+    } catch {
+        // Every source rejected or returned an empty payload.
+        console.error(`All fetch attempts failed for ${label}`);
+        return [];
+    }
 };
 
 // --- Binance source chain (direct + CORS proxies) ---
@@ -136,7 +140,10 @@ export const fetchKlines = async (
  * and returns an array of objects: { time, open, high, low, close, volume }.
  */
 const fetchFromPDAX = async (symbol: string, interval: string, limit: number): Promise<Kline[]> => {
-    const pdaxSymbol = symbol.replace('USDT', '-PHP');
+    // Only the trailing USDT quote gets converted. A blanket replace mangles
+    // symbols where 'USDT' appears in the base (TUSDUSDT → T-PHPUSDT) and
+    // passes non-USDT quotes (BTCBUSD) through to PDAX as garbage.
+    const pdaxSymbol = symbol.endsWith('USDT') ? `${symbol.slice(0, -4)}-PHP` : symbol;
     const pdaxInterval = mapInterval(interval, 'pdax');
     const source: FetchSource = {
         url: `https://api.pdax.ph/api/v1/market/klines?symbol=${pdaxSymbol}&interval=${pdaxInterval}&limit=${limit}`,
@@ -184,24 +191,37 @@ const fetchFromCoinsph = async (symbol: string, interval: string, limit: number)
 };
 
 /**
- * Multi-exchange kline fetch: tries Philippine exchanges first (PDAX, Coins.ph),
+ * Multi-exchange kline fetch: races the two Philippine exchanges in parallel,
  * then falls back to the Binance proxy chain. Returns standardized Kline[]
  * (time in ms), or [] if all sources fail.
+ *
+ * Both PH exchanges quote the same pairs (BTCUSDT → BTC-PHP), so whichever
+ * responds first with a non-empty payload is a valid result for the caller —
+ * racing them (instead of the old PDAX→Coins.ph serial chain) cuts the
+ * worst-case PH latency from ~10s to ~5s and returns as soon as the faster
+ * exchange answers.
  */
 export const fetchMultiExchangeKlines = async (
     symbol: string,
     interval: string,
     limit: number = 300,
 ): Promise<Kline[]> => {
-    // Try PDAX first (Philippine exchange)
-    const pdaxData = await fetchFromPDAX(symbol, interval, limit);
-    if (pdaxData.length > 0) return pdaxData;
+    const phAttempts = [
+        fetchFromPDAX(symbol, interval, limit).then(k => {
+            if (k.length === 0) throw new Error('PDAX empty');
+            return k;
+        }),
+        fetchFromCoinsph(symbol, interval, limit).then(k => {
+            if (k.length === 0) throw new Error('Coins.ph empty');
+            return k;
+        }),
+    ];
 
-    // Try Coins.ph second (Philippine exchange)
-    const coinsphData = await fetchFromCoinsph(symbol, interval, limit);
-    if (coinsphData.length > 0) return coinsphData;
-
-    // Fallback to Binance via proxy chain
-    console.log('PH exchanges unavailable, trying Binance fallback...');
-    return fetchKlines(symbol, interval, limit);
+    try {
+        return await Promise.any(phAttempts);
+    } catch {
+        // Both PH exchanges unavailable — fall back to Binance via proxy chain.
+        console.log('PH exchanges unavailable, trying Binance fallback...');
+        return fetchKlines(symbol, interval, limit);
+    }
 };

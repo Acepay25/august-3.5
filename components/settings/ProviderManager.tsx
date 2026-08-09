@@ -336,6 +336,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                 <div className="space-y-1">
                                     {configs.map(c => {
                                         const isSelected = selected?.id === c.id;
+                                        const isReady = c.isEnabled && c.apiKey.trim().length > 0;
                                         return (
                                             <button
                                                 key={c.id}
@@ -352,7 +353,10 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                                     </div>
                                                     <span className="text-xs truncate font-medium">{c.name}</span>
                                                 </div>
-                                                <span className={`w-2 h-2 rounded-full shrink-0 ${c.isEnabled ? 'bg-emerald-400 shadow-[0_0_6px_rgba(228,228,231,0.8)]' : 'bg-zinc-600'}`} />
+                                                <span
+                                                    className={`w-2 h-2 rounded-full shrink-0 ${isReady ? 'bg-emerald-400 shadow-[0_0_6px_rgba(228,228,231,0.8)]' : c.isEnabled ? 'bg-amber-400' : 'bg-zinc-600'}`}
+                                                    title={isReady ? 'Ready' : c.isEnabled ? 'Enabled, API key missing' : 'Disabled'}
+                                                />
                                             </button>
                                         );
                                     })}
@@ -526,7 +530,9 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
 
                                 {/* Delete Provider Icon */}
                                 <button
+                                    disabled={selected.isBuiltIn}
                                     onClick={async () => {
+                                        if (selected.isBuiltIn) return;
                                         const ok = await confirm({
                                             title: `Delete ${selected.name}?`,
                                             message: 'This removes the provider, its API key, and its models. Analyses already logged are unaffected.',
@@ -537,8 +543,9 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                         const remaining = configs.filter(c => c.id !== selected.id);
                                         if (remaining.length > 0) setSelectedId(remaining[0].id);
                                     }}
-                                    className="p-1.5 text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
-                                    title="Delete Provider"
+                                    className="p-1.5 text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-30"
+                                    title={selected.isBuiltIn ? 'Built-in providers cannot be deleted' : 'Delete Provider'}
+                                    aria-label={selected.isBuiltIn ? 'Built-in provider cannot be deleted' : `Delete ${selected.name}`}
                                 >
                                     <TrashIcon className="w-4 h-4 text-zinc-400 hover:text-rose-400" />
                                 </button>
@@ -774,7 +781,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
  * refreshes every 5s while the provider panel is open.
  */
 const HealthStrip: React.FC<{ providerId: string }> = ({ providerId }) => {
-    const [tick, setTick] = useState(0);
+    const [, setTick] = useState(0);
     useEffect(() => {
         // Pause the 5s health poll while the tab is backgrounded — no point
         // re-rendering the strip (and burning the health cache) when nobody
@@ -792,13 +799,14 @@ const HealthStrip: React.FC<{ providerId: string }> = ({ providerId }) => {
             }
         };
         start();
-        document.addEventListener('visibilitychange', () => {
+        const handleVisibilityChange = (): void => {
             if (document.visibilityState === 'visible') start();
             else stop();
-        });
+        };
+        document.addEventListener('visibilitychange', handleVisibilityChange);
         return () => {
             stop();
-            document.removeEventListener('visibilitychange', start);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
         };
     }, []);
     const health = getProviderHealth(providerId);

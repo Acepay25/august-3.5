@@ -6,7 +6,6 @@ import { getCalibratedWinRate, getSampleSize, ConfidenceLevel } from '../../serv
 interface CalibrationWidgetProps {
     confidence: 'High' | 'Medium' | 'Low' | 'Avoid';
     confidenceCalibration?: ConfidenceCalibration;
-    coinName: string;
 }
 
 /**

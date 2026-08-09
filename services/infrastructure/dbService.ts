@@ -20,6 +20,7 @@ import {
   sqliteDeleteUser,
   migrateFromIndexedDB
 } from './SqliteService';
+import { putMessageImages, getConversationImages } from './messageImageStore';
 import { runExclusiveWrite } from './SqliteServiceHelpers';
 import {
   isSqliteMigrated,
@@ -41,7 +42,14 @@ let dbReadyPromise: Promise<void> | null = null;
  * Safe to call before or after initDatabase().
  */
 const ensureDbReady = async (): Promise<boolean> => {
-  if (dbReadyPromise) {
+  if (!dbReadyPromise) {
+    // Lazy-init: the app usually calls initDatabase() on startup, but a save
+    // can beat it (debounce/heartbeat firing during the first tick). Without
+    // this, that early write sees sqliteReady=false and lands in IndexedDB,
+    // then gets orphaned once the SQLite migration runs. Trigger init here so
+    // every caller waits for the real backend.
+    await initDatabase();
+  } else {
     await dbReadyPromise;
   }
   return sqliteReady;
@@ -127,13 +135,82 @@ export const initDatabase = async (): Promise<void> => {
         console.log('[dbService] Web platform, using IndexedDB');
         await initIndexedDB();
       }
-    })();
+    })()
+      .catch((err: unknown) => {
+        // Don't leave a permanently-rejected promise: a transient failure
+        // (e.g. the SQLite plugin not ready during the very first tick)
+        // would otherwise poison every later read/write. Reset so the next
+        // access retries initialization.
+        dbReadyPromise = null;
+        throw err;
+      });
   }
   return dbReadyPromise;
 };
 
 // ============================================================================
-// IndexedDB OPERATIONS (for web and migration source)
+// IMAGE STRIPPING / REHYDRATION (messageImageStore integration)
+// ============================================================================
+
+/**
+ * Move message chart images into the side store and return the profile
+ * payload WITHOUT them — keeps the hot save path (debounce, heartbeat,
+ * settings) free of multi-MB base64 serialization. Images are only stripped
+ * for keys whose store write committed; a failure leaves them inline
+ * (legacy persistence), so images are never dropped.
+ */
+async function stripMessageImages(data: UserProfile): Promise<UserProfile>;
+async function stripMessageImages(
+    data: Partial<Omit<UserProfile, 'username'>>
+): Promise<Partial<Omit<UserProfile, 'username'>>>;
+async function stripMessageImages(
+    data: UserProfile | Partial<Omit<UserProfile, 'username'>>
+): Promise<UserProfile | Partial<Omit<UserProfile, 'username'>>> {
+    if (!Array.isArray(data.conversations) || data.conversations.length === 0) return data;
+
+    let conversationsChanged = false;
+    const conversations = await Promise.all(data.conversations.map(async conv => {
+        if (!Array.isArray(conv.messages) || conv.messages.length === 0) return conv;
+        let messagesChanged = false;
+        const messages = await Promise.all(conv.messages.map(async msg => {
+            if (!Array.isArray(msg.images) || msg.images.length === 0) return msg;
+            const stored = await putMessageImages(conv.id, msg.id, msg.images);
+            if (!stored) return msg; // keep inline — never drop images
+            messagesChanged = true;
+            const stripped = { ...msg };
+            delete stripped.images;
+            return stripped;
+        }));
+        if (!messagesChanged) return conv;
+        conversationsChanged = true;
+        return { ...conv, messages };
+    }));
+
+    if (!conversationsChanged) return data;
+    return { ...data, conversations };
+};
+
+/**
+ * Reattach side-store images to a freshly loaded profile. Messages that
+ * still carry inline images (legacy profiles written before this change)
+ * are left untouched.
+ */
+const rehydrateMessageImages = async (profile: UserProfile): Promise<void> => {
+    if (!Array.isArray(profile.conversations)) return;
+    for (const conv of profile.conversations) {
+        if (!Array.isArray(conv.messages) || conv.messages.length === 0) continue;
+        const stored = await getConversationImages(conv.id);
+        if (Object.keys(stored).length === 0) continue;
+        conv.messages = conv.messages.map(msg => {
+            if (Array.isArray(msg.images) && msg.images.length > 0) return msg;
+            const images = stored[msg.id];
+            return images ? { ...msg, images } : msg;
+        });
+    }
+};
+
+// ============================================================================
+// INDEXEDDB OPERATIONS (for web and migration source)
 // ============================================================================
 
 const idbGetAllUsernames = async (): Promise<string[]> => {
@@ -213,17 +290,27 @@ export const getAllUsernames = async (): Promise<string[]> => {
  * Get user profile
  */
 export const getUserProfile = async (username: string): Promise<UserProfile | undefined> => {
+  let profile: UserProfile | undefined;
   if (await ensureDbReady()) {
-    const profile = await sqliteGetUserProfile(username);
-    return profile || undefined;
+    const sqliteProfile = await sqliteGetUserProfile(username);
+    profile = sqliteProfile || undefined;
+  } else {
+    profile = await idbGetUserProfile(username);
   }
-  return idbGetUserProfile(username);
+  if (profile) {
+    // Reattach side-store images so the UI (thumbnails, re-run) and
+    // backups (which snapshot via getUserProfile) still see them.
+    await rehydrateMessageImages(profile);
+  }
+  return profile;
 };
 
 /**
  * Save user profile (partial update)
  */
 export const saveUserProfile = async (username: string, data: Partial<Omit<UserProfile, 'username'>>): Promise<void> => {
+  // Chart images leave the profile blob first (see messageImageStore).
+  const dataToSave = await stripMessageImages(data);
   if (await ensureDbReady()) {
     // The read-modify-write must be atomic: overlapping saves (data debounce,
     // settings debounce, heartbeat, unload flush) each read the whole profile
@@ -240,7 +327,7 @@ export const saveUserProfile = async (username: string, data: Partial<Omit<UserP
         finalTradeSummary: null,
         settings: { activeFrameworks: [] },
         ...existing,
-        ...data,
+        ...dataToSave,
         updatedAt: new Date().toISOString(),
       };
       if (!updatedProfile.createdAt) {
@@ -250,20 +337,21 @@ export const saveUserProfile = async (username: string, data: Partial<Omit<UserP
     });
     return;
   }
-  return idbSaveUserProfile(username, data);
+  return idbSaveUserProfile(username, dataToSave);
 };
 
 /**
  * Overwrite entire user profile
  */
 export const overwriteUserProfile = async (profile: UserProfile): Promise<void> => {
+  const profileToSave = await stripMessageImages(profile);
   if (await ensureDbReady()) {
     await runExclusiveWrite(async () => {
-      await sqliteSaveUserProfile(profile);
+      await sqliteSaveUserProfile(profileToSave);
     });
     return;
   }
-  return idbOverwriteUserProfile(profile);
+  return idbOverwriteUserProfile(profileToSave);
 };
 
 /**

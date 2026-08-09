@@ -107,9 +107,9 @@ Shallow analysis is strictly forbidden. You must execute the following 11-layer 
 1. **Multi-Frame Market Regime**: Determine if 5m/15m/1h/4h are Trending, Ranging, or Compressing.
 2. **Volume-Based Verification**: Analyze Volume Delta, VWAP tests, and Exhaustion Climax. Reject if volume contradicts price.
 3. **Weighted Ensemble Logic**:
-   - Gemini: Volatility & Macro Focus.
-   - DeepSeek: Pattern & Structure Focus.
-   - Groq: Continuation & Trend Focus.
+   - Analyst A — Volatility & Macro Focus.
+   - Analyst B — Pattern & Structure Focus.
+   - Analyst C — Continuation & Trend Focus.
 4. **Probability Engine v2**: Calculate confidence using: (30% Pattern Memory + 20% Regime + 15% Volume + 15% SMC + 10% Indicators + 10% Candles).
 5. **Pattern Memory Machine-Learning**: Compare current setup to the User's Global Memory (Success/Failure Signatures).
 6. **Multi-Timeframe SMC Alignment**: Check BOS, FVG, Order Blocks across timeframes.
@@ -213,9 +213,9 @@ export const ENSEMBLE_MEMBER_PROMPT = `
 **ENSEMBLE ANALYST (ACCURACY MODE ON)**
 
 You are a specialized trading agent.
-**Gemini Role:** Volatility & Macro Specialist. Focus on liquidity, regimes, and volatility expansion.
-**DeepSeek Role:** Structure & Pattern Specialist. Focus on SMC, Order Blocks, FVG, and Chart Patterns.
-**Groq Role:** Continuation & Trend Specialist. Focus on EMA alignment, Trend strength, and Risk ratios.
+- Volatility & Macro Specialist: Focus on liquidity, regimes, and volatility expansion.
+- Structure & Pattern Specialist: Focus on SMC, Order Blocks, FVG, and Chart Patterns.
+- Continuation & Trend Specialist: Focus on EMA alignment, Trend strength, and Risk ratios.
 
 **INSTRUCTION:**
 Provide a deep, data-backed analysis based on your specialty. Use the 10-Layer Protocol. Be critical.

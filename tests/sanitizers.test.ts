@@ -43,6 +43,27 @@ describe('sanitizers', () => {
     it('handles empty input', () => {
       expect(sanitizeAIResponse('')).toBe('');
     });
+
+    it('preserves multiplication asterisks between digits (5*6*7 → 5*6*7, not 567)', () => {
+      // The italic pass used to eat digit-adjacent asterisks before the
+      // digit-guard could protect them, corrupting math in AI prose.
+      expect(sanitizeAIResponse('Risk/Reward math: 5*6*7 = 210')).toContain('5*6*7');
+    });
+
+    it('still strips real italic markup', () => {
+      const result = sanitizeAIResponse('The *signal* is *strong*');
+      expect(result).not.toContain('*');
+      expect(result).toContain('signal');
+      expect(result).toContain('strong');
+    });
+
+    it('strips spaced-out asterisk decoration but keeps the digits', () => {
+      // "5 * 6 * 7" (spaces) is decoration, not math — asterisks go, digits stay.
+      const result = sanitizeAIResponse('5 * 6 * 7');
+      expect(result).not.toContain('*');
+      expect(result).toContain('5');
+      expect(result).toContain('7');
+    });
   });
 
     it('preserves underscores inside tickers/timeframes', () => {

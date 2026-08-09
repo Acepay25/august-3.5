@@ -34,6 +34,8 @@ export interface MarketData {
     priceChangePercent24h: number;
     volume24h: number;
     fundingRate?: number;
+    /** False means the response is a fallback/placeholder, not a live observation. */
+    available?: boolean;
 }
 
 /**
@@ -74,6 +76,7 @@ export interface DerivativesData {
     sentimentScore: number;            // -100 to +100
 
     dataTimestamp: string;
+    available?: boolean;
 }
 
 /**
@@ -101,6 +104,7 @@ export interface OrderBookData {
         nearestBuyWall?: { price: number; distance: number };
         nearestSellWall?: { price: number; distance: number };
     };
+    available?: boolean;
 }
 
 /**
@@ -125,6 +129,7 @@ export interface LiquidationData {
     dominantLiquidations: 'longs' | 'shorts' | 'balanced';
     liquidationPressure: 'high' | 'medium' | 'low';
     sentiment: string; // e.g., "Heavy long liquidations - bearish pressure"
+    available?: boolean;
 }
 
 /**
@@ -505,7 +510,8 @@ export const fetchMarketData = async (symbol: string): Promise<MarketData> => {
             price24hLow: parseFloat(data.lowPrice),
             priceChange24h: parseFloat(data.priceChange),
             priceChangePercent24h: parseFloat(data.priceChangePercent),
-            volume24h: parseFloat(data.quoteVolume)
+            volume24h: parseFloat(data.quoteVolume),
+            available: true
         };
 
         setCache(cacheKey, marketData);
@@ -532,16 +538,21 @@ export const fetchFundingRate = async (symbol: string): Promise<number> => {
         const response = await robustFuturesFetch(`/fapi/v1/premiumIndex?symbol=${normalizedSymbol}`);
         const data = await response.json();
 
-        // premiumIndex returns a single object with lastFundingRate
-        const fundingRate = parseFloat(data.lastFundingRate) || 0;
+        // premiumIndex returns a single object with lastFundingRate. A 0 is a
+        // LEGITIMATE funding rate (new pair, funding just settled) — only fall
+        // through to the extra endpoint when the field is actually missing.
+        const rawFundingRate = data?.lastFundingRate;
+        const fundingRate = (typeof rawFundingRate === 'string' || typeof rawFundingRate === 'number')
+            ? parseFloat(String(rawFundingRate))
+            : NaN;
 
-        if (fundingRate !== 0) {
+        if (!Number.isNaN(fundingRate)) {
             setCache(cacheKey, fundingRate);
             return fundingRate;
         }
 
-        // Fallback: try the fundingRate endpoint
-        console.log(`[MarketDataService] premiumIndex returned 0, trying fundingRate endpoint...`);
+        // Fallback: try the fundingRate endpoint (premiumIndex returned no field)
+        console.log(`[MarketDataService] premiumIndex returned no funding rate, trying fundingRate endpoint...`);
         const fallbackResponse = await robustFuturesFetch(`/fapi/v1/fundingRate?symbol=${normalizedSymbol}&limit=1`);
         const fallbackData = await fallbackResponse.json();
         const fallbackRate = fallbackData.length > 0 ? parseFloat(fallbackData[0].fundingRate) : 0;
@@ -776,7 +787,8 @@ export const fetchDerivativesData = async (symbol: string): Promise<DerivativesD
             takerBuySell: tbs,
             overallSentiment,
             sentimentScore: Math.round(sentimentScore),
-            dataTimestamp: new Date().toISOString()
+            dataTimestamp: new Date().toISOString(),
+            available: true
         };
 
         setCache(cacheKey, result);
@@ -793,7 +805,8 @@ export const fetchDerivativesData = async (symbol: string): Promise<DerivativesD
             takerBuySell: { buyVolume: 0, sellVolume: 0, ratio: 1, pressure: 'neutral' },
             overallSentiment: 'neutral',
             sentimentScore: 0,
-            dataTimestamp: new Date().toISOString()
+            dataTimestamp: new Date().toISOString(),
+            available: false
         };
     }
 };
@@ -890,7 +903,8 @@ export const fetchOrderBookDepth = async (symbol: string): Promise<OrderBookData
             buyWalls,
             sellWalls,
             dominantSide,
-            wallDistance
+            wallDistance,
+            available: true
         };
 
         setCache(cacheKey, result);
@@ -912,7 +926,8 @@ const getDefaultOrderBook = (): OrderBookData => ({
     buyWalls: [],
     sellWalls: [],
     dominantSide: 'balanced',
-    wallDistance: {}
+    wallDistance: {},
+    available: false
 });
 
 /**
@@ -1019,7 +1034,8 @@ export const fetchRecentLiquidations = async (symbol: string): Promise<Liquidati
             recentEvents,
             dominantLiquidations,
             liquidationPressure,
-            sentiment
+            sentiment,
+            available: true
         };
 
         setCache(cacheKey, result);
@@ -1037,7 +1053,8 @@ const getDefaultLiquidations = (): LiquidationData => ({
     recentEvents: [],
     dominantLiquidations: 'balanced',
     liquidationPressure: 'low',
-    sentiment: 'No liquidation data available'
+    sentiment: 'No liquidation data available',
+    available: false
 });
 
 /**
@@ -1050,6 +1067,11 @@ export const fetchCompleteMarketSnapshot = async (
     marketData: MarketData;
     klines: { '5m': Kline[]; '15m': Kline[]; '1h': Kline[]; '4h': Kline[] };
     fundingRate: number;
+    availability: {
+        marketData: boolean;
+        klines: { '5m': boolean; '15m': boolean; '1h': boolean; '4h': boolean };
+        fundingRate: boolean;
+    };
 }> => {
     const normalizedSymbol = normalizeSymbol(symbol);
 
@@ -1078,7 +1100,19 @@ export const fetchCompleteMarketSnapshot = async (
             '1h': klines1h,
             '4h': klines4h
         },
-        fundingRate
+        fundingRate,
+        availability: {
+            marketData: marketData.available !== false,
+            klines: {
+                '5m': klines5m.length > 0,
+                '15m': klines15m.length > 0,
+                '1h': klines1h.length > 0,
+                '4h': klines4h.length > 0
+            },
+            // A zero rate can be valid, but the degraded path also returns 0;
+            // label it conservatively so prompts never imply certainty.
+            fundingRate: fundingRate !== 0
+        }
     };
 };
 

@@ -1,8 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { DebateTurn, AnalystLensConfig, TradeAnalysis } from '../../types';
+import { DebateTurn, AnalystLensConfig, TradeAnalysis, ReplacementOffer } from '../../types';
 import { BotIcon, ChevronDownIcon } from '../shared/Icons';
+import MarkdownContent from '../shared/MarkdownContent';
 import { getRoleDisplayForProvider } from '../../services/ui/AnalystLensService';
+import { buildTranscriptMarkdown, buildTranscriptJson, buildTranscriptFilename, downloadTextFile } from '../../utils/transcriptExport';
 import DebateSummary from './DebateSummary';
+import ThinkingModal from './ThinkingModal';
 
 interface DebateChatProps {
     debateTurns: DebateTurn[];
@@ -16,6 +19,13 @@ interface DebateChatProps {
     activeDebateSpeakers?: Record<string, number>;
     /** Final trade plan — renders the pinned consensus strip on completed debates. */
     analysis?: TradeAnalysis | null;
+    /** Owning message id — routes the replacement choice back to the run. */
+    messageId?: string;
+    /** Mid-debate replacement offer: an analyst dropped and the debate is
+     *  waiting for the user to pick a fresh provider (or skip). */
+    replacementOffer?: ReplacementOffer;
+    /** Pick a replacement candidate (providerId) or pass null to continue without. */
+    onReplacementChoice?: (messageId: string, providerId: string | null) => void;
 }
 
 const cleanSpeakerPrefix = (text: string, speaker: string): string => text
@@ -87,6 +97,36 @@ const splitModeratorTurn = (
     }).filter(segment => Boolean(segment.text));
 };
 
+/**
+ * Harness-style per-turn thinking: the speaker's chain of thought sits in a
+ * collapsible block above their final text. Auto-expands while the speaker is
+ * actively streaming (live debates), collapses to a one-click toggle after.
+ */
+const TurnThinking: React.FC<{ content: string; autoOpen: boolean }> = ({ content, autoOpen }) => {
+    const [open, setOpen] = useState(false);
+    return (
+        <details
+            className="mt-2.5 rounded-lg border border-white/10 bg-black/20 group"
+            open={open || autoOpen}
+            onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}
+        >
+            <summary className="cursor-pointer list-none px-3 py-1.5 text-[10px] uppercase tracking-widest text-zinc-500 group-open:text-zinc-300">
+                {autoOpen ? (
+                    <span className="inline-flex items-center gap-1.5">
+                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400"></span>
+                        Thinking<span className="normal-case tracking-normal text-zinc-600">…</span>
+                    </span>
+                ) : (
+                    <>Thinking <span className="normal-case tracking-normal text-zinc-600">(expand)</span></>
+                )}
+            </summary>
+            <div className="border-t border-white/5 px-3 py-2">
+                <MarkdownContent content={content} className="text-zinc-500" />
+            </div>
+        </details>
+    );
+};
+
 const DebateChat: React.FC<DebateChatProps> = ({
     debateTurns,
     modelsUsed = {},
@@ -98,6 +138,9 @@ const DebateChat: React.FC<DebateChatProps> = ({
     isDebating = false,
     activeDebateSpeakers = {},
     analysis = null,
+    messageId,
+    replacementOffer,
+    onReplacementChoice,
 }) => {
     const [isThinkingOpen, setIsThinkingOpen] = useState(false);
     const [expandedSpeaker, setExpandedSpeaker] = useState<string | null>(null);
@@ -105,6 +148,8 @@ const DebateChat: React.FC<DebateChatProps> = ({
     const [isReplaying, setIsReplaying] = useState(false);
     const [replayIndex, setReplayIndex] = useState(0);
     const [replaySpeed, setReplaySpeed] = useState(1);
+    const [isExportOpen, setIsExportOpen] = useState(false);
+    const exportMenuRef = useRef<HTMLSpanElement>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
     const thinkingControlRef = useRef<HTMLDivElement>(null);
     const userScrolledUpRef = useRef(false);
@@ -180,6 +225,28 @@ const DebateChat: React.FC<DebateChatProps> = ({
             .join('\n\n');
         navigator.clipboard.writeText(text).catch(() => {});
     };
+
+    const exportTranscript = (format: 'md' | 'json') => {
+        const content = format === 'md'
+            ? buildTranscriptMarkdown(debateTurns, analysis)
+            : buildTranscriptJson(debateTurns, analysis);
+        downloadTextFile(
+            buildTranscriptFilename(analysis, format),
+            content,
+            format === 'md' ? 'text/markdown' : 'application/json'
+        );
+        setIsExportOpen(false);
+    };
+
+    // Close the export menu on outside click.
+    useEffect(() => {
+        if (!isExportOpen) return undefined;
+        const handlePointerDown = (event: PointerEvent): void => {
+            if (!exportMenuRef.current?.contains(event.target as Node)) setIsExportOpen(false);
+        };
+        document.addEventListener('pointerdown', handlePointerDown);
+        return () => document.removeEventListener('pointerdown', handlePointerDown);
+    }, [isExportOpen]);
 
     useEffect(() => {
         if (!isThinkingOpen) return undefined;
@@ -276,6 +343,35 @@ const DebateChat: React.FC<DebateChatProps> = ({
                     >
                         Copy transcript
                     </button>
+                    <span className="relative" ref={exportMenuRef}>
+                        <button
+                            type="button"
+                            onClick={() => setIsExportOpen(o => !o)}
+                            aria-expanded={isExportOpen}
+                            className="rounded-md border border-white/10 px-2 py-1 text-[9px] uppercase tracking-wider text-zinc-400 transition-colors hover:border-cyan-400/30 hover:text-cyan-300"
+                            title="Export the debate transcript to a file"
+                        >
+                            ⬇ Export
+                        </button>
+                        {isExportOpen && (
+                            <span className="absolute right-0 top-full z-10 mt-1 flex flex-col overflow-hidden rounded-lg border border-white/10 bg-zinc-900 shadow-xl">
+                                <button
+                                    type="button"
+                                    onClick={() => exportTranscript('md')}
+                                    className="whitespace-nowrap px-3 py-1.5 text-left text-[10px] text-zinc-300 transition-colors hover:bg-zinc-800"
+                                >
+                                    Markdown (.md)
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => exportTranscript('json')}
+                                    className="whitespace-nowrap px-3 py-1.5 text-left text-[10px] text-zinc-300 transition-colors hover:bg-zinc-800"
+                                >
+                                    JSON (.json)
+                                </button>
+                            </span>
+                        )}
+                    </span>
                     {!isReplaying ? (
                         <button
                             type="button"
@@ -329,6 +425,50 @@ const DebateChat: React.FC<DebateChatProps> = ({
                     )}
                 </div>
             )}
+            {/* Mid-debate analyst replacement banner — an analyst dropped and
+                the debate is paused until the user picks a fresh provider. */}
+            {replacementOffer && onReplacementChoice && messageId && (
+                <div className="status-surface border-b border-amber-400/20 bg-amber-400/5 px-3 py-2.5">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-amber-300">
+                            {replacementOffer.droppedName} dropped out (Round {replacementOffer.round})
+                        </span>
+                        <span className="text-[11px] text-zinc-400">Pick a replacement analyst to continue the debate:</span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        {replacementOffer.candidates.map(candidate => {
+                            const chosen = replacementOffer.chosenProviderId === candidate.providerId;
+                            const disabled = Boolean(replacementOffer.chosenProviderId);
+                            return (
+                                <button
+                                    key={candidate.providerId}
+                                    type="button"
+                                    disabled={disabled}
+                                    onClick={() => onReplacementChoice(messageId, candidate.providerId)}
+                                    className={`rounded-lg border px-2.5 py-1 text-[10px] font-medium transition-colors ${
+                                        chosen
+                                            ? 'border-amber-400/40 bg-amber-400/15 text-amber-200'
+                                            : disabled
+                                                ? 'border-white/5 bg-zinc-800/40 text-zinc-600'
+                                                : 'border-white/10 bg-zinc-800 text-zinc-200 hover:border-amber-400/40 hover:text-amber-200'
+                                    }`}
+                                >
+                                    {chosen ? 'Analyzing…' : `${candidate.displayName} · ${candidate.modelId}`}
+                                </button>
+                            );
+                        })}
+                        {!replacementOffer.chosenProviderId && (
+                            <button
+                                type="button"
+                                onClick={() => onReplacementChoice(messageId, null)}
+                                className="rounded-lg border border-white/10 px-2.5 py-1 text-[10px] font-medium text-zinc-400 transition-colors hover:border-white/25 hover:text-zinc-200"
+                            >
+                                Continue without
+                            </button>
+                        )}
+                    </div>
+                </div>
+            )}
             <div
                 ref={scrollRef}
                 onScroll={() => {
@@ -364,6 +504,11 @@ const DebateChat: React.FC<DebateChatProps> = ({
                     const segments = turn.speaker === 'Moderator'
                         ? splitModeratorTurn(turn.text, analystNames, modelNames)
                         : [{ text: turn.text }];
+                    // Per-turn chain of thought (harness-style). Reasoning is
+                    // keyed/accumulated per speaker; turn.reasoning wins when
+                    // the engine attaches a per-turn slice.
+                    const turnReasoning = (turn.reasoning || getReasoning(turn.speaker) || '').trim();
+                    const isSpeakerStreaming = isDebating && activeDebateSpeakers[turn.speaker] !== undefined;
                     return (
                         <React.Fragment key={`${turn.speaker}-${turn.round ?? 'legacy'}-${index}`}>
                             {hasRoundSeparator && (
@@ -387,6 +532,9 @@ const DebateChat: React.FC<DebateChatProps> = ({
                                             {isVerdict && <span className="ml-auto rounded border border-cyan-400/20 bg-cyan-400/10 px-1.5 py-0.5 text-[9px] font-bold tracking-widest text-cyan-300">DECISION</span>}
                                         </div>
                                         <div className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-300">{turn.speaker === 'Moderator' ? segment.text : cleanSpeakerPrefix(segment.text, turn.speaker)}</div>
+                                        {segmentIndex === 0 && turnReasoning && (
+                                            <TurnThinking content={turnReasoning} autoOpen={isSpeakerStreaming} />
+                                        )}
                                     </div>
                                     {turn.speaker === 'Moderator' && <SpeakerAvatar speaker="Moderator" moderator />}
                                 </div>
@@ -415,15 +563,13 @@ const DebateChat: React.FC<DebateChatProps> = ({
                             <div className="absolute bottom-full z-20 mb-2 w-64 rounded-xl border border-white/10 bg-zinc-900 p-2 shadow-xl">
                                 {activeSpeakers.map(([speaker, round]) => {
                                     const reasoning = getReasoning(speaker);
-                                    const selected = expandedSpeaker === speaker;
-                                    return (
+        return (
                                         <div key={speaker} className="rounded-lg p-2 hover:bg-zinc-800">
-                                            <button type="button" onClick={() => setExpandedSpeaker(selected ? null : speaker)} className="flex w-full items-center gap-2 text-left">
+                                                <button type="button" onClick={() => { setExpandedSpeaker(speaker); setIsThinkingOpen(false); }} className="flex w-full items-center gap-2 text-left" aria-haspopup="dialog">
                                                 <SpeakerAvatar speaker={speaker} moderator={speaker === 'Moderator'} small />
                                                 <span className="min-w-0 flex-1 truncate text-xs text-zinc-300">{getDisplayName(speaker)}</span>
                                                 <span className="text-[9px] text-zinc-600">{getPhaseLabel(round, speaker === 'Moderator' && round === latestModeratorRound)}</span>
                                             </button>
-                                            {selected && <div className="mt-2 max-h-32 overflow-y-auto border-t border-white/5 pt-2 text-xs leading-relaxed text-zinc-500 whitespace-pre-wrap">{reasoning || 'Reasoning is not available yet.'}</div>}
                                         </div>
                                     );
                                 })}
@@ -445,6 +591,13 @@ const DebateChat: React.FC<DebateChatProps> = ({
                     </div>
                 )}
             </div>
+            <ThinkingModal
+                isOpen={Boolean(expandedSpeaker)}
+                onClose={() => setExpandedSpeaker(null)}
+                title={expandedSpeaker ? getDisplayName(expandedSpeaker) : 'Analyst thinking'}
+                subtitle={expandedSpeaker ? `${getModelName(expandedSpeaker) || 'Model unavailable'} · Debate reasoning` : undefined}
+                content={expandedSpeaker ? getReasoning(expandedSpeaker) : undefined}
+            />
         </div>
     );
 };

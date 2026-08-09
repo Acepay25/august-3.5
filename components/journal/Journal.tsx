@@ -31,7 +31,6 @@ interface JournalProps {
     onDeleteTrades: (ids: string[]) => void;
     onClearAllTrades: () => void;
     modelIdToName: Record<string, string>;
-    ocrModelIdToName: Record<string, string>;
     onUpdateInsights: (ids: string[]) => void;
     isSummarizing?: boolean;
     currentInsightIds: string[];
@@ -196,7 +195,7 @@ const JournalInner: React.FC<JournalProps> = ({
     isVisible, onClose, initialTab, isEmbedded = false,
     initialTradeId, onInitialTradeConsumed, username,
     // Trade Log Pass-through
-    trades, onDeleteTrades, onClearAllTrades, modelIdToName, ocrModelIdToName, onUpdateInsights, isSummarizing, currentInsightIds, onUpdateTradeLeverage,
+    trades, onDeleteTrades, onClearAllTrades, modelIdToName, onUpdateInsights, isSummarizing, currentInsightIds, onUpdateTradeLeverage,
     // Performance Review Pass-through
     finalSummary, individualSummaries, isLoading, isInsightGenerating, insightProgress, newlyAddedInsightIds, summarizationProvider, summarizationModel, onSetSummarizationProvider, onSetSummarizationModel, providers = [], summaryCharLimit = 1000, onUpdateSummaryCharLimit = () => {}, onRegenerateSummary = () => {}, onDeleteInsight, useAlgorithmicSummary = false, onToggleAlgorithmicSummary = () => {},
     // Analytics Pass-through
@@ -245,7 +244,6 @@ const JournalInner: React.FC<JournalProps> = ({
                 onDeleteTrades={onDeleteTrades}
                 onClearAllTrades={onClearAllTrades}
                 modelIdToName={modelIdToName}
-                ocrModelIdToName={ocrModelIdToName}
                 onUpdateInsights={onUpdateInsights}
                 isSummarizing={isSummarizing}
                 currentInsightIds={currentInsightIds}
@@ -358,7 +356,7 @@ const JournalInner: React.FC<JournalProps> = ({
             />
 
             {/* Main Panel - Full screen on mobile, side panel on desktop */}
-            <aside className="status-surface fixed inset-0 sm:inset-y-0 sm:right-0 sm:left-auto sm:w-[480px] bg-zinc-950 z-50 flex flex-col animate-slide-up sm:animate-slide-left">
+            <aside role="dialog" aria-modal="true" aria-label="Trading Journal" className="status-surface fixed inset-0 sm:inset-y-0 sm:right-0 sm:left-auto sm:w-[480px] bg-zinc-950 z-50 flex flex-col animate-slide-up sm:animate-slide-left">
 
                 {/* Modern Header */}
                 <header className="shrink-0 relative">

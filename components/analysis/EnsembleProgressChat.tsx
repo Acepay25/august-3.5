@@ -1,12 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { EnsembleAnalystProgress, EnsembleProgress } from '../../types';
-import { BotIcon, ChevronDownIcon } from '../shared/Icons';
+import { BotIcon } from '../shared/Icons';
 import MarkdownContent from '../shared/MarkdownContent';
 
 interface EnsembleProgressChatProps {
     progress: EnsembleProgress;
     modelIdToName?: Record<string, string>;
     isLive?: boolean;
+    /** Live runs render their analyst list in the floating activity card. */
+    hideSubagents?: boolean;
     /** Re-run affordance for failed analysts — wired by the host app (the
      *  pipeline has no per-analyst re-dispatch; the host re-runs the analysis
      *  with the same prompt context). */
@@ -37,112 +39,147 @@ const TypingDots: React.FC = () => (
     </span>
 );
 
-const getAnalystDetails = (analyst: EnsembleAnalystProgress): string | undefined => (
-    analyst.reasoning || analyst.thoughtProcess || analyst.finalOutput
-);
+const STATUS_TEXT: Record<EnsembleAnalystProgress['status'], string> = {
+    waiting: 'Waiting',
+    analyzing: 'Thinking',
+    error: 'Unavailable',
+    complete: 'Complete',
+};
 
-const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({ progress, modelIdToName = {}, isLive = false, onRetryAnalyst }) => {
-    const [expandedKey, setExpandedKey] = useState<string | null>(null);
-    const [isLiveExpanded, setIsLiveExpanded] = useState(false);
-    const [typingIndex, setTypingIndex] = useState(0);
-    const scrollRef = useRef<HTMLDivElement>(null);
+/**
+ * Harness-style analyst card (Codex / Claude Code): the model's chain of
+ * thought lives in a collapsible "Thinking" block, and the final output is
+ * always rendered below it. While the analyst is streaming, both the card and
+ * the Thinking block auto-expand so the live trace is visible; once complete,
+ * the Thinking block collapses back to a one-click toggle.
+ */
+const AnalystRow: React.FC<{
+    analyst: EnsembleAnalystProgress;
+    modelName: string;
+    accent: (typeof ACCENTS)[number];
+    onRetryAnalyst?: (analystKey: string) => void;
+}> = ({ analyst, modelName, accent, onRetryAnalyst }) => {
+    const [open, setOpen] = useState(false);
+    const [thinkingOpen, setThinkingOpen] = useState(false);
 
-    const activeAnalysts = progress.analysts.filter(analyst => analyst.status === 'analyzing');
-    const waitingAnalysts = progress.analysts.filter(analyst => analyst.status === 'waiting');
-    const typingAnalysts = activeAnalysts.length > 0 ? activeAnalysts : waitingAnalysts;
-    const allAnalystsFinished = progress.analysts.length > 0 && progress.analysts.every(analyst => analyst.status === 'complete' || analyst.status === 'error');
-    const hasFinalOutput = progress.analysts.some(analyst => Boolean(analyst.finalOutput));
-    const showAnalystCards = !isLive || isLiveExpanded;
+    const thinkingContent = analyst.reasoning || analyst.thoughtProcess || '';
+    const isStreamingThinking = analyst.status === 'analyzing' && thinkingContent.length > 0;
+    const expanded = open || isStreamingThinking;
+    const showThinkingBlock = isStreamingThinking || thinkingContent.length > 0;
 
-    useEffect(() => {
-        if (isLive && scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }, [progress, isLive]);
-
-    useEffect(() => {
-        if (!isLive || typingAnalysts.length < 2) {
-            setTypingIndex(0);
-            return undefined;
-        }
-        const timer = window.setInterval(() => {
-            setTypingIndex(previous => (previous + 1) % typingAnalysts.length);
-        }, 1100);
-        return () => window.clearInterval(timer);
-    }, [isLive, typingAnalysts.length, typingAnalysts.map(analyst => analyst.key).join('|')]);
-
-    const activeTypingAnalyst = typingAnalysts[typingIndex % Math.max(typingAnalysts.length, 1)];
-    const typingLabel = activeAnalysts.length > 0
-        ? `${activeTypingAnalyst?.displayName || 'Analysts'} ${activeAnalysts.length > 1 ? 'are typing' : 'is typing'}`
-        : waitingAnalysts.length > 0
-            ? `Waiting for ${waitingAnalysts.length} analyst${waitingAnalysts.length === 1 ? '' : 's'}`
-            : 'Preparing analyst outputs';
-
-    const renderAnalystCard = (analyst: EnsembleAnalystProgress, index: number): React.ReactNode => {
-        const accent = ACCENTS[index % ACCENTS.length];
-        const expanded = expandedKey === analyst.key;
-        const modelName = modelIdToName[analyst.modelId] ?? analyst.modelName;
-        const details = getAnalystDetails(analyst);
-        const canExpand = Boolean(details) || analyst.status === 'complete';
-        const statusText = analyst.status === 'waiting'
-            ? 'Waiting'
-            : analyst.status === 'analyzing'
-                ? 'Thinking'
-                : analyst.status === 'error'
-                    ? 'Unavailable'
-                    : 'Complete';
-
-        return (
-            <div key={analyst.key} className="flex items-start gap-2.5">
-                <AnalystAvatar name={analyst.displayName} color={accent.color} active={analyst.status === 'analyzing'} />
-                <div className="min-w-0 flex-1 rounded-2xl border bg-zinc-800/60 px-3.5 py-3" style={{ borderColor: accent.border, backgroundColor: analyst.status === 'complete' ? accent.surface : undefined }}>
+    return (
+        <div
+            className="overflow-hidden rounded-xl border"
+            style={{ borderColor: accent.border, backgroundColor: analyst.status === 'complete' ? accent.surface : undefined }}
+        >
+            <div className="flex items-center gap-2">
+                <button
+                    type="button"
+                    onClick={() => setOpen(o => !o)}
+                    className="flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-zinc-700/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+                    aria-expanded={expanded}
+                    aria-label={`${expanded ? 'Collapse' : 'Expand'} ${analyst.displayName} analysis`}
+                >
+                    <AnalystAvatar name={analyst.displayName} color={accent.color} active={analyst.status === 'analyzing'} small />
+                    <div className="min-w-0 flex-1">
+                        <div className="truncate text-xs font-semibold text-zinc-200">{analyst.displayName}</div>
+                        <div className="truncate text-[10px] text-zinc-600">{modelName}</div>
+                    </div>
+                    <span className="shrink-0 text-[10px] font-medium" style={{ color: accent.color }}>{STATUS_TEXT[analyst.status]}</span>
+                    <span className="shrink-0 text-[9px] uppercase tracking-wider text-zinc-500">{expanded ? 'Hide' : 'View'}</span>
+                    <span className={`shrink-0 text-[10px] text-zinc-500 transition-transform ${expanded ? 'rotate-90' : ''}`} aria-hidden="true">▸</span>
+                </button>
+                {analyst.status === 'error' && onRetryAnalyst && (
                     <button
                         type="button"
-                        className={`flex w-full items-center gap-2 text-left ${canExpand ? 'cursor-pointer' : 'cursor-default'}`}
-                        onClick={() => canExpand && setExpandedKey(expanded ? null : analyst.key)}
-                        disabled={!canExpand}
-                        aria-expanded={canExpand ? expanded : undefined}
+                        onClick={() => onRetryAnalyst(analyst.key)}
+                        className="mr-2 shrink-0 rounded-lg border border-white/10 px-2 py-2 text-[9px] uppercase tracking-wider text-zinc-400 transition-colors hover:border-cyan-400/30 hover:text-cyan-300"
+                        title="Re-run the analysis with this analyst included"
                     >
-                        <div className="min-w-0 flex-1">
-                            <div className="truncate text-xs font-semibold text-zinc-200">{analyst.displayName}</div>
-                            <div className="truncate text-[10px] text-zinc-600">{modelName}</div>
-                        </div>
-                        <span className="shrink-0 text-[10px] font-medium" style={{ color: accent.color }}>{statusText}</span>
-                        {canExpand && <ChevronDownIcon className={`h-4 w-4 text-zinc-500 transition-transform ${expanded ? 'rotate-180' : ''}`} />}
+                        ↺
                     </button>
-
-                    {analyst.status === 'analyzing' && <div className="mt-2 flex items-center gap-2 text-xs text-zinc-500"><TypingDots />Generating final output</div>}
-                    {analyst.status === 'waiting' && <div className="mt-2 text-xs text-zinc-600">Waiting to start</div>}
-                    {analyst.status === 'error' && (
-                        <div className="mt-2 flex items-center gap-2">
-                            <div className="min-w-0 flex-1 text-xs text-zinc-500">{analyst.error || 'This analyst was unavailable.'}</div>
-                            {onRetryAnalyst && (
-                                <button
-                                    type="button"
-                                    onClick={() => onRetryAnalyst(analyst.key)}
-                                    className="shrink-0 rounded-md border border-white/10 px-2 py-1 text-[9px] uppercase tracking-wider text-zinc-400 transition-colors hover:border-cyan-400/30 hover:text-cyan-300"
-                                    title="Re-run the analysis with this analyst included"
-                                >
-                                    ↺ Retry
-                                </button>
-                            )}
-                        </div>
-                    )}
-
-                    {expanded && (
-                        <div className="mt-3 border-t border-white/5 pt-3">
-                            <div className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
-                                {analyst.status === 'complete' ? 'Final output' : 'Thinking'}
+                )}
+            </div>
+            {expanded && (
+                <div className="space-y-3 border-t border-white/5 px-2.5 pb-3 pt-2">
+                    {showThinkingBlock && (
+                        <details
+                            className="rounded-lg border border-white/10 bg-black/20 group"
+                            open={thinkingOpen || isStreamingThinking}
+                            onToggle={(e) => setThinkingOpen((e.target as HTMLDetailsElement).open)}
+                        >
+                            <summary className="cursor-pointer list-none px-3 py-2 text-[10px] uppercase tracking-widest text-zinc-400 group-open:text-zinc-200">
+                                {isStreamingThinking ? (
+                                    <span className="inline-flex items-center gap-1.5">
+                                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400"></span>
+                                        Thinking<span className="normal-case tracking-normal text-zinc-600">…</span>
+                                    </span>
+                                ) : (
+                                    <>Thinking <span className="normal-case tracking-normal text-zinc-600">(expand)</span></>
+                                )}
+                            </summary>
+                            <div className="border-t border-white/5 px-3 py-2">
+                                <MarkdownContent content={thinkingContent} className="text-zinc-500" />
                             </div>
-                            {details ? (
-                                <MarkdownContent content={details} className="text-sm leading-relaxed text-zinc-300" />
+                        </details>
+                    )}
+                    {analyst.status === 'complete' && (
+                        <div>
+                            <div className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Final output</div>
+                            {analyst.finalOutput ? (
+                                <MarkdownContent content={analyst.finalOutput} className="text-sm leading-6 text-zinc-200" />
                             ) : (
-                                <div className="text-xs italic text-zinc-600">This model has not shared reasoning yet.</div>
+                                <p className="text-xs italic text-zinc-600">No final output was captured for this analyst.</p>
                             )}
                         </div>
                     )}
                 </div>
+            )}
+        </div>
+    );
+};
+
+export const AnalystSubagents: React.FC<{
+    progress: EnsembleProgress;
+    modelIdToName?: Record<string, string>;
+    isLive?: boolean;
+    onRetryAnalyst?: (analystKey: string) => void;
+}> = ({ progress, modelIdToName = {}, isLive = false, onRetryAnalyst }) => {
+    const activeAnalysts = progress.analysts.filter(analyst => analyst.status === 'analyzing');
+    const waitingAnalysts = progress.analysts.filter(analyst => analyst.status === 'waiting');
+    const typingLabel = activeAnalysts.length > 0
+        ? `${activeAnalysts.length > 1 ? 'Analysts are' : activeAnalysts[0]?.displayName || 'Analyst is'} typing`
+        : waitingAnalysts.length > 0
+            ? `Waiting for ${waitingAnalysts.length} analyst${waitingAnalysts.length === 1 ? '' : 's'}`
+            : 'Preparing analyst outputs';
+
+    return (
+        <div className="space-y-2">
+            <div className="flex items-center gap-2 px-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                <span>Subagents</span>
+                <span className="text-zinc-700">{progress.analysts.length}</span>
+                {isLive && <><span className="h-1 w-1 rounded-full bg-cyan-400" aria-hidden="true" /><span className="normal-case tracking-normal text-cyan-300/80">{typingLabel}</span></>}
             </div>
-        );
-    };
+            {progress.analysts.map((analyst, index) => (
+                <AnalystRow
+                    key={analyst.key}
+                    analyst={analyst}
+                    modelName={modelIdToName[analyst.modelId] ?? analyst.modelName}
+                    accent={ACCENTS[index % ACCENTS.length]}
+                    onRetryAnalyst={onRetryAnalyst}
+                />
+            ))}
+            <div className="px-1 text-[10px] text-zinc-600">Click an analyst to expand their thinking and final output.</div>
+        </div>
+    );
+};
+
+const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({ progress, modelIdToName = {}, isLive = false, hideSubagents = false }) => {
+    const scrollRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (isLive && scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }, [progress, isLive]);
 
     return (
         <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-zinc-950/80">
@@ -177,30 +214,8 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({ progress, m
                     </div>
                 )}
 
-                {isLive && !allAnalystsFinished && (
-                    <button
-                        type="button"
-                        onClick={() => setIsLiveExpanded(previous => !previous)}
-                        className="flex w-full items-center gap-3 rounded-2xl border border-cyan-400/20 bg-cyan-500/5 px-3.5 py-3 text-left transition-colors hover:border-cyan-400/40 hover:bg-cyan-500/10"
-                        aria-expanded={isLiveExpanded}
-                    >
-                        <div className="flex -space-x-2">
-                            {progress.analysts.map((analyst, index) => (
-                                <AnalystAvatar key={analyst.key} name={analyst.displayName} color={ACCENTS[index % ACCENTS.length].color} active={analyst.key === activeTypingAnalyst?.key} small />
-                            ))}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2 text-xs font-semibold text-cyan-300"><TypingDots />{typingLabel}</div>
-                            <div className="mt-0.5 text-[10px] text-zinc-600">Click to view each analyst’s thinking</div>
-                        </div>
-                        <ChevronDownIcon className={`h-4 w-4 shrink-0 text-zinc-500 transition-transform ${isLiveExpanded ? 'rotate-180' : ''}`} />
-                    </button>
-                )}
-
-                {showAnalystCards && progress.analysts.map(renderAnalystCard)}
-
-                {isLive && isLiveExpanded && !allAnalystsFinished && hasFinalOutput && (
-                    <div className="text-center text-[10px] text-zinc-600">Analysts are still finishing their outputs.</div>
+                {!hideSubagents && progress.analysts.length > 0 && (
+                    <AnalystSubagents progress={progress} modelIdToName={modelIdToName} isLive={isLive} />
                 )}
             </div>
         </div>

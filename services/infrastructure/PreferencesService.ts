@@ -17,6 +17,9 @@ import { Preferences } from '@capacitor/preferences';
 
 // Storage keys
 export const PREF_KEYS = {
+    // Provider metadata is portable; API keys are deliberately redacted by
+    // ExportService before backups leave the device.
+    PROVIDER_CONFIGS: 'provider_configs_v1',
     // Core AI Handling
     MEMORY_PROVIDER: 'memory_provider', // ProviderConfig id of the provider used for memory synthesis
 
@@ -38,6 +41,7 @@ export const PREF_KEYS = {
 
     // Alerts
     PRICE_ALERTS: 'price_alerts',
+    SETUP_WATCHES: 'setup_watches',
     OUTCOME_AUTOPILOT_STATE: 'outcome_autopilot_state',
 
     // Data integrity

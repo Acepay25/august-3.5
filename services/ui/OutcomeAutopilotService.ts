@@ -58,6 +58,12 @@ type Listener = (messageId: string, resolution: AutopilotResolution) => void;
 
 const CHECK_INTERVAL_MS = 60_000;
 
+// How many processed/dismissed message ids to keep. MUST match between the
+// in-memory trim (pruneIdSets) and persist() — if disk kept fewer than
+// memory, messages outside the disk window became re-detectable after a
+// restart and produced duplicate banners/logs.
+const MAX_TRACKED_IDS = 2000;
+
 class OutcomeAutopilotServiceClass {
     private registrations = new Map<string, Registration>();
     private resolutions = new Map<string, AutopilotResolution>();
@@ -132,7 +138,6 @@ class OutcomeAutopilotServiceClass {
      * the most recent window is sufficient.
      */
     private pruneIdSets(): void {
-        const MAX_TRACKED_IDS = 2000;
         const trim = (set: Set<string>): void => {
             if (set.size <= MAX_TRACKED_IDS) return;
             const entries = [...set];
@@ -446,8 +451,11 @@ class OutcomeAutopilotServiceClass {
     private async persist(): Promise<void> {
         try {
             const state: PersistedState = {
-                processed: [...this.processed].slice(-500),
-                dismissed: [...this.dismissed].slice(-500),
+                // Keep the same window as the in-memory trim — a narrower
+                // persist window would resurrect old messages as
+                // re-detectable after a restart.
+                processed: [...this.processed].slice(-MAX_TRACKED_IDS),
+                dismissed: [...this.dismissed].slice(-MAX_TRACKED_IDS),
             };
             await setPreferenceObject(PREF_KEYS.OUTCOME_AUTOPILOT_STATE, state);
         } catch (err) {

@@ -27,6 +27,10 @@ const OutcomeMismatchModal: React.FC<OutcomeMismatchModalProps> = ({
 
     const tpFirstTime = priceValidation.tpHits.length > 0 ? priceValidation.tpHits[0].candleTime : null;
     const slTouchTime = priceValidation.slTouched ? priceValidation.slTouchTime : null;
+    // The summary sentence must match the actual polarity — the old text
+    // claimed "TP before SL" for EVERY mismatch, which was actively wrong
+    // for the SL-first case (TP never hit).
+    const tpHitFirst = !!tpFirstTime && (!slTouchTime || tpFirstTime < slTouchTime);
 
     return (
         <div ref={dialogRef} className="status-surface fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 animate-fade-in" role="dialog" aria-modal="true" aria-label="Outcome mismatch warning">
@@ -80,7 +84,9 @@ const OutcomeMismatchModal: React.FC<OutcomeMismatchModalProps> = ({
                             )}
                         </ul>
                         <p className="text-xs text-yellow-500/80 mt-2 bg-yellow-500/10 p-2 rounded-lg">
-                            The Take Profit was reached <strong>BEFORE</strong> the Stop Loss.
+                            {tpHitFirst
+                                ? 'The Take Profit was reached <strong>BEFORE</strong> the Stop Loss.'
+                                : 'The Stop Loss was touched <strong>BEFORE</strong> any Take Profit was reached.'}
                         </p>
                     </div>
 

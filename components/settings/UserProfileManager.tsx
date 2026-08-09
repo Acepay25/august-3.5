@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
-import { BotIcon, UserIcon, UploadIcon, TrashIcon } from '../shared/Icons';
+import { BotIcon, UserIcon, UploadIcon, TrashIcon, CloseIcon } from '../shared/Icons';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
 
 interface UserProfileManagerProps {
   isVisible: boolean;
@@ -7,12 +8,17 @@ interface UserProfileManagerProps {
   existingUsers: string[];
   onImportProfile: (fileContent: string) => Promise<void>;
   onDeleteUser: (username: string) => void;
+  onClose?: () => void;
 }
 
-const UserProfileManager: React.FC<UserProfileManagerProps> = ({ isVisible, onUserSelect, existingUsers, onImportProfile, onDeleteUser }) => {
+const UserProfileManager: React.FC<UserProfileManagerProps> = ({ isVisible, onUserSelect, existingUsers, onImportProfile, onDeleteUser, onClose }) => {
   const [newUsername, setNewUsername] = useState('');
   const [formError, setFormError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Esc dismisses the modal (the audit flagged this screen as a navigation
+  // dead-end — it had no way out until a profile was selected).
+  useEscapeClose(Boolean(onClose) && isVisible, () => onClose?.());
 
   if (!isVisible) return null;
 
@@ -57,10 +63,20 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ isVisible, onUs
   };
 
   return (
-    <div className="fixed inset-0 bg-black z-50 flex items-center justify-center p-4 animate-fade-in" role="dialog" aria-modal="true" aria-label="User profile selection">
+    <div className="fixed inset-0 bg-black z-50 flex items-center justify-center p-4 animate-fade-in" role="dialog" aria-modal="true" aria-label="User profile selection" onClick={(e) => { if (e.target === e.currentTarget) onClose?.(); }}>
       <div className="relative w-full max-w-md bg-zinc-900 rounded-3xl border border-white/10 shadow-2xl overflow-hidden">
           {/* Header */}
           <div className="relative px-8 py-10 text-center border-b border-white/5">
+              {onClose && (
+                  <button
+                      type="button"
+                      onClick={onClose}
+                      aria-label="Close user selection"
+                      className="absolute right-4 top-4 p-2 text-zinc-500 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-cyan-400"
+                  >
+                      <CloseIcon />
+                  </button>
+              )}
               <div className="flex justify-center mb-6">
                   <div className="w-20 h-20 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-2xl shadow-xl shadow-cyan-500/20 flex items-center justify-center text-white transform rotate-3 hover:rotate-0 transition-transform duration-500">
                       <BotIcon />

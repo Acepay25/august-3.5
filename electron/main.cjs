@@ -136,16 +136,29 @@ function providerRequestDetails(request) {
         body = {
             model,
             max_tokens: request.maxTokens ?? 4096,
-            messages: messages.filter(message => message?.role !== 'system'),
+            messages: messages.filter(message => message?.role !== 'system').map(message => ({
+                role: message.role,
+                content: toAnthropicContent(message.content)
+            })),
         };
-        if (system) body.system = typeof system.content === 'string' ? system.content : '';
+        if (system) body.system = contentToText(system.content);
         if (request.temperature !== undefined) body.temperature = request.temperature;
     } else if (format === 'responses') {
         url = `${baseUrl}/responses`;
         if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
         body = {
             model,
-            input: messages,
+            input: messages.filter(message => message?.role !== 'system').map(message => ({
+                role: message.role,
+                content: typeof message.content === 'string'
+                    ? message.content
+                    : message.content.map(part => part.type === 'text'
+                        ? { type: 'input_text', text: part.text }
+                        : { type: 'input_image', image_url: part.image_url.url })
+            })),
+            ...(messages.find(message => message?.role === 'system') ? {
+                instructions: contentToText(messages.find(message => message?.role === 'system').content)
+            } : {}),
             max_output_tokens: request.maxTokens ?? 4096,
             temperature: request.temperature ?? 0.7,
         };
@@ -154,6 +167,29 @@ function providerRequestDetails(request) {
     }
 
     return { url, headers, body };
+}
+
+function contentToText(content) {
+    return typeof content === 'string'
+        ? content
+        : (Array.isArray(content) ? content.filter(part => part?.type === 'text').map(part => part.text).join('') : '');
+}
+
+function toAnthropicContent(content) {
+    if (typeof content === 'string') return [{ type: 'text', text: content }];
+    if (!Array.isArray(content)) return [];
+    return content.map(part => {
+        if (part?.type === 'text') return { type: 'text', text: part.text };
+        const url = part?.image_url?.url || '';
+        const commaIndex = url.indexOf(',');
+        if (url.startsWith('data:') && commaIndex !== -1) {
+            const header = url.slice(5, commaIndex);
+            const mimeMatch = header.match(/^image\/(png|jpeg|webp|gif)\b/i);
+            const mediaType = mimeMatch ? `image/${mimeMatch[1].toLowerCase()}` : 'image/png';
+            return { type: 'image', source: { type: 'base64', media_type: mediaType, data: url.slice(commaIndex + 1) } };
+        }
+        return { type: 'image', source: { type: 'url', url } };
+    });
 }
 
 function parseProviderErrorBody(raw) {
@@ -262,6 +298,9 @@ async function createWindow() {
         width: saved.width,
         height: saved.height,
         ...(saved.x !== undefined && saved.y !== undefined ? { x: saved.x, y: saved.y } : {}),
+        // Don't show the frame until the first paint is ready — otherwise a
+        // blank/white window flashes on launch (the audit flagged this).
+        show: false,
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
@@ -273,6 +312,17 @@ async function createWindow() {
         },
         icon: path.join(__dirname, '../public/favicon.ico')
     });
+
+    // Show on first paint; a 4s fail-safe covers the custom app:// protocol in
+    // case ready-to-show never fires (slow disk, renderer error page).
+    let windowShown = false;
+    const showWindow = () => {
+        if (windowShown || !mainWindow || mainWindow.isDestroyed()) return;
+        windowShown = true;
+        mainWindow.show();
+    };
+    mainWindow.once('ready-to-show', showWindow);
+    setTimeout(showWindow, 4000);
 
     // Persist bounds/position on close so the next launch restores them.
     mainWindow.on('close', () => saveWindowState(mainWindow));

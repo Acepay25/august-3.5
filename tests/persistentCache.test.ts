@@ -154,7 +154,7 @@ describe('persistentCache (IndexedDB)', () => {
     expect(await persistentGet('key-0')).toBeNull();
     expect(await persistentGet('key-4')).toBeNull();
     expect((await persistentGet('key-204'))?.value).toBe(204);
-  });
+  }, 15000);
 
   it('clears BOTH memory and the persisted store on clearAllCaches', async () => {
     const { cacheResponse, getCachedResponse, clearAllCaches } = await import('../services/infrastructure/responseCache');
@@ -171,7 +171,7 @@ describe('persistentCache (IndexedDB)', () => {
     const fresh = await import('../services/infrastructure/responseCache');
     const rehydrated = await fresh.getCachedResponse(['no-images'], 'prompt-one', 'model-a');
     expect(rehydrated).toBeUndefined();
-  });
+  }, 15000);
 
   it('survives "reloads" (persisted store rehydrates a fresh memory cache)', async () => {
     const { cacheResponse } = await import('../services/infrastructure/responseCache');

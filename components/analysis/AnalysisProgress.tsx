@@ -159,6 +159,8 @@ interface AnalysisProgressProps {
   steps: AnalysisStep[];
   isActive: boolean;
   onCancel: () => void;
+  /** Render inside a parent surface, such as the desktop activity rail. */
+  embedded?: boolean;
   isPostMortem?: boolean;
   isPostMortemInProgress?: boolean;
   onOpenPostMortem?: () => void;
@@ -168,6 +170,7 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({
   steps,
   isActive,
   onCancel,
+  embedded = false,
   isPostMortem,
   isPostMortemInProgress,
   onOpenPostMortem,
@@ -186,6 +189,9 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({
   const glowColor = isPostMortem
     ? 'shadow-[0_0_50px_-12px_rgba(161,161,170,0.2)]'
     : 'shadow-[0_0_50px_-12px_rgba(176, 176, 182,0.2)]';
+  const surfaceClass = embedded
+    ? 'animate-fade-in'
+    : `glass status-surface rounded-2xl ${glowColor} border-t ${accentBorder} p-4 animate-fade-in`;
 
   const taskBlocks = (
     <div className="space-y-1">
@@ -196,9 +202,7 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({
   );
 
   return (
-    <div
-      className={`glass status-surface rounded-2xl ${glowColor} border-t ${accentBorder} p-4 animate-fade-in`}
-    >
+    <div className={surfaceClass}>
       {isActive ? (
         <>
           {/* Active: show Task blocks + action buttons */}

@@ -30,16 +30,19 @@ interface WinRateDashboardProps {
     trades: LoggedTrade[];
 }
 
-// Color constants
+// Color constants — distinct monochrome shades so chart series / confidence
+// buckets stay visually separable without breaking the black/gray theme.
+// (The old map reused #6b6b73 for rose/orange/blue and #8a8a92 for
+// yellow/purple, so e.g. Family A and Family C drew identical lines.)
 const COLORS = {
     cyan: '#b0b0b6',
     emerald: '#d2d2d6',
     rose: '#6b6b73',
     yellow: '#8a8a92',
-    orange: '#6b6b73',
-    purple: '#8a8a92',
-    blue: '#6b6b73',
-    zinc: '#6b6b73'
+    orange: '#9e9ea6',
+    purple: '#7c7c84',
+    blue: '#5f5f67',
+    zinc: '#55555d'
 };
 
 const FAMILY_COLORS: Record<string, string> = {
@@ -223,15 +226,30 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                     <div className="text-xl sm:text-3xl font-black text-white">{overallStats.totalTrades}</div>
                 </div>
 
-                {/* Net PnL */}
+                {/* Net PnL — dollar PnL from manual captures; autopilot
+                    confirms carry pnlPercent only (never pnlAmount), so they
+                    are shown as the percent line instead of being invisible. */}
                 <div className="glass-panel p-3 sm:p-4 rounded-xl border border-white/5 bg-zinc-800 text-center relative overflow-hidden">
                     {overallStats.totalPnL !== 0 && (
                         <div className={`absolute top-0 left-0 w-full h-1 ${overallStats.totalPnL > 0 ? 'bg-emerald-500' : 'bg-rose-500'}`}></div>
                     )}
                     <div className="text-[9px] sm:text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1">Net PnL</div>
-                    <div className={`text-lg sm:text-2xl font-mono font-black ${overallStats.totalPnL >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {overallStats.totalPnL >= 0 ? '+' : ''}{overallStats.totalPnL.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}
-                    </div>
+                    {overallStats.totalPnL !== 0 ? (
+                        <div className={`text-lg sm:text-2xl font-mono font-black ${overallStats.totalPnL >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                            {overallStats.totalPnL >= 0 ? '+' : ''}{overallStats.totalPnL.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}
+                        </div>
+                    ) : overallStats.totalPnLPercent !== 0 ? (
+                        <div className={`text-lg sm:text-2xl font-mono font-black ${overallStats.totalPnLPercent >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                            {overallStats.totalPnLPercent >= 0 ? '+' : ''}{overallStats.totalPnLPercent.toLocaleString('en-US', { maximumFractionDigits: 1 })}%
+                        </div>
+                    ) : (
+                        <div className="text-lg sm:text-2xl font-mono font-black text-zinc-500">$0</div>
+                    )}
+                    {overallStats.totalPnL !== 0 && overallStats.totalPnLPercent !== 0 && (
+                        <div className={`text-[10px] font-mono mt-0.5 ${overallStats.totalPnLPercent >= 0 ? 'text-emerald-400/80' : 'text-rose-400/80'}`}>
+                            {overallStats.totalPnLPercent >= 0 ? '+' : ''}{overallStats.totalPnLPercent.toLocaleString('en-US', { maximumFractionDigits: 1 })}%
+                        </div>
+                    )}
                 </div>
 
                 {/* Profit Factor */}
@@ -351,9 +369,15 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                                         <span className="font-bold text-sm text-white">{coin.coin}</span>
                                     </div>
                                     <div className="flex items-center gap-3">
-                                        <span className={`text-xs font-mono ${coin.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                            {coin.pnl >= 0 ? '+' : ''}{coin.pnl.toFixed(0)}
-                                        </span>
+                                        {coin.pnl !== 0 ? (
+                                            <span className={`text-xs font-mono ${coin.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                                {coin.pnl >= 0 ? '+' : ''}{coin.pnl.toFixed(0)}
+                                            </span>
+                                        ) : coin.pnlPercent !== 0 ? (
+                                            <span className={`text-xs font-mono ${coin.pnlPercent >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                                {coin.pnlPercent >= 0 ? '+' : ''}{coin.pnlPercent.toFixed(1)}%
+                                            </span>
+                                        ) : null}
                                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${coin.winRate >= 50 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>
                                             {coin.winRate}%
                                         </span>

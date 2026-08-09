@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { TradeAnalysis, TradeOutcome, AccuracySubMode, ConfidenceCalibration, ConfluenceData, DualScenarioAnalysis, LevelProbabilities, ProbabilityReasoning, TradingStyle } from '../../types';
 import { ChevronDownIcon, BookmarkIcon, BookmarkSolidIcon, BrainIcon, UpdateIcon, ActivityIcon, SkipIcon } from '../shared/Icons';
 import { FAMILY_UI_DATA } from '../../constants/models';
@@ -8,13 +8,17 @@ import { DEFAULT_LEVERAGE } from '../../utils/conversationUtils';
 import { parsePrice } from '../../utils/analysisUtils';
 import { simulateFromAnalysisTime } from '../../services/backtesting/BacktestingService';
 import { AutopilotResolution } from '../../services/ui/OutcomeAutopilotService';
+import ConsensusPanel from './ConsensusPanel';
 import { PriceAlertService } from '../../services/ui/PriceAlertService';
 import ConfluenceScoreIndicator from './ConfluenceScoreIndicator';
 import ProbabilityWidget from '../market/ProbabilityWidget';
 import CalibrationWidget from './CalibrationWidget';
+import CalibrationDriftNote from './CalibrationDriftNote';
 import BacktestPanel from './BacktestPanel';
 import PriceAlertToggle from './PriceAlertToggle';
+import SetupWatchControl from './SetupWatchControl';
 import ShareMenu from './ShareMenu';
+import DecisionRecord from './DecisionRecord';
 
 // ─── Shared countdown ticker ────────────────────────────────────────────────
 // Every PENDING analysis card used to run its own setInterval(60s) + re-render
@@ -163,12 +167,42 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
         lastChecked: Date | null;
     } | null>(null);
 
+    // === VISIBILITY GATE FOR THE 30s ENTRY POLL ===
+    // N pending cards used to run N independent 30s kline checks regardless
+    // of whether the user could see them. Only poll cards that are actually
+    // on screen (and the app is in the foreground) — a card that scrolls out
+    // resumes on return, and a stale result self-corrects on the next check.
+    const cardRef = useRef<HTMLDivElement | null>(null);
+    const [isCardOnScreen, setIsCardOnScreen] = useState(true);
+    const [isPageForeground, setIsPageForeground] = useState(() => typeof document !== 'undefined' && document.visibilityState === 'visible');
+
+    useEffect(() => {
+        if (typeof IntersectionObserver === 'undefined') return;
+        const el = cardRef.current;
+        if (!el) return;
+        const observer = new IntersectionObserver(
+            (entries) => setIsCardOnScreen(entries.some((e) => e.isIntersecting)),
+            { threshold: 0.05 }
+        );
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, []);
+
+    useEffect(() => {
+        const onVisibility = () => setIsPageForeground(document.visibilityState === 'visible');
+        document.addEventListener('visibilitychange', onVisibility);
+        return () => document.removeEventListener('visibilitychange', onVisibility);
+    }, []);
+
     // Live countdown timer state
     const [now, setNow] = useState(Date.now());
 
     // Auto-poll every 30 seconds for PENDING trades to detect entry
     useEffect(() => {
         if (outcome !== TradeOutcome.PENDING || !createdAt || !coinName) return;
+        // Visibility gate: hidden cards (scrolled out / backgrounded app)
+        // don't run their own kline check — see VISIBILITY GATE above.
+        if (!isCardOnScreen || !isPageForeground) return;
 
         // Guarded setter: the poll used to set a FRESH object every 30s even
         // when nothing changed, re-rendering this 1300+ line card pointlessly.
@@ -236,10 +270,14 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
             }
         };
 
-        checkEntry(); // Initial check
+        // Declare the interval BEFORE the initial check: the first check can
+        // hit clearInterval(interval) when the window already expired, which
+        // threw a ReferenceError (TDZ) on the un-initialized const and left a
+        // redundant 30s poll running.
         const interval = setInterval(checkEntry, 30000); // Poll every 30s
+        checkEntry(); // Initial check
         return () => clearInterval(interval);
-    }, [outcome, createdAt, coinName, analysis, leverage, validityDurationMinutes, autoEntryStatus?.wasActiveBeforeExpiry]);
+    }, [outcome, createdAt, coinName, analysis, leverage, validityDurationMinutes, autoEntryStatus?.wasActiveBeforeExpiry, isCardOnScreen, isPageForeground]);
 
     // Calculate validity remaining FIRST (needed for isTradeActive check)
     const validUntilForExpiry = (validityDurationMinutes && createdAt)
@@ -332,7 +370,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
     const hasValidRR = rrRatio !== undefined && rrRatio !== null && !isNaN(rrRatio) && rrRatio > 0;
 
     return (
-        <div className="analysis-card mt-6 sm:mt-8 w-full pb-28 sm:pb-8">
+        <div ref={cardRef} className="analysis-card mt-6 sm:mt-8 w-full pb-28 sm:pb-8">
 
             {/* Coin Name Header */}
             <div className="mb-4 sm:mb-6 flex items-center px-1 justify-between flex-wrap gap-2">
@@ -382,6 +420,13 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                     </div>
                 )}
             </div>
+
+            {/* Consensus explainability — audit the verdict against its analysts */}
+            {analysis.analystConsensus && (
+                <ConsensusPanel consensus={analysis.analystConsensus} verdict={analysis} />
+            )}
+
+            <DecisionRecord analysis={analysis} outcome={outcome} />
 
             {/* Hybrid data staleness — the packet claims real-time; show its age */}
             {analysis.marketSnapshot ? (() => {
@@ -534,7 +579,12 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                             <CalibrationWidget
                                 confidence={confidence}
                                 confidenceCalibration={confidenceCalibration}
-                                coinName={coinName}
+                            />
+                            {/* Calibration drift alert (over/under-confident) */}
+                            <CalibrationDriftNote
+                                confidence={confidence as ConfidenceLevel}
+                                probability={probability}
+                                confidenceCalibration={confidenceCalibration}
                             />
                         </div>
                     </div>
@@ -589,7 +639,10 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                             </button>
                         ))}
                         {activeStrategies.some(s => !activeFrameworks.includes(s)) && (
-                            <button onClick={() => onApplyStrategy(activeStrategies[0])} className="text-[10px] sm:text-xs px-3 py-1.5 sm:px-4 sm:py-2 text-cyan-500 hover:underline opacity-80 font-medium">+ Add</button>
+                            // Add the FIRST strategy that isn't already applied —
+                            // the old code applied activeStrategies[0], which was
+                            // often the already-active one (a silent no-op).
+                            <button onClick={() => onApplyStrategy(activeStrategies.find(s => !activeFrameworks.includes(s))!)} className="text-[10px] sm:text-xs px-3 py-1.5 sm:px-4 sm:py-2 text-cyan-500 hover:underline opacity-80 font-medium">+ Add</button>
                         )}
                     </div>
                 )}
@@ -1451,10 +1504,12 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                                 <span className="hidden sm:inline text-[10px] font-bold uppercase tracking-wider">Think</span>
                             </button>
                         )}
+                        {/* Price-triggered re-debate ("watch this setup") */}
+                        <SetupWatchControl analysis={analysis} messageId={messageId} />
                         {/* Price Alert Toggle */}
                         <PriceAlertToggle analysis={analysis} messageId={messageId} />
                         {/* Share Button */}
-                        <ShareMenu analysis={analysis} messageId={messageId} outcome={outcome} tradingStyle={tradingStyle} />
+                        <ShareMenu analysis={analysis} outcome={outcome} tradingStyle={tradingStyle} />
                         {onUpdateTrade && (
                             <button onClick={() => onUpdateTrade(messageId)} className="px-3 py-2 rounded-lg border border-violet-400/25 bg-violet-500/10 text-violet-200 hover:border-violet-300/40 hover:bg-violet-500/20 transition-colors flex items-center justify-center gap-1.5" title="Update Setup">
                                  <UpdateIcon className="w-4 h-4" /><span className="hidden sm:inline text-[10px] font-bold uppercase tracking-wider">Update</span>

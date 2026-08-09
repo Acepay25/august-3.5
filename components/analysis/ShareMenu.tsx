@@ -1,12 +1,11 @@
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { TradeAnalysis, TradeOutcome, TradingStyle } from '../../types';
 import { LoadingIcon, ShareIcon } from '../shared/Icons';
 import { TradeShareService } from '../../services/ui/TradeShareService';
 
 interface ShareMenuProps {
     analysis: TradeAnalysis;
-    messageId: string;
     outcome?: TradeOutcome;
     tradingStyle?: Exclude<TradingStyle, 'auto'>;
 }
@@ -22,6 +21,12 @@ const ShareMenu: React.FC<ShareMenuProps> = ({
 }) => {
     const [isSharing, setIsSharing] = useState(false);
     const [shareSuccess, setShareSuccess] = useState<string | null>(null);
+    // Clear the transient success message even if the component unmounts
+    // before the reset timer fires (avoid setState-on-unmounted).
+    const shareResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    useEffect(() => () => {
+        if (shareResetTimer.current) clearTimeout(shareResetTimer.current);
+    }, []);
 
     const handleShare = async () => {
         setIsSharing(true);
@@ -49,7 +54,8 @@ const ShareMenu: React.FC<ShareMenuProps> = ({
             setShareSuccess('Error');
         }
         setIsSharing(false);
-        setTimeout(() => setShareSuccess(null), 2000);
+        if (shareResetTimer.current) clearTimeout(shareResetTimer.current);
+        shareResetTimer.current = setTimeout(() => setShareSuccess(null), 2000);
     };
 
     return (

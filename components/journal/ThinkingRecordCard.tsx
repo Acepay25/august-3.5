@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Brain, ChevronDown, MessageSquare } from 'lucide-react';
 import { ThinkingRecord } from '../../types/thinking';
 import { TradeOutcome } from '../../types';
+import ThinkingModal from '../analysis/ThinkingModal';
 
 interface ThinkingRecordCardProps {
   record: ThinkingRecord;
@@ -57,6 +58,7 @@ const Section: React.FC<{ title: string; children: React.ReactNode; defaultOpen?
 export const ThinkingRecordCard: React.FC<ThinkingRecordCardProps> = ({ record }) => {
   const colors = getProviderColor(record.provider);
   const isTurn = record.role === 'debate_turn';
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   return (
     <div className={`rounded-lg border ${colors.border} ${colors.bg} p-3`}>
@@ -96,30 +98,25 @@ export const ThinkingRecordCard: React.FC<ThinkingRecordCardProps> = ({ record }
         </p>
       )}
 
-      <div className="space-y-1.5">
-        {record.reasoning && (
-          <Section title={isTurn ? 'Turn Text' : 'Reasoning (CoT)'} defaultOpen={!isTurn}>
-            {record.reasoning}
-          </Section>
-        )}
-        {record.finalOutput && (
-          <Section title="Final Output">{record.finalOutput}</Section>
-        )}
-        {record.rawReasoning && (
-          <Section title="Raw Chain-of-Thought">{record.rawReasoning}</Section>
-        )}
-        {record.analysisJson && (
-          <Section title="Analysis JSON">
-            {(() => {
-              try {
-                return JSON.stringify(JSON.parse(record.analysisJson), null, 2);
-              } catch {
-                return record.analysisJson;
-              }
-            })()}
-          </Section>
-        )}
-      </div>
+      <button type="button" onClick={() => setIsModalOpen(true)} className="mt-3 flex w-full items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-zinc-400 transition-colors hover:border-cyan-400/30 hover:bg-zinc-800 hover:text-cyan-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400" aria-haspopup="dialog">
+        <span>View full thinking</span>
+        <span aria-hidden="true">Open →</span>
+      </button>
+
+      <ThinkingModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title={`${roleLabel(record)}${record.provider !== 'moderator' ? ` · ${record.provider}` : ''}`}
+        subtitle={record.modelName || (record.outcome ? `Outcome: ${record.outcome}` : undefined)}
+      >
+        <div className="space-y-2">
+          {record.reasoning && <Section title={isTurn ? 'Turn Text' : 'Reasoning (CoT)'} defaultOpen={!isTurn}>{record.reasoning}</Section>}
+          {record.finalOutput && <Section title="Final Output">{record.finalOutput}</Section>}
+          {record.rawReasoning && <Section title="Raw Chain-of-Thought">{record.rawReasoning}</Section>}
+          {record.analysisJson && <Section title="Analysis JSON">{(() => { try { return JSON.stringify(JSON.parse(record.analysisJson), null, 2); } catch { return record.analysisJson; } })()}</Section>}
+          {!record.reasoning && !record.finalOutput && !record.rawReasoning && !record.analysisJson && <p className="text-sm italic text-zinc-600">No detailed thinking was stored for this analyst.</p>}
+        </div>
+      </ThinkingModal>
     </div>
   );
 };

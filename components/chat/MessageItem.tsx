@@ -7,6 +7,8 @@ import LiveMarketDataView from '../market/LiveMarketDataView';
 import DebateChat from '../analysis/DebateChat';
 import EnsembleProgressChat from '../analysis/EnsembleProgressChat';
 import AnalysisResult from '../analysis/AnalysisResult';
+import ThinkingModal from '../analysis/ThinkingModal';
+import TodayReassessmentPanel from './TodayReassessmentPanel';
 import { AutopilotResolution } from '../../services/ui/OutcomeAutopilotService';
 
 // Helper to validate URLs (XSS prevention)
@@ -41,6 +43,9 @@ export interface ChatContextProps {
     handleInitiateSimulator?: (messageId: string) => void; // Scenario Simulator
     // Retry failed post-mortem
     onRetryPostMortem?: (messageId: string) => void;
+    // Post-mortem "what would I do today?" re-assessment
+    onTodayReassessment?: (messageId: string) => void;
+    todayReassessmentInFlight?: string | null;
     // Probability Selection
     onSelectMessageForProbability?: (id: string) => void;
     // Side-by-side compare of two analysis cards.
@@ -49,6 +54,10 @@ export interface ChatContextProps {
     onViewReasoning?: (messageId: string) => void;
     /** F4: re-run the debate for a completed analysis card with the same setup. */
     onReRunAnalysis?: (messageId: string) => void;
+    /** Mid-debate analyst replacement: pick a candidate (providerId) or pass
+     *  null to continue without. Keyed by message id so a stale click from an
+     *  earlier run is ignored. */
+    onReplacementChoice?: (messageId: string, providerId: string | null) => void;
     // Selection Mode Props
     isSelectionMode?: boolean;
     selectedMessageIds?: Set<string>;
@@ -129,13 +138,17 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
         onCompareAnalysis,
         onViewReasoning,
         onReRunAnalysis,
+        onReplacementChoice,
+        onTodayReassessment,
+        todayReassessmentInFlight,
     } = context;
 
     const isHighlighted = highlightedAnalysisId === message.id;
     const isUserMessage = message.role === MessageRole.USER;
-    const [isThinkingExpanded, setIsThinkingExpanded] = React.useState(false);
+    const [isThinkingModalOpen, setIsThinkingModalOpen] = React.useState(false);
     const [isPreviousDebateExpanded, setIsPreviousDebateExpanded] = React.useState(false);
     const [isAnalystOutputsExpanded, setIsAnalystOutputsExpanded] = React.useState(false);
+    const [isRunLedgerOpen, setIsRunLedgerOpen] = React.useState(false);
     const thinkingEntries = Object.entries({
         ...(message.thoughtProcesses ?? {}),
         ...(message.reasoningProcesses ?? {}),
@@ -152,9 +165,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
 
     React.useEffect(() => {
         if (isEnsembleMessage) {
-            setIsThinkingExpanded(false);
-        } else if (thinkingEntries.length > 0) {
-            setIsThinkingExpanded(true);
+            setIsThinkingModalOpen(false);
         }
     }, [isEnsembleMessage, message.id, thinkingEntries.length]);
 
@@ -253,33 +264,23 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
 
                             {isCasualReply && !isEnsembleMessage && (
                                 <div className="mb-4 border-b border-white/10 pb-3">
-                                    <button type="button" onClick={() => setIsThinkingExpanded(prev => !prev)} className="flex w-full items-center gap-2 text-left text-sm text-zinc-500 hover:text-zinc-300 transition-colors" aria-expanded={isThinkingExpanded}>
+                                    <button type="button" onClick={() => setIsThinkingModalOpen(true)} className="flex w-full items-center gap-2 text-left text-sm text-zinc-500 hover:text-zinc-300 transition-colors" aria-haspopup="dialog">
                                         <BrainIcon className="h-4 w-4" />
                                         <span className="font-medium">Thinking</span>
                                         <span className="text-zinc-600">for a few seconds</span>
-                                        <ChevronDownIcon className={`ml-auto h-4 w-4 transition-transform ${isThinkingExpanded ? 'rotate-180' : ''}`} />
+                                        <span className="ml-auto text-[10px] uppercase tracking-wider text-zinc-600">View</span>
                                     </button>
-                                    {isThinkingExpanded && (
-                                        <div className="mt-3 max-h-[min(52vh,34rem)] space-y-3 overflow-y-auto overscroll-contain rounded-lg border border-white/5 bg-zinc-900/60 px-3 py-3 text-xs leading-relaxed text-zinc-500 custom-scrollbar">
-                                            {thinkingEntries.length > 0
-                                                ? thinkingEntries.map(([providerId, content]) => (
-                                                    <MarkdownContent key={providerId} content={content} className="text-zinc-400" />
-                                                ))
-                                                : 'This model did not return a separate reasoning trace. Only the generated answer is available.'}
-                                        </div>
-                                    )}
                                 </div>
                             )}
 
                             {message.role === MessageRole.AI && !isCasualReply && !isEnsembleMessage && thinkingEntries.length > 0 && (
                                 <div className="mb-4 border-b border-white/10 pb-3">
-                                    <button type="button" onClick={() => setIsThinkingExpanded(prev => !prev)} className="flex w-full items-center gap-2 text-left text-sm text-zinc-500 hover:text-zinc-300 transition-colors" aria-expanded={isThinkingExpanded}>
+                                    <button type="button" onClick={() => setIsThinkingModalOpen(true)} className="flex w-full items-center gap-2 text-left text-sm text-zinc-500 hover:text-zinc-300 transition-colors" aria-haspopup="dialog">
                                         <BrainIcon className="h-4 w-4" />
                                         <span className="font-medium">Thinking</span>
                                         <span className="text-zinc-600">for a few seconds</span>
-                                        <ChevronDownIcon className={`ml-auto h-4 w-4 transition-transform ${isThinkingExpanded ? 'rotate-180' : ''}`} />
+                                        <span className="ml-auto text-[10px] uppercase tracking-wider text-zinc-600">View</span>
                                     </button>
-                                    {isThinkingExpanded && <div className="mt-3 max-h-[min(52vh,34rem)] space-y-3 overflow-y-auto overscroll-contain rounded-lg border border-white/5 bg-zinc-900/60 px-3 py-3 text-xs leading-relaxed text-zinc-400 custom-scrollbar">{thinkingEntries.map(([providerId, content]) => <MarkdownContent key={providerId} content={content} className="text-zinc-400" />)}</div>}
                                 </div>
                             )}
 
@@ -299,6 +300,14 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 <SmoothText text={displayContent} animate={message.role === MessageRole.AI && context.latestMessageId === message.id && !message.analysis} />
                             </div>
 
+                            {/* "What would I do today?" — fresh re-assessment against today's price */}
+                            {message.isPostMortem && onTodayReassessment && (
+                                <TodayReassessmentPanel
+                                    message={message}
+                                    inFlight={todayReassessmentInFlight ?? null}
+                                    onRequest={onTodayReassessment}
+                                />
+                            )}
 
                             {/* Retry button for failed post-mortem analysis.
                                 The failed message is persisted as role AI (P2-15),
@@ -350,7 +359,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
 
                             {/* Analyst requests appear in chat before the moderator debate starts. */}
                             {!message.isDebating && !message.analysis && message.ensembleProgress && (
-                                <EnsembleProgressChat progress={message.ensembleProgress} modelIdToName={modelIdToName} isLive onRetryAnalyst={onReRunAnalysis ? () => onReRunAnalysis(message.id) : undefined} />
+                                <EnsembleProgressChat progress={message.ensembleProgress} modelIdToName={modelIdToName} isLive hideSubagents onRetryAnalyst={onReRunAnalysis ? () => onReRunAnalysis(message.id) : undefined} />
                             )}
 
                             {/* Live debates stay visible; completed cards default to the result only. */}
@@ -366,21 +375,61 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     isDebating
                                     activeDebateSpeakers={message.activeDebateSpeakers}
                                     analysis={message.analysis}
+                                    messageId={message.id}
+                                    replacementOffer={message.replacementOffer}
+                                    onReplacementChoice={onReplacementChoice}
                                 />
                             )}
 
                             {/* Per-run summary — durations, gate cap, Monte Carlo (from runStats) */}
                             {message.analysis && message.runStats && (
-                                <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[9px] uppercase tracking-wider text-zinc-600">
-                                    <span>Run {Math.round(message.runStats.durationMs / 1000)}s</span>
-                                    {message.runStats.analystCount !== undefined && <span>{message.runStats.analystCount} analysts</span>}
-                                    {message.runStats.gateCap !== undefined && <span>Gate cap {Math.round(message.runStats.gateCap * 100)}%</span>}
-                                    {message.runStats.mcWinRate !== undefined && <span>MC win {message.runStats.mcWinRate}%</span>}
-                                    {message.runStats.mcEV !== undefined && <span>MC EV {message.runStats.mcEV}R</span>}
-                                    {message.runStats.btMatches !== undefined && message.runStats.btMatches > 0 && (
-                                        <span title="How this exact setup did historically (similar past trades)">
-                                            Similar setups: {message.runStats.btMatches} · {message.runStats.btWinRate !== undefined ? `${message.runStats.btWinRate.toFixed(0)}% WR` : '—'} · {message.runStats.btEV !== undefined ? `${message.runStats.btEV > 0 ? '+' : ''}${message.runStats.btEV}R` : '—'}
-                                        </span>
+                                <div className="mb-2">
+                                    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[9px] uppercase tracking-wider text-zinc-600">
+                                        <span>Run {Math.round(message.runStats.durationMs / 1000)}s</span>
+                                        {message.runStats.analystCount !== undefined && <span>{message.runStats.analystCount} analysts</span>}
+                                        {message.runStats.gateCap !== undefined && <span>Gate cap {Math.round(message.runStats.gateCap * 100)}%</span>}
+                                        {message.runStats.mcWinRate !== undefined && <span>MC win {message.runStats.mcWinRate}%</span>}
+                                        {message.runStats.mcEV !== undefined && <span>MC EV {message.runStats.mcEV}R</span>}
+                                        {message.runStats.btMatches !== undefined && message.runStats.btMatches > 0 && (
+                                            <span title="How this exact setup did historically (similar past trades)">
+                                                Similar setups: {message.runStats.btMatches} · {message.runStats.btWinRate !== undefined ? `${message.runStats.btWinRate.toFixed(0)}% WR` : '—'} · {message.runStats.btEV !== undefined ? `${message.runStats.btEV > 0 ? '+' : ''}${message.runStats.btEV}R` : '—'}
+                                            </span>
+                                        )}
+                                        {message.runStats.analysts && message.runStats.analysts.length > 0 && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setIsRunLedgerOpen(o => !o)}
+                                                aria-expanded={isRunLedgerOpen}
+                                                className="text-zinc-500 hover:text-zinc-300 transition-colors"
+                                                title="Per-analyst cost & latency ledger"
+                                            >
+                                                {isRunLedgerOpen ? '▾ Run ledger' : '▸ Run ledger'}
+                                            </button>
+                                        )}
+                                    </div>
+                                    {isRunLedgerOpen && message.runStats.analysts && message.runStats.analysts.length > 0 && (
+                                        <div className="mt-1.5 overflow-x-auto rounded-lg border border-white/10 bg-zinc-900/60">
+                                            <table className="w-full text-left text-[9px] border-collapse">
+                                                <thead>
+                                                    <tr className="text-zinc-500 uppercase tracking-wide">
+                                                        <th className="px-2 py-1 font-semibold">Analyst</th>
+                                                        <th className="px-2 py-1 font-semibold">Model</th>
+                                                        <th className="px-2 py-1 font-semibold">Time</th>
+                                                        <th className="px-2 py-1 font-semibold">Output</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {message.runStats.analysts.map(a => (
+                                                        <tr key={a.providerId} className="border-t border-white/5 text-zinc-300">
+                                                            <td className="px-2 py-1 whitespace-nowrap max-w-[160px] truncate" title={a.displayName}>{a.displayName}</td>
+                                                            <td className="px-2 py-1 whitespace-nowrap max-w-[140px] truncate text-zinc-400" title={a.modelId}>{a.modelId}</td>
+                                                            <td className="px-2 py-1 whitespace-nowrap">{a.durationMs !== undefined ? `${(a.durationMs / 1000).toFixed(1)}s` : '—'}</td>
+                                                            <td className="px-2 py-1 whitespace-nowrap">{a.charsOut !== undefined ? `${a.charsOut.toLocaleString()} chars` : '—'}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
                                     )}
                                 </div>
                             )}
@@ -494,6 +543,19 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                         </div>
                 </>
             </div>
+            <ThinkingModal
+                isOpen={isThinkingModalOpen}
+                onClose={() => setIsThinkingModalOpen(false)}
+                title="Model thinking"
+                subtitle={thinkingEntries.length > 0 ? `${thinkingEntries.length} reasoning trace${thinkingEntries.length === 1 ? '' : 's'}` : 'No separate reasoning trace'}
+            >
+                {thinkingEntries.length > 0 ? thinkingEntries.map(([providerId, content]) => (
+                    <div key={providerId} className="mb-5 last:mb-0">
+                        <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-zinc-500">{providerId}</div>
+                        <MarkdownContent content={content} className="text-sm leading-7 text-zinc-300" />
+                    </div>
+                )) : <p className="text-sm italic text-zinc-600">This model did not return a separate reasoning trace. Only the generated answer is available.</p>}
+            </ThinkingModal>
         </div>
     );
 });

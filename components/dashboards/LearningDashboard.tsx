@@ -76,8 +76,10 @@ const CalibrationBar: React.FC<{ label: string; actual: number; expected: number
 export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades }) => {
     const profile = useMemo(() => computeLearningProfile(trades), [trades]);
     // Memoized — loadLearningRules parses localStorage; running it inline in
-    // the JSX re-parsed on every render of the dashboard.
-    const learnedRules = useMemo(() => loadLearningRules().rules || [], []);
+    // the JSX re-parsed on every render of the dashboard. Keyed on `trades` so
+    // newly learned rules (post-mortems append to the trade log) appear while
+    // the tab is open instead of only after a remount.
+    const learnedRules = useMemo(() => loadLearningRules().rules || [], [trades]);
 
     const getWinRateColor = (rate: number) => {
         if (rate >= 65) return 'text-emerald-400';

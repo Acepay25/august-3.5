@@ -55,9 +55,15 @@ const BacktestPanel: React.FC<BacktestPanelProps> = ({
         entryPoints.map((_, idx) => idx) // Default: all entries selected
     );
 
-    // Re-sync selected entries when entryPoints changes
+    // Re-sync selected entries when entryPoints changes. Identity-guarded:
+    // the defensive `= []` default creates a fresh array every render when
+    // `analysis` is missing, which used to re-fire this effect forever.
     useEffect(() => {
-        setSelectedBacktestEntries(entryPoints.map((_, idx) => idx));
+        setSelectedBacktestEntries(prev => {
+            const next = entryPoints.map((_, idx) => idx);
+            if (prev.length === next.length && prev.every((v, i) => v === next[i])) return prev;
+            return next;
+        });
     }, [entryPoints]);
 
     // Outcome validation state
@@ -66,13 +72,6 @@ const BacktestPanel: React.FC<BacktestPanelProps> = ({
         intendedOutcome: TradeOutcome.WIN | TradeOutcome.LOSS | null;
         message: string;
     }>({ show: false, intendedOutcome: null, message: '' });
-
-    // Debug logging for backtest results (Analyst Lens debugging)
-    useEffect(() => {
-        if (backtestResult) {
-            console.log('Backtest Result Debug:', backtestResult);
-        }
-    }, [backtestResult]);
 
     // Backtest handler - uses analysis timestamp for accurate simulation
     const handleBacktest = async () => {

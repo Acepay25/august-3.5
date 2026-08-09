@@ -379,7 +379,17 @@ export const exportBackupToFile = async (backupId: string): Promise<void> => {
             throw new Error('Backup not found');
         }
 
-        const blob = new Blob([record.profileJson], { type: 'application/json' });
+        // Include the preferences sidecar in the downloadable artifact. Keep
+        // the profile-shaped envelope for compatibility with the existing
+        // import flow, while avoiding a second opaque file users can forget.
+        const profile = JSON.parse(record.profileJson) as Record<string, unknown>;
+        const preferences = record.preferencesJson ? JSON.parse(record.preferencesJson) : undefined;
+        const exportPayload = {
+            ...profile,
+            _backupExportedAt: new Date().toISOString(),
+            ...(preferences ? { _preferencesBackup: preferences } : {}),
+        };
+        const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;

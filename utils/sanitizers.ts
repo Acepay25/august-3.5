@@ -14,7 +14,10 @@ export const sanitizeAIResponse = (text: string): string => {
   let cleaned = text
     .replace(/^#+\s/gm, '') // Headings
     .replace(/(\*\*|__)(.*?)\1/g, '$2') // Bold
-    .replace(/(\*)(.*?)\1/g, '$2')   // Italic (*)
+    // Italic (*) — skip digit-adjacent asterisks so math survives the pass
+    // ("5*6*7" must not become "567"); the digit-guard below can only protect
+    // asterisks that are still present when it runs.
+    .replace(/(?<!\d)\*(.*?)(?<!\d)\*/g, '$1')
     // Underscore-italic only at word boundaries — a bare `_` pair would
     // otherwise corrupt tickers/timeframes ("BTCUSDT_4h" → "BTCUSDT4h").
     .replace(/(?<!\w)_([^_\n]*)_(?!\w)/g, '$1')
@@ -88,7 +91,7 @@ export const cleanPriceField = (val: unknown): string => {
 
   // Strip square brackets but KEEP the price inside ("[94500]" → "94500",
   // "94500 [call]" → "94500 call" — the jargon pass then removes "call").
-  str = str.replace(/[\[\]]/g, '');
+  str = str.replace(/[\x5b\x5d]/g, '');
 
   // Remove specific jargon words often hallucinated by AI
   const jargon = ['straddle', 'strangle', 'spread', 'condor', 'iron', 'call', 'put', 'option', 'breakeven', 'credit', 'debit', 'halves', 'profit'];
@@ -99,7 +102,7 @@ export const cleanPriceField = (val: unknown): string => {
   str = str.replace(/\s+/g, ' ').trim();
   // Trim leading/trailing punctuation — but preserve a leading minus so
   // negative percentages ("-0.5%") and negative prices keep their sign.
-  str = str.replace(/^[;,\[\s]+|[;,\[\]\-\s]+$/g, '');
+  str = str.replace(/^[;,\x5b\s]+|[;,\x5b\x5d\-\s]+$/g, '');
 
   return sanitizeJSONString(str);
 };

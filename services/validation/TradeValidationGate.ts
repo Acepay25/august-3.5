@@ -76,6 +76,7 @@ import {
 } from './ValidationConstants';
 import { StructuredRule } from '../../types';
 import { validateAllRules } from '../learning/RuleEngineService';
+import { parsePrice } from '../../utils/analysisUtils';
 
 
 // ============================================================================
@@ -532,10 +533,12 @@ ${patternMatch.warning ? `\n PATTERN MEMORY:\n${patternMatch.warning}` : ''}
     const analysisDirection = analysis.direction;
     const isTradeableDirection = analysisDirection === 'Long' || analysisDirection === 'Short';
 
-    // Parse numeric values
-    const entryPrice = parseFloat(analysis.entryPoints[0]?.price?.replace(/[^0-9.-]/g, '') || '0');
-    const stopLoss = parseFloat(analysis.stopLoss?.replace(/[^0-9.-]/g, '') || '0');
-    const takeProfit1 = parseFloat(analysis.takeProfit[0]?.price?.replace(/[^0-9.-]/g, '') || '0');
+    // Parse numeric values — use the canonical parsePrice so annotated AI
+    // prices like "94500 4h" resolve to 94500, not the naive digit-strip
+    // regex result 945004 (~100× inflation corrupts R:R and ATR-distance math).
+    const entryPrice = parsePrice(analysis.entryPoints[0]?.price || '') || 0;
+    const stopLoss = parsePrice(analysis.stopLoss || '') || 0;
+    const takeProfit1 = parsePrice(analysis.takeProfit[0]?.price || '') || 0;
     const atr = hybridData.indicators?.['1h']?.atr ?? 0;
 
     // Determine trade type from strategy

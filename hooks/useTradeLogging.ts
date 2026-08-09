@@ -18,6 +18,10 @@ export const MAX_TRADE_SUMMARIES = 100;
 
 export interface UseTradeLoggingParams {
     messages: Message[];
+    // Latest-message ref (from useConversations). The four "initiate"
+    // handlers feed chatContext, whose memoization would otherwise be
+    // defeated every stream chunk by a fresh `messages` closure.
+    messagesRef: { current: Message[] };
     updateMessages: (updater: (prev: Message[]) => Message[]) => void;
     activeConversationLeverage?: number;
     moderatorProviderId: string;
@@ -46,7 +50,7 @@ export interface UseTradeLoggingParams {
 
 export const useTradeLogging = (params: UseTradeLoggingParams) => {
     const {
-        messages, updateMessages, activeConversationLeverage,
+        messages, messagesRef, updateMessages, activeConversationLeverage,
         moderatorProviderId, moderatorModel,
         memoryModel, memoryConfig, useAlgorithmicInsights,
         setIsAutoCapturing, setIsHybridLoading, setIsEntryNotHitCapturing,
@@ -409,21 +413,21 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
     // ─── Log / Skip / Update Initiation ───────────────────────────────────
 
     const handleInitiateLogTrade = useCallback((messageId: string, outcome: TradeOutcome.WIN | TradeOutcome.LOSS) => {
-        const msg = messages.find(m => m.id === messageId);
+        const msg = messagesRef.current.find(m => m.id === messageId);
         if (msg) {
             // Open DataCaptureModal directly - trade will only be logged after capture confirmation
             setDataCaptureCandidate({ message: msg, outcome, feedback: undefined });
         }
-    }, [messages]);
+    }, [messagesRef]);
 
     const handleInitiateSkipTrade = useCallback((messageId: string) => {
-        const msg = messages.find(m => m.id === messageId);
+        const msg = messagesRef.current.find(m => m.id === messageId);
         if (msg) {
             setSkipCandidate(msg);
             setSkipReason(TradeOutcome.SKIPPED);
             setCorrectedEntry('');
         }
-    }, [messages]);
+    }, [messagesRef]);
 
     const handleConfirmSkipTrade = useCallback((reason: TradeOutcome.ENTRY_NOT_HIT | TradeOutcome.SKIPPED) => {
         if (!skipCandidate) return;
@@ -513,13 +517,15 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
                 });
 
                 setNewlyAddedInsightIds(prev => new Set(prev).add(loggedTrade.id));
-                setTimeout(() => {
+                const timer = setTimeout(() => {
+                    insightTimersRef.current.delete(timer);
                     setNewlyAddedInsightIds(prev => {
                         const next = new Set(prev);
                         next.delete(loggedTrade.id);
                         return next;
                     });
                 }, 3000);
+                insightTimersRef.current.add(timer);
 
                 console.log('[AutoInsight] Entry Not Hit logged to Recent Insights:', loggedTrade.id);
             } catch (error) {
@@ -662,20 +668,20 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
     // ─── Update Trade Logic ───────────────────────────────────────────────
 
     const handleInitiateUpdateTrade = useCallback((messageId: string) => {
-        const msg = messages.find(m => m.id === messageId);
+        const msg = messagesRef.current.find(m => m.id === messageId);
         if (msg && msg.analysis) {
             setUpdateCandidate(msg);
         }
-    }, [messages]);
+    }, [messagesRef]);
 
     // ─── Scenario Simulator Logic ─────────────────────────────────────────
 
     const handleInitiateSimulator = useCallback((messageId: string) => {
-        const msg = messages.find(m => m.id === messageId);
+        const msg = messagesRef.current.find(m => m.id === messageId);
         if (msg && msg.analysis) {
             setSimulatorCandidate(msg);
         }
-    }, [messages]);
+    }, [messagesRef]);
 
     const handleConfirmUpdateTrade = useCallback((text: string, images: ImageMetadata[]) => {
         if (!updateCandidate || !updateCandidate.analysis) return;

@@ -272,7 +272,11 @@ export const computeLearningProfile = (trades: LoggedTrade[]): PersonalizedLearn
         bestDirections: filterSignificant(directionStats).sort(sortByWinRate),
         bestRegimes: filterSignificant(regimeStats).sort(sortByWinRate),
         worstSetups: worstSetups.slice(0, 5),
-        confidenceAccuracy: confidenceStats.map(c => ({
+        confidenceAccuracy: confidenceStats
+            // 'UNKNOWN' (trades without a recorded confidence) is not a real
+            // ConfidenceLevel — casting it poisons downstream calibration math.
+            .filter(c => c.name !== 'UNKNOWN')
+            .map(c => ({
             level: c.name as ConfidenceLevel,
             winRate: c.winRate,
             count: c.count
@@ -367,6 +371,9 @@ export const getSetupSpecificStats = (
         if (coin && tradeCoin !== coin.toUpperCase()) matches = false;
         if (direction && tradeDirection !== direction) matches = false;
         if (pattern && !tradePattern.toLowerCase().includes(pattern.toLowerCase())) matches = false;
+        // `regime` was destructured but never applied — the caller passes it
+        // expecting regime-filtered stats; without this every regime matched.
+        if (regime && extractRegime(t).toUpperCase() !== regime.toUpperCase()) matches = false;
 
         return matches;
     });

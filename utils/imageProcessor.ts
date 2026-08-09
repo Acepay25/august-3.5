@@ -14,12 +14,53 @@ import { isQuotaError } from './errorUtils';
  * ~6.7MB base64 string per message (held in memory, persisted, and echoed
  * into composer previews). Downscaled data URLs keep charts legible while
  * cutting memory/storage roughly 5-10x.
+ *
+ * Decode path: `createImageBitmap(file)` when available — the decode runs
+ * off the main thread and never materializes the image as a giant base64
+ * string (a 12MP screenshot used to create a ~16MB data URL on the main
+ * thread, then a ~48MB RGBA decode, before being drawn at 1600px). The
+ * decoded bitmap is explicitly `close()`d to release its backing memory.
  */
 const MAX_DIMENSION = 1600;
 const JPEG_QUALITY = 0.85;
 
-export const readFileAsDownscaledDataUrl = (file: File): Promise<string> =>
+const readFileAsDataUrl = (file: File): Promise<string> =>
   new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
+export const readFileAsDownscaledDataUrl = (file: File): Promise<string> => {
+  if (typeof createImageBitmap === 'function') {
+    return (async () => {
+      let bitmap: ImageBitmap | null = null;
+      try {
+        bitmap = await createImageBitmap(file);
+        const scale = Math.min(1, MAX_DIMENSION / Math.max(bitmap.width, bitmap.height));
+        if (scale >= 1) {
+          // Small enough already — keep the original (PNG stays lossless).
+          return readFileAsDataUrl(file);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+        canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return readFileAsDataUrl(file);
+        ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        return canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+      } catch {
+        return readFileAsDataUrl(file);
+      } finally {
+        bitmap?.close();
+      }
+    })();
+  }
+
+  // Legacy fallback (old WebViews without createImageBitmap): decode via an
+  // <img> element from the data URL.
+  return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onloadend = () => {
       const original = reader.result as string;
@@ -28,7 +69,6 @@ export const readFileAsDownscaledDataUrl = (file: File): Promise<string> =>
         try {
           const scale = Math.min(1, MAX_DIMENSION / Math.max(image.width, image.height));
           if (scale >= 1) {
-            // Small enough already — keep the original (PNG stays lossless).
             resolve(original);
             return;
           }
@@ -52,6 +92,7 @@ export const readFileAsDownscaledDataUrl = (file: File): Promise<string> =>
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+};
 
 export const processImagesForSummarization = async (
   files: File[],

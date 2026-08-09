@@ -82,7 +82,6 @@ interface SettingsMenuProps {
     onDeleteTrades?: (ids: string[]) => void;
     onClearAllTrades?: () => void;
     modelIdToName?: Record<string, string>;
-    ocrModelIdToName?: Record<string, string>;
     onUpdateInsights?: (ids: string[]) => void;
     isSummarizing?: boolean;
     currentInsightIds?: string[];
@@ -212,6 +211,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
     const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
     const [activeInstructionTab, setActiveInstructionTab] = useState<InstructionTab>('general');
     const dialogRef = useRef<HTMLDivElement>(null);
+    const initialTabResolvedRef = useRef(false);
     useEffect(() => {
         if (!isVisible) return;
         const handleKeyDown = (event: KeyboardEvent) => {
@@ -235,10 +235,17 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
     // Enabled providers list for lens settings —
     // derived from dynamic provider configs (ready = enabled + API key).
     const readyConfigProviders = (providerConfigs ?? []).filter(c => c.isEnabled && c.apiKey.trim().length > 0);
-    const enabledProvidersList: AIProvider[] = readyConfigProviders.map(c => c.id);
-
     // First ready provider — used as the default summarization provider for the embedded journal
     const firstReadyProvider = readyConfigProviders[0];
+
+    // Provider configs load asynchronously. Resolve the landing tab once after
+    // that load so existing users do not get stranded on provider CRUD while
+    // preserving deliberate tab choices after the first render.
+    useEffect(() => {
+        if (!isVisible || !providerConfigsLoaded || initialTabResolvedRef.current) return;
+        initialTabResolvedRef.current = true;
+        setActiveTab(readyConfigProviders.length > 0 ? 'general' : 'models');
+    }, [isVisible, providerConfigsLoaded, readyConfigProviders.length]);
 
     // Heal a stale vision-model selection: `selectedOcrModel` is a bare model
     // id, and if its provider was disabled/removed it appears in no dropdown
@@ -287,7 +294,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                     <div className="flex-1 flex min-h-0 flex-col md:flex-row">
                         
                         {/* Left Tab Navigation Sidebar */}
-                        <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-zinc-800/80 bg-zinc-950 p-4 space-y-1 shrink-0 flex flex-col justify-between">
+                        <div className="w-full md:w-64 max-h-[32vh] overflow-y-auto md:max-h-none md:overflow-visible border-b md:border-b-0 md:border-r border-zinc-800/80 bg-zinc-950 p-4 space-y-1 shrink-0 flex flex-col justify-between custom-scrollbar">
                             <div className="space-y-1">
                                 {/* Get Started — what a new user needs first */}
                                 <p className="px-3.5 pt-1 pb-0.5 text-[9px] font-bold uppercase tracking-widest text-zinc-600">
@@ -298,7 +305,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                     activeTab={activeTab}
                                     onClick={() => setActiveTab('models')}
                                     icon={<AISettingsIcon className="w-4 h-4" />}
-                                    label="AI Models & Providers"
+                                    label="AI setup"
                                 />
                                 {/* Analysis — how analyses behave */}
                                 <p className="px-3.5 pt-3 pb-0.5 text-[9px] font-bold uppercase tracking-widest text-zinc-600">
@@ -309,28 +316,28 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                     activeTab={activeTab}
                                     onClick={() => setActiveTab('general')}
                                     icon={<SettingsIcon className="w-4 h-4" />}
-                                    label="General & Analysis"
+                                    label="Analysis"
                                 />
                                 <NavTabButton
                                     id="lenses"
                                     activeTab={activeTab}
                                     onClick={() => setActiveTab('lenses')}
                                     icon={<BrainIcon className="w-4 h-4" />}
-                                    label="Analyst Lenses"
+                                    label="Analyst roles"
                                 />
                                 <NavTabButton
                                     id="instructions"
                                     activeTab={activeTab}
                                     onClick={() => setActiveTab('instructions')}
                                     icon={<EditIcon className="w-4 h-4" />}
-                                    label="Custom Instructions"
+                                    label="Response preferences"
                                 />
                                 <NavTabButton
                                     id="memory"
                                     activeTab={activeTab}
                                     onClick={() => setActiveTab('memory')}
                                     icon={<ActivityIcon className="w-4 h-4" />}
-                                    label="Memory & Learning"
+                                    label="Personal edge"
                                 />
                                 {/* Account & Data — journal, profile, backups */}
                                 <p className="px-3.5 pt-3 pb-0.5 text-[9px] font-bold uppercase tracking-widest text-zinc-600">
@@ -341,7 +348,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                     activeTab={activeTab}
                                     onClick={() => setActiveTab('journal')}
                                     icon={<HistoryIcon className="w-4 h-4" />}
-                                    label="Trading Journal"
+                                    label="Journal & automation"
                                     badge={props.loggedTrades && props.loggedTrades.length > 0 ? `${props.loggedTrades.length}` : undefined}
                                 />
                                 <NavTabButton
@@ -349,7 +356,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                     activeTab={activeTab}
                                     onClick={() => setActiveTab('actions')}
                                     icon={<SwitchUserIcon className="w-4 h-4" />}
-                                    label="Profile & Data"
+                                    label="Workspace & data"
                                 />
                             </div>
 
@@ -388,7 +395,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         onDeleteTrades={props.onDeleteTrades || (() => {})}
                                         onClearAllTrades={props.onClearAllTrades || (() => {})}
                                         modelIdToName={props.modelIdToName || {}}
-                                        ocrModelIdToName={props.ocrModelIdToName || {}}
                                         onUpdateInsights={props.onUpdateInsights || (() => {})}
                                         isSummarizing={props.isSummarizing}
                                         currentInsightIds={props.currentInsightIds || []}
@@ -418,6 +424,14 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                             {/* TAB 1: AI Models & Providers */}
                             {activeTab === 'models' && (
                                 <div className="space-y-6 animate-fade-in">
+                                    {providerConfigsLoaded && readyConfigProviders.length === 0 && (
+                                        <div className="status-surface rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-4">
+                                            <h3 className="text-sm font-bold text-zinc-100">Connect an AI service to get started</h3>
+                                            <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+                                                Choose a provider below, paste your key, select a model, then use Test before running your first analysis. Connection type, custom endpoints, and model IDs are advanced options.
+                                            </p>
+                                        </div>
+                                    )}
                                     {/* Vision & Moderator Controls Header bar */}
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         {/* Vision Model Selector — models from ready providers */}

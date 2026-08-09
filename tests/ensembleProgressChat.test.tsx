@@ -12,7 +12,7 @@ vi.mock('../components/shared/Icons', () => ({
 
 // Mock MarkdownContent
 vi.mock('../components/shared/MarkdownContent', () => ({
-    default: ({ children }: { children: string }) => <span>{children}</span>,
+    default: ({ content, children }: { content?: string; children?: string }) => <span>{content ?? children}</span>,
 }));
 
 const makeAnalyst = (overrides: Partial<EnsembleAnalystProgress> = {}): EnsembleAnalystProgress => ({
@@ -96,5 +96,31 @@ describe('EnsembleProgressChat', () => {
         render(<EnsembleProgressChat progress={progress} isLive={true} />);
         const typingText = screen.getByText(/typing/);
         expect(typingText).toBeDefined();
+    });
+
+    it('shows collapsible thinking + final output on expand (harness style)', () => {
+        const progress = makeProgress([
+            makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'complete', reasoning: 'Chain of thought trace', finalOutput: 'Bullish call' }),
+        ]);
+        render(<EnsembleProgressChat progress={progress} />);
+        // Collapsed by default — the details stay hidden until expanded.
+        expect(screen.queryByText('Final output')).toBeNull();
+        fireEvent.click(screen.getByLabelText('Expand Analyst A analysis'));
+        // Final output is always visible once the card is expanded...
+        expect(screen.getByText('Final output')).toBeDefined();
+        expect(screen.getByText('Bullish call')).toBeDefined();
+        // ...while the thinking stays behind its own collapsible toggle
+        // (closed <details> keeps its children in the DOM, so assert `open`).
+        expect(screen.getByText('Chain of thought trace').closest('details')?.open).toBe(false);
+        fireEvent.click(screen.getByText(/Thinking/));
+        expect(screen.getByText('Chain of thought trace').closest('details')?.open).toBe(true);
+    });
+
+    it('auto-expands the thinking trace while an analyst is streaming', () => {
+        const progress = makeProgress([
+            makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'analyzing', reasoning: 'Live trace in progress' }),
+        ]);
+        render(<EnsembleProgressChat progress={progress} isLive={true} />);
+        expect(screen.getByText('Live trace in progress')).toBeDefined();
     });
 });
