@@ -2034,8 +2034,8 @@ ${accuracyVerificationNote}`
                                 role: 'analyst',
                                 modelName: provider.model,
                                 reasoning: thoughtMap[providerKey] || '',
-                                // The <FINAL_OUTPUT> section — the analyst's final
-                                // answer, kept separate from its reasoning.
+                                // The analyst's final answer (post-reasoning
+                                // output), kept separate from its reasoning.
                                 finalOutput: analystResult.finalOutput || undefined,
                                 // Raw provider-streamed chain of thought
                                 // (reasoning_content / thinking blocks) keyed by
@@ -2161,7 +2161,7 @@ ${accuracyVerificationNote}`
                         );
                     if (!isCurrentRequest()) assertCurrentRequest();
                     const soloAiMessage: Message = {
-                        id: `ai-${Date.now()}`, role: MessageRole.AI, text: result.thoughtProcess, createdAt: new Date().toISOString(), analysis: processNewAnalysis(result.analysis), sources: result.sources || [], outcome: TradeOutcome.PENDING, ocrModelUsed: userMessage.ocrModelUsed,
+                        id: `ai-${Date.now()}`, role: MessageRole.AI, text: result.finalOutput || result.thoughtProcess, createdAt: new Date().toISOString(), analysis: processNewAnalysis(result.analysis), sources: result.sources || [], outcome: TradeOutcome.PENDING, ocrModelUsed: userMessage.ocrModelUsed,
                         imageSummaries: userMessage.imageSummaries,
                         modelsUsed: { [provider.config.id]: provider.model },
                         thoughtProcesses: { [provider.config.id]: result.thoughtProcess },

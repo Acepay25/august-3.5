@@ -29,6 +29,10 @@ export interface UseTradeLoggingParams {
     memoryModel: string;
     memoryConfig: ProviderConfig;
     useAlgorithmicInsights: boolean;
+    /** Fired after a trade is logged AND its insight generation settles —
+     *  App debounces this into an automatic AI Review (Pattern Memory)
+     *  re-run so the journal stays fresh without manual regeneration. */
+    onJournalAutoRefresh?: () => void;
     // UI state setters needed by handlers:
     setIsAutoCapturing: (v: boolean) => void;
     setIsHybridLoading: (v: boolean) => void;
@@ -53,6 +57,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         messages, messagesRef, updateMessages, activeConversationLeverage,
         moderatorProviderId, moderatorModel,
         memoryModel, memoryConfig, useAlgorithmicInsights,
+        onJournalAutoRefresh,
         setIsAutoCapturing, setIsHybridLoading, setIsEntryNotHitCapturing,
         setIsUpdateAutoCapturing, setIsInsightGenerating,
         setCurrentHybridData, startPostMortemAnalysis, handleSendMessage,
@@ -207,8 +212,11 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             );
         } finally {
             setIsInsightGenerating(false);
+            // The trade is logged — ask App to re-run the AI Review (debounced)
+            // whether or not this insight landed.
+            onJournalAutoRefresh?.();
         }
-    }, [memoryModel, memoryConfig, useAlgorithmicInsights, toast]);
+    }, [memoryModel, memoryConfig, useAlgorithmicInsights, toast, onJournalAutoRefresh]);
 
     // ─── Trade Logging ────────────────────────────────────────────────────
 
@@ -321,7 +329,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         // Auto-add to Recent Insights with FIFO enforcement
         void autoAddRecentInsight(loggedTrade);
 
-    }, [activeConversationLeverage, moderatorProviderId, moderatorModel, updateMessages, memoryModel, memoryConfig, useAlgorithmicInsights, toast]);
+    }, [activeConversationLeverage, moderatorProviderId, moderatorModel, updateMessages, memoryModel, memoryConfig, useAlgorithmicInsights, toast, autoAddRecentInsight]);
 
     // ─── Data Capture Modal Handlers ──────────────────────────────────────
 
@@ -538,9 +546,11 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
                 );
             } finally {
                 setIsInsightGenerating(false);
+                // ENTRY_NOT_HIT is a logged trade too — refresh the AI Review.
+                onJournalAutoRefresh?.();
             }
         })();
-    }, [activeConversationLeverage, memoryModel, memoryConfig, useAlgorithmicInsights, toast]);
+    }, [activeConversationLeverage, memoryModel, memoryConfig, useAlgorithmicInsights, toast, onJournalAutoRefresh]);
 
     // ─── Outcome Autopilot confirmation ───────────────────────────────────
     // One-click logging of autopilot-detected outcomes. Funnels through the

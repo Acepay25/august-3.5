@@ -309,6 +309,26 @@ const App: React.FC = () => {
     const stableHandleSendMessage = useCallback((...args: any[]) => handleSendMessageRef.current(...args), []);
     const stableStartPostMortem = useCallback((...args: any[]) => startPostMortemAnalysisRef.current(...args), []);
 
+    // ─── Journal auto-refresh ────────────────────────────────────────────
+    // Every logged trade (WIN/LOSS/ENTRY_NOT_HIT) re-runs the AI Review
+    // (Pattern Memory) automatically instead of waiting for the manual
+    // "Regenerate" button. The handler is STABLE (useCallback + latest-ref)
+    // so useTradeLogging's memoized callbacks don't re-arm on every App
+    // render; the 1.2s debounce collapses rapid multi-trade logging into a
+    // single regeneration.
+    const journalAutoRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const regenerateFinalSummaryRef = useRef<() => void>(() => {});
+    const handleJournalAutoRefresh = useCallback(() => {
+        if (journalAutoRefreshTimerRef.current) clearTimeout(journalAutoRefreshTimerRef.current);
+        journalAutoRefreshTimerRef.current = setTimeout(() => {
+            journalAutoRefreshTimerRef.current = null;
+            regenerateFinalSummaryRef.current();
+        }, 1200);
+    }, []);
+    useEffect(() => () => {
+        if (journalAutoRefreshTimerRef.current) clearTimeout(journalAutoRefreshTimerRef.current);
+    }, []);
+
     // Trade logging state and handlers (extracted to hooks/useTradeLogging.ts)
     const {
         loggedTrades, setLoggedTrades,
@@ -363,6 +383,7 @@ const App: React.FC = () => {
         toast,
         setPostMortemCandidate,
         setConfidenceCalibration,
+        onJournalAutoRefresh: handleJournalAutoRefresh,
     });
 
     const [leverageInput, setLeverageInput] = useState<string>(String(DEFAULT_LEVERAGE));
@@ -726,7 +747,7 @@ const App: React.FC = () => {
                 tradeSummaries: [],
                 finalTradeSummary: null,
                 globalMemory: undefined,
-                settings: { activeFrameworks: DEFAULT_FRAMEWORKS, summaryCharLimit: 4000, summarizationProvider: firstReady?.id || '', summarizationModel: firstReady?.selectedModel || '', isGlobalMemoryEnabled: false, isAccuracyModeEnabled: false, accuracySubMode: 'original', customInstructions: { general: [], accuracyOriginal: [], accuracyPure: [] }, isPlaybookEnabledInPureAI: false, isFamiliesEnabledInPureAI: false, isMemoryEnabledInPureAI: false, isHybridIntelligenceEnabled: false, isAutoCapturing: false, isUpdateAutoCapturing: false, isEntryNotHitCapturing: false, memoryProvider: '', memoryModel: '' },
+                settings: { activeFrameworks: DEFAULT_FRAMEWORKS, summaryCharLimit: 4000, summarizationProvider: firstReady?.id || '', summarizationModel: firstReady?.selectedModel || '', isGlobalMemoryEnabled: false, isAccuracyModeEnabled: false, accuracySubMode: 'original', customInstructions: { general: [], accuracyOriginal: [], accuracyPure: [] }, isPlaybookEnabledInPureAI: false, isFamiliesEnabledInPureAI: false, isMemoryEnabledInPureAI: false, isHybridIntelligenceEnabled: false, isAutoCapturing: false, isUpdateAutoCapturing: false, isEntryNotHitCapturing: false, useAlgorithmicSummary: false, useAlgorithmicInsights: false, memoryProvider: '', memoryModel: '' },
                 lastActiveConversationId: newConv.id
             });
         }
@@ -1008,6 +1029,8 @@ const App: React.FC = () => {
             const firstReadyProvider = getFirstReadyProvider(providerConfigs);
             setSummarizationProvider(profile.settings?.summarizationProvider || firstReadyProvider?.id || '');
             setSummarizationModel(profile.settings?.summarizationModel || firstReadyProvider?.selectedModel || '');
+            setUseAlgorithmicSummary(profile.settings?.useAlgorithmicSummary ?? false);
+            setUseAlgorithmicInsights(profile.settings?.useAlgorithmicInsights ?? false);
             setIsGlobalMemoryEnabled(profile.settings?.isGlobalMemoryEnabled ?? false);
             setIsAccuracyModeEnabled(profile.settings?.isAccuracyModeEnabled ?? false);
             setAccuracySubMode(profile.settings?.accuracySubMode || 'original');
@@ -1176,7 +1199,7 @@ const App: React.FC = () => {
         tradeSummaries: tradeSummaries,
         finalTradeSummary: finalTradeSummary,
         globalMemory: globalMemory,
-        settings: { activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, confidenceCalibration, memoryProvider: memoryConfig?.id || '', memoryModel },
+        settings: { activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, confidenceCalibration, memoryProvider: memoryConfig?.id || '', memoryModel },
         lastActiveConversationId: activeConversationId || undefined,
         // AI Learning data
         insightKnowledgeBase: insightKnowledgeBase,
@@ -1185,7 +1208,7 @@ const App: React.FC = () => {
         // clear silently destroyed them. Snapshotting them here populates the
         // users.learningRules column and BackupService payload.
         learningRules: storageService.loadLearningRules(),
-    }), [conversationHistory, loggedTrades, activeFrameworks, activeConversationId, savedAnalyses, tradeSummaries, finalTradeSummary, globalMemory, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, confidenceCalibration, insightKnowledgeBase, memoryConfig, memoryModel]);
+    }), [conversationHistory, loggedTrades, activeFrameworks, activeConversationId, savedAnalyses, tradeSummaries, finalTradeSummary, globalMemory, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, confidenceCalibration, insightKnowledgeBase, memoryConfig, memoryModel]);
 
     // ─── P1-6: Split save into DATA (heavy) + SETTINGS (light) ───────────
     // Previously a single effect re-serialized ALL conversations (with base64
@@ -1246,7 +1269,7 @@ const App: React.FC = () => {
                 // Only the settings sub-object — no conversations, no trades,
                 // no base64 images. This is a cheap write.
                 await dbService.saveUserProfile(activeUsername, {
-                    settings: { activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, confidenceCalibration, memoryProvider: memoryConfig?.id || '', memoryModel },
+                    settings: { activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, confidenceCalibration, memoryProvider: memoryConfig?.id || '', memoryModel },
                 });
                 setSaveStatus('SAVED');
             } catch (err) {
@@ -1259,7 +1282,7 @@ const App: React.FC = () => {
         return () => {
             clearTimeout(handler);
         };
-    }, [activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, confidenceCalibration, memoryConfig, memoryModel, activeUsername, toast]);
+    }, [activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, confidenceCalibration, memoryConfig, memoryModel, activeUsername, toast]);
 
     // (3) SAVE HEARTBEAT — the 1500ms DATA debounce restarts on every message
     // change, so nothing is persisted for the ENTIRE duration of a run (the
@@ -1452,8 +1475,18 @@ const App: React.FC = () => {
 
 
     const handleDeleteTrades = (ids: string[]) => {
-        setLoggedTrades(prev => prev.filter(t => !ids.includes(t.id)));
-        setTradeSummaries(prev => prev.filter(s => !ids.includes(s.id)));
+        const idSet = new Set(ids);
+        const nextTrades = loggedTrades.filter(t => !idSet.has(t.id));
+        const nextSummaries = tradeSummaries.filter(s => !idSet.has(s.id));
+        setLoggedTrades(nextTrades);
+        setTradeSummaries(nextSummaries);
+        if (nextTrades.length === 0) {
+            setFinalTradeSummary(null);
+        } else if (nextTrades.length !== loggedTrades.length) {
+            // The AI Review was synthesized from the old trade set — re-run
+            // it so Pattern Memory never describes deleted trades.
+            handleJournalAutoRefresh();
+        }
     };
 
     const handleClearAllTrades = async () => {
@@ -1553,12 +1586,17 @@ const App: React.FC = () => {
         } finally {
             setIsSummaryInProgress(false);
             setInsightProgress(null);
+            // New insights landed — re-run the AI Review so Pattern Memory
+            // reflects the expanded insight set.
+            handleJournalAutoRefresh();
         }
     };
 
     // Delete individual insight from Recent Insights
     const handleDeleteInsight = (id: string) => {
         setTradeSummaries(prev => prev.filter(s => s.id !== id));
+        // The AI Review is synthesized from the insights — keep it in sync.
+        handleJournalAutoRefresh();
         console.log(`[ManualInsights] Removed insight with id: ${id}`);
     };
 
@@ -1628,6 +1666,9 @@ const App: React.FC = () => {
         } finally {
             setIsSummaryInProgress(false);
             setInsightProgress(null);
+            // Insights were rewritten — re-run the AI Review so Pattern
+            // Memory is synthesized from the fresh insight text.
+            handleJournalAutoRefresh();
         }
     };
 
@@ -1642,8 +1683,16 @@ const App: React.FC = () => {
     };
 
     const handleRegenerateFinalSummary = async () => {
+        // Guard: an auto-refresh may already be running (the debounced
+        // journal auto-refresh and the manual button share this path) —
+        // never launch two AI syntheses concurrently.
+        if (isSummaryInProgress) return;
         setIsSummaryInProgress(true);
         try {
+            if (loggedTrades.length === 0) {
+                setFinalTradeSummary(null);
+                return;
+            }
             let summary = '';
 
             if (useAlgorithmicSummary) {
@@ -1665,6 +1714,12 @@ const App: React.FC = () => {
             setIsSummaryInProgress(false);
         }
     };
+
+    // Latest-ref for the journal auto-refresh (declared above the
+    // useTradeLogging call). Assigning AFTER the declaration keeps the stable
+    // handleJournalAutoRefresh closure seeing the freshest regeneration logic
+    // without re-arming the hook's memoized callbacks on every render.
+    regenerateFinalSummaryRef.current = () => { void handleRegenerateFinalSummary(); };
 
     const handleClearAllConversations = async () => {
         const prevHistory = conversationHistory;

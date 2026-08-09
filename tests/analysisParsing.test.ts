@@ -107,6 +107,8 @@ describe('analyzeTradingView response parsing', () => {
 
     const result = await analyzeTradingView(config, baseParams);
     expect(result.finalOutput).toContain('Plain readable analysis text');
+    // No native reasoning streamed and nothing tagged ⇒ harness-style: no thinking.
+    expect(result.thoughtProcess).toBe('');
   });
 
   it('uses the accumulated streamed reasoning as thinking when nothing else parses', async () => {
@@ -136,12 +138,45 @@ describe('analyzeTradingView response parsing', () => {
     await expect(analyzeTradingView(config, baseParams)).rejects.toThrow('Received an empty response from the AI.');
   });
 
-  it('fulfills (no throw) when the response is only empty tags, falling back to placeholder thinking', async () => {
+  it('fulfills (no throw) when the response is only empty tags, yielding no thinking', async () => {
     scriptStream(['<THINKING></THINKING><FINAL_OUTPUT></FINAL_OUTPUT>']);
 
     const result = await analyzeTradingView(config, baseParams);
-    expect(result.thoughtProcess).toContain('No separate thinking section was provided.');
+    expect(result.thoughtProcess).toBe('');
     expect(result.finalOutput).toBe('');
+  });
+
+  it('prefers native streamed reasoning over a tagged THINKING section', async () => {
+    scriptStream(
+      ['<THINKING>Tagged fallback reasoning.</THINKING><FINAL_OUTPUT>Proposal text.</FINAL_OUTPUT>'],
+      ['Native chain-of-thought from the provider.']
+    );
+
+    const result = await analyzeTradingView(config, baseParams);
+    expect(result.thoughtProcess).toContain('Native chain-of-thought');
+    expect(result.thoughtProcess).not.toContain('Tagged fallback');
+    expect(result.finalOutput).toContain('Proposal text.');
+  });
+
+  it('splits header-style labels (**THINKING** / **FINAL OUTPUT**) when tags are absent', async () => {
+    scriptStream([
+      '**THINKING:**\nWeighing 4h structure against 1h momentum.\n**FINAL OUTPUT:**\nLong BTCUSDT from 95000, stop 94500.',
+    ]);
+
+    const result = await analyzeTradingView(config, baseParams);
+    expect(result.thoughtProcess).toContain('Weighing 4h structure');
+    expect(result.thoughtProcess).not.toContain('FINAL OUTPUT');
+    expect(result.finalOutput).toContain('Long BTCUSDT from 95000');
+    expect(result.finalOutput).not.toContain('THINKING');
+  });
+
+  it('strips tag artifacts from a natural untagged response', async () => {
+    scriptStream(['<THINKING>Should not leak into output.</THINKING>\nLong BTCUSDT with a stop at 94500.']);
+
+    const result = await analyzeTradingView(config, baseParams);
+    expect(result.finalOutput).toContain('Long BTCUSDT');
+    expect(result.finalOutput).not.toContain('<THINKING>');
+    expect(result.finalOutput).not.toContain('Should not leak');
   });
 });
 

@@ -147,7 +147,6 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
     const isUserMessage = message.role === MessageRole.USER;
     const [isThinkingModalOpen, setIsThinkingModalOpen] = React.useState(false);
     const [isPreviousDebateExpanded, setIsPreviousDebateExpanded] = React.useState(false);
-    const [isAnalystOutputsExpanded, setIsAnalystOutputsExpanded] = React.useState(false);
     const [isRunLedgerOpen, setIsRunLedgerOpen] = React.useState(false);
     const thinkingEntries = Object.entries({
         ...(message.thoughtProcesses ?? {}),
@@ -185,6 +184,17 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
     if (message.analysis) {
         displayContent = displayContent.replace(/<JSON_PLAN>[\s\S]*?<\/JSON_PLAN>/g, '').trim();
     }
+
+    // Legacy prompt formats wrapped output in <THINKING>/<FINAL_OUTPUT> tags
+    // or header-style labels. Strip residual scaffolding from cached and
+    // historical messages so it never renders in the bubble.
+    displayContent = displayContent
+        .replace(/<THINKING>[\s\S]*?<\/THINKING>/gi, '')
+        .replace(/<FINAL_OUTPUT>[\s\S]*?<\/FINAL_OUTPUT>/gi, '')
+        .replace(/<\/?(?:THINKING|FINAL_OUTPUT)>/gi, '')
+        .replace(/^\s*(?:\*\*)?(?:THINKING|FINAL OUTPUT|FINAL_OUTPUT)(?:\*\*)?\s*:?\s*$/gim, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
 
     // Determine Bubble Styling - Clean modern design like ChatGPT/Gemini
     const bubbleClass = isUserMessage
@@ -449,26 +459,6 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     activeDebateSpeakers={message.activeDebateSpeakers}
                                     analysis={message.analysis}
                                 />
-                            )}
-
-                            {!message.isDebating && message.analysis && message.ensembleProgress && (
-                                <div className="mt-4 border-t border-white/10 pt-3">
-                                    <button
-                                        type="button"
-                                        onClick={() => setIsAnalystOutputsExpanded(previous => !previous)}
-                                        className="flex w-full items-center justify-between rounded-xl border border-white/5 bg-zinc-900/60 px-3 py-2.5 text-left text-xs font-semibold text-zinc-400 transition-colors hover:border-cyan-400/20 hover:bg-zinc-800/80 hover:text-zinc-200 focus-visible:ring-2 focus-visible:ring-cyan-400"
-                                        aria-expanded={isAnalystOutputsExpanded}
-                                        aria-controls={`analyst-outputs-${message.id}`}
-                                    >
-                                        <span>Analyst outputs</span>
-                                        <ChevronDownIcon className={`h-4 w-4 transition-transform ${isAnalystOutputsExpanded ? 'rotate-180' : ''}`} />
-                                    </button>
-                                    {isAnalystOutputsExpanded && (
-                                        <div id={`analyst-outputs-${message.id}`}>
-                                            <EnsembleProgressChat progress={message.ensembleProgress} modelIdToName={modelIdToName} onRetryAnalyst={onReRunAnalysis ? () => onReRunAnalysis(message.id) : undefined} />
-                                        </div>
-                                    )}
-                                </div>
                             )}
 
                             {!message.isDebating && message.analysis && debateTurns.length > 0 && (

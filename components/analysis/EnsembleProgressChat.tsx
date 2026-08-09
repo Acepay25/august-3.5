@@ -61,10 +61,13 @@ const AnalystRow: React.FC<{
 }> = ({ analyst, modelName, accent, onRetryAnalyst }) => {
     const [open, setOpen] = useState(false);
     const [thinkingOpen, setThinkingOpen] = useState(false);
+    // A manual toggle wins over streaming auto-expand: once the user collapses
+    // the card or the Thinking block mid-stream, it stays collapsed.
+    const userInteractedRef = useRef(false);
 
     const thinkingContent = analyst.reasoning || analyst.thoughtProcess || '';
     const isStreamingThinking = analyst.status === 'analyzing' && thinkingContent.length > 0;
-    const expanded = open || isStreamingThinking;
+    const expanded = open || (isStreamingThinking && !userInteractedRef.current);
     const showThinkingBlock = isStreamingThinking || thinkingContent.length > 0;
 
     return (
@@ -75,7 +78,7 @@ const AnalystRow: React.FC<{
             <div className="flex items-center gap-2">
                 <button
                     type="button"
-                    onClick={() => setOpen(o => !o)}
+                    onClick={() => { setOpen(o => !o); userInteractedRef.current = true; }}
                     className="flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-zinc-700/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
                     aria-expanded={expanded}
                     aria-label={`${expanded ? 'Collapse' : 'Expand'} ${analyst.displayName} analysis`}
@@ -105,10 +108,13 @@ const AnalystRow: React.FC<{
                     {showThinkingBlock && (
                         <details
                             className="rounded-lg border border-white/10 bg-black/20 group"
-                            open={thinkingOpen || isStreamingThinking}
+                            open={thinkingOpen || (isStreamingThinking && !userInteractedRef.current)}
                             onToggle={(e) => setThinkingOpen((e.target as HTMLDetailsElement).open)}
                         >
-                            <summary className="cursor-pointer list-none px-3 py-2 text-[10px] uppercase tracking-widest text-zinc-400 group-open:text-zinc-200">
+                            <summary
+                                onClick={() => { userInteractedRef.current = true; }}
+                                className="cursor-pointer list-none px-3 py-2 text-[10px] uppercase tracking-widest text-zinc-400 group-open:text-zinc-200"
+                            >
                                 {isStreamingThinking ? (
                                     <span className="inline-flex items-center gap-1.5">
                                         <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400"></span>

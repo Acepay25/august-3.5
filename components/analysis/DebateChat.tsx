@@ -104,13 +104,19 @@ const splitModeratorTurn = (
  */
 const TurnThinking: React.FC<{ content: string; autoOpen: boolean }> = ({ content, autoOpen }) => {
     const [open, setOpen] = useState(false);
+    // A manual toggle wins over auto-open: once the user collapses the block
+    // mid-stream, autoOpen must not force it back open on the next chunk.
+    const userInteractedRef = useRef(false);
     return (
         <details
             className="mt-2.5 rounded-lg border border-white/10 bg-black/20 group"
-            open={open || autoOpen}
+            open={open || (autoOpen && !userInteractedRef.current)}
             onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}
         >
-            <summary className="cursor-pointer list-none px-3 py-1.5 text-[10px] uppercase tracking-widest text-zinc-500 group-open:text-zinc-300">
+            <summary
+                onClick={() => { userInteractedRef.current = true; }}
+                className="cursor-pointer list-none px-3 py-1.5 text-[10px] uppercase tracking-widest text-zinc-500 group-open:text-zinc-300"
+            >
                 {autoOpen ? (
                     <span className="inline-flex items-center gap-1.5">
                         <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400"></span>

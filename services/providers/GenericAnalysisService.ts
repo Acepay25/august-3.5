@@ -43,6 +43,39 @@ function isSmallContextModel(modelId: string): boolean {
     return m.includes('kimi') || m.includes('gpt-oss-20b') || m.includes('mistral-7b');
 }
 
+/**
+ * Legacy models (or old cached prompts) sometimes wrap their output in
+ * header-style labels instead of real XML tags: **THINKING** / **FINAL OUTPUT**.
+ * Split the response on those labels so each section survives on its own.
+ */
+function splitThinkingHeaders(raw: string): { thinking: string; output: string } {
+    const headerRe = /^\s*(?:\*\*)?(THINKING|FINAL OUTPUT|FINAL_OUTPUT)(?:\*\*)?\s*:?[ \t]*\r?\n?/gim;
+    const matches = [...raw.matchAll(headerRe)];
+    if (matches.length < 2) return { thinking: '', output: '' };
+    const sections: Record<string, string> = {};
+    matches.forEach((match, i) => {
+        const start = (match.index ?? 0) + match[0].length;
+        const end = i + 1 < matches.length ? (matches[i + 1].index ?? raw.length) : raw.length;
+        const key = match[1].toUpperCase().replace(/[ _]/g, '_');
+        sections[key] = raw.slice(start, end).trim();
+    });
+    return { thinking: sections['THINKING'] ?? '', output: sections['FINAL_OUTPUT'] ?? '' };
+}
+
+/**
+ * Remove legacy XML tags and standalone label headers from text destined for
+ * display, so historical/cached responses never show format scaffolding.
+ */
+function stripTagArtifacts(text: string): string {
+    return text
+        .replace(/<THINKING>[\s\S]*?<\/THINKING>/gi, '')
+        .replace(/<FINAL_OUTPUT>[\s\S]*?<\/FINAL_OUTPUT>/gi, '')
+        .replace(/<\/?(?:THINKING|FINAL_OUTPUT)>/gi, '')
+        .replace(/^\s*(?:\*\*)?(?:THINKING|FINAL OUTPUT|FINAL_OUTPUT)(?:\*\*)?\s*:?\s*$/gim, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+}
+
 // ─── analyzeTradingView ─────────────────────────────────────────────────────
 
 export interface AnalyzeTradingViewParams {
@@ -158,9 +191,9 @@ export async function analyzeTradingView(
       ${RISK_MANAGEMENT_RULES}
 
       **SYNTHESIS & OUTPUT:**
-      Do NOT output JSON. Return exactly two readable sections:
-      <THINKING>your concise reasoning and evidence</THINKING>
-      <FINAL_OUTPUT>your readable trade proposal with direction, levels, confidence, and risks</FINAL_OUTPUT>
+      Do NOT output JSON. Present your readable trade proposal with direction,
+      levels, confidence, and risks as natural prose — no JSON keys, braces,
+      arrays, XML tags, or section labels.
     `;
     } else if (isAccuracyMode) {
         systemPrompt = `${ACCURACY_MODE_PROMPT}
@@ -183,9 +216,9 @@ export async function analyzeTradingView(
       ${RISK_MANAGEMENT_RULES}
 
       **SYNTHESIS & OUTPUT:**
-      Do NOT output JSON. Return exactly two readable sections:
-      <THINKING>your concise reasoning and evidence</THINKING>
-      <FINAL_OUTPUT>your readable trade proposal with direction, levels, confidence, and risks</FINAL_OUTPUT>
+      Do NOT output JSON. Present your readable trade proposal with direction,
+      levels, confidence, and risks as natural prose — no JSON keys, braces,
+      arrays, XML tags, or section labels.
     `;
     } else {
         // Standard mode — full master prompt with formatting rules and lens support.
@@ -342,14 +375,7 @@ export async function analyzeTradingView(
       ────────────────────────────────────────
       `}
 
-      Do NOT output JSON. Return exactly these two readable sections — plain prose, NEVER JSON keys, braces, or arrays:
-
-      <THINKING>
-        Write your full chain-of-thought here as normal prose: multi-timeframe structure, price action type, family classification, pattern matching, bias & probability, the trade setup, numeric chart analysis, and your final summary (Sections 1-8 with separator lines).
-      </THINKING>
-      <FINAL_OUTPUT>
-        Write your readable trade proposal here as normal prose: the coin, direction, entry level(s), stop loss, take-profit target(s), probability, confidence, strategy, key support/resistance levels, and the key risks.
-      </FINAL_OUTPUT>
+      Do NOT output JSON. Present your readable trade proposal as natural prose — no JSON keys, braces, arrays, XML tags, or section labels. Cover the full analysis from Sections 1-8 (with separator lines): the coin, direction, entry level(s), stop loss, take-profit target(s), probability, confidence, strategy, key support/resistance levels, and the key risks.
 
       **EVIDENCE DISCIPLINE (MANDATORY):** Back your 2-4 most important conclusions with concrete data sources (indicator names, timeframes, OCR/chart references, injected market data). Mark each as observed (directly verified), partial (some supporting data), or unobserved (inference only) — never fabricate data to fill gaps.
 
@@ -367,7 +393,7 @@ export async function analyzeTradingView(
     // Standard mode uses pattern memory + recent insights blocks; accuracy mode relies on global memory context.
     let userPromptText: string;
     if (isAccuracyMode) {
-        userPromptText = `${formattedPrompt}${imageSummaryContext}\n\n${memoryContext}\n\nReturn the THINKING and FINAL_OUTPUT sections described above.`;
+        userPromptText = `${formattedPrompt}${imageSummaryContext}\n\n${memoryContext}\n\nPresent your readable trade proposal.`;
     } else {
         const patternMemoryContext = finalTradeSummary
             ? truncateTextToTokens(`\n\n** PATTERN MEMORY (SYNTHESIS) - MANDATORY REFERENCE:**\nThe following is a synthesis of your recent trading performance and patterns. You MUST reference this data for Section 4 (Pattern Matching):\n${finalTradeSummary}\n`, 600)
@@ -382,7 +408,7 @@ export async function analyzeTradingView(
             const minimalInsights = recentInsightsContext.length > 200 ? recentInsightsContext.substring(0, 200) + '...[truncated]' : recentInsightsContext;
             const minimalImages = imageSummaryContext.length > 500 ? imageSummaryContext.substring(0, 500) + '...[truncated]' : imageSummaryContext;
             systemPrompt = effectiveSystemPrompt;
-            userPromptText = `${formattedPrompt}\n\n${marketDataOverride}\n\n${minimalImages}\n\n${minimalPattern}\n\n${minimalInsights}\n\nReturn readable THINKING and FINAL_OUTPUT sections only.`;
+            userPromptText = `${formattedPrompt}\n\n${marketDataOverride}\n\n${minimalImages}\n\n${minimalPattern}\n\n${minimalInsights}\n\nPresent your readable trade proposal.`;
         } else {
             // Capable models get the LARGER budgets — this was inverted (they
             // were cut harder than the small-context branch, defeating the
@@ -392,7 +418,7 @@ export async function analyzeTradingView(
             const truncatedPattern = patternMemoryContext.length > 600 ? patternMemoryContext.substring(0, 600) + '...[truncated for TPM]' : patternMemoryContext;
             const truncatedInsights = recentInsightsContext.length > 300 ? recentInsightsContext.substring(0, 300) + '...[truncated for TPM]' : recentInsightsContext;
             const truncatedMemory = memoryContext.length > 600 ? memoryContext.substring(0, 600) + '...[truncated for TPM]' : memoryContext;
-            userPromptText = `${formattedPrompt}${truncatedImages}\n\n${truncatedPattern}\n\n${truncatedInsights}\n\n${truncatedMemory}\n\nReturn readable THINKING and FINAL_OUTPUT sections only.`;
+            userPromptText = `${formattedPrompt}${truncatedImages}\n\n${truncatedPattern}\n\n${truncatedInsights}\n\n${truncatedMemory}\n\nPresent your readable trade proposal.`;
         }
     }
 
@@ -445,12 +471,33 @@ export async function analyzeTradingView(
     if (!responseText) responseText = reasoningAccumulated;
 
     try {
-        const thinkingMatch = responseText.match(/<THINKING>\s*([\s\S]*?)\s*<\/THINKING>/i);
-        const outputMatch = responseText.match(/<FINAL_OUTPUT>\s*([\s\S]*?)\s*<\/FINAL_OUTPUT>/i);
-        let thoughtProcess = sanitizeAIResponseLight(thinkingMatch?.[1] || '');
-        let finalOutput = sanitizeAIResponseLight(outputMatch?.[1] || '');
+        // Legacy XML-style tags (very old prompts asked models to emit these).
+        const taggedThinking = responseText.match(/<THINKING>\s*([\s\S]*?)\s*<\/THINKING>/i);
+        const taggedOutput = responseText.match(/<FINAL_OUTPUT>\s*([\s\S]*?)\s*<\/FINAL_OUTPUT>/i);
+        const hasTaggedSections = Boolean(taggedThinking || taggedOutput);
 
-        // Defensive recovery: some models ignore the tagged format and return
+        // Native provider chain-of-thought (reasoning_content / thinking
+        // deltas streamed via onReasoning) IS the thinking — harness-style.
+        // The prompt never asks the model to narrate its reasoning; the tagged
+        // sections below are parsed purely as a backward-compatible fallback
+        // for legacy cached responses. No reasoning ⇒ no thinking block.
+        let thoughtProcess = sanitizeAIResponseLight(reasoningAccumulated.trim());
+        let finalOutput = '';
+
+        if (hasTaggedSections) {
+            if (!thoughtProcess) thoughtProcess = sanitizeAIResponseLight(taggedThinking?.[1] || '');
+            finalOutput = sanitizeAIResponseLight(taggedOutput?.[1] || '');
+        } else {
+            // Header-style labels (**THINKING** / **FINAL OUTPUT**) are another
+            // legacy variant — split them the same way as the XML tags.
+            const headers = splitThinkingHeaders(responseText);
+            if (headers.thinking || headers.output) {
+                if (!thoughtProcess) thoughtProcess = sanitizeAIResponseLight(headers.thinking);
+                finalOutput = sanitizeAIResponseLight(headers.output);
+            }
+        }
+
+        // Defensive recovery: some models ignore the output format and return
         // raw JSON (legacy {thoughtProcess, analysis} or a bare trade plan).
         // Recover it into readable text so the cards never show raw JSON.
         if (!thoughtProcess || !finalOutput) {
@@ -463,12 +510,12 @@ export async function analyzeTradingView(
                     const analysisObj = json.analysis && typeof json.analysis === 'object' ? json.analysis : json;
                     const isTradePlan = typeof analysisObj.coinName === 'string' || typeof analysisObj.direction === 'string';
                     if (!thoughtProcess) {
-                        thoughtProcess = jsonThought || reasoningAccumulated || 'No separate thinking section was provided.';
+                        thoughtProcess = jsonThought || reasoningAccumulated;
                     }
                     if (!finalOutput) {
                         finalOutput = isTradePlan
                             ? formatAnalysisForDisplay(analysisObj)
-                            : (jsonThought || reasoningAccumulated || responseText.replace(/<\/?(?:THINKING|FINAL_OUTPUT)>/gi, '').trim());
+                            : (jsonThought || reasoningAccumulated || stripTagArtifacts(responseText));
                     }
                 }
             } catch {
@@ -476,11 +523,10 @@ export async function analyzeTradingView(
             }
         }
         if (!finalOutput) {
-            finalOutput = sanitizeAIResponseLight(responseText.replace(/<\/?(?:THINKING|FINAL_OUTPUT)>/gi, '').trim());
+            finalOutput = sanitizeAIResponseLight(stripTagArtifacts(responseText));
         }
-        if (!thoughtProcess) {
-            thoughtProcess = reasoningAccumulated || 'No separate thinking section was provided.';
-        }
+        // thoughtProcess stays '' when the provider streamed no native
+        // reasoning — the UI then renders no thinking block (harness-style).
 
         // Analysts deliberately do not produce the structured trade plan.
         // Keep a neutral internal value for legacy validation/Monte Carlo paths;

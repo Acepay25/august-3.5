@@ -26,7 +26,7 @@ export interface ThinkingRecord {
   modelName?: string;
   /** The reasoning/thought process text */
   reasoning: string;
-  /** The model's final output section (analyst <FINAL_OUTPUT>, moderator verdict prose) */
+  /** The model's final output (analyst answer after reasoning, moderator verdict prose) */
   finalOutput?: string;
   /** Raw provider-streamed chain of thought (reasoning_content / thinking blocks), when available */
   rawReasoning?: string;
