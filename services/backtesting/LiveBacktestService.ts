@@ -11,6 +11,7 @@
 
 import { LoggedTrade, TradeAnalysis, TradeOutcome } from '../../types';
 import { MarketRegime } from '../analysis/TechnicalAnalysisService';
+import { parsePrice } from '../../utils/analysisUtils';
 
 // =============================================================================
 // TYPES
@@ -212,9 +213,9 @@ const calculatePnlPercent = (trade: LoggedTrade): number => {
     const analysis = trade.analysis;
     if (!analysis) return trade.outcome === 'WIN' ? 2 : -1;
 
-    const entry = parseFloat(analysis.entryPoints?.[0]?.price?.replace(/[^0-9.]/g, '') || '0');
-    const sl = parseFloat(analysis.stopLoss?.replace(/[^0-9.]/g, '') || '0');
-    const tp = parseFloat(analysis.takeProfit?.[0]?.price?.replace(/[^0-9.]/g, '') || '0');
+    const entry = parsePrice(analysis.entryPoints?.[0]?.price || '') || 0;
+    const sl = parsePrice(analysis.stopLoss || '') || 0;
+    const tp = parsePrice(analysis.takeProfit?.[0]?.price || '') || 0;
 
     if (entry > 0) {
         if (trade.outcome === 'WIN' && tp > 0) {

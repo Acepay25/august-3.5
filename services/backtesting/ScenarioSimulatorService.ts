@@ -7,7 +7,7 @@
  */
 
 import { TradeAnalysis, LoggedTrade, TradeOutcome } from '../../types';
-import { runSimulation, MonteCarloResult, SimulationConfig } from '../analysis/MonteCarloService';
+import { runSimulationAsync, MonteCarloResult, SimulationConfig } from '../analysis/MonteCarloService';
 import { parsePrice } from '../../utils/analysisUtils';
 
 // =============================================================================
@@ -141,10 +141,10 @@ export function compareScenarios(
 /**
  * Run Monte Carlo simulation for a scenario
  */
-export function runScenarioMonteCarlo(
+export async function runScenarioMonteCarlo(
     config: ScenarioConfig,
     numSimulations: number = 500
-): MonteCarloResult | null {
+): Promise<MonteCarloResult | null> {
     try {
         const simConfig: SimulationConfig = {
             entry: config.entry,
@@ -156,7 +156,9 @@ export function runScenarioMonteCarlo(
             numSimulations,
         };
 
-        return runSimulation(simConfig);
+        // Run through the worker (with sync fallback) so the modal never
+        // blocks the main thread on every slider change.
+        return await runSimulationAsync(simConfig);
     } catch (error) {
         console.error('[ScenarioSimulator] Monte Carlo failed:', error);
         return null;
@@ -360,14 +362,14 @@ export function extractConfigFromAnalysis(
 /**
  * Run complete scenario analysis
  */
-export function analyzeScenario(
+export async function analyzeScenario(
     config: ScenarioConfig,
     loggedTrades: LoggedTrade[],
     runMonteCarlo: boolean = true
-): ScenarioResult {
+): Promise<ScenarioResult> {
     const metrics = calculateMetrics(config);
     const historicalMatches = findHistoricalMatches(config, loggedTrades);
-    const monteCarlo = runMonteCarlo ? runScenarioMonteCarlo(config) : null;
+    const monteCarlo = runMonteCarlo ? await runScenarioMonteCarlo(config) : null;
     const suggestions = generateSuggestions(config, metrics, historicalMatches);
 
     return {

@@ -128,10 +128,12 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
         }
 
         // Use setTimeout to allow UI to update before heavy computation
-        simulationTimerRef.current = setTimeout(() => {
+        simulationTimerRef.current = setTimeout(async () => {
             simulationTimerRef.current = null;
             const historicalMatches = findHistoricalMatches(currentScenarioConfig, loggedTrades);
-            const monteCarlo = runScenarioMonteCarlo(currentScenarioConfig, 300);
+            // Async Monte Carlo (worker-backed) — the modal stays responsive
+            // while the simulation runs.
+            const monteCarlo = await runScenarioMonteCarlo(currentScenarioConfig, 300);
             const metrics = calculateMetrics(currentScenarioConfig);
             const suggestions = generateSuggestions(currentScenarioConfig, metrics, historicalMatches);
 

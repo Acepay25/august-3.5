@@ -6,7 +6,6 @@ import { validateTradeOutcome, TradeOutcomeValidation } from '../services/backte
 import { sanitizeAIResponse } from '../utils/sanitizers';
 import * as ensembleService from '../services/providers/ensembleService';
 import * as MemoryService from '../services/learning/MemoryService';
-import { getTradingWeaknesses } from '../services/learning/MistakePatternService';
 import { jobQueue, JobType } from '../services/infrastructure/JobQueueService';
 import { MAX_TRADE_SUMMARIES } from './useTradeLogging';
 import { saveThinkingBatch, generateThinkingId, getThinkingTradeId } from '../services/infrastructure/ThinkingStoreService';
@@ -541,7 +540,13 @@ Please investigate this discrepancy in your analysis.
                         }
                         setTradeSummaries(prev => {
                             const newSummary = { id: tradeToUpdate.id, summaryText: summary, timestamp: new Date().toISOString() };
-                            const updated = [...prev, newSummary];
+                            // Replace an existing summary for this trade — the
+                            // autopilot path already dedupes by id; this path
+                            // didn't, so both fired for the same trade and
+                            // Recent Insights showed duplicate cards.
+                            const updated = prev.some(s => s.id === tradeToUpdate.id)
+                                ? prev.map(s => s.id === tradeToUpdate.id ? newSummary : s)
+                                : [...prev, newSummary];
                             return updated.slice(-MAX_TRADE_SUMMARIES);
                         });
 
@@ -566,14 +571,6 @@ Please investigate this discrepancy in your analysis.
                     jobQueue.addJob(JobType.EXTRACT_RULES, tradeWithPM);
                 } catch (insightError) {
                     console.error('[AI Learning] Failed to queue background jobs:', insightError);
-                }
-
-                // Update trading weaknesses
-                try {
-                    const updatedWeaknesses = getTradingWeaknesses(loggedTradesRef.current);
-                    console.log('[AI Learning] Updated trading weaknesses analysis');
-                } catch (weaknessError) {
-                    console.error('[AI Learning] Failed to update weaknesses:', weaknessError);
                 }
             }
 

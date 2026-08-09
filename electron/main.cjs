@@ -616,6 +616,22 @@ function setupAutoUpdater() {
 // APP LIFECYCLE
 // =============================================================================
 
+// Single-instance lock: without it a double launch opens two windows and two
+// auto-update checks, and the update-status IPC pushes to whichever window
+// happens to respond. The second instance focuses the first window instead.
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+    app.quit();
+} else {
+    app.on('second-instance', () => {
+        if (mainWindow) {
+            if (mainWindow.isMinimized()) mainWindow.restore();
+            mainWindow.focus();
+        }
+    });
+}
+
+if (gotSingleInstanceLock) {
 app.whenReady().then(() => {
     createWindow();
     setupAutoUpdater();
@@ -636,6 +652,7 @@ app.whenReady().then(() => {
         }
     });
 });
+} // gotSingleInstanceLock
 
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {

@@ -8,11 +8,8 @@ import {
     PURE_AI_MODERATOR_PROMPT,
     TRADING_FAMILIES_PROMPT,
     STRESS_TEST_PROTOCOL,
-    DEVILS_ADVOCATE_PROMPT,
-    ENHANCED_ACCURACY_VALIDATION_PROMPT,
-    REGIME_TRADING_RULES,
+    EXTENDED_SL_ZONE_DEBATE_CONTEXT,
     MODERATOR_VERIFICATION_ENFORCEMENT_PROMPT,
-    POST_MORTEM_PATTERN_LEARNING_PROMPT,
     PROBABILITY_ESTIMATION_PROMPT,
     MODERATOR_FINAL_AUTHORITY_PROTOCOL,
     DEBATE_RESPONSE_PROMPT,
@@ -24,7 +21,7 @@ import {
 } from '../../constants/prompts';
 import { DUAL_SCENARIO_JSON_SCHEMA } from '../../constants/schemas';
 import { parseLiveMarketData } from '../../utils/liveMarketParser';
-import { truncateTextToTokens, truncateJsonSafely } from '../../utils/analysisUtils';
+import { truncateTextToTokens, parsePrice } from '../../utils/analysisUtils';
 import { generateEnhancedDebateContext, EnhancedDebateContext } from '../ui/EnhancedDebateService';
 import { MarketRegime } from '../analysis/TechnicalAnalysisService';
 import {
@@ -710,7 +707,7 @@ export const analyzePreDebateDivergence = (
     const entries = analystsResults
         .map(r => {
             const entry = r.analysis.entryPoints?.[0]?.price;
-            return typeof entry === 'string' ? parseFloat(entry.replace(/[^0-9.]/g, '')) : entry;
+            return typeof entry === 'string' ? parsePrice(entry) : entry;
         })
         .filter(e => !isNaN(e)) as number[];
 
@@ -1011,7 +1008,11 @@ export const conductDebate = (
 
     let analystsInput = "";
     analystsResults.forEach((res, index) => {
-        analystsInput += `\n**${analystNames[index].toUpperCase()} INITIAL ANALYSIS**:\n${truncateJsonSafely(JSON.stringify(res.analysis), 800)}\n`;
+        // Feed the moderator the analyst's prose reasoning (thoughtProcess),
+        // not the machine JSON — the real-debate path already does this, and
+        // the JSON form omits how the analyst actually reasoned.
+        const analystProse = res.thoughtProcess || res.finalOutput || JSON.stringify(res.analysis);
+        analystsInput += `\n**${analystNames[index].toUpperCase()} INITIAL ANALYSIS**:\n${truncateTextToTokens(analystProse, 800)}\n`;
     });
 
     // Dynamic Construction of Dialogue Instructions based on active analysts
@@ -1077,8 +1078,6 @@ ${marketDataOverride}
 ${gateReconciliationContext}
 
 ${AI_CORE_SKILL_INJECTION}
-
-${POST_MORTEM_PATTERN_LEARNING_PROMPT}
 
 ${PROBABILITY_ESTIMATION_PROMPT}
 
@@ -1318,8 +1317,6 @@ export const conductTwoWayDebate = async function* (
       ${weightedVotingContext2}
 
       ${AI_CORE_SKILL_INJECTION}
-
-      ${POST_MORTEM_PATTERN_LEARNING_PROMPT}
 
       ${learningContext || ''}
 
@@ -1883,8 +1880,6 @@ ${ruleViolationContext}
 ${gateReconciliationContext}
 
 ${AI_CORE_SKILL_INJECTION}
-
-${POST_MORTEM_PATTERN_LEARNING_PROMPT}
 
 ${learningContext || ''}
 
@@ -3170,45 +3165,7 @@ export const conductTwoWayPostMortemDebate = (
     const tradeHistoryContext = structuredMemoryContext ||
         (finalTradeSummary ? `**PATTERN MEMORY LIBRARY (Historical Context):**\n${truncateTextToTokens(finalTradeSummary, 1500)}` : "No past trades logged.");
 
-    const extendedSLZoneContext = `** CRITICAL - 150% EXTENDED SL ZONE LOGIC:**
-This system uses an "Extended SL Zone" where the initial Stop Loss is a SOFT limit:
-- Original SL Distance = |Entry - StopLoss|
-- Extended SL = SL + 50% of original distance (total 150% risk from entry)
-- If price touches original SL but stays within 150% zone and then hits TP → WIN
-- **CRITICAL: If price exceeds the 150% extended threshold → DEFINITIVE LOSS**
-
-When the stop-loss touches the 150% extended zone boundary, this MUST be treated as a REAL LOSS:
-1. The original SL was hit AND exceeded by 50%
-2. This represents a failure of the trade thesis
-3. In live trading, this position would have been closed at a significant loss
-
-**⚠️ SPECIAL CASE: MISSED WIN DUE TO TIGHT STOP LOSS:**
-When the ORIGINAL stop-loss is hit, price does NOT reach the 150% extended zone, and then reverses to hit TP:
-1. This is still classified as a **LOSS** (because the SL was triggered in live trading)
-2. However, this MUST be flagged as a **"MISSED WIN DUE TO TIGHT SL"**
-3. The trade COULD have been profitable with a wider stop loss
-
-**MANDATORY CORRECTED SL ANALYSIS (When Missed Win Detected):**
-Each analyst MUST:
-1. Calculate the **exact minimum SL distance** that would have kept the trade alive
-2. Propose a **corrected optimal SL** (typically 10-20% wider than the minimum)
-3. Explain the **rationale** based on:
-   - Market volatility at the time (ATR considerations)
-   - Key structural levels that should have been used as SL anchors
-   - Whether a better entry would have naturally provided more SL room
-
-**MODERATOR RESPONSIBILITY (When 150% Zone Breached):**
-You MUST ensure the final conclusion addresses:
-1. Whether the initial Stop Loss should have been placed wider
-2. Whether the entry timing was optimal
-3. Store this as 'extendedSLZoneBreach: true' for future pattern memory reference
-
-**MODERATOR RESPONSIBILITY (When Missed Win Detected):**
-You MUST:
-1. Synthesize all analyst SL correction proposals
-2. Calculate a **weighted average corrected SL** based on analyst reasoning
-3. Provide a **final recommended SL adjustment percentage** for similar future setups
-4. Store flag 'missedWinTightSL: true' for pattern memory`;
+    const extendedSLZoneContext = EXTENDED_SL_ZONE_DEBATE_CONTEXT;
 
     const moderatorPrompt = `
     You are a **Master Trading Strategist** conducting a rigorous 5-round post-mortem debate.
@@ -3227,7 +3184,7 @@ You MUST:
 
     ${tradeHistoryContext}
 
-    ${PROBABILITY_ESTIMATION_PROMPT}
+    **PROBABILITY ASSESSMENT:** Include a prose assessment of the probability that the SL and TP levels would have been hit — no JSON structure.
 
     ${MODERATOR_FINAL_AUTHORITY_PROTOCOL}
 
@@ -3380,45 +3337,7 @@ export const conductThreeWayPostMortemDebate = (
     const imageContext = postTradeImageSummaries?.length ? `** VERIFIED TRADE OUTCOME DATA (HIGHEST PRIORITY):**\n${postTradeImageSummaries.join('\n---\n')}` : `No post-trade data was provided.`;
     const tradeHistoryContext = finalTradeSummary ? `**PATTERN MEMORY LIBRARY (Historical Context):**\n${truncateTextToTokens(finalTradeSummary, 1500)}` : "No past trades logged.";
 
-    const extendedSLZoneContext = `** CRITICAL - 150% EXTENDED SL ZONE LOGIC:**
-This system uses an "Extended SL Zone" where the initial Stop Loss is a SOFT limit:
-- Original SL Distance = |Entry - StopLoss|
-- Extended SL = SL + 50% of original distance (total 150% risk from entry)
-- If price touches original SL but stays within 150% zone and then hits TP → WIN
-- **CRITICAL: If price exceeds the 150% extended threshold → DEFINITIVE LOSS**
-
-When the stop-loss touches the 150% extended zone boundary, this MUST be treated as a REAL LOSS:
-1. The original SL was hit AND exceeded by 50%
-2. This represents a failure of the trade thesis
-3. In live trading, this position would have been closed at a significant loss
-
-**⚠️ SPECIAL CASE: MISSED WIN DUE TO TIGHT STOP LOSS:**
-When the ORIGINAL stop-loss is hit, price does NOT reach the 150% extended zone, and then reverses to hit TP:
-1. This is still classified as a **LOSS** (because the SL was triggered in live trading)
-2. However, this MUST be flagged as a **"MISSED WIN DUE TO TIGHT SL"**
-3. The trade COULD have been profitable with a wider stop loss
-
-**MANDATORY CORRECTED SL ANALYSIS (When Missed Win Detected):**
-Each analyst MUST:
-1. Calculate the **exact minimum SL distance** that would have kept the trade alive
-2. Propose a **corrected optimal SL** (typically 10-20% wider than the minimum)
-3. Explain the **rationale** based on:
-   - Market volatility at the time (ATR considerations)
-   - Key structural levels that should have been used as SL anchors
-   - Whether a better entry would have naturally provided more SL room
-
-**MODERATOR RESPONSIBILITY (When 150% Zone Breached):**
-You MUST ensure the final conclusion addresses:
-1. Whether the initial Stop Loss should have been placed wider
-2. Whether the entry timing was optimal
-3. Store this as 'extendedSLZoneBreach: true' for future pattern memory reference
-
-**MODERATOR RESPONSIBILITY (When Missed Win Detected):**
-You MUST:
-1. Synthesize all analyst SL correction proposals
-2. Calculate a **weighted average corrected SL** based on analyst reasoning
-3. Provide a **final recommended SL adjustment percentage** for similar future setups
-4. Store flag 'missedWinTightSL: true' for pattern memory`;
+    const extendedSLZoneContext = EXTENDED_SL_ZONE_DEBATE_CONTEXT;
 
     const moderatorPrompt = `
     You are a **Master Trading Strategist** conducting a rigorous 5-round post-mortem debate with three analysts.  
@@ -3437,7 +3356,7 @@ You MUST:
 
     ${tradeHistoryContext}
 
-    ${PROBABILITY_ESTIMATION_PROMPT}
+    **PROBABILITY ASSESSMENT:** Include a prose assessment of the probability that the SL and TP levels would have been hit — no JSON structure.
 
     ${MODERATOR_FINAL_AUTHORITY_PROTOCOL}
 

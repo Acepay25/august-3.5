@@ -155,7 +155,7 @@ const AdvancedAnalyticsSidePanel: React.FC<AdvancedAnalyticsSidePanelProps> = ({
                     </div>
 
                     {/* Scrollable Content */}
-                    <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent">
+                    <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar scrollbar-track-transparent">
 
                         {/* Underperformer Feedback */}
                         <SectionCard
@@ -188,7 +188,7 @@ const AdvancedAnalyticsSidePanel: React.FC<AdvancedAnalyticsSidePanelProps> = ({
                                             </button>
 
                                             {item.showPrompt && (
-                                                <div className="p-3 pt-0 animate-in slide-in-from-top-2 duration-200">
+                                                <div className="p-3 pt-0 animate-fade-in">
                                                     <div className="p-3 rounded-lg bg-black/30 border border-rose-500/10">
                                                         <div className="text-[10px] text-rose-400/80 mb-2 font-medium">Injected Prompt:</div>
                                                         <pre className="text-[10px] text-zinc-400 whitespace-pre-wrap max-h-32 overflow-y-auto font-mono leading-relaxed">

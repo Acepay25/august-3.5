@@ -150,7 +150,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
         switch (activeTab) {
             case 'Intelligence':
                 return (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 h-full animate-in fade-in slide-in-from-bottom-4 duration-500">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 h-full animate-fade-in">
                         {/* 1.1 RL - Large Card */}
                         <ModernCard title="Reinforcement Loop" accent="emerald" icon={<Icons.Chart className="w-5 h-5" />} large>
                             <div className="h-48 w-full -ml-2 min-w-0">
@@ -204,7 +204,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                                             ))}
                                         </select>
                                     </div>
-                                    <div className="p-3 overflow-y-auto max-h-[100px] scrollbar-thin scrollbar-thumb-purple-500/20">
+                                    <div className="p-3 overflow-y-auto max-h-[100px] custom-scrollbar scrollbar-thumb-purple-500/20">
                                         <p className="text-[10px] text-purple-200/80 font-mono leading-relaxed">
                                             <span className="text-purple-400 font-bold">IF</span> {rules[selectedRuleIndex]?.ifCondition} <br />
                                             <span className="text-purple-400 font-bold">THEN</span> {rules[selectedRuleIndex]?.thenAction}
@@ -247,7 +247,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                                             ))}
                                         </select>
                                     </div>
-                                    <div className="p-3 overflow-y-auto max-h-[100px] scrollbar-thin scrollbar-thumb-amber-500/20">
+                                    <div className="p-3 overflow-y-auto max-h-[100px] custom-scrollbar scrollbar-thumb-amber-500/20">
                                         <p className="text-[10px] text-amber-200/80 font-mono leading-relaxed">
                                             "{insights[selectedInsightIndex]?.insight}"
                                         </p>
@@ -271,7 +271,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
 
             case 'Algorithm':
                 return (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 h-full animate-in fade-in slide-in-from-bottom-4 duration-500">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 h-full animate-fade-in">
                         {/* 2.1 Monte Carlo */}
                         <ModernCard title="Regime Detection" value="Active" subtitle="ADX/ATR Trend Monitoring" accent="yellow" icon={<Icons.Zap className="w-5 h-5" />} />
 
@@ -310,7 +310,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                                         <option value="postMortem">Post-Mortem</option>
                                     </select>
                                 </div>
-                                <div className="flex-1 bg-zinc-800 rounded-xl p-3 font-mono text-[9px] text-zinc-400 overflow-auto border border-white/5 scrollbar-thin scrollbar-thumb-zinc-700">
+                                <div className="flex-1 bg-zinc-800 rounded-xl p-3 font-mono text-[9px] text-zinc-400 overflow-auto border border-white/5 custom-scrollbar">
                                     <div className="whitespace-pre">
                                         {JSON.stringify(validationSchemas[selectedSchema] || { type: 'object' }, null, 2)}
                                     </div>
@@ -324,7 +324,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
 
             case 'System':
                 return (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 h-full animate-in fade-in slide-in-from-bottom-4 duration-500">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 h-full animate-fade-in">
                         {/* 3.4 Storage - Real Output */}
                         <ModernCard title="Unified Storage" accent="blue" icon={<Icons.Server className="w-5 h-5" />}>
                             <div className="mt-1">

@@ -8,6 +8,7 @@
  */
 
 import { LoggedTrade, TradeOutcome } from '../../types';
+import { parsePrice } from '../../utils/analysisUtils';
 
 // ============================================================================
 // TYPES
@@ -254,8 +255,8 @@ export const trackSLOutcome = (
         return undefined;
     }
 
-    const entry = parseFloat(trade.analysis.entryPoints[0].price.replace(/[^0-9.-]/g, ''));
-    const stopLoss = parseFloat(trade.analysis.stopLoss.replace(/[^0-9.-]/g, ''));
+    const entry = parsePrice(trade.analysis.entryPoints[0].price || '');
+    const stopLoss = parsePrice(trade.analysis.stopLoss || '');
     const direction = trade.analysis.direction;
 
     if (!entry || !stopLoss) return undefined;
@@ -284,7 +285,7 @@ export const trackSLOutcome = (
     const takeProfit1 = trade.analysis.takeProfit?.[0]?.price;
     let hitTP = false;
     if (takeProfit1) {
-        const tp = parseFloat(takeProfit1.replace(/[^0-9.-]/g, ''));
+        const tp = parsePrice(takeProfit1 || '');
         hitTP = direction === 'Long'
             ? priceData.maxPrice >= tp
             : priceData.minPrice <= tp;
@@ -352,8 +353,8 @@ function getDefaultOptimization(currentSampleSize: number): SLOptimization {
 }
 
 function parseSlDistance(trade: LoggedTrade): number {
-    const entry = parseFloat(trade.analysis?.entryPoints?.[0]?.price?.replace(/[^0-9.-]/g, '') || '0');
-    const sl = parseFloat(trade.analysis?.stopLoss?.replace(/[^0-9.-]/g, '') || '0');
+    const entry = parsePrice(trade.analysis?.entryPoints?.[0]?.price || '') || 0;
+    const sl = parsePrice(trade.analysis?.stopLoss || '') || 0;
     if (!entry || !sl) return 0;
     return Math.abs((sl - entry) / entry) * 100;
 }

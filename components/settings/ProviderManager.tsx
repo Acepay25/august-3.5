@@ -10,7 +10,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { ProviderConfig, ApiFormat, API_FORMAT_LABELS } from '../../types/provider';
 import { testConnection } from '../../services/providers/GenericProviderService';
-import { getProviderHealth } from '../../services/infrastructure/ProviderHealthService';
+import { getProviderHealth, resetProviderHealth } from '../../services/infrastructure/ProviderHealthService';
 import { validateProviderUrl } from '../../utils/providerUrlValidation';
 import { useConfirmDialog } from '../shared/ConfirmDialog';
 
@@ -29,6 +29,8 @@ interface ProviderManagerProps {
     onAddModel?: (providerId: string, modelId: string) => Promise<void>;
     onRemoveModel?: (providerId: string, modelId: string) => Promise<void>;
     onUpdateModel?: (providerId: string, oldModelId: string, newModelId: string) => Promise<void>;
+    /** Reports staged-edit dirtiness so the host can confirm before closing. */
+    onDirtyChange?: (dirty: boolean) => void;
 }
 
 // ─── SVG Icons ────────────────────────────────────────────────────────────────
@@ -122,6 +124,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
     onAddModel,
     onRemoveModel,
     onUpdateModel,
+    onDirtyChange,
 }) => {
     const { confirm, ConfirmDialogComponent } = useConfirmDialog();
     const [selectedId, setSelectedId] = useState<string>(configs[0]?.id || '');
@@ -191,11 +194,19 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
         );
     }, [selected, draftKey, draftUrl, draftFormat, draftModel, nameDraft]);
 
+    // Surface dirtiness to the host (SettingsMenu) so closing the modal while
+    // a draft is staged can warn instead of silently discarding edits.
+    useEffect(() => {
+        onDirtyChange?.(isDirty);
+    }, [isDirty, onDirtyChange]);
+
     const handleSave = useCallback(async () => {
         if (!selected || !draftUrlValidation.valid) return;
         setSaveState('saving');
         const updates: Partial<Omit<ProviderConfig, 'id' | 'isBuiltIn'>> = {
-            apiKey: draftKey,
+            // Trim the key — a pasted key with a trailing newline passed the
+            // "ready" check (getReadyProviders trims) but failed every auth.
+            apiKey: draftKey.trim(),
             baseUrl: draftUrl.trim(),
             apiFormat: draftFormat,
             selectedModel: draftModel,
@@ -540,6 +551,10 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                         });
                                         if (!ok) return;
                                         onRemoveProvider(selected.id);
+                                        // Drop the deleted provider's health
+                                        // telemetry — it would otherwise linger
+                                        // in the module Map forever.
+                                        resetProviderHealth(selected.id);
                                         const remaining = configs.filter(c => c.id !== selected.id);
                                         if (remaining.length > 0) setSelectedId(remaining[0].id);
                                     }}
@@ -677,7 +692,16 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
 
                                                     {/* Delete Model Trash Icon */}
                                                     <button
-                                                        onClick={() => handleRemoveModelSubmit(m)}
+                                                        onClick={async () => {
+                                                            // Confirm before removing a carefully-typed model id — the
+                                                            // provider delete already confirms; this was the silent one.
+                                                            const ok = await confirm({
+                                                                title: `Remove model "${m}"?`,
+                                                                message: 'The model id will be removed from this provider\'s list.',
+                                                                confirmLabel: 'Remove',
+                                                            });
+                                                            if (ok) handleRemoveModelSubmit(m);
+                                                        }}
                                                         className="p-1 text-zinc-500 hover:text-rose-400 transition-colors"
                                                         title="Remove Model"
                                                     >

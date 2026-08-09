@@ -68,7 +68,7 @@ class ErrorBoundary extends Component<Props, State> {
     render(): ReactNode {
         if (this.state.hasError) {
             return (
-                <div className="fixed inset-0 bg-zinc-900 flex flex-col items-center justify-center p-6 text-white">
+                <div className="status-surface fixed inset-0 bg-zinc-900 flex flex-col items-center justify-center p-6 text-white">
                     <div className="max-w-md w-full text-center space-y-6">
                         {/* Error Icon */}
                         <div className="text-6xl mb-4"></div>

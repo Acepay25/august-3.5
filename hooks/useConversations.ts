@@ -20,11 +20,13 @@ export function useConversations() {
 
     const messages = activeConversation?.messages || [];
 
-    // Ref to hold the latest messages for async access to prevent stale closures
+    // Ref to hold the latest messages for async access to prevent stale
+    // closures. Assigned during render (not in a post-commit effect) so async
+    // code reading it after an updateMessages call can never see the previous
+    // array — the effect lag forced multiple in-file workarounds elsewhere
+    // (matches the loggedTradesRef pattern in App).
     const messagesRef = useRef<Message[]>([]);
-    useEffect(() => {
-        messagesRef.current = messages;
-    }, [messages]);
+    messagesRef.current = messages;
 
     // Per-conversation selections. Provider enable/disable + per-provider model
     // selection now live in ProviderConfig (global, via useProviderConfigs).

@@ -293,7 +293,7 @@ export const calculateIndicators = (klines: Kline[]): TechnicalIndicators => {
         stdDev: 2
     });
     const lastBB = bbValues[bbValues.length - 1] || { upper: currentPrice, middle: currentPrice, lower: currentPrice };
-    const bandwidth = ((lastBB.upper - lastBB.lower) / lastBB.middle) * 100;
+    const bandwidth = lastBB.middle > 0 ? ((lastBB.upper - lastBB.lower) / lastBB.middle) * 100 : 0;
     const percentB = lastBB.upper !== lastBB.lower
         ? ((currentPrice - lastBB.lower) / (lastBB.upper - lastBB.lower)) * 100
         : 50;
@@ -311,8 +311,9 @@ export const calculateIndicators = (klines: Kline[]): TechnicalIndicators => {
     const stochD = lastStoch.d || 50;
     const stochJ = 3 * stochK - 2 * stochD; // J = 3K - 2D
 
-    // Volume analysis
-    const avgVolume = volumes.slice(-20).reduce((a, b) => a + b, 0) / Math.min(20, volumes.length);
+    // Volume analysis — guarded: empty/degraded klines (per-source degradation
+    // returns []) must not produce NaN (0/0) that flows into the prompt.
+    const avgVolume = volumes.length === 0 ? 0 : volumes.slice(-20).reduce((a, b) => a + b, 0) / Math.min(20, volumes.length);
     const volumeTrend = currentVolume > avgVolume * 1.5 ? 'high'
         : currentVolume < avgVolume * 0.5 ? 'low'
             : 'normal';
@@ -325,7 +326,7 @@ export const calculateIndicators = (klines: Kline[]): TechnicalIndicators => {
         period: 14
     });
     const atr = safeCalc(() => atrValues[atrValues.length - 1], 0);
-    const atrPercent = (atr / currentPrice) * 100;
+    const atrPercent = currentPrice > 0 ? (atr / currentPrice) * 100 : 0;
 
     // Price Position
     const positions: string[] = [];
@@ -768,7 +769,7 @@ const calculateVolumeProfile = (klines: Kline[]): { poc: number; valueAreaHigh: 
 export const calculateAdvancedVolume = (klines: Kline[]): AdvancedVolumeAnalysis => {
     const volumes = klines.map(k => k.volume);
     const currentVolume = volumes[volumes.length - 1] || 0;
-    const avgVolume = volumes.slice(-20).reduce((a, b) => a + b, 0) / Math.min(20, volumes.length);
+    const avgVolume = volumes.length === 0 ? 0 : volumes.slice(-20).reduce((a, b) => a + b, 0) / Math.min(20, volumes.length);
     const currentPrice = klines[klines.length - 1]?.close || 0;
 
     // Basic volume trend

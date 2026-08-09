@@ -42,6 +42,7 @@ interface ChatAreaProps {
     isPostMortemInProgress: boolean;
     setIsLivePostMortemVisible: (val: boolean) => void;
     handleCancelAnalysis: () => void;
+    onRetryFailedRun?: (userMessageId: string) => void;
     onDeleteMessages: (ids: string[]) => void;
     // ChatInput Props
     images: ImageMetadata[];
@@ -132,6 +133,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     isPostMortemInProgress,
     setIsLivePostMortemVisible,
     handleCancelAnalysis,
+    onRetryFailedRun,
     onDeleteMessages,
     // ChatInput Props
     images,
@@ -242,8 +244,9 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         selectedMessageIds: selectedIds,
         onToggleMessageSelection: handleToggleSelection,
         onViewImage: (url: string) => setViewerImageUrl(url),
-        onSelectMessageForProbability
-    }), [chatContext, latestMessageId, isSelectionMode, selectedIds, handleToggleSelection, onSelectMessageForProbability]);
+        onSelectMessageForProbability,
+        onRetryFailedRun,
+    }), [chatContext, latestMessageId, isSelectionMode, selectedIds, handleToggleSelection, onSelectMessageForProbability, onRetryFailedRun]);
 
     // Fresh sessions start with zero messages (no hardcoded intro bubble),
     // so no intro-text substitution is needed — messages pass through as-is.
@@ -365,6 +368,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 ref={virtuosoRef}
                 data={processedMessages}
                 context={enhancedContext}
+                computeItemKey={(_, message) => message.id}
                 itemContent={(index, message, context) => <MessageItem message={message} context={context} />}
                 followOutput={prefersReducedMotion ? false : 'smooth'}
                 atBottomStateChange={(atBottom) => setShowScrollDown(!atBottom)}

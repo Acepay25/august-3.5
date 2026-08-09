@@ -2,6 +2,9 @@
   "name": "august-3.5",
   "private": true,
   "version": "1.0.9",
+  "engines": {
+    "node": ">=22"
+  },
   "type": "module",
   "main": "electron/main.cjs",
   "description": "Advanced AI-powered cryptocurrency trading analysis terminal",
@@ -42,12 +45,10 @@
     "clsx": "^2.1.1",
     "electron-updater": "^6.8.9",
     "idb": "8.0.0",
-    "lightweight-charts": "^5.1.0",
     "lucide-react": "^1.26.0",
     "openai": "4.52.7",
     "react": "19.2.0",
     "react-dom": "19.2.0",
-    "react-is": "^19.2.3",
     "react-markdown": "^10.1.0",
     "react-virtuoso": "4.12.3",
     "recharts": "^3.5.1",

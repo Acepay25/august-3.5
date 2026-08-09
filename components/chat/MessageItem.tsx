@@ -54,6 +54,8 @@ export interface ChatContextProps {
     onViewReasoning?: (messageId: string) => void;
     /** F4: re-run the debate for a completed analysis card with the same setup. */
     onReRunAnalysis?: (messageId: string) => void;
+    /** Failed-run retry: rebuild the prompt + charts from the user message. */
+    onRetryFailedRun?: (userMessageId: string) => void;
     /** Mid-debate analyst replacement: pick a candidate (providerId) or pass
      *  null to continue without. Keyed by message id so a stale click from an
      *  earlier run is ignored. */
@@ -138,7 +140,10 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
         onCompareAnalysis,
         onViewReasoning,
         onReRunAnalysis,
+        onRetryFailedRun,
         onReplacementChoice,
+        copiedMessageId,
+        handleCopy,
         onTodayReassessment,
         todayReassessmentInFlight,
     } = context;
@@ -310,6 +315,21 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 <SmoothText text={displayContent} animate={message.role === MessageRole.AI && context.latestMessageId === message.id && !message.analysis} />
                             </div>
 
+                            {/* Failed-run retry: rebuild the same prompt + charts. */}
+                            {message.retryOf && onRetryFailedRun && (
+                                <button
+                                    type="button"
+                                    onClick={() => onRetryFailedRun(message.retryOf!.userMessageId)}
+                                    className="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-md text-sm font-medium transition-colors"
+                                    aria-label="Retry the failed analysis with the same chart"
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                    </svg>
+                                    Retry with same chart
+                                </button>
+                            )}
+
                             {/* "What would I do today?" — fresh re-assessment against today's price */}
                             {message.isPostMortem && onTodayReassessment && (
                                 <TodayReassessmentPanel
@@ -414,6 +434,17 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                                 title="Per-analyst cost & latency ledger"
                                             >
                                                 {isRunLedgerOpen ? '▾ Run ledger' : '▸ Run ledger'}
+                                            </button>
+                                        )}
+                                        {message.text && (
+                                            <button
+                                                type="button"
+                                                onClick={() => handleCopy(message)}
+                                                className="text-zinc-500 hover:text-zinc-300 transition-colors"
+                                                title="Copy the full analysis text"
+                                                aria-label="Copy analysis text"
+                                            >
+                                                {copiedMessageId === message.id ? '✓ Copied' : '⧉ Copy'}
                                             </button>
                                         )}
                                     </div>

@@ -3,11 +3,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { CloseIcon, ActivityIcon, BellIcon, TrashIcon, LoadingIcon, CameraIcon, CheckIcon, ChevronDownIcon, BrainIcon, TrendUpIcon, TrendDownIcon, AlertTriangleIcon } from '../shared/Icons';
 import { Spinner } from '../ui/Spinner';
 import { Kline } from '../../types';
+import { ChartCandle } from '../../types/chart';
 import { detectChartPatterns, detectKeyZones, DetectedPattern } from '../../utils/patternDetection';
 import { analyzeWithAI, AITrendlineAnalysis, MarketInsights } from '../../services/analysis/AITrendlineService';
 import { fetchKlines } from '../../services/analysis/KlineService';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
-import { CandlestickData, Time } from 'lightweight-charts';
 
 interface LiveMarketProps {
     isVisible: boolean;
@@ -336,8 +336,8 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze }
                 }
 
                 // Convert to CandlestickData format for AI service
-                const candles: CandlestickData<Time>[] = klines.map(k => ({
-                    time: Math.floor(k.time / 1000) as Time,
+                const candles: ChartCandle[] = klines.map(k => ({
+                    time: Math.floor(k.time / 1000),
                     open: k.open,
                     high: k.high,
                     low: k.low,

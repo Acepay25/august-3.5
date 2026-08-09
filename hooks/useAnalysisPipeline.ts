@@ -23,6 +23,7 @@ import { getGateAnalysis, GateOutput } from '../services/validation/GateKeeperSe
 import { isQuotaError } from '../utils/errorUtils';
 import { recalculateAnalysisMetrics, sanitizeTradeAnalysis, clampProbabilityToGate } from '../utils/analysisUtils';
 import { saveThinkingBatch, generateThinkingId, getThinkingTradeId } from '../services/infrastructure/ThinkingStoreService';
+import { offlineQueue } from '../services/infrastructure/OfflineQueueService';
 import { notifyAnalysisComplete } from '../services/infrastructure/CompletionNotifications';
 import { ThinkingRecord } from '../types/thinking';
 import { extractLastJson } from '../utils/jsonUtils';
@@ -263,7 +264,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             config.id,                             // provider identity
         ]));
 
-        const cached = await getCachedResponse(imageHashes, prompt, model, modeContext);
+        const cached = await getCachedResponse(imageHashes, prompt, model, config.id, modeContext);
         if (cached) {
             devLog(`[ResponseCache] HIT for ${config.name || model} (${model})`);
             // Replay the stored reasoning through onReasoning — a cache hit
@@ -309,7 +310,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 finalOutput: result.finalOutput,
                 analysis: result.analysis,
                 sources: result.sources,
-            }, modeContext);
+            }, config.id, modeContext);
             devLog(`[ResponseCache] STORED for ${config.name || model} (${model})`);
         }
 
@@ -492,7 +493,14 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     const handleSendMessage = useCallback(async (customPrompt?: string, customImages?: ImageMetadata[], hiddenContext?: string, options?: { isUpdate?: boolean; updateInterval?: string; presetHybridData?: HybridDataPacket | null }) => {
         const isSummarizing = images.some(img => img.isLoading);
 
-        if (isAnalysisInProgress || analysisInFlightRef.current) return;
+        if (isAnalysisInProgress || analysisInFlightRef.current) {
+            // Drafting stays enabled during a run, but a send attempt while a
+            // debate is live must not silently eat the message (the composer
+            // only disables during loadingMessage, which is null mid-debate).
+            const draft = typeof customPrompt === 'string' ? customPrompt : input;
+            if (draft.trim()) toast.warning('Analysis in progress', 'Your message will be sent once the current run finishes.');
+            return;
+        }
 
         // --- ROUTING LOGIC: Standard vs Accuracy Mode ---
         // Ensemble participants are model-level entries, not just provider
@@ -2322,11 +2330,27 @@ ${accuracyVerificationNote}`
                 return;
             }
 
+            // Offline sends are queued and re-dispatched on reconnect instead
+            // of landing as a dead error bubble (the queue was previously
+            // wired to the header badge but nothing ever enqueued).
+            if (typeof navigator !== 'undefined' && !navigator.onLine) {
+                try {
+                    await offlineQueue.add({ type: 'analysis', payload: { prompt: effectiveInput, images: imagesToUse.map(img => img.dataURL) } });
+                    updateRequestMessages(prev => [...prev, { id: `err-${Date.now()}`, role: MessageRole.SYSTEM, createdAt: new Date().toISOString(), text: "You're offline — this analysis was queued and will run automatically when you're back online." }]);
+                    return;
+                } catch (queueErr) {
+                    console.warn('[Pipeline] Failed to queue offline request:', queueErr);
+                }
+            }
+
             // Sanitize the fallback: never leak long key-like tokens (API keys)
             // and cap length so internal SDK errors stay readable but bounded.
             const rawMessage = error instanceof Error ? error.message : "An unknown error occurred.";
             const safeMessage = rawMessage.replace(/\b[A-Za-z0-9_-]{24,}\b/g, '***').slice(0, 500);
-            updateRequestMessages(prev => [...prev, { id: `err-${Date.now()}`, role: MessageRole.SYSTEM, createdAt: new Date().toISOString(), text: safeMessage }]);
+            // retryOf lets the error bubble rebuild the exact prompt + charts
+            // (the send cleared the composer immediately, so a failure left
+            // the user with no way to re-run the same setup).
+            updateRequestMessages(prev => [...prev, { id: `err-${Date.now()}`, role: MessageRole.SYSTEM, createdAt: new Date().toISOString(), text: safeMessage, retryOf: { userMessageId: userMessage.id } }]);
         } finally {
             if (analysisAbortController.current === currentAbortController) {
                 setLoadingMessage(null);

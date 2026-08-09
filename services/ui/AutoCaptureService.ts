@@ -832,7 +832,7 @@ export const generateComparisonBlock = (
     const origPattern = originalAnalysis.detectedPatternFamily || originalAnalysis.marketConditions?.pattern || 'N/A';
 
     const currentPrice = currentData.marketData.currentPrice;
-    const entryPrice = parseFloat(origEntry.replace(/[^0-9.]/g, ''));
+    const entryPrice = parsePrice(origEntry);
 
     // CRITICAL FIX: Determine the FINAL REFERENCE PRICE for post-mortem analysis
     // Priority: 1) historicalOutcome.priceAtHit (actual TP/SL hit), 2) currentPrice (fallback)

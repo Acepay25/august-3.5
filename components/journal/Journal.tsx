@@ -9,7 +9,7 @@ import ModelPerformanceDashboard from '../dashboards/ModelPerformanceDashboard';
 import ReasoningDashboard from '../dashboards/ReasoningDashboard';
 import { CloseIcon, HistoryIcon, StarIcon, ChartBarIcon, BrainIcon } from '../shared/Icons';
 import { exportTradesCSV, exportTradesHTML } from '../../utils/reportExport';
-import { AIProvider, LoggedTrade, TradeSummary, GlobalMemory } from '../../types';
+import { AIProvider, LoggedTrade, TradeSummary, GlobalMemory, TradeOutcome } from '../../types';
 import { computeJournalStats } from '../../utils/journalAnalytics';
 import { ProviderConfig } from '../../types/provider';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
@@ -37,6 +37,8 @@ interface JournalProps {
     /** (i/n) progress for manual insight-generation loops. */
     insightProgress?: { done: number; total: number } | null;
     onUpdateTradeLeverage: (id: string, leverage: number) => void;
+    /** Correct a mis-logged outcome from the expanded card. */
+    onUpdateOutcome?: (id: string, outcome: TradeOutcome) => void;
 
     // PerformanceReview Props
     finalSummary: string | null;
@@ -195,7 +197,7 @@ const JournalInner: React.FC<JournalProps> = ({
     isVisible, onClose, initialTab, isEmbedded = false,
     initialTradeId, onInitialTradeConsumed, username,
     // Trade Log Pass-through
-    trades, onDeleteTrades, onClearAllTrades, modelIdToName, onUpdateInsights, isSummarizing, currentInsightIds, onUpdateTradeLeverage,
+    trades, onDeleteTrades, onClearAllTrades, modelIdToName, onUpdateInsights, isSummarizing, currentInsightIds, onUpdateTradeLeverage, onUpdateOutcome,
     // Performance Review Pass-through
     finalSummary, individualSummaries, isLoading, isInsightGenerating, insightProgress, newlyAddedInsightIds, summarizationProvider, summarizationModel, onSetSummarizationProvider, onSetSummarizationModel, providers = [], summaryCharLimit = 1000, onUpdateSummaryCharLimit = () => {}, onRegenerateSummary = () => {}, onDeleteInsight, useAlgorithmicSummary = false, onToggleAlgorithmicSummary = () => {},
     // Analytics Pass-through
@@ -248,6 +250,7 @@ const JournalInner: React.FC<JournalProps> = ({
                 isSummarizing={isSummarizing}
                 currentInsightIds={currentInsightIds}
                 onUpdateTradeLeverage={onUpdateTradeLeverage}
+                onUpdateOutcome={onUpdateOutcome}
                 username={activeUsername}
             />
         ) : activeTab === 'performance' ? (

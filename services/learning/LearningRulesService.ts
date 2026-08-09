@@ -99,6 +99,20 @@ export const saveLearningRules = (storage: LearningRulesStorage): void => {
 };
 
 /**
+ * Remove every rule derived from the given trades (trade deletion cascade) —
+ * rules referencing deleted trades would otherwise describe setups that no
+ * longer exist in the journal.
+ */
+export const removeRulesForTrades = (tradeIds: string[]): void => {
+    if (tradeIds.length === 0) return;
+    const idSet = new Set(tradeIds);
+    const storage = loadLearningRules();
+    const nextRules = storage.rules.filter(r => !idSet.has(r.sourceTradeId));
+    if (nextRules.length === storage.rules.length) return;
+    saveLearningRules({ ...storage, rules: nextRules, lastUpdated: new Date().toISOString() });
+};
+
+/**
  * Extract IF/THEN rules from post-mortem text
  */
 export const extractIfThenRules = (

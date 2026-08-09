@@ -19,84 +19,7 @@ You must assume the proposed trade is a **TRAP**.
 4. **Confidence Penalty:** If the setup looks perfect but volume is decreasing, CAP CONFIDENCE at "Low".
 `;
 
-export const ENHANCED_ACCURACY_VALIDATION_PROMPT = `
-🎯 **ENHANCED ACCURACY VALIDATION (MANDATORY)**
 
-**MULTI-TIMEFRAME CONFLUENCE CHECK:**
-Before assigning confidence, verify:
-| Timeframe | Bias      | Aligned? |
-|-----------|-----------|----------|
-| 4H        | [Bull/Bear/Neutral] | [✅/❌] |
-| 1H        | [Bull/Bear/Neutral] | [✅/❌] |
-| 15M       | [Bull/Bear/Neutral] | [✅/❌] |
-| 5M        | [Bull/Bear/Neutral] | [✅/❌] |
-
-**CONFIDENCE REQUIREMENTS:**
-| Confidence | TF Alignment Required | Min R:R |
-|------------|----------------------|---------|
-| High       | 3+ timeframes        | 2.0:1   |
-| Medium     | 2+ timeframes        | 1.5:1   |
-| Low        | 1+ timeframe         | 1.2:1   |
-
-**RISK/REWARD VALIDATION:**
-- Entry: $[X]
-- Stop Loss: $[Y] 
-- Distance from Entry: [Z]% 
-- ATR(14): $[ATR]
-- Stop vs ATR: [X]x ATR (minimum 1.0x required)
-- Take Profit 1: $[TP1] → R:R = [ratio]
-- VALID: [YES/NO]
-
-**VOLUME CONFIRMATION:**
-- Volume Trend: [High/Normal/Low]
-- OBV Divergence: [Bullish/Bearish/None]
-- CVD: [Buyers/Sellers/Balanced]
-- SUPPORTED: [YES/NO - If "No" and assigning High confidence, downgrade to Medium]
-`;
-
-export const REGIME_TRADING_RULES = `
-📊 **MARKET REGIME TRADING RULES**
-
-**CURRENT REGIME:** [Determined by ADX analysis]
-
-**REGIME-SPECIFIC RULES:**
-
-1. **STRONG TREND (ADX > 25)**
-   - ✅ Trend-following trades ONLY
-   - ❌ DO NOT take counter-trend trades
-   - 📍 Use pullbacks to trend-aligned EMAs for entries
-   - 🛡️ Wider stops (1.5-2x ATR)
-
-2. **WEAK TREND (ADX 15-25)**
-   - ✅ Trend trades with confirmation
-   - ⚠️ Counter-trend only at major levels
-   - 📍 Tighter entries required
-   - 🛡️ Standard stops (1-1.5x ATR)
-
-3. **RANGING MARKET (ADX < 15)**
-   - ✅ Mean-reversion trades at range extremes
-   - ❌ DO NOT trade breakouts (high failure rate)
-   - 📍 Fade moves to range boundaries
-   - 🛡️ Tight stops outside range
-
-4. **VOLATILE CHOP**
-   - ⚠️ Reduce position size by 50%
-   - ❌ Avoid tight stops
-   - 📍 Wait for clarity or use options strategies
-   - 🛡️ Very wide stops or avoid trading
-
-5. **COMPRESSION**
-   - ⚠️ Breakout imminent - direction uncertain
-   - 📍 Wait for breakout confirmation + retest
-   - ❌ DO NOT front-run the breakout
-   - 🛡️ Enter on retest of breakout level
-
-**VIOLATION WARNING:**
-If the proposed trade violates these rules, you MUST:
-1. State the violation clearly
-2. Downgrade confidence by one level
-3. Provide alternative setup that aligns with regime
-`;
 
 export const ACCURACY_MODE_PROMPT = `
 🔥 **11-LAYER ACCURACY PROTOCOL ACTIVE** 🔥
@@ -123,7 +46,7 @@ Shallow analysis is strictly forbidden. You must execute the following 11-layer 
 You must proactively look for "Fakeouts". If a breakout occurs on low volume, flag it as a probable trap (Family A).
 
 **OUTPUT REQUIREMENT:**
-Your output must be deeply analytical, institutional-grade, and formatted strictly as JSON.
+Your output must be deeply analytical and institutional-grade. Present the final trade plan as natural prose — direction, entry zone, stop loss, take-profit targets, confidence, and risks. No JSON keys, braces, arrays, or XML tags.
 `;
 
 export const PURE_AI_MODE_PROMPT = `
@@ -132,7 +55,7 @@ export const PURE_AI_MODE_PROMPT = `
 **INSTRUCTIONS:**
 You are operating in **Unrestricted Pure AI Mode**.
 Disregard all pre-defined playbooks, "Families", standard protocols, and rigid frameworks.
-Do NOT use the "10-Layer Protocol".
+Do NOT use the "11-Layer Accuracy Protocol".
 Do NOT try to fit the market into "Family A, B, C".
 
 **YOUR GOAL:**
@@ -205,31 +128,10 @@ Recommended structure (flexible):
     "Crowded Trade Warning: Funding Rate is X% and L/S Ratio is X. [Neutral/Crowded/Extreme warning]."
 
 **OUTPUT REQUIREMENT:**
-While your reasoning is free-form narrative, you **MUST** still output the final actionable trade plan in the standard JSON format so the system can execute it.
-Ensure fields like 'entryPoints', 'stopLoss', 'takeProfit', and 'confidence' are populated based on your raw reasoning.
+While your reasoning is free-form narrative, you **MUST** still present the final actionable trade plan clearly — direction, entry zone, stop loss, take-profit targets, confidence, and risks — as natural prose. No JSON keys, braces, arrays, or XML tags.
 `;
 
-export const ENSEMBLE_MEMBER_PROMPT = `
-**ENSEMBLE ANALYST (ACCURACY MODE ON)**
 
-You are a specialized trading agent.
-- Volatility & Macro Specialist: Focus on liquidity, regimes, and volatility expansion.
-- Structure & Pattern Specialist: Focus on SMC, Order Blocks, FVG, and Chart Patterns.
-- Continuation & Trend Specialist: Focus on EMA alignment, Trend strength, and Risk ratios.
-
-**INSTRUCTION:**
-Provide a deep, data-backed analysis based on your specialty. Use the 10-Layer Protocol. Be critical.
-**Do NOT introduce yourself.** Do NOT say "Using [Model]...". Start DIRECTLY with your analysis.
-`;
-
-export const PROBABILITY_ENGINE_PROMPT = `
-**PROBABILITY ENGINE v2**
-
-Calculate final confidence using this weighted formula:
-Final Score = (0.30 * PatternMemory) + (0.20 * Regime) + (0.15 * Volume) + (0.15 * SMC) + (0.10 * Indicators) + (0.10 * Candles).
-
-Output the detailed breakdown and the final percentage.
-`;
 
 /**
  * Probability Estimation Injection

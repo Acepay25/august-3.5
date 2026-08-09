@@ -17,9 +17,10 @@ import { sanitizeAIResponse, sanitizeAIResponseLight, sanitizeJSONString } from 
 import { sanitizeTradeAnalysis, truncateTextToTokens, formatAnalysisForDisplay, parsePrice } from '../../utils/analysisUtils';
 import { parseGlobalMemory, parseStrategySearchResults } from '../../schemas/learning';
 import {
-    MASTER_ANALYSIS_PROMPT, DEVILS_ADVOCATE_PROMPT, INVALIDATION_THESIS_PROMPT, CORRELATION_AWARENESS_PROMPT,
+    MASTER_ANALYSIS_PROMPT,
     LENS_MODE_BASE_PROMPT, COMPACT_ANALYSIS_PROMPT, ACCURACY_MODE_PROMPT, PURE_AI_MODE_PROMPT,
     RISK_MANAGEMENT_RULES, TRADING_FAMILIES_PROMPT, AI_PROVIDER_MEMORY_ENFORCEMENT_PROMPT,
+    ENTRY_NOT_HIT_ANALYSIS_PROMPT, ENTRY_NOT_HIT_ANALYSIS_QUESTIONS,
 } from '../../constants/prompts';
 import { constructOptimizedContext } from '../../utils/memoryUtils';
 import { parseLiveMarketData } from '../../utils/liveMarketParser';
@@ -180,8 +181,6 @@ export async function analyzeTradingView(
 
       ${userOverride}
 
-      ${marketDataOverride}
-
       ${playbookContext}
 
       ${familiesContext}
@@ -203,8 +202,6 @@ export async function analyzeTradingView(
       ${visionDeepDive}
 
       ${userOverride}
-
-      ${marketDataOverride}
 
       **CONTEXTUAL DATA:**
       **PLAYBOOK: CORE TRADING FRAMEWORKS**
@@ -230,17 +227,9 @@ export async function analyzeTradingView(
 
       ${rolePrompt ? '' : visionDeepDive}
 
-      ${rolePrompt ? '' : DEVILS_ADVOCATE_PROMPT}
-
-      ${rolePrompt ? '' : INVALIDATION_THESIS_PROMPT}
-
-      ${rolePrompt ? '' : CORRELATION_AWARENESS_PROMPT}
-
       ${AI_PROVIDER_MEMORY_ENFORCEMENT_PROMPT}
 
       ${userOverride}
-
-      ${marketDataOverride}
 
       **CONTEXTUAL DATA:**
       **PLAYBOOK: CORE TRADING FRAMEWORKS**
@@ -393,7 +382,7 @@ export async function analyzeTradingView(
     // Standard mode uses pattern memory + recent insights blocks; accuracy mode relies on global memory context.
     let userPromptText: string;
     if (isAccuracyMode) {
-        userPromptText = `${formattedPrompt}${imageSummaryContext}\n\n${memoryContext}\n\nPresent your readable trade proposal.`;
+        userPromptText = `${formattedPrompt}${marketDataOverride}\n\n${imageSummaryContext}\n\n${memoryContext}\n\nPresent your readable trade proposal.`;
     } else {
         const patternMemoryContext = finalTradeSummary
             ? truncateTextToTokens(`\n\n** PATTERN MEMORY (SYNTHESIS) - MANDATORY REFERENCE:**\nThe following is a synthesis of your recent trading performance and patterns. You MUST reference this data for Section 4 (Pattern Matching):\n${finalTradeSummary}\n`, 600)
@@ -418,7 +407,7 @@ export async function analyzeTradingView(
             const truncatedPattern = patternMemoryContext.length > 600 ? patternMemoryContext.substring(0, 600) + '...[truncated for TPM]' : patternMemoryContext;
             const truncatedInsights = recentInsightsContext.length > 300 ? recentInsightsContext.substring(0, 300) + '...[truncated for TPM]' : recentInsightsContext;
             const truncatedMemory = memoryContext.length > 600 ? memoryContext.substring(0, 600) + '...[truncated for TPM]' : memoryContext;
-            userPromptText = `${formattedPrompt}${truncatedImages}\n\n${truncatedPattern}\n\n${truncatedInsights}\n\n${truncatedMemory}\n\nPresent your readable trade proposal.`;
+            userPromptText = `${formattedPrompt}${marketDataOverride}\n\n${truncatedImages}\n\n${truncatedPattern}\n\n${truncatedInsights}\n\n${truncatedMemory}\n\nPresent your readable trade proposal.`;
         }
     }
 
@@ -659,14 +648,7 @@ If this trade hit the 150% extended zone or is a missed win, FLAG THIS PATTERN c
 
     if (outcome === TradeOutcome.ENTRY_NOT_HIT) {
         const userFeedbackBlock = correctedEntry ? `**USER FEEDBACK: CORRECTED ENTRY** The user provided a corrected entry: **${correctedEntry}**.` : '';
-        analysisPrompt = `**Role:**
-You are an advanced trade post-analysis engine focused on execution review and learning optimization.
-
-**Task:**
-Perform a mandatory **ENTRY_NOT_HIT** analysis for a trading setup that did not trigger, identifying whether the setup was valid, whether the directional bias was correct, and what execution or timing factors caused the miss.
-
-**Context:**
-This analysis applies **only** to trades where the entry price was not hit. The goal is to extract actionable learning rules to reduce future missed opportunities without changing the original strategy intent.
+        analysisPrompt = `${ENTRY_NOT_HIT_ANALYSIS_PROMPT}
 
 **PREVIOUS ANALYSIS:**
 ${JSON.stringify(previousMessage.analysis, null, 2)}
@@ -681,47 +663,7 @@ ${tradeHistoryContext}
 
 ${groundingDirective}
 
-**Instructions:**
-Answer **all** of the following **MANDATORY ENTRY_NOT_HIT ANALYSIS QUESTIONS** clearly and objectively:
-
-1. **Setup Validity Check**
-   * Was the original setup objectively valid based on the defined pattern/strategy rules?
-
-2. **Direction Accuracy**
-   * Did price eventually move in the predicted direction?
-   * Explicitly confirm whether the projected TP level would have been hit.
-
-3. **Entry Type Analysis**
-   * Identify the reason the entry was missed:
-     * Limit order miss
-     * Trader hesitation
-     * No valid trigger condition
-
-4. **Market Context at Entry Time**
-   * Describe what was occurring at the exact moment price approached the intended entry (structure, volatility, momentum, liquidity behavior).
-
-5. **Opportunity Cost Assessment**
-   * If direction was correct, quantify the missed move (e.g., percentage move, R multiple, or distance to TP after near-entry).
-
-**Critical Learning Output (REQUIRED):**
-* Generate **one clear IF / THEN rule** that directly addresses **only one** of the following improvement areas:
-  * Better entry placement strategy
-  * Alternative entry types (market vs limit)
-  * Entry anticipation techniques
-  * Setup recognition timing improvements
-
-**Classification Rule:**
-* If the setup was **VALID** and the direction was **CORRECT**, explicitly flag the case as:
-  **"MISSED OPPORTUNITY"**
-  and mark it for future pattern learning and probability adjustment.
-
-**Output Format:**
-* Sectioned responses matching the numbered questions
-* A clearly labeled **IF / THEN Learning Rule**
-* Final classification label (MISSED OPPORTUNITY or NOT MISSED OPPORTUNITY)
-
-**Tone / Style:**
-Analytical, precise, execution-focused, and rule-driven.`;
+${ENTRY_NOT_HIT_ANALYSIS_QUESTIONS}`;
     } else if (outcome === TradeOutcome.WIN) {
         const feedbackBlock = `**USER FEEDBACK (TRADE OUTCOME):**
 ${correctedStopLoss ? `- Corrected SL: ${correctedStopLoss}` : ''}
@@ -932,8 +874,10 @@ export async function getQuickResponse(
         messages.push({ role: 'user', content: prompt });
     }
 
-    const result = await sendChatRequest(config, messages, { maxTokens: 1024, signal, onReasoning });
-    return sanitizeAIResponse(result || "I am sorry, I could not generate a response.");
+    const result = await sendChatRequest(config, messages, { maxTokens: 2048, signal, onReasoning });
+    // Chat replies render via MarkdownRenderer — the light sanitizer keeps the
+    // model's markdown (bold/lists/code) instead of flattening it to plain text.
+    return sanitizeAIResponseLight(result || "I am sorry, I could not generate a response.");
 }
 
 // ─── summarizeChartImage (vision/OCR) ───────────────────────────────────────
@@ -1035,7 +979,7 @@ export async function summarizeChartImage(
             ],
         }];
 
-        const fullSummary = await sendChatRequest(config, messages, { maxTokens: 1024, signal });
+        const fullSummary = await sendChatRequest(config, messages, { maxTokens: 2560, signal });
 
         const timeframeMatch = fullSummary.match(/Timeframe:\s*(.*?)(?:\n|$)/i);
         const priceMatch = fullSummary.match(/(?:Current )?Price:\s*(.*?)(?:\n|$)/i);
@@ -1126,7 +1070,7 @@ export async function discoverStrategies(
     const result = await sendChatRequest(config, [{ role: 'user', content: prompt }], { jsonMode: true, signal });
     if (!result) return [];
     try {
-        const parsed = JSON.parse(result);
+        const parsed = extractAndParseJson(result) || {};
         const results = Array.isArray(parsed) ? parsed : (parsed.results || parsed.strategies || []);
         return results.filter((r: any) =>
             r.name && typeof r.name === 'string' &&
@@ -1408,7 +1352,7 @@ Generate the updated Global Memory JSON object.
 
     const result = await sendChatRequest(config, [{ role: 'user', content: prompt }], { jsonMode: true, maxTokens: 2048, signal });
     try {
-        const parsed = parseGlobalMemory(JSON.parse(result || "{}"));
+        const parsed = parseGlobalMemory(extractAndParseJson(result) || {});
         if (parsed) return parsed;
         console.error(`${config.name} updateGlobalMemory produced invalid memory shape:`, result);
     } catch {

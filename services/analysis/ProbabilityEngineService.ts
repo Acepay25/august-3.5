@@ -137,11 +137,18 @@ function euclideanDistance(a: FeatureVector, b: FeatureVector): number {
     const wRSI = 1 / 20;
     const wADX = 1 / 20;
     const wMACD = 1 / 50; // Hist can be large
+    // Funding rate scaled to bps (0.01% = 1bp) — extracted into the feature
+    // vector but previously never used in similarity; regime mismatch adds a
+    // fixed term (0 same / 0.5 different) so context matches matter.
+    const wFunding = 1 / 10;
+    const regimeDiff = a.regime === b.regime ? 0 : 1;
 
     return Math.sqrt(
         Math.pow((a.rsi - b.rsi) * wRSI, 2) +
         Math.pow((a.adx - b.adx) * wADX, 2) +
-        Math.pow((a.macdHist - b.macdHist) * wMACD, 2)
+        Math.pow((a.macdHist - b.macdHist) * wMACD, 2) +
+        Math.pow((a.fundingRate - b.fundingRate) * 100 * wFunding, 2) +
+        Math.pow(regimeDiff * 0.5, 2)
     );
 }
 

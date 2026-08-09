@@ -172,12 +172,16 @@ export const getImageHash = (dataURL: string): string => {
 
 /**
  * Build a cache key for a full AI response.
+ * `providerId` is REQUIRED in the key: two providers sharing a model id (two
+ * OpenAI-compatible endpoints both listing `gpt-4o`) would otherwise serve
+ * each other's cached analysis, and a disabled provider's output could be
+ * returned for the same chart.
  * `contextKey` folds mode/role context (deep analysis, accuracy submode, lens
  * role prompt, custom ensemble prompt) into the key so a 10-minute-TTL hit can
  * never serve an analysis computed under a different mode for the same chart.
  */
-const buildResponseKey = (imageHashes: string[], promptHash: string, model: string, contextKey?: string): string => {
-  return `${imageHashes.sort().join('+')}:${promptHash}:${model}${contextKey ? `:${contextKey}` : ''}`;
+const buildResponseKey = (imageHashes: string[], promptHash: string, model: string, providerId: string, contextKey?: string): string => {
+  return `${imageHashes.sort().join('+')}:${promptHash}:${model}:${providerId}${contextKey ? `:${contextKey}` : ''}`;
 };
 
 /**
@@ -189,9 +193,10 @@ export const getCachedResponse = async (
   imageHashes: string[],
   prompt: string,
   model: string,
+  providerId: string,
   contextKey?: string
 ): Promise<CachedResponse | undefined> => {
-  const key = buildResponseKey(imageHashes, hashString(prompt), model, contextKey);
+  const key = buildResponseKey(imageHashes, hashString(prompt), model, providerId, contextKey);
   const hit = responseCache.get(key);
   if (hit) return hit;
 
@@ -211,9 +216,10 @@ export const cacheResponse = (
   prompt: string,
   model: string,
   response: { thoughtProcess: string; finalOutput?: string; analysis: unknown; sources?: unknown[] },
+  providerId: string,
   contextKey?: string
 ): void => {
-  const key = buildResponseKey(imageHashes, hashString(prompt), model, contextKey);
+  const key = buildResponseKey(imageHashes, hashString(prompt), model, providerId, contextKey);
   const entry: CachedResponse = {
     ...response,
     model,
