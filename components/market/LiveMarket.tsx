@@ -195,7 +195,10 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze }
     // Esc closes the overlay (was a navigation dead-end).
     useEscapeClose(isVisible, onClose);
     const [symbol, setSymbol] = useState('ETHUSDT');
-    const [interval, setInterval] = useState('15m');
+    // Renamed from `interval` — a state variable named `interval` shadows the
+    // global setInterval, making any future bare setInterval(...) call throw
+    // "setInterval is not a function".
+    const [chartInterval, setChartInterval] = useState('15m');
     const [alerts, setAlerts] = useState<Alert[]>([]);
     const alertsRef = useRef<Alert[]>([]);
 
@@ -263,7 +266,7 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze }
             tradingViewWidgetRef.current = new window.TradingView.widget({
                 autosize: true,
                 symbol: chartSymbol,
-                interval: mapIntervalToTradingView(interval),
+                interval: mapIntervalToTradingView(chartInterval),
                 timezone: "Etc/UTC",
                 theme: "dark",
                 style: "1",
@@ -308,7 +311,7 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze }
                 widgetRef.current.innerHTML = '';
             }
         };
-    }, [isVisible, symbol, interval]);
+    }, [isVisible, symbol, chartInterval]);
 
     // AI Analysis for chart
     useEffect(() => {
@@ -326,7 +329,7 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze }
             setIsAIAnalyzing(true);
             try {
                 // Fetch kline data for AI analysis
-                const klines = await fetchKlines(symbol, interval, 300);
+                const klines = await fetchKlines(symbol, chartInterval, 300);
                 if (klines.length < 50) {
                     setIsAIAnalyzing(false);
                     return;
@@ -341,7 +344,7 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze }
                     close: k.close,
                 }));
 
-                const analysis = await analyzeWithAI(candles, symbol, interval);
+                const analysis = await analyzeWithAI(candles, symbol, chartInterval);
 
                 if (isMountedRef.current && requestId === aiAnalysisRequestRef.current) {
                     setMarketBias(analysis.marketBias);
@@ -360,7 +363,7 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze }
         // Debounce to avoid rapid calls
         const timeout = setTimeout(runAIAnalysis, 500);
         return () => clearTimeout(timeout);
-    }, [isVisible, symbol, interval]);
+    }, [isVisible, symbol, chartInterval]);
     useEffect(() => {
         if (!isVisible) {
             setConnectionState({ status: 'connecting', source: 'socket' });
@@ -699,7 +702,7 @@ ${JSON.stringify(marketData, null, 2)}
     if (!isVisible) return null;
 
     return (
-        <div className="status-surface fixed inset-0 bg-zinc-950 z-50 flex flex-col animate-fade-in pb-[env(safe-area-inset-bottom)]">
+        <div role="dialog" aria-modal="true" aria-label="Live Market" className="status-surface fixed inset-0 bg-zinc-950 z-50 flex flex-col animate-fade-in pb-[env(safe-area-inset-bottom)]">
             {/* Header - 2 rows on mobile for spacious feel */}
             <div className="bg-zinc-900 border-b border-white/10 flex-shrink-0 shadow-lg shadow-black/20">
                 {/* Top Row - Title, Price & Close */}
@@ -769,8 +772,8 @@ ${JSON.stringify(marketData, null, 2)}
                         {/* Interval Selector */}
                         <div className="relative shrink-0">
                             <select
-                                value={interval}
-                                onChange={(e) => setInterval(e.target.value)}
+                                value={chartInterval}
+                                onChange={(e) => setChartInterval(e.target.value)}
                                 aria-label="Chart interval"
                                 className="appearance-none bg-zinc-800 text-white text-sm font-bold h-12 pl-4 pr-10 rounded-xl border border-white/10 focus:outline-none focus:border-cyan-500 cursor-pointer hover:bg-zinc-700 transition-colors min-w-[78px]"
                             >
@@ -959,9 +962,11 @@ ${JSON.stringify(marketData, null, 2)}
                         </div>
                     )}
 
-                    {/* Loading State */}
+                    {/* Loading State — no id here: the aria-controls target
+                        above is the expanded content panel, and a duplicate
+                        id would make the two divs indistinguishable. */}
                     {isInsightsPanelExpanded && isAIAnalyzing && (
-                        <div id="live-market-insights" className="px-4 sm:px-6 pb-6">
+                        <div className="px-4 sm:px-6 pb-6">
                             <div className="bg-zinc-800 rounded-xl p-6 border border-white/5 flex flex-col items-center justify-center gap-3">
                                 <Spinner size="w-8 h-8" color="border-cyan-400" />
                                 <span className="text-sm text-zinc-400">Analyzing market conditions...</span>

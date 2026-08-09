@@ -378,16 +378,20 @@ export async function analyzeTradingView(
 
         if (isSmallContextModel(modelName)) {
             const effectiveSystemPrompt = COMPACT_ANALYSIS_PROMPT;
-            const minimalPattern = patternMemoryContext.length > 500 ? patternMemoryContext.substring(0, 500) + '...[truncated]' : patternMemoryContext;
-            const minimalInsights = recentInsightsContext.length > 300 ? recentInsightsContext.substring(0, 300) + '...[truncated]' : recentInsightsContext;
-            const minimalImages = imageSummaryContext.length > 600 ? imageSummaryContext.substring(0, 600) + '...[truncated]' : imageSummaryContext;
+            const minimalPattern = patternMemoryContext.length > 400 ? patternMemoryContext.substring(0, 400) + '...[truncated]' : patternMemoryContext;
+            const minimalInsights = recentInsightsContext.length > 200 ? recentInsightsContext.substring(0, 200) + '...[truncated]' : recentInsightsContext;
+            const minimalImages = imageSummaryContext.length > 500 ? imageSummaryContext.substring(0, 500) + '...[truncated]' : imageSummaryContext;
             systemPrompt = effectiveSystemPrompt;
             userPromptText = `${formattedPrompt}\n\n${marketDataOverride}\n\n${minimalImages}\n\n${minimalPattern}\n\n${minimalInsights}\n\nReturn readable THINKING and FINAL_OUTPUT sections only.`;
         } else {
-            const truncatedImages = imageSummaryContext.length > 600 ? imageSummaryContext.substring(0, 600) + '...[truncated for TPM]' : imageSummaryContext;
-            const truncatedPattern = patternMemoryContext.length > 400 ? patternMemoryContext.substring(0, 400) + '...[truncated for TPM]' : patternMemoryContext;
+            // Capable models get the LARGER budgets — this was inverted (they
+            // were cut harder than the small-context branch, defeating the
+            // token-level truncation above). Pattern memory & insights are the
+            // highest-value context for the trade proposal.
+            const truncatedImages = imageSummaryContext.length > 800 ? imageSummaryContext.substring(0, 800) + '...[truncated for TPM]' : imageSummaryContext;
+            const truncatedPattern = patternMemoryContext.length > 600 ? patternMemoryContext.substring(0, 600) + '...[truncated for TPM]' : patternMemoryContext;
             const truncatedInsights = recentInsightsContext.length > 300 ? recentInsightsContext.substring(0, 300) + '...[truncated for TPM]' : recentInsightsContext;
-            const truncatedMemory = memoryContext.length > 500 ? memoryContext.substring(0, 500) + '...[truncated for TPM]' : memoryContext;
+            const truncatedMemory = memoryContext.length > 600 ? memoryContext.substring(0, 600) + '...[truncated for TPM]' : memoryContext;
             userPromptText = `${formattedPrompt}${truncatedImages}\n\n${truncatedPattern}\n\n${truncatedInsights}\n\n${truncatedMemory}\n\nReturn readable THINKING and FINAL_OUTPUT sections only.`;
         }
     }
@@ -760,6 +764,104 @@ Answer **all** of the following **MANDATORY LOSS ANALYSIS QUESTIONS**:
         { signal }
     );
     return sanitizeAIResponse(result || "Post-mortem analysis failed.");
+}
+
+// ─── conductTodayReassessment ("What would I do today?") ────────────────────
+// A closed trade's post-mortem is hindsight. This re-assesses the SAME setup
+// against TODAY's market price and answers forward-looking: would I still take
+// it? The model is told the outcome (so it can't pretend ignorance) but the
+// verdict must be about the setup's validity NOW, not about the past.
+
+export interface TodayReassessmentParams {
+    analysis: TradeAnalysis;
+    postMortem: string;
+    /** Actual trade outcome — optional; omitted when unknown. */
+    outcome?: TradeOutcome;
+    currentPrice: number;
+    signal?: AbortSignal;
+}
+
+export type TodayVerdict = 'YES' | 'NO' | 'MAYBE';
+
+const TODAY_REASSESSMENT_MAX_PM_CHARS = 1500;
+
+/**
+ * Build the reassessment prompt. Pure + exported for unit tests.
+ */
+export const buildTodayReassessmentPrompt = (params: TodayReassessmentParams): string => {
+    const { analysis, postMortem, outcome, currentPrice } = params;
+    const entry = analysis.entryPoints?.[0]?.price || 'N/A';
+    const sl = analysis.stopLoss || 'N/A';
+    const tps = (analysis.takeProfit || []).map(tp => tp.price).filter(Boolean);
+    const pmExcerpt = (postMortem || '').trim().slice(0, TODAY_REASSESSMENT_MAX_PM_CHARS) || 'No post-mortem available.';
+    const priceLine = currentPrice > 0
+        ? `**CURRENT MARKET PRICE (TODAY):** $${currentPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+        : '**CURRENT MARKET PRICE:** unavailable right now — reason from the levels alone and say so if you cannot judge.';
+
+    return `**Role:**
+You are a forward-looking trading reviewer. You are re-examining a CLOSED trade's setup with fresh eyes TODAY.
+
+**THE RULE:**
+- The past outcome is known and useful context, but your verdict must be about whether this setup would be a valid trade **if it appeared in the market TODAY**.
+- Do NOT let hindsight decide for you. A losing trade can still be a good setup; a winning trade can still be a bad one.
+- Judge using TODAY's price vs the original levels, not the exit.
+
+**ORIGINAL SETUP:**
+- Coin: ${analysis.coinName || 'N/A'}
+- Direction: ${analysis.direction || 'N/A'}
+- Entry: ${entry} | Stop Loss: ${sl}${tps.length ? ` | Take Profits: ${tps.join(', ')}` : ''}
+- Confidence: ${analysis.confidence || 'N/A'} (${analysis.probability != null ? analysis.probability + '%' : 'N/A'})
+- Strategy: ${analysis.strategy || 'N/A'}
+
+${priceLine}
+
+**ACTUAL OUTCOME (hindsight):** ${outcome ?? 'N/A'}
+
+**POST-MORTEM LESSON (condensed):**
+${pmExcerpt}
+
+**ANSWER:**
+1. Would you still take this setup TODAY? Give a direct verdict.
+2. What has changed since the setup appeared (price location vs entry/SL/TP, structure, edge)?
+3. What specific condition would need to change for your answer to flip?
+
+**MANDATORY FORMAT:**
+End your response with an explicit verdict tag on its own line:
+<TODAY_VERDICT>YES</TODAY_VERDICT>  (or NO / MAYBE)
+
+YES = you would take this exact setup today; NO = you would not; MAYBE = needs a specific confirmation before deciding.`;
+};
+
+/** Parse the mandatory verdict tag out of a reassessment response. Pure. */
+export const parseTodayReassessment = (text: string): { verdict: TodayVerdict | 'UNKNOWN'; body: string } => {
+    const tagMatch = text.match(/<TODAY_VERDICT>\s*(YES|NO|MAYBE)\s*<\/TODAY_VERDICT>/i);
+    const verdict = tagMatch ? (tagMatch[1].toUpperCase() as TodayVerdict) : 'UNKNOWN';
+    const body = text
+        .replace(/<TODAY_VERDICT>\s*(?:YES|NO|MAYBE)\s*<\/TODAY_VERDICT>/gi, '')
+        .trim();
+    return { verdict, body: body || text.trim() };
+};
+
+/**
+ * Run a single-provider "what would I do today?" re-assessment.
+ * @returns the verdict + the model's reasoning (verdict tag stripped).
+ */
+export async function conductTodayReassessment(
+    config: ProviderConfig,
+    params: TodayReassessmentParams
+): Promise<{ verdict: TodayVerdict; text: string }> {
+    const prompt = buildTodayReassessmentPrompt(params);
+    const result = await sendChatRequest(
+        config,
+        [{ role: 'user', content: prompt }],
+        { signal: params.signal }
+    );
+    // Parse the tag from the RAW response — sanitizeAIResponse strips all
+    // <...> HTML tags, which would destroy <TODAY_VERDICT> before we see it.
+    const { verdict, body } = parseTodayReassessment(result || '');
+    // A missing/ambiguous tag defaults to MAYBE — never invent a hard yes/no
+    // the model didn't commit to. Sanitize only the displayed body.
+    return { verdict: verdict === 'UNKNOWN' ? 'MAYBE' : verdict, text: sanitizeAIResponse(body) };
 }
 
 // ─── getQuickResponse ───────────────────────────────────────────────────────

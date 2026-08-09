@@ -16,7 +16,7 @@ export function useAppSettings() {
     // Memory Provider Selection
     const [memoryConfig, setMemoryConfig] = useState<ProviderConfig | null>(null);
     const [memoryModel, setMemoryModel] = useState<string>('');
-    const [isGlobalMemoryEnabled, setIsGlobalMemoryEnabled] = useState<boolean>(true);
+    const [isGlobalMemoryEnabled, setIsGlobalMemoryEnabled] = useState<boolean>(false);
 
     // Accuracy Mode State
     const [isAccuracyModeEnabled, setIsAccuracyModeEnabled] = useState<boolean>(false);

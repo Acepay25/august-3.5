@@ -11,6 +11,9 @@
 const DB_NAME = 'august-cache';
 const STORE_NAME = 'kv';
 const MAX_ENTRIES = 200;
+// AI response cache entries go stale fast (market context moves) — anything
+// older than this is dead weight and evicted first under pressure.
+const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 export interface PersistentEntry<T> {
   key: string;
@@ -23,7 +26,10 @@ let dbPromise: Promise<IDBDatabase> | null = null;
 const openDb = (): Promise<IDBDatabase> => {
   if (typeof indexedDB === 'undefined') return Promise.reject(new Error('IndexedDB unavailable'));
   if (dbPromise) return dbPromise;
-  dbPromise = new Promise((resolve, reject) => {
+  // Local const so the explicit type survives flow analysis — `dbPromise`
+  // itself is widened (the catch closure reassigns it to null) and would
+  // otherwise fail the final return type.
+  const promise: Promise<IDBDatabase> = new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, 1);
     request.onupgradeneeded = () => {
       const db = request.result;
@@ -33,8 +39,15 @@ const openDb = (): Promise<IDBDatabase> => {
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
+  }).catch((err: unknown): never => {
+    // Never cache a rejected promise: one transient failure (private mode,
+    // version conflict, quota) would otherwise poison EVERY later read/write
+    // for the rest of the session. Reset so the next call retries.
+    dbPromise = null;
+    throw err;
   });
-  return dbPromise;
+  dbPromise = promise;
+  return promise;
 };
 
 export const persistentGet = async <T>(key: string): Promise<PersistentEntry<T> | null> => {
@@ -59,28 +72,31 @@ export const persistentSet = async (key: string, value: unknown, timestamp: numb
       const store = tx.objectStore(STORE_NAME);
       store.put({ key, value, timestamp } as PersistentEntry<unknown>);
 
-      // Cap the store: evict the OLDEST entries beyond MAX_ENTRIES.
-      // openCursor walks in KEY order (hashed keys — not age), so collect all
-      // entries first and delete the oldest by timestamp — otherwise fresh
-      // entries (including the one just written) could be evicted while
-      // expired junk survives.
+      // Cap the store under pressure (count at/over the cap): evict TTL-expired
+      // entries first, then the OLDEST remaining — by timestamp, not cursor
+      // key order (hashed keys — openCursor walks in key order, not age).
+      // Otherwise fresh entries (including the one just written) could be
+      // evicted while expired junk survives.
       const countReq = store.count();
       countReq.onsuccess = () => {
-        const overflow = countReq.result - MAX_ENTRIES;
-        if (overflow > 0) {
-          const collected: { key: IDBValidKey; timestamp: number }[] = [];
-          const scanReq = store.openCursor();
-          scanReq.onsuccess = () => {
-            const cursor = scanReq.result;
-            if (cursor) {
-              collected.push({ key: cursor.key, timestamp: (cursor.value as { timestamp?: number })?.timestamp ?? 0 });
-              cursor.continue();
-            } else {
-              collected.sort((a, b) => a.timestamp - b.timestamp);
-              for (const entry of collected.slice(0, overflow)) store.delete(entry.key);
-            }
-          };
-        }
+        if (countReq.result <= MAX_ENTRIES) return;
+        const collected: { key: IDBValidKey; timestamp: number }[] = [];
+        const scanReq = store.openCursor();
+        scanReq.onsuccess = () => {
+          const cursor = scanReq.result;
+          if (cursor) {
+            collected.push({ key: cursor.key, timestamp: (cursor.value as { timestamp?: number })?.timestamp ?? 0 });
+            cursor.continue();
+          } else {
+            const now = Date.now();
+            const expired = collected.filter(entry => now - entry.timestamp > CACHE_TTL_MS);
+            for (const entry of expired) store.delete(entry.key);
+            const survivors = collected.filter(entry => now - entry.timestamp <= CACHE_TTL_MS);
+            survivors.sort((a, b) => a.timestamp - b.timestamp);
+            const overflow = survivors.length - (MAX_ENTRIES - expired.length);
+            for (const entry of survivors.slice(0, Math.max(0, overflow))) store.delete(entry.key);
+          }
+        };
       };
 
       tx.oncomplete = () => resolve();

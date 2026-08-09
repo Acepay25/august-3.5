@@ -1,0 +1,208 @@
+/**
+ * SetupWatchControl — "Watch this setup" button + status pill for an
+ * analysis card.
+ *
+ * Idle: opens an inline trigger-config popover (price above / below / ±% move).
+ * Armed: amber pill showing the trigger + cancel button.
+ * Triggered: neutral pill — the re-debate was launched.
+ *
+ * State is owned by the SetupWatchService singleton and read through
+ * useSyncExternalStore, so the card stays in sync without threading props
+ * through MessageItem / chatContext (which must keep a stable identity).
+ */
+
+import React, { useState } from 'react';
+import { useSyncExternalStore } from 'react';
+import { TradeAnalysis, SetupWatchTriggerType } from '../../types';
+import { EyeIcon, CloseIcon, CheckIcon } from '../shared/Icons';
+import { PriceAlertService } from '../../services/ui/PriceAlertService';
+import { SetupWatchService, describeWatchTrigger } from '../../services/ui/SetupWatchService';
+import { parsePrice as canonicalParsePrice } from '../../utils/analysisUtils';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
+
+interface SetupWatchControlProps {
+    analysis: TradeAnalysis;
+    messageId: string;
+}
+
+const TRIGGER_TYPES: Array<{ type: SetupWatchTriggerType; label: string; hint: string }> = [
+    { type: 'PRICE_ABOVE', label: 'Above', hint: 'Re-debate when price breaks above a level' },
+    { type: 'PRICE_BELOW', label: 'Below', hint: 'Re-debate when price drops below a level' },
+    { type: 'PCT_MOVE', label: '±% Move', hint: 'Re-debate when price moves a % from now' },
+];
+
+const fmtPrice = (n: number | undefined): string => {
+    if (n == null || !isFinite(n)) return '—';
+    return n >= 1000 ? `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : `$${n.toFixed(2)}`;
+};
+
+const SetupWatchControl: React.FC<SetupWatchControlProps> = ({ analysis, messageId }) => {
+    const watch = useSyncExternalStore(
+        (cb) => SetupWatchService.subscribeChanges(cb),
+        () => SetupWatchService.getWatchForMessage(messageId),
+    );
+
+    const [open, setOpen] = useState(false);
+    const [triggerType, setTriggerType] = useState<SetupWatchTriggerType>('PRICE_ABOVE');
+    const [priceLevel, setPriceLevel] = useState('');
+    const [percent, setPercent] = useState('2');
+    // Escape closes the popover (matches the modal convention).
+    useEscapeClose(open, () => setOpen(false));
+
+    const symbol = PriceAlertService.normalizeSymbol(analysis.coinName || 'UNKNOWN');
+    const currentPrice = PriceAlertService.getCurrentPrice(symbol);
+
+    const openDialog = () => {
+        const entry = canonicalParsePrice(analysis.entryPoints?.[0]?.price);
+        const stop = canonicalParsePrice(analysis.stopLoss);
+        setTriggerType('PRICE_ABOVE');
+        setPriceLevel(entry > 0 ? String(entry) : currentPrice ? String(currentPrice) : '');
+        setPercent('2');
+        setOpen(true);
+    };
+
+    const levelNum = parseFloat(priceLevel);
+    const pctNum = parseFloat(percent);
+    const isLevelValid = triggerType !== 'PCT_MOVE' && levelNum > 0;
+    const isMoveValid = triggerType === 'PCT_MOVE' && pctNum > 0 && currentPrice != null;
+
+    const handleCreate = () => {
+        if (!isLevelValid && !isMoveValid) return;
+        SetupWatchService.createWatch({
+            messageId,
+            coinName: analysis.coinName || 'UNKNOWN',
+            triggerType,
+            priceLevel: triggerType === 'PCT_MOVE' ? undefined : levelNum,
+            percent: triggerType === 'PCT_MOVE' ? pctNum : undefined,
+            referencePrice: currentPrice ?? 0,
+        });
+        setOpen(false);
+    };
+
+    // ─── Status pills ─────────────────────────────────────────────────────
+    if (watch?.status === 'ARMED') {
+        return (
+            <div className="relative flex items-center gap-1">
+                <span
+                    className="px-3 py-2 rounded-lg border border-amber-400/30 bg-amber-500/15 text-amber-200 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5"
+                    title={`Re-debate when ${describeWatchTrigger(watch)} (armed)`}
+                >
+                    <EyeIcon className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">{describeWatchTrigger(watch)}</span>
+                    <span className="sm:hidden">Watch on</span>
+                </span>
+                <button
+                    onClick={() => SetupWatchService.cancelWatch(watch.id)}
+                    className="px-2 py-2 rounded-lg border border-white/10 bg-zinc-700/80 text-zinc-400 hover:text-rose-300 hover:border-rose-400/30 transition-colors"
+                    title="Cancel watch"
+                    aria-label="Cancel watch"
+                >
+                    <CloseIcon className="w-3.5 h-3.5" />
+                </button>
+            </div>
+        );
+    }
+    if (watch?.status === 'TRIGGERED') {
+        return (
+            <span
+                className="px-3 py-2 rounded-lg border border-white/10 bg-zinc-700/60 text-zinc-400 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5"
+                title={`Watch fired (${watch.triggerCount}x) — re-debate launched`}
+            >
+                <CheckIcon className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Re-debate launched</span>
+                <span className="sm:hidden">Done</span>
+            </span>
+        );
+    }
+
+    // ─── Idle: Watch button + trigger config popover ──────────────────────
+    return (
+        <div className="relative">
+            <button
+                onClick={() => setOpen(o => !o)}
+                className="px-3 py-2 rounded-lg border border-white/10 bg-zinc-700/80 text-zinc-300 transition-colors hover:border-amber-400/25 hover:bg-amber-500/10 hover:text-amber-200 flex items-center justify-center gap-1.5"
+                title="Watch this setup — re-run the debate when price hits a level"
+                aria-expanded={open}
+            >
+                <EyeIcon className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline text-[10px] font-bold uppercase tracking-wider">Watch</span>
+            </button>
+            {open && (
+                <div className="absolute right-0 top-full mt-1 z-40 w-72 rounded-lg border border-white/10 bg-zinc-800 shadow-xl p-3 text-left">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-2">
+                        Re-debate when…
+                    </div>
+                    {/* Trigger type selector */}
+                    <div className="flex gap-1 mb-2">
+                        {TRIGGER_TYPES.map(t => (
+                            <button
+                                key={t.type}
+                                onClick={() => setTriggerType(t.type)}
+                                title={t.hint}
+                                className={`flex-1 px-2 py-1.5 rounded-md border text-[10px] font-bold uppercase tracking-wider transition-colors ${
+                                    triggerType === t.type
+                                        ? 'border-amber-400/40 bg-amber-500/15 text-amber-200'
+                                        : 'border-white/10 bg-zinc-700/60 text-zinc-400 hover:text-zinc-200'
+                                }`}
+                            >
+                                {t.label}
+                            </button>
+                        ))}
+                    </div>
+                    {/* Level / percent input */}
+                    {triggerType !== 'PCT_MOVE' ? (
+                        <label className="block mb-2">
+                            <span className="text-[10px] text-zinc-400 uppercase tracking-wider">Trigger price (USDT)</span>
+                            <input
+                                type="number"
+                                step="any"
+                                value={priceLevel}
+                                onChange={e => setPriceLevel(e.target.value)}
+                                className="mt-1 w-full px-2 py-1.5 rounded-md bg-zinc-900 border border-white/10 text-zinc-200 text-sm focus:outline-none focus:border-amber-400/40"
+                                placeholder="e.g. 65000"
+                            />
+                        </label>
+                    ) : (
+                        <label className="block mb-2">
+                            <span className="text-[10px] text-zinc-400 uppercase tracking-wider">Move % from now</span>
+                            <input
+                                type="number"
+                                step="any"
+                                min="0"
+                                value={percent}
+                                onChange={e => setPercent(e.target.value)}
+                                className="mt-1 w-full px-2 py-1.5 rounded-md bg-zinc-900 border border-white/10 text-zinc-200 text-sm focus:outline-none focus:border-amber-400/40"
+                                placeholder="e.g. 2"
+                            />
+                        </label>
+                    )}
+                    <div className="text-[10px] text-zinc-500 mb-2">
+                        Current: {currentPrice != null ? fmtPrice(currentPrice) : 'fetching…'}
+                        {triggerType === 'PCT_MOVE' && currentPrice != null && (
+                            <span className="block mt-0.5 text-zinc-400">
+                                ±{pctNum > 0 ? pctNum.toFixed(1) : '—'}% → {fmtPrice(currentPrice * (1 + (pctNum > 0 ? pctNum : 0) / 100))} / {fmtPrice(currentPrice * (1 - (pctNum > 0 ? pctNum : 0) / 100))}
+                            </span>
+                        )}
+                    </div>
+                    <div className="flex gap-1.5">
+                        <button
+                            onClick={handleCreate}
+                            disabled={!isLevelValid && !isMoveValid}
+                            className="flex-1 px-3 py-1.5 rounded-md border border-amber-400/40 bg-amber-500/15 text-amber-200 text-[10px] font-bold uppercase tracking-wider hover:bg-amber-500/25 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        >
+                            Start watching
+                        </button>
+                        <button
+                            onClick={() => setOpen(false)}
+                            className="px-3 py-1.5 rounded-md border border-white/10 bg-zinc-700/60 text-zinc-400 text-[10px] font-bold uppercase tracking-wider hover:text-zinc-200 transition-colors"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+export default React.memo(SetupWatchControl);

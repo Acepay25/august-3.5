@@ -3,21 +3,13 @@
  * Provides consistent error handling and user-friendly messages across all AI providers
  */
 
-export type ProviderName =
-    | 'Gemini'
-    | 'OpenAI'
-    | 'Groq'
-    | 'Groq New'
-    | 'Groq Alt'
-    | 'Groq Alt 2'
-    | 'OpenRouter'
-    | 'Grok'
-    | 'DeepSeek'
-    | 'Zhipu'
-    | 'Binance';
+// Provider display names are runtime-configured (user-entered ProviderConfig
+// names) — a fixed union would go stale (legacy 'Groq Alt' / 'Binance' entries)
+// and lie for custom providers, so error branding takes a plain string.
+export type ProviderName = string;
 
 export interface ParsedAPIError {
-    type: 'rate_limit' | 'quota_exceeded' | 'invalid_key' | 'network' | 'server' | 'unknown';
+    type: 'rate_limit' | 'quota_exceeded' | 'invalid_key' | 'network' | 'timeout' | 'server' | 'unknown';
     message: string;
     retryAfterSeconds?: number;
     provider: ProviderName;
@@ -66,18 +58,32 @@ export const parseAPIError = (error: any, provider: ProviderName): ParsedAPIErro
         };
     }
 
-    // Network Error — includes real timeouts. AbortSignal.timeout() rejects
-    // with name 'TimeoutError' and message "The operation timed out." — the
-    // old matcher only looked for 'timeout' (no space), so genuine timeouts
-    // were classified 'unknown' and never retried.
+    // Timeout — a request that burned its full budget (or was aborted by the
+    // Electron main-process timer) is wedged; retrying it immediately only
+    // extends the stall. Previously these were classified 'network' and
+    // retried 3× at 300s each → a ~15-minute hang on desktop.
     if (
         error?.name === 'TimeoutError'
         || errorMessage.includes('timed out')
         || errorMessage.includes('timeout')
-        || errorMessage.includes('the operation was aborted') // Electron main-side 120s timeout
-        || errorMessage.includes('network')
+        || errorMessage.includes('the operation was aborted') // Electron main-side abort of a hung request
+    ) {
+        return {
+            type: 'timeout',
+            message: `${provider} request timed out. The provider may be overloaded — try again shortly.`,
+            provider
+        };
+    }
+
+    // Network Error — connection-level failures (not timeouts), retryable.
+    if (
+        errorMessage.includes('network')
         || errorMessage.includes('fetch')
         || errorMessage.includes('econnrefused')
+        || errorMessage.includes('enotfound')
+        || errorMessage.includes('failed to connect')
+        || errorMessage.includes('certificate')
+        || errorMessage.includes('tls')
     ) {
         return {
             type: 'network',
@@ -138,6 +144,12 @@ export const getErrorToastConfig = (parsedError: ParsedAPIError): {
                 message: parsedError.message,
                 duration: 8000
             };
+        case 'timeout':
+            return {
+                title: 'Timeout',
+                message: parsedError.message,
+                duration: 8000
+            };
         case 'server':
             return {
                 title: 'Server Error',
@@ -157,6 +169,8 @@ export const getErrorToastConfig = (parsedError: ParsedAPIError): {
  * Check if error should trigger a retry
  */
 export const shouldRetry = (parsedError: ParsedAPIError): boolean => {
+    // 'timeout' is deliberately non-retryable — a request that burned its full
+    // budget is wedged, and immediate retries only extend the stall.
     return parsedError.type === 'rate_limit' || parsedError.type === 'network' || parsedError.type === 'server';
 };
 

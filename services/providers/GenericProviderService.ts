@@ -139,7 +139,12 @@ async function chatCompletionsCall(
     }
     let response: OpenAI.Chat.Completions.ChatCompletion;
     try {
-        response = await client.chat.completions.create(params, options?.signal ? { signal: options.signal } : undefined);
+        // Timeout wrap happens here (not at the call site) so the jsonMode
+        // retry below gets a FRESH budget — AbortSignal.any keeps the old
+        // timer, so wrapping at the call site made the retry inherit a
+        // partially-consumed timeout. Always applied (even with no caller
+        // signal) so a wedged gateway can never hang the pipeline.
+        response = await client.chat.completions.create(params, { signal: withTimeoutSignal(options?.signal) });
     } catch (error: any) {
         // A number of OpenAI-compatible gateways reject response_format even
         // though they support the chat-completions endpoint. Retry once
@@ -147,21 +152,27 @@ async function chatCompletionsCall(
         if (options?.jsonMode && (error?.status === 400 || error?.status === 422)) {
             const fallbackParams = { ...params } as Record<string, unknown>;
             delete fallbackParams.response_format;
-            response = await client.chat.completions.create(fallbackParams as any, options?.signal ? { signal: options.signal } : undefined);
+            response = await client.chat.completions.create(fallbackParams as any, { signal: withTimeoutSignal(options?.signal) });
         } else {
             throw error;
         }
     }
     const message = response.choices[0]?.message as any;
     const reasoning = message?.reasoning_content || message?.reasoning;
-    if (typeof reasoning === 'string' && reasoning.trim()) options?.onReasoning?.(reasoning.trim());
     const content = Array.isArray(message?.content)
         ? message.content.filter((part: any) => typeof part?.text === 'string').map((part: any) => part.text).join('\n')
         : message?.content;
     if (!content && !reasoning && options?.jsonMode) {
         // Some gateways return 200 with an empty message when response_format
-        // is present. Retry once without the optional JSON enforcement.
+        // is present. Retry once without the optional JSON enforcement (fresh
+        // timeout is applied internally on the next attempt).
         return chatCompletionsCall(config, messages, { ...options, jsonMode: false });
+    }
+    // Reasoning is forwarded as a separate channel only when the answer text
+    // exists — otherwise the reasoning IS the answer and returning it both via
+    // onReasoning and as content would make callers accumulate it twice.
+    if (typeof reasoning === 'string' && reasoning.trim() && content) {
+        options?.onReasoning?.(reasoning.trim());
     }
     // Some reasoning-capable gateways place the generated answer in
     // reasoning_content when the final content field is omitted. Preserve it
@@ -390,7 +401,12 @@ function toFriendlyProviderError(error: unknown, providerName: string): unknown 
         const raw = rawMessage.toLowerCase();
         if (raw.includes('desktop provider bridge')) {
             friendly = 'Desktop provider bridge is not loaded. Fully quit and restart the Electron app.';
-        } else if (raw.includes('fetch') || raw.includes('network') || raw.includes('econnrefused') || raw.includes('enotfound') || raw.includes('failed to connect') || raw.includes('certificate') || raw.includes('tls') || raw.includes('timeout') || raw.includes('timed out')) {
+        } else if (raw.includes('aborted') || raw.includes('timed out') || raw.includes('timeout')) {
+            // "The operation was aborted" arrives from the Electron bridge when
+            // the main-process timer (or our per-attempt cap) killed a hung
+            // request — surface it as a timeout, not a mystery abort.
+            friendly = `${name}: request timed out. The provider may be overloaded — try again shortly.`;
+        } else if (raw.includes('fetch') || raw.includes('network') || raw.includes('econnrefused') || raw.includes('enotfound') || raw.includes('failed to connect') || raw.includes('certificate') || raw.includes('tls')) {
             friendly = `${name}: could not reach the server. Check the base URL and your connection.`;
         } else if (rawMessage && rawMessage.toLowerCase() !== 'provider request failed.') {
             // Sanitize the raw SDK text before surfacing it: it can embed the
@@ -453,6 +469,16 @@ export async function sendChatRequest(
                         void electronAPI.cancelProviderChat?.(requestId);
                     };
                     options?.signal?.addEventListener('abort', cancelRequest, { once: true });
+                    // An abort arriving BEFORE the listener registered would
+                    // never fire it — re-check so a main-process request can't
+                    // run to its 300s cap on an already-aborted signal.
+                    if (options?.signal?.aborted) cancelRequest();
+                    // Hard per-attempt timeout for the Electron bridge. Unlike
+                    // the web paths it has no built-in cap, and main.cjs's
+                    // 300s guard surfaces only as a generic "aborted" error —
+                    // without this a wedged main-process request could hang
+                    // the pipeline ~15 minutes across 3 retries.
+                    const timeout = window.setTimeout(() => cancelRequest(), REQUEST_TIMEOUT_MS);
                     return electronAPI.providerChat({
                         config: effectiveConfig,
                         messages,
@@ -470,10 +496,11 @@ export async function sendChatRequest(
                         if (result.reasoning) options?.onReasoning?.(result.reasoning);
                         return result.text || '';
                     }).finally(() => {
+                        window.clearTimeout(timeout);
                         options?.signal?.removeEventListener('abort', cancelRequest);
                     });
                 }
-                if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+                if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
                     return fetch('/__provider_proxy', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -493,30 +520,38 @@ export async function sendChatRequest(
                             if (result.status !== undefined) (error as any).status = result.status;
                             throw error;
                         }
-                        let data: any = {};
+                        let data: any;
                         try {
                             data = result.body ? JSON.parse(result.body) : {};
                         } catch (e) {
-                            throw new Error(`Provider proxy returned invalid JSON: ${(e as Error).message}. Body: ${(result.body || '').slice(0, 200)}`);
+                            const message = e instanceof Error ? e.message : 'Unknown JSON parsing error';
+                            throw new Error(`Provider proxy returned invalid JSON: ${message}. Body: ${(result.body || '').slice(0, 200)}`, { cause: e });
                         }
                         const reasoning = result.reasoning || data.choices?.[0]?.message?.reasoning_content || data.choices?.[0]?.message?.reasoning;
-                        if (typeof reasoning === 'string' && reasoning.trim()) options?.onReasoning?.(reasoning.trim());
+                        let text: string;
                         if (effectiveConfig.apiFormat === 'messages') {
-                            return Array.isArray(data.content) ? data.content.filter((block: any) => block?.type === 'text').map((block: any) => block.text).join('\n') : data.text || '';
+                            text = Array.isArray(data.content) ? data.content.filter((block: any) => block?.type === 'text').map((block: any) => block.text).join('\n') : data.text || '';
+                        } else if (effectiveConfig.apiFormat === 'responses') {
+                            text = data.output_text || '';
+                        } else {
+                            const message = data.choices?.[0]?.message || {};
+                            const content = Array.isArray(message.content)
+                                ? message.content.filter((part: any) => typeof part?.text === 'string').map((part: any) => part.text).join('\n')
+                                : message.content;
+                            text = content || '';
                         }
-                        if (effectiveConfig.apiFormat === 'responses') {
-                            return data.output_text || '';
-                        }
-                        const message = data.choices?.[0]?.message || {};
-                        const content = Array.isArray(message.content)
-                            ? message.content.filter((part: any) => typeof part?.text === 'string').map((part: any) => part.text).join('\n')
-                            : message.content;
-                        return content || message.reasoning_content || message.reasoning || '';
+                        // Reasoning goes out on its own channel only when the
+                        // answer text exists; otherwise it IS the answer and
+                        // must not be double-reported as content too.
+                        if (typeof reasoning === 'string' && reasoning.trim() && text) options?.onReasoning?.(reasoning.trim());
+                        return text || (typeof reasoning === 'string' ? reasoning : '') || '';
                     });
                 }
                 switch (effectiveConfig.apiFormat) {
                     case 'chat_completions':
-                        return chatCompletionsCall(effectiveConfig, messages, { ...options, signal: withTimeoutSignal(options?.signal) });
+                        // chatCompletionsCall applies its own per-attempt
+                        // timeout internally (needed for its jsonMode retry).
+                        return chatCompletionsCall(effectiveConfig, messages, options);
                     case 'messages':
                         return messagesCall(effectiveConfig, messages, { ...options, signal: withTimeoutSignal(options?.signal) });
                     case 'responses':
@@ -564,7 +599,7 @@ export async function* streamChatRequest(
         // Dev browser on localhost: route through the CORS-avoiding Vite
         // provider proxy, which passes SSE through. Direct SDK streaming from
         // the browser fails for providers without CORS headers (e.g. opencode).
-        if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+        if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
             if (effectiveConfig.apiFormat === 'chat_completions') {
                 const startedAt = Date.now();
                 try {
@@ -596,12 +631,14 @@ export async function* streamChatRequest(
             }
             return;
         }
+        // Fallback for non-OpenAI-compat formats: fetch then yield once.
+        // Inside the try so its errors flow through toFriendlyProviderError
+        // (previously this sat after the catch and bypassed friendly mapping).
+        const full = await sendChatRequest(effectiveConfig, messages, options);
+        yield full;
     } catch (error) {
         throw toFriendlyProviderError(error, effectiveConfig.name);
     }
-    // Fallback for non-OpenAI-compat formats: fetch then yield once.
-    const full = await sendChatRequest(effectiveConfig, messages, options);
-    yield full;
 }
 
 /**
@@ -666,7 +703,11 @@ async function* streamViaProxy(
                 if (chunk?.error) {
                     const message = chunk.error.message || `Provider stream error (${chunk.error.code ?? 'unknown'})`;
                     const error = new Error(message);
-                    if (chunk.error.code !== undefined) (error as any).status = chunk.error.code;
+                    // error.code is a STRING (e.g. 'invalid_request_error') —
+                    // assign a numeric status (or 0) so numeric status checks
+                    // downstream never see a string.
+                    if (chunk.error.code !== undefined) (error as any).status = parseInt(chunk.error.code, 10) || 0;
+                    if (chunk.error.status !== undefined) (error as any).status = chunk.error.status;
                     throw error;
                 }
                 const delta = chunk?.choices?.[0]?.delta || {};
@@ -682,16 +723,24 @@ async function* streamViaProxy(
             if (dataLine) {
                 const data = dataLine.slice(5).trim();
                 if (data && data !== '[DONE]') {
+                    let chunk: any;
                     try {
-                        const chunk = JSON.parse(data);
-                        if (chunk?.error) {
-                            throw new Error(chunk.error.message || `Provider stream error (${chunk.error.code ?? 'unknown'})`);
-                        }
+                        chunk = JSON.parse(data);
+                    } catch { /* trailing partial event — ignore */ }
+                    if (chunk?.error) {
+                        // Provider error in the final event must propagate, not
+                        // be silently swallowed like a partial event would be.
+                        const error = new Error(chunk.error.message || `Provider stream error (${chunk.error.code ?? 'unknown'})`);
+                        if (chunk.error.code !== undefined) (error as any).status = parseInt(chunk.error.code, 10) || 0;
+                        if (chunk.error.status !== undefined) (error as any).status = chunk.error.status;
+                        throw error;
+                    }
+                    if (chunk) {
                         const delta = chunk?.choices?.[0]?.delta || {};
                         const reasoning = delta.reasoning_content || delta.reasoning;
                         if (typeof reasoning === 'string' && reasoning.trim()) options?.onReasoning?.(reasoning);
                         if (typeof delta.content === 'string' && delta.content) yield delta.content;
-                    } catch { /* ignore */ }
+                    }
                 }
             }
         }

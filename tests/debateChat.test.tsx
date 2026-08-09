@@ -196,4 +196,40 @@ describe('DebateChat', () => {
         expect(screen.getByText('To Analyst A')).toBeDefined();
         expect(screen.getByText('To Analyst B')).toBeDefined();
     });
+
+    it('shows collapsible per-turn thinking above the final text (harness style)', () => {
+        const turns = [makeTurn('Macro Analyst', 'Final verdict text', 1)];
+        const props = {
+            ...baseProps,
+            debateTurns: turns,
+            reasoningProcesses: { 'Macro Analyst': 'Chain of thought for macro call' },
+        };
+        render(<DebateChat {...props} />);
+        // Final output is always visible; thinking sits behind its toggle
+        // (closed <details> keeps children in the DOM, so assert `open`).
+        expect(screen.getByText('Final verdict text')).toBeDefined();
+        const details = screen.getByText('Chain of thought for macro call').closest('details');
+        expect(details?.open).toBe(false);
+        fireEvent.click(screen.getByText(/Thinking/));
+        expect(screen.getByText('Chain of thought for macro call').closest('details')?.open).toBe(true);
+    });
+
+    it('shows moderator thinking keyed to lowercase moderator (post-mortem transcript)', () => {
+        // Post-mortem debates are single moderator-driven streams; the wiring
+        // stores the captured chain of thought under reasoningProcesses.moderator.
+        const turns = [
+            makeTurn('Moderator', 'Master Strategist verdict', 1),
+        ];
+        const props = {
+            ...baseProps,
+            debateTurns: turns,
+            reasoningProcesses: { moderator: 'Weighed the extended SL zone and missed-win flag…' },
+        };
+        render(<DebateChat {...props} />);
+        expect(screen.getByText('Master Strategist verdict')).toBeDefined();
+        const details = screen.getByText('Weighed the extended SL zone and missed-win flag…').closest('details');
+        expect(details?.open).toBe(false);
+        fireEvent.click(screen.getByText(/Thinking/));
+        expect(screen.getByText('Weighed the extended SL zone and missed-win flag…').closest('details')?.open).toBe(true);
+    });
 });

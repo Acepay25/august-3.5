@@ -7,7 +7,6 @@ import { getPreferenceObject, setPreferenceObject, PREF_KEYS } from '../../servi
 interface HybridDataPanelProps {
     data: HybridDataPacket | null;
     isLoading?: boolean;
-    onClose?: () => void;
     connectionStatus?: 'disconnected' | 'connecting' | 'connected' | 'error';
     // Hide entirely (e.g. while Settings is open so the panel doesn't float
     // above the modal backdrop).
@@ -135,7 +134,7 @@ const TimeframeBadge: React.FC<{ tf: string; indicators: any; expanded?: boolean
     );
 };
 
-const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onClose, connectionStatus, hidden, slOptimization, suggestedEntryPrice, entryTimingScore }) => {
+const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, connectionStatus, hidden, slOptimization, suggestedEntryPrice, entryTimingScore }) => {
     const [isExpanded, setIsExpanded] = React.useState(false);
     const [showDetailedView, setShowDetailedView] = React.useState(false);
     const [loadingStep, setLoadingStep] = React.useState(0);
@@ -493,6 +492,15 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, onCl
 
                 {/* Scrollable Content */}
                 <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar">
+
+                    {data.dataQuality?.status === 'degraded' && (
+                        <div className="status-surface rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-[10px] text-amber-200" role="status">
+                            <div className="font-bold uppercase tracking-wider">Partial market data</div>
+                            <p className="mt-1 leading-relaxed text-amber-100/80">
+                                Unavailable: {data.dataQuality.unavailableSources.join(', ')}. Treat related values as unknown, not neutral.
+                            </p>
+                        </div>
+                    )}
 
                     {/* NEW: Session Context */}
                     {data.session && (

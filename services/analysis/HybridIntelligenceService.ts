@@ -115,6 +115,11 @@ export interface HybridDataPacket {
     fundingRate: number;
     fundingRateSentiment: 'bullish' | 'bearish' | 'neutral';
     dataTimestamp: string;
+    dataQuality?: {
+        status: 'complete' | 'degraded';
+        unavailableSources: string[];
+        checkedAt: string;
+    };
 
     // ========== NEW ENHANCED DATA ==========
 
@@ -275,6 +280,16 @@ export const fetchHybridData = async (symbol: string): Promise<HybridDataPacket>
         fetchRecentLiquidations(symbol)
     ]);
 
+    const unavailableSources: string[] = [];
+    if (!snapshot.availability.marketData) unavailableSources.push('current market ticker');
+    for (const timeframe of ['5m', '15m', '1h', '4h'] as const) {
+        if (!snapshot.availability.klines[timeframe]) unavailableSources.push(`${timeframe} candles`);
+    }
+    if (!snapshot.availability.fundingRate) unavailableSources.push('funding rate');
+    if (derivatives.available === false) unavailableSources.push('derivatives');
+    if (orderBook.available === false) unavailableSources.push('order book');
+    if (liquidations.available === false) unavailableSources.push('liquidations');
+
     // Calculate core TA for each timeframe
     const indicators5m = calculateIndicators(snapshot.klines['5m']);
     const indicators15m = calculateIndicators(snapshot.klines['15m']);
@@ -373,6 +388,11 @@ export const fetchHybridData = async (symbol: string): Promise<HybridDataPacket>
         fundingRate: snapshot.fundingRate,
         fundingRateSentiment,
         dataTimestamp: new Date().toISOString(),
+        dataQuality: {
+            status: unavailableSources.length > 0 ? 'degraded' : 'complete',
+            unavailableSources,
+            checkedAt: new Date().toISOString()
+        },
 
         // Enhanced data
         derivatives,
@@ -437,6 +457,9 @@ export const generateHybridPromptInjection = (data: HybridDataPacket): string =>
     const sourceLine = dataAgeMin <= 10
         ? `**Source:** Binance API (${dataAgeMin}m ago)`
         : `**Source:** Binance API — DATA IS ${dataAgeMin}m OLD; verify levels against the current price before acting`;
+    const qualityLine = data.dataQuality?.status === 'degraded'
+        ? `**Data quality:** DEGRADED — unavailable: ${data.dataQuality.unavailableSources.join(', ')}. Do not infer unavailable sources as neutral or balanced.`
+        : '**Data quality:** Complete for the requested sources.';
 
     return `
 ═══════════════════════════════════════════════════════════════
@@ -445,6 +468,7 @@ export const generateHybridPromptInjection = (data: HybridDataPacket): string =>
 **Symbol:** ${data.symbol}
 **Data Timestamp:** ${data.dataTimestamp}
 ${sourceLine}
+${qualityLine}
 
  **MARKET OVERVIEW:**
 - Current Price: $${data.marketData.currentPrice}

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 
-export const useTypingEffect = (text: string | null, baseSpeed: number = 10): [string, boolean] => {
+export const useTypingEffect = (text: string | null, baseSpeed: number = 30): [string, boolean] => {
   const [displayedText, setDisplayedText] = useState('');
   const [isFinished, setIsFinished] = useState(false);
   const timeouts = useRef<ReturnType<typeof setTimeout>[]>([]);

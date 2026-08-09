@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { MutableRefObject } from 'react';
-import { Message, MessageRole, TradeOutcome, LoggedTrade, DebateTurn, LiveThoughts, TradeSummary, GlobalMemory, AnalysisStep } from '../types';
+import { Message, MessageRole, TradeOutcome, LoggedTrade, DebateTurn, LiveThoughts, TradeSummary, GlobalMemory, AnalysisStep, TodayReassessment } from '../types';
 import { PostMortemCandidate } from '../components/modals/PostTradeUploadModal';
 import { validateTradeOutcome, TradeOutcomeValidation } from '../services/backtesting/BacktestingService';
 import { sanitizeAIResponse } from '../utils/sanitizers';
@@ -11,7 +11,9 @@ import { jobQueue, JobType } from '../services/infrastructure/JobQueueService';
 import { MAX_TRADE_SUMMARIES } from './useTradeLogging';
 import { saveThinkingBatch, generateThinkingId, getThinkingTradeId } from '../services/infrastructure/ThinkingStoreService';
 import { ProviderConfig } from '../types/provider';
-import { conductPostMortem, summarizeTrade } from '../services/providers/GenericAnalysisService';
+import { conductPostMortem, summarizeTrade, conductTodayReassessment } from '../services/providers/GenericAnalysisService';
+import { fetchMarketData, normalizeSymbol } from '../services/analysis/MarketDataService';
+import { PriceAlertService } from '../services/ui/PriceAlertService';
 
 export interface UsePostMortemParams {
     // Conversation state
@@ -88,6 +90,8 @@ export const usePostMortem = (params: UsePostMortemParams) => {
     const [mismatchData, setMismatchData] = useState<{ candidate: PostMortemCandidate; validation: TradeOutcomeValidation } | null>(null);
     const [typingMessageState, setTypingMessageState] = useState<{ id: string; fullText: string; field: 'postMortem' } | null>(null);
     const [livePostMortemThoughts, setLivePostMortemThoughts] = useState<LiveThoughts>({});
+    /** Post-mortem message id currently running a "what would I do today?" re-assessment. */
+    const [todayReassessmentInFlight, setTodayReassessmentInFlight] = useState<string | null>(null);
 
     // ─── P0-2: Cancellation guard for in-flight post-mortem work ──────────
     // When the user switches accounts, any async post-mortem analysis still
@@ -318,20 +322,35 @@ Please investigate this discrepancy in your analysis.
                 throw new Error('All AI providers failed during post-mortem analysis. Please check your provider configuration and try again.');
             }
 
+            // messagesRef only syncs via a post-commit effect (useConversations),
+            // so reading it right after the final updatePostMortemMessages below
+            // would miss the last streamed turns. Capture the freshest parsed
+            // turns here during streaming instead, and fall back to the ref only
+            // when no turns were hoisted (e.g. non-debate path).
+            let latestDebateTurns: DebateTurn[] | undefined;
+            // Captured moderator chain-of-thought during the debate stream.
+            // Declared at run scope so the finalize path (outside the debate
+            // branch) can attach it to the message; empty on the non-debate path.
+            let moderatorReasoning = "";
+
             if (results.length > 1) {
                 setLoadingMessage("Ensemble Debate in progress...");
                 completeStep('analysis'); startStep('debate');
                 updatePostMortemMessages(prev => prev.map(m => m.id === postMortemMessageId ? { ...m, isDebating: true, text: 'Ensemble is analyzing trade outcome...' } : m));
 
                 let debateStream;
+                // The post-mortem debate is a single moderator-driven stream,
+                // so any chain-of-thought captured from it keys to lowercase
+                // 'moderator' — the same key DebateChat.getReasoning reads for
+                // the Master Strategist (harness-style thinking blocks).
 
                 if (results.length === 2) {
-                    debateStream = ensembleService.conductTwoWayPostMortemDebate(candidate.message, candidate.outcome, results[0].result, results[1].result, results[0].provider, results[1].provider, finalTradeSummary, moderatorConfig, moderatorModel, imageUrls, undefined, currentAbortController.signal);
+                    debateStream = ensembleService.conductTwoWayPostMortemDebate(candidate.message, candidate.outcome, results[0].result, results[1].result, results[0].provider, results[1].provider, finalTradeSummary, moderatorConfig, moderatorModel, imageUrls, undefined, currentAbortController.signal, (delta) => { moderatorReasoning += delta; });
                 } else {
                     const r1 = results[0];
                     const r2 = results[1];
                     const r3 = results[2] || results[0];
-                    debateStream = ensembleService.conductThreeWayPostMortemDebate(candidate.message, candidate.outcome, r1.result, r2.result, r3.result, r1.provider, r2.provider, r3.provider, finalTradeSummary, moderatorConfig, moderatorModel, imageUrls, currentAbortController.signal);
+                    debateStream = ensembleService.conductThreeWayPostMortemDebate(candidate.message, candidate.outcome, r1.result, r2.result, r3.result, r1.provider, r2.provider, r3.provider, finalTradeSummary, moderatorConfig, moderatorModel, imageUrls, currentAbortController.signal, (delta) => { moderatorReasoning += delta; });
                 }
 
                 let fullDebateText = "";
@@ -371,7 +390,11 @@ Please investigate this discrepancy in your analysis.
                             });
                         }
 
-                        updatePostMortemMessages(prev => prev.map(m => m.id === postMortemMessageId ? { ...m, debateTurns: currentTurns, postMortemDebateTurns: currentTurns } : m));
+                        // Only hoist non-empty parses — a mid-stream chunk can
+                        // yield zero matches and must not shadow earlier turns.
+                        if (currentTurns.length > 0) latestDebateTurns = currentTurns;
+
+                        updatePostMortemMessages(prev => prev.map(m => m.id === postMortemMessageId ? { ...m, debateTurns: currentTurns, postMortemDebateTurns: currentTurns, reasoningProcesses: { ...(m.reasoningProcesses ?? {}), ...(moderatorReasoning ? { moderator: moderatorReasoning } : {}) } } : m));
                     }
 
                     const reportStart = fullDebateText.match(/<FINAL_REPORT_START>/i);
@@ -423,7 +446,7 @@ Please investigate this discrepancy in your analysis.
             if (isRunStale(myRunId)) return;
             // Persist post-mortem debate turns to ThinkingStore before clearing from message
             const postMortemTradeId = getThinkingTradeId(candidate.message.analysis?.createdAt, candidate.message.id);
-            const postMortemTurns = messagesRef.current.find(m => m.id === postMortemMessageId)?.postMortemDebateTurns;
+            const postMortemTurns = latestDebateTurns ?? messagesRef.current.find(m => m.id === postMortemMessageId)?.postMortemDebateTurns;
             if (postMortemTurns && postMortemTurns.length > 0) {
                 try {
                     // LOW #10: static import — this module is already in the
@@ -458,6 +481,9 @@ Please investigate this discrepancy in your analysis.
                 text: finalPostMortemReport,
                 isDebating: false,
                 postMortemDebateTurns: undefined, // Clear from message (now persisted in ThinkingStore)
+                // Keep the moderator's captured chain of thought on the message
+                // (merging so pre-existing analysis reasoning is preserved).
+                ...(moderatorReasoning ? { reasoningProcesses: { ...(m.reasoningProcesses ?? {}), moderator: moderatorReasoning } } : {}),
             } : m));
 
             // P0-2: If the user switched accounts while the post-mortem was
@@ -628,6 +654,99 @@ Please investigate this discrepancy in your analysis.
         await startPostMortemAnalysis(updatedCandidate, undefined, undefined, finalValidation);
     };
 
+    /**
+     * "What would I do today?" — re-assesses a closed trade's setup against
+     * the CURRENT market price, answering forward-looking whether the setup
+     * would still be a valid trade today (hindsight known, verdict fresh).
+     * Rides the post-mortem run-id/abort guards so account/conversation
+     * switches cancel it like any other post-mortem work.
+     */
+    const startTodayReassessment = async (messageId: string): Promise<void> => {
+        if (todayReassessmentInFlight) return;
+
+        // Synchronous validation FIRST — never abort other post-mortem work
+        // for a request that cannot run.
+        const msgs = messagesRef.current;
+        const pmIndex = msgs.findIndex(m => m.id === messageId);
+        const pmMessage = pmIndex >= 0 ? msgs[pmIndex] : undefined;
+        if (!pmMessage?.isPostMortem) return;
+
+        // The original analysis card is the nearest preceding message with one.
+        let card: Message | undefined;
+        for (let i = pmIndex - 1; i >= 0; i--) {
+            if (msgs[i].analysis) { card = msgs[i]; break; }
+        }
+        if (!card?.analysis) {
+            console.warn('[TodayReassessment] No source analysis found for post-mortem', messageId);
+            return;
+        }
+
+        const provider = providerConfigs.find(c => c.isEnabled && c.apiKey && c.selectedModel);
+        if (!provider) {
+            console.warn('[TodayReassessment] No enabled provider configured');
+            return;
+        }
+
+        // Bump the run id BEFORE aborting so the aborted post-mortem run's
+        // catch/finally see a stale id and discard SILENTLY — without the
+        // bump it would write "Post-Mortem Failed" + postMortemFailedCandidate
+        // over its partial transcript. The bump precedes the capture so THIS
+        // run stays current (isRunStale uses the fresh id).
+        postMortemRunIdRef.current += 1;
+        const myRunId = postMortemRunIdRef.current;
+        postMortemAbortControllerRef.current?.abort();
+        const currentAbortController = new AbortController();
+        postMortemAbortControllerRef.current = currentAbortController;
+        // The aborted run's stale finally skips UI cleanup — close the
+        // streaming overlay explicitly so it can't stay up after the takeover.
+        setIsPostMortemInProgress(false);
+        setIsLivePostMortemVisible(false);
+        setLoadingMessage(null);
+
+        // Claim the slot before the first await — a double-click must not
+        // start two fetches (the second would abort the first).
+        setTodayReassessmentInFlight(messageId);
+
+        // Live price: cached socket price first, else a fresh ticker fetch.
+        let currentPrice = 0;
+        const symbol = normalizeSymbol(card.analysis.coinName || '');
+        if (symbol) {
+            try {
+                currentPrice = PriceAlertService.getCurrentPrice(symbol) ?? (await fetchMarketData(symbol)).currentPrice;
+            } catch (e) {
+                console.warn('[TodayReassessment] Price fetch failed — reasoning from levels only:', e);
+            }
+        }
+
+        try {
+            const { verdict, text } = await conductTodayReassessment(provider, {
+                analysis: card.analysis,
+                postMortem: pmMessage.postMortem || pmMessage.text || '',
+                outcome: card.outcome ?? pmMessage.outcome,
+                currentPrice,
+                signal: currentAbortController.signal,
+            });
+            if (isRunStale(myRunId)) return;
+            const reassessment: TodayReassessment = {
+                verdict,
+                text,
+                price: currentPrice,
+                createdAt: new Date().toISOString(),
+            };
+            updateMessages(
+                prev => prev.map(m => m.id === messageId ? { ...m, todayReassessment: reassessment } : m),
+                activeConversationId,
+            );
+        } catch (e: any) {
+            if (isRunStale(myRunId) || e?.name === 'AbortError') return;
+            console.error('[TodayReassessment] Failed:', e);
+        } finally {
+            // Unconditional — a stale run must still release the in-flight
+            // slot, or the button stays disabled until the app reloads.
+            setTodayReassessmentInFlight(prev => (prev === messageId ? null : prev));
+        }
+    };
+
     return {
         // State
         mismatchData,
@@ -636,9 +755,12 @@ Please investigate this discrepancy in your analysis.
         setTypingMessageState,
         livePostMortemThoughts,
         setLivePostMortemThoughts,
+        todayReassessmentInFlight,
+        setTodayReassessmentInFlight,
 
         // Functions
         startPostMortemAnalysis,
+        startTodayReassessment,
         invalidatePostMortemRuns,
         handleRetryPostMortem,
         handleAllPostMortemTypingComplete,

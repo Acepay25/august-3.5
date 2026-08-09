@@ -38,11 +38,12 @@ export function useConversations() {
             return prevHistory.map(conv => {
                 if (conv.id === conversationId) {
                     const next = updater(conv.messages);
-                    // P2-16: Enforce the message cap. Drop the OLDEST messages
-                    // (FIFO) so recent context is preserved. This runs on every
-                    // message append/edit, keeping conversations bounded.
+                    // P2-16: Enforce the message cap. Pure FIFO would evict the
+                    // FIRST user message — the conversation's anchor request
+                    // that later re-analyses reference as chatHistory — so keep
+                    // it and trim the oldest messages AFTER it.
                     const trimmed = next.length > MAX_MESSAGES_PER_CONVERSATION
-                        ? next.slice(next.length - MAX_MESSAGES_PER_CONVERSATION)
+                        ? [next[0], ...next.slice(next.length - MAX_MESSAGES_PER_CONVERSATION + 1)]
                         : next;
                     return { ...conv, messages: trimmed };
                 }

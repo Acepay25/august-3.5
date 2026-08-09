@@ -269,7 +269,7 @@ export function runProgrammaticGate(input: GateInput): GateOutput {
     const rsi1h = indicators['1h']?.rsi?.rsi14;
     const volume1h = indicators['1h']?.volume;
 
-    if (rsi1h && volume1h) {
+    if (rsi1h && volume1h && volume1h.average > 0) {
         const volumeRatio = volume1h.current / volume1h.average;
 
         if (rsi1h > 80 && volumeRatio > 1.8) {
@@ -284,7 +284,7 @@ export function runProgrammaticGate(input: GateInput): GateOutput {
     }
 
     // ====== CHECK 5: VOLUME CONTEXT ======
-    if (volume1h) {
+    if (volume1h && volume1h.average > 0) {
         const volumeRatio = volume1h.current / volume1h.average;
         const isNearExtreme = rsi1h && (rsi1h > 70 || rsi1h < 30);
 

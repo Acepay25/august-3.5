@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { memo, useState, useEffect, useRef } from 'react';
 import { BotIcon, LoadingIcon, CheckIcon, EyeIcon, HamburgerIcon, ActivityIcon, CloudOffIcon } from './Icons';
 import { getSessionContext, getAllSessionsStatus, SessionContext, SessionStatus } from '../../services/infrastructure/SessionService';
 import { UpdateButton } from './UpdateButton';
@@ -40,9 +40,12 @@ interface HeaderProps {
     onNewConversation: () => void;
     onLoadConversation: (id: string) => void;
     onDeleteConversation: (id: string) => void;
+    onDeleteConversations?: (ids: string[]) => Promise<boolean> | boolean;
 }
 
-export const Header: React.FC<HeaderProps> = ({
+// Memoized: Header re-renders every time App does (typing, progress ticks);
+// with stable props it only renders when something it actually shows changes.
+export const Header: React.FC<HeaderProps> = memo(({
     activeUsername,
     saveStatus,
     isAnalysisInProgress,
@@ -66,6 +69,7 @@ export const Header: React.FC<HeaderProps> = ({
     conversations,
     activeConversationId,
     onDeleteConversation,
+    onDeleteConversations,
     onNewConversation,
     onLoadConversation
 }) => {
@@ -338,6 +342,7 @@ export const Header: React.FC<HeaderProps> = ({
                                     onNewConversation={onNewConversation}
                                     onLoadConversation={onLoadConversation}
                                     onDeleteConversation={onDeleteConversation}
+                                    onDeleteConversations={onDeleteConversations}
                                     onOpenLiveMarket={onOpenLiveMarket}
                                     onOpenVisionData={() => setIsVisionDataVisible(true)}
                                     onOpenJournal={() => setJournalState({ isOpen: true, tab: 'log' })}
@@ -355,4 +360,4 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
         </header >
     );
-};
+});

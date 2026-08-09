@@ -74,8 +74,11 @@ const ProbabilityPanel: React.FC<ProbabilityPanelProps> = ({
                         disabled={isCalculating || !selectedMessageId}
                         className={`p-1 rounded hover:bg-zinc-700 text-zinc-400 hover:text-purple-400 transition-all ${isCalculating ? 'animate-spin opacity-50' : ''}`}
                         title="Regenerate Probability Analysis"
+                        aria-label="Regenerate Probability Analysis"
                     >
-                        
+                        {/* Text glyph — the icon was stripped with the lucide
+                            removal, leaving an invisible empty control. */}
+                        <span aria-hidden="true" className="text-sm leading-none font-bold">↻</span>
                     </button>
                 </div>
             }

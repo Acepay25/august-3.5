@@ -1,6 +1,4 @@
-import React from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import React, { lazy, memo, Suspense } from 'react';
 
 interface MarkdownContentProps {
   /** Markdown text to render. */
@@ -10,62 +8,28 @@ interface MarkdownContentProps {
 }
 
 /**
- * Shared markdown renderer for AI text — bold, highlighted inline code,
- * boxed code blocks and bordered tables (the dark theme used across the app).
- * ReactMarkdown escapes raw HTML by default, so AI output can't inject markup.
+ * Shared markdown renderer for AI text. Thin lazy boundary: the heavy
+ * react-markdown chunk is only fetched when the first AI message renders
+ * (then cached), keeping ~300KB out of the startup bundle. While the chunk
+ * loads, the raw text is shown pre-wrapped in the same layout so there is
+ * no visual shift.
+ *
+ * Memoized: streamed AI messages re-render constantly (each chunk, each
+ * chatContext change). With identical props, memo skips both the Suspense
+ * wrapper and the markdown re-parse entirely.
  */
-const MarkdownContent: React.FC<MarkdownContentProps> = ({ content, className }) => {
-  return (
-    <div className={`text-xs leading-relaxed text-zinc-300 prose prose-invert prose-sm max-w-none ${className ?? ''}`}>
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          pre: ({ children }) => (
-            <pre className="my-2 rounded-lg bg-black/50 border border-white/10 p-3 overflow-x-auto text-[11px] font-mono leading-relaxed text-zinc-300 whitespace-pre-wrap">
-              {children}
-            </pre>
-          ),
-          code: ({ className: codeClassName, children, ...props }) => {
-            // Fenced blocks carry a language-* class and live inside the
-            // boxed <pre>; bare backticks are inline highlights.
-            const isBlock = /language-/.test(String(codeClassName || ''));
-            if (isBlock) {
-              return (
-                <code className="font-mono text-zinc-300" {...props}>
-                  {children}
-                </code>
-              );
-            }
-            return (
-              <code className="rounded bg-cyan-500/10 border border-cyan-500/15 px-1 py-0.5 text-[11px] font-mono text-cyan-200" {...props}>
-                {children}
-              </code>
-            );
-          },
-          table: ({ children }) => (
-            <div className="my-2 overflow-x-auto rounded-lg border border-white/10">
-              <table className="w-full text-left text-[11px] border-collapse">{children}</table>
-            </div>
-          ),
-          th: ({ children }) => (
-            <th className="border-b border-white/15 bg-zinc-800/60 px-2 py-1 text-zinc-200 font-semibold text-left">{children}</th>
-          ),
-          td: ({ children }) => (
-            <td className="border-b border-white/5 px-2 py-1 text-zinc-400 align-top">{children}</td>
-          ),
-          blockquote: ({ children }) => (
-            <blockquote className="border-l-2 border-cyan-500/40 pl-3 text-zinc-400">{children}</blockquote>
-          ),
-          strong: ({ children }) => <strong className="text-zinc-100 font-bold">{children}</strong>,
-          a: ({ children, href }) => (
-            <a href={href} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:text-cyan-300 underline">{children}</a>
-          ),
-        }}
-      >
-        {content || ''}
-      </ReactMarkdown>
-    </div>
-  );
-};
+const MarkdownRenderer = lazy(() => import('./MarkdownRenderer'));
 
-export default MarkdownContent;
+const MarkdownFallback: React.FC<MarkdownContentProps> = ({ content, className }) => (
+  <div className={`text-xs leading-relaxed text-zinc-300 whitespace-pre-wrap ${className ?? ''}`}>
+    {content || ''}
+  </div>
+);
+
+const MarkdownContent: React.FC<MarkdownContentProps> = ({ content, className }) => (
+  <Suspense fallback={<MarkdownFallback content={content} className={className} />}>
+    <MarkdownRenderer content={content} className={className} />
+  </Suspense>
+);
+
+export default memo(MarkdownContent);

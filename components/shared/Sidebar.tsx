@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Conversation, MessageRole } from '../../types';
 import {
     ActivityIcon,
@@ -42,6 +42,7 @@ interface SidebarContentProps {
     onOpenJournal: () => void;
     onOpenSettings: () => void;
     onDeleteConversation: (id: string) => void;
+    onDeleteConversations?: (ids: string[]) => Promise<boolean> | boolean;
     // Called after every action so the mobile drawer can close itself;
     // a no-op for the persistent desktop sidebar.
     onNavigate?: () => void;
@@ -63,6 +64,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
     onOpenJournal,
     onOpenSettings,
     onDeleteConversation,
+    onDeleteConversations,
     onNavigate,
     collapsed = false,
 }) => {
@@ -74,6 +76,20 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
     // F5: conversation search — typing a query searches the FULL history
     // (the recent list only shows the first 8).
     const [searchQuery, setSearchQuery] = useState('');
+    const [isSelectionMode, setIsSelectionMode] = useState(false);
+    const [selectedConversationIds, setSelectedConversationIds] = useState<Set<string>>(new Set());
+
+    useEffect(() => {
+        const validIds = new Set(conversations.map(conversation => conversation.id));
+        setSelectedConversationIds(previous => new Set([...previous].filter(id => validIds.has(id))));
+    }, [conversations]);
+
+    useEffect(() => {
+        if (collapsed) {
+            setIsSelectionMode(false);
+            setSelectedConversationIds(new Set());
+        }
+    }, [collapsed]);
     const previews = useMemo(() => {
         const map = new Map<string, string>();
         for (const conv of conversations) map.set(conv.id, getPreview(conv));
@@ -88,6 +104,25 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
     const act = (fn: () => void) => () => {
         fn();
         onNavigate?.();
+    };
+
+    const toggleConversationSelection = (id: string) => {
+        setSelectedConversationIds(previous => {
+            const next = new Set(previous);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
+
+    const handleDeleteSelected = async () => {
+        if (!onDeleteConversations || selectedConversationIds.size === 0) return;
+        const deleted = await onDeleteConversations([...selectedConversationIds]);
+        if (deleted !== false) {
+            setSelectedConversationIds(new Set());
+            setIsSelectionMode(false);
+            onNavigate?.();
+        }
     };
 
     return (
@@ -122,8 +157,20 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
             </nav>
 
             {/* Recent conversations */}
-            {!collapsed && <div className="px-5 pb-1 pt-5">
+            {!collapsed && <div className="flex items-center justify-between px-5 pb-1 pt-5">
                 <span className="text-[10px] font-medium text-zinc-400 uppercase tracking-widest">Recent</span>
+                {onDeleteConversations && (
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setIsSelectionMode(previous => !previous);
+                            setSelectedConversationIds(new Set());
+                        }}
+                        className="rounded px-1.5 py-1 text-[10px] text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-200 focus-visible:ring-2 focus-visible:ring-cyan-400"
+                    >
+                        {isSelectionMode ? 'Cancel' : 'Select'}
+                    </button>
+                )}
             </div>}
             {!collapsed && (
                 <div className="px-3 pb-2">
@@ -135,6 +182,21 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                         aria-label="Search conversations"
                         className="w-full rounded-lg border border-white/10 bg-zinc-900/60 px-2.5 py-1.5 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-cyan-400/40"
                     />
+                </div>
+            )}
+            {!collapsed && isSelectionMode && (
+                <div className="mx-3 mb-2 flex items-center justify-between gap-2 rounded-lg border border-cyan-400/20 bg-cyan-500/5 px-2.5 py-2">
+                    <span className="text-[11px] text-zinc-400">
+                        {selectedConversationIds.size} selected
+                    </span>
+                    <button
+                        type="button"
+                        onClick={handleDeleteSelected}
+                        disabled={selectedConversationIds.size === 0}
+                        className="rounded-md bg-rose-500/10 px-2 py-1 text-[10px] font-medium text-rose-300 transition-colors hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-rose-400"
+                    >
+                        Delete selected
+                    </button>
                 </div>
             )}
             <div className="flex-1 min-h-0 overflow-y-auto px-2 pb-2 space-y-0.5">
@@ -149,8 +211,21 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                                 : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/80'
                                 }`}
                         >
+                            {!collapsed && isSelectionMode && (
+                                <input
+                                    type="checkbox"
+                                    checked={selectedConversationIds.has(conv.id)}
+                                    onChange={() => toggleConversationSelection(conv.id)}
+                                    onClick={(event) => event.stopPropagation()}
+                                    className="h-3.5 w-3.5 shrink-0 accent-cyan-400"
+                                    aria-label={`Select ${getPreview(conv)} for deletion`}
+                                />
+                            )}
                             <button
-                                onClick={act(() => onLoadConversation(conv.id))}
+                                onClick={() => {
+                                    if (isSelectionMode) toggleConversationSelection(conv.id);
+                                    else act(() => onLoadConversation(conv.id))();
+                                }}
                                 className={`flex items-center ${collapsed ? 'justify-center' : 'gap-2'} flex-1 min-w-0 text-left`}
                                 title={getPreview(conv)}
                                 aria-label={getPreview(conv)}
@@ -158,7 +233,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                                 <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${conv.id === activeConversationId ? 'bg-zinc-300' : 'bg-zinc-700'}`} />
                                  {!collapsed && <span className="truncate text-sm">{getPreview(conv)}</span>}
                             </button>
-                            {!collapsed && conv.id !== activeConversationId && (
+                            {!collapsed && !isSelectionMode && conv.id !== activeConversationId && (
                                 <button
                                     onClick={(e) => {
                                         e.stopPropagation();

@@ -48,7 +48,7 @@ export const OnboardingCard: React.FC<OnboardingCardProps> = ({ hasAnyApiKey, on
                     <h2 className="text-base font-semibold text-zinc-100">Welcome to August 3.5</h2>
                     <p className="mt-1 text-sm text-zinc-400 leading-relaxed">
                         To start analyzing charts, add at least one AI provider API key.
-                        Open <span className="font-medium text-zinc-200">Settings → AI Models</span> and paste your key (Gemini, OpenAI, DeepSeek, Groq, Zhipu, or OpenRouter).
+                        Open <span className="font-medium text-zinc-200">Settings → AI setup</span> and paste your key (Gemini, OpenAI, DeepSeek, Groq, Zhipu, or OpenRouter).
                     </p>
                     <div className="mt-4 flex items-center gap-3">
                         <button

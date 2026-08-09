@@ -113,10 +113,7 @@ export const useUserProfiles = (params: UseUserProfilesParams) => {
             if (!result.success) {
                 toast.error("Export Failed", result.error);
             } else {
-                // The backup embeds the preferences (incl. provider API keys —
-                // encrypted on desktop, plaintext on web). Say so explicitly so
-                // users treat the file as sensitive.
-                toast.success("Export Complete", "Backup saved. It includes your provider API keys — keep the file private.");
+                toast.success("Export Complete", "Backup saved. API keys were excluded; reconnect providers after restoring on a new device.");
             }
         }
     };

@@ -189,6 +189,15 @@ export const canShare = async (): Promise<boolean> => {
 
 
 import { getPreferenceObject, setPreferenceObject, PREF_KEYS } from './PreferencesService';
+import { ProviderConfig } from '../../types/provider';
+
+const redactPreferenceValue = (key: string, value: unknown): unknown => {
+    if (key !== PREF_KEYS.PROVIDER_CONFIGS || !Array.isArray(value)) return value;
+    return value.map((provider: ProviderConfig) => ({
+        ...provider,
+        apiKey: '',
+    }));
+};
 
 /**
  * Export all preference keys as a supplementary backup
@@ -204,7 +213,7 @@ export const exportPreferencesData = async (): Promise<Record<string, any>> => {
         try {
             const value = await getPreferenceObject(key);
             if (value !== null) {
-                backup[key] = value;
+                backup[key] = redactPreferenceValue(key, value);
             }
         } catch (e) {
             console.warn(`[ExportService] Failed to export key ${key}:`, e);
@@ -221,7 +230,7 @@ export const exportPreferencesData = async (): Promise<Record<string, any>> => {
             if (!key || keysToBackup.includes(key)) continue;
             const value = await getPreferenceObject(key);
             if (value !== null) {
-                backup[key] = value;
+                backup[key] = redactPreferenceValue(key, value);
             }
         }
     } catch (e) {
@@ -237,6 +246,17 @@ export const exportPreferencesData = async (): Promise<Record<string, any>> => {
 export const importPreferencesData = async (backup: Record<string, any>): Promise<void> => {
     for (const [key, value] of Object.entries(backup)) {
         try {
+            if (key === PREF_KEYS.PROVIDER_CONFIGS && Array.isArray(value)) {
+                const existing = await getPreferenceObject<ProviderConfig[]>(key) || [];
+                const merged = value.map((provider: ProviderConfig) => {
+                    const current = existing.find(item => item.id === provider.id);
+                    return provider.apiKey
+                        ? provider
+                        : { ...provider, apiKey: current?.apiKey || '' };
+                });
+                await setPreferenceObject(key, merged);
+                continue;
+            }
             // Check if this is a known preference key or legacy key
             // Start simple: just save it
             if (typeof value === 'object') {

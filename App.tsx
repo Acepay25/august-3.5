@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { VirtuosoHandle } from 'react-virtuoso';
-import { Message, MessageRole, TradeOutcome, ImageMetadata, AIProvider, Conversation, UserProfile, SavedAnalysis, TradeSummary, GlobalMemory, AccuracySubMode, CustomInstructionsMap, AnalystLensConfig, LoggedTrade } from './types';
+import { Message, MessageRole, TradeOutcome, ImageMetadata, AIProvider, Conversation, UserProfile, SavedAnalysis, TradeSummary, GlobalMemory, AccuracySubMode, CustomInstructionsMap, AnalystLensConfig, LoggedTrade, SetupWatch, SetupWatchTriggerEvent } from './types';
 import * as ensembleService from './services/providers/ensembleService';
 import { generateFinalSummary } from './services/providers/GenericAnalysisService';
 import * as dbService from './services/infrastructure/dbService';
@@ -18,6 +18,7 @@ import { OnboardingCard } from './components/shared/OnboardingCard';
 import { Header } from './components/shared/Header';
 import { SidebarContent } from './components/shared/Sidebar';
 import { ChatArea } from './components/chat/ChatArea';
+import { AnalystSubagents } from './components/analysis/EnsembleProgressChat';
 import { useProviderConfigs } from './hooks/useProviderConfigs';
 import { useAppSettings } from './hooks/useAppSettings';
 import { useJournalUI } from './hooks/useJournalUI';
@@ -87,6 +88,7 @@ import { startAutoBackup, stopAutoBackup, createBackup } from './services/infras
 import { storageService } from './services/infrastructure/StorageService';
 import { initInvalidationRuleService, loadInvalidationRules } from './services/validation/InvalidationRuleService';
 import { PriceAlertService } from './services/ui/PriceAlertService';
+import { SetupWatchService, describeWatchTrigger } from './services/ui/SetupWatchService';
 import { OutcomeAutopilotService, AutopilotResolution } from './services/ui/OutcomeAutopilotService';
 import { clearAllCaches } from './services/infrastructure/responseCache';
 import { initNativeStatusBar } from './services/infrastructure/NativeStatusBar';
@@ -342,6 +344,7 @@ const App: React.FC = () => {
         calculateTimeDifference,
     } = useTradeLogging({
         messages,
+        messagesRef,
         updateMessages,
         activeConversationLeverage: activeConversation?.leverage,
         moderatorProviderId,
@@ -419,6 +422,7 @@ const App: React.FC = () => {
         handleClearChat,
         handleDeleteMessages,
         getActiveCustomInstructions,
+        handleReplacementChoice,
     } = useAnalysisPipeline({
         messages, messagesRef, updateMessages, activeConversation, activeConversationId,
         providerConfigs: readyProviders,
@@ -470,7 +474,7 @@ const App: React.FC = () => {
             issues.push('disable extra models (maximum 3 for ensemble)');
         }
         if (!moderatorProviderId || !readyProviders.some(p => p.id === moderatorProviderId)) {
-            issues.push('select a moderator in Settings → AI Models');
+            issues.push('select a moderator in Settings → AI setup');
         }
         if (missingAnalystRoles.length > 0 && lensConfig.enabled) {
             issues.push(`assign ${missingAnalystRoles.map(role => ANALYST_ROLE_DEFINITIONS[role].shortName).join(', ')} in Assign Analysts`);
@@ -516,6 +520,8 @@ const App: React.FC = () => {
         handleRetryPostMortem,
         handleAllPostMortemTypingComplete,
         handleMismatchResolution,
+        todayReassessmentInFlight,
+        startTodayReassessment,
     } = usePostMortem({
         messages,
         activeConversationId,
@@ -558,7 +564,6 @@ const App: React.FC = () => {
     // ... (Rest of existing hooks/functions) ...
     const analysisMessages = useMemo(() => messages.filter(m => m.analysis || m.isDebating), [messages]);
     const currentInsightIds = useMemo(() => tradeSummaries.map(s => s.id), [tradeSummaries]);
-
     const isImageUploadDisabled = isAnalysisInProgress || isPostMortemInProgress;
     const isSummarizing = images.some(img => img.isLoading);
     const isAnyProviderEnabled = readyProviders.length > 0 || isAccuracyModeEnabled;
@@ -691,7 +696,9 @@ const App: React.FC = () => {
         setTradeSummaries([]);
         setFinalTradeSummary(null);
         setGlobalMemory(undefined);
-        setIsGlobalMemoryEnabled(true);
+        setIsGlobalMemoryEnabled(false);
+        setMemoryConfig(null);
+        setMemoryModel('');
         setIsAccuracyModeEnabled(false);
         setAccuracySubMode('original');
         setCustomInstructions({ general: [], accuracyOriginal: [], accuracyPure: [] });
@@ -719,7 +726,7 @@ const App: React.FC = () => {
                 tradeSummaries: [],
                 finalTradeSummary: null,
                 globalMemory: undefined,
-                settings: { activeFrameworks: DEFAULT_FRAMEWORKS, summaryCharLimit: 4000, summarizationProvider: firstReady?.id || '', summarizationModel: firstReady?.selectedModel || '', isGlobalMemoryEnabled: true, isAccuracyModeEnabled: false, accuracySubMode: 'original', customInstructions: { general: [], accuracyOriginal: [], accuracyPure: [] }, isPlaybookEnabledInPureAI: false, isFamiliesEnabledInPureAI: false, isMemoryEnabledInPureAI: false, isHybridIntelligenceEnabled: false, isAutoCapturing: false, isUpdateAutoCapturing: false, isEntryNotHitCapturing: false },
+                settings: { activeFrameworks: DEFAULT_FRAMEWORKS, summaryCharLimit: 4000, summarizationProvider: firstReady?.id || '', summarizationModel: firstReady?.selectedModel || '', isGlobalMemoryEnabled: false, isAccuracyModeEnabled: false, accuracySubMode: 'original', customInstructions: { general: [], accuracyOriginal: [], accuracyPure: [] }, isPlaybookEnabledInPureAI: false, isFamiliesEnabledInPureAI: false, isMemoryEnabledInPureAI: false, isHybridIntelligenceEnabled: false, isAutoCapturing: false, isUpdateAutoCapturing: false, isEntryNotHitCapturing: false, memoryProvider: '', memoryModel: '' },
                 lastActiveConversationId: newConv.id
             });
         }
@@ -746,6 +753,32 @@ const App: React.FC = () => {
     // checks) in sync with the canonical activeUsername state before
     // dependent hooks render.
     activeUsernameRef.current = activeUsername ?? null;
+
+    const latestHistoricalAnalysis = useMemo(() => {
+        const historical = conversationHistory
+            .flatMap(conversation => conversation.messages || [])
+            .filter(message => Boolean(message.analysis))
+            .sort((a, b) => new Date(b.analysis?.createdAt || b.createdAt).getTime() - new Date(a.analysis?.createdAt || a.createdAt).getTime());
+        return historical[0]?.analysis;
+    }, [conversationHistory]);
+    const homeDashboard = useMemo(() => {
+        if (messages.length > 0 || (conversationHistory.length === 0 && loggedTrades.length === 0)) return undefined;
+        return {
+            username: activeUsername,
+            trades: loggedTrades,
+            latestAnalysis: latestHistoricalAnalysis,
+            conversationCount: conversationHistory.length,
+            readyProviderCount: readyProviders.length,
+            hasProviderConfig: providerConfigs.length > 0,
+            onStartAnalysis: () => {
+                setInput('Analyze the chart I attached with a clear verdict, entry, stop, targets, and invalidation criteria.');
+                requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('textarea')?.focus());
+            },
+            onOpenJournal: () => setJournalState({ isOpen: true, tab: 'log' }),
+            onOpenLiveMarket: () => setIsLiveMarketVisible(true),
+            onOpenSettings: () => setIsSettingsMenuVisible(true),
+        };
+    }, [activeUsername, conversationHistory, latestHistoricalAnalysis, loggedTrades, messages.length, providerConfigs.length, readyProviders.length, setInput, setJournalState]);
 
     // P1-4/P1-9: Track the previous active user in a ref mutated by this
     // effect itself. (A render-phase read of activeUsernameRef made
@@ -796,8 +829,20 @@ const App: React.FC = () => {
             const target = e.target as HTMLElement | null;
             const isTyping = !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable);
             if (isTyping) return;
-            const anyOverlayOpen = journalState.isOpen || isSettingsMenuVisible || isLiveMarketVisible || isCommandPaletteOpen || isSavedGalleryOpen || isUserModalOpen;
-            if (anyOverlayOpen) return;
+            const anyOverlayOpen = journalState.isOpen || isSettingsMenuVisible || isLiveMarketVisible || isCommandPaletteOpen || isSavedGalleryOpen || isUserModalOpen || isAdvancedAnalyticsOpen || isVisionDataVisible || isStrategySearchVisible || isSavedAnalysesVisible || isVersionHistoryVisible;
+            if (anyOverlayOpen) {
+                // Overlays with their own document-level Esc handlers
+                // (SettingsMenu, command palette, Journal, LiveMarket, dialogs)
+                // close themselves. Close the gate-owned overlays here so one
+                // Esc never both closes an overlay AND cancels a running
+                // analysis — but never cancels while anything is open.
+                if (isAdvancedAnalyticsOpen) setIsAdvancedAnalyticsOpen(false);
+                if (isVisionDataVisible) setIsVisionDataVisible(false);
+                if (isStrategySearchVisible) setIsStrategySearchVisible(false);
+                if (isSavedAnalysesVisible) setIsSavedAnalysesVisible(false);
+                if (isVersionHistoryVisible) setIsVersionHistoryVisible(false);
+                return;
+            }
             if (isAnalysisInProgress && !isPostMortemInProgress) {
                 handleCancelAnalysis();
                 toast.info('Analysis cancelled', 'The partial debate was preserved in the chat.');
@@ -805,7 +850,7 @@ const App: React.FC = () => {
         };
         document.addEventListener('keydown', onKeyDown);
         return () => document.removeEventListener('keydown', onKeyDown);
-    }, [isAnalysisInProgress, isPostMortemInProgress, handleCancelAnalysis, toast, journalState.isOpen, isSettingsMenuVisible, isLiveMarketVisible, isCommandPaletteOpen, isSavedGalleryOpen, isUserModalOpen]);
+    }, [isAnalysisInProgress, isPostMortemInProgress, handleCancelAnalysis, toast, journalState.isOpen, isSettingsMenuVisible, isLiveMarketVisible, isCommandPaletteOpen, isSavedGalleryOpen, isUserModalOpen, isAdvancedAnalyticsOpen, isVisionDataVisible, isStrategySearchVisible, isSavedAnalysesVisible, isVersionHistoryVisible]);
 
     // ─── Side-by-side compare ──────────────────────────────────────────────
     const [compareState, setCompareState] = useState<{ primaryId: string; secondaryId: string | null } | null>(null);
@@ -870,7 +915,12 @@ const App: React.FC = () => {
     // (Ctrl+N + "/" handler lives next to handleNewConversation below.)
 
 
+    // Prevent the async startup profile scan from reopening the workspace
+    // picker after the user has already submitted a workspace name.
+    const profileSelectionStartedRef = useRef(false);
+
     const loadUserData = async (username: string) => {
+        profileSelectionStartedRef.current = true;
         handleCancelAnalysis();
         invalidatePostMortemRuns();
         setIsLoading(true);
@@ -910,6 +960,7 @@ const App: React.FC = () => {
         }
         await initInvalidationRuleService();
         await PriceAlertService.init();
+        await SetupWatchService.init();
         await OutcomeAutopilotService.init();
         await initConfluenceService();
         await initPatternMemoryService();
@@ -957,7 +1008,7 @@ const App: React.FC = () => {
             const firstReadyProvider = getFirstReadyProvider(providerConfigs);
             setSummarizationProvider(profile.settings?.summarizationProvider || firstReadyProvider?.id || '');
             setSummarizationModel(profile.settings?.summarizationModel || firstReadyProvider?.selectedModel || '');
-            setIsGlobalMemoryEnabled(profile.settings?.isGlobalMemoryEnabled ?? true);
+            setIsGlobalMemoryEnabled(profile.settings?.isGlobalMemoryEnabled ?? false);
             setIsAccuracyModeEnabled(profile.settings?.isAccuracyModeEnabled ?? false);
             setAccuracySubMode(profile.settings?.accuracySubMode || 'original');
 
@@ -1098,7 +1149,7 @@ const App: React.FC = () => {
                 const sessionUser = sessionStorage.getItem('activeUsername');
                 if (sessionUser && users.includes(sessionUser)) {
                     loadUserData(sessionUser);
-                } else {
+                } else if (!profileSelectionStartedRef.current) {
                     setIsUserModalOpen(true);
                 }
             } catch (error) {
@@ -1106,7 +1157,7 @@ const App: React.FC = () => {
                 if (!isMounted) return;
                 // Show the user modal even if DB init fails so the app
                 // doesn't get stuck on a blank screen.
-                setIsUserModalOpen(true);
+                if (!profileSelectionStartedRef.current) setIsUserModalOpen(true);
             }
         };
         initializeApp();
@@ -1125,7 +1176,7 @@ const App: React.FC = () => {
         tradeSummaries: tradeSummaries,
         finalTradeSummary: finalTradeSummary,
         globalMemory: globalMemory,
-        settings: { activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, confidenceCalibration, memoryProvider: memoryConfig?.id || '' },
+        settings: { activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, confidenceCalibration, memoryProvider: memoryConfig?.id || '', memoryModel },
         lastActiveConversationId: activeConversationId || undefined,
         // AI Learning data
         insightKnowledgeBase: insightKnowledgeBase,
@@ -1134,7 +1185,7 @@ const App: React.FC = () => {
         // clear silently destroyed them. Snapshotting them here populates the
         // users.learningRules column and BackupService payload.
         learningRules: storageService.loadLearningRules(),
-    }), [conversationHistory, loggedTrades, activeFrameworks, activeConversationId, savedAnalyses, tradeSummaries, finalTradeSummary, globalMemory, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, confidenceCalibration, insightKnowledgeBase, memoryConfig]);
+    }), [conversationHistory, loggedTrades, activeFrameworks, activeConversationId, savedAnalyses, tradeSummaries, finalTradeSummary, globalMemory, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, confidenceCalibration, insightKnowledgeBase, memoryConfig, memoryModel]);
 
     // ─── P1-6: Split save into DATA (heavy) + SETTINGS (light) ───────────
     // Previously a single effect re-serialized ALL conversations (with base64
@@ -1152,11 +1203,19 @@ const App: React.FC = () => {
     useEffect(() => {
         if (!activeUsername) return;
 
-        setSaveStatus('SAVING');
+        // Bail out when already SAVING — this effect re-arms on EVERY stream
+        // chunk, and a state write to the same value would still schedule a
+        // full App render each time (P1-6: setSaveStatus was a raw setter).
+        setSaveStatus(prev => (prev === 'SAVING' ? prev : 'SAVING'));
 
         const handler = setTimeout(async () => {
             try {
-                const profileData = buildProfileSnapshot();
+                // buildProfileSnapshot deliberately stays OUT of this effect's
+                // deps (see dep list below): settings-only toggles would re-arm
+                // a heavy full-snapshot save that the SETTINGS effect already
+                // covers. heartbeatSnapshotRef (synced every render, below)
+                // always holds the freshest snapshot without re-arming here.
+                const profileData = heartbeatSnapshotRef.current();
                 await dbService.saveUserProfile(activeUsername, profileData);
                 lastSavedSnapshotRef.current = profileData;
                 setSaveStatus('SAVED');
@@ -1169,7 +1228,7 @@ const App: React.FC = () => {
         return () => {
             clearTimeout(handler);
         };
-    }, [conversationHistory, loggedTrades, savedAnalyses, tradeSummaries, finalTradeSummary, globalMemory, insightKnowledgeBase, activeUsername, activeConversationId, buildProfileSnapshot]);
+    }, [conversationHistory, loggedTrades, savedAnalyses, tradeSummaries, finalTradeSummary, globalMemory, insightKnowledgeBase, activeUsername, activeConversationId]);
 
     // (2) SETTINGS save — light payload, runs on settings toggles. Uses a
     // longer debounce (2500ms) since settings changes are low-risk and we
@@ -1179,15 +1238,15 @@ const App: React.FC = () => {
 
         // Surface settings saves in the header status too — the old path
         // failed silently (console.error only), so a broken write looked
-        // like a successful toggle.
-        setSaveStatus('SAVING');
+        // like a successful toggle. Same bail-out as the DATA effect.
+        setSaveStatus(prev => (prev === 'SAVING' ? prev : 'SAVING'));
 
         const handler = setTimeout(async () => {
             try {
                 // Only the settings sub-object — no conversations, no trades,
                 // no base64 images. This is a cheap write.
                 await dbService.saveUserProfile(activeUsername, {
-                    settings: { activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, confidenceCalibration, memoryProvider: memoryConfig?.id || '' },
+                    settings: { activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, confidenceCalibration, memoryProvider: memoryConfig?.id || '', memoryModel },
                 });
                 setSaveStatus('SAVED');
             } catch (err) {
@@ -1200,7 +1259,7 @@ const App: React.FC = () => {
         return () => {
             clearTimeout(handler);
         };
-    }, [activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, confidenceCalibration, memoryConfig, activeUsername, toast]);
+    }, [activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, confidenceCalibration, memoryConfig, memoryModel, activeUsername, toast]);
 
     // (3) SAVE HEARTBEAT — the 1500ms DATA debounce restarts on every message
     // change, so nothing is persisted for the ENTIRE duration of a run (the
@@ -1220,7 +1279,21 @@ const App: React.FC = () => {
         if (!activeUsername || (!isAnalysisInProgress && !isPostMortemInProgress)) return;
         const interval = setInterval(async () => {
             try {
+                const last = lastSavedSnapshotRef.current;
                 const snapshot = heartbeatSnapshotRef.current();
+                // Skip the write when nothing changed since the last persisted
+                // snapshot (reference compare — same as the unload-flush dirty
+                // check). Pure typing or a settled run must not force a
+                // full-profile stringify every 15s.
+                const dirty = !last
+                    || last.conversations !== snapshot.conversations
+                    || last.tradeLog !== snapshot.tradeLog
+                    || last.tradeSummaries !== snapshot.tradeSummaries
+                    || last.savedAnalyses !== snapshot.savedAnalyses
+                    || last.finalTradeSummary !== snapshot.finalTradeSummary
+                    || last.globalMemory !== snapshot.globalMemory
+                    || last.insightKnowledgeBase !== snapshot.insightKnowledgeBase;
+                if (!dirty) return;
                 await dbService.saveUserProfile(activeUsername, snapshot);
                 lastSavedSnapshotRef.current = snapshot;
             } catch (err) {
@@ -1679,6 +1752,19 @@ const App: React.FC = () => {
         if (ok) handleDeleteConversations([id]);
     };
 
+    const handleDeleteSelectedConversations = async (ids: string[]): Promise<boolean> => {
+        if (ids.length === 0) return false;
+        const ok = await confirmDialog({
+            title: `Delete ${ids.length} session${ids.length === 1 ? '' : 's'}?`,
+            message: `This will remove ${ids.length} selected conversation${ids.length === 1 ? '' : 's'} and their messages. Logged trades are kept.`,
+            confirmLabel: 'Delete selected',
+            destructive: true,
+        });
+        if (!ok) return false;
+        handleDeleteConversations(ids);
+        return true;
+    };
+
     const handleStartNewConversation = () => {
         handleCancelAnalysis();
         invalidatePostMortemRuns();
@@ -1907,19 +1993,19 @@ const App: React.FC = () => {
     // F4: "Re-run debate" — re-dispatches the original prompt + chart images
     // through the normal pipeline so the user gets a fresh debate for the
     // same setup (also the missing retry path for failed analyst slots).
-    const handleReRunAnalysis = useCallback((messageId: string) => {
-        const index = messages.findIndex(m => m.id === messageId);
-        const card = index >= 0 ? messages[index] : undefined;
-        if (!card) return;
+    // Shared by the manual Re-run button and price-triggered setup watches.
+    const buildRerunPayload = useCallback((messageId: string): { prompt: string; images: ImageMetadata[] } | null => {
+        // P1-6: read via messagesRef for a stable identity (see handleSaveAnalysis).
+        const msgs = messagesRef.current;
+        const index = msgs.findIndex(m => m.id === messageId);
+        const card = index >= 0 ? msgs[index] : undefined;
+        if (!card) return null;
         let userMsg: Message | undefined;
         for (let i = index - 1; i >= 0; i--) {
-            if (messages[i].role === MessageRole.USER) { userMsg = messages[i]; break; }
+            if (msgs[i].role === MessageRole.USER) { userMsg = msgs[i]; break; }
         }
         const prompt = userMsg?.text?.trim();
-        if (!prompt) {
-            toast.warning('Cannot re-run', 'No original prompt found for this analysis.');
-            return;
-        }
+        if (!prompt) return null;
         // Rebuild ImageMetadata from the persisted dataURLs (the pipeline's
         // vision payload needs File objects).
         const images: ImageMetadata[] = (userMsg?.images ?? []).map((url, i) => ({
@@ -1928,24 +2014,78 @@ const App: React.FC = () => {
             summary: userMsg?.imageSummaries?.[i],
             isLoading: false,
         }));
-        stableHandleSendMessage(prompt, images, `Re-run requested for analysis card ${messageId}.`);
-    }, [messages, stableHandleSendMessage, toast]);
+        return { prompt, images };
+    }, [messagesRef]);
+
+    const handleReRunAnalysis = useCallback((messageId: string) => {
+        const payload = buildRerunPayload(messageId);
+        if (!payload) {
+            toast.warning('Cannot re-run', 'No original prompt found for this analysis.');
+            return;
+        }
+        stableHandleSendMessage(payload.prompt, payload.images, `Re-run requested for analysis card ${messageId}.`);
+    }, [buildRerunPayload, stableHandleSendMessage, toast]);
+
+    // ─── Price-triggered re-debate ("watch this setup") ────────────────────
+    // A setup watch fires → launch a fresh debate for the same setup with the
+    // previous verdict as context. In-flight runs re-arm the watch instead so
+    // the next price tick (≤10s polling) launches once the pipeline frees up.
+    // The guard reads isAnalysisInProgress DIRECTLY: a ref synced via an
+    // effect lagged by one effect cycle, so a fire landing in that window was
+    // dropped — and since rearmWatch had already re-armed, the watch lost its
+    // fire-once while staying TRIGGERED.
+
+    const launchRedeBate = useCallback((watch: SetupWatch) => {
+        const payload = buildRerunPayload(watch.messageId);
+        if (!payload) {
+            toast.warning('Watch triggered', `No original prompt found for ${watch.coinName} — re-debate skipped.`);
+            return;
+        }
+        const card = messagesRef.current.find(m => m.id === watch.messageId);
+        const a = card?.analysis;
+        const verdict = a
+            ? `Previous verdict: ${a.direction || 'Neutral'} · confidence ${a.confidence || 'N/A'} · probability ${a.probability != null ? `${a.probability}%` : 'N/A'}.`
+            : 'No previous verdict available.';
+        const hidden = `Price-triggered re-debate for ${watch.coinName} (watch on ${watch.messageId}): ${describeWatchTrigger(watch)}. ${verdict} Re-analyze this setup with fresh market data and reassess the trade.`;
+        stableHandleSendMessage(payload.prompt, payload.images, hidden);
+        toast.success?.('Re-debate launched', `${watch.coinName} hit "${describeWatchTrigger(watch)}" — fresh debate started with the previous verdict as context.`);
+    }, [buildRerunPayload, messagesRef, stableHandleSendMessage, toast]);
+
+    const handleWatchTriggered = useCallback((trigger: SetupWatchTriggerEvent) => {
+        if (isAnalysisInProgress) {
+            // A run is already in progress — re-arm; the next tick retries.
+            SetupWatchService.rearmWatch(trigger.watch.id);
+            return;
+        }
+        launchRedeBate(trigger.watch);
+    }, [isAnalysisInProgress, launchRedeBate]);
+
+    // Subscribe once; armed watches persisted in Preferences re-fire after
+    // restart because SetupWatchService.init() runs in the bootstrap effect.
+    useEffect(() => {
+        return SetupWatchService.subscribe(handleWatchTriggered);
+    }, [handleWatchTriggered]);
 
     const handleViewStrategyDetails = useCallback((name: string) => {
         setStrategyToView(name);
         setIsStrategySearchVisible(true);
     }, []);
 
+    // P1-6: reads messages via messagesRef (not the `messages` closure) so
+    // this handler keeps a stable identity across stream chunks — a fresh
+    // identity here would re-create chatContext (and re-render every visible
+    // MessageItem) on each chunk.
     const handleSaveAnalysis = useCallback((messageId: string) => {
-        const msgIndex = messages.findIndex(m => m.id === messageId);
-        const msg = msgIndex >= 0 ? messages[msgIndex] : undefined;
+        const msgs = messagesRef.current;
+        const msgIndex = msgs.findIndex(m => m.id === messageId);
+        const msg = msgIndex >= 0 ? msgs[msgIndex] : undefined;
         if (msg && msg.analysis) {
             // Find the nearest preceding user message. Reconstructing the user ID from the
             // AI message ID never matches because both use independent Date.now() timestamps.
             let userPrompt = "Unknown Request";
             for (let i = msgIndex - 1; i >= 0; i--) {
-                if (messages[i].role === MessageRole.USER) {
-                    userPrompt = messages[i].text || "Unknown Request";
+                if (msgs[i].role === MessageRole.USER) {
+                    userPrompt = msgs[i].text || "Unknown Request";
                     break;
                 }
             }
@@ -1965,9 +2105,9 @@ const App: React.FC = () => {
                 return [...prev, saved];
             });
         }
-    }, [messages, moderatorProviderId, moderatorModel]);
+    }, [messagesRef, moderatorProviderId, moderatorModel]);
 
-    const handleCalculateAIProbabilities = async (messageId: string, mode: 'AI' | 'Algo' = 'AI') => {
+    const handleCalculateAIProbabilities = useCallback(async (messageId: string, mode: 'AI' | 'Algo' = 'AI') => {
         const msg = messages.find(m => m.id === messageId);
         if (!msg || !msg.analysis) return;
 
@@ -2040,7 +2180,55 @@ const App: React.FC = () => {
         } finally {
             setIsCalculatingAIProbabilities(false);
         }
-    };
+    }, [messages, loggedTrades, updateMessages, toast, moderatorConfig, moderatorModel]);
+
+    // ─── Stable identities for overlay/panel callbacks ─────────────────────
+    // Inline arrows here were recreated on every App render, busting
+    // React.memo on ChatArea/Journal and rebuilding ChatArea's
+    // enhancedContext (re-rendering every memoized MessageItem) on each
+    // keystroke / progress tick even when nothing relevant changed.
+    const handleSelectMessageForProbability = useCallback((id: string) => {
+        setSelectedProbabilityMessageId(id);
+        setIsAdvancedAnalyticsOpen(true);
+        handleCalculateAIProbabilities(id);
+    }, [handleCalculateAIProbabilities]);
+
+    const handleCloseJournal = useCallback(() => {
+        setJournalState(prev => ({ ...prev, isOpen: false }));
+    }, []);
+
+    const handleOpenJournal = useCallback(() => {
+        setJournalState({ isOpen: true, tab: 'log' });
+    }, []);
+
+    const handleOpenLiveMarket = useCallback(() => {
+        setIsLiveMarketVisible(true);
+    }, []);
+
+    const handleOpenVersionHistory = useCallback(() => {
+        setIsVersionHistoryVisible(true);
+    }, []);
+
+    const handleOpenAnalytics = useCallback(() => {
+        setIsAdvancedAnalyticsOpen(true);
+    }, []);
+
+    const handleInteract = useCallback(() => {
+        setIsAdvancedAnalyticsOpen(false);
+    }, []);
+
+    // Journal props were rebuilt per render (fresh array/object identities),
+    // which refired ModelPerformanceDashboard's full trade-log rescan on every
+    // App render while the journal was open. Memoize on readyProviders so they
+    // only change when the provider configuration actually changes.
+    const journalEnabledProviders = useMemo(
+        () => readyProviders.map(p => p.id),
+        [readyProviders]
+    );
+    const journalSelectedModels = useMemo(
+        () => Object.fromEntries(readyProviders.map(p => [p.id, p.selectedModel])),
+        [readyProviders]
+    );
 
     // ─── Outcome Autopilot ────────────────────────────────────────────────
     // Register PENDING analyses for automatic SL/TP detection; resolutions
@@ -2192,9 +2380,22 @@ const App: React.FC = () => {
         onCompareAnalysis: handleCompareAnalysis,
         onViewReasoning: handleViewReasoning,
         onReRunAnalysis: handleReRunAnalysis,
-    }), [typingMessageState, highlightedAnalysisId, expandedPostMortems, expandedPostMortemImages, savedAnalyses, activeFrameworks, copiedMessageId, modelIdToName, providerNameToId, handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy, handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, confidenceCalibration, handleRetryPostMortem, lensConfig, chatLeverage, autopilotResolutions, handleConfirmAutopilot, handleDismissAutopilot, handleCompareAnalysis, handleViewReasoning, handleReRunAnalysis]);
+        onReplacementChoice: handleReplacementChoice,
+        // Post-mortem "what would I do today?" re-assessment.
+        onTodayReassessment: startTodayReassessment,
+        todayReassessmentInFlight,
+    }), [typingMessageState, highlightedAnalysisId, expandedPostMortems, expandedPostMortemImages, savedAnalyses, activeFrameworks, copiedMessageId, modelIdToName, providerNameToId, handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy, handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, confidenceCalibration, handleRetryPostMortem, lensConfig, chatLeverage, autopilotResolutions, handleConfirmAutopilot, handleDismissAutopilot, handleCompareAnalysis, handleViewReasoning, handleReRunAnalysis, handleReplacementChoice, startTodayReassessment, todayReassessmentInFlight]);
 
     // ... (Rest of component remains unchanged) ...
+    const isAnalysisProgressVisible = Boolean(
+        loadingMessage || (isAnalysisInProgress && !isPostMortemInProgress),
+    );
+    const activeEnsembleRun = useMemo(() => {
+        if (!isAnalysisProgressVisible) return null;
+        const message = [...messages].reverse().find(item => item.ensembleProgress);
+        return message?.ensembleProgress ? { messageId: message.id, progress: message.ensembleProgress } : null;
+    }, [isAnalysisProgressVisible, messages]);
+
     return (
         // P1-6: Outer Suspense boundary. fallback={null} so a suspending lazy
         // subtree (e.g. a modal opening) does NOT blank the always-visible
@@ -2223,7 +2424,7 @@ const App: React.FC = () => {
                 providers={readyProviders}
                 onAllTypingComplete={handleAllPostMortemTypingComplete}
             />
-            <UserProfileManager isVisible={isUserModalOpen} onUserSelect={loadUserData} existingUsers={existingUsernames} onImportProfile={handleImportData} onDeleteUser={handleDeleteUser} />
+            <UserProfileManager isVisible={isUserModalOpen} onUserSelect={loadUserData} existingUsers={existingUsernames} onImportProfile={handleImportData} onDeleteUser={handleDeleteUser} onClose={() => setIsUserModalOpen(false)} />
             <AccuracyModeModal isOpen={showAccuracyModal} onClose={() => setShowAccuracyModal(false)} onConfirm={handleConfirmAccuracyMode} isEnabling={!isAccuracyModeEnabled} />
             <LiveMarket isVisible={isLiveMarketVisible} onClose={() => setIsLiveMarketVisible(false)} onAnalyze={handleLiveMarketAnalyze} />
             {dataCaptureCandidate && (
@@ -2300,7 +2501,10 @@ const App: React.FC = () => {
                 isGlobalMemoryEnabled={isGlobalMemoryEnabled}
                 setIsGlobalMemoryEnabled={setIsGlobalMemoryEnabled}
                 memoryConfig={memoryConfig}
-                onMemoryConfigChange={setMemoryConfig}
+                onMemoryConfigChange={(config) => {
+                    setMemoryConfig(config);
+                    setMemoryModel(config?.selectedModel || '');
+                }}
                 isPlaybookEnabledInPureAI={isPlaybookEnabledInPureAI}
                 setIsPlaybookEnabledInPureAI={setIsPlaybookEnabledInPureAI}
                 isFamiliesEnabledInPureAI={isFamiliesEnabledInPureAI}
@@ -2330,7 +2534,6 @@ const App: React.FC = () => {
                 onDeleteTrades={handleDeleteTrades}
                 onClearAllTrades={handleClearAllTrades}
                 modelIdToName={modelIdToName}
-                ocrModelIdToName={ocrModelIdToName}
                 onUpdateInsights={handleManualInsightsUpdate}
                 isSummarizing={isSummarizing}
                 currentInsightIds={currentInsightIds}
@@ -2350,7 +2553,7 @@ const App: React.FC = () => {
                 isPostMortemInProgress={isPostMortemInProgress}
                 currentVisionData={currentVisionData}
                 isFreshSession={messages.length === 0}
-                onOpenVersionHistory={() => setIsVersionHistoryVisible(true)}
+                onOpenVersionHistory={handleOpenVersionHistory}
                 isMobileMenuOpen={isMobileMenuOpen}
                 mobileMenuRef={mobileMenuRef}
                 setIsMobileMenuOpen={setIsMobileMenuOpen}
@@ -2360,8 +2563,9 @@ const App: React.FC = () => {
                 setIsLivePostMortemVisible={setIsLivePostMortemVisible}
                 isLoading={isLoading}
                 isRateLimited={isRateLimited}
-                onOpenLiveMarket={() => setIsLiveMarketVisible(true)}
+                onOpenLiveMarket={handleOpenLiveMarket}
                 onDeleteConversation={handleDeleteConversationFromSidebar}
+                onDeleteConversations={handleDeleteSelectedConversations}
                 isOnline={isOnline}
                 pendingQueueCount={pendingQueueCount}
                 liveMarketConditions={liveMarketConditions}
@@ -2374,18 +2578,17 @@ const App: React.FC = () => {
             <React.Suspense fallback={null}>
             <Journal
                 isVisible={journalState.isOpen}
-                onClose={() => setJournalState(prev => ({ ...prev, isOpen: false }))}
+                onClose={handleCloseJournal}
                 initialTab={journalState.tab}
                 initialTradeId={journalState.focusTradeId}
                 username={activeUsername || undefined}
                 onInitialTradeConsumed={handleReasoningTradeConsumed}
                 trades={loggedTrades}
-                enabledProviders={readyProviders.map(p => p.id)}
-                selectedModels={Object.fromEntries(readyProviders.map(p => [p.id, p.selectedModel]))}
+                enabledProviders={journalEnabledProviders}
+                selectedModels={journalSelectedModels}
                 onDeleteTrades={handleDeleteTrades}
                 onClearAllTrades={handleClearAllTrades}
                 modelIdToName={modelIdToName}
-                ocrModelIdToName={ocrModelIdToName}
                 onUpdateInsights={handleManualInsightsUpdate}
                 isSummarizing={isSummarizing}
                 currentInsightIds={currentInsightIds}
@@ -2483,15 +2686,18 @@ const App: React.FC = () => {
                         onNewConversation={handleStartNewConversation}
                         onLoadConversation={handleLoadConversation}
                         onDeleteConversation={handleDeleteConversationFromSidebar}
-                        onOpenLiveMarket={() => setIsLiveMarketVisible(true)}
+                        onDeleteConversations={handleDeleteSelectedConversations}
+                        onOpenLiveMarket={handleOpenLiveMarket}
                         onOpenVisionData={() => setIsVisionDataVisible(true)}
-                        onOpenJournal={() => setJournalState({ isOpen: true, tab: 'log' })}
+                        onOpenJournal={handleOpenJournal}
                         onOpenSettings={() => setIsSettingsMenuVisible(true)}
                         collapsed={isSidebarCollapsed}
                     />
                 </aside>
 
-                <main className="flex-1 flex flex-col min-h-0 min-w-0 relative">
+                <main
+                    className={`flex-1 flex flex-col min-h-0 min-w-0 relative transition-[margin,padding] duration-200 ${isAnalysisProgressVisible ? 'lg:mr-[27rem] lg:px-8 xl:px-16' : ''}`}
+                >
                     {/* Mistake Warning Banner - Global Risk Reminder */}
                     {loggedTrades.length > 0 && (
                         <React.Suspense fallback={null}>
@@ -2512,11 +2718,7 @@ const App: React.FC = () => {
                 messages={messages}
                 analysisSteps={analysisSteps}
                 isAnalysisActive={!!loadingMessage}
-                onSelectMessageForProbability={(id) => {
-                    setSelectedProbabilityMessageId(id);
-                    setIsAdvancedAnalyticsOpen(true);
-                    handleCalculateAIProbabilities(id);
-                }}
+                onSelectMessageForProbability={handleSelectMessageForProbability}
                 chatContext={chatContext}
                 virtuosoRef={virtuosoRef}
                 isRateLimited={isRateLimited}
@@ -2581,15 +2783,71 @@ const App: React.FC = () => {
                 suggestedEntryPrice={currentSuggestedEntryPrice}
                 entryTimingScore={currentEntryTimingScore}
                 onNewConversation={handleStartNewConversation}
-                onOpenJournal={() => setJournalState({ isOpen: true, tab: 'log' })}
-                onOpenLiveMarket={() => setIsLiveMarketVisible(true)}
-                onOpenAnalytics={() => setIsAdvancedAnalyticsOpen(true)}
-                onInteract={() => {
-                    if (isAdvancedAnalyticsOpen) setIsAdvancedAnalyticsOpen(false);
-                }}
+                onOpenJournal={handleOpenJournal}
+                onOpenLiveMarket={handleOpenLiveMarket}
+                onOpenAnalytics={handleOpenAnalytics}
+                homeDashboard={homeDashboard}
+                onInteract={handleInteract}
             />
                 </main>
-            </div>
+
+                {/* Desktop activity card: float progress over the right side so
+                    the conversation keeps its full width while the run is live. */}
+                {isAnalysisProgressVisible && (
+                    <div className="pointer-events-none fixed right-4 top-24 z-40 hidden w-[min(26rem,calc(100vw-2rem))] max-h-[calc(100vh-7rem)] lg:block">
+                        <div className="pointer-events-auto h-fit max-h-[calc(100vh-7rem)] overflow-y-auto rounded-3xl border border-white/[0.08] bg-[#2a2a2a] p-3 shadow-2xl scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent" aria-label="Analysis progress">
+                            <div className="flex items-center justify-between px-1 pb-3">
+                                <div>
+                                    <h2 className="text-sm font-medium text-zinc-200">Analysis</h2>
+                                    <p className="mt-0.5 text-[11px] text-zinc-500">Live progress</p>
+                                </div>
+                                <span className="flex items-center gap-1.5 rounded-full bg-cyan-500/10 px-2 py-1 text-[10px] font-medium text-cyan-300">
+                                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400" aria-hidden="true" />
+                                    {isPostMortemInProgress ? 'Post-mortem' : 'Running'}
+                                </span>
+                            </div>
+
+                            {analysisSteps && analysisSteps.length > 0 ? (
+                                <AnalysisProgress
+                                    steps={analysisSteps}
+                                    isActive={!!loadingMessage || isAnalysisInProgress}
+                                    onCancel={handleCancelAnalysis}
+                                    embedded
+                                    isPostMortem={isPostMortemInProgress}
+                                    isPostMortemInProgress={isPostMortemInProgress}
+                                    onOpenPostMortem={() => setIsLivePostMortemVisible(true)}
+                                    />
+                            ) : (
+                                <div className="rounded-2xl border border-cyan-500/20 bg-zinc-900/60 p-4">
+                                    <div className="flex items-center gap-2 text-sm text-cyan-300" aria-live="polite">
+                                        <span className="h-2 w-2 animate-pulse rounded-full bg-cyan-400" aria-hidden="true" />
+                                        {loadingMessage || 'Analysis in progress'}
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={handleCancelAnalysis}
+                                        className="mt-4 w-full rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs font-medium text-rose-300 transition-colors hover:bg-rose-500/20"
+                                    >
+                                        Stop generating
+                                    </button>
+                                </div>
+                            )}
+
+                            {activeEnsembleRun && activeEnsembleRun.progress.analysts.length > 0 && (
+                                <div className="mt-3 border-t border-white/10 pt-3">
+                                    <AnalystSubagents
+                                        progress={activeEnsembleRun.progress}
+                                        modelIdToName={modelIdToName}
+                                        isLive
+                                        onRetryAnalyst={() => handleReRunAnalysis(activeEnsembleRun.messageId)}
+                                    />
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                </div>
 
             {/* Command palette — Ctrl/Cmd+K */}
             <CommandPalette

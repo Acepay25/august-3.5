@@ -86,6 +86,13 @@ class GlobalLearningService {
      * Update calibration with a new trade outcome and auto-save
      */
     public async updateCalibration(entry: GranularCalibrationEntry): Promise<void> {
+        // Guard against the constructor's empty default: if the on-disk state
+        // hasn't loaded yet, applying the update would build on an empty
+        // baseline and the following saveLearningState() would OVERWRITE the
+        // user's real calibration history with it.
+        if (!this._isInitialized) {
+            await this.initialize();
+        }
         const oldState = this._calibration;
 
         // Use granular update if possible, otherwise fallback is handled within updateGranularCalibration

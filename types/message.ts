@@ -88,6 +88,46 @@ export interface RunStats {
   btMatches?: number;
   btWinRate?: number;
   btEV?: number;
+  /**
+   * Per-analyst cost & latency ledger: who actually ran, with which model,
+   * how long they took, and how much text they produced. App-computed so the
+   * run can be audited after the fact (and the count can never silently claim
+   * analysts that dropped out mid-debate).
+   */
+  analysts?: RunAnalystStats[];
+}
+
+/** One analyst's entry in the run ledger. */
+export interface RunAnalystStats {
+  /** ProviderConfig.id — the key used across modelsUsed/calibration. */
+  providerId: string;
+  displayName: string;
+  modelId: string;
+  /** Wall-clock time for the initial analysis call, ms. */
+  durationMs?: number;
+  /** Combined output size (final output + thought process), chars. */
+  charsOut?: number;
+}
+
+/** A candidate provider the user can pick to replace an analyst that dropped
+ *  mid-debate. Transient UI state — never persisted. */
+export interface ReplacementCandidate {
+  providerId: string;
+  displayName: string;
+  modelId: string;
+}
+
+/** Mid-debate analyst-replacement offer: the debate generator suspends and
+ *  shows this banner until the user picks a candidate or skips. */
+export interface ReplacementOffer {
+  /** Analyst that dropped out mid-debate. */
+  droppedName: string;
+  /** Round during which the drop happened. */
+  round: number;
+  /** Ready providers that can step in (active + moderator excluded). */
+  candidates: ReplacementCandidate[];
+  /** providerId the user picked; undefined until a choice is made. */
+  chosenProviderId?: string;
 }
 
 export interface Message {
@@ -143,6 +183,22 @@ export interface Message {
   confluenceData?: ConfluenceData;
   // Per-run execution summary (durations, gate cap, Monte Carlo snapshot)
   runStats?: RunStats;
+  /** Transient mid-debate analyst-replacement offer (generator suspends until
+   *  the user chooses). Cleared when the debate ends or is cancelled. */
+  replacementOffer?: ReplacementOffer;
+  /** "What would I do today?" — fresh forward-looking re-assessment of the
+   *  closed trade's setup against the current market price. */
+  todayReassessment?: TodayReassessment;
+}
+
+/** "What would I do today?" — fresh forward-looking re-assessment of a closed
+ *  trade's setup against the current market price. */
+export interface TodayReassessment {
+  verdict: 'YES' | 'NO' | 'MAYBE';
+  text: string;
+  /** Current market price used for the reassessment (0 = unavailable). */
+  price: number;
+  createdAt: string;
 }
 
 export interface ImageMetadata {

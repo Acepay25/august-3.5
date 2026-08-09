@@ -21,6 +21,8 @@ import {
   conductTwoWayDebate,
   conductThreeWayDebate,
   conductRealDebate,
+  awaitReplacementWithTimeout,
+  buildLivePriceRefreshBlock,
   REAL_DEBATE_RESPONSE_ROUNDS,
 } from '../services/providers/ensembleService';
 import type { RealDebateTurnEvent } from '../services/providers/ensembleService';
@@ -513,6 +515,64 @@ describe('conductRealDebate (real inter-model debate)', () => {
     expect(events.some(event => event.round === 6 && event.speaker === 'Moderator')).toBe(true);
   });
 
+  it('injects the live price refresh into rebuttal, clarification answer and verdict prompts', async () => {
+    const calls = scriptedClarificationStreams(['<CLARIFICATION_UNSATISFIED>', '<CLARIFICATION_SATISFIED>']);
+    await collectEvents(conductRealDebate(
+      clarificationAnalysts(),
+      'Analyze BTCUSDT',
+      null, config, 'model-a',
+      undefined, [], undefined, undefined, undefined, undefined, null, undefined,
+      undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+      undefined, () => 62500, // replacementTimeoutMs, getLivePrice
+    ));
+
+    // Rebuttal rounds: every analyst re-anchors on TODAY's price.
+    const rebuttals = calls.filter(c => c.system.includes('ENSEMBLE DEBATE PARTICIPANT'));
+    expect(rebuttals.length).toBeGreaterThan(0);
+    for (const c of rebuttals) {
+      expect(c.user).toContain('LIVE PRICE REFRESH');
+      expect(c.user).toContain('$62,500');
+    }
+    // Clarification answers carry the refresh too.
+    const answers = calls.filter(c => c.system.includes('CLARIFICATION ANSWER'));
+    expect(answers.length).toBeGreaterThan(0);
+    for (const c of answers) {
+      expect(c.user).toContain('LIVE PRICE REFRESH');
+      expect(c.user).toContain('$62,500');
+    }
+    // The final verdict is anchored on the freshest price.
+    const verdict = calls.find(c => c.system.includes('debate moderator'))!;
+    expect(verdict.user).toContain('LIVE PRICE REFRESH');
+    expect(verdict.user).toContain('$62,500');
+  });
+
+  it('omits the live price refresh when no live price is available', async () => {
+    const calls = mockStreams();
+    await collectEvents(conductRealDebate(
+      [realAnalyst('prov-a', 'Analyst One', 'model-a'), realAnalyst('prov-b', 'Analyst Two', 'model-b')],
+      'Analyze BTCUSDT',
+      null, config, 'model-a',
+      undefined, [], undefined, undefined, undefined, undefined, null, undefined,
+      undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+      undefined, () => null, // replacementTimeoutMs, getLivePrice: unknown → no refresh anywhere
+    ));
+
+    expect(calls.length).toBeGreaterThan(0);
+    for (const c of calls) {
+      expect(c.user).not.toContain('LIVE PRICE REFRESH');
+    }
+  });
+
+  it('buildLivePriceRefreshBlock formats a price and no-ops on unknown/invalid values', () => {
+    expect(buildLivePriceRefreshBlock(62500, 'before Round 2')).toContain('$62,500');
+    expect(buildLivePriceRefreshBlock(62500, 'before Round 2')).toContain('before Round 2');
+    expect(buildLivePriceRefreshBlock(null, 'x')).toBe('');
+    expect(buildLivePriceRefreshBlock(undefined, 'x')).toBe('');
+    expect(buildLivePriceRefreshBlock(0, 'x')).toBe('');
+    expect(buildLivePriceRefreshBlock(NaN, 'x')).toBe('');
+    expect(buildLivePriceRefreshBlock(-5, 'x')).toBe('');
+  });
+
   it('runs a second clarification cycle after one unsatisfied judgment', async () => {
     const calls = scriptedClarificationStreams(['<CLARIFICATION_UNSATISFIED>', '<CLARIFICATION_SATISFIED>']);
     const events = await collectEvents(conductRealDebate(clarificationAnalysts(), 'Analyze BTCUSDT', null, config, 'model-a'));
@@ -707,5 +767,194 @@ describe('conductRealDebate (real inter-model debate)', () => {
     expect(analystThreeCalls).toBe(1);
     // The moderator verdict still arrives.
     expect(events.some(e => e.speaker === 'Moderator')).toBe(true);
+  });
+
+  // =========================================================================
+  // Mid-debate analyst replacement (generator suspension)
+  // =========================================================================
+
+  /** Round-2 drop of Analyst Two; rounds 1/3+ stream normally. */
+  const replacementDropStreams = (dropAnalyst: string) => {
+    const calls: { system: string; user: string }[] = [];
+    let droppedCalls = 0;
+    streamMock.mockImplementation(async function* (...args: any[]) {
+      const messages = args[1] as { role: string; content: string }[];
+      const system = messages[0].content;
+      const user = messages[1].content;
+      calls.push({ system, user });
+      if (user.includes('CLARIFICATION ROUND')) {
+        yield '<CLARIFICATION_DONE>';
+        return;
+      }
+      if (user.includes('CLARIFICATION JUDGMENT')) {
+        yield '<CLARIFICATION_SATISFIED>';
+        return;
+      }
+      if (system.includes('debate moderator')) {
+        yield 'Moderator verdict.\n</DEBATE_END>\n';
+        yield verdictJson;
+        return;
+      }
+      if (system.includes(dropAnalyst)) {
+        droppedCalls++;
+        if (droppedCalls === 1) throw new Error(`${dropAnalyst} provider exploded`);
+      }
+      yield 'rebuttal';
+    });
+    return { calls, droppedCalls: () => droppedCalls };
+  };
+
+  it('injects a replacement analyst mid-debate when one drops a rebuttal', async () => {
+    const replacement = realAnalyst('prov-c', 'Analyst Three', 'model-c');
+    const onReplacementRequested = vi.fn().mockResolvedValue(replacement);
+    replacementDropStreams('Analyst Two');
+
+    const events = await collectEvents(conductRealDebate(
+      [realAnalyst('prov-a', 'Analyst One', 'model-a'), realAnalyst('prov-b', 'Analyst Two', 'model-b')],
+      'Analyze BTCUSDT',
+      null, config, 'model-a',
+      undefined, [], undefined, undefined, undefined, undefined, null, undefined,
+      new AbortController().signal,
+      undefined, undefined, undefined, undefined, undefined,
+      onReplacementRequested, 2000,
+    ));
+
+    // The callback fired once, with the dropped analyst and the drop round.
+    expect(onReplacementRequested).toHaveBeenCalledTimes(1);
+    expect(onReplacementRequested).toHaveBeenCalledWith('Analyst Two', 2);
+
+    // Drop + join notices are visible System turns.
+    const systemTexts = events.filter(e => e.speaker === 'System').map(e => e.text).join(' ');
+    expect(systemTexts).toContain('Analyst Two dropped out');
+    expect(systemTexts).toContain('Analyst Two was replaced by Analyst Three');
+
+    // The replacement's fresh position is a visible turn seeded at the drop round.
+    const seededOpening = events.find(e => e.speaker === 'Analyst Three' && e.round === 2);
+    expect(seededOpening?.text).toContain('opening statement');
+
+    // Round 3 rebuttals include the replacement alongside the survivor.
+    expect(events.filter(e => e.round === 3).map(e => e.speaker).sort()).toEqual(['Analyst One', 'Analyst Three']);
+    // The moderator verdict still arrives.
+    const moderatorText = events.filter(e => e.speaker === 'Moderator').map(e => e.text).join('');
+    expect(extractLastJson(moderatorText).direction).toBe('Long');
+  });
+
+  it('continues without a replacement when the user skips', async () => {
+    const onReplacementRequested = vi.fn().mockResolvedValue(null);
+    replacementDropStreams('Analyst Two');
+
+    const events = await collectEvents(conductRealDebate(
+      [realAnalyst('prov-a', 'Analyst One', 'model-a'), realAnalyst('prov-b', 'Analyst Two', 'model-b')],
+      'Analyze BTCUSDT',
+      null, config, 'model-a',
+      undefined, [], undefined, undefined, undefined, undefined, null, undefined,
+      new AbortController().signal,
+      undefined, undefined, undefined, undefined, undefined,
+      onReplacementRequested, 2000,
+    ));
+
+    expect(onReplacementRequested).toHaveBeenCalledTimes(1);
+    // No replacement ever speaks; only the survivor rebuts in round 3.
+    expect(events.some(e => e.speaker === 'Analyst Three')).toBe(false);
+    expect(events.filter(e => e.round === 3).map(e => e.speaker)).toEqual(['Analyst One']);
+    expect(events.some(e => e.speaker === 'Moderator')).toBe(true);
+  });
+
+  it('suspends the debate while waiting for the replacement choice', async () => {
+    // Object holder so TS doesn't narrow the resolver to never across closures.
+    const pendingReplacement: { resolve: ((a: unknown) => void) | null } = { resolve: null };
+    const onReplacementRequested = vi.fn().mockImplementation(
+      () => new Promise(resolve => { pendingReplacement.resolve = resolve; }),
+    );
+    const { calls } = replacementDropStreams('Analyst Two');
+    const gen = conductRealDebate(
+      [realAnalyst('prov-a', 'Analyst One', 'model-a'), realAnalyst('prov-b', 'Analyst Two', 'model-b')],
+      'Analyze BTCUSDT',
+      null, config, 'model-a',
+      undefined, [], undefined, undefined, undefined, undefined, null, undefined,
+      new AbortController().signal,
+      undefined, undefined, undefined, undefined, undefined,
+      onReplacementRequested, 2000,
+    );
+
+    // Drain until the System drop notice appears (round-2 pump is complete).
+    const events: RealDebateTurnEvent[] = [];
+    for (let i = 0; i < 20; i++) {
+      const result = await gen.next();
+      if (result.done) break;
+      events.push(result.value);
+      if (result.value.speaker === 'System' && result.value.text.includes('dropped out')) break;
+    }
+    expect(events.some(e => e.speaker === 'System' && e.text.includes('Analyst Two dropped out'))).toBe(true);
+
+    // Resuming the generator invokes the replacement callback and suspends on
+    // it — the moderator must NOT be called while the user is choosing.
+    const pending = gen.next();
+    expect(onReplacementRequested).toHaveBeenCalledTimes(1);
+    expect(calls.filter(c => c.system.includes('debate moderator')).length).toBe(0);
+
+    // The user picks a replacement: the wait resolves and the debate continues.
+    pendingReplacement.resolve?.(realAnalyst('prov-c', 'Analyst Three', 'model-c'));
+    const resumed = await pending;
+    if (resumed.done) throw new Error('Debate ended while waiting for the replacement notice');
+    const rest = await collectEvents(gen);
+    const all = [...events, resumed.value, ...rest];
+    expect(all.some(e => e.speaker === 'Analyst Three')).toBe(true);
+    expect(all.some(e => e.speaker === 'Moderator')).toBe(true);
+    // The moderator call happened only after the wait resolved.
+    expect(calls.filter(c => c.system.includes('debate moderator')).length).toBeGreaterThan(0);
+  });
+
+  it('offers a replacement when an analyst drops while answering a clarification question', async () => {
+    const onReplacementRequested = vi.fn().mockResolvedValue(realAnalyst('prov-c', 'Analyst Three', 'model-c'));
+    scriptedClarificationStreams(['<CLARIFICATION_SATISFIED>'], { failAnswer: 'Analyst Two' });
+
+    const events = await collectEvents(conductRealDebate(
+      clarificationAnalysts(),
+      'Analyze BTCUSDT',
+      null, config, 'model-a',
+      undefined, [], undefined, undefined, undefined, undefined, null, undefined,
+      new AbortController().signal,
+      undefined, undefined, undefined, undefined, undefined,
+      onReplacementRequested, 2000,
+    ));
+
+    // Analyst Two dropped during the answers (round 5); the replacement was
+    // offered at that round and joined.
+    expect(onReplacementRequested).toHaveBeenCalledTimes(1);
+    expect(onReplacementRequested).toHaveBeenCalledWith('Analyst Two', 5);
+    expect(events.some(e => e.speaker === 'Analyst Three' && e.round === 5)).toBe(true);
+    expect(events.some(e => e.speaker === 'Moderator')).toBe(true);
+  });
+});
+
+// =============================================================================
+// awaitReplacementWithTimeout — the bounded suspension primitive
+// =============================================================================
+
+describe('awaitReplacementWithTimeout', () => {
+  it('resolves with the promise value', async () => {
+    await expect(awaitReplacementWithTimeout(Promise.resolve('ok'), undefined, 1000)).resolves.toEqual({ status: 'resolved', value: 'ok' });
+  });
+
+  it('resolves { status: "timedOut" } when the wait budget elapses', async () => {
+    await expect(awaitReplacementWithTimeout(new Promise<void>(() => {}), undefined, 30)).resolves.toEqual({ status: 'timedOut' });
+  });
+
+  it('rejects with AbortError when the signal aborts during the wait', async () => {
+    const controller = new AbortController();
+    const wait = awaitReplacementWithTimeout(new Promise<void>(() => {}), controller.signal, 5000);
+    setTimeout(() => controller.abort(), 10);
+    await expect(wait).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
+  it('rejects immediately when the signal is already aborted', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    await expect(awaitReplacementWithTimeout(Promise.resolve('x'), controller.signal, 1000)).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
+  it('propagates promise rejections', async () => {
+    await expect(awaitReplacementWithTimeout(Promise.reject(new Error('boom')), undefined, 1000)).rejects.toThrow('boom');
   });
 });

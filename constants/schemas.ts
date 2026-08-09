@@ -102,7 +102,8 @@ export const GATE_SCAN_JSON_SCHEMA = `{
     "patternMemory": 0.15,
     "htfConflict": 0.00,
     "volumeContext": 0.00,
-    "total": 0.15
+    "rawTotal": 0.15,
+    "effectiveTotal": 0.15
   },
   "warnings": ["Pattern Memory: 75% similar to failed Long"],
   "insights": ["Strong trend continuation potential"],

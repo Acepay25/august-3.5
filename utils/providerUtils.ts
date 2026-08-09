@@ -51,7 +51,11 @@ export function buildModelIdToName(configs: ProviderConfig[]): Record<string, st
 export function buildProviderNameToId(configs: ProviderConfig[]): Record<string, string> {
     const map: Record<string, string> = {};
     for (const config of configs) {
-        map[config.name] = config.id;
+        // First provider wins if two providers share a display name — matches
+        // buildModelIdToName's convention (a stable map, not last-write-wins).
+        if (!(config.name in map)) {
+            map[config.name] = config.id;
+        }
     }
     return map;
 }

@@ -9,13 +9,13 @@ import { EmptyState } from '../ui/EmptyState';
 import { ReasoningPanel } from './ReasoningPanel';
 import { getThinkingTradeId } from '../../services/infrastructure/ThinkingStoreService';
 import { DEFAULT_LEVERAGE } from '../../utils/conversationUtils';
+import SetupLifecycleCard from '../analysis/SetupLifecycleCard';
 
 interface TradeLogContentProps {
     trades: LoggedTrade[];
     onDeleteTrades: (ids: string[]) => void;
     onClearAllTrades: () => void;
     modelIdToName: Record<string, string>;
-    ocrModelIdToName: Record<string, string>;
     onUpdateInsights: (ids: string[]) => void;
     isSummarizing?: boolean;
     currentInsightIds: string[];
@@ -65,11 +65,10 @@ const TradeLogRow: React.FC<{
     onSelect: (id: string) => void;
     onViewImage: (url: string) => void;
     modelIdToName: Record<string, string>;
-    ocrModelIdToName: Record<string, string>;
     isInsight: boolean;
     onUpdateLeverage: (id: string, leverage: number) => void;
     username?: string;
-}> = ({ trade, onToggle, isExpanded, isSelected, onSelect, onViewImage, modelIdToName, ocrModelIdToName, isInsight, onUpdateLeverage, username }) => {
+}> = ({ trade, onToggle, isExpanded, isSelected, onSelect, onViewImage, modelIdToName, isInsight, onUpdateLeverage, username }) => {
     const { analysis, outcome, timestamp, postMortem, postMortemImages, correctedEntry, correctedStopLoss, correctedTakeProfit, pnlAmount, pnlPercent, modelsUsed, geminiModelUsed, deepseekModelUsed, zhipuModelUsed, groqModelUsed, groqNewModelUsed, groqAlt2ModelUsed, openrouterModelUsed, moderatorModel, leverage, isAccuracyMode, accuracySubMode } = trade;
     const { direction, stopLoss, stopLossPercentage, entryPoints, takeProfit, activeStrategies, coinName, invalidationCriteria } = analysis;
     const [isInsightsVisible, setIsInsightsVisible] = useState(false);
@@ -189,6 +188,9 @@ const TradeLogRow: React.FC<{
 
             {isExpanded && (
                 <div className="px-4 pb-4 border-t border-white/5 animate-fade-in bg-zinc-800 rounded-b-xl" onClick={(e) => e.stopPropagation()}>
+                    <div className="pt-4">
+                        <SetupLifecycleCard analysis={analysis} outcome={outcome} triggeredEntryIndices={trade.triggeredEntryIndices} compact />
+                    </div>
                     <div className="grid grid-cols-2 gap-3 text-xs pt-4 font-mono">
 
                         {/* Trade Settings Row */}
@@ -327,7 +329,7 @@ const TradeLogRow: React.FC<{
     );
 };
 
-const TradeLogContent: React.FC<TradeLogContentProps> = ({ trades, onDeleteTrades, onClearAllTrades, modelIdToName, ocrModelIdToName, onUpdateInsights, isSummarizing, currentInsightIds, onUpdateTradeLeverage, username }) => {
+const TradeLogContent: React.FC<TradeLogContentProps> = ({ trades, onDeleteTrades, onClearAllTrades, modelIdToName, onUpdateInsights, isSummarizing, currentInsightIds, onUpdateTradeLeverage, username }) => {
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [viewerImageUrl, setViewerImageUrl] = useState<string | null>(null);
@@ -468,7 +470,6 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({ trades, onDeleteTrade
                                     onSelect={handleSelect}
                                     onViewImage={(url) => setViewerImageUrl(url)}
                                     modelIdToName={modelIdToName}
-                                    ocrModelIdToName={ocrModelIdToName}
                                     isInsight={currentInsightIds.includes(trade.id)}
                                     onUpdateLeverage={onUpdateTradeLeverage}
                                     username={username}

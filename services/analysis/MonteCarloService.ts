@@ -367,6 +367,11 @@ export const runSimulation = (config: SimulationConfig): MonteCarloResult => {
  * Guarded against the degenerate cases (winRate 0, zero avg loss, zero b)
  * that previously produced Infinity/NaN, and clamped to [0, 1] (never size
  * more than 100% of the account).
+ *
+ * A zero/negative-EV system returns 0 — the old code fell back to a hardcoded
+ * 2% average win, so ANY system with winRate > 1/3 reported a positive Kelly
+ * fraction (up to 100% of the account) even when the setup was a guaranteed
+ * loser. Sizing a losing system is worse than not sizing it.
  */
 export const computeKellyFraction = (
     winRatePct: number,
@@ -374,11 +379,13 @@ export const computeKellyFraction = (
     slHitPct: number,
     ciLowerPct: number
 ): number => {
+    if (expectedValuePct <= 0) return 0;
     const winRate = winRatePct / 100;
     const lossRate = 1 - winRate;
-    const avgWinPercent = winRate > 0 && expectedValuePct > 0
-        ? expectedValuePct / winRate
-        : 2; // Default 2% if unknown
+    const avgWinPercent = winRate > 0 ? expectedValuePct / winRate : 0;
+    // NOTE: avgLossPercent deliberately uses the 5th-percentile tail PnL
+    // (conservative) rather than the mean loss — a documented tail choice,
+    // not a bug.
     const avgLossPercent = slHitPct > 0 && Math.abs(ciLowerPct) > 0
         ? Math.abs(ciLowerPct)
         : 1; // Default 1% if unknown
@@ -395,10 +402,12 @@ export const calculateRuinRisk = (
     const winRate = monteCarloResult.winRate / 100;
     const lossRate = 1 - winRate;
 
-    // Calculate average win and loss based on probabilities
+    // Calculate average win and loss based on probabilities. A zero/negative
+    // EV system gets avgWin 0 — mirroring computeKellyFraction, a losing
+    // system must not be modeled with a phantom 2% win.
     const avgWinPercent = winRate > 0 && monteCarloResult.expectedValue > 0
         ? monteCarloResult.expectedValue / winRate
-        : 2; // Default 2% if unknown
+        : 0;
 
     const avgLossPercent = monteCarloResult.probabilities.slHit > 0 && Math.abs(monteCarloResult.confidenceInterval.lower) > 0
         ? Math.abs(monteCarloResult.confidenceInterval.lower)
@@ -577,23 +586,60 @@ const getWorker = (): Worker => {
 };
 
 /**
+ * A wedged worker (browser suspends the tab, infinite loop in the worker)
+ * would otherwise leave the caller's promise pending forever. Race every
+ * worker call against a timeout and fall back to the synchronous path —
+ * identical math, just on the main thread.
+ */
+const WORKER_TIMEOUT_MS = 10_000;
+
+const withWorkerTimeout = async <T>(
+    workerPromise: Promise<T>,
+    id: string,
+    syncFallback: () => T
+): Promise<T> => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+        return await Promise.race([
+            workerPromise,
+            new Promise<never>((_, reject) => {
+                timer = setTimeout(() => reject(new Error('Monte Carlo worker timed out')), WORKER_TIMEOUT_MS);
+            }),
+        ]);
+    } catch (err) {
+        if (err instanceof Error && err.message === 'Monte Carlo worker timed out') {
+            console.warn('[MonteCarlo] Worker timed out — falling back to synchronous simulation');
+            // Release the pending slot so a late worker reply is ignored.
+            pendingRequests.delete(id);
+            return syncFallback();
+        }
+        throw err;
+    } finally {
+        if (timer) clearTimeout(timer);
+    }
+};
+
+/**
  * Run Monte Carlo simulation in a Web Worker (non-blocking).
- * Falls back to synchronous execution if Workers are unavailable.
+ * Falls back to synchronous execution if Workers are unavailable or the
+ * worker wedges past WORKER_TIMEOUT_MS.
  */
 export const runSimulationAsync = (config: SimulationConfig): Promise<MonteCarloResult> => {
     if (typeof Worker === 'undefined') {
         return Promise.resolve(runSimulation(config));
     }
     const id = `mc-${++requestId}`;
-    return new Promise((resolve, reject) => {
+    const workerPromise = new Promise<MonteCarloResult>((resolve, reject) => {
         pendingRequests.set(id, { resolve, reject });
         getWorker().postMessage({ type: 'runSimulation', id, config });
     });
+    return withWorkerTimeout(workerPromise, id, () => runSimulation(config));
 };
 
 /**
  * Calculate ruin risk in a Web Worker (non-blocking).
- * Falls back to synchronous execution if Workers are unavailable.
+ * Falls back to synchronous execution if Workers are unavailable or the
+ * worker wedges past WORKER_TIMEOUT_MS.
  */
 export const calculateRuinRiskAsync = (
     accountBalance: number,
@@ -605,8 +651,11 @@ export const calculateRuinRiskAsync = (
         return Promise.resolve(calculateRuinRisk(accountBalance, positionSize, leverage, monteCarloResult));
     }
     const id = `mc-${++requestId}`;
-    return new Promise((resolve, reject) => {
+    const workerPromise = new Promise<RuinRiskResult>((resolve, reject) => {
         pendingRequests.set(id, { resolve, reject });
         getWorker().postMessage({ type: 'calculateRuinRisk', id, accountBalance, positionSize, leverage, monteCarloResult });
     });
+    return withWorkerTimeout(workerPromise, id, () =>
+        calculateRuinRisk(accountBalance, positionSize, leverage, monteCarloResult)
+    );
 };

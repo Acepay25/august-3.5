@@ -22,11 +22,25 @@ import {
     MIN_TRADES_FOR_CALIBRATION,
     MIN_TRADES_FOR_PROMPT_DISPLAY,
     MIN_TRADES_FOR_CALIBRATION_NOTE,
+    CALIBRATION_DRIFT_THRESHOLD_PTS,
     DECAY_FACTOR,
     MAX_TRADE_AGE_DAYS
 } from '../../constants/calibrationConstants';
 
 export type ConfidenceLevel = 'High' | 'Medium' | 'Low' | 'Avoid';
+
+/** Drift verdict for one analysis: declared probability vs historical reality. */
+export interface CalibrationDrift {
+    status: 'accurate' | 'overconfident' | 'underconfident' | 'insufficient_data';
+    /** The AI's declared probability for this trade (%), or NaN-ish input as-is. */
+    declared: number;
+    /** Historical win rate (%) of the confidence bucket, or null when unknown. */
+    actual: number | null;
+    /** declared − actual in points (positive = overconfident), or null when unknown. */
+    delta: number | null;
+    /** Number of logged outcomes behind `actual`. */
+    sampleSize: number;
+}
 
 /**
  * Initialize empty calibration object
@@ -150,7 +164,9 @@ export const getCalibratedWinRateWithDecay = (
 
     for (const entry of relevantEntries) {
         const entryDate = new Date(entry.timestamp);
-        const daysAgo = Math.floor((now.getTime() - entryDate.getTime()) / (1000 * 60 * 60 * 24));
+        // Clamp at 0: a future-dated entry (clock skew) would otherwise get a
+        // negative daysAgo → DECAY_FACTOR^-n > 1 weight, inflating its influence.
+        const daysAgo = Math.max(0, Math.floor((now.getTime() - entryDate.getTime()) / (1000 * 60 * 60 * 24)));
 
         // Calculate weight using exponential decay
         const weight = Math.pow(DECAY_FACTOR, daysAgo);
@@ -225,16 +241,50 @@ export const getConfidenceAccuracy = (
     calibration: ConfidenceCalibration | undefined,
     confidence: ConfidenceLevel,
     aiProbability: number
-): 'accurate' | 'overconfident' | 'underconfident' | 'insufficient_data' => {
-    const winRate = getCalibratedWinRate(calibration, confidence);
+): 'accurate' | 'overconfident' | 'underconfident' | 'insufficient_data' =>
+    getCalibrationDrift(calibration, confidence, aiProbability).status;
 
-    if (winRate === null) return 'insufficient_data';
+/**
+ * Full calibration-drift signal for a single analysis: compares the AI's
+ * declared probability against the historical win rate of the confidence
+ * bucket, with the signed delta (points) and the sample size behind it.
+ *
+ * - `overconfident`: declared runs > CALIBRATION_DRIFT_THRESHOLD_PTS above
+ *   reality ("running hot") — treat the setup as lower than advertised.
+ * - `underconfident`: declared runs > threshold below reality ("running
+ *   cold") — the setup may be better than the AI's own rating suggests.
+ * - `accurate`: within threshold, or insufficient data to judge.
+ *
+ * Guards: no calibration, sample below MIN_TRADES_FOR_CALIBRATION, and a
+ * missing/zero/NaN declared probability all return `insufficient_data`
+ * (a 0 default means "not provided", not a 0% forecast).
+ */
+export const getCalibrationDrift = (
+    calibration: ConfidenceCalibration | undefined,
+    confidence: ConfidenceLevel,
+    declaredProbability: number
+): CalibrationDrift => {
+    const sampleSize = getSampleSize(calibration, confidence);
+    if (sampleSize < MIN_TRADES_FOR_CALIBRATION) {
+        return { status: 'insufficient_data', declared: declaredProbability, actual: null, delta: null, sampleSize };
+    }
 
-    const diff = aiProbability - winRate;
+    const actual = getCalibratedWinRate(calibration, confidence);
+    if (actual === null || !isFinite(declaredProbability) || declaredProbability <= 0) {
+        return { status: 'insufficient_data', declared: declaredProbability, actual, delta: null, sampleSize };
+    }
 
-    if (Math.abs(diff) <= 10) return 'accurate';
-    if (diff > 10) return 'overconfident';
-    return 'underconfident';
+    const delta = declaredProbability - actual;
+    if (Math.abs(delta) <= CALIBRATION_DRIFT_THRESHOLD_PTS) {
+        return { status: 'accurate', declared: declaredProbability, actual, delta, sampleSize };
+    }
+    return {
+        status: delta > 0 ? 'overconfident' : 'underconfident',
+        declared: declaredProbability,
+        actual,
+        delta,
+        sampleSize,
+    };
 };
 
 /**

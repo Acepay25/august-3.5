@@ -9,6 +9,7 @@ import { ArrowUpIcon, ArrowDownIcon, CloseIcon, LoadingIcon, EyeIcon, BrainIcon,
 import HybridDataPanel from '../analysis/HybridDataPanel';
 import ImageViewerModal from '../modals/ImageViewerModal';
 import AnalysisProgress from '../analysis/AnalysisProgress';
+import HomeDashboard, { HomeDashboardProps } from '../dashboard/HomeDashboard';
 
 // Hoisted list components to prevent re-creation on each render
 const ListHeader = () => <div className="h-16"></div>;
@@ -104,6 +105,8 @@ interface ChatAreaProps {
     onOpenAnalytics: () => void;
     onInteract?: () => void;
     onSelectMessageForProbability?: (id: string) => void;
+    /** Returning-user summary shown when the active conversation is empty. */
+    homeDashboard?: HomeDashboardProps;
     // Analysis Progress (Task UI)
     analysisSteps?: AnalysisStep[];
     isAnalysisActive?: boolean;
@@ -179,6 +182,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     onOpenAnalytics,
     onInteract,
     onSelectMessageForProbability,
+    homeDashboard,
     analysisSteps,
     isAnalysisActive
 }) => {
@@ -246,8 +250,10 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     const processedMessages = messages;
 
     // Shared ChatInput props — the composer renders either inside the
-    // fresh-session hero canvas (centered) or docked at the bottom.
-    const chatInputProps = {
+    // fresh-session hero canvas (centered) or docked at the bottom. Memoized
+    // so the React.memo'd ChatInput skips re-renders when only the message
+    // list changed (chatInputProps was a fresh object literal every render).
+    const chatInputProps = useMemo(() => ({
         images,
         removeImage,
         leverageRef,
@@ -270,7 +276,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         isRateLimited,
         isAnyProviderEnabled,
         providers,
-            onUpdateProvider,
+        onUpdateProvider,
         selectedVisionModel,
         setSelectedVisionModel,
         lensConfig,
@@ -285,7 +291,20 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         setIsEnsembleEnabled,
         selectedChatModel,
         setSelectedChatModel,
-    };
+    }), [
+        images, removeImage, leverageRef, setIsLeverageDropdownOpen,
+        leverageInput, handleLeverageChange, handleLeverageBlur,
+        isLeverageDropdownOpen, handlePresetLeverage, fileInputRef,
+        isImageUploadDisabled, handleImageUpload, input, setInput,
+        handleSendMessage, handleCancelAnalysis, loadingMessage, isSummarizing,
+        isAnalysisInProgress, isRateLimited, isAnyProviderEnabled, providers,
+        onUpdateProvider, selectedVisionModel, setSelectedVisionModel,
+        lensConfig, setLensConfig, ensembleModelSelection,
+        setEnsembleModelSelection, customEnsemblePrompt,
+        setCustomEnsemblePrompt, customLensPrompts, setCustomLensPrompts,
+        isEnsembleEnabled, setIsEnsembleEnabled, selectedChatModel,
+        setSelectedChatModel,
+    ]);
 
     return (
         <div
@@ -351,6 +370,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 atBottomStateChange={(atBottom) => setShowScrollDown(!atBottom)}
                 atTopStateChange={(atTop) => setShowScrollUp(!atTop && analysisMessages.length > 0)}
                 style={{ height: '100%', width: '100%' }}
+                className="scrollbar-hide"
                 increaseViewportBy={200}
                 components={{
                     Header: ListHeader,
@@ -410,8 +430,8 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 must still be able to cancel mid-debate. */}
             {(loadingMessage || (isAnalysisInProgress && !isPostMortemInProgress)) ? (
                 <>
-                <div className="absolute bottom-[calc(env(safe-area-inset-bottom)+11rem)] sm:bottom-[calc(env(safe-area-inset-bottom)+12rem)] lg:bottom-[calc(env(safe-area-inset-bottom)+13rem)] left-0 right-0 p-2 sm:p-4 pointer-events-none z-10">
-                    <div className="max-w-4xl mx-auto pointer-events-auto">
+                <div className="absolute bottom-[calc(env(safe-area-inset-bottom)+11rem)] sm:bottom-[calc(env(safe-area-inset-bottom)+12rem)] left-0 right-0 p-2 sm:p-4 pointer-events-none z-10 lg:hidden">
+                    <div className="max-w-4xl mx-auto pointer-events-auto lg:max-w-none">
                         {analysisSteps && analysisSteps.length > 0 ? (
                             <AnalysisProgress
                                 steps={analysisSteps}
@@ -450,14 +470,17 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 /* Fresh session: open canvas, tagline, centered composer,
                     and quick actions */
                 <div className="chat-hero-grid absolute inset-0 z-10 bg-zinc-950 overflow-y-auto">
-                    <div className="min-h-full flex flex-col items-center justify-center px-3 sm:px-4 lg:px-8 py-10">
-                        {/* First-run guidance lives in the app-level
-                            OnboardingCard (dismissible, persisted) — no
-                            duplicate card here. */}
-                        <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-zinc-100 text-center">
-                            August 3.5 makes your trading easier.
-                        </h1>
-                        <div className="w-full max-w-3xl mt-8">
+                    <div className={`min-h-full flex flex-col items-center px-3 sm:px-4 lg:px-8 py-10 ${homeDashboard ? 'justify-start' : 'justify-center'}`}>
+                        {homeDashboard ? (
+                            <div className="w-full max-w-5xl mb-6">
+                                <HomeDashboard {...homeDashboard} />
+                            </div>
+                        ) : (
+                            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-zinc-100 text-center">
+                                August 3.5 makes your trading easier.
+                            </h1>
+                        )}
+                        <div className={`w-full max-w-3xl ${homeDashboard ? '' : 'mt-8'}`}>
                             <ChatInput centered {...chatInputProps} />
                         </div>
                         <div className="w-full max-w-3xl mt-4">

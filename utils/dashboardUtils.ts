@@ -11,6 +11,10 @@ export interface OverallStats {
     wins: number;
     losses: number;
     totalPnL: number;
+    /** Sum of pnlPercent (autopilot-confirmed trades). Kept separate from
+     *  totalPnL — manual captures store dollars, autopilot stores percents,
+     *  and mixing units would corrupt the math. */
+    totalPnLPercent: number;
     avgWinSize: number;
     avgLossSize: number;
     profitFactor: number;
@@ -31,6 +35,9 @@ export interface CoinStats {
     total: number;
     winRate: number;
     pnl: number;
+    /** Percent PnL for this coin (autopilot-confirmed trades) — same unit
+     *  separation as OverallStats.totalPnLPercent. */
+    pnlPercent: number;
 }
 
 export interface FamilyStats {
@@ -67,6 +74,13 @@ export const calculateOverallStats = (trades: LoggedTrade[]): OverallStats => {
     const winRate = total > 0 ? Math.round((wins / total) * 100) : 0;
 
     const totalPnL = trades.reduce((sum, t) => sum + (t.pnlAmount || 0), 0);
+    // Percent PnL is carried ONLY on pnlPercent (never written into pnlAmount —
+    // see types/trade.ts). Autopilot-confirmed trades would otherwise be
+    // invisible in the dashboard's Net PnL card.
+    const totalPnLPercent = trades.reduce(
+        (sum, t) => sum + (typeof t.pnlPercent === 'number' ? t.pnlPercent : 0),
+        0
+    );
 
     const winningTrades = completedTrades.filter(t => t.outcome === TradeOutcome.WIN && t.pnlAmount);
     const losingTrades = completedTrades.filter(t => t.outcome === TradeOutcome.LOSS && t.pnlAmount);
@@ -88,6 +102,7 @@ export const calculateOverallStats = (trades: LoggedTrade[]): OverallStats => {
         wins,
         losses,
         totalPnL: Math.round(totalPnL * 100) / 100,
+        totalPnLPercent: Math.round(totalPnLPercent * 10) / 10,
         avgWinSize: Math.round(avgWinSize * 100) / 100,
         avgLossSize: Math.round(avgLossSize * 100) / 100,
         profitFactor: profitFactor === Infinity ? 999 : profitFactor
@@ -119,14 +134,15 @@ export const calculatePerformanceByConfidence = (trades: LoggedTrade[]): Confide
  * Calculate performance by coin
  */
 export const calculatePerformanceByCoin = (trades: LoggedTrade[]): CoinStats[] => {
-    const coinMap = new Map<string, { wins: number; losses: number; pnl: number }>();
+    const coinMap = new Map<string, { wins: number; losses: number; pnl: number; pnlPercent: number }>();
 
     trades.forEach(trade => {
         const coin = trade.analysis?.coinName || 'Unknown';
         if (trade.outcome !== TradeOutcome.WIN && trade.outcome !== TradeOutcome.LOSS) return;
 
-        const existing = coinMap.get(coin) || { wins: 0, losses: 0, pnl: 0 };
+        const existing = coinMap.get(coin) || { wins: 0, losses: 0, pnl: 0, pnlPercent: 0 };
         existing.pnl += trade.pnlAmount || 0;
+        if (typeof trade.pnlPercent === 'number') existing.pnlPercent += trade.pnlPercent;
 
         if (trade.outcome === TradeOutcome.WIN) {
             existing.wins++;
@@ -146,7 +162,8 @@ export const calculatePerformanceByCoin = (trades: LoggedTrade[]): CoinStats[] =
             winRate: stats.wins + stats.losses > 0
                 ? Math.round((stats.wins / (stats.wins + stats.losses)) * 100)
                 : 0,
-            pnl: Math.round(stats.pnl * 100) / 100
+            pnl: Math.round(stats.pnl * 100) / 100,
+            pnlPercent: Math.round(stats.pnlPercent * 10) / 10
         }))
         .sort((a, b) => b.total - a.total);
 };

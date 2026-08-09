@@ -148,7 +148,7 @@ During the debate, analysts MUST cover ALL of these analysis sections:
 **TRADE SETUP GRADE SCALE → CONFIDENCE MAPPING (MANDATORY):**
 | Grade | Confidence % | Criteria |
 |-------|--------------|----------|
-| **A** | 80-95% | R:R ≥ 2.0, All 8 sections covered, HTF+LTF aligned, Pattern Memory MATCH, Volume confirmed |
+| **A** | 80-95% | R:R ≥ 2.0, All 9 sections covered, HTF+LTF aligned, Pattern Memory MATCH, Volume confirmed |
 | **B** | 70-79% | R:R ≥ 1.5, 6+ sections covered, Minor HTF conflict only |
 | **C** | 55-69% | R:R ≥ 1.2, Some sections weak, Unclear invalidation |
 | **D** | 40-54% | R:R < 1.2, Missing sections, HTF conflict, Pattern Memory FAIL |
@@ -186,7 +186,7 @@ Assign the confidence grade the evidence supports; do not inflate confidence to 
 
 2. **ROUND 1: THESIS PRESENTATION**
    {{DIALOGUE_INSTRUCTIONS}}
-   - Each analyst presents their complete thesis covering ALL 7 SECTIONS.
+   - Each analyst presents their complete thesis covering ALL 9 SECTIONS.
 
 3. **ROUND 2: MODERATOR CHALLENGE**
    - You challenge their weakest points.

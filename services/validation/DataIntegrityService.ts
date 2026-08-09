@@ -57,8 +57,12 @@ export const checkDataIntegrity = async (
         }
     }
 
-    // Update last known trade count for next session
-    await setPreference(`${PREF_KEYS.LAST_TRADE_COUNT}_${username}`, String(currentTradeCount));
+    // Update last known trade count for next session — but never re-baseline
+    // to 0. A count of 0 usually means the profile was still loading when the
+    // check ran; re-baselining would permanently mask a real data loss.
+    if (currentTradeCount > 0) {
+        await setPreference(`${PREF_KEYS.LAST_TRADE_COUNT}_${username}`, String(currentTradeCount));
+    }
 
     // Update session timestamp
     await setPreference(`${PREF_KEYS.LAST_SESSION}_${username}`, new Date().toISOString());

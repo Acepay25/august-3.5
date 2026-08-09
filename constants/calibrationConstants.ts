@@ -23,6 +23,12 @@ export const MIN_TRADES_FOR_PROMPT_DISPLAY = 5;
  */
 export const MIN_TRADES_FOR_CALIBRATION_NOTE = 10;
 
+/**
+ * |declared probability − historical win rate| (points) above which the
+ * model's confidence is flagged as drifting (over- or under-confident).
+ */
+export const CALIBRATION_DRIFT_THRESHOLD_PTS = 10;
+
 // ============================================================================
 // TIME DECAY CONFIGURATION
 // ============================================================================

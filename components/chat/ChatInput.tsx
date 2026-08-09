@@ -283,7 +283,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             // also sends as an alternative.
                             onKeyDown={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && (!e.shiftKey || e.ctrlKey || e.metaKey) ? (e.preventDefault(), handleSendMessage()) : null}
                             placeholder={images.length > 0 ? "Analyze charts..." : "Write a message..."}
-                            className="flex-1 min-w-0 bg-transparent px-2 py-2 text-base text-white placeholder-zinc-500 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/40 focus-visible:rounded-md transition-all min-h-[44px] lg:min-h-[48px] max-h-32 resize-none leading-relaxed"
+                            className="flex-1 min-w-0 bg-transparent px-2 py-2 text-base text-white placeholder-zinc-500 outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 transition-all min-h-[44px] lg:min-h-[48px] max-h-32 resize-none leading-relaxed"
                             rows={1}
                             // Always typeable — sending (not typing) is what
                             // requires a ready provider.
@@ -599,7 +599,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                         <div role="dialog" aria-label="Provider settings" className="mt-4 bg-zinc-900 rounded-2xl border border-white/10 overflow-hidden animate-fade-in">
                             {/* AI Providers List — only providers ENABLED in
                                 Settings participate in ensemble; enable/disable
-                                happens in Settings → AI Models. */}
+                                happens in Settings → AI setup. */}
                             <div className="max-h-[300px] overflow-y-auto">
                                 {providers.filter(p => p.isEnabled).length > 0 ? (
                                     providers.filter(p => p.isEnabled).map((provider, index) => (
@@ -654,7 +654,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                     ))
                                 ) : (
                                     <div className="px-4 py-6 text-center text-xs text-zinc-500">
-                                        No enabled providers. Enable providers in Settings → AI Models.
+                                        No enabled providers. Enable providers in Settings → AI setup.
                                     </div>
                                 )}
                             </div>

@@ -83,6 +83,10 @@ export const analyzeWithAI = async (
 
     // Prepare summarized candle data (last 100 candles for efficiency)
     const recentCandles = candles.slice(-100);
+    if (recentCandles.length === 0) {
+        console.warn(`[AITrendlineService] No candle data available for ${symbol} ${interval}`);
+        return EMPTY_RESULT;
+    }
     const candleData = recentCandles.map((c, i) => ({
         i,
         t: c.time,
@@ -163,7 +167,8 @@ RESPOND IN THIS EXACT JSON FORMAT:
         try {
             parsed = JSON.parse(jsonStr);
         } catch (e) {
-            throw new Error(`[AITrendlineService] ${providerName} returned invalid JSON: ${(e as Error).message}`);
+            const message = e instanceof Error ? e.message : 'Unknown JSON parsing error';
+            throw new Error(`[AITrendlineService] ${providerName} returned invalid JSON: ${message}`, { cause: e });
         }
 
         // Convert index-based trendlines to time/price based

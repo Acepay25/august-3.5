@@ -3,7 +3,7 @@
  * Shows win rates, cold streaks, expertise, and dynamic weights
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Cpu } from 'lucide-react';
 import { AIProvider, LoggedTrade } from '../../types';
 import { EmptyState } from '../ui/EmptyState';
@@ -303,12 +303,21 @@ const ModelPerformanceDashboard: React.FC<ModelPerformanceDashboardProps> = ({
     const [weights, setWeights] = useState<DynamicWeights | null>(null);
     const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
     const [isRefreshing, setIsRefreshing] = useState(false);
+    // Tracks the pending refresh timer so rapid prop changes (trade log
+    // updates, provider toggles) cancel the in-flight scan instead of
+    // stacking overlapping 500ms runs; also cleared on unmount.
+    const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const refreshData = () => {
+        if (refreshTimerRef.current) {
+            clearTimeout(refreshTimerRef.current);
+            refreshTimerRef.current = null;
+        }
         setIsRefreshing(true);
 
         // Small delay to show the animation
-        setTimeout(() => {
+        refreshTimerRef.current = setTimeout(() => {
+            refreshTimerRef.current = null;
             // Sync rolling window from current trade log (works with any number of trades)
             if (trades.length > 0) {
                 syncRollingWindowFromTradeLog(trades);
@@ -342,6 +351,12 @@ const ModelPerformanceDashboard: React.FC<ModelPerformanceDashboardProps> = ({
 
     useEffect(() => {
         refreshData();
+        return () => {
+            if (refreshTimerRef.current) {
+                clearTimeout(refreshTimerRef.current);
+                refreshTimerRef.current = null;
+            }
+        };
     }, [enabledProviders, currentRegime, currentFamily, trades]);
 
     return (

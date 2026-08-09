@@ -1,5 +1,5 @@
 
-import { TradeAnalysis, Message, TradeOutcome, AccuracySubMode, LoggedTrade, AnalystLensConfig, AnalystRole } from '../../types';
+import { TradeAnalysis, Message, TradeOutcome, AccuracySubMode, LoggedTrade, AnalystLensConfig, AnalystRole, AnalystConsensus } from '../../types';
 import { ProviderConfig } from '../../types/provider';
 import { streamChatRequest, ChatMessage } from './GenericProviderService';
 import { extractAndParseJson, extractLastJson } from '../../utils/jsonUtils';
@@ -665,7 +665,7 @@ export interface DivergenceAnalysis {
  * Returns a divergence score and recommended actions for the moderator.
  */
 export const analyzePreDebateDivergence = (
-    analystsResults: { analysis: TradeAnalysis, thoughtProcess: string, finalOutput?: string }[],
+    analystsResults: { analysis: TradeAnalysis, thoughtProcess?: string, finalOutput?: string }[],
     analystNames: string[]
 ): DivergenceAnalysis => {
     if (analystsResults.length < 2) {
@@ -783,6 +783,45 @@ Before proceeding to the final verdict, the moderator MUST:
 };
 
 /**
+ * Build the persisted consensus breakdown for the explainability panel:
+ * each analyst's structured call (direction/entry/SL/TP/confidence/probability)
+ * plus the pre-debate divergence analysis. Attached to the verdict analysis
+ * by the pipeline (app-computed, never AI-generated) so the final call can be
+ * audited against its own inputs — in the live card, history, and journal.
+ */
+export const buildAnalystConsensus = (
+    analysts: { provider: { config: { id: string }; name: string }; result: { analysis: TradeAnalysis } }[]
+): AnalystConsensus | undefined => {
+    if (analysts.length < 1) return undefined;
+    const entries: AnalystConsensus['entries'] = analysts.map((a) => {
+        const analysis = a.result.analysis;
+        return {
+            providerId: a.provider.config.id,
+            displayName: a.provider.name,
+            direction: analysis.direction,
+            entry: analysis.entryPoints?.[0]?.price ? String(analysis.entryPoints[0].price) : undefined,
+            stopLoss: analysis.stopLoss || undefined,
+            takeProfit: analysis.takeProfit?.[0]?.price ? String(analysis.takeProfit[0].price) : undefined,
+            confidence: analysis.confidence,
+            probability: typeof analysis.probability === 'number' ? analysis.probability : undefined,
+        };
+    });
+    const divergence = analyzePreDebateDivergence(
+        analysts.map((a) => a.result),
+        analysts.map((a) => a.provider.name)
+    );
+    return {
+        entries,
+        divergence: {
+            score: divergence.score,
+            isEchoChamber: divergence.isEchoChamber,
+            divergenceType: divergence.divergenceType,
+            details: divergence.details,
+        },
+    };
+};
+
+/**
  * Generate a concise divergence summary for the moderator prompt.
  */
 export const generateDivergenceContext = (
@@ -808,6 +847,43 @@ ${analysis.details.map(d => `- ${d}`).join('\n')}
     }
 
     return context.trim();
+};
+
+/**
+ * Build a compact Bayesian calibration block for the moderator: each analyst's
+ * RAW probability vs their history-calibrated probability (keyed by provider
+ * ID — display names almost never match the byProvider map). Only analysts
+ * with a numeric probability AND a meaningful shift (>5 points) are listed;
+ * returns '' when there is no calibration data or nothing shifted.
+ *
+ * This is the LIVE-path equivalent of the calibration that used to live only
+ * in the (dead) two/three-way debate generators — the real debate and the
+ * accuracy-mode simulation never saw it, so historical accuracy never
+ * influenced a moderator verdict.
+ */
+const buildCalibrationContext = (
+    analysts: { name: string; providerId?: string; result: { analysis: TradeAnalysis } }[],
+): string => {
+    const calibrationData = GlobalLearningService.getCalibration();
+    if (!calibrationData) return '';
+
+    const lines: string[] = [];
+    for (const analyst of analysts) {
+        const rawProb = analyst.result.analysis.probability;
+        if (typeof rawProb !== 'number' || isNaN(rawProb)) continue;
+        const calibratedProb = getBayesianCalibratedConfidence(
+            calibrationData,
+            analyst.providerId || analyst.name,
+            analyst.result.analysis.confidence as ConfidenceLevel,
+            rawProb,
+        );
+        if (Math.abs(calibratedProb - rawProb) > 5) {
+            lines.push(`- **${analyst.name}**: ${Math.round(rawProb)}% → ${Math.round(calibratedProb)}% (Bayesian calibrated from historical accuracy)`);
+        }
+    }
+    if (lines.length === 0) return '';
+
+    return `\n\n**BAYESIAN CONFIDENCE CALIBRATION (from the user's trade history):**\n${lines.join('\n')}\nPrefer the calibrated values as the more reliable probability reference.`;
 };
 
 /**
@@ -871,8 +947,12 @@ ${planJson.slice(0, 6000)}
                 return { verdict: 'adjusted', note: 'Plan adjusted by the accuracy pass.', planJson: typeof adjustedJson === 'string' ? adjustedJson : JSON.stringify(adjustedJson) };
             }
         } catch {
-            // fall through to confirmed — never discard the original plan
+            // fall through to the clean note below — never discard the plan
         }
+        // Marker present but no parseable JSON: return a clean note instead
+        // of the raw body (which may contain half-emitted JSON) so the
+        // malformed payload never leaks into the chat bubble.
+        return { verdict: 'confirmed', note: 'Plan verified by the accuracy pass.' };
     }
     const note = text.replace(/<ACCURACY_(?:ADJUST|CONFIRMED)>/gi, '').trim();
     return { verdict: 'confirmed', note: note || 'Plan verified by the accuracy pass.' };
@@ -893,7 +973,9 @@ export const conductDebate = (
     tradeSummaries?: { id: string; summaryText: string; timestamp: string }[], // Recent Insights
     learningContext?: string, // NEW: Unified learning context from UnifiedLearningBuilder
     signal?: AbortSignal, // Cancellation for the moderator stream
-    onReasoning?: (reasoning: string) => void
+    onReasoning?: (reasoning: string) => void,
+    /** Provider IDs per analyst (calibration is keyed by provider ID). */
+    analystProviders?: string[]
 ): AsyncGenerator<string, void, unknown> => {
 
     let tradeHistoryContext = finalTradeSummary ? `Pattern Memory Library (History):\n${truncateTextToTokens(finalTradeSummary, 3000)}` : "No past trades logged.";
@@ -972,6 +1054,19 @@ export const conductDebate = (
 
     const safeUserPrompt = truncateTextToTokens(userPrompt, 1500);
 
+    // --- PRE-DEBATE DIVERGENCE + BAYESIAN CALIBRATION ---
+    // Same live-path treatment as conductRealDebate: echo-chamber warnings and
+    // historical-accuracy calibration reach the moderator instead of only
+    // existing in the (dead) two/three-way generators.
+    const divergenceContext = generateDivergenceContext(analystsResults, analystNames);
+    const calibrationContext = buildCalibrationContext(
+        analystsResults.map((res, index) => ({
+            name: analystNames[index] || `Analyst ${index + 1}`,
+            providerId: analystProviders?.[index],
+            result: res,
+        })),
+    );
+
     const finalPrompt = `
 ${systemPrompt}
 
@@ -988,6 +1083,10 @@ ${POST_MORTEM_PATTERN_LEARNING_PROMPT}
 ${PROBABILITY_ESTIMATION_PROMPT}
 
 ${learningContext || ''}
+
+${divergenceContext}
+
+${calibrationContext}
 
 ${STRESS_TEST_PROTOCOL}
 
@@ -2198,6 +2297,73 @@ export interface RealDebateAnalyst {
     result: { thoughtProcess: string; finalOutput: string; analysis: TradeAnalysis };
 }
 
+/** How long the debate waits for the user to pick a replacement analyst before continuing without one. */
+export const DEBATE_REPLACEMENT_WAIT_MS = 60_000;
+
+/** Outcome of a bounded replacement wait. */
+export type ReplacementWaitResult<T> =
+    | { status: 'resolved'; value: T }
+    | { status: 'timedOut' };
+
+/**
+ * Resolve `promise` unless the caller aborts (rejects with AbortError) or the
+ * wait budget elapses (resolves `{ status: 'timedOut' }`). Used to suspend the
+ * debate while the UI asks the user for a mid-debate analyst replacement
+ * without holding the round open forever. The consumer's pending promise is
+ * NOT cancelled on timeout — the generator emits a timeout marker so the
+ * consumer abandons the wait itself (a late user click must never inject a
+ * phantom analyst into a debate that already moved on).
+ */
+export const awaitReplacementWithTimeout = async <T>(
+    promise: Promise<T>,
+    signal: AbortSignal | undefined,
+    timeoutMs: number,
+): Promise<ReplacementWaitResult<T>> => {
+    return new Promise<ReplacementWaitResult<T>>((resolve, reject) => {
+        let settled = false;
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
+        const onAbort = (): void => {
+            if (settled) return;
+            settled = true;
+            if (timeoutId) clearTimeout(timeoutId);
+            const err = new Error('Aborted');
+            err.name = 'AbortError';
+            reject(err);
+        };
+        if (timeoutMs > 0) {
+            timeoutId = setTimeout(() => {
+                if (settled) return;
+                settled = true;
+                if (signal) signal.removeEventListener('abort', onAbort);
+                resolve({ status: 'timedOut' });
+            }, timeoutMs);
+        }
+        if (signal) {
+            if (signal.aborted) {
+                onAbort();
+                return;
+            }
+            signal.addEventListener('abort', onAbort, { once: true });
+        }
+        promise.then(
+            (value) => {
+                if (settled) return;
+                settled = true;
+                if (timeoutId) clearTimeout(timeoutId);
+                if (signal) signal.removeEventListener('abort', onAbort);
+                resolve({ status: 'resolved', value });
+            },
+            (err) => {
+                if (settled) return;
+                settled = true;
+                if (timeoutId) clearTimeout(timeoutId);
+                if (signal) signal.removeEventListener('abort', onAbort);
+                reject(err);
+            },
+        );
+    });
+};
+
 /**
  * Streaming event emitted by conductRealDebate. `text` is a DELTA chunk —
  * the consumer accumulates it per (speaker, round). Rounds:
@@ -2210,6 +2376,23 @@ export interface RealDebateTurnEvent {
     round: number;
     text: string;
 }
+
+/**
+ * Build a "live price refresh" context block for a debate round. When the
+ * live feed knows TODAY's price, the round's prompt tells the model the
+ * market may have moved since the original snapshot so it weighs the
+ * current price against the setup levels instead of arguing over a stale
+ * price. Returns '' when no live price is available (graceful no-op).
+ * Pure — exported for tests.
+ */
+export const buildLivePriceRefreshBlock = (price: number | null | undefined, label: string): string => {
+    if (!price || !isFinite(price) || price <= 0) return '';
+    return (
+        `\n\n**LIVE PRICE REFRESH (${label}):** $${price.toLocaleString('en-US', { maximumFractionDigits: 2 })} — ` +
+        `the market may have moved since the original snapshot; weigh TODAY's price against the setup levels in your response.`
+    );
+};
+
 
 // Machine-readable markers emitted by the clarification phase. The questions
 // call may short-circuit with <CLARIFICATION_DONE>; the (internal) judgment
@@ -2318,7 +2501,23 @@ export const conductRealDebate = async function* (
     /** Wall-clock budget for the whole debate (rebuttals + clarification
      *  cycles). On expiry the debate skips remaining rounds and proceeds
      *  straight to the moderator verdict. */
-    timeoutMs?: number
+    timeoutMs?: number,
+    /** Mid-debate analyst replacement. Invoked once per analyst that drops
+     *  (stream failure) BEFORE the next phase runs; the debate suspends while
+     *  the returned promise is pending so the consumer can ask the user for a
+     *  fresh provider. Resolve with a fully-formed analyst record to inject it
+     *  (it joins the remaining rebuttals/clarifications/verdict), or null to
+     *  continue without. The abort signal interrupts the wait. */
+    onReplacementRequested?: (droppedName: string, round: number) => Promise<RealDebateAnalyst | null>,
+    /** How long the debate waits for the replacement choice (defaults to
+     *  DEBATE_REPLACEMENT_WAIT_MS). Test seams pass a small value. */
+    replacementTimeoutMs?: number,
+    /** Live-price provider invoked at each round boundary (rebuttals,
+     *  clarification, verdict). Return TODAY's price or null/undefined when
+     *  unknown — the refresh line is then omitted and the debate runs as
+     *  before. Analysts re-anchor on the current price between rounds
+     *  instead of arguing over a stale snapshot. */
+    getLivePrice?: () => number | null
 ): AsyncGenerator<RealDebateTurnEvent, void, unknown> {
 
     if (analysts.length < 2) {
@@ -2332,24 +2531,32 @@ export const conductRealDebate = async function* (
 
     const names = analysts.map(a => a.provider.name);
     const activeAnalystNames = new Set(names);
+    // Mutable roster: grows when a mid-debate replacement joins. Everything
+    // that re-invokes analysts (rebuttal rounds, clarifications, verdict
+    // context) reads THIS, never the original `analysts` array — a replacement
+    // provider must be re-callable and visible to the moderator.
+    const debateRoster: RealDebateAnalyst[] = [...analysts];
     // Analysts that dropped mid-round (stream failure) — their partial text is
     // purged from the transcript and a visible notice is emitted.
     const droppedThisRound = new Set<string>();
     // Speaker labels the moderator may use when addressing analysts: provider
     // names plus lens role short names (Macro / Technical / Risk). Used to
-    // split the clarification question block per analyst.
-    // All speaker labels the moderator may use (provider names + lens short
-    // names + 'Moderator' so a moderator interjection terminates a section).
-    const speakerLabels = analysts.flatMap((a) => {
-        const labels = [a.provider.name];
-        if (lensConfig?.enabled) {
-            const role = getRoleForProvider(`${a.provider.config.id}::${a.provider.model}`, lensConfig.assignments);
-            const shortName = role !== AnalystRole.UNASSIGNED ? ANALYST_ROLE_DEFINITIONS[role].shortName : '';
-            if (shortName) labels.push(shortName);
-        }
+    // split the clarification question block per analyst. Rebuilt when a
+    // replacement joins so its labels anchor its own section.
+    const buildSpeakerLabels = (): string[] => {
+        const labels = debateRoster.flatMap((a) => {
+            const own = [a.provider.name];
+            if (lensConfig?.enabled) {
+                const role = getRoleForProvider(`${a.provider.config.id}::${a.provider.model}`, lensConfig.assignments);
+                const shortName = role !== AnalystRole.UNASSIGNED ? ANALYST_ROLE_DEFINITIONS[role].shortName : '';
+                if (shortName) own.push(shortName);
+            }
+            return own;
+        });
+        labels.push('Moderator');
         return labels;
-    });
-    speakerLabels.push('Moderator');
+    };
+    let speakerLabels = buildSpeakerLabels();
     // Per-analyst TARGET aliases — only the analyst's OWN labels may anchor
     // its section (the old code included every other analyst's labels, so an
     // unaddressed analyst grabbed the first section and answered the wrong
@@ -2357,7 +2564,7 @@ export const conductRealDebate = async function* (
     const targetAliasesFor = (name: string): string[] => {
         const aliases = [name];
         if (lensConfig?.enabled) {
-            const analyst = analysts.find(a => a.provider.name === name);
+            const analyst = debateRoster.find(a => a.provider.name === name);
             if (analyst) {
                 const role = getRoleForProvider(`${analyst.provider.config.id}::${analyst.provider.model}`, lensConfig.assignments);
                 const shortName = role !== AnalystRole.UNASSIGNED ? ANALYST_ROLE_DEFINITIONS[role].shortName : '';
@@ -2369,6 +2576,27 @@ export const conductRealDebate = async function* (
     // Per-speaker text per round (1-based index). Rebuttal deltas accumulate.
     const roundTexts: Record<string, string[]> = { Moderator: [] };
     analysts.forEach(a => { roundTexts[a.provider.name] = []; });
+
+    /** Inject a replacement analyst that joins the debate from the next phase.
+     *  Its position is seeded at `dropRound` (its fresh analysis, streamed as
+     *  a visible turn) so the next rebuttal round / clarification treats it as
+     *  an established speaker — same semantics as round-1 openings. */
+    const injectReplacement = (replacement: RealDebateAnalyst, dropRound: number): void => {
+        const name = replacement.provider.name;
+        names.push(name);
+        activeAnalystNames.add(name);
+        roundTexts[name] = [];
+        const opening = replacement.result.finalOutput || replacement.result.thoughtProcess || 'No opening statement provided.';
+        roundTexts[name][dropRound] = opening;
+        debateRoster.push(replacement);
+        if (analystProviders) analystProviders.push(replacement.provider.config.id);
+        speakerLabels = buildSpeakerLabels();
+    };
+
+    /** Offer the user a replacement for a dropped analyst and inject the pick.
+     *  On wait timeout the consumer's offer is still pending — emit a marker
+     *  so it abandons the wait (a late click must never inject a phantom
+     *  analyst into a debate that already moved on). */
 
     // --- ROUND 1: OPENING STATEMENTS (free — each analyst's own final output) ---
     for (const analyst of analysts) {
@@ -2393,11 +2621,11 @@ export const conductRealDebate = async function* (
 
         // Context is snapshotted BEFORE the round starts, so every analyst
         // responds to the others' previous round — never to themselves.
-        const tasks = analysts
+        const tasks = debateRoster
             .filter(a => activeAnalystNames.has(a.provider.name) && roundTexts[a.provider.name]?.[round - 1])
             .map((analyst) => {
                 const ownPosition = roundTexts[analyst.provider.name]?.[round - 1];
-                const others = analysts
+                const others = debateRoster
                     .filter(o => o.provider.name !== analyst.provider.name && roundTexts[o.provider.name]?.[round - 1])
                     .map(o => `**${o.provider.name} (Round ${round - 1}):**\n${roundTexts[o.provider.name][round - 1]}`)
                     .join('\n\n') || 'No other analyst has spoken yet.';
@@ -2405,11 +2633,15 @@ export const conductRealDebate = async function* (
                 const systemPrompt = DEBATE_RESPONSE_PROMPT
                     .replace('{{NAME}}', analyst.provider.name)
                     .replace('{{ROUND}}', String(round));
+                // Snapshot the live price ONCE per round so every analyst in
+                // the parallel batch sees the SAME current price.
+                const livePriceBlock = buildLivePriceRefreshBlock(getLivePrice?.() ?? null, `before Round ${round}`);
                 const userContent =
                     `**TRADING REQUEST:**\n${truncateTextToTokens(userPrompt, 350)}\n\n` +
                     `**YOUR POSITION (Round ${round - 1}):**\n${truncateTextToTokens(ownPosition, 225)}\n\n` +
                     `**OTHER ANALYSTS' LATEST POSITIONS:**\n${truncateTextToTokens(others, 600)}\n\n` +
-                    `Respond now with your rebuttal for Round ${round}.`;
+                    `Respond now with your rebuttal for Round ${round}.` +
+                    livePriceBlock;
 
                 const messages: ChatMessage[] = [
                     { role: 'system', content: systemPrompt },
@@ -2493,6 +2725,34 @@ export const conductRealDebate = async function* (
         for (const name of droppedThisRound) {
             yield { speaker: 'System', round, text: `${name} dropped out during Round ${round} (provider stream failed) — the debate continues without them.` };
         }
+        // Mid-debate replacement: the debate suspends (bounded by
+        // replacementTimeoutMs) while the consumer asks the user for a fresh
+        // analyst to step in for each dropped speaker. Injected replacements
+        // join the remaining rebuttal rounds (and any clarifications).
+        if (onReplacementRequested && droppedThisRound.size > 0) {
+            for (const droppedName of droppedThisRound) {
+                if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+                const waitResult = await awaitReplacementWithTimeout(
+                    onReplacementRequested(droppedName, round),
+                    signal,
+                    replacementTimeoutMs ?? DEBATE_REPLACEMENT_WAIT_MS,
+                );
+                if (waitResult.status === 'timedOut') {
+                    // Consumer's offer is still pending — emit the marker so
+                    // it abandons the wait; a late click must never inject a
+                    // phantom analyst into a debate that already moved on.
+                    yield { speaker: 'System', round, text: `<REPLACEMENT_TIMEOUT> No replacement selected for ${droppedName} within the wait window — the debate continues without them.` };
+                    continue;
+                }
+                const replacement = waitResult.value;
+                if (replacement && !activeAnalystNames.has(replacement.provider.name)) {
+                    injectReplacement(replacement, round);
+                    yield { speaker: 'System', round, text: `${droppedName} was replaced by ${replacement.provider.name} — ${replacement.provider.name} joins the debate from Round ${round + 1}.` };
+                    const opening = replacement.result.finalOutput || replacement.result.thoughtProcess;
+                    if (opening) yield { speaker: replacement.provider.name, round, text: opening };
+                }
+            }
+        }
         droppedThisRound.clear();
     }
 
@@ -2523,7 +2783,9 @@ export const conductRealDebate = async function* (
         const questionRound = lastRebuttalRound + 1;
         const priorQATranscript = buildDebateTranscript(names, roundTexts, lastRebuttalRound, 100, 1500);
         const questionSystemPrompt = MODERATOR_CLARIFICATION_QUESTIONS_PROMPT.replace('{{ANALYSTS}}', names.join(', '));
-        const questionUserContent = `**THE DEBATE TRANSCRIPT (rounds 1-${lastRebuttalRound}):**\n${priorQATranscript}`;
+        const questionUserContent =
+            `**THE DEBATE TRANSCRIPT (rounds 1-${lastRebuttalRound}):**\n${priorQATranscript}` +
+            buildLivePriceRefreshBlock(getLivePrice?.() ?? null, 'before the clarification questions');
         onSpeakerStatus?.('Moderator', questionRound, true);
         let questionText = '';
         try {
@@ -2573,7 +2835,7 @@ export const conductRealDebate = async function* (
         // -- ANALYST ANSWERS (parallel, each on its own provider) --
         const answerRound = questionRound + 1;
         lastRebuttalRound = answerRound;
-        const liveAnalysts = analysts.filter(a => activeAnalystNames.has(a.provider.name));
+        const liveAnalysts = debateRoster.filter(a => activeAnalystNames.has(a.provider.name));
         const clarificationTranscript = buildDebateTranscript(
             names,
             roundTexts,
@@ -2587,7 +2849,8 @@ export const conductRealDebate = async function* (
                 .replace('{{QUESTION}}', getAnalystClarificationQuestion(questionText, targetAliasesFor(analyst.provider.name), speakerLabels));
             const answerUserContent =
                 `**THE DEBATE TRANSCRIPT (with this round's moderator questions):**\n${clarificationTranscript}\n\n` +
-                `Respond now with your answer for Round ${answerRound}.`;
+                `Respond now with your answer for Round ${answerRound}.` +
+                buildLivePriceRefreshBlock(getLivePrice?.() ?? null, 'before the clarification answers');
             const messages: ChatMessage[] = [
                 { role: 'system', content: answerSystemPrompt },
                 { role: 'user', content: answerUserContent },
@@ -2652,6 +2915,30 @@ export const conductRealDebate = async function* (
         }
         for (const name of droppedThisRound) {
             yield { speaker: 'System', round: answerRound, text: `${name} dropped out while answering the clarification question (provider stream failed).` };
+        }
+        // Same replacement hook as the rebuttal rounds: an analyst that dies
+        // during clarification can be swapped for a fresh one that participates
+        // in any remaining clarification cycles and the verdict.
+        if (onReplacementRequested && droppedThisRound.size > 0) {
+            for (const droppedName of droppedThisRound) {
+                if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+                const waitResult = await awaitReplacementWithTimeout(
+                    onReplacementRequested(droppedName, answerRound),
+                    signal,
+                    replacementTimeoutMs ?? DEBATE_REPLACEMENT_WAIT_MS,
+                );
+                if (waitResult.status === 'timedOut') {
+                    yield { speaker: 'System', round: answerRound, text: `<REPLACEMENT_TIMEOUT> No replacement selected for ${droppedName} within the wait window — the debate continues without them.` };
+                    continue;
+                }
+                const replacement = waitResult.value;
+                if (replacement && !activeAnalystNames.has(replacement.provider.name)) {
+                    injectReplacement(replacement, answerRound);
+                    yield { speaker: 'System', round: answerRound, text: `${droppedName} was replaced by ${replacement.provider.name}.` };
+                    const opening = replacement.result.finalOutput || replacement.result.thoughtProcess;
+                    if (opening) yield { speaker: replacement.provider.name, round: answerRound, text: opening };
+                }
+            }
         }
         droppedThisRound.clear();
 
@@ -2772,6 +3059,14 @@ export const conductRealDebate = async function* (
         `\n\n**TRADING REQUEST:**\n${truncateTextToTokens(userPrompt, 350)}`,
         marketDataOverride,
         generateGateReconciliationContext(gateResult ?? null, []),
+        // Live-path divergence + calibration: previously these only existed in
+        // the dead two/three-way debate generators, so the real debate's
+        // moderator never saw echo-chamber warnings or historical accuracy.
+        // The full roster (original + mid-debate replacements) is used so the
+        // names↔results alignment is exact.
+        generateDivergenceContext(debateRoster.map(a => a.result), names),
+        buildCalibrationContext(debateRoster.map(a => ({ name: a.provider.name, providerId: a.provider.config.id, result: a.result }))),
+        buildLivePriceRefreshBlock(getLivePrice?.() ?? null, 'before the final verdict'),
         mcContext,
         lensContext,
         learningContext ? `\n\n**LEARNING CONTEXT (from the user's trading history):**\n${truncateTextToTokens(learningContext, 500)}` : '',
@@ -2817,7 +3112,14 @@ export const conductRealDebate = async function* (
         // marker, or no JSON plan anywhere in the response. The moderator call
         // is always a fresh streamChatRequest with its own prompt — never a
         // reused analyst result, even when the same model fills both roles.
-        const hasJsonPlan = !streamFailed && /<JSON_PLAN>|```json/i.test(moderatorText);
+        // The <JSON_PLAN> tag must be CLOSED: an opening tag with no closing
+        // tag means the JSON got truncated mid-stream — treating it as a
+        // success skipped the compact-prompt retry and sent broken JSON to
+        // the parser.
+        const hasJsonPlan = !streamFailed && (
+            /<JSON_PLAN>[\s\S]*<\/JSON_PLAN>/i.test(moderatorText)
+            || /```json[\s\S]*```/i.test(moderatorText)
+        );
         const hasErrorMarker = !streamFailed && /<MODERATOR_ERROR>/.test(moderatorText);
         if (hasJsonPlan && !hasErrorMarker) break;
         if (attempt === attempts.length - 1) break;
@@ -2841,7 +3143,8 @@ export const conductTwoWayPostMortemDebate = (
     moderatorModel: string,
     postTradeImageSummaries?: string[],
     trades?: LoggedTrade[], // NEW: Pass trades for synthesis
-    signal?: AbortSignal // Cancellation for the moderator stream
+    signal?: AbortSignal, // Cancellation for the moderator stream
+    onReasoning?: (reasoning: string) => void // Captures the moderator's chain of thought (harness-style thinking blocks)
 ): AsyncGenerator<string, void, unknown> => {
 
     const imageContext = postTradeImageSummaries?.length ? `** VERIFIED TRADE OUTCOME DATA (HIGHEST PRIORITY):**\n${postTradeImageSummaries.join('\n---\n')}` : `No post-trade data was provided.`;
@@ -3016,7 +3319,7 @@ You MUST:
 
     Start with <DEBATE_START> now.`;
 
-    return getModeratorAnalysisStream(moderatorConfig, moderatorModel, moderatorPrompt, signal);
+    return getModeratorAnalysisStream(moderatorConfig, moderatorModel, moderatorPrompt, signal, onReasoning);
 };
 
 /**
@@ -3070,7 +3373,8 @@ export const conductThreeWayPostMortemDebate = (
     moderatorConfig: ProviderConfig,
     moderatorModel: string,
     postTradeImageSummaries?: string[],
-    signal?: AbortSignal // Cancellation for the moderator stream
+    signal?: AbortSignal, // Cancellation for the moderator stream
+    onReasoning?: (reasoning: string) => void // Captures the moderator's chain of thought (harness-style thinking blocks)
 ): AsyncGenerator<string, void, unknown> => {
 
     const imageContext = postTradeImageSummaries?.length ? `** VERIFIED TRADE OUTCOME DATA (HIGHEST PRIORITY):**\n${postTradeImageSummaries.join('\n---\n')}` : `No post-trade data was provided.`;
@@ -3231,5 +3535,5 @@ You MUST:
 
     Start with <DEBATE_START> now.`;
 
-    return getModeratorAnalysisStream(moderatorConfig, moderatorModel, moderatorPrompt, signal);
+    return getModeratorAnalysisStream(moderatorConfig, moderatorModel, moderatorPrompt, signal, onReasoning);
 };

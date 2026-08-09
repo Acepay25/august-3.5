@@ -16,8 +16,15 @@ function devProviderProxy() {
           const request = JSON.parse(Buffer.concat(chunks).toString('utf8'));
           const config = request?.config || {};
           const parsed = new URL(String(config.baseUrl || '').trim());
-          if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]', '::1'].includes(parsed.hostname))) {
-            throw new Error('Provider URLs must use HTTPS. HTTP is allowed only for localhost.');
+          const hostname = parsed.hostname.toLowerCase();
+          const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]' || hostname === '::1' || hostname === '0.0.0.0' ||
+            /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname) ||
+            /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname) ||
+            /^192\.168\.\d{1,3}\.\d{1,3}$/.test(hostname) ||
+            /^172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}$/.test(hostname) ||
+            /^169\.254\.\d{1,3}\.\d{1,3}$/.test(hostname);
+          if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && isLocal)) {
+            throw new Error('Provider URLs must use HTTPS. HTTP is allowed only for localhost and private LAN addresses.');
           }
           if (parsed.username || parsed.password || parsed.search || parsed.hash) {
             throw new Error('Provider URLs cannot include credentials, query parameters, or fragments.');
@@ -34,6 +41,7 @@ function devProviderProxy() {
           const headers: Record<string, string> = { 'Content-Type': 'application/json' };
           let url = '';
           let body: Record<string, unknown>;
+          const messages = request.messages || [];
           if (config.apiFormat === 'chat_completions') {
             url = `${baseUrl}/chat/completions`;
             if (apiKey && apiKey !== 'not-needed') headers.Authorization = `Bearer ${apiKey}`;
@@ -43,24 +51,31 @@ function devProviderProxy() {
             url = `${baseUrl}/messages`;
             if (apiKey) headers['x-api-key'] = apiKey;
             headers['anthropic-version'] = '2023-06-01';
-            const messages = request.messages || [];
             const system = messages.find((message: any) => message?.role === 'system');
-            body = { model: config.selectedModel, max_tokens: request.maxTokens ?? 4096, messages: messages.filter((message: any) => message?.role !== 'system') };
-            if (system) body.system = typeof system.content === 'string' ? system.content : '';
+            body = { model: config.selectedModel, max_tokens: request.maxTokens ?? 4096, messages: messages.filter((message: any) => message?.role !== 'system').map((message: any) => ({ role: message.role, content: toAnthropicContent(message.content) })) };
+            if (system) body.system = contentToText(system.content);
           } else if (config.apiFormat === 'responses') {
             url = `${baseUrl}/responses`;
             if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
-            body = { model: config.selectedModel, input: request.messages || [], max_output_tokens: request.maxTokens ?? 4096, temperature: request.temperature ?? 0.7 };
+            const responsesMessages = messages.filter((message: any) => message?.role !== 'system');
+            const responsesSystem = messages.find((message: any) => message?.role === 'system');
+            body = {
+              model: config.selectedModel,
+              input: responsesMessages.map((message: any) => ({
+                role: message.role,
+                content: typeof message.content === 'string'
+                  ? message.content
+                  : (message.content || []).map((part: any) => part?.type === 'text'
+                    ? { type: 'input_text', text: part.text }
+                    : { type: 'input_image', image_url: part?.image_url?.url || '' })
+              })),
+              ...(responsesSystem ? { instructions: contentToText(responsesSystem.content) } : {}),
+              max_output_tokens: request.maxTokens ?? 4096,
+              temperature: request.temperature ?? 0.7
+            };
           } else {
             throw new Error('Unknown provider API format.');
           }
-          let upstream = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal: AbortSignal.timeout(120000) });
-          if (!upstream.ok && request.jsonMode && (upstream.status === 400 || upstream.status === 422) && body.response_format) {
-            const fallbackBody = { ...body };
-            delete fallbackBody.response_format;
-            upstream = await fetch(url, { method: 'POST', headers, body: JSON.stringify(fallbackBody), signal: AbortSignal.timeout(120000) });
-          }
-
           // Streaming (SSE) passthrough — used by streamChatRequest on localhost
           // so the renderer receives per-chunk deltas without CORS failures
           // (direct browser SDK calls are blocked by providers without CORS
@@ -92,11 +107,26 @@ function devProviderProxy() {
                 if (done) break;
                 res.write(decoder.decode(value, { stream: true }));
               }
+            } catch (streamError) {
+              // Mid-stream upstream failure: headers are already committed as
+              // text/event-stream with a 200 status, so a JSON error body
+              // would corrupt the stream and be silently dropped by the
+              // renderer's SSE parser — the failure would look like a clean
+              // completion. Emit an SSE error event instead; streamViaProxy
+              // treats a chunk.error as a real failure and surfaces it.
+              const message = streamError instanceof Error ? streamError.message : 'Provider stream interrupted.';
+              res.write(`data: ${JSON.stringify({ error: { message, code: 'stream_interrupted' } })}\n\n`);
             } finally {
               reader.releaseLock();
             }
             res.end();
             return;
+          }
+          let upstream = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal: AbortSignal.timeout(120000) });
+          if (!upstream.ok && request.jsonMode && (upstream.status === 400 || upstream.status === 422) && body.response_format) {
+            const fallbackBody = { ...body };
+            delete fallbackBody.response_format;
+            upstream = await fetch(url, { method: 'POST', headers, body: JSON.stringify(fallbackBody), signal: AbortSignal.timeout(120000) });
           }
           let text = await upstream.text();
           if (upstream.ok && request.jsonMode && body.response_format) {
@@ -140,6 +170,29 @@ function devProviderProxy() {
   };
 }
 
+function contentToText(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+  return content.filter((part: any) => part?.type === 'text').map((part: any) => part.text).join('');
+}
+
+function toAnthropicContent(content: unknown): any[] {
+  if (typeof content === 'string') return [{ type: 'text', text: content }];
+  if (!Array.isArray(content)) return [];
+  return content.map((part: any) => {
+    if (part?.type === 'text') return { type: 'text', text: part.text };
+    const url = part?.image_url?.url || '';
+    const commaIndex = url.indexOf(',');
+    if (url.startsWith('data:') && commaIndex !== -1) {
+      const header = url.slice(5, commaIndex);
+      const mimeMatch = header.match(/^image\/(png|jpeg|webp|gif)\b/i);
+      const mediaType = mimeMatch ? `image/${mimeMatch[1].toLowerCase()}` : 'image/png';
+      return { type: 'image', source: { type: 'base64', media_type: mediaType, data: url.slice(commaIndex + 1) } };
+    }
+    return { type: 'image', source: { type: 'url', url } };
+  });
+}
+
 // Fix for a common issue with Node.js v17+ DNS resolution.
 // This ensures 'localhost' resolves correctly.
 dns.setDefaultResultOrder('verbatim');
@@ -155,8 +208,8 @@ export default defineConfig(() => {
       },
     },
     server: {
-      // Adding server config to ensure it runs smoothly
-      host: '0.0.0.0',
+      // Keep the unauthenticated development proxy local to this machine.
+      host: '127.0.0.1',
       port: 3000,
       // Development assets must never be served from a stale browser cache.
       // Vite HMR remains responsible for live updates while this also makes
@@ -171,9 +224,15 @@ export default defineConfig(() => {
         external: ['protobufjs/minimal.js'],
         output: {
           manualChunks: {
-            'vendor-ai': ['@google/genai', 'openai'],
-            'vendor-charts': ['lightweight-charts', 'recharts'],
-            'vendor-crypto': ['ccxt', 'technicalindicators'],
+            'vendor-ai': ['openai'],
+            // NOTE: recharts + lightweight-charts intentionally have NO manual
+            // chunk. A fixed 'vendor-charts' entry made rollup link the charts
+            // chunk into vendor-react (shared-module hoisting), which put a
+            // 363KB static import into the startup module graph and preloaded
+            // it on every launch even though charts are only reachable through
+            // lazy components (Journal, LiveMarket, VersionHistoryDashboard).
+            // Without the entry they stay in their lazy consumer chunks.
+            'vendor-crypto': ['technicalindicators'],
             'vendor-react': ['react', 'react-dom', 'react-virtuoso'],
           },
         },

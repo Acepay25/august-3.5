@@ -55,7 +55,7 @@ const AnalystPanel: React.FC<{
   loadingStreaming: string;
   onTypingComplete: () => void;
 }> = ({ title, modelName, text, output, reasoning, colorClasses, loadingIdle, loadingStreaming, onTypingComplete }) => {
-  const [typedText, isFinished] = useTypingEffect(output, 4);
+  const [typedText, isFinished] = useTypingEffect(output, 30);
   const [thinkingOpen, setThinkingOpen] = useState(false);
 
   useEffect(() => {

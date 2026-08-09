@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area
 } from 'recharts';
@@ -40,7 +41,8 @@ const Icons = {
 };
 
 export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) => {
-    const [selectedVersionId, setSelectedVersionId] = useState<string>('v6');
+    // Esc closes the overlay (backdrop-click was the only way out before).
+    useEscapeClose(true, onClose);
     const [activeTab, setActiveTab] = useState<'Intelligence' | 'Algorithm' | 'System'>('Intelligence');
     const [signals, setSignals] = useState<ReinforcementSignal[]>([]);
     const [calibration, setCalibration] = useState<ConfidenceCalibration | undefined>(undefined);
@@ -72,9 +74,15 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
 
             const r = storageService.loadLearningRules().rules || [];
             setRules(r);
+            // 5s polling reloads the lists — clamp the selection so a shrink
+            // between polls can't point past the end of the new array (the
+            // <select> would render no matching <option>).
+            setSelectedRuleIndex(i => Math.min(i, Math.max(0, r.length - 1)));
 
             const iStats = getAttributedInsightsSummary();
-            setInsights(iStats.topInsights || []);
+            const topInsights = iStats.topInsights || [];
+            setInsights(topInsights);
+            setSelectedInsightIndex(i => Math.min(i, Math.max(0, topInsights.length - 1)));
 
             // 2. System Data
             setQueueSize(jobQueue.getQueueLength());
@@ -371,8 +379,8 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                         {/* Version Selector Dropdown - Cleaned up (Removed v4/v5 per request) */}
                         <div className="relative group">
                             <select
-                                value={selectedVersionId}
-                                onChange={(e) => setSelectedVersionId(e.target.value)}
+                                value="v6"
+                                aria-label="System version"
                                 className="appearance-none bg-zinc-900 border border-zinc-800 text-zinc-300 text-sm rounded-xl py-2 pl-4 pr-10 focus:outline-none focus:ring-1 focus:ring-blue-500 hover:bg-zinc-800 transition-colors"
                             >
                                 <option value="v6">Version 6.0 (Current)</option>
