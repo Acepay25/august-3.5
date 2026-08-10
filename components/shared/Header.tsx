@@ -4,6 +4,7 @@ import { getSessionContext, getAllSessionsStatus, SessionContext, SessionStatus 
 import { UpdateButton } from './UpdateButton';
 import { SidebarContent } from './Sidebar';
 import { Conversation } from '../../types';
+import { AutomationConfig } from '../../types/automation';
 
 interface HeaderProps {
     activeUsername: string | null;
@@ -39,6 +40,10 @@ interface HeaderProps {
     onLoadConversation: (id: string) => void;
     onDeleteConversation: (id: string) => void;
     onDeleteConversations?: (ids: string[]) => Promise<boolean> | boolean;
+    // Automations (mobile drawer sidebar section)
+    automations?: AutomationConfig[];
+    onOpenAutomation?: (id: string | null) => void;
+    onCreateAutomation?: () => void;
 }
 
 // Memoized: Header re-renders every time App does (typing, progress ticks);
@@ -67,7 +72,10 @@ export const Header: React.FC<HeaderProps> = memo(({
     onDeleteConversation,
     onDeleteConversations,
     onNewConversation,
-    onLoadConversation
+    onLoadConversation,
+    automations,
+    onOpenAutomation,
+    onCreateAutomation
 }) => {
     const [sessionContext, setSessionContext] = useState<SessionContext | null>(null);
     const [allSessions, setAllSessions] = useState<SessionStatus[]>([]);
@@ -343,6 +351,9 @@ export const Header: React.FC<HeaderProps> = memo(({
                                     onOpenVisionData={() => setIsVisionDataVisible(true)}
                                     onOpenJournal={() => setJournalState({ isOpen: true, tab: 'log' })}
                                     onOpenSettings={() => setIsSettingsVisible(true)}
+                                    automations={automations}
+                                    onOpenAutomation={onOpenAutomation}
+                                    onCreateAutomation={onCreateAutomation}
                                     onNavigate={() => setIsMobileMenuOpen(false)}
                                 />
                             </div>

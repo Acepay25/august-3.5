@@ -471,6 +471,10 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     // ─── Refs ──────────────────────────────────────────────────────────────
     const analysisAbortController = useRef<AbortController | null>(null);
     const analysisConversationIdRef = useRef<string | null>(null);
+    // Automation runs: private message list (results never touch the main
+    // conversation) + silent flag (step tracker / loading UI stay muted).
+    const automationMessagesRef = useRef<Message[]>([]);
+    const automationSilentRef = useRef(false);
     // Synchronous double-submit guard: `isAnalysisInProgress` (state) is only
     // flipped deep inside the async run, so a second Enter in the window
     // between submit and the first await passed both guards, appended a
@@ -508,23 +512,29 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     }, [isEnsembleEnabled, isHybridLoading, currentHybridData, loadingMessage, analysisSteps.length]);
 
     // ─── Analysis Pipeline Step Tracking ───────────────────────────────────
+    // Automation runs mute the step tracker entirely (automationSilentRef).
     const initAnalysisSteps = (steps: AnalysisStep[]) => {
+        if (automationSilentRef.current) return;
         setAnalysisSteps(steps.map(s => ({ ...s, status: 'pending' as const, startTime: undefined, endTime: undefined })));
     };
 
     const startStep = (id: string) => {
+        if (automationSilentRef.current) return;
         setAnalysisSteps(prev => prev.map(s => s.id === id ? { ...s, status: 'running' as const, startTime: Date.now() } : s));
     };
 
     const completeStep = (id: string) => {
+        if (automationSilentRef.current) return;
         setAnalysisSteps(prev => prev.map(s => s.id === id ? { ...s, status: 'complete' as const, endTime: Date.now() } : s));
     };
 
     const failStep = (id: string) => {
+        if (automationSilentRef.current) return;
         setAnalysisSteps(prev => prev.map(s => s.id === id ? { ...s, status: 'error' as const, endTime: Date.now() } : s));
     };
 
     const addSubStep = (id: string, subStep: { label: string; detail?: string; filename?: string }) => {
+        if (automationSilentRef.current) return;
         setAnalysisSteps(prev => prev.map(s => s.id === id ? { ...s, subSteps: [...(s.subSteps || []), subStep] } : s));
     };
 
@@ -553,15 +563,66 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     };
 
     // ─── Main Analysis Handler ─────────────────────────────────────────────
-    const handleSendMessage = useCallback(async (customPrompt?: string, customImages?: ImageMetadata[], hiddenContext?: string, options?: { isUpdate?: boolean; updateInterval?: string; presetHybridData?: HybridDataPacket | null }) => {
+    const handleSendMessage = useCallback(async (customPrompt?: string, customImages?: ImageMetadata[], hiddenContext?: string, options?: {
+        isUpdate?: boolean;
+        updateInterval?: string;
+        presetHybridData?: HybridDataPacket | null;
+        /**
+         * Automation run: the analysis executes with the automation's own
+         * mode/model overrides and its results are delivered via onMessage
+         * instead of being written to the active conversation. The run uses
+         * a private message list, so the main chat is never touched.
+         */
+        automation?: {
+            automationId: string;
+            /** Synthetic conversation providing leverage + thread summary. */
+            conversation: Conversation;
+            /** Per-run overrides; absent fields fall back to global settings. */
+            overrides?: {
+                accuracyMode?: boolean;
+                accuracySubMode?: AccuracySubMode;
+                lensConfig?: AnalystLensConfig;
+                ensembleModelSelection?: EnsembleModelSelection;
+                moderatorConfig?: ProviderConfig;
+                moderatorModel?: string;
+            };
+            /** Delivered once with the complete user prompt + AI card. */
+            onMessage: (run: { userMessage: Message; aiMessage: Message }) => void;
+            /** Delivered when the run fails (user-safe message). */
+            onError: (error: string) => void;
+        };
+    }) => {
+        const isAutomationRun = !!options?.automation;
+        // Automation runs redirect message writes to a private list and mute
+        // the chat UI (loading text, step tracker, hybrid panel).
+        automationSilentRef.current = isAutomationRun;
+        if (isAutomationRun) automationMessagesRef.current = [];
+
+        // Run-scoped mode/model overrides — automation runs may specify
+        // their own accuracy mode, lens config, analyst picks and moderator
+        // (fall back to the global settings when absent).
+        const runAccuracyMode = options?.automation?.overrides?.accuracyMode ?? isAccuracyModeEnabled;
+        const runAccuracySubMode = options?.automation?.overrides?.accuracySubMode ?? accuracySubMode;
+        const runLensConfig = options?.automation?.overrides?.lensConfig ?? lensConfig;
+        const runEnsembleSelection = options?.automation?.overrides?.ensembleModelSelection ?? ensembleModelSelection;
+        const runModeratorConfig = options?.automation?.overrides?.moderatorConfig ?? moderatorConfig;
+        const runModeratorModel = options?.automation?.overrides?.moderatorModel ?? moderatorModel;
+        // Automations always run the ensemble pipeline, even when the global
+        // ensemble toggle is off.
+        const runEnsembleEnabled = isAutomationRun || isEnsembleEnabled;
+
         const isSummarizing = images.some(img => img.isLoading);
 
         if (isAnalysisInProgress || analysisInFlightRef.current) {
             // Drafting stays enabled during a run, but a send attempt while a
             // debate is live must not silently eat the message (the composer
             // only disables during loadingMessage, which is null mid-debate).
-            const draft = typeof customPrompt === 'string' ? customPrompt : input;
-            if (draft.trim()) toast.warning('Analysis in progress', 'Your message will be sent once the current run finishes.');
+            // Automation runs skip the toast — the scheduler checks the
+            // in-flight state itself before firing.
+            if (!isAutomationRun) {
+                const draft = typeof customPrompt === 'string' ? customPrompt : input;
+                if (draft.trim()) toast.warning('Analysis in progress', 'Your message will be sent once the current run finishes.');
+            }
             return;
         }
 
@@ -574,15 +635,15 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         // model ids are resolved against each provider's current model list.
         const { analysts: enabledProviders, missingAnalystRoles, hasCompleteAnalystAssignments, resolvedAssignments } = buildEnsembleAnalysts(
             providerConfigs,
-            lensConfig,
-            ensembleModelSelection,
-            isEnsembleEnabled
+            runLensConfig,
+            runEnsembleSelection,
+            runEnsembleEnabled
         );
 
         // Accuracy mode runs the same per-analyst analysis phase, so the
         // staged analyst cards (status + live reasoning) apply there too —
         // previously the user only saw the single moderator stream.
-        const isStagedEnsemble = isEnsembleEnabled && enabledProviders.length > 1;
+        const isStagedEnsemble = runEnsembleEnabled && enabledProviders.length > 1;
 
         let effectiveInput = '';
         if (typeof customPrompt === 'string') {
@@ -605,11 +666,12 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             );
             return;
         }
-        if (isEnsembleEnabled) {
+        if (runEnsembleEnabled && !isAutomationRun) {
             // Role-assignment requirements only apply when Lenses are ON —
             // with Lenses off, the ordinary "Debate Models" picker (or the
             // per-provider ensemble models) determines the participants.
-            if (lensConfig.enabled) {
+            // (Automation runs build complete assignments by construction.)
+            if (runLensConfig.enabled) {
                 if (missingAnalystRoles.length > 0) {
                     toast.warning('Assign all analysts', `Assign ${missingAnalystRoles.map(role => ANALYST_ROLE_DEFINITIONS[role].shortName).join(', ')} before starting the ensemble.`);
                     return;
@@ -621,7 +683,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             }
         }
 
-        if (!isAccuracyModeEnabled && enabledProviders.length > 3) {
+        if (!isAutomationRun && !runAccuracyMode && enabledProviders.length > 3) {
             toast.warning("Provider Limit", "A maximum of 3 AI providers can be enabled for an ensemble debate in Standard Mode. Please disable at least one.");
             return;
         }
@@ -643,6 +705,12 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         // before a provider response or stream chunk arrives.
         const requestConversationId = activeConversationId;
         const updateRequestMessages = (updater: (prevMessages: Message[]) => Message[]): void => {
+            if (isAutomationRun) {
+                // Automation runs keep a PRIVATE message list — the main
+                // conversation is never touched.
+                automationMessagesRef.current = updater(automationMessagesRef.current);
+                return;
+            }
             updateMessages(updater, requestConversationId);
         };
         const isCurrentRequest = (): boolean =>
@@ -661,7 +729,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             }
         };
 
-        if (imagesToUse.length > 0) {
+        if (imagesToUse.length > 0 && !isAutomationRun) {
             const visionData = imagesToUse.map(img => img.fullAnalysisText || `Chart ${imagesToUse.indexOf(img) + 1}: No analysis text available.`);
             setCurrentVisionData(visionData);
         }
@@ -711,15 +779,19 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             ocrModelUsed: userMessage.ocrModelUsed,
             imageSummaries: userMessage.imageSummaries,
             modelsUsed: buildModelsUsedRecord(enabledProviders),
-            isAccuracyMode: isAccuracyModeEnabled,
-            isLensMode: lensConfig?.enabled ?? false,
-            accuracySubMode: isAccuracyModeEnabled ? accuracySubMode : undefined,
-            tradingStyle: lensConfig?.enabled && lensConfig.tradingStyle !== 'auto' ? (lensConfig.tradingStyle as any) : undefined,
+            isAccuracyMode: runAccuracyMode,
+            isLensMode: runLensConfig?.enabled ?? false,
+            accuracySubMode: runAccuracyMode ? runAccuracySubMode : undefined,
+            tradingStyle: runLensConfig?.enabled && runLensConfig.tradingStyle !== 'auto' ? (runLensConfig.tradingStyle as any) : undefined,
         } : null;
 
         updateRequestMessages(prev => ensemblePlaceholder ? [...prev, userMessage, ensemblePlaceholder] : [...prev, userMessage]);
-        setInput('');
-        setImages([]);
+        // Automation runs must not clear the composer (the user may be
+        // mid-draft while a scheduled run fires).
+        if (!isAutomationRun) {
+            setInput('');
+            setImages([]);
+        }
 
         const updateEnsembleProgress = (updater: (progress: NonNullable<Message['ensembleProgress']>) => NonNullable<Message['ensembleProgress']>): void => {
             if (!ensemblePlaceholder) return;
@@ -741,10 +813,12 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             currentHybridData && detectedSymbol && currentHybridData.symbol === detectedSymbol
                 ? currentHybridData
                 : null;
-        if (isEnsembleEnabled && isHybridIntelligenceEnabled && !cachedHybridData && !options?.presetHybridData) {
-            setHybridConnectionStatus(prev => (prev === 'connected' ? 'connected' : 'connecting'));
-            setIsHybridLoading(true);
-            setCurrentHybridData(null);
+        if (runEnsembleEnabled && isHybridIntelligenceEnabled && !cachedHybridData && !options?.presetHybridData) {
+            if (!isAutomationRun) {
+                setHybridConnectionStatus(prev => (prev === 'connected' ? 'connected' : 'connecting'));
+                setIsHybridLoading(true);
+                setCurrentHybridData(null);
+            }
         }
         let freshHybridData: HybridDataPacket | null = cachedHybridData;
         if (options?.presetHybridData) {
@@ -754,14 +828,18 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         }
 
         try {
-            const currentMessages = [...messagesRef.current, userMessage];
-            const currentThreadSummary = activeConversation?.threadSummary;
+            const currentMessages = isAutomationRun
+                ? [...(options?.automation?.conversation.messages ?? []), userMessage]
+                : [...messagesRef.current, userMessage];
+            const currentThreadSummary = isAutomationRun
+                ? options?.automation?.conversation.threadSummary
+                : activeConversation?.threadSummary;
             const memoryToInject = isGlobalMemoryEnabled ? globalMemory : undefined;
             const instructionsToUse = getActiveCustomInstructions();
 
             // These steps describe the ensemble analysis pipeline only. Casual
             // chat must not render analysis/fetching progress at all.
-            if (isEnsembleEnabled) {
+            if (runEnsembleEnabled) {
                 initAnalysisSteps([
                     { id: 'market-data', title: 'Fetching market data', status: 'pending' },
                     { id: 'gate-scan', title: 'Running pattern gate scan', status: 'pending' },
@@ -788,10 +866,10 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             // is fetched and nothing is injected into the analyst prompts.
             // Preset data (auto-capture) always wins — it was explicitly
             // fetched for this analysis, so it is injected below regardless.
-            if (isEnsembleEnabled && isHybridIntelligenceEnabled && !options?.presetHybridData) {
+            if (runEnsembleEnabled && isHybridIntelligenceEnabled && !options?.presetHybridData) {
                 try {
                     devLog('[Hybrid Intelligence] Attempting to fetch data for prompt:', effectiveInput);
-                    setLoadingMessage('Fetching real-time market data...');
+                    if (!isAutomationRun) setLoadingMessage('Fetching real-time market data...');
                     startStep('market-data');
                     const learningRules = loadLearningRules();
                     const hybridResult = await tryFetchHybridDataFromPromptWithCalibration(
@@ -800,12 +878,12 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                         learningRules
                     );
                     if (!isCurrentRequest()) assertCurrentRequest();
-                    setIsHybridLoading(false);
+                    if (!isAutomationRun) setIsHybridLoading(false);
                     if (hybridResult) {
                         bayesianConfidenceCap = hybridResult.adjustedConfidence;
                         // Use enhanced injection which includes calibration data
                         hybridDataInjection = hybridResult.enhancedInjection || hybridResult.promptInjection;
-                        setCurrentHybridData(hybridResult.data); // Store for UI display
+                        if (!isAutomationRun) setCurrentHybridData(hybridResult.data); // Store for UI display
                         freshHybridData = hybridResult.data; // Use local var downstream (state is stale in this closure)
 
                         // Store correlation risk if available - helpful for UI later
@@ -822,10 +900,10 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     }
                 } catch (hybridError) {
                     if (!isCurrentRequest()) assertCurrentRequest();
-                    setIsHybridLoading(false);
+                    if (!isAutomationRun) setIsHybridLoading(false);
                     completeStep('market-data');
                     console.error('[Hybrid Intelligence] ERROR fetching market data:', hybridError);
-                    toast.warning('Hybrid data unavailable', 'Market data fetch failed — analysis will proceed without real-time data.');
+                    if (!isAutomationRun) toast.warning('Hybrid data unavailable', 'Market data fetch failed — analysis will proceed without real-time data.');
                 }
             } else if (options?.presetHybridData) {
                 // Auto-capture flow: the data was already fetched upstream —
@@ -861,7 +939,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             // live data so the lens prompts, the rebuttal personas and the
             // card's tradingStyle field all agree. Falls back to swing when
             // no hybrid data exists (hybrid off / fetch failed).
-            const effectiveTradingStyle = getEffectiveStyle(lensConfig.tradingStyle, freshHybridData ?? undefined).style;
+            const effectiveTradingStyle = getEffectiveStyle(runLensConfig.tradingStyle, freshHybridData ?? undefined).style;
 
             // AI LEARNING: Generate UNIFIED learning context from all 6 learning services
             let learningInjection = '';
@@ -956,10 +1034,10 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
             let gateInjection = '';
             let capturedGateResult: GateOutput | null = null; // Local variable to avoid state closure issue
-            if (finalSymbol && isEnsembleEnabled) {
+            if (finalSymbol && runEnsembleEnabled) {
                 try {
                     devLog(`[GateKeeper] Running Gate check for ${finalSymbol}...`);
-                    setLoadingMessage('Running Gate Scan...');
+                    if (!isAutomationRun) setLoadingMessage('Running Gate Scan...');
                     completeStep('market-data'); startStep('gate-scan');
 
                     const gateResult = await getGateAnalysis(finalSymbol, loggedTrades);
@@ -980,7 +1058,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     console.error('[GateKeeper] Gate check failed:', gateError);
                     // Fail-open: proceed without Gate constraints
                     failStep('gate-scan');
-                    toast.warning('Gate check skipped', 'Quality constraints could not be applied — analysis will proceed without gate validation.');
+                    if (!isAutomationRun) toast.warning('Gate check skipped', 'Quality constraints could not be applied — analysis will proceed without gate validation.');
                 }
             }
 
@@ -1017,7 +1095,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
             // Chart analysis only runs in ensemble mode; otherwise the
             // message is handled as casual chat with the selected model.
-            if (isChartAnalysisRequested && isEnsembleEnabled) {
+            if (isChartAnalysisRequested && runEnsembleEnabled) {
                 const summaries = imagesToUse.map(meta => meta.fullAnalysisText).filter(Boolean) as string[];
                 const processNewAnalysis = (analysis: TradeAnalysis): TradeAnalysis => {
                     const finalAnalysis = sanitizeTradeAnalysis(analysis);
@@ -1235,15 +1313,17 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 };
 
                 if (enabledProviders.length > 1) {
-                    setLoadingMessage("Thinking...");
+                    if (!isAutomationRun) setLoadingMessage("Thinking...");
                     completeStep('gate-scan'); startStep('analysis');
                     currentPhaseRef.current = 'analysis';
                     setAnalysisSteps(prev => prev.map(s => s.id === 'analysis' ? { ...s, title: `Analyzing with ${enabledProviders.map(p => p.name).join(', ')}` } : s));
                     setIsAnalysisInProgress(true);
                     // Clear previous Monte Carlo results for fresh analysis
-                    setPerAIMonteCarloResults([]);
-                    setLatestMonteCarloResult(null);
-                    setLatestBacktestResult(null);
+                    if (!isAutomationRun) {
+                        setPerAIMonteCarloResults([]);
+                        setLatestMonteCarloResult(null);
+                        setLatestBacktestResult(null);
+                    }
                     reasoningMapRef.current = {};
                     activeDebateSpeakersRef.current = {};
                     debateTurnsRef.current = [];
@@ -1268,7 +1348,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                         deepenAnalysis: isDeepAnalysis,
                         globalMemory: memoryToInject,
                         threadSummary: currentThreadSummary,
-                        subMode: isAccuracyModeEnabled ? accuracySubMode : undefined,
+                        subMode: runAccuracyMode ? runAccuracySubMode : undefined,
                         customInstructions: instructionsToUse,
                         isPlaybookEnabledInPureAI,
                         isFamiliesEnabledInPureAI,
@@ -1278,7 +1358,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                         // resolvedAssignments (not lensConfig.assignments): a stale
                         // persisted model id would otherwise make the role lookup
                         // return UNASSIGNED and drop the persona silently.
-                        rolePrompt: lensConfig.enabled && provider.thoughtsKey
+                        rolePrompt: runLensConfig.enabled && provider.thoughtsKey
                             ? (customLensPrompts?.[getRoleForProvider(`${provider.config.id}::${provider.model}`, resolvedAssignments)]
                                 || getLensPromptForStyle(
                                     `${provider.config.id}::${provider.model}`,
@@ -1287,7 +1367,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                                 ))
                             : undefined,
                         // Normal mode (Lenses off): custom base prompt override.
-                        systemPromptOverride: lensConfig.enabled ? undefined : (customEnsemblePrompt || undefined),
+                        systemPromptOverride: runLensConfig.enabled ? undefined : (customEnsemblePrompt || undefined),
                         // User-uploaded strategy summaries (Settings → Strategies).
                         userStrategies: strategiesBlock || undefined,
                         // Streamed chain-of-thought deltas accumulate — the
@@ -1557,7 +1637,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                         }
                     }
 
-                    if (isAccuracyModeEnabled) {
+                    if (runAccuracyMode) {
                         // ACCURACY MODE — the moderator autoplays the whole
                         // simulated transcript. Guard: with zero fulfilled
                         // analysts the moderator would be invoked with an
@@ -1575,10 +1655,10 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                                 fulfilledAnalysts.map(a => a.provider.name),
                                 enhancedPrompt,
                                 finalTradeSummary,
-                                accuracySubMode,
+                                runAccuracySubMode,
                                 instructionsToUse,
-                                moderatorConfig,
-                                activeModModel,
+                                runModeratorConfig,
+                                runModeratorModel,
                                 isFamiliesEnabledInPureAI,
                                 isMemoryEnabledInPureAI,
                                 capturedGateResult, // Gate result for reconciliation (local, not stale state)
@@ -1601,7 +1681,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                                 // (lenses silently inert in accuracy mode).
                                 // Assignments are resolved so stale model ids
                                 // still resolve to the right persona.
-                                lensConfig.enabled ? { ...lensConfig, assignments: resolvedAssignments } : undefined
+                                runLensConfig.enabled ? { ...runLensConfig, assignments: resolvedAssignments } : undefined
                         );
                     } else {
                         // STANDARD MODE — REAL inter-model debate. Each analyst
@@ -1632,7 +1712,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             // already-replaced) and the moderator.
                             const usedProviderIds = new Set<string>();
                             for (const a of allFulfilledAnalysts) usedProviderIds.add(a.provider.config.id);
-                            usedProviderIds.add(moderatorConfig.id);
+                            usedProviderIds.add(runModeratorConfig.id);
                             const candidates = providerConfigs
                                 .filter(p => p.isEnabled !== false && !usedProviderIds.has(p.id) && (p.selectedModel || p.models?.[0]))
                                 .map(p => ({
@@ -1703,12 +1783,12 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                                 })),
                                 enhancedPrompt,
                                 finalTradeSummary,
-                                moderatorConfig,
-                                activeModModel,
+                                runModeratorConfig,
+                                runModeratorModel,
                                 instructionsToUse,
                                 perAIMC,   // monteCarloResults
-                                lensConfig.enabled ? { ...lensConfig, assignments: resolvedAssignments } : undefined, // lensConfig (resolved)
-                                lensConfig.enabled ? fulfilledAnalysts.map(a => a.provider.config.id) : undefined, // analystProviders
+                                runLensConfig.enabled ? { ...runLensConfig, assignments: resolvedAssignments } : undefined, // lensConfig (resolved)
+                                runLensConfig.enabled ? fulfilledAnalysts.map(a => a.provider.config.id) : undefined, // analystProviders
                                 activeFrameworks, // playbook
                                 tradeSummaries, // recent insights for pattern matching
                                 capturedGateResult, // Gate result (current run, not stale state)
@@ -1757,7 +1837,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     }
 
                     let fullResponseText = '';
-                    if (isAccuracyModeEnabled) {
+                    if (runAccuracyMode) {
                         // ACCURACY MODE — the moderator autoplays the whole
                         // simulated transcript as one stream; parse `Speaker:`
                         // lines out of it with the established regex.
@@ -2011,11 +2091,11 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     // reviews the debate + plan and may adjust levels/confidence.
                     // Fail-safe: any error keeps the moderator's plan untouched.
                     let accuracyVerificationNote = '';
-                    if (isAccuracyModeEnabled && finalAnalysis.direction && finalAnalysis.direction !== 'Neutral') {
+                    if (runAccuracyMode && finalAnalysis.direction && finalAnalysis.direction !== 'Neutral') {
                         try {
                             const verification = await ensembleService.verifyAccuracyPlan(
-                                moderatorConfig,
-                                activeModModel,
+                                runModeratorConfig,
+                                runModeratorModel,
                                 fullResponseText,
                                 JSON.stringify(finalAnalysis),
                                 currentAbortController.signal,
@@ -2169,6 +2249,17 @@ ${accuracyVerificationNote}`
                         `${processedAnalysis?.direction ?? finalAnalysis.direction} ${finalAnalysis.coinName || ''} — ${finalAnalysis.confidence} confidence`
                     );
 
+                    // Automation run: deliver the completed card to the caller
+                    // (the main conversation was never touched).
+                    if (isAutomationRun) {
+                        const finalAiMessage = automationMessagesRef.current.find(m => m.id === debateMessageId);
+                        if (finalAiMessage) {
+                            options?.automation?.onMessage({ userMessage, aiMessage: finalAiMessage });
+                        } else {
+                            options?.automation?.onError?.('Automation run produced no result message.');
+                        }
+                    }
+
                     // === ThinkingStore: Save reasoning for training & analysis ===
                     // Persist per-analyst reasoning, moderator synthesis, and debate turns
                     // so they can be correlated with outcomes and exported for model training.
@@ -2273,7 +2364,7 @@ ${accuracyVerificationNote}`
 
                 } else if (enabledProviders.length === 1) {
                     const provider = enabledProviders[0];
-                    setLoadingMessage(isAccuracyModeEnabled ? `Running High-Precision Analysis...` : `Analyzing with ${provider.name}...`);
+                    if (!isAutomationRun) setLoadingMessage(runAccuracyMode ? `Running High-Precision Analysis...` : `Analyzing with ${provider.name}...`);
                     completeStep('gate-scan'); startStep('analysis');
                     // Guard flag for the solo path too — without it Esc couldn't
                     // cancel solo runs and the re-entrancy guard was inert
@@ -2300,14 +2391,14 @@ ${accuracyVerificationNote}`
                                 deepenAnalysis: isDeepAnalysis,
                                 globalMemory: memoryToInject,
                                 threadSummary: currentThreadSummary,
-                                subMode: isAccuracyModeEnabled ? accuracySubMode : undefined,
+                                subMode: runAccuracyMode ? runAccuracySubMode : undefined,
                                 customInstructions: instructionsToUse,
                                 isPlaybookEnabledInPureAI,
                                 isFamiliesEnabledInPureAI,
                                 isMemoryEnabledInPureAI,
                                 // Analyst Lens: pass role-specific prompt based on trading style
                                 // (custom prompt overrides from the prompt editor win).
-                                rolePrompt: lensConfig.enabled && provider.thoughtsKey
+                                rolePrompt: runLensConfig.enabled && provider.thoughtsKey
                                     ? (customLensPrompts?.[getRoleForProvider(`${provider.config.id}::${provider.model}`, resolvedAssignments)]
                                         || getLensPromptForStyle(
                                             `${provider.config.id}::${provider.model}`,
@@ -2316,7 +2407,7 @@ ${accuracyVerificationNote}`
                                         ))
                                     : undefined,
                                 // Normal mode (Lenses off): custom base prompt override.
-                                systemPromptOverride: lensConfig.enabled ? undefined : (customEnsemblePrompt || undefined),
+                                systemPromptOverride: runLensConfig.enabled ? undefined : (customEnsemblePrompt || undefined),
                                 // User-uploaded strategy summaries (Settings → Strategies).
                                 userStrategies: strategiesBlock || undefined,
                                 // Streamed chain-of-thought deltas accumulate — the
@@ -2330,11 +2421,11 @@ ${accuracyVerificationNote}`
                         imageSummaries: userMessage.imageSummaries,
                         modelsUsed: { [provider.config.id]: provider.model },
                         thoughtProcesses: { [provider.config.id]: result.thoughtProcess },
-                        isAccuracyMode: isAccuracyModeEnabled,
-                        isLensMode: lensConfig?.enabled ?? false,
+                        isAccuracyMode: runAccuracyMode,
+                        isLensMode: runLensConfig?.enabled ?? false,
                         // Always set tradingStyle regardless of Lens mode
                         tradingStyle: effectiveTradingStyle,
-                        accuracySubMode: isAccuracyModeEnabled ? accuracySubMode : undefined,
+                        accuracySubMode: runAccuracyMode ? runAccuracySubMode : undefined,
                         // Multi-Timeframe Confluence from Hybrid Intelligence
                         confluenceData: freshHybridData?.confluence ? {
                             score: freshHybridData.confluence.score,
@@ -2350,6 +2441,11 @@ ${accuracyVerificationNote}`
                         soloAiMessage.analysis!.marketSnapshot = freshHybridData;
                     }
                         updateRequestMessages(prev => [...prev, soloAiMessage]);
+
+                    // Automation run: deliver the completed solo card.
+                    if (isAutomationRun) {
+                        options?.automation?.onMessage({ userMessage, aiMessage: soloAiMessage });
+                    }
 
                     // === ThinkingStore: Persist the solo analysis reasoning ===
                     // Same training-data contract as the debate path (one
@@ -2508,7 +2604,14 @@ ${accuracyVerificationNote}`
             // (the send cleared the composer immediately, so a failure left
             // the user with no way to re-run the same setup).
             updateRequestMessages(prev => [...prev, { id: `err-${Date.now()}`, role: MessageRole.SYSTEM, createdAt: new Date().toISOString(), text: safeMessage, retryOf: { userMessageId: userMessage.id } }]);
+
+            // Automation runs surface failures through their own callback
+            // (the error bubble above lands in the private list).
+            if (isAutomationRun) {
+                options?.automation?.onError?.(safeMessage || 'Automation run failed.');
+            }
         } finally {
+            automationSilentRef.current = false;
             if (analysisAbortController.current === currentAbortController) {
                 setLoadingMessage(null);
                 // Cancelling during the hybrid fetch skipped setIsHybridLoading
