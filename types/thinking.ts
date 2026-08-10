@@ -44,6 +44,11 @@ export interface ThinkingRecord {
   probability?: number;
   /** Trade outcome — filled when the trade resolves (WIN/LOSS/PENDING/etc.) */
   outcome?: TradeOutcome;
+  /** Realized PnL in dollars — backfilled at outcome time (risk-weighted
+   *  training signal: a WIN at +4R is not the same as a WIN at +0.5R). */
+  pnlAmount?: number;
+  /** Realized PnL as a leveraged percent (e.g. +200 = +200%). */
+  pnlPercent?: number;
   /** When this reasoning was recorded */
   createdAt: string;
 }
@@ -60,6 +65,9 @@ export interface ThinkingRecordStats {
    */
   avgConfidence: number;
   avgProbability: number;
+  /** Average realized PnL (leveraged %) over records that carry one — an
+   *  expectancy proxy per provider; 0 when none resolved with PnL. */
+  avgPnLPercent: number;
   /** Wins / (wins + losses) over resolved records; 0 when none resolved. */
   winRate: number;
 }
@@ -94,6 +102,9 @@ export interface ThinkingExportRow {
   confidence?: string;
   probability?: number;
   outcome?: TradeOutcome;
+  /** Realized PnL (risk-weighted training label — see ThinkingRecord). */
+  pnlAmount?: number;
+  pnlPercent?: number;
   tradeId: string;
   createdAt: string;
 }

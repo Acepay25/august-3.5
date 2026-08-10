@@ -199,7 +199,7 @@ export const ReasoningDashboard: React.FC<ReasoningDashboardProps> = ({ username
                 <span className="text-sm font-bold text-white capitalize">{stat.provider}</span>
                 <span className="text-xs text-zinc-500">{stat.total} analyses</span>
               </div>
-              <div className="grid grid-cols-4 gap-2 text-center">
+              <div className="grid grid-cols-5 gap-2 text-center">
                 <div>
                   <p className="text-lg font-bold text-emerald-400">{stat.wins}</p>
                   <p className="text-[9px] text-zinc-600 uppercase">Wins</p>
@@ -217,6 +217,12 @@ export const ReasoningDashboard: React.FC<ReasoningDashboardProps> = ({ username
                     {stat.winRate > 0 ? `${stat.winRate}%` : '—'}
                   </p>
                   <p className="text-[9px] text-zinc-600 uppercase">Win Rate</p>
+                </div>
+                <div>
+                  <p className={`text-lg font-bold ${stat.avgPnLPercent >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {stat.avgPnLPercent !== 0 ? `${stat.avgPnLPercent >= 0 ? '+' : ''}${stat.avgPnLPercent}%` : '—'}
+                  </p>
+                  <p className="text-[9px] text-zinc-600 uppercase" title="Average realized PnL (leveraged %) — expectancy proxy">Avg PnL</p>
                 </div>
               </div>
               {/* Calibration indicator */}
