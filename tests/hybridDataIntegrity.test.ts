@@ -10,6 +10,11 @@ import {
     formatFibLadder,
     formatCandleHistoryInsight
 } from '../services/analysis/HybridIntelligenceService';
+import {
+    generateNumericChartData,
+    formatLastBarsArrows,
+    ChartBar
+} from '../services/analysis/NumericChartService';
 import { LiquidationData } from '../services/analysis/MarketDataService';
 
 /**
@@ -217,6 +222,70 @@ describe('Candle History Insight (per-TF skew honesty)', () => {
             '1h': tf(25, 5, 'bullish')
         }));
         expect(insight).toContain('HTF BULLISH: Both 4H and 1H show strong bullish candle dominance.');
+    });
+});
+
+describe('Chart "Last 5 bars" arrows (chronological, completed candles only)', () => {
+    /** Build klines with explicit per-candle direction (+1 up, -1 down, 0 doji). */
+    const makeKlines = (n: number, dirs: number[], start = 60000): Kline[] => {
+        const klines: Kline[] = [];
+        let close = start;
+        for (let i = 0; i < n; i++) {
+            const open = close;
+            const dir = dirs[i] ?? 1;
+            close = open + dir * 50;
+            klines.push({
+                time: i * 3600000,
+                open,
+                high: Math.max(open, close) + 25,
+                low: Math.min(open, close) - 25,
+                close,
+                volume: 1000
+            });
+        }
+        return klines;
+    };
+
+    const fakeBar = (direction: ChartBar['direction']): ChartBar => ({
+        index: 0, time: '', open: 0, high: 0, low: 0, close: 0, volume: 0,
+        bodySize: 0, bodyPercent: 0, direction, upperWickRatio: 0, lowerWickRatio: 0,
+        wickBias: 'balanced', volumeRelative: 1, volumeTrend: 'flat', volumeSpike: false
+    });
+
+    it('renders arrows oldest → newest (left-to-right chronological)', () => {
+        // bars are newest-first: [c15↓, c14↑, c13↑, c12↓, c11↓] → must read ↓↓↑↑↓
+        const bars = [fakeBar('bearish'), fakeBar('bullish'), fakeBar('bullish'), fakeBar('bearish'), fakeBar('bearish')];
+        expect(formatLastBarsArrows(bars)).toBe('↓↓↑↑↓');
+    });
+
+    it('renders doji as flat and keeps the newest-first window order', () => {
+        const bars = [fakeBar('doji'), fakeBar('bullish'), fakeBar('bearish'), fakeBar('doji'), fakeBar('bullish')];
+        // oldest→newest: bullish, doji, bearish, bullish, doji
+        expect(formatLastBarsArrows(bars)).toBe('↑→↓↑→');
+    });
+
+    it('excludes the still-forming live candle from the analyzed bars', () => {
+        // 16 candles; newest (idx 15) is the live candle and must NOT appear.
+        const dirs = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, -1, 1, 1, -1, 1]; // idx 15 = live
+        const klines = makeKlines(16, dirs);
+        const chart = generateNumericChartData(klines, '1h');
+        // bars[0] = newest COMPLETED = klines[14]
+        expect(chart.bars[0].open).toBe(klines[14].open);
+        expect(chart.bars[0].close).toBe(klines[14].close);
+        // bars contain 10 completed candles (16 - 1 live = 15 available → 10 analyzed)
+        expect(chart.bars.length).toBe(10);
+    });
+
+    it('arrows match the last 5 completed candles read chronologically', () => {
+        // Last 6 candles: c10=↑ c11=↓ c12=↑ c13=↑ c14=↓ c15=+1(live, excluded)
+        const dirs = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, -1, 1, 1, -1, 1];
+        const klines = makeKlines(16, dirs);
+        const chart = generateNumericChartData(klines, '1h');
+        // Completed candles 10..14: ↑ ↓ ↑ ↑ ↓ → chronological arrows
+        expect(formatLastBarsArrows(chart.bars)).toBe('↑↓↑↑↓');
+        // The same window the RAW OHLC section shows (last 15 completed → last 5)
+        const rawLast5 = klines.slice(10, 15).map(k => (k.close > k.open ? '↑' : k.close < k.open ? '↓' : '→')).join('');
+        expect(rawLast5).toBe('↑↓↑↑↓'); // c10..c14, live candle c15 excluded
     });
 });
 
