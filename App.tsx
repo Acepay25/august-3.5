@@ -1741,7 +1741,7 @@ const App: React.FC = () => {
         const trade = loggedTradesRef.current.find(t => t.id === id);
         if (trade) {
             const tradeId = getThinkingTradeId(trade.analysis?.createdAt, id);
-            void updateThinkingOutcome(tradeId, outcome, id, activeUsernameRef.current || 'default').catch(err => {
+            void updateThinkingOutcome(tradeId, outcome, id, activeUsernameRef.current || 'default', { pnlAmount: trade.pnlAmount, pnlPercent: trade.pnlPercent }).catch(err => {
                 console.warn('[TradeLog] Failed to update thinking outcome:', err);
             });
         }
@@ -1749,10 +1749,19 @@ const App: React.FC = () => {
 
     // Fill in / correct PnL from the journal card (autopilot-logged trades
     // only carry the leveraged percent, so the dollar figure needs a manual
-    // entry to make the dashboard PnL math meaningful).
+    // entry to make the dashboard PnL math meaningful). Backfills the
+    // thinking records too so the training corpus stays consistent with the
+    // journal.
     const handleUpdateTradePnL = useCallback((id: string, pnl: { pnlAmount?: number; pnlPercent?: number }) => {
         setLoggedTrades(prev => prev.map(t => t.id === id ? { ...t, ...pnl } : t));
-    }, [setLoggedTrades]);
+        const trade = loggedTradesRef.current.find(t => t.id === id);
+        if (trade) {
+            const tradeId = getThinkingTradeId(trade.analysis?.createdAt, id);
+            void updateThinkingOutcome(tradeId, trade.outcome, id, activeUsernameRef.current || 'default', pnl).catch(err => {
+                console.warn('[TradeLog] Failed to backfill thinking PnL:', err);
+            });
+        }
+    }, [setLoggedTrades, loggedTradesRef]);
 
     const handleRegenerateFinalSummary = async () => {
         // Guard: an auto-refresh may already be running (the debounced

@@ -159,8 +159,8 @@ export const saveThinkingBatch = async (records: ThinkingRecord[]): Promise<void
                             id, tradeId, username, provider, role, modelName,
                             reasoning, finalOutput, rawReasoning, messageId,
                             analysisJson, debateTurnIndex, debateTurnSpeaker,
-                            confidence, probability, outcome, createdAt
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            confidence, probability, outcome, pnlAmount, pnlPercent, createdAt
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     `, [
                         record.id,
                         record.tradeId,
@@ -178,6 +178,8 @@ export const saveThinkingBatch = async (records: ThinkingRecord[]): Promise<void
                         record.confidence || null,
                         record.probability ?? null,
                         record.outcome || null,
+                        record.pnlAmount ?? null,
+                        record.pnlPercent ?? null,
                         record.createdAt,
                     ]);
                 }
@@ -469,7 +471,8 @@ export const getProviderReasoningStats = async (
                 AVG(CASE confidence
                     WHEN 'High' THEN 4 WHEN 'Medium' THEN 3
                     WHEN 'Low' THEN 2 WHEN 'Avoid' THEN 1
-                END) as avgConfidence
+                END) as avgConfidence,
+                AVG(pnlPercent) as avgPnLPercent
             FROM thinking_records
             WHERE username = ? AND role = 'analyst'
             GROUP BY provider
@@ -486,6 +489,9 @@ export const getProviderReasoningStats = async (
                 ? Math.round(row.avgConfidence * 10) / 10
                 : 0,
             avgProbability: Math.round((row.avgProbability || 0) * 10) / 10,
+            avgPnLPercent: row.avgPnLPercent
+                ? Math.round(row.avgPnLPercent * 10) / 10
+                : 0,
             winRate: row.wins + row.losses > 0
                 ? Math.round(((row.wins / (row.wins + row.losses)) * 100) * 10) / 10
                 : 0,
@@ -526,6 +532,16 @@ export const getProviderReasoningStats = async (
                 avgProbability: probabilities.length > 0
                     ? Math.round((probabilities.reduce((sum, p) => sum + p, 0) / probabilities.length) * 10) / 10
                     : 0,
+                // Expectancy proxy: average realized PnL % (SQLite AVG parity —
+                // only records that carry a percent, missing treated as absent).
+                avgPnLPercent: (() => {
+                    const pnls = records
+                        .map(r => r.pnlPercent)
+                        .filter((p): p is number => typeof p === 'number');
+                    return pnls.length > 0
+                        ? Math.round((pnls.reduce((sum, p) => sum + p, 0) / pnls.length) * 10) / 10
+                        : 0;
+                })(),
                 winRate: wins + losses > 0
                     ? Math.round(((wins / (wins + losses)) * 100) * 10) / 10
                     : 0,
@@ -549,7 +565,8 @@ export const updateThinkingOutcome = async (
     tradeId: string,
     outcome: TradeOutcome,
     messageId?: string,
-    username?: string
+    username?: string,
+    pnl?: { pnlAmount?: number; pnlPercent?: number }
 ): Promise<void> => {
     if (isNativePlatform()) {
         const { getSqliteDb } = await import('./SqliteServiceHelpers');
@@ -558,15 +575,21 @@ export const updateThinkingOutcome = async (
 
         const scopeSql = username ? ' AND username = ?' : '';
         const scopeParams = username ? [username] : [];
+        // PnL columns are nullable — only set them when provided so a later
+        // backfill can't wipe an earlier value with an empty update.
+        const pnlSet = pnl
+            ? ', pnlAmount = COALESCE(?, pnlAmount), pnlPercent = COALESCE(?, pnlPercent)'
+            : '';
+        const pnlParams = pnl ? [pnl.pnlAmount ?? null, pnl.pnlPercent ?? null] : [];
         if (messageId) {
             await db.run(
-                `UPDATE thinking_records SET outcome = ? WHERE (tradeId = ? OR messageId = ?)${scopeSql}`,
-                [outcome, tradeId, messageId, ...scopeParams]
+                `UPDATE thinking_records SET outcome = ?${pnlSet} WHERE (tradeId = ? OR messageId = ?)${scopeSql}`,
+                [outcome, ...pnlParams, tradeId, messageId, ...scopeParams]
             );
         } else {
             await db.run(
-                `UPDATE thinking_records SET outcome = ? WHERE tradeId = ?${scopeSql}`,
-                [outcome, tradeId, ...scopeParams]
+                `UPDATE thinking_records SET outcome = ?${pnlSet} WHERE tradeId = ?${scopeSql}`,
+                [outcome, ...pnlParams, tradeId, ...scopeParams]
             );
         }
     } else {
@@ -585,6 +608,11 @@ export const updateThinkingOutcome = async (
         const tx = db.transaction(STORE_NAME, 'readwrite');
         for (const record of all) {
             record.outcome = outcome;
+            if (pnl) {
+                // Only overwrite when provided (COALESCE parity with SQLite).
+                if (pnl.pnlAmount !== undefined) record.pnlAmount = pnl.pnlAmount;
+                if (pnl.pnlPercent !== undefined) record.pnlPercent = pnl.pnlPercent;
+            }
             await tx.store.put(record);
         }
         await tx.done;
@@ -612,6 +640,8 @@ const rowToRecord = (row: any): ThinkingRecord => ({
     confidence: row.confidence || undefined,
     probability: row.probability ?? undefined,
     outcome: row.outcome || undefined,
+    pnlAmount: row.pnlAmount ?? undefined,
+    pnlPercent: row.pnlPercent ?? undefined,
     createdAt: row.createdAt,
 });
 
@@ -627,6 +657,8 @@ const rowToExportRow = (row: any): ThinkingExportRow => ({
     confidence: row.confidence || undefined,
     probability: row.probability ?? undefined,
     outcome: row.outcome || undefined,
+    pnlAmount: row.pnlAmount ?? undefined,
+    pnlPercent: row.pnlPercent ?? undefined,
     tradeId: row.tradeId,
     createdAt: row.createdAt,
 });
@@ -643,6 +675,8 @@ const recordToExportRow = (r: ThinkingRecord): ThinkingExportRow => ({
     confidence: r.confidence,
     probability: r.probability,
     outcome: r.outcome,
+    pnlAmount: r.pnlAmount,
+    pnlPercent: r.pnlPercent,
     tradeId: r.tradeId,
     createdAt: r.createdAt,
 });

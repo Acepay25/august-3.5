@@ -222,6 +222,8 @@ const createTables = async (): Promise<void> => {
             confidence TEXT,
             probability REAL,
             outcome TEXT,
+            pnlAmount REAL,
+            pnlPercent REAL,
             createdAt TEXT
         );
 
@@ -312,6 +314,16 @@ const createTables = async (): Promise<void> => {
             { label: 'v5 thinking_records.rawReasoning', sql: 'ALTER TABLE thinking_records ADD COLUMN rawReasoning TEXT;' },
             { label: 'v5 thinking_records.messageId', sql: 'ALTER TABLE thinking_records ADD COLUMN messageId TEXT;' },
             { label: 'v5 thinking_records.messageId index', sql: 'CREATE INDEX IF NOT EXISTS idx_thinking_message ON thinking_records(messageId);' },
+        ]);
+    }
+
+    // VERSION 6 MIGRATION: Realized PnL on thinking records — the training
+    // corpus becomes risk-weighted (a WIN at +4R vs +0.5R), enabling EV-based
+    // per-provider stats in the reasoning dashboard.
+    if (appliedVersion < 6) {
+        await runMigrations(6, [
+            { label: 'v6 thinking_records.pnlAmount', sql: 'ALTER TABLE thinking_records ADD COLUMN pnlAmount REAL;' },
+            { label: 'v6 thinking_records.pnlPercent', sql: 'ALTER TABLE thinking_records ADD COLUMN pnlPercent REAL;' },
         ]);
     }
 

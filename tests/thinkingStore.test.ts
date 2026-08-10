@@ -45,7 +45,7 @@ class FakeSqliteDb {
                 'id', 'tradeId', 'username', 'provider', 'role', 'modelName',
                 'reasoning', 'finalOutput', 'rawReasoning', 'messageId',
                 'analysisJson', 'debateTurnIndex', 'debateTurnSpeaker',
-                'confidence', 'probability', 'outcome', 'createdAt',
+                'confidence', 'probability', 'outcome', 'pnlAmount', 'pnlPercent', 'createdAt',
             ];
             const row: Record<string, any> = {};
             cols.forEach((c, i) => {
@@ -61,11 +61,19 @@ class FakeSqliteDb {
             this.rows = sorted.slice(0, keep);
         } else if (/UPDATE thinking_records SET outcome/i.test(sql)) {
             const outcome = params[0];
-            const tradeId = params[1];
-            const messageId = params[2];
+            // The real query conditionally appends the PnL COALESCE pair, so
+            // the param layout shifts when PnL is provided.
+            const hasPnl = /pnlAmount = COALESCE/i.test(sql);
+            const pnlAmount = hasPnl ? params[1] : undefined;
+            const pnlPercent = hasPnl ? params[2] : undefined;
+            const tradeId = params[hasPnl ? 3 : 1];
+            const messageId = params[hasPnl ? 4 : 2];
             this.rows.forEach(r => {
                 if (r.tradeId === tradeId || (messageId && r.messageId === messageId)) {
                     r.outcome = outcome;
+                    // COALESCE semantics: null never overwrites an earlier value.
+                    if (pnlAmount !== null && pnlAmount !== undefined) r.pnlAmount = pnlAmount;
+                    if (pnlPercent !== null && pnlPercent !== undefined) r.pnlPercent = pnlPercent;
                 }
             });
         }
@@ -130,6 +138,10 @@ class FakeSqliteDb {
                     pending,
                     avgProbability: probs.length > 0 ? probs.reduce((s, p) => s + p, 0) / probs.length : null,
                     avgConfidence: scores.length > 0 ? scores.reduce((s, v) => s + v, 0) / scores.length : null,
+                    avgPnLPercent: (() => {
+                        const pnls = recs.map(r => r.pnlPercent).filter((p): p is number => typeof p === 'number');
+                        return pnls.length > 0 ? pnls.reduce((s, v) => s + v, 0) / pnls.length : null;
+                    })(),
                 };
             });
             // Matches ORDER BY total DESC in the real query.
@@ -330,4 +342,75 @@ describe('ThinkingStoreService (SQLite path)', () => {
         expect(trades.find(t => t.tradeId === 'trade-2')?.outcome).toBe(TradeOutcome.LOSS);
         expect(trades.find(t => t.tradeId === 'trade-3')?.outcome).toBe(TradeOutcome.SKIPPED);
     });
+});
+
+describe('ThinkingStoreService — PnL on thinking records', () => {
+  let fakeDb: FakeSqliteDb;
+
+  beforeEach(() => {
+    fakeDb = new FakeSqliteDb();
+    (getSqliteDb as ReturnType<typeof vi.fn>).mockResolvedValue(fakeDb);
+  });
+
+  it('round-trips pnlAmount/pnlPercent through save/get', async () => {
+    await saveThinkingBatch([
+      makeRecord({
+        id: 'pnl-a1',
+        tradeId: 'trade-pnl',
+        reasoning: 'strong continuation thesis',
+        pnlAmount: 1240.5,
+        pnlPercent: 42,
+      }),
+    ]);
+    const all = await getThinkingByTrade('trade-pnl');
+    expect(all.find(r => r.id === 'pnl-a1')).toMatchObject({ pnlAmount: 1240.5, pnlPercent: 42 });
+  });
+
+  it('backfills PnL alongside the outcome', async () => {
+    await saveThinkingBatch([
+      makeRecord({ id: 'pnl-b1', tradeId: 'trade-pnl', messageId: 'msg-42' }),
+    ]);
+    await updateThinkingOutcome('trade-pnl', TradeOutcome.WIN, 'msg-42', 'test-user', { pnlAmount: 800, pnlPercent: 25 });
+    const all = await getThinkingByTrade('trade-pnl');
+    expect(all.find(r => r.id === 'pnl-b1')).toMatchObject({ outcome: TradeOutcome.WIN, pnlAmount: 800, pnlPercent: 25 });
+  });
+
+  it('preserves existing PnL when a later update omits it (COALESCE semantics)', async () => {
+    await saveThinkingBatch([
+      makeRecord({ id: 'pnl-c1', tradeId: 'trade-pnl', messageId: 'msg-42' }),
+    ]);
+    await updateThinkingOutcome('trade-pnl', TradeOutcome.WIN, 'msg-42', 'test-user', { pnlAmount: 800, pnlPercent: 25 });
+    // Outcome-only correction (e.g. fixing a mis-logged WIN/LOSS) must not
+    // wipe the PnL that was already backfilled.
+    await updateThinkingOutcome('trade-pnl', TradeOutcome.LOSS, 'msg-42', 'test-user');
+    const all = await getThinkingByTrade('trade-pnl');
+    expect(all.find(r => r.id === 'pnl-c1')).toMatchObject({ outcome: TradeOutcome.LOSS, pnlAmount: 800, pnlPercent: 25 });
+  });
+
+  it('includes PnL in the training export rows', async () => {
+    await saveThinkingBatch([
+      makeRecord({
+        id: 'pnl-d1',
+        tradeId: 'trade-pnl',
+        reasoning: 'thesis text',
+        pnlAmount: -300,
+        pnlPercent: -12.5,
+      }),
+    ]);
+    const rows = await getAllThinkingForExport('test-user');
+    const mine = rows.find(r => r.tradeId === 'trade-pnl');
+    expect(mine).toMatchObject({ pnlAmount: -300, pnlPercent: -12.5 });
+  });
+
+  it('computes avgPnLPercent in provider stats (expectancy proxy)', async () => {
+    await saveThinkingBatch([
+      makeRecord({ id: 's1', tradeId: 't1', provider: 'gemini', pnlPercent: 40 }),
+      makeRecord({ id: 's2', tradeId: 't2', provider: 'gemini', pnlPercent: -10 }),
+      // No PnL yet — must not drag the average down (SQLite AVG ignores NULLs).
+      makeRecord({ id: 's3', tradeId: 't3', provider: 'gemini' }),
+    ]);
+    const stats = await getProviderReasoningStats('test-user');
+    const gemini = stats.find(s => s.provider === 'gemini');
+    expect(gemini?.avgPnLPercent).toBe(15);
+  });
 });

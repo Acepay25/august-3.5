@@ -272,7 +272,15 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             const tradeId = getThinkingTradeId(loggedTrade.analysis?.createdAt, loggedTrade.id);
             // Pass the card (message) id so the outcome reaches the records
             // even if the timestamp key diverges from the logged trade.
-            updateThinkingOutcome(tradeId, outcome, message.id, localStorage.getItem('last_active_user') || 'default').catch(err => {
+            // PnL travels with the outcome — the corpus becomes risk-weighted
+            // (a WIN at +4R is not the same as a WIN at +0.5R).
+            updateThinkingOutcome(
+                tradeId,
+                outcome,
+                message.id,
+                localStorage.getItem('last_active_user') || 'default',
+                { pnlAmount: loggedTrade.pnlAmount, pnlPercent: loggedTrade.pnlPercent }
+            ).catch(err => {
                 console.warn('[ThinkingStore] Failed to update outcome:', err);
             });
         } catch (err) {
