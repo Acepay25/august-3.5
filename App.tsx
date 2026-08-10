@@ -24,6 +24,9 @@ import { AnalystSubagents } from './components/analysis/EnsembleProgressChat';
 import { useProviderConfigs } from './hooks/useProviderConfigs';
 import { useAppSettings } from './hooks/useAppSettings';
 import { useJournalUI } from './hooks/useJournalUI';
+import { useAutomations } from './hooks/useAutomations';
+import AutomationView from './components/automation/AutomationView';
+import AutomationEditorModal, { ModelOption } from './components/automation/AutomationEditorModal';
 import { PostMortemCandidate } from './components/modals/PostTradeUploadModal';
 import { ChevronLeftIcon, ChevronRightIcon } from './components/shared/Icons';
 
@@ -812,6 +815,37 @@ const App: React.FC = () => {
         toast,
         confirmDialog,
     });
+
+    // ─── Automations: scheduled analyses (own card feed per automation) ───
+    // Placed after activeUsername — the scheduler is scoped to the active
+    // user's configs and re-arms on user switch.
+    const automations = useAutomations({
+        activeUsername,
+        runPipeline: handleSendMessage,
+        conversationHistory,
+        providerConfigs,
+        isAnalysisInProgress,
+        toast,
+    });
+
+    // Model options for the automation editor (provider :: model pairs).
+    const automationModelOptions = useMemo(() => {
+        const options: ModelOption[] = [];
+        for (const p of providerConfigs) {
+            if (!p.isEnabled || !p.apiKey.trim()) continue;
+            for (const m of p.models) {
+                options.push({ value: `${p.id}::${m}`, label: `${p.name} · ${m}` });
+            }
+        }
+        return options;
+    }, [providerConfigs]);
+
+    // Editor target — narrowed once here (property narrowing does not
+    // survive into the JSX callbacks below).
+    const editingAutomation = automations.editor && automations.editor.mode === 'edit'
+        ? automations.editor.automation
+        : undefined;
+    const editorIsOpen = automations.editor !== null;
 
     // Keep the activeUsernameRef (read by usePostMortem's run-staleness
     // checks) in sync with the canonical activeUsername state before
@@ -2726,6 +2760,52 @@ const App: React.FC = () => {
             </React.Suspense>
             <VisionDataViewer isVisible={isVisionDataVisible} onClose={() => setIsVisionDataVisible(false)} visionData={currentVisionData} />
 
+            {/* Automations: the selected automation's card feed + editor */}
+            {automations.viewAutomationId && (() => {
+                const config = automations.configs.find(c => c.id === automations.viewAutomationId);
+                if (!config) return null;
+                return (
+                    <div className="fixed inset-0 z-[75] bg-zinc-950 animate-fade-in">
+                        <AutomationView
+                            config={config}
+                            runs={automations.runsByAutomation[config.id] ?? []}
+                            isLoadingRuns={false}
+                            isRunning={automations.runningAutomationId === config.id}
+                            onBack={automations.closeAutomation}
+                            onEdit={() => automations.setEditor({ mode: 'edit', automation: config })}
+                            onDelete={() => {
+                                void confirmDialog({
+                                    title: 'Delete this automation?',
+                                    message: `"${config.name}" and its ${(automations.runsByAutomation[config.id] ?? []).length} stored runs will be removed.`,
+                                    confirmLabel: 'Delete',
+                                    destructive: true,
+                                }).then(ok => { if (ok) void automations.deleteAutomation(config.id); });
+                            }}
+                            onRunNow={() => automations.runNow(config)}
+                            onToggleEnabled={() => void automations.toggleAutomationEnabled(config.id)}
+                            onRefresh={() => automations.refreshRuns(config.id)}
+                            modelIdToName={modelIdToName}
+                        />
+                    </div>
+                );
+            })()}
+            <AutomationEditorModal
+                isVisible={editorIsOpen}
+                initial={editingAutomation}
+                modelOptions={automationModelOptions}
+                onClose={() => automations.setEditor(null)}
+                onSave={(config) => {
+                    void automations.saveAutomation(config);
+                    automations.setEditor(null);
+                }}
+                onDelete={editingAutomation
+                    ? () => {
+                        void automations.deleteAutomation(editingAutomation.id);
+                        automations.setEditor(null);
+                    }
+                    : undefined}
+            />
+
 
             <Header
                 activeUsername={activeUsername}
@@ -2752,6 +2832,9 @@ const App: React.FC = () => {
                 activeConversationId={activeConversationId}
                 onNewConversation={handleStartNewConversation}
                 onLoadConversation={handleLoadConversation}
+                automations={automations.configs}
+                onOpenAutomation={(id) => automations.openAutomation(id)}
+                onCreateAutomation={() => automations.setEditor({ mode: 'create' })}
             />
 
             <React.Suspense fallback={null}>
@@ -2872,6 +2955,9 @@ const App: React.FC = () => {
                         onOpenVisionData={() => setIsVisionDataVisible(true)}
                         onOpenJournal={handleOpenJournal}
                         onOpenSettings={() => setIsSettingsMenuVisible(true)}
+                        automations={automations.configs}
+                        onOpenAutomation={(id) => automations.openAutomation(id)}
+                        onCreateAutomation={() => automations.setEditor({ mode: 'create' })}
                         collapsed={isSidebarCollapsed}
                     />
                 </aside>

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Conversation, MessageRole } from '../../types';
+import { AutomationConfig } from '../../types/automation';
 import {
     ActivityIcon,
     BookmarkIcon,
@@ -43,6 +44,11 @@ interface SidebarContentProps {
     onOpenSettings: () => void;
     onDeleteConversation: (id: string) => void;
     onDeleteConversations?: (ids: string[]) => Promise<boolean> | boolean;
+    // Automations — scheduled analyses. The section lists them inline; a
+    // click opens the automation's own card feed.
+    automations?: AutomationConfig[];
+    onOpenAutomation?: (id: string | null) => void;
+    onCreateAutomation?: () => void;
     // Called after every action so the mobile drawer can close itself;
     // a no-op for the persistent desktop sidebar.
     onNavigate?: () => void;
@@ -65,6 +71,9 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
     onOpenSettings,
     onDeleteConversation,
     onDeleteConversations,
+    automations = [],
+    onOpenAutomation,
+    onCreateAutomation,
     onNavigate,
     collapsed = false,
 }) => {
@@ -155,6 +164,56 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                     <NavRow collapsed={collapsed} icon={<BookmarkIcon className="h-4 w-4" />} label="Trading Journal" onClick={act(onOpenJournal)} />
                 </div>
             </nav>
+
+            {/* Automations — scheduled analyses, one card feed each */}
+            <div className={collapsed ? 'px-2 pt-3' : 'px-2 pt-4'}>
+                {!collapsed && (
+                    <div className="flex items-center justify-between px-3 pb-1">
+                        <span className="text-[10px] font-medium text-zinc-400 uppercase tracking-widest">Automations</span>
+                        {onCreateAutomation && (
+                            <button
+                                type="button"
+                                onClick={act(onCreateAutomation)}
+                                className="rounded px-1.5 py-0.5 text-[10px] text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-200"
+                                title="New automation"
+                                aria-label="New automation"
+                            >
+                                + New
+                            </button>
+                        )}
+                    </div>
+                )}
+                <div className="space-y-0.5">
+                    {collapsed ? (
+                        onOpenAutomation && (
+                            <NavRow
+                                collapsed
+                                icon={<span className="text-[10px] font-black">⏱</span>}
+                                label="Automations"
+                                onClick={act(() => onOpenAutomation(automations[0]?.id ?? null))}
+                            />
+                        )
+                    ) : automations.length === 0 ? (
+                        <p className="px-3 py-1.5 text-[10px] text-zinc-600">
+                            No automations — <button type="button" onClick={act(onCreateAutomation ?? (() => {}))} className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2">create one</button> to schedule analyses.
+                        </p>
+                    ) : (
+                        automations.map(a => (
+                            <button
+                                key={a.id}
+                                type="button"
+                                onClick={() => act(() => onOpenAutomation?.(a.id))()}
+                                className="w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-left transition-colors hover:bg-zinc-800/80 group"
+                                title={`${a.name} — ${a.schedule.cron}`}
+                            >
+                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${a.enabled ? 'bg-emerald-400' : 'bg-zinc-700'}`} />
+                                <span className="truncate text-[11px] text-zinc-400 group-hover:text-zinc-200">{a.name}</span>
+                                <span className="ml-auto text-[9px] font-mono text-zinc-600 group-hover:text-zinc-400 shrink-0">{a.schedule.cron}</span>
+                            </button>
+                        ))
+                    )}
+                </div>
+            </div>
 
             {/* Recent conversations */}
             {!collapsed && <div className="flex items-center justify-between px-5 pb-1 pt-5">
