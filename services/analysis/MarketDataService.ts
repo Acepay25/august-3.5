@@ -1086,11 +1086,11 @@ export const fetchCompleteMarketSnapshot = async (
     symbol: string
 ): Promise<{
     marketData: MarketData;
-    klines: { '5m': Kline[]; '15m': Kline[]; '1h': Kline[]; '4h': Kline[] };
+    klines: { '15m': Kline[]; '1h': Kline[]; '4h': Kline[]; '1d': Kline[] };
     fundingRate: number;
     availability: {
         marketData: boolean;
-        klines: { '5m': boolean; '15m': boolean; '1h': boolean; '4h': boolean };
+        klines: { '15m': boolean; '1h': boolean; '4h': boolean; '1d': boolean };
         fundingRate: boolean;
     };
 }> => {
@@ -1104,31 +1104,31 @@ export const fetchCompleteMarketSnapshot = async (
     // the run. Timeframe klines + funding rate now degrade to empty/0 so the
     // rest of the packet survives; the core ticker (marketData) stays critical
     // because the packet cannot exist without it.
-    const [marketData, klines5m, klines15m, klines1h, klines4h, fundingRate] = await Promise.all([
+    const [marketData, klines15m, klines1h, klines4h, klines1d, fundingRate] = await Promise.all([
         fetchMarketData(normalizedSymbol),
-        fetchOHLCV(normalizedSymbol, '5m', 300).catch(err => { console.warn(`[MarketData] 5m klines failed, continuing without them:`, err?.message || err); return []; }),
         fetchOHLCV(normalizedSymbol, '15m', 300).catch(err => { console.warn(`[MarketData] 15m klines failed, continuing without them:`, err?.message || err); return []; }),
         fetchOHLCV(normalizedSymbol, '1h', 300).catch(err => { console.warn(`[MarketData] 1h klines failed, continuing without them:`, err?.message || err); return []; }),
         fetchOHLCV(normalizedSymbol, '4h', 300).catch(err => { console.warn(`[MarketData] 4h klines failed, continuing without them:`, err?.message || err); return []; }),
+        fetchOHLCV(normalizedSymbol, '1d', 300).catch(err => { console.warn(`[MarketData] 1d klines failed, continuing without them:`, err?.message || err); return []; }),
         fetchFundingRate(normalizedSymbol).catch(err => { console.warn(`[MarketData] funding rate failed, defaulting to 0:`, err?.message || err); return 0; })
     ]);
 
     return {
         marketData,
         klines: {
-            '5m': klines5m,
             '15m': klines15m,
             '1h': klines1h,
-            '4h': klines4h
+            '4h': klines4h,
+            '1d': klines1d
         },
         fundingRate,
         availability: {
             marketData: marketData.available !== false,
             klines: {
-                '5m': klines5m.length > 0,
                 '15m': klines15m.length > 0,
                 '1h': klines1h.length > 0,
-                '4h': klines4h.length > 0
+                '4h': klines4h.length > 0,
+                '1d': klines1d.length > 0
             },
             // A zero rate can be valid, but the degraded path also returns 0;
             // label it conservatively so prompts never imply certainty.

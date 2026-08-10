@@ -171,38 +171,38 @@ describe('Candle History Insight (per-TF skew honesty)', () => {
 
     const history = (overrides: Record<string, ReturnType<typeof tf>> = {}) => ({
         '4h': tf(15, 15, 'neutral'),
+        '1d': tf(15, 15, 'neutral'),
         '1h': tf(16, 14, 'neutral'),
-        '15m': tf(14, 16, 'neutral'),
-        '5m': tf(11, 19, 'bearish'),
+        '15m': tf(11, 19, 'bearish'),
         ...overrides
     });
 
-    it('surfaces a skewed 5m instead of blanket LTF NEUTRAL (regression: dump case)', () => {
+    it('surfaces a skewed 15m instead of blanket LTF NEUTRAL (regression: dump case)', () => {
         const insight = formatCandleHistoryInsight(history());
         expect(insight).toContain('↔ HTF NEUTRAL');
-        expect(insight).toContain('LTF SKEW: 15m neutral, 5m bearish-skewed (11 Bullish, 19 Bearish)');
+        expect(insight).toContain('LTF SKEW: 1h neutral, 15m bearish-skewed (11 Bullish, 19 Bearish)');
         expect(insight).not.toContain('LTF NEUTRAL');
     });
 
     it('both LTF timeframes aligned bearish → ENTRY FAVORABLE', () => {
         const insight = formatCandleHistoryInsight(history({
-            '15m': tf(9, 21, 'bearish'),
-            '5m': tf(11, 19, 'bearish')
+            '1h': tf(9, 21, 'bearish'),
+            '15m': tf(11, 19, 'bearish')
         }));
-        expect(insight).toContain('LTF ENTRY FAVORABLE: 15m structure and 5m confirmation both bearish.');
+        expect(insight).toContain('LTF ENTRY FAVORABLE: 1H bias and 15m structure both bearish.');
     });
 
-    it('15m and 5m opposing → LTF MIXED', () => {
+    it('1h and 15m opposing → LTF MIXED', () => {
         const insight = formatCandleHistoryInsight(history({
-            '15m': tf(22, 8, 'bullish'),
-            '5m': tf(11, 19, 'bearish')
+            '1h': tf(22, 8, 'bullish'),
+            '15m': tf(11, 19, 'bearish')
         }));
-        expect(insight).toContain('LTF MIXED: 15m and 5m disagree.');
+        expect(insight).toContain('LTF MIXED: 1H and 15m disagree.');
     });
 
     it('all four timeframes neutral → both NEUTRAL lines', () => {
         const insight = formatCandleHistoryInsight(history({
-            '5m': tf(15, 15, 'neutral')
+            '15m': tf(15, 15, 'neutral')
         }));
         expect(insight).toContain('↔ HTF NEUTRAL');
         expect(insight).toContain('↔ LTF NEUTRAL');
@@ -212,16 +212,16 @@ describe('Candle History Insight (per-TF skew honesty)', () => {
         const insight = formatCandleHistoryInsight(history({
             '4h': tf(24, 6, 'bullish')
         }));
-        expect(insight).toContain('HTF SKEW: 4h bullish-skewed (24 Bullish, 6 Bearish), 1h neutral');
+        expect(insight).toContain('HTF SKEW: 4h bullish-skewed (24 Bullish, 6 Bearish), 1d neutral');
         expect(insight).not.toContain('HTF NEUTRAL');
     });
 
     it('both HTF timeframes bullish → HTF BULLISH', () => {
         const insight = formatCandleHistoryInsight(history({
             '4h': tf(24, 6, 'bullish'),
-            '1h': tf(25, 5, 'bullish')
+            '1d': tf(25, 5, 'bullish')
         }));
-        expect(insight).toContain('HTF BULLISH: Both 4H and 1H show strong bullish candle dominance.');
+        expect(insight).toContain('HTF BULLISH: Both 4H and 1D show strong bullish candle dominance.');
     });
 });
 
