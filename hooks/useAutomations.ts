@@ -27,7 +27,7 @@ import {
     uid,
     runUid,
 } from '../services/automation/AutomationService';
-import { cronMatches, parseCron, nextCronTime } from '../services/automation/cronParser';
+import { parseCron, nextCronTime, hasCronFireBetween } from '../services/automation/cronParser';
 import { DEFAULT_LEVERAGE } from '../utils/conversationUtils';
 
 /** Global catch-up budget: at most this many missed runs replay on reopen. */
@@ -146,6 +146,10 @@ export function useAutomations(params: UseAutomationsParams) {
     const inFlightRef = useRef<string | null>(null);
     const conversationHistoryRef = useRef(conversationHistory);
     conversationHistoryRef.current = conversationHistory;
+    // Per-automation "last tick checked" timestamps — the scheduler fires
+    // when the cron's next occurrence falls inside the tick window, so
+    // second-exact schedules are never missed by a coarse tick.
+    const lastCheckedRef = useRef<Map<string, number>>(new Map());
 
     const persistConfigs = useCallback(async (next: AutomationConfig[]) => {
         setConfigs(next);
@@ -284,6 +288,12 @@ export function useAutomations(params: UseAutomationsParams) {
             const loaded = await loadAutomationConfigs(username);
             if (cancelled) return;
             setConfigs(loaded);
+            // Prime the per-automation checkpoints: a fresh automation starts
+            // its clock NOW (never fires retroactively); an existing one
+            // continues from its last completed run.
+            for (const config of loaded) {
+                lastCheckedRef.current.set(config.id, config.lastRunAt ?? Date.now());
+            }
 
             // Catch-up: replay ticks missed while the app was closed (capped
             // globally at MAX_TOTAL_CATCH_UP — a week of missed hourly runs
@@ -306,24 +316,28 @@ export function useAutomations(params: UseAutomationsParams) {
             if (!cancelled) await saveAutomationLastSeen(username, Date.now());
         })();
 
-        // Tick every 30s: fire enabled automations whose cron matches the
-        // current minute (deduped: at most once per minute per automation).
+        // Tick every 15s: fire an automation when its cron's next occurrence
+        // falls inside the window since the last check. Window-based (not
+        // "matches right now") so second-exact schedules are never missed,
+        // and one run per tick keeps manual + automation runs serialized.
         const interval = window.setInterval(async () => {
             if (cancelled) return;
             const usernameNow = usernameRef.current;
             if (!usernameNow) return;
             await saveAutomationLastSeen(usernameNow, Date.now());
             if (inFlightRef.current || params.isAnalysisInProgress) return;
-            const now = new Date();
+            const now = Date.now();
             for (const config of configsRef.current) {
                 if (!config.enabled) continue;
-                const last = config.lastRunAt ?? 0;
-                if (now.getTime() - last >= 60_000 && cronMatches(config.schedule.cron, now)) {
+                const lastCheck = lastCheckedRef.current.get(config.id)
+                    ?? (config.lastRunAt ?? Date.now());
+                if (hasCronFireBetween(config.schedule.cron, new Date(lastCheck), new Date(now))) {
+                    lastCheckedRef.current.set(config.id, now);
                     void runAutomation(config);
                     break; // one run per tick
                 }
             }
-        }, 30_000);
+        }, 15_000);
 
         return () => {
             cancelled = true;
@@ -340,6 +354,9 @@ export function useAutomations(params: UseAutomationsParams) {
             ? configsRef.current.map(c => c.id === config.id ? config : c)
             : [...configsRef.current, config];
         await persistConfigs(next);
+        // A created/edited schedule starts counting from now — the new
+        // schedule must not fire retroactively.
+        lastCheckedRef.current.set(config.id, Date.now());
     }, [persistConfigs]);
 
     const deleteAutomation = useCallback(async (id: string) => {
@@ -365,6 +382,9 @@ export function useAutomations(params: UseAutomationsParams) {
         const config = configsRef.current.find(c => c.id === id);
         if (!config) return;
         await persistConfigs(configsRef.current.map(c => c.id === id ? { ...c, enabled: !c.enabled, updatedAt: Date.now() } : c));
+        // Enabling must not immediately fire a stale match — restart the
+        // schedule clock at now.
+        lastCheckedRef.current.set(id, Date.now());
     }, [persistConfigs]);
 
     // ─── UI state helpers ─────────────────────────────────────────────────

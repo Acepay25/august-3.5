@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseCron, cronMatches, nextCronTime, countMissedRuns } from '../services/automation/cronParser';
+import { parseCron, cronMatches, nextCronTime, countMissedRuns, hasCronFireBetween, humanizeCron } from '../services/automation/cronParser';
 
 const at = (minute: number, hour: number, dom: number, month: number, dow: number): Date =>
     new Date(2026, month - 1, dom, hour, minute, 0, 0);
@@ -14,7 +14,6 @@ describe('parseCron', () => {
     it('rejects malformed expressions', () => {
         expect(parseCron('')).toBeNull();
         expect(parseCron('* * * *')).toBeNull();          // 4 fields
-        expect(parseCron('* * * * * *')).toBeNull();      // 6 fields
         expect(parseCron('60 * * * *')).toBeNull();       // minute out of range
         expect(parseCron('* 24 * * *')).toBeNull();       // hour out of range
         expect(parseCron('* * 32 * *')).toBeNull();       // dom out of range
@@ -22,6 +21,8 @@ describe('parseCron', () => {
         expect(parseCron('*/0 * * * *')).toBeNull();      // zero step
         expect(parseCron('a * * * *')).toBeNull();        // garbage
         expect(parseCron('5-1 * * * *')).toBeNull();      // inverted range
+        expect(parseCron('* * * * *')).not.toBeNull();    // 5 wildcards = every minute (valid)
+        expect(parseCron('* * * * * *')).not.toBeNull();  // 6 wildcards = every second (valid)
     });
 
     it('normalizes dow 7 to Sunday (0)', () => {
@@ -97,5 +98,64 @@ describe('countMissedRuns', () => {
         const since = at(10, 9, 1, 1, 4);
         const now = at(50, 9, 1, 1, 4);
         expect(countMissedRuns('0 9 * * *', since, now, 3)).toBe(0);
+    });
+});
+
+describe('seconds field (6-field cron)', () => {
+    it('parses a 6-field expression with a leading seconds field', () => {
+        const fields = parseCron('15 30 14 * * 1,3')!;
+        expect(fields.second!.has(15)).toBe(true);
+        expect(fields.minute!.has(30)).toBe(true);
+        expect(fields.hour!.has(14)).toBe(true);
+        expect(fields.dow!.has(1) && fields.dow!.has(3)).toBe(true);
+    });
+
+    it('matches the exact second', () => {
+        // Mon 2026-06-08 at 14:30:15.
+        const d = new Date(2026, 5, 8, 14, 30, 15, 0);
+        expect(cronMatches('15 30 14 * * 1', d)).toBe(true);
+        expect(cronMatches('15 30 14 * * 1', new Date(2026, 5, 8, 14, 30, 16, 0))).toBe(false);
+        expect(cronMatches('15 30 14 * * 1', new Date(2026, 5, 8, 14, 30, 15, 0))).toBe(true);
+    });
+
+    it('resolves the exact second in nextCronTime', () => {
+        const next = nextCronTime('15 30 14 * * 1', at(0, 14, 8, 6, 1))!;
+        expect(next.getSeconds()).toBe(15);
+        expect(next.getMinutes()).toBe(30);
+        expect(next.getHours()).toBe(14);
+    });
+
+    it('is backward compatible with 5-field expressions (any second)', () => {
+        expect(cronMatches('0 9 * * *', new Date(2026, 5, 8, 9, 0, 42, 0))).toBe(true);
+    });
+});
+
+describe('hasCronFireBetween', () => {
+    it('catches a second-exact fire inside the tick window', () => {
+        // Fire at 14:30:15; window (14:30:10, 14:30:16].
+        const from = new Date(2026, 5, 8, 14, 30, 10, 0);
+        const to = new Date(2026, 5, 8, 14, 30, 16, 0);
+        expect(hasCronFireBetween('15 30 14 * * 1', from, to)).toBe(true);
+        // Window before the fire.
+        expect(hasCronFireBetween('15 30 14 * * 1', new Date(2026, 5, 8, 14, 30, 0, 0), new Date(2026, 5, 8, 14, 30, 10, 0))).toBe(false);
+    });
+
+    it('catches a minute-granularity fire', () => {
+        const from = new Date(2026, 5, 8, 8, 59, 50, 0);
+        const to = new Date(2026, 5, 8, 9, 0, 10, 0);
+        expect(hasCronFireBetween('0 9 * * *', from, to)).toBe(true);
+    });
+});
+
+describe('humanizeCron', () => {
+    it('humanizes the generated daily-at-time shape', () => {
+        expect(humanizeCron('0 0 9 * * 0,1,2,3,4,5,6')).toBe('Daily at 09:00:00');
+        expect(humanizeCron('0 0 9 * * 1,2,3,4,5')).toBe('Weekdays at 09:00:00');
+        expect(humanizeCron('15 30 14 * * 1,3')).toBe('Mon, Wed at 14:30:15');
+        expect(humanizeCron('0 0 9 * * 0,6')).toBe('Weekends at 09:00:00');
+    });
+
+    it('falls back to the raw expression for custom schedules', () => {
+        expect(humanizeCron('*/15 * * * *')).toBe('*/15 * * * *');
     });
 });
