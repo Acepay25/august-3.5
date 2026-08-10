@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useConfirmDialog } from '../shared/ConfirmDialog';
 import { APP_NAME, APP_VERSION } from '../../constants/version';
-import { AIProvider, AccuracySubMode, LoggedTrade, GlobalMemory, TradeSummary, TradeOutcome } from '../../types';
+import { AIProvider, AccuracySubMode, LoggedTrade } from '../../types';
 import { AnalystLensConfig } from '../../types/lens';
 import { CustomInstructionsMap } from '../../types/user';
 import { ProviderConfig, ApiFormat } from '../../types/provider';
@@ -12,7 +12,6 @@ import MemorySettings from './MemorySettings';
 import { DiagnosticsPanel } from './DiagnosticsPanel';
 import { BackupManager } from './BackupManager';
 import { AlertManager } from './AlertManager';
-import { Journal } from '../journal/Journal';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
 import { ActivityIcon, AISettingsIcon, BrainIcon, CloseIcon, EditIcon, HistoryIcon, BookmarkIcon, SettingsIcon, UserIcon, ExportIcon, SearchIcon, SwitchUserIcon, CodeIcon } from '../shared/Icons';
 import PromptManager from './PromptManager';
@@ -83,22 +82,10 @@ interface SettingsMenuProps {
     onToggleAlgorithmicSummary?: (enabled: boolean) => void;
     useAlgorithmicInsights?: boolean;
     onToggleAlgorithmicInsights?: (enabled: boolean) => void;
-    // Journal Props for Embedded View
+    /** Trade count for the "Journal & automation" nav badge. The journal
+     *  itself is the SHARED overlay (single instance, always in sync with
+     *  the sidebar one — the old embedded duplicate drifted). */
     loggedTrades?: LoggedTrade[];
-    onDeleteTrades?: (ids: string[]) => void;
-    onClearAllTrades?: () => void;
-    modelIdToName?: Record<string, string>;
-    onUpdateInsights?: (ids: string[]) => void;
-    isSummarizing?: boolean;
-    currentInsightIds?: string[];
-    onUpdateTradeLeverage?: (id: string, leverage: number) => void;
-    onUpdateOutcome?: (id: string, outcome: TradeOutcome) => void;
-    onUpdatePnL?: (id: string, pnl: { pnlAmount?: number; pnlPercent?: number }) => void;
-    finalSummary?: string | null;
-    individualSummaries?: TradeSummary[];
-    familyWinRates?: Record<string, { total: number; wins: number; winRate: number }>;
-    globalMemory?: GlobalMemory | null;
-    threadSummary?: string;
     // Models
     selectedOcrModel?: string;
     onSetOcrModel?: (modelId: string) => void;
@@ -176,6 +163,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
         onOpenPlaybook,
         onOpenUserProfile,
         onOpenStrategySearch,
+        onOpenJournal,
         onSwitchUser,
         onExportData,
         username,
@@ -398,14 +386,14 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                 <p className="px-3.5 pt-3 pb-0.5 text-[9px] font-bold uppercase tracking-widest text-zinc-600">
                                     Account & Data
                                 </p>
-                                <NavTabButton
-                                    id="journal"
-                                    activeTab={activeTab}
-                                    onClick={() => setActiveTab('journal')}
-                                    icon={<HistoryIcon className="w-4 h-4" />}
-                                    label="Journal & automation"
-                                    badge={props.loggedTrades && props.loggedTrades.length > 0 ? `${props.loggedTrades.length}` : undefined}
-                                />
+                        <NavTabButton
+                            id="journal"
+                            activeTab={activeTab}
+                            onClick={() => { onOpenJournal?.(); onClose(); }}
+                            icon={<HistoryIcon className="w-4 h-4" />}
+                            label="Journal & automation"
+                            badge={props.loggedTrades && props.loggedTrades.length > 0 ? `${props.loggedTrades.length}` : undefined}
+                        />
                                 <NavTabButton
                                     id="actions"
                                     activeTab={activeTab}
@@ -438,45 +426,11 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                         {/* Right Content Workspace */}
                         <div className="flex-1 overflow-y-auto p-6 bg-zinc-950 custom-scrollbar">
                             
-                            {/* TAB 0: Trading Journal */}
-                            {activeTab === 'journal' && (
-                                <div className="h-full animate-fade-in">
-                                    <Journal
-                                        isVisible={true}
-                                        onClose={() => setActiveTab('models')}
-                                        initialTab="log"
-                                        isEmbedded={true}
-                                        trades={props.loggedTrades || []}
-                                        onDeleteTrades={props.onDeleteTrades || (() => {})}
-                                        onClearAllTrades={props.onClearAllTrades || (() => {})}
-                                        modelIdToName={props.modelIdToName || {}}
-                                        onUpdateInsights={props.onUpdateInsights || (() => {})}
-                                        isSummarizing={props.isSummarizing}
-                                        currentInsightIds={props.currentInsightIds || []}
-                                        onUpdateTradeLeverage={props.onUpdateTradeLeverage || (() => {})}
-                                        onUpdateOutcome={props.onUpdateOutcome || (() => {})}
-                                        onUpdatePnL={props.onUpdatePnL || (() => {})}
-                                        finalSummary={props.finalSummary || null}
-                                        individualSummaries={props.individualSummaries || []}
-                                        isLoading={!!props.isLoading}
-                                        summarizationProvider={props.summarizationProvider || firstReadyProvider?.id || ''}
-                                        summarizationModel={props.summarizationModel || firstReadyProvider?.selectedModel || ''}
-                                        onSetSummarizationProvider={props.onSetSummarizationProvider || (() => {})}
-                                        onSetSummarizationModel={props.onSetSummarizationModel || (() => {})}
-                                        providers={readyConfigProviders}
-                                        summaryCharLimit={props.summaryCharLimit || 1000}
-                                        onUpdateSummaryCharLimit={props.onUpdateSummaryCharLimit || (() => {})}
-                                        onRegenerateSummary={props.onRegenerateSummary || (() => {})}
-                                        useAlgorithmicSummary={props.useAlgorithmicSummary ?? false}
-                                        onToggleAlgorithmicSummary={props.onToggleAlgorithmicSummary || (() => {})}
-                                        useAlgorithmicInsights={props.useAlgorithmicInsights ?? false}
-                                        onToggleAlgorithmicInsights={props.onToggleAlgorithmicInsights || (() => {})}
-                                        familyWinRates={props.familyWinRates || {}}
-                                        globalMemory={props.globalMemory ?? undefined}
-                                        threadSummary={props.threadSummary || ''}
-                                    />
-                                </div>
-                            )}
+                            {/* TAB 0: (removed) Trading Journal — the
+                                "Journal & automation" nav item opens the
+                                SHARED journal overlay instead of embedding a
+                                second instance here, so the sidebar journal
+                                and the settings journal can never desync. */}
 
                             {/* TAB 1: AI Models & Providers */}
                             {activeTab === 'models' && (

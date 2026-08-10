@@ -2721,18 +2721,7 @@ const App: React.FC = () => {
                 onRemoveModel={handleRemoveModel}
                 onUpdateModel={handleUpdateModel}
                 loggedTrades={loggedTrades}
-                onDeleteTrades={handleDeleteTrades}
-                onClearAllTrades={handleClearAllTrades}
-                modelIdToName={modelIdToName}
-                onUpdateInsights={handleManualInsightsUpdate}
-                isSummarizing={isSummaryInProgress}
-                currentInsightIds={currentInsightIds}
-                onUpdateTradeLeverage={handleUpdateTradeLeverage}
-                onUpdateOutcome={handleUpdateTradeOutcome}
-                onUpdatePnL={handleUpdateTradePnL}
-                familyWinRates={familyWinRates}
-                globalMemory={globalMemory}
-                threadSummary={activeConversation?.threadSummary}
+                onOpenJournal={handleOpenJournal}
             />
             </React.Suspense>
             <VisionDataViewer isVisible={isVisionDataVisible} onClose={() => setIsVisionDataVisible(false)} visionData={currentVisionData} />

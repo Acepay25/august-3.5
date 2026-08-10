@@ -580,11 +580,27 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             pnlPercent,
             slOptimizationData,
         });
-    }, [logTradeWithFeedback]);
+        // Every other logging path (capture modal auto/skip, entry-not-hit)
+        // starts the post-mortem right after logging — the autopilot
+        // one-click confirm must do the same, or a confirmed outcome never
+        // gets its post-mortem analysis.
+        startPostMortemAnalysis(
+            { message, outcome, feedback: undefined },
+            undefined,
+            undefined
+        );
+    }, [logTradeWithFeedback, startPostMortemAnalysis]);
 
     const confirmAutopilotEntryNotHit = useCallback((message: Message) => {
         logEntryNotHitTrade({ message });
-    }, [logEntryNotHitTrade]);
+        // Mirror handleEntryNotHitSkip: a confirmed no-entry also triggers
+        // the entry-not-hit post-mortem (it never did from this path).
+        startPostMortemAnalysis(
+            { message, outcome: TradeOutcome.ENTRY_NOT_HIT, feedback: undefined },
+            undefined,
+            undefined
+        );
+    }, [logEntryNotHitTrade, startPostMortemAnalysis]);
 
     const handleEntryNotHitAutoCapture = useCallback(async () => {
         if (!entryNotHitCandidate || !entryNotHitCandidate.message.analysis) {

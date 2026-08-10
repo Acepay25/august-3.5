@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Brain, ChevronDown, ChevronRight, Download, Loader2, TrendingUp, TrendingDown } from 'lucide-react';
+import { Brain, ChevronRight, Download, Loader2, TrendingUp, TrendingDown, ArrowLeft } from 'lucide-react';
 import { getProviderReasoningStats, getAllThinkingForExport, getThinkingByTrade, getThinkingTrades } from '../../services/infrastructure/ThinkingStoreService';
 import { ThinkingRecordStats, ThinkingTradeSummary, ThinkingRecord } from '../../types/thinking';
 import { ThinkingRecordCard } from '../journal/ThinkingRecordCard';
@@ -142,8 +142,6 @@ export const ReasoningDashboard: React.FC<ReasoningDashboardProps> = ({ username
     ? Math.round((totalWins / (totalWins + totalLosses)) * 1000) / 10
     : 0;
 
-  const selectedTrade = trades.find(t => t.tradeId === selectedTradeId);
-
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -254,12 +252,31 @@ export const ReasoningDashboard: React.FC<ReasoningDashboardProps> = ({ username
 
       {/* ============ PER-TRADE REASONING BROWSER ============ */}
       <div className="bg-zinc-800/60 border border-white/5 rounded-xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Brain className="w-4 h-4 text-cyan-400" />
-            <h3 className="text-sm font-bold text-white">Per-Trade Reasoning</h3>
-            <span className="text-[10px] text-zinc-500">one entry per analysis card — every model's CoT + final output</span>
-          </div>
+        <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between gap-2">
+          {selectedTradeId ? (
+            <>
+              {/* Drill-down header: a real Back button returns to the list —
+                  the old inline expansion left no way back but re-clicking. */}
+              <button
+                onClick={() => setSelectedTradeId(null)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 transition-colors"
+                aria-label="Back to reasoning list"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" /> Back
+              </button>
+              <div className="flex items-center gap-2 min-w-0">
+                <Brain className="w-4 h-4 text-cyan-400 shrink-0" />
+                <h3 className="text-sm font-bold text-white shrink-0">Trade Reasoning</h3>
+                <span className="text-[10px] text-zinc-500 font-mono truncate">{selectedTradeId}</span>
+              </div>
+            </>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Brain className="w-4 h-4 text-cyan-400" />
+              <h3 className="text-sm font-bold text-white">Per-Trade Reasoning</h3>
+              <span className="text-[10px] text-zinc-500">one entry per analysis card — every model's CoT + final output</span>
+            </div>
+          )}
         </div>
 
         {isLoading ? (
@@ -272,62 +289,52 @@ export const ReasoningDashboard: React.FC<ReasoningDashboardProps> = ({ username
             <p className="text-sm text-zinc-500">No reasoning records yet</p>
             <p className="text-xs text-zinc-600 mt-1">Run an ensemble analysis to build your training dataset</p>
           </div>
-        ) : (
-          <>
-            {/* Trade list */}
-            <div className="divide-y divide-white/5 max-h-64 overflow-y-auto custom-scrollbar">
-              {trades.map(trade => {
-                const isSelected = trade.tradeId === selectedTradeId;
-                const date = trade.createdAt ? new Date(trade.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
-                return (
-                  <button
-                    key={trade.tradeId}
-                    onClick={() => handleSelectTrade(trade.tradeId)}
-                    className={`w-full flex items-center gap-2 px-4 py-2.5 text-left transition-colors ${isSelected ? 'bg-cyan-500/10' : 'hover:bg-white/5'}`}
-                  >
-                    {isSelected ? <ChevronDown className="w-3.5 h-3.5 text-cyan-400 shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 text-zinc-600 shrink-0" />}
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-medium text-zinc-300 truncate font-mono">{trade.tradeId}</p>
-                      <p className="text-[10px] text-zinc-500">{date} · {trade.recordCount} records</p>
-                    </div>
-                    {trade.outcome && (
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] border shrink-0 ${
-                        trade.outcome === 'WIN' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                        : trade.outcome === 'LOSS' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
-                        : 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20'
-                      }`}>
-                        {trade.outcome}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Selected trade detail */}
-            {selectedTradeId && (
-              <div className="p-3 border-t border-white/5 space-y-2 bg-zinc-900/50">
-                <div className="flex items-center justify-between px-1">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">
-                    {selectedTrade ? 'Full reasoning for this analysis' : 'Reasoning for this analysis'}
-                  </p>
-                  <span className="text-[10px] text-zinc-600 font-mono">{selectedTradeId}</span>
-                </div>
-                {isLoadingRecords ? (
-                  <div className="flex items-center gap-2 py-4 justify-center text-zinc-500">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span className="text-xs">Loading reasoning...</span>
-                  </div>
-                ) : records.length === 0 ? (
-                  <p className="text-xs text-zinc-600 py-2 text-center">No reasoning records stored for this trade.</p>
-                ) : (
-                  records.map(record => (
-                    <ThinkingRecordCard key={record.id} record={record} />
-                  ))
-                )}
+        ) : selectedTradeId ? (
+          /* Drill-down screen: the selected trade's full reasoning, with a
+             Back button (header above) returning to the list. */
+          <div className="p-3 sm:p-4 space-y-2 bg-zinc-900/50">
+            {isLoadingRecords ? (
+              <div className="flex items-center gap-2 py-4 justify-center text-zinc-500">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span className="text-xs">Loading reasoning...</span>
               </div>
+            ) : records.length === 0 ? (
+              <p className="text-xs text-zinc-600 py-2 text-center">No reasoning records stored for this trade.</p>
+            ) : (
+              records.map(record => (
+                <ThinkingRecordCard key={record.id} record={record} />
+              ))
             )}
-          </>
+          </div>
+        ) : (
+          /* Trade list — clicking an entry navigates to its reasoning screen. */
+          <div className="divide-y divide-white/5 max-h-[420px] overflow-y-auto custom-scrollbar">
+            {trades.map(trade => {
+              const date = trade.createdAt ? new Date(trade.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+              return (
+                <button
+                  key={trade.tradeId}
+                  onClick={() => handleSelectTrade(trade.tradeId)}
+                  className="w-full flex items-center gap-2 px-4 py-2.5 text-left transition-colors hover:bg-white/5"
+                >
+                  <ChevronRight className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium text-zinc-300 truncate font-mono">{trade.tradeId}</p>
+                    <p className="text-[10px] text-zinc-500">{date} · {trade.recordCount} records</p>
+                  </div>
+                  {trade.outcome && (
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] border shrink-0 ${
+                      trade.outcome === 'WIN' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                      : trade.outcome === 'LOSS' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                      : 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20'
+                    }`}>
+                      {trade.outcome}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         )}
       </div>
     </div>
