@@ -9,7 +9,7 @@ import { ArrowUpIcon, ArrowDownIcon, CloseIcon, LoadingIcon, EyeIcon, BrainIcon,
 import HybridDataPanel from '../analysis/HybridDataPanel';
 import ImageViewerModal from '../modals/ImageViewerModal';
 import AnalysisProgress from '../analysis/AnalysisProgress';
-import HomeDashboard, { HomeDashboardProps } from '../dashboard/HomeDashboard';
+import WorkspaceWelcome, { WorkspaceWelcomeProps } from './WorkspaceWelcome';
 
 // Hoisted list components to prevent re-creation on each render
 const ListHeader = () => <div className="h-16"></div>;
@@ -108,7 +108,7 @@ interface ChatAreaProps {
     onInteract?: () => void;
     onSelectMessageForProbability?: (id: string) => void;
     /** Returning-user summary shown when the active conversation is empty. */
-    homeDashboard?: HomeDashboardProps;
+    homeDashboard?: WorkspaceWelcomeProps;
     // Analysis Progress (Task UI)
     analysisSteps?: AnalysisStep[];
     isAnalysisActive?: boolean;
@@ -479,8 +479,8 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 <div className="chat-hero-grid absolute inset-0 z-10 bg-zinc-950 overflow-y-auto">
                     <div className={`min-h-full flex flex-col items-center px-3 sm:px-4 lg:px-8 py-10 ${homeDashboard ? 'justify-start' : 'justify-center'}`}>
                         {homeDashboard ? (
-                            <div className="w-full max-w-5xl mb-6">
-                                <HomeDashboard {...homeDashboard} />
+                            <div className="w-full mb-6 flex justify-center">
+                                <WorkspaceWelcome {...homeDashboard} />
                             </div>
                         ) : (
                             <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-zinc-100 text-center">
