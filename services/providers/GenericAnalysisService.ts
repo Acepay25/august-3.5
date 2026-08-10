@@ -107,19 +107,35 @@ const priceTokens = (line: string): string[] =>
 
 const firstPriceToken = (line: string): string | undefined => priceTokens(line)[0];
 
+/**
+ * Value after a labeled line: the inline capture, or the NEXT line when the
+ * label ends with the colon — the lens prompts put the value on the
+ * following line ("**Optimal Entry Zone:**\n$93,800 to $94,200").
+ */
+const labeledValue = (text: string, match: RegExpMatchArray | null, group = 1): string => {
+    if (!match) return '';
+    const inline = (match[group] ?? '').trim();
+    if (inline) return inline;
+    const rest = text.slice((match.index ?? 0) + match[0].length);
+    return rest.split('\n')[0].trim();
+};
+
 export const extractStructuredPlanFromProse = (text: string): ParsedTradePlan => {
     if (!text) return {};
     const plan: ParsedTradePlan = {};
 
     // --- Direction: labeled forms first ("Direction:", "MACRO BIAS:",
     // "TECHNICAL BIAS:", "VERDICT:", "Bias:"), then explicit ALL-CAPS
-    // LONG/SHORT (lens roles write "TECHNICAL BIAS: LONG"). Bare lowercase
-    // "bullish"/"bearish" in prose is never enough — sentence noise. A label
-    // whose line lists competing options ("LONG / SHORT / NO TRADE") means
-    // the model echoed the template — no verdict.
-    const dirLabel = text.match(/Direction\s*:\s*(Long|Short|Neutral|Bullish|Bearish|Buy|Sell)/i)
-        || text.match(/(?:MACRO|TECHNICAL|FINAL|TRADE|TOTAL)\s*(?:BIAS|VERDICT|RECOMMENDATION|OUTLOOK)\s*:\s*(?:(?:STRONG|WEAK|CONFIRMED)\s+)?(Long|Short|Neutral|Buy|Sell|NO\s*TRADE)/i)
-        || text.match(/(?:Bias|Verdict|Outlook|Thesis|Recommendation)\s*:\s*(Long|Short|Neutral|Bullish|Bearish|Buy|Sell|NO\s*TRADE)/i);
+    // LONG/SHORT (lens roles write "TECHNICAL BIAS: LONG"). Labels may be
+    // markdown-bolded with the COLON INSIDE the markers ("**MACRO
+    // VERDICT:** Bullish") — the \*{0,2} bridges on both sides of the colon
+    // see through that. Bare lowercase "bullish"/"bearish" in prose is
+    // never enough — sentence noise. A label whose line lists competing
+    // options ("LONG / SHORT / NO TRADE") means the model echoed the
+    // template — no verdict.
+    const dirLabel = text.match(/Direction\s*\*{0,2}\s*:\s*\*{0,2}\s*(Long|Short|Neutral|Bullish|Bearish|Buy|Sell)/i)
+        || text.match(/(?:MACRO|TECHNICAL|FINAL|TRADE|TOTAL)\s*(?:BIAS|VERDICT|RECOMMENDATION|OUTLOOK)\s*\*{0,2}\s*:\s*\*{0,2}\s*(?:(?:STRONG|WEAK|CONFIRMED)\s+)?(Long|Short|Neutral|Bullish|Bearish|Buy|Sell|NO\s*TRADE)/i)
+        || text.match(/(?:Bias|Verdict|Outlook|Thesis|Recommendation)\s*\*{0,2}\s*:\s*\*{0,2}\s*(Long|Short|Neutral|Bullish|Bearish|Buy|Sell|NO\s*TRADE)/i);
     if (dirLabel) {
         const word = dirLabel[1].toLowerCase();
         const mapped = word.includes('long') || word.includes('bull') || word.includes('buy')
@@ -137,28 +153,38 @@ export const extractStructuredPlanFromProse = (text: string): ParsedTradePlan =>
         if (explicitLong !== explicitShort) plan.direction = explicitLong ? 'Long' : 'Short';
     }
 
-    // --- Entry (single price or zone — both survive parsePrice) ---
-    const entryLine = text.match(/Entry(?:\s*Zone)?\s*:\s*([^\n]*)/i);
-    if (entryLine && entryLine[1] && !/N\/?A/i.test(entryLine[1])) {
-        const tokens = priceTokens(entryLine[1]);
-        if (tokens.length > 0) {
-            plan.entryPoints = [tokens.length > 1 ? `${tokens[0]} - ${tokens[tokens.length - 1]}` : tokens[0]];
+    // --- Entry (single price or zone — both survive parsePrice; the value
+    // may sit on the next line, see labeledValue) ---
+    const entryLine = text.match(/Entry(?:\s*Zone)?\s*\*{0,2}\s*:\s*\*{0,2}\s*([^\n]*)/i);
+    if (entryLine) {
+        const entryRaw = labeledValue(text, entryLine);
+        if (entryRaw && !/N\/?A/i.test(entryRaw)) {
+            const tokens = priceTokens(entryRaw);
+            if (tokens.length > 0) {
+                plan.entryPoints = [tokens.length > 1 ? `${tokens[0]} - ${tokens[tokens.length - 1]}` : tokens[0]];
+            }
         }
     }
 
     // --- Stop loss ("Stop Loss:", "SL:"; "Stop Loss Percentage:" is
     // deliberately NOT matched — the colon comes after "Percentage"). ---
-    const slLine = text.match(/(?:Stop Loss|SL)\s*(?:1)?\s*:\s*([^\n]*)/i);
-    if (slLine && slLine[1] && !/N\/?A/i.test(slLine[1])) {
-        const sl = firstPriceToken(slLine[1]);
-        if (sl) plan.stopLoss = sl;
+    const slLine = text.match(/(?:Stop Loss|SL)\s*(?:1)?\s*\*{0,2}\s*:\s*\*{0,2}\s*([^\n]*)/i);
+    if (slLine) {
+        const slRaw = labeledValue(text, slLine);
+        if (slRaw && !/N\/?A/i.test(slRaw)) {
+            const sl = firstPriceToken(slRaw);
+            if (sl) plan.stopLoss = sl;
+        }
     }
 
     // --- Take profits ("Take Profit 1:", "TP1:") ---
-    const tpLines = [...text.matchAll(/(?:Take Profit|TP)\s*(\d)?\s*:\s*([^\n]*)/gi)];
+    const tpLines = [...text.matchAll(/(?:Take Profit|TP)\s*(\d)?\s*\*{0,2}\s*:\s*\*{0,2}\s*([^\n]*)/gi)];
     if (tpLines.length > 0) {
         plan.takeProfit = tpLines
-            .map(m => (m[2] && !/N\/?A/i.test(m[2]) ? firstPriceToken(m[2]) : undefined))
+            .map(m => {
+                const raw = labeledValue(text, m, 2);
+                return raw && !/N\/?A/i.test(raw) ? firstPriceToken(raw) : undefined;
+            })
             .filter((t): t is string => !!t);
     }
 
@@ -167,14 +193,14 @@ export const extractStructuredPlanFromProse = (text: string): ParsedTradePlan =>
     // NOT probabilities and stay unmatched — the schema's confidence path
     // handles those separately. The range-guard rejects a template echo
     // ("<0-100>%") — "100" inside a range must not read as 100%.
-    const probMatch = text.match(/Probability\s*%?\s*:\s*(?<![-–—])(\d+(?:\.\d+)?)\s*%/i);
+    const probMatch = text.match(/Probability\s*\*{0,2}\s*%?\s*:\s*\*{0,2}\s*(?<![-–—])(\d+(?:\.\d+)?)\s*%/i);
     if (probMatch) {
         const p = parseFloat(probMatch[1]);
         if (!isNaN(p) && p > 0 && p <= 100) plan.probability = p;
     }
 
     // --- Confidence label ("Confidence: High") ---
-    const confMatch = text.match(/(?:Confidence|Conviction)\s*:\s*(High|Medium|Med|Low|Avoid)/i);
+    const confMatch = text.match(/(?:Confidence|Conviction)\s*\*{0,2}\s*:\s*\*{0,2}\s*(High|Medium|Med|Low|Avoid)/i);
     if (confMatch) {
         const c = confMatch[1].toLowerCase();
         plan.confidence = c === 'med' || c === 'medium' ? 'Medium'
@@ -675,7 +701,7 @@ export async function analyzeTradingView(
             ? analysis.takeProfit.map(tp => ({ price: sanitizeJSONString(String(tp.price || '')), percentage: sanitizeJSONString(String(tp.percentage || '')) })).filter(tp => tp.price)
             : [];
         analysis.entryPoints = Array.isArray(analysis.entryPoints)
-            ? analysis.entryPoints.map(ep => ({ description: sanitizeJSONString(String(ep.description || '')), price: sanitizeJSONString(String(ep.price || '')) })).filter(ep => ep.description)
+            ? analysis.entryPoints.map(ep => ({ description: sanitizeJSONString(String(ep.description || '')), price: sanitizeJSONString(String(ep.price || '')) })).filter(ep => ep.price)
             : [];
         analysis.createdAt = new Date().toISOString();
 

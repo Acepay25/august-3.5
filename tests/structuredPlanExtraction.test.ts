@@ -57,6 +57,16 @@ Probability: 55%
         expect(extractStructuredPlanFromProse('**TECHNICAL BIAS:**\nSHORT').direction).toBe('Short');
     });
 
+    it('sees through markdown-bolded labels and Bullish/Bearish verdicts', () => {
+        // The lens prompts mandate **MACRO VERDICT:** / **TECHNICAL BIAS:**
+        // — the parser must see past the asterisks, and "Bullish"/"Bearish"
+        // verdicts map to Long/Short.
+        expect(extractStructuredPlanFromProse('**MACRO VERDICT:** Bullish').direction).toBe('Long');
+        expect(extractStructuredPlanFromProse('**MACRO VERDICT:** Bearish').direction).toBe('Short');
+        expect(extractStructuredPlanFromProse('**TECHNICAL BIAS:**\nLONG').direction).toBe('Long');
+        expect(extractStructuredPlanFromProse('**TECHNICAL BIAS:**\nNO TRADE').direction).toBe('Neutral');
+    });
+
     it('does NOT treat a 1-10 role scale as a probability', () => {
         const plan = extractStructuredPlanFromProse('**MACRO CONFIDENCE:**\n7');
         expect(plan.probability).toBeUndefined();
