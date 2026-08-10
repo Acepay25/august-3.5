@@ -4,12 +4,15 @@ import { Message, MessageRole, TradeOutcome, SavedAnalysis, Conversation, Debate
 import { ChevronDownIcon, LinkIcon, CheckIcon, BrainIcon } from '../shared/Icons';
 import MarkdownContent from '../shared/MarkdownContent';
 import LiveMarketDataView from '../market/LiveMarketDataView';
-import DebateChat from '../analysis/DebateChat';
 import EnsembleProgressChat from '../analysis/EnsembleProgressChat';
 import AnalysisResult from '../analysis/AnalysisResult';
+import AnalystInlineRow from '../analysis/AnalystInlineRow';
 import ThinkingModal from '../analysis/ThinkingModal';
 import TodayReassessmentPanel from './TodayReassessmentPanel';
+import { getRoleDisplayForProvider } from '../../services/ui/AnalystLensService';
 import { AutopilotResolution } from '../../services/ui/OutcomeAutopilotService';
+
+const ACCENT_COLORS = ['#8aabd8', '#34d399', '#fb7185'];
 
 // Helper to validate URLs (XSS prevention)
 const isSafeUrl = (url: string): boolean => {
@@ -79,6 +82,8 @@ export interface ChatContextProps {
     onConfirmAutopilot?: (messageId: string) => void;
     onDismissAutopilot?: (messageId: string) => void;
     latestMessageId?: string | null;
+    /** Opens the right-side analyst panel for a given message and optional active tab. */
+    onOpenAnalystPanel?: (message: Message, activeTab?: string) => void;
 }
 
 const SmoothText: React.FC<{ text: string; animate: boolean }> = ({ text, animate }) => {
@@ -149,12 +154,12 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
         handleCopy,
         onTodayReassessment,
         todayReassessmentInFlight,
+        onOpenAnalystPanel,
     } = context;
 
     const isHighlighted = highlightedAnalysisId === message.id;
     const isUserMessage = message.role === MessageRole.USER;
     const [isThinkingModalOpen, setIsThinkingModalOpen] = React.useState(false);
-    const [isPreviousDebateExpanded, setIsPreviousDebateExpanded] = React.useState(false);
     const [isRunLedgerOpen, setIsRunLedgerOpen] = React.useState(false);
     const [isMemoryGateExpanded, setIsMemoryGateExpanded] = React.useState(false);
     // Inline edit of a sent user message (history correction).
@@ -499,23 +504,11 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 <EnsembleProgressChat progress={message.ensembleProgress} modelIdToName={modelIdToName} isLive hideSubagents onRetryAnalyst={onReRunAnalysis ? () => onReRunAnalysis(message.id) : undefined} />
                             )}
 
-                            {/* Live debates stay visible; completed cards default to the result only. */}
-                            {message.isDebating && debateTurns.length > 0 && (
-                                <DebateChat
-                                    debateTurns={debateTurns}
-                                    modelsUsed={message.modelsUsed}
-                                    thoughtProcesses={message.thoughtProcesses}
-                                    reasoningProcesses={message.reasoningProcesses}
-                                    modelIdToName={modelIdToName}
-                                    providerNameToId={providerNameToId}
-                                    lensConfig={lensConfig}
-                                    isDebating
-                                    activeDebateSpeakers={message.activeDebateSpeakers}
-                                    analysis={message.analysis}
-                                    messageId={message.id}
-                                    replacementOffer={message.replacementOffer}
-                                    onReplacementChoice={onReplacementChoice}
-                                />
+                            {/* Live debate is shown in the right-side panel now. */}
+                            {message.isDebating && (
+                                <div className="text-[10px] text-zinc-500 px-3 py-2">
+                                    {debateTurns.length > 0 ? `${debateTurns.length} debate turn${debateTurns.length === 1 ? '' : 's'} in progress — open the analyst panel to view.` : 'Debate starting…'}
+                                </div>
                             )}
 
                             {/* Per-run summary — durations, gate cap, Monte Carlo (from runStats) */}
@@ -585,46 +578,28 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                             {/* Main Analysis Result */}
                             {message.analysis && <AnalysisResult analysis={message.analysis} messageId={message.id} onLogTrade={handleInitiateLogTrade} onInitiateSkip={handleInitiateSkipTrade} onViewStrategy={handleViewStrategyDetails} onSaveAnalysis={handleSaveAnalysis} onUpdateTrade={handleInitiateUpdateTrade} onSimulate={handleInitiateSimulator} onReRunAnalysis={onReRunAnalysis} isSaved={savedAnalyses.some(sa => sa.id === message.id)} outcome={message.outcome} activeFrameworks={activeFrameworks} onApplyStrategy={handleApplyStrategy} imageSummaries={message.imageSummaries} isAccuracyMode={message.isAccuracyMode} accuracySubMode={message.accuracySubMode} confidenceCalibration={confidenceCalibration} confluenceData={message.confluenceData} leverage={leverage} isLensMode={message.isLensMode} tradingStyle={message.tradingStyle} onSelectForProbability={onSelectMessageForProbability} autopilotResolution={autopilotResolutions?.[message.id]} onConfirmAutopilot={onConfirmAutopilot} onDismissAutopilot={onDismissAutopilot} onCompare={onCompareAnalysis} onViewReasoning={onViewReasoning} />}
 
-                            {!message.isDebating && debateTurns.length > 0 && !message.analysis && (
-                                <DebateChat
-                                    debateTurns={debateTurns}
-                                    modelsUsed={message.modelsUsed}
-                                    thoughtProcesses={message.thoughtProcesses}
-                                    reasoningProcesses={message.reasoningProcesses}
-                                    modelIdToName={modelIdToName}
-                                    providerNameToId={providerNameToId}
-                                    lensConfig={lensConfig}
-                                    activeDebateSpeakers={message.activeDebateSpeakers}
-                                    analysis={message.analysis}
-                                />
-                            )}
-
-                            {!message.isDebating && message.analysis && debateTurns.length > 0 && (
-                                <div className="mt-4 border-t border-white/10 pt-3">
-                                    <button
-                                        type="button"
-                                        onClick={() => setIsPreviousDebateExpanded(previous => !previous)}
-                                        className="flex w-full items-center justify-between rounded-xl border border-white/5 bg-zinc-900/60 px-3 py-2.5 text-left text-xs font-semibold text-zinc-400 transition-colors hover:border-cyan-400/20 hover:bg-zinc-800/80 hover:text-zinc-200 focus-visible:ring-2 focus-visible:ring-cyan-400"
-                                        aria-expanded={isPreviousDebateExpanded}
-                                        aria-controls={`previous-debate-${message.id}`}
-                                    >
-                                        <span>Previous debate</span>
-                                        <ChevronDownIcon className={`h-4 w-4 transition-transform ${isPreviousDebateExpanded ? 'rotate-180' : ''}`} />
-                                    </button>
-                                    {isPreviousDebateExpanded && (
-                                        <div id={`previous-debate-${message.id}`}>
-                                            <DebateChat
-                                                debateTurns={debateTurns}
-                                                modelsUsed={message.modelsUsed}
-                                                thoughtProcesses={message.thoughtProcesses}
-                                                reasoningProcesses={message.reasoningProcesses}
-                                                modelIdToName={modelIdToName}
-                                                providerNameToId={providerNameToId}
-                                                lensConfig={lensConfig}
-                                                activeDebateSpeakers={message.activeDebateSpeakers}
+                            {/* Per-analyst rows — click to open the right-side panel */}
+                            {thinkingEntries.length > 0 && onOpenAnalystPanel && (
+                                <div className="mt-3 space-y-1.5">
+                                    <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600 px-1">Analysts</p>
+                                    {thinkingEntries.map(([key], idx) => {
+                                        const roleDisplay = lensConfig ? getRoleDisplayForProvider(key, lensConfig.assignments) : null;
+                                        const modelId = message.modelsUsed?.[key];
+                                        const ep = message.ensembleProgress;
+                                        const analystProgress = ep?.analysts.find(a => a.providerId === key);
+                                        return (
+                                            <AnalystInlineRow
+                                                key={key}
+                                                index={idx}
+                                                displayName={roleDisplay?.name ?? modelIdToName[key] ?? key}
+                                                modelName={modelIdToName[modelId ?? '']}
+                                                roleEmoji={roleDisplay?.emoji}
+                                                roleColor={ACCENT_COLORS[idx % ACCENT_COLORS.length]}
+                                                status={analystProgress?.status ?? (message.analysis ? 'complete' : 'waiting')}
+                                                onClick={() => onOpenAnalystPanel(message, key)}
                                             />
-                                        </div>
-                                    )}
+                                        );
+                                    })}
                                 </div>
                             )}
 
