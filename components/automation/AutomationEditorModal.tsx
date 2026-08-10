@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { AutomationConfig, AutomationInputSource, AutomationMode, AutomationModelPick } from '../../types/automation';
 import { parseCron, nextCronTime, humanizeCron } from '../../services/automation/cronParser';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
@@ -36,37 +36,80 @@ interface ParsedDailySchedule {
     second: number;
 }
 
+export type AutomationFrequencyMode = 'daily' | 'minutes' | 'hours';
+
+interface ParsedScheduleState {
+    frequency: AutomationFrequencyMode;
+    /** Step for 'minutes'/'hours' modes (e.g. 30 for every 30 min). */
+    every: number;
+    days: number[];
+    hour: number;
+    minute: number;
+    second: number;
+}
+
+/** Arithmetic step of a sorted value set (used to recover star-slash-N steps). */
+const stepOf = (values: number[]): number => (values.length >= 2 ? values[1] - values[0] : 1);
+
 /**
- * Parse an existing cron into the day/time editor state. Handles the
- * generated shapes: 6-field "s m h * * dow" and legacy 5-field "m h * * dow".
- * Returns null when the expression is a custom schedule (kept in Advanced).
+ * Parse an existing cron back into the editor state. Handles:
+ *   daily   — 6-field "s m h * * dow" or legacy 5-field "m h * * dow"
+ *   minutes — minute-step shape (e.g. every 30 min: "star/30 * * * dow")
+ *   hours   — hour-step shape (e.g. every 3 h: "0 star/3 * * dow")
+ * Returns null for custom expressions (kept in the Advanced field).
  */
-const parseDailySchedule = (cron: string | undefined): ParsedDailySchedule | null => {
-    if (!cron) return null;
-    const parts = cron.trim().split(/\s+/);
-    const isSix = parts.length === 6;
-    const isFive = parts.length === 5;
-    if (!isSix && !isFive) return null;
-    // Shape: [second] minute hour * * dow-list
-    const dowIndex = isSix ? 5 : 4;
-    const domIndex = isSix ? 3 : 2;
-    const monthIndex = isSix ? 4 : 3;
-    if (parts[domIndex] !== '*' || parts[monthIndex] !== '*') return null;
-    const dowRaw = parts[dowIndex];
-    if (!/^[\d,]+$/.test(dowRaw)) return null;
-    const dowValues = [...new Set(dowRaw.split(',').map(Number))].map(v => (v === 7 ? 0 : v));
-    const hour = parseInt(parts[isSix ? 2 : 1], 10);
-    const minute = parseInt(parts[isSix ? 1 : 0], 10);
-    const second = isSix ? parseInt(parts[0], 10) : 0;
-    if (isNaN(hour) || isNaN(minute) || isNaN(second)) return null;
-    if (hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 59) return null;
-    return { days: dowValues, hour, minute, second };
+const parseScheduleState = (cron: string | undefined): ParsedScheduleState | null => {
+    const fields = cron ? parseCron(cron) : null;
+    if (!fields) return null;
+    if (fields.dom !== null || fields.month !== null) return null;
+
+    // '*' fields mean the full range.
+    const minutes = fields.minute !== null
+        ? [...fields.minute].sort((a, b) => a - b)
+        : Array.from({ length: 60 }, (_, i) => i);
+    const hours = fields.hour !== null
+        ? [...fields.hour].sort((a, b) => a - b)
+        : Array.from({ length: 24 }, (_, i) => i);
+    const second = fields.second !== null ? [...fields.second][0] ?? 0 : 0;
+
+    const dowValues = fields.dow !== null ? [...fields.dow].map(v => (v === 7 ? 0 : v)) : ALL_DAYS;
+
+    // Frequency shapes: a stepped minute field over all hours = "every N
+    // minutes"; a stepped hour field with a single minute = "every N hours".
+    if (minutes.length > 1 && hours.length === 24) {
+        return { frequency: 'minutes', every: stepOf(minutes), days: dowValues, hour: hours[0], minute: minutes[0], second };
+    }
+    if (hours.length > 1 && minutes.length === 1) {
+        return { frequency: 'hours', every: stepOf(hours), days: dowValues, hour: hours[0], minute: minutes[0], second };
+    }
+    if (minutes.length === 1 && hours.length === 1) {
+        return { frequency: 'daily', every: 1, days: dowValues, hour: hours[0], minute: minutes[0], second };
+    }
+    return null;
 };
 
-/** Build the storage cron from the day/time editor state (6-field, seconds first). */
-const buildDailyCron = (days: number[], hour: number, minute: number, second: number): string => {
+/** Build the storage cron from the editor state. */
+const buildScheduleCron = (
+    frequency: AutomationFrequencyMode,
+    every: number,
+    days: number[],
+    hour: number,
+    minute: number,
+    second: number
+): string => {
     const sorted = [...new Set(days)].sort((a, b) => a - b);
     const dow = sorted.length === 0 ? '*' : sorted.join(',');
+
+    if (frequency === 'minutes') {
+        // Every N minutes: minute step, all hours, selected days.
+        // (5-field: minute hour dom month dow — "star/30 * * * dow".)
+        return every <= 1 ? `* * * * ${dow}` : `*/${every} * * * ${dow}`;
+    }
+    if (frequency === 'hours') {
+        // Every N hours: minute 0, hour step, selected days.
+        return every <= 1 ? `0 * * * ${dow}` : `0 */${every} * * ${dow}`;
+    }
+    // Once per day at the chosen time on the selected days.
     return `${second} ${minute} ${hour} * * ${dow}`;
 };
 
@@ -89,18 +132,24 @@ const splitOption = (value: string): { providerId: string; modelId: string } => 
 
 const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible, initial, modelOptions, onClose, onSave, onDelete }) => {
     const [name, setName] = useState(initial?.name ?? '');
-    // Schedule = days-of-week toggles + a time of day (h/m/s). The storage
-    // cron is generated from these two inputs; a custom cron can override
+    // Schedule = frequency (once per day, or every N minutes/hours) +
+    // days-of-week toggles + a time of day (h/m/s for the daily mode).
+    // The storage cron is generated from these; a custom cron can override
     // them via the Advanced field (existing non-daily schedules).
-    const [scheduleDays, setScheduleDays] = useState<number[]>(() => parseDailySchedule(initial?.schedule.cron)?.days ?? ALL_DAYS);
+    const [frequencyMode, setFrequencyMode] = useState<AutomationFrequencyMode>(() => parseScheduleState(initial?.schedule.cron)?.frequency ?? 'daily');
+    const [frequencyEvery, setFrequencyEvery] = useState<number>(() => {
+        const p = parseScheduleState(initial?.schedule.cron);
+        return p && p.frequency !== 'daily' ? p.every : 30;
+    });
+    const [scheduleDays, setScheduleDays] = useState<number[]>(() => parseScheduleState(initial?.schedule.cron)?.days ?? ALL_DAYS);
     const [scheduleTime, setScheduleTime] = useState<{ h: number; m: number; s: number }>(() => {
-        const p = parseDailySchedule(initial?.schedule.cron);
+        const p = parseScheduleState(initial?.schedule.cron);
         return p ? { h: p.hour, m: p.minute, s: p.second } : { h: 9, m: 0, s: 0 };
     });
     const [advancedCron, setAdvancedCron] = useState<string>(() => {
         // Pre-fill the advanced field ONLY when the existing schedule is a
         // custom expression the day/time UI cannot represent.
-        return parseDailySchedule(initial?.schedule.cron) ? '' : (initial?.schedule.cron ?? '');
+        return parseScheduleState(initial?.schedule.cron) ? '' : (initial?.schedule.cron ?? '');
     });
     const [advancedOpen, setAdvancedOpen] = useState(false);
     const [inputSource, setInputSource] = useState<AutomationInputSource>(initial?.inputSource ?? 'template');
@@ -125,10 +174,18 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
 
     // The generated cron is the source of truth unless a custom cron was
     // typed into the Advanced field.
-    const generatedCron = buildDailyCron(scheduleDays, scheduleTime.h, scheduleTime.m, scheduleTime.s);
+    const generatedCron = buildScheduleCron(frequencyMode, frequencyEvery, scheduleDays, scheduleTime.h, scheduleTime.m, scheduleTime.s);
     const effectiveCron = advancedCron.trim() ? advancedCron.trim() : generatedCron;
     const cronValid = parseCron(effectiveCron) !== null;
     const nextRun = cronValid ? nextCronTime(effectiveCron, new Date()) : null;
+
+    // Runs-per-day estimate for the frequency modes (selected days only).
+    const runsPerDay = useMemo(() => {
+        const dayCount = Math.max(1, scheduleDays.length) / 7;
+        if (frequencyMode === 'minutes') return Math.round((1440 / Math.max(1, frequencyEvery)) * dayCount);
+        if (frequencyMode === 'hours') return Math.round((24 / Math.max(1, frequencyEvery)) * dayCount);
+        return dayCount;
+    }, [frequencyMode, frequencyEvery, scheduleDays.length]);
 
     // Lens mode needs exactly 3 DISTINCT models; normal mode needs 1-3.
     const requiredSelections = useLenses ? 3 : 1;
@@ -216,9 +273,41 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                         />
                     </div>
 
-                    {/* Schedule — days of the week + time of day (h/m/s) */}
+                    {/* Schedule — frequency + days of the week + time */}
                     <div>
                         <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 block mb-1.5">Schedule</span>
+
+                        {/* Frequency: once per day, or every N minutes/hours */}
+                        <div className="flex items-center gap-2 flex-wrap mb-2.5">
+                            <span className="text-[10px] font-medium text-zinc-400">Frequency</span>
+                            <div className="flex gap-1">
+                                {([['daily', 'Once per day'], ['minutes', 'Every N minutes'], ['hours', 'Every N hours']] as [AutomationFrequencyMode, string][]).map(([value, label]) => (
+                                    <button
+                                        key={value}
+                                        type="button"
+                                        onClick={() => setFrequencyMode(value)}
+                                        className={`px-2 py-1 rounded text-[9px] font-bold uppercase tracking-wider border transition-all ${frequencyMode === value ? 'bg-cyan-500/20 border-cyan-500/30 text-cyan-300' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'}`}
+                                    >
+                                        {label}
+                                    </button>
+                                ))}
+                            </div>
+                            {frequencyMode !== 'daily' && (
+                                <div className="flex items-center gap-1">
+                                    <input
+                                        type="number"
+                                        min={1}
+                                        max={frequencyMode === 'minutes' ? 59 : 24}
+                                        value={frequencyEvery}
+                                        onChange={(e) => setFrequencyEvery(Math.max(1, Math.min(frequencyMode === 'minutes' ? 59 : 24, parseInt(e.target.value, 10) || 1)))}
+                                        className="w-14 bg-zinc-950 border border-white/10 rounded px-1.5 py-1 text-xs font-mono text-zinc-200 focus:outline-none focus:border-cyan-500/50"
+                                        aria-label={frequencyMode === 'minutes' ? 'Minutes between runs' : 'Hours between runs'}
+                                    />
+                                    <span className="text-[10px] text-zinc-500">{frequencyMode === 'minutes' ? 'min' : 'h'}</span>
+                                </div>
+                            )}
+                        </div>
+
                         <div className="flex items-center justify-between gap-2 mb-1.5">
                             <span className="text-[10px] font-medium text-zinc-400">Days of the week</span>
                             <div className="flex gap-1">
@@ -252,43 +341,47 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                             })}
                         </div>
 
-                        {/* Time of day — hour, minute, second */}
-                        <div className="flex items-center gap-2 mt-3 flex-wrap">
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Time</span>
-                            <div className="flex items-center gap-1">
-                                <select
-                                    value={scheduleTime.h}
-                                    onChange={(e) => setScheduleTime(prev => ({ ...prev, h: parseInt(e.target.value, 10) }))}
-                                    className="bg-zinc-950 border border-white/10 rounded px-1.5 py-1 text-xs font-mono text-zinc-200 focus:outline-none focus:border-cyan-500/50 cursor-pointer"
-                                    aria-label="Hour"
-                                >
-                                    {Array.from({ length: 24 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2, '0')}</option>)}
-                                </select>
-                                <span className="text-zinc-600 text-xs">:</span>
-                                <select
-                                    value={scheduleTime.m}
-                                    onChange={(e) => setScheduleTime(prev => ({ ...prev, m: parseInt(e.target.value, 10) }))}
-                                    className="bg-zinc-950 border border-white/10 rounded px-1.5 py-1 text-xs font-mono text-zinc-200 focus:outline-none focus:border-cyan-500/50 cursor-pointer"
-                                    aria-label="Minute"
-                                >
-                                    {Array.from({ length: 60 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2, '0')}</option>)}
-                                </select>
-                                <span className="text-zinc-600 text-xs">:</span>
-                                <select
-                                    value={scheduleTime.s}
-                                    onChange={(e) => setScheduleTime(prev => ({ ...prev, s: parseInt(e.target.value, 10) }))}
-                                    className="bg-zinc-950 border border-white/10 rounded px-1.5 py-1 text-xs font-mono text-zinc-200 focus:outline-none focus:border-cyan-500/50 cursor-pointer"
-                                    aria-label="Second"
-                                >
-                                    {Array.from({ length: 60 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2, '0')}</option>)}
-                                </select>
+                        {/* Time of day — hour, minute, second (daily mode only) */}
+                        {frequencyMode === 'daily' && (
+                            <div className="flex items-center gap-2 mt-3 flex-wrap">
+                                <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Time</span>
+                                <div className="flex items-center gap-1">
+                                    <select
+                                        value={scheduleTime.h}
+                                        onChange={(e) => setScheduleTime(prev => ({ ...prev, h: parseInt(e.target.value, 10) }))}
+                                        className="bg-zinc-950 border border-white/10 rounded px-1.5 py-1 text-xs font-mono text-zinc-200 focus:outline-none focus:border-cyan-500/50 cursor-pointer"
+                                        aria-label="Hour"
+                                    >
+                                        {Array.from({ length: 24 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2, '0')}</option>)}
+                                    </select>
+                                    <span className="text-zinc-600 text-xs">:</span>
+                                    <select
+                                        value={scheduleTime.m}
+                                        onChange={(e) => setScheduleTime(prev => ({ ...prev, m: parseInt(e.target.value, 10) }))}
+                                        className="bg-zinc-950 border border-white/10 rounded px-1.5 py-1 text-xs font-mono text-zinc-200 focus:outline-none focus:border-cyan-500/50 cursor-pointer"
+                                        aria-label="Minute"
+                                    >
+                                        {Array.from({ length: 60 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2, '0')}</option>)}
+                                    </select>
+                                    <span className="text-zinc-600 text-xs">:</span>
+                                    <select
+                                        value={scheduleTime.s}
+                                        onChange={(e) => setScheduleTime(prev => ({ ...prev, s: parseInt(e.target.value, 10) }))}
+                                        className="bg-zinc-950 border border-white/10 rounded px-1.5 py-1 text-xs font-mono text-zinc-200 focus:outline-none focus:border-cyan-500/50 cursor-pointer"
+                                        aria-label="Second"
+                                    >
+                                        {Array.from({ length: 60 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2, '0')}</option>)}
+                                    </select>
+                                </div>
                             </div>
-                        </div>
+                        )}
 
                         <p className="text-[10px] text-emerald-400/90 mt-2">
                             {scheduleDays.length === 0
                                 ? 'Toggle at least one day to schedule the automation.'
-                                : `${humanizeCron(generatedCron)} — the automation triggers once on each selected day at this time.`}
+                                : frequencyMode === 'daily'
+                                    ? `${humanizeCron(generatedCron)} — the automation triggers once on each selected day at this time.`
+                                    : `${humanizeCron(generatedCron)} — about ${runsPerDay} run${runsPerDay === 1 ? '' : 's'} per day on the selected days.`}
                         </p>
                         {advancedCron.trim() && (
                             <p className="text-[10px] text-amber-400/90 mt-1">Using a custom cron (Advanced): <span className="font-mono">{advancedCron.trim()}</span> — the day/time selection above is ignored.</p>
