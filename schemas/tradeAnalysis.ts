@@ -315,7 +315,7 @@ const DEFAULT_MARKET_CONDITIONS: MarketConditions = {
   rsi: 'N/A',
   macd: 'N/A',
   sentiment: 'N/A',
-  prices: { '5m': 'N/A', '15m': 'N/A', '1h': 'N/A', '4h': 'N/A' },
+  prices: { '15m': 'N/A', '1h': 'N/A', '4h': 'N/A', '1d': 'N/A' },
 };
 
 const CoercedMarketConditionsSchema = z.any().optional().transform((val): MarketConditions => {

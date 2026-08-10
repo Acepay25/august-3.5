@@ -99,17 +99,20 @@ import {
 /**
  * Enhanced Hybrid Data Packet with all new data sources
  */
+/**
+ * The timeframe set used across the hybrid payload: 15m (structure + entry),
+ * 1h (intraday bias/key levels), 4h (HTF bias), 1d (macro trend/regime anchor).
+ * 5m was dropped — it was the noisiest signal in the payload — and 1d added
+ * the macro context the injection previously lacked entirely.
+ */
+export type HybridTimeframe = '15m' | '1h' | '4h' | '1d';
+
 export interface HybridDataPacket {
     symbol: string;
     marketData: MarketData;
 
     // Core Technical Indicators (per timeframe)
-    indicators: {
-        '5m': TechnicalIndicators;
-        '15m': TechnicalIndicators;
-        '1h': TechnicalIndicators;
-        '4h': TechnicalIndicators;
-    };
+    indicators: Record<HybridTimeframe, TechnicalIndicators>;
 
     // Legacy key levels (for backwards compatibility)
     keyLevels: {
@@ -143,7 +146,6 @@ export interface HybridDataPacket {
 
     // VWAP analysis
     vwap: {
-        '5m': VWAPData;
         '1h': VWAPData;
     };
 
@@ -176,37 +178,22 @@ export interface HybridDataPacket {
 
     // ========== NUMERIC CHART REPRESENTATION ==========
     // Feature-based + State-based chart view for AI understanding
-    chartRepresentation?: {
-        '5m': NumericChartData;  // Added for swing trade precision
-        '15m': NumericChartData;
-        '1h': NumericChartData;
-        '4h': NumericChartData;
-    };
+    chartRepresentation?: Record<HybridTimeframe, NumericChartData>;
 
     // ========== PATTERN CLASSIFICATION ==========
     // ML-based classification of the setup
     patternClassification: ClassificationResult;
 
     // ========== CANDLE HISTORY ANALYSIS ==========
-    // Last 20 completed candles per timeframe (excludes current incomplete candle)
-    candleHistory: {
-        '5m': CandleHistory;
-        '15m': CandleHistory;
-        '1h': CandleHistory;
-        '4h': CandleHistory;
-    };
+    // Last 30 completed candles per timeframe (excludes current incomplete candle)
+    candleHistory: Record<HybridTimeframe, CandleHistory>;
 
     // ========== DETECTED CANDLE PATTERNS ==========
     // Named classical patterns (pin bar, double top, BOS, …) over the
     // last 30 completed candles per timeframe. This is the "what a human
     // trader would see" layer that lets the model reason about structure
     // it could not derive from indicators alone.
-    detectedPatterns: {
-        '5m': CandlePatternScan;
-        '15m': CandlePatternScan;
-        '1h': CandlePatternScan;
-        '4h': CandlePatternScan;
-    };
+    detectedPatterns: Record<HybridTimeframe, CandlePatternScan>;
 }
 
 /**
@@ -300,7 +287,7 @@ export const fetchHybridData = async (symbol: string): Promise<HybridDataPacket>
 
     const unavailableSources: string[] = [];
     if (!snapshot.availability.marketData) unavailableSources.push('current market ticker');
-    for (const timeframe of ['5m', '15m', '1h', '4h'] as const) {
+    for (const timeframe of ['15m', '1h', '4h', '1d'] as const) {
         if (!snapshot.availability.klines[timeframe]) unavailableSources.push(`${timeframe} candles`);
     }
     if (!snapshot.availability.fundingRate) unavailableSources.push('funding rate');
@@ -309,20 +296,20 @@ export const fetchHybridData = async (symbol: string): Promise<HybridDataPacket>
     if (liquidations.available === false) unavailableSources.push('liquidations');
 
     // Calculate core TA for each timeframe
-    const indicators5m = calculateIndicators(snapshot.klines['5m']);
     const indicators15m = calculateIndicators(snapshot.klines['15m']);
     const indicators1h = calculateIndicators(snapshot.klines['1h']);
     const indicators4h = calculateIndicators(snapshot.klines['4h']);
+    const indicators1d = calculateIndicators(snapshot.klines['1d']);
 
     // Legacy key levels (for backwards compatibility)
     const keyLevels = calculateKeyLevels(snapshot.klines['4h']);
 
     // Calculate multi-timeframe confluence score
     const confluence = calculateConfluenceScore({
-        '5m': indicators5m,
         '15m': indicators15m,
         '1h': indicators1h,
-        '4h': indicators4h
+        '4h': indicators4h,
+        '1d': indicators1d
     });
 
     // Interpret funding rate
@@ -342,7 +329,6 @@ export const fetchHybridData = async (symbol: string): Promise<HybridDataPacket>
     const enhancedKeyLevels = calculateEnhancedKeyLevels(snapshot.klines['4h'], '4h');
 
     // VWAP
-    const vwap5m = calculateVWAP(snapshot.klines['5m']);
     const vwap1h = calculateVWAP(snapshot.klines['1h']);
 
     // Ichimoku
@@ -367,10 +353,10 @@ export const fetchHybridData = async (symbol: string): Promise<HybridDataPacket>
     // Candle History Analysis (last 30 completed candles per timeframe)
     // NOTE: Each timeframe uses its OWN kline data, not shared
     const candleHistory = {
-        '5m': analyzeCandleHistory(snapshot.klines['5m']),
         '15m': analyzeCandleHistory(snapshot.klines['15m']),
         '1h': analyzeCandleHistory(snapshot.klines['1h']),
-        '4h': analyzeCandleHistory(snapshot.klines['4h'])
+        '4h': analyzeCandleHistory(snapshot.klines['4h']),
+        '1d': analyzeCandleHistory(snapshot.klines['1d'])
     };
 
     // Detected Candle Patterns (last 30 completed candles per timeframe).
@@ -378,20 +364,20 @@ export const fetchHybridData = async (symbol: string): Promise<HybridDataPacket>
     // so the prompt can show the model what a human trader would see on
     // the chart: pin bars, double tops, BOS, engulfings, etc.
     const detectedPatterns = {
-        '5m': scanCandlePatterns(snapshot.klines['5m'], 30),
         '15m': scanCandlePatterns(snapshot.klines['15m'], 30),
         '1h': scanCandlePatterns(snapshot.klines['1h'], 30),
-        '4h': scanCandlePatterns(snapshot.klines['4h'], 30)
+        '4h': scanCandlePatterns(snapshot.klines['4h'], 30),
+        '1d': scanCandlePatterns(snapshot.klines['1d'], 30)
     };
 
-    console.log(`  - Candle History: 5m=${candleHistory['5m'].summary}, 1h=${candleHistory['1h'].summary}`);
-    console.log(`  - Detected Patterns: 4h=${detectedPatterns['4h'].patterns.length} patterns, 1h=${detectedPatterns['1h'].patterns.length} patterns`);
+    console.log(`  - Candle History: 1d=${candleHistory['1d'].summary}, 4h=${candleHistory['4h'].summary}, 1h=${candleHistory['1h'].summary}`);
+    console.log(`  - Detected Patterns: 1d=${detectedPatterns['1d'].patterns.length} patterns, 4h=${detectedPatterns['4h'].patterns.length} patterns`);
 
     // Create partial packet for classification (circular dependency workaround)
     const partialData: any = {
         symbol: snapshot.marketData.symbol,
         marketData: snapshot.marketData,
-        indicators: { '5m': indicators5m, '15m': indicators15m, '1h': indicators1h, '4h': indicators4h },
+        indicators: { '15m': indicators15m, '1h': indicators1h, '4h': indicators4h, '1d': indicators1d },
         dataTimestamp: new Date().toISOString(),
         regime,
         advancedVolume,
@@ -406,10 +392,10 @@ export const fetchHybridData = async (symbol: string): Promise<HybridDataPacket>
         symbol: snapshot.marketData.symbol,
         marketData: snapshot.marketData,
         indicators: {
-            '5m': indicators5m,
             '15m': indicators15m,
             '1h': indicators1h,
-            '4h': indicators4h
+            '4h': indicators4h,
+            '1d': indicators1d
         },
         keyLevels,
         confluence,
@@ -428,7 +414,6 @@ export const fetchHybridData = async (symbol: string): Promise<HybridDataPacket>
         regime,
         enhancedKeyLevels,
         vwap: {
-            '5m': vwap5m,
             '1h': vwap1h
         },
         ichimoku: {
@@ -450,10 +435,10 @@ export const fetchHybridData = async (symbol: string): Promise<HybridDataPacket>
 
         // Numeric Chart Representation for AI understanding
         chartRepresentation: {
-            '5m': generateNumericChartData(snapshot.klines['5m'], '5m'),  // Added for swing trade precision
-            '15m': generateNumericChartData(snapshot.klines['15m'], '15m'),
+            '1d': generateNumericChartData(snapshot.klines['1d'], '1d'),
+            '4h': generateNumericChartData(snapshot.klines['4h'], '4h'),
             '1h': generateNumericChartData(snapshot.klines['1h'], '1h'),
-            '4h': generateNumericChartData(snapshot.klines['4h'], '4h')
+            '15m': generateNumericChartData(snapshot.klines['15m'], '15m')
         },
         // Candle History
         candleHistory,
@@ -491,46 +476,47 @@ export const formatFibLadder = (fibLevels: FibonacciLevels): string =>
  * Format the Candle History Insight summary.
  * Each timeframe gets a ↔ marker only when its own dominantTrend is neutral —
  * but a blanket "no trend" summary must never lump in a genuinely skewed
- * timeframe (e.g. 5m at 63% bearish). When one side is neutral and the other
- * is skewed, surface the skew explicitly so the model weighs it.
+ * timeframe. When one side is neutral and the other is skewed, surface the
+ * skew explicitly so the model weighs it.
+ * Pairing: HTF = 4h & 1d (macro/direction), LTF = 1h & 15m (bias/entry).
  */
 export const formatCandleHistoryInsight = (candleHistory: HybridDataPacket['candleHistory']): string => {
     const h4 = candleHistory['4h'].dominantTrend;
+    const d1 = candleHistory['1d'].dominantTrend;
     const h1 = candleHistory['1h'].dominantTrend;
     const m15 = candleHistory['15m'].dominantTrend;
-    const m5 = candleHistory['5m'].dominantTrend;
 
     let insight = '';
 
-    // HTF alignment
-    if (h4 === 'bullish' && h1 === 'bullish') {
-        insight += ' HTF BULLISH: Both 4H and 1H show strong bullish candle dominance. Favor long setups.';
-    } else if (h4 === 'bearish' && h1 === 'bearish') {
-        insight += ' HTF BEARISH: Both 4H and 1H show strong bearish candle dominance. Favor short setups.';
-    } else if ((h4 === 'bullish' && h1 === 'bearish') || (h4 === 'bearish' && h1 === 'bullish')) {
-        insight += ' HTF DIVERGENCE: 4H vs 1H disagree. Possible reversal or consolidation.';
-    } else if (h4 === 'neutral' && h1 === 'neutral') {
+    // HTF alignment (4h + 1d)
+    if (h4 === 'bullish' && d1 === 'bullish') {
+        insight += ' HTF BULLISH: Both 4H and 1D show strong bullish candle dominance. Favor long setups.';
+    } else if (h4 === 'bearish' && d1 === 'bearish') {
+        insight += ' HTF BEARISH: Both 4H and 1D show strong bearish candle dominance. Favor short setups.';
+    } else if ((h4 === 'bullish' && d1 === 'bearish') || (h4 === 'bearish' && d1 === 'bullish')) {
+        insight += ' HTF DIVERGENCE: 4H vs 1D disagree. Possible reversal or consolidation.';
+    } else if (h4 === 'neutral' && d1 === 'neutral') {
         insight += '↔ HTF NEUTRAL: No clear HTF candle trend dominance.';
     } else {
         const skew4 = h4 !== 'neutral' ? `4h ${h4}-skewed (${candleHistory['4h'].summary})` : '4h neutral';
-        const skew1 = h1 !== 'neutral' ? `1h ${h1}-skewed (${candleHistory['1h'].summary})` : '1h neutral';
-        insight += ` HTF SKEW: ${skew4}, ${skew1}. Respect the skewed timeframe for key-level direction.`;
+        const skew1d = d1 !== 'neutral' ? `1d ${d1}-skewed (${candleHistory['1d'].summary})` : '1d neutral';
+        insight += ` HTF SKEW: ${skew4}, ${skew1d}. Respect the skewed timeframe for macro direction.`;
     }
 
-    // LTF entry context
+    // LTF entry context (1h + 15m)
     insight += '\n';
-    if (m15 === 'bullish' && m5 === 'bullish') {
-        insight += ' LTF ENTRY FAVORABLE: 15m structure and 5m confirmation both bullish.';
-    } else if (m15 === 'bearish' && m5 === 'bearish') {
-        insight += ' LTF ENTRY FAVORABLE: 15m structure and 5m confirmation both bearish.';
-    } else if ((m15 === 'bullish' && m5 === 'bearish') || (m15 === 'bearish' && m5 === 'bullish')) {
-        insight += ' LTF MIXED: 15m and 5m disagree. Wait for alignment before entry.';
-    } else if (m15 === 'neutral' && m5 === 'neutral') {
+    if (h1 === 'bullish' && m15 === 'bullish') {
+        insight += ' LTF ENTRY FAVORABLE: 1H bias and 15m structure both bullish.';
+    } else if (h1 === 'bearish' && m15 === 'bearish') {
+        insight += ' LTF ENTRY FAVORABLE: 1H bias and 15m structure both bearish.';
+    } else if ((h1 === 'bullish' && m15 === 'bearish') || (h1 === 'bearish' && m15 === 'bullish')) {
+        insight += ' LTF MIXED: 1H and 15m disagree. Wait for alignment before entry.';
+    } else if (h1 === 'neutral' && m15 === 'neutral') {
         insight += '↔ LTF NEUTRAL: No clear LTF trend. Be cautious with entry timing.';
     } else {
+        const skew1 = h1 !== 'neutral' ? `1h ${h1}-skewed (${candleHistory['1h'].summary})` : '1h neutral';
         const skew15 = m15 !== 'neutral' ? `15m ${m15}-skewed (${candleHistory['15m'].summary})` : '15m neutral';
-        const skew5 = m5 !== 'neutral' ? `5m ${m5}-skewed (${candleHistory['5m'].summary})` : '5m neutral';
-        insight += ` LTF SKEW: ${skew15}, ${skew5}. Respect the skewed timeframe for entry timing.`;
+        insight += ` LTF SKEW: ${skew1}, ${skew15}. Respect the skewed timeframe for entry timing.`;
     }
 
     return insight;
@@ -648,13 +634,13 @@ ${data.confluence.score >= 70 ? ' STRONG BULLISH CONFLUENCE' :
 
  **TECHNICAL ANALYSIS (CODE-CALCULATED):**
 
+${generateTASummary(data.indicators['1d'], '1D Timeframe')}
+
 ${generateTASummary(data.indicators['4h'], '4H Timeframe')}
 
 ${generateTASummary(data.indicators['1h'], '1H Timeframe')}
 
 ${generateTASummary(data.indicators['15m'], '15M Timeframe')}
-
-${generateTASummary(data.indicators['5m'], '5M Timeframe')}
 
  **ENHANCED KEY LEVELS:**
 **Pivot Points (4H):**
@@ -671,13 +657,13 @@ ${formatFibLadder(data.enhancedKeyLevels.fibLevels)}
 ${generateSessionSummary(data.session)}
 
  **CANDLE HISTORY (Last 30 Completed):**
-- 5m (Entry Confirmation):  ${data.candleHistory['5m'].sequence.join('')} (${data.candleHistory['5m'].summary}) ${data.candleHistory['5m'].dominantTrend === 'bullish' ? '' : data.candleHistory['5m'].dominantTrend === 'bearish' ? '' : '↔'}
-- 15m (Market Structure): ${data.candleHistory['15m'].sequence.join('')} (${data.candleHistory['15m'].summary}) ${data.candleHistory['15m'].dominantTrend === 'bullish' ? '' : data.candleHistory['15m'].dominantTrend === 'bearish' ? '' : '↔'}
+- 1d (Macro trend): ${data.candleHistory['1d'].sequence.join('')} (${data.candleHistory['1d'].summary}) ${data.candleHistory['1d'].dominantTrend === 'bullish' ? '' : data.candleHistory['1d'].dominantTrend === 'bearish' ? '' : '↔'}
+- 4h (HTF bias):  ${data.candleHistory['4h'].sequence.join('')} (${data.candleHistory['4h'].summary}) ${data.candleHistory['4h'].dominantTrend === 'bullish' ? '' : data.candleHistory['4h'].dominantTrend === 'bearish' ? '' : '↔'}
 - 1h (Key Levels):  ${data.candleHistory['1h'].sequence.join('')} (${data.candleHistory['1h'].summary}) ${data.candleHistory['1h'].dominantTrend === 'bullish' ? '' : data.candleHistory['1h'].dominantTrend === 'bearish' ? '' : '↔'}
-- 4h (Key Levels):  ${data.candleHistory['4h'].sequence.join('')} (${data.candleHistory['4h'].summary}) ${data.candleHistory['4h'].dominantTrend === 'bullish' ? '' : data.candleHistory['4h'].dominantTrend === 'bearish' ? '' : '↔'}
+- 15m (Entry Confirmation): ${data.candleHistory['15m'].sequence.join('')} (${data.candleHistory['15m'].summary}) ${data.candleHistory['15m'].dominantTrend === 'bullish' ? '' : data.candleHistory['15m'].dominantTrend === 'bearish' ? '' : '↔'}
 
 ${data.detectedPatterns ? (() => {
-            const formatTfPatterns = (tf: '5m' | '15m' | '1h' | '4h', role: string): string => {
+            const formatTfPatterns = (tf: HybridTimeframe, role: string): string => {
                 const scan = data.detectedPatterns[tf];
                 if (!scan || scan.windowSize === 0) {
                     return `- ${tf} (${role}): Insufficient data for pattern detection.`;
@@ -703,10 +689,10 @@ ${data.detectedPatterns ? (() => {
                 return `- ${tf} (${role}) — last ${scan.windowSize} candles:\n${lines.join('\n')}\n${struct}`;
             };
             return ` **DETECTED CANDLE PATTERNS (last 30 candles per timeframe):**
+${formatTfPatterns('1d', 'Macro trend')}
 ${formatTfPatterns('4h', 'HTF bias')}
 ${formatTfPatterns('1h', 'Key level reactions')}
-${formatTfPatterns('15m', 'Market structure')}
-${formatTfPatterns('5m', 'Entry timing')}
+${formatTfPatterns('15m', 'Entry timing & structure')}
 `;
         })() : ''}
 
@@ -719,7 +705,7 @@ ${data.detectedPatterns ? (() => {
             // The RAW candle data (O/H/L/C) — the "see the chart like a
             // human" layer: wick/body structure, gaps and sweeps are visible
             // in the numbers, not just the green/red sequence above.
-            const formatCandleRow = (tf: '5m' | '15m' | '1h' | '4h', role: string): string => {
+            const formatCandleRow = (tf: HybridTimeframe, role: string): string => {
                 const scan = data.detectedPatterns![tf];
                 if (!scan || !scan.candles || scan.candles.length === 0) {
                     return `- ${tf} (${role}): Insufficient candle data.`;
@@ -731,17 +717,17 @@ ${data.detectedPatterns ? (() => {
                 return `- ${tf} (${role}) — last ${recent.length} candles (O/H/L/C, oldest → newest):\n    ${row}`;
             };
             return ` **CANDLE DATA (RAW OHLC — read like a chart):**
+${formatCandleRow('1d', 'Macro trend')}
 ${formatCandleRow('4h', 'HTF bias')}
 ${formatCandleRow('1h', 'Key level reactions')}
-${formatCandleRow('15m', 'Market structure')}
-${formatCandleRow('5m', 'Entry timing')}
+${formatCandleRow('15m', 'Entry timing & structure')}
 `;
         })() : ''}
 
  **TIMEFRAME PURPOSE GUIDE:**
-- 4H & 1H: Use for key price levels and overall direction
-- 15m: Use for market structure (BOS, CHoCH, HH/HL, LH/LL)
-- 5m: Use for entry confirmation and timing
+- 1D: Macro trend and major support/resistance (the weekly context)
+- 4H & 1H: Key price levels and intraday direction
+- 15m: Market structure (BOS, CHoCH, HH/HL, LH/LL) and entry timing
 
  **Candle History Insight:**
 ${formatCandleHistoryInsight(data.candleHistory)}
@@ -755,9 +741,9 @@ ${formatCandleHistoryInsight(data.candleHistory)}
 6. Use Pivot/Fib levels for precise entry, SL, and TP placement.
 7. MTF Confluence Score ${data.confluence.score}/100 indicates ${data.confluence.strength} signal strength.
 8. ** CANDLE HISTORY (MANDATORY CITATION):** You MUST cite the Candle History data above in your analysis:
-   - Cite 4H/1H counts for key level direction (e.g., "4H shows ${data.candleHistory['4h'].summary}")
-   - Cite 15m for market structure proof
-   - Cite 5m for entry confirmation reasoning
+   - Cite 1D/4H counts for macro direction (e.g., "1D shows ${data.candleHistory['1d'].summary}")
+   - Cite 1H counts for intraday key-level direction
+   - Cite 15m for structure and entry timing reasoning
    - If proposing direction AGAINST dominant HTF candle trend, you MUST provide strong justification.
 
  **ACCURACY VALIDATION REQUIREMENTS:**
@@ -782,10 +768,10 @@ Before finalizing, you MUST provide:
 3. Crowded trade warning if funding rate > 0.01% or L/S ratio extreme
 
 ${data.chartRepresentation ? generateChartPromptInjection(
-                    data.chartRepresentation['5m'],  // Added for swing trade precision  
                     data.chartRepresentation['15m'],
                     data.chartRepresentation['1h'],
-                    data.chartRepresentation['4h']
+                    data.chartRepresentation['4h'],
+                    data.chartRepresentation['1d']
                 ) : ''}
 ═══════════════════════════════════════════════════════════════
 `;
@@ -1122,10 +1108,10 @@ const buildMonteCarloConfig = (
 
         // Get ATR from hybrid data - average all available timeframes for balanced volatility
         const availableAtrs = [
-            hybridData.indicators?.['5m']?.atr,
             hybridData.indicators?.['15m']?.atr,
             hybridData.indicators?.['1h']?.atr,
-            hybridData.indicators?.['4h']?.atr
+            hybridData.indicators?.['4h']?.atr,
+            hybridData.indicators?.['1d']?.atr
         ].filter((v): v is number => v !== undefined && v > 0);
 
         let atr: number;

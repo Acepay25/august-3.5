@@ -555,10 +555,10 @@ export const generateNumericChartData = (
  * Now includes 5m timeframe for swing trade precision
  */
 export const generateChartPromptInjection = (
-    data5m: NumericChartData,
     data15m: NumericChartData,
     data1h: NumericChartData,
-    data4h: NumericChartData
+    data4h: NumericChartData,
+    data1d: NumericChartData
 ): string => {
     const formatTimeframe = (data: NumericChartData): string => {
         const { state, keyLevels, bars } = data;
@@ -600,24 +600,24 @@ NOTE: this is a structural (state-based) classifier. If it disagrees with the
 ADX-based MARKET REGIME block, the ADX regime is AUTHORITATIVE for direction
 and bias — use this block for trend maturity, momentum and structure context.
 
+${formatTimeframe(data1d)}
+
 ${formatTimeframe(data4h)}
 
 ${formatTimeframe(data1h)}
 
 ${formatTimeframe(data15m)}
 
-${formatTimeframe(data5m)}
-
 **MULTI-TIMEFRAME ALIGNMENT:**
-- 4H Trend: ${data4h.state.trend.replace('_', ' ')} | 1H Trend: ${data1h.state.trend.replace('_', ' ')} | 15M Trend: ${data15m.state.trend.replace('_', ' ')} | 5M Trend: ${data5m.state.trend.replace('_', ' ')}
-- HTF Alignment: ${data4h.state.trend === data1h.state.trend ? ' 4H-1H aligned' : ' 4H-1H divergence'}
-- LTF Alignment: ${data15m.state.trend === data5m.state.trend ? ' 15M-5M aligned' : ' 15M-5M divergence'}
+- 1D Trend: ${data1d.state.trend.replace('_', ' ')} | 4H Trend: ${data4h.state.trend.replace('_', ' ')} | 1H Trend: ${data1h.state.trend.replace('_', ' ')} | 15M Trend: ${data15m.state.trend.replace('_', ' ')}
+- HTF Alignment: ${data4h.state.trend === data1d.state.trend ? ' 4H-1D aligned' : ' 4H-1D divergence'}
+- LTF Alignment: ${data1h.state.trend === data15m.state.trend ? ' 1H-15M aligned' : ' 1H-15M divergence'}
 
  **USE THIS DATA TO:**
 - Validate entry timing based on trend maturity
 - Check for momentum confirmation across timeframes
 - Identify high-probability setups (aligned trends, breakout regimes)
-- Use 5M data for precise SWING TRADE entry timing
+- Use 15M data for precise SWING TRADE entry timing
 - Avoid late entries in mature trends
 ═══════════════════════════════════════════════════════════════
 `;

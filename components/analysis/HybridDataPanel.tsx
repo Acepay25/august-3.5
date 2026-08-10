@@ -796,17 +796,17 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, conn
                         <div className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider mb-2">Indicators</div>
                         {showDetailedView ? (
                             <div className="space-y-2">
+                                <TimeframeBadge tf="1D" indicators={data.indicators['1d']} expanded />
                                 <TimeframeBadge tf="4H" indicators={data.indicators['4h']} expanded />
                                 <TimeframeBadge tf="1H" indicators={data.indicators['1h']} expanded />
                                 <TimeframeBadge tf="15M" indicators={data.indicators['15m']} expanded />
-                                <TimeframeBadge tf="5M" indicators={data.indicators['5m']} expanded />
                             </div>
                         ) : (
                             <div className="grid grid-cols-4 gap-1">
+                                <TimeframeBadge tf="1D" indicators={data.indicators['1d']} />
                                 <TimeframeBadge tf="4H" indicators={data.indicators['4h']} />
                                 <TimeframeBadge tf="1H" indicators={data.indicators['1h']} />
                                 <TimeframeBadge tf="15M" indicators={data.indicators['15m']} />
-                                <TimeframeBadge tf="5M" indicators={data.indicators['5m']} />
                             </div>
                         )}
                     </div>
