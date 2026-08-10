@@ -18,6 +18,10 @@ export function useAppSettings() {
     const [memoryModel, setMemoryModel] = useState<string>('');
     const [isGlobalMemoryEnabled, setIsGlobalMemoryEnabled] = useState<boolean>(false);
 
+    // User-uploaded strategy summaries (Settings → Strategies): master switch
+    // that gates whether enabled docs are injected into analysis prompts.
+    const [isStrategiesEnabled, setIsStrategiesEnabled] = useState<boolean>(false);
+
     // Accuracy Mode State
     const [isAccuracyModeEnabled, setIsAccuracyModeEnabled] = useState<boolean>(false);
     const [accuracySubMode, setAccuracySubMode] = useState<AccuracySubMode>('original');
@@ -57,6 +61,10 @@ export function useAppSettings() {
     // Defaults are empty — App resolves them to the first ready provider once configs load.
     const [summarizationProvider, setSummarizationProvider] = useState<AIProvider>('');
     const [summarizationModel, setSummarizationModel] = useState<string>('');
+    // Global vision model (Settings → AI setup → Vision Model): one model for
+    // EVERY vision feature — chart OCR, post-trade uploads, PDF book OCR.
+    // Empty = fall back to the conversation's OCR model, then first ready provider.
+    const [visionModel, setVisionModel] = useState<string>('');
     // Journal generation defaults to AI (false = use AI); algorithmic mode
     // (true, token-free) is an explicit opt-in. Persisted via UserSettings.
     const [useAlgorithmicSummary, setUseAlgorithmicSummary] = useState<boolean>(false);
@@ -67,6 +75,7 @@ export function useAppSettings() {
         memoryConfig, setMemoryConfig,
         memoryModel, setMemoryModel,
         isGlobalMemoryEnabled, setIsGlobalMemoryEnabled,
+        isStrategiesEnabled, setIsStrategiesEnabled,
         isAccuracyModeEnabled, setIsAccuracyModeEnabled,
         accuracySubMode, setAccuracySubMode,
         customInstructions, setCustomInstructions,
@@ -84,6 +93,7 @@ export function useAppSettings() {
         summaryCharLimit, setSummaryCharLimit,
         summarizationProvider, setSummarizationProvider,
         summarizationModel, setSummarizationModel,
+        visionModel, setVisionModel,
         useAlgorithmicSummary, setUseAlgorithmicSummary,
         useAlgorithmicInsights, setUseAlgorithmicInsights,
     };

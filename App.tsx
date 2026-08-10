@@ -6,6 +6,7 @@ import * as ensembleService from './services/providers/ensembleService';
 import { generateFinalSummary } from './services/providers/GenericAnalysisService';
 import * as dbService from './services/infrastructure/dbService';
 import { initPromptOverrides } from './services/infrastructure/PromptOverrideService';
+import { initStrategyDocs } from './services/infrastructure/StrategyService';
 import { ANALYST_ROLE_DEFINITIONS, getRoleForProvider } from './services/ui/AnalystLensService';
 import { AnalystRole } from './types/enums';
 import { ProbabilityEngineService } from './services/analysis/ProbabilityEngineService';
@@ -193,6 +194,7 @@ const App: React.FC = () => {
         memoryConfig, setMemoryConfig,
         memoryModel, setMemoryModel,
         isGlobalMemoryEnabled, setIsGlobalMemoryEnabled,
+        isStrategiesEnabled, setIsStrategiesEnabled,
         isAccuracyModeEnabled, setIsAccuracyModeEnabled,
         accuracySubMode, setAccuracySubMode,
         customInstructions, setCustomInstructions,
@@ -210,6 +212,7 @@ const App: React.FC = () => {
         summaryCharLimit, setSummaryCharLimit,
         summarizationProvider, setSummarizationProvider,
         summarizationModel, setSummarizationModel,
+        visionModel, setVisionModel,
         useAlgorithmicSummary, setUseAlgorithmicSummary,
         useAlgorithmicInsights, setUseAlgorithmicInsights,
     } = useAppSettings();
@@ -221,6 +224,22 @@ const App: React.FC = () => {
             isEnabled: false, isBuiltIn: true, models: [], selectedModel: '',
         },
     [readyProviders, moderatorProviderId]);
+
+    // ONE vision model for EVERY vision feature (chart OCR, post-trade
+    // uploads, PDF book OCR). Resolution: the globally selected model
+    // (Settings → AI setup → Vision Model) → the per-conversation OCR model
+    // (legacy, saved conversations) → first ready provider → moderator.
+    const visionConfig: ProviderConfig = useMemo(() => {
+        if (visionModel) {
+            const byGlobal = readyProviders.find(p => p.selectedModel === visionModel || p.models.includes(visionModel));
+            if (byGlobal) return byGlobal;
+        }
+        if (selectedOcrModel) {
+            const byConversation = readyProviders.find(p => p.selectedModel === selectedOcrModel || p.models.includes(selectedOcrModel));
+            if (byConversation) return byConversation;
+        }
+        return readyProviders[0] || moderatorConfig;
+    }, [readyProviders, visionModel, selectedOcrModel, moderatorConfig]);
 
     // Ensemble mode: off = casual chat with the selected model (no chart
     // analysis); on = full analysis/debate pipeline. Initialized once from
@@ -465,7 +484,7 @@ const App: React.FC = () => {
         setHighlightedAnalysisId,
         setIsPostMortemInProgress, setIsLivePostMortemVisible,
         isAccuracyModeEnabled, accuracySubMode,
-        isGlobalMemoryEnabled, customInstructions,
+        isGlobalMemoryEnabled, isStrategiesEnabled, customInstructions,
         isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI,
         isHybridIntelligenceEnabled, lensConfig, activeFrameworks,
         isEnsembleEnabled,
@@ -768,7 +787,7 @@ const App: React.FC = () => {
                 tradeSummaries: [],
                 finalTradeSummary: null,
                 globalMemory: undefined,
-                settings: { activeFrameworks: DEFAULT_FRAMEWORKS, summaryCharLimit: 4000, summarizationProvider: firstReady?.id || '', summarizationModel: firstReady?.selectedModel || '', isGlobalMemoryEnabled: false, isAccuracyModeEnabled: false, accuracySubMode: 'original', customInstructions: { general: [], accuracyOriginal: [], accuracyPure: [] }, isPlaybookEnabledInPureAI: false, isFamiliesEnabledInPureAI: false, isMemoryEnabledInPureAI: false, isHybridIntelligenceEnabled: false, isAutoCapturing: false, isUpdateAutoCapturing: false, isEntryNotHitCapturing: false, useAlgorithmicSummary: false, useAlgorithmicInsights: false, memoryProvider: '', memoryModel: '' },
+                settings: { activeFrameworks: DEFAULT_FRAMEWORKS, summaryCharLimit: 4000, summarizationProvider: firstReady?.id || '', summarizationModel: firstReady?.selectedModel || '', visionModel: '', isGlobalMemoryEnabled: false, isAccuracyModeEnabled: false, accuracySubMode: 'original', customInstructions: { general: [], accuracyOriginal: [], accuracyPure: [] }, isPlaybookEnabledInPureAI: false, isFamiliesEnabledInPureAI: false, isMemoryEnabledInPureAI: false, isHybridIntelligenceEnabled: false, isAutoCapturing: false, isUpdateAutoCapturing: false, isEntryNotHitCapturing: false, useAlgorithmicSummary: false, useAlgorithmicInsights: false, memoryProvider: '', memoryModel: '' },
                 lastActiveConversationId: newConv.id
             });
         }
@@ -987,6 +1006,9 @@ const App: React.FC = () => {
         // Prompt overrides are per-user — load the active user's edits into
         // the sync cache so prompt assembly (getPrompt) sees them.
         await initPromptOverrides(username);
+        // Same per-user treatment for uploaded strategy docs (Settings →
+        // Strategies) — the sync cache feeds the analysis-prompt injection.
+        await initStrategyDocs(username);
         // Native (Capacitor) loads the lens config asynchronously, after the
         // useAppSettings lazy initializer already ran with an empty default —
         // push the cached config into React state so the lens dropdowns don't
@@ -1056,6 +1078,9 @@ const App: React.FC = () => {
             const firstReadyProvider = getFirstReadyProvider(providerConfigs);
             setSummarizationProvider(profile.settings?.summarizationProvider || firstReadyProvider?.id || '');
             setSummarizationModel(profile.settings?.summarizationModel || firstReadyProvider?.selectedModel || '');
+            // Global vision model: empty = fall back to the conversation's
+            // OCR model / first ready provider at resolution time.
+            setVisionModel(profile.settings?.visionModel || '');
             setUseAlgorithmicSummary(profile.settings?.useAlgorithmicSummary ?? false);
             setUseAlgorithmicInsights(profile.settings?.useAlgorithmicInsights ?? false);
             setIsGlobalMemoryEnabled(profile.settings?.isGlobalMemoryEnabled ?? false);
@@ -1226,7 +1251,7 @@ const App: React.FC = () => {
         tradeSummaries: tradeSummaries,
         finalTradeSummary: finalTradeSummary,
         globalMemory: globalMemory,
-        settings: { activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, confidenceCalibration, memoryProvider: memoryConfig?.id || '', memoryModel },
+        settings: { activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, visionModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, confidenceCalibration, memoryProvider: memoryConfig?.id || '', memoryModel },
         lastActiveConversationId: activeConversationId || undefined,
         // AI Learning data
         insightKnowledgeBase: insightKnowledgeBase,
@@ -1235,7 +1260,7 @@ const App: React.FC = () => {
         // clear silently destroyed them. Snapshotting them here populates the
         // users.learningRules column and BackupService payload.
         learningRules: storageService.loadLearningRules(),
-    }), [conversationHistory, loggedTrades, activeFrameworks, activeConversationId, savedAnalyses, tradeSummaries, finalTradeSummary, globalMemory, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, confidenceCalibration, insightKnowledgeBase, memoryConfig, memoryModel]);
+    }), [conversationHistory, loggedTrades, activeFrameworks, activeConversationId, savedAnalyses, tradeSummaries, finalTradeSummary, globalMemory, summaryCharLimit, summarizationProvider, summarizationModel, visionModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, confidenceCalibration, insightKnowledgeBase, memoryConfig, memoryModel]);
 
     // ─── P1-6: Split save into DATA (heavy) + SETTINGS (light) ───────────
     // Previously a single effect re-serialized ALL conversations (with base64
@@ -1296,7 +1321,7 @@ const App: React.FC = () => {
                 // Only the settings sub-object — no conversations, no trades,
                 // no base64 images. This is a cheap write.
                 await dbService.saveUserProfile(activeUsername, {
-                    settings: { activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, confidenceCalibration, memoryProvider: memoryConfig?.id || '', memoryModel },
+                    settings: { activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, visionModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, confidenceCalibration, memoryProvider: memoryConfig?.id || '', memoryModel },
                 });
                 setSaveStatus('SAVED');
             } catch (err) {
@@ -1309,7 +1334,7 @@ const App: React.FC = () => {
         return () => {
             clearTimeout(handler);
         };
-    }, [activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, confidenceCalibration, memoryConfig, memoryModel, activeUsername, toast]);
+    }, [activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, visionModel, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, isHybridIntelligenceEnabled, isAutoCapturing, isUpdateAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, confidenceCalibration, memoryConfig, memoryModel, activeUsername, toast]);
 
     // (3) SAVE HEARTBEAT — the 1500ms DATA debounce restarts on every message
     // change, so nothing is persisted for the ENTIRE duration of a run (the
@@ -2101,7 +2126,6 @@ const App: React.FC = () => {
             // OCR burns a vision API call — only run it in ensemble mode
             // (the upload button is already hidden/disabled otherwise).
             if (isEnsembleEnabled) {
-                const visionConfig = readyProviders.find(p => p.selectedModel === selectedOcrModel || p.models.includes(selectedOcrModel)) || readyProviders[0] || moderatorConfig;
                 processImagesForSummarization(filesToProcess, images.length, visionConfig, setImages, handleQuotaExceeded);
             } else {
                 setImages(prev => prev.filter(img => !img.isLoading));
@@ -2606,8 +2630,8 @@ const App: React.FC = () => {
                     isCapturing={isEntryNotHitCapturing}
                 />
             )}
-            {postMortemCandidate && <PostTradeUploadModal candidate={postMortemCandidate} onClose={() => setPostMortemCandidate(null)} onAnalyze={(summaries, urls) => startPostMortemAnalysis(postMortemCandidate, summaries, urls)} visionConfig={readyProviders.find(p => p.selectedModel === selectedOcrModel || p.models.includes(selectedOcrModel)) || readyProviders[0] || moderatorConfig} onQuotaExceeded={handleQuotaExceeded} />}
-            {updateCandidate && <UpdateTradeModal message={updateCandidate} onClose={() => setUpdateCandidate(null)} onConfirm={handleConfirmUpdateTrade} onAutoCapture={handleUpdateAutoCapture} isCapturing={isUpdateAutoCapturing} visionConfig={readyProviders.find(p => p.selectedModel === selectedOcrModel || p.models.includes(selectedOcrModel)) || readyProviders[0] || moderatorConfig} onQuotaExceeded={handleQuotaExceeded} />}
+            {postMortemCandidate && <PostTradeUploadModal candidate={postMortemCandidate} onClose={() => setPostMortemCandidate(null)} onAnalyze={(summaries, urls) => startPostMortemAnalysis(postMortemCandidate, summaries, urls)} visionConfig={visionConfig} onQuotaExceeded={handleQuotaExceeded} />}
+            {updateCandidate && <UpdateTradeModal message={updateCandidate} onClose={() => setUpdateCandidate(null)} onConfirm={handleConfirmUpdateTrade} onAutoCapture={handleUpdateAutoCapture} isCapturing={isUpdateAutoCapturing} visionConfig={visionConfig} onQuotaExceeded={handleQuotaExceeded} />}
             {simulatorCandidate && (
                 <ScenarioSimulator
                     message={simulatorCandidate}
@@ -2657,6 +2681,8 @@ const App: React.FC = () => {
                 onToggleEntryNotHitCapturing={() => setIsEntryNotHitCapturing(!isEntryNotHitCapturing)}
                 isGlobalMemoryEnabled={isGlobalMemoryEnabled}
                 setIsGlobalMemoryEnabled={setIsGlobalMemoryEnabled}
+                isStrategiesEnabled={isStrategiesEnabled}
+                setIsStrategiesEnabled={setIsStrategiesEnabled}
                 memoryConfig={memoryConfig}
                 onMemoryConfigChange={(config) => {
                     setMemoryConfig(config);
@@ -2676,6 +2702,9 @@ const App: React.FC = () => {
                 providerConfigsLoaded={providerConfigsLoaded}
                 selectedOcrModel={selectedOcrModel}
                 onSetOcrModel={handleSetSelectedOcrModel}
+                visionModel={visionModel}
+                onSetVisionModel={setVisionModel}
+                visionConfig={visionConfig}
                 moderatorProvider={moderatorProviderId as AIProvider}
                 moderatorModel={moderatorModel}
                 onSetModeratorProvider={handleSetModeratorProvider}

@@ -7,14 +7,20 @@
  * trades a bit of nuance for cheap, explainable rules so the model can
  * reason about *which* pattern fired and *where* (index in the window).
  *
- * Scope (covers what the user named explicitly + a small standard set):
- *   - single-candle: pin bar, hammer, shooting star, doji, marubozu
- *   - two-candle:   bullish / bearish engulfing, tweezer top / bottom
- *   - three-candle: morning star, evening star, three white soldiers,
- *                   three black crows
- *   - structure:    double top, double bottom, higher-high / higher-low
- *                   trend, lower-high / lower-low trend, BOS (break of
- *                   structure) on the recent swing
+ * Scope (the standard classical set a human trader would name on a chart):
+ *   - single-candle: pin bar, hammer, hanging man, shooting star,
+ *                    inverted hammer, doji, spinning top, marubozu,
+ *                    belt hold
+ *   - two-candle:    bullish / bearish engulfing, tweezer top / bottom,
+ *                    bullish / bearish harami, piercing line,
+ *                    dark cloud cover
+ *   - three-candle:  morning star, evening star, three white soldiers,
+ *                    three black crows, three inside up / down,
+ *                    bullish / bearish fair value gap (FVG)
+ *   - structure:     double top, double bottom, higher-high / higher-low
+ *                    trend, lower-high / lower-low trend, BOS (break of
+ *                    structure), CHoCH (change of character), SFP
+ *                    (sweep of liquidity / failed break) on the recent swing
  *
  * Everything is deterministic and order-N (single pass over the window),
  * so it can run on every analysis without measurable cost.
@@ -79,7 +85,31 @@ const isBearish = (k: Kline): boolean => k.close < k.open;
 // SINGLE-CANDLE PATTERNS
 // ---------------------------------------------------------------------------
 
-function detectSingleCandlePatterns(c: Kline, idx: number): DetectedCandlePattern[] {
+/**
+ * Net direction of the up-to-5 candles *before* `idx` in the recent-first
+ * window. Some one-candle shapes (hammer vs hanging man, shooting star vs
+ * inverted hammer) are the same geometry with opposite meaning depending on
+ * the trend that preceded them — a human reads them in context.
+ */
+function priorTrendOf(window: Kline[], idx: number): 'bullish' | 'bearish' | 'neutral' {
+    const prior = window.slice(idx + 1, idx + 6); // older candles follow the current one
+    if (prior.length === 0) return 'neutral';
+    let up = 0;
+    let down = 0;
+    for (const k of prior) {
+        if (k.close > k.open) up++;
+        else if (k.close < k.open) down++;
+    }
+    if (up > down) return 'bullish';
+    if (down > up) return 'bearish';
+    return 'neutral';
+}
+
+function detectSingleCandlePatterns(
+    c: Kline,
+    idx: number,
+    priorTrend: 'bullish' | 'bearish' | 'neutral'
+): DetectedCandlePattern[] {
     const out: DetectedCandlePattern[] = [];
     const r = c.high - c.low;
     if (r === 0) return out;
@@ -102,8 +132,25 @@ function detectSingleCandlePatterns(c: Kline, idx: number): DetectedCandlePatter
         return out;
     }
 
-    // Pin bar: long lower wick, small body, sitting at the bottom of the range
-    if (lower > 60 && bodyRatio < 35 && upper < 25) {
+    // Spinning top: small body with wicks on both sides — indecision, but
+    // with a real body (doji already returned above).
+    if (bodyRatio < 25 && lower > 25 && upper > 25) {
+        out.push({
+            name: 'spinning_top',
+            index: idx,
+            direction: 'neutral',
+            strength: 0.55,
+            priceLevel: c.close,
+            note: 'Small body with wicks on both sides — indecision.'
+        });
+    }
+
+    // Pin bar: long lower wick, small body, body sitting at the TOP of the
+    // range (close in the upper half). The wick thresholds already imply the
+    // body position (lower > 60 ⇒ the body bottom sits above 60% of the
+    // range), but the clause is stated explicitly so the invariant survives
+    // future threshold edits.
+    if (lower > 60 && bodyRatio < 35 && upper < 25 && (c.close - c.low) / r > 0.55) {
         out.push({
             name: 'bullish_pin_bar',
             index: idx,
@@ -114,8 +161,11 @@ function detectSingleCandlePatterns(c: Kline, idx: number): DetectedCandlePatter
         });
     }
 
-    // Shooting star: long upper wick, small body, sitting at the top of the range
-    if (upper > 60 && bodyRatio < 35 && lower < 25) {
+    // Shooting star: long upper wick, small body, body sitting at the BOTTOM
+    // of the range (implied by upper > 60, stated explicitly for the same
+    // reason as the pin bar). After a downtrend the same geometry is an
+    // inverted hammer instead, so this fires only outside bearish context.
+    if (priorTrend !== 'bearish' && upper > 60 && bodyRatio < 35 && lower < 25 && (c.high - c.close) / r > 0.55) {
         out.push({
             name: 'bearish_shooting_star',
             index: idx,
@@ -126,13 +176,34 @@ function detectSingleCandlePatterns(c: Kline, idx: number): DetectedCandlePatter
         });
     }
 
-    // Hammer: small body at the top of the range, long lower wick
-    // (distinguish from pin bar by the body's position: hammer body is in
-    // the upper half of the range)
-    if (lower > 50 && bodyRatio < 40 && (c.close - c.low) / r > 0.55) {
-        // Skip if we already classified as bullish pin bar (same shape);
-        // hammer is the same signal but emphasizes the trend context.
-        if (!out.find(p => p.name === 'bullish_pin_bar')) {
+    // Inverted hammer: the shooting-star geometry after a downtrend — same
+    // shape, opposite meaning (bullish reversal instead of bearish rejection).
+    if (priorTrend === 'bearish' && upper > 60 && bodyRatio < 35 && lower < 25 && (c.high - c.close) / r > 0.55) {
+        out.push({
+            name: 'inverted_hammer',
+            index: idx,
+            direction: 'bullish',
+            strength: 0.65,
+            priceLevel: c.high,
+            note: `Upper wick ${upper.toFixed(0)}% of range after a downtrend — sellers failed to follow through.`
+        });
+    }
+
+    // Hammer / hanging man: small body at the top of the range, long lower
+    // wick. Same geometry; the prior trend decides whether the low-test is a
+    // bullish hammer (after a downtrend) or a bearish hanging man (after an
+    // uptrend). Skipped when the stricter pin bar already fired (same shape).
+    if (lower > 50 && bodyRatio < 40 && (c.close - c.low) / r > 0.55 && !out.find(p => p.name === 'bullish_pin_bar')) {
+        if (priorTrend === 'bullish') {
+            out.push({
+                name: 'hanging_man',
+                index: idx,
+                direction: 'bearish',
+                strength: 0.65,
+                priceLevel: c.low,
+                note: 'Hammer shape after an uptrend — buyers absorbed the dip, but upside momentum is at risk.'
+            });
+        } else {
             out.push({
                 name: 'hammer',
                 index: idx,
@@ -142,6 +213,30 @@ function detectSingleCandlePatterns(c: Kline, idx: number): DetectedCandlePatter
                 note: 'Hammer formation — buyers absorbed sell pressure at the low.'
             });
         }
+    }
+
+    // Belt hold: the candle opens at/near the extreme and the body fills most
+    // of the range — a strong opening commitment. (Body ≤ 88% keeps marubozu
+    // the dominant "full-body" label.)
+    if (bodyRatio > 60 && bodyRatio <= 88 && lower < 10 && upper < 30) {
+        out.push({
+            name: 'bullish_belt_hold',
+            index: idx,
+            direction: 'bullish',
+            strength: 0.7,
+            priceLevel: c.close,
+            note: 'Opened at the low and closed near the high — buying commitment from the open.'
+        });
+    }
+    if (bodyRatio > 60 && bodyRatio <= 88 && upper < 10 && lower < 30) {
+        out.push({
+            name: 'bearish_belt_hold',
+            index: idx,
+            direction: 'bearish',
+            strength: 0.7,
+            priceLevel: c.close,
+            note: 'Opened at the high and closed near the low — selling commitment from the open.'
+        });
     }
 
     // Marubozu: very long body, tiny wicks — strong directional conviction
@@ -225,6 +320,86 @@ function detectTwoCandlePatterns(curr: Kline, prev: Kline, idx: number): Detecte
         }
     }
 
+    // Bullish harami: prev bearish with a large body, curr bullish with a
+    // small body fully inside the prev body — selling momentum pausing.
+    if (isBearish(prev) && isBullish(curr)) {
+        const prevTop = Math.max(prev.open, prev.close);
+        const prevBottom = Math.min(prev.open, prev.close);
+        const prevRange = prev.high - prev.low;
+        const currTop = Math.max(curr.open, curr.close);
+        const currBottom = Math.min(curr.open, curr.close);
+        if (
+            prevRange > 0 &&
+            (prevTop - prevBottom) / prevRange > 0.4 &&
+            currTop <= prevTop && currBottom >= prevBottom &&
+            (currTop - currBottom) < (prevTop - prevBottom) * 0.7
+        ) {
+            out.push({
+                name: 'bullish_harami',
+                index: idx,
+                direction: 'bullish',
+                strength: 0.65,
+                priceLevel: curr.close,
+                note: 'Small bullish candle nested inside the prior bearish body — selling momentum paused.'
+            });
+        }
+    }
+
+    // Bearish harami: mirror
+    if (isBullish(prev) && isBearish(curr)) {
+        const prevTop = Math.max(prev.open, prev.close);
+        const prevBottom = Math.min(prev.open, prev.close);
+        const prevRange = prev.high - prev.low;
+        const currTop = Math.max(curr.open, curr.close);
+        const currBottom = Math.min(curr.open, curr.close);
+        if (
+            prevRange > 0 &&
+            (prevTop - prevBottom) / prevRange > 0.4 &&
+            currTop <= prevTop && currBottom >= prevBottom &&
+            (currTop - currBottom) < (prevTop - prevBottom) * 0.7
+        ) {
+            out.push({
+                name: 'bearish_harami',
+                index: idx,
+                direction: 'bearish',
+                strength: 0.65,
+                priceLevel: curr.close,
+                note: 'Small bearish candle nested inside the prior bullish body — buying momentum paused.'
+            });
+        }
+    }
+
+    // Piercing line: prev bearish, curr bullish opens below prev close and
+    // closes more than halfway into prev body (but below prev open).
+    if (isBearish(prev) && isBullish(curr)) {
+        const prevMid = (prev.open + prev.close) / 2;
+        if (curr.open < prev.close && curr.close > prevMid && curr.close < prev.open) {
+            out.push({
+                name: 'piercing_line',
+                index: idx,
+                direction: 'bullish',
+                strength: 0.7,
+                priceLevel: curr.close,
+                note: 'Bullish candle closed more than halfway into the prior bearish body.'
+            });
+        }
+    }
+
+    // Dark cloud cover: mirror of the piercing line.
+    if (isBullish(prev) && isBearish(curr)) {
+        const prevMid = (prev.open + prev.close) / 2;
+        if (curr.open > prev.close && curr.close < prevMid && curr.close > prev.open) {
+            out.push({
+                name: 'dark_cloud_cover',
+                index: idx,
+                direction: 'bearish',
+                strength: 0.7,
+                priceLevel: curr.close,
+                note: 'Bearish candle closed more than halfway into the prior bullish body.'
+            });
+        }
+    }
+
     return out;
 }
 
@@ -232,6 +407,12 @@ function detectTwoCandlePatterns(curr: Kline, prev: Kline, idx: number): Detecte
 // THREE-CANDLE PATTERNS
 // ---------------------------------------------------------------------------
 
+/**
+ * Candles arrive newest-first: `curr` is the most recent candle, `prev` the
+ * oldest of the three (the sequence start). Patterns "complete" at `curr`, so
+ * the reported index is the recent-first index of `curr` — the same anchor
+ * convention the two-candle detector uses.
+ */
 function detectThreeCandlePatterns(
     curr: Kline,
     mid: Kline,
@@ -279,39 +460,109 @@ function detectThreeCandlePatterns(
         }
     }
 
-    // Three white soldiers: three consecutive bullish candles, each closing
-    // near its high and each opening within the previous body
+    // Three white soldiers: three consecutive strong bullish candles, each
+    // opening within the *previous* candle's body, each closing near its
+    // high, with rising closes.
     if (isBullish(prev) && isBullish(mid) && isBullish(curr)) {
-        const opens = [mid.open, curr.open];
-        const allInside = opens.every(o => o >= Math.min(prev.open, prev.close) && o <= Math.max(prev.open, prev.close) || true);
         const strongBodies = [prev, mid, curr].every(k => Math.abs(bodyPct(k)) > 0.3);
         const closesNearHigh = [prev, mid, curr].every(k => upperWickPct(k) < 30);
-        if (allInside && strongBodies && closesNearHigh) {
+        const opensInsidePrevious =
+            mid.open >= Math.min(prev.open, prev.close) && mid.open <= Math.max(prev.open, prev.close) &&
+            curr.open >= Math.min(mid.open, mid.close) && curr.open <= Math.max(mid.open, mid.close);
+        const risingCloses = curr.close > mid.close && mid.close > prev.close;
+        if (strongBodies && closesNearHigh && opensInsidePrevious && risingCloses) {
             out.push({
                 name: 'three_white_soldiers',
                 index: idx,
                 direction: 'bullish',
                 strength: 0.8,
                 priceLevel: curr.close,
-                note: 'Three consecutive strong bullish candles closing near highs.'
+                note: 'Three strong bullish candles, each opening within the prior body and closing near its high.'
             });
         }
     }
 
-    // Three black crows
+    // Three black crows: mirror of the soldiers — each opens within the
+    // previous body, closes near its low, with falling closes.
     if (isBearish(prev) && isBearish(mid) && isBearish(curr)) {
         const strongBodies = [prev, mid, curr].every(k => Math.abs(bodyPct(k)) > 0.3);
         const closesNearLow = [prev, mid, curr].every(k => lowerWickPct(k) < 30);
-        if (strongBodies && closesNearLow) {
+        const opensInsidePrevious =
+            mid.open >= Math.min(prev.open, prev.close) && mid.open <= Math.max(prev.open, prev.close) &&
+            curr.open >= Math.min(mid.open, mid.close) && curr.open <= Math.max(mid.open, mid.close);
+        const fallingCloses = curr.close < mid.close && mid.close < prev.close;
+        if (strongBodies && closesNearLow && opensInsidePrevious && fallingCloses) {
             out.push({
                 name: 'three_black_crows',
                 index: idx,
                 direction: 'bearish',
                 strength: 0.8,
                 priceLevel: curr.close,
-                note: 'Three consecutive strong bearish candles closing near lows.'
+                note: 'Three strong bearish candles, each opening within the prior body and closing near its low.'
             });
         }
+    }
+
+    // Three inside up: bearish → small bullish candle nested inside it →
+    // bullish candle closing above the first candle's open. Reversal after a
+    // pause (harami + confirmation).
+    if (isBearish(prev) && isBullish(mid) && isBullish(curr)) {
+        const prevTop = Math.max(prev.open, prev.close);
+        const prevBottom = Math.min(prev.open, prev.close);
+        const midTop = Math.max(mid.open, mid.close);
+        const midBottom = Math.min(mid.open, mid.close);
+        if (midTop <= prevTop && midBottom >= prevBottom && curr.close > prev.open) {
+            out.push({
+                name: 'three_inside_up',
+                index: idx,
+                direction: 'bullish',
+                strength: 0.75,
+                priceLevel: curr.close,
+                note: 'Small bullish candle inside the bearish body, then a close above it — reversal.'
+            });
+        }
+    }
+
+    // Three inside down: mirror.
+    if (isBullish(prev) && isBearish(mid) && isBearish(curr)) {
+        const prevTop = Math.max(prev.open, prev.close);
+        const prevBottom = Math.min(prev.open, prev.close);
+        const midTop = Math.max(mid.open, mid.close);
+        const midBottom = Math.min(mid.open, mid.close);
+        if (midTop <= prevTop && midBottom >= prevBottom && curr.close < prev.open) {
+            out.push({
+                name: 'three_inside_down',
+                index: idx,
+                direction: 'bearish',
+                strength: 0.75,
+                priceLevel: curr.close,
+                note: 'Small bearish candle inside the bullish body, then a close below it — reversal.'
+            });
+        }
+    }
+
+    // Fair value gap: the newest candle's low gaps above the oldest candle's
+    // high (bullish FVG) — the untraded zone between them is unfilled
+    // liquidity the market often returns to.
+    if (curr.low > prev.high) {
+        out.push({
+            name: 'bullish_fvg',
+            index: idx,
+            direction: 'bullish',
+            strength: 0.6,
+            priceLevel: (prev.high + curr.low) / 2,
+            note: `Unfilled gap zone between ${prev.high} and ${curr.low} — bullish fair value gap.`
+        });
+    }
+    if (curr.high < prev.low) {
+        out.push({
+            name: 'bearish_fvg',
+            index: idx,
+            direction: 'bearish',
+            strength: 0.6,
+            priceLevel: (curr.high + prev.low) / 2,
+            note: `Unfilled gap zone between ${curr.high} and ${prev.low} — bearish fair value gap.`
+        });
     }
 
     return out;
@@ -331,6 +582,10 @@ interface SwingPoints {
  * than the highs of the 2 candles on each side; mirror for swing low.
  * This is intentionally local-only — the model gets the recent structure,
  * not a full ZigZag of the entire history.
+ *
+ * Runs over the recent-first window, so the result lists are ordered
+ * newest→oldest: `highs[0]` is the most recent swing high, and the index
+ * on each point is a recent-first candle index (0 = most recent candle).
  */
 function extractLocalSwings(candles: Kline[]): SwingPoints {
     const highs: { index: number; price: number }[] = [];
@@ -357,15 +612,16 @@ function detectStructurePatterns(candles: Kline[], swings: SwingPoints): Detecte
     const out: DetectedCandlePattern[] = [];
     if (candles.length === 0) return out;
 
-    // Last two swing highs and last two swing lows are what the model
-    // needs to reason about HH/HL vs LH/LL. Index 0 = most recent candle.
-    const lastHighs = swings.highs.slice(-3);
-    const lastLows = swings.lows.slice(-3);
+    // Swings arrive newest-first (see extractLocalSwings), so [0] is the
+    // most recent swing and the first entries are what the model needs to
+    // reason about HH/HL vs LH/LL. Index 0 = most recent candle throughout.
+    const lastHighs = swings.highs.slice(0, 3);
+    const lastLows = swings.lows.slice(0, 3);
 
-    // Double top: last two swing highs within 0.3% of each other
+    // Double top: the two most recent swing highs within 0.3% of each other
     if (lastHighs.length >= 2) {
-        const a = lastHighs[lastHighs.length - 1];
-        const b = lastHighs[lastHighs.length - 2];
+        const a = lastHighs[0];
+        const b = lastHighs[1];
         const delta = Math.abs(a.price - b.price) / (a.price || 1) * 100;
         if (delta < 0.3) {
             out.push({
@@ -381,8 +637,8 @@ function detectStructurePatterns(candles: Kline[], swings: SwingPoints): Detecte
 
     // Double bottom
     if (lastLows.length >= 2) {
-        const a = lastLows[lastLows.length - 1];
-        const b = lastLows[lastLows.length - 2];
+        const a = lastLows[0];
+        const b = lastLows[1];
         const delta = Math.abs(a.price - b.price) / (a.price || 1) * 100;
         if (delta < 0.3) {
             out.push({
@@ -402,7 +658,7 @@ function detectStructurePatterns(candles: Kline[], swings: SwingPoints): Detecte
     // structural event for trend resumption.
     const lastCandle = candles[0];
     if (lastHighs.length > 0) {
-        const lastHigh = lastHighs[lastHighs.length - 1].price;
+        const lastHigh = lastHighs[0].price;
         if (lastCandle.close > lastHigh) {
             out.push({
                 name: 'bullish_bos',
@@ -415,7 +671,7 @@ function detectStructurePatterns(candles: Kline[], swings: SwingPoints): Detecte
         }
     }
     if (lastLows.length > 0) {
-        const lastLow = lastLows[lastLows.length - 1].price;
+        const lastLow = lastLows[0].price;
         if (lastCandle.close < lastLow) {
             out.push({
                 name: 'bearish_bos',
@@ -424,6 +680,59 @@ function detectStructurePatterns(candles: Kline[], swings: SwingPoints): Detecte
                 strength: 0.8,
                 priceLevel: lastLow,
                 note: `Close ${lastCandle.close} below recent swing low ${lastLow}.`
+            });
+        }
+    }
+
+    // CHoCH (change of character): the break happens *after* a sequence of
+    // declining swing highs (bullish) / rising swing lows (bearish) — the
+    // trend structure flipped, not just a new extreme.
+    if (lastHighs.length >= 2 && lastHighs[0].price < lastHighs[1].price && lastCandle.close > lastHighs[0].price) {
+        out.push({
+            name: 'bullish_cho_ch',
+            index: 0,
+            direction: 'bullish',
+            strength: 0.7,
+            priceLevel: lastHighs[0].price,
+            note: 'Close broke the most recent swing high after declining highs — change of character.'
+        });
+    }
+    if (lastLows.length >= 2 && lastLows[0].price > lastLows[1].price && lastCandle.close < lastLows[0].price) {
+        out.push({
+            name: 'bearish_cho_ch',
+            index: 0,
+            direction: 'bearish',
+            strength: 0.7,
+            priceLevel: lastLows[0].price,
+            note: 'Close broke the most recent swing low after rising lows — change of character.'
+        });
+    }
+
+    // SFP (sweep of liquidity / failed break): the wick pierces the recent
+    // swing level but the close returns inside — the break failed.
+    if (lastLows.length > 0) {
+        const lastLow = lastLows[0].price;
+        if (lastCandle.low < lastLow && lastCandle.close > lastLow) {
+            out.push({
+                name: 'bullish_sfp',
+                index: 0,
+                direction: 'bullish',
+                strength: 0.7,
+                priceLevel: lastLow,
+                note: `Low ${lastCandle.low} swept below swing low ${lastLow} but closed back above — failed break.`
+            });
+        }
+    }
+    if (lastHighs.length > 0) {
+        const lastHigh = lastHighs[0].price;
+        if (lastCandle.high > lastHigh && lastCandle.close < lastHigh) {
+            out.push({
+                name: 'bearish_sfp',
+                index: 0,
+                direction: 'bearish',
+                strength: 0.7,
+                priceLevel: lastHigh,
+                note: `High ${lastCandle.high} swept above swing high ${lastHigh} but closed back below — failed break.`
             });
         }
     }
@@ -446,13 +755,16 @@ function countTrendStructure(swings: SwingPoints): {
     let higherLows = 0;
     let lowerLows = 0;
 
+    // Swings arrive newest-first; each entry is compared against the OLDER
+    // swing that follows it in the list, so a newer swing above an older one
+    // counts as a higher high — the time direction matches the chart.
     for (let i = 1; i < swings.highs.length; i++) {
-        if (swings.highs[i].price > swings.highs[i - 1].price) higherHighs++;
-        else if (swings.highs[i].price < swings.highs[i - 1].price) lowerHighs++;
+        if (swings.highs[i - 1].price > swings.highs[i].price) higherHighs++;
+        else if (swings.highs[i - 1].price < swings.highs[i].price) lowerHighs++;
     }
     for (let i = 1; i < swings.lows.length; i++) {
-        if (swings.lows[i].price > swings.lows[i - 1].price) higherLows++;
-        else if (swings.lows[i].price < swings.lows[i - 1].price) lowerLows++;
+        if (swings.lows[i - 1].price > swings.lows[i].price) higherLows++;
+        else if (swings.lows[i - 1].price < swings.lows[i].price) lowerLows++;
     }
 
     return { higherHighs, higherLows, lowerHighs, lowerLows };
@@ -514,9 +826,10 @@ export function scanCandlePatterns(
 
     const patterns: DetectedCandlePattern[] = [];
 
-    // Single-candle patterns on every bar
+    // Single-candle patterns on every bar (prior-trend context is computed
+    // from the older candles that follow the bar in the recent-first window)
     recentFirst.forEach((c, i) => {
-        patterns.push(...detectSingleCandlePatterns(c, i));
+        patterns.push(...detectSingleCandlePatterns(c, i, priorTrendOf(recentFirst, i)));
     });
 
     // Two-candle patterns
@@ -529,8 +842,8 @@ export function scanCandlePatterns(
         patterns.push(...detectThreeCandlePatterns(recentFirst[i], recentFirst[i + 1], recentFirst[i + 2], i));
     }
 
-    // Structure patterns need local swings; use the oldest-first array
-    // so the swing-extraction loop is straightforward.
+    // Structure patterns need local swings; extraction runs over the same
+    // recent-first array (swing lists come back newest-first).
     const swings = extractLocalSwings(recentFirst);
     patterns.push(...detectStructurePatterns(recentFirst, swings));
 
@@ -555,10 +868,10 @@ export function scanCandlePatterns(
         bullishPct > 60 ? 'bullish' : bullishPct < 40 ? 'bearish' : 'neutral';
 
     const recentSwingHigh = swings.highs.length > 0
-        ? Math.max(...swings.highs.map(s => s.price))
+        ? swings.highs[0].price
         : undefined;
     const recentSwingLow = swings.lows.length > 0
-        ? Math.min(...swings.lows.map(s => s.price))
+        ? swings.lows[0].price
         : undefined;
 
     return {

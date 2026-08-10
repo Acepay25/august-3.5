@@ -899,7 +899,8 @@ export const verifyAccuracyPlan = async (
     moderatorModel: string,
     debateContent: string,
     planJson: string,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    hybridContext?: string
 ): Promise<{ verdict: 'confirmed' | 'adjusted'; note: string; planJson?: string }> => {
     const prompt = `
 **ROLE: ENSEMBLE DEBATE MODERATOR — ACCURACY VERIFICATION PASS**
@@ -911,6 +912,9 @@ The autoplayed debate below produced the attached trade plan. Before the plan is
 <ACCURACY_CONFIRMED>
 4. If any level or the confidence needs correcting, output <ACCURACY_ADJUST> followed by the COMPLETE corrected plan as a single valid JSON object (same schema as the original), and NOTHING else.
 
+${hybridContext ? `**LIVE CHART & PATTERN CONTEXT (VERIFIED):**
+${hybridContext}
+` : ''}
 **THE DEBATE:**
 ${debateContent.slice(0, 8000)}
 
@@ -975,7 +979,11 @@ export const conductDebate = (
     signal?: AbortSignal, // Cancellation for the moderator stream
     onReasoning?: (reasoning: string) => void,
     /** Provider IDs per analyst (calibration is keyed by provider ID). */
-    analystProviders?: string[]
+    analystProviders?: string[],
+    /** Full chart/pattern context (hybrid data + user strategies) so the
+     *  moderator sees the same chart the analysts see, not just the
+     *  truncated user request. */
+    hybridContext?: string
 ): AsyncGenerator<string, void, unknown> => {
 
     let tradeHistoryContext = finalTradeSummary ? `Pattern Memory Library (History):\n${truncateTextToTokens(finalTradeSummary, 3000)}` : "No past trades logged.";
@@ -1078,6 +1086,9 @@ ${userOverride}
 
 ${marketDataOverride}
 
+${hybridContext ? `\n**LIVE CHART & PATTERN CONTEXT (VERIFIED):**
+${hybridContext}
+` : ''}
 ${gateReconciliationContext}
 
 ${AI_CORE_SKILL_INJECTION}
@@ -3124,10 +3135,12 @@ export const conductRealDebate = async function* (
 
     // Compact fallback used for ONE automatic retry when the first moderator
     // attempt errors or produces no JSON plan (long prompts are the usual
-    // culprit on reasoning-heavy models).
+    // culprit on reasoning-heavy models). The chart context still rides along
+    // so the retry is not blind.
     const compactModeratorPrompt = [
         getPrompt('debate.final_verdict_compact', MODERATOR_FINAL_VERDICT_PROMPT_COMPACT).replace('{{ANALYSTS}}', names.join(', ')),
         `\n\n**THE DEBATE TRANSCRIPT (COMPACT):**\n${transcriptBlock}`,
+        hybridContext ? `\n\n**HYBRID INTELLIGENCE MARKET DATA (VERIFIED LIVE):**\n${truncateTextToTokens(hybridContext, 1500)}` : '',
     ].join('\n');
 
     const finalRound = lastRebuttalRound + 1;

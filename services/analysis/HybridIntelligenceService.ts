@@ -611,10 +611,12 @@ ${data.detectedPatterns ? (() => {
                 if (!scan || scan.windowSize === 0) {
                     return `- ${tf} (${role}): Insufficient data for pattern detection.`;
                 }
-                // Show the most recent / highest-strength patterns (top 5).
+                // Show the most recent / highest-strength patterns (top 8 —
+                // the detector now covers the full classical set, so the
+                // model gets the complete "what a human sees" picture).
                 const top = [...scan.patterns]
                     .sort((a, b) => b.strength - a.strength)
-                    .slice(0, 5);
+                    .slice(0, 8);
                 if (top.length === 0) {
                     return `- ${tf} (${role}): No notable patterns in the last ${scan.windowSize} candles.`;
                 }
