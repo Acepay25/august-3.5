@@ -89,6 +89,7 @@ interface SettingsMenuProps {
     currentInsightIds?: string[];
     onUpdateTradeLeverage?: (id: string, leverage: number) => void;
     onUpdateOutcome?: (id: string, outcome: TradeOutcome) => void;
+    onUpdatePnL?: (id: string, pnl: { pnlAmount?: number; pnlPercent?: number }) => void;
     finalSummary?: string | null;
     individualSummaries?: TradeSummary[];
     familyWinRates?: Record<string, { total: number; wins: number; winRate: number }>;
@@ -429,6 +430,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         currentInsightIds={props.currentInsightIds || []}
                                         onUpdateTradeLeverage={props.onUpdateTradeLeverage || (() => {})}
                                         onUpdateOutcome={props.onUpdateOutcome || (() => {})}
+                                        onUpdatePnL={props.onUpdatePnL || (() => {})}
                                         finalSummary={props.finalSummary || null}
                                         individualSummaries={props.individualSummaries || []}
                                         isLoading={!!props.isLoading}

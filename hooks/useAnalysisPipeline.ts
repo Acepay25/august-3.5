@@ -4,7 +4,7 @@ import {
     DebateTurn, Conversation, TradeAnalysis, TradeSummary,
     GlobalMemory, AccuracySubMode, CustomInstructionsMap, CustomInstruction,
     AnalystLensConfig, AnalysisStep, InsightKnowledgeBase, ConfidenceCalibration,
-    ReplacementOffer,
+    ReplacementOffer, PatternMemoryGateView,
 } from '../types';
 
 import { ProviderConfig } from '../types/provider';
@@ -49,6 +49,7 @@ import { generateLearningFromPrompt, isLearningEnabled } from '../services/learn
 import { generatePersonalizedInjection } from '../services/ui/PersonalizedPromptService';
 import { PriceAlertService } from '../services/ui/PriceAlertService';
 import { buildUnifiedLearningContext } from '../services/learning/UnifiedLearningBuilder';
+import { generateMandatoryPatternCheck, generatePatternMemoryEnforcementContext } from '../services/learning/PatternMemorySynthesisService';
 import { ANALYST_ROLE_DEFINITIONS, getLensPromptForStyle, getRoleForProvider } from '../services/ui/AnalystLensService';
 import { buildEnsembleAnalysts, buildAnalystFailureReport } from '../services/ui/EnsembleAnalystService';
 import { EnsembleModelSelection } from '../services/ui/AnalystLensService';
@@ -1419,6 +1420,52 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     // reflect everyone who actually delivered, not just the
                     // initial roster.
                     const allFulfilledAnalysts: ensembleService.RealDebateAnalyst[] = [...fulfilledAnalysts];
+
+                    // PATTERN-MEMORY GATE (visibility + enforcement) — the
+                    // HALT/REDUCE_SIZE/WARNING check only ever ran inside the
+                    // legacy 3-way generator: invisible to the user and absent
+                    // from the live debate paths. Run it here — surface the
+                    // outcome on the card AND fold the enforcement text into
+                    // the moderator's learning context so live debates enforce
+                    // it the same way the legacy path did.
+                    let patternMemoryGate: PatternMemoryGateView | null = null;
+                    const gateSource = fulfilledAnalysts[0]?.result;
+                    if (gateSource?.analysis && loggedTrades.length > 0) {
+                        try {
+                            const gateSetupContext = {
+                                coin: gateSource.analysis.coinName,
+                                direction: gateSource.analysis.direction as 'Long' | 'Short' | undefined,
+                                pattern: gateSource.analysis.marketConditions?.pattern,
+                                family: gateSource.analysis.detectedPatternFamily || undefined,
+                                confidence: gateSource.analysis.confidence as 'High' | 'Medium' | 'Low' | undefined,
+                            };
+                            const gate = generateMandatoryPatternCheck(gateSetupContext, loggedTrades);
+                            if (gate.gateResult !== 'PASS') {
+                                patternMemoryGate = {
+                                    gateResult: gate.gateResult,
+                                    reason: gate.reason,
+                                    mandatoryQuestions: gate.mandatoryQuestions,
+                                    historicalFailures: gate.historicalFailures.map(t => ({
+                                        coinName: t.coin,
+                                        direction: t.direction,
+                                        outcome: t.outcome,
+                                        keyLesson: t.keyLesson,
+                                    })),
+                                };
+                                const enforcementText = generatePatternMemoryEnforcementContext(gateSetupContext, loggedTrades);
+                                moderatorLearningContext = moderatorLearningContext
+                                    ? `${moderatorLearningContext}\n\n${enforcementText}`
+                                    : enforcementText;
+                                updateRequestMessages(prev => prev.map(m =>
+                                    (m.id === debateMessageId || m.id === ensemblePlaceholder?.id)
+                                        ? { ...m, patternMemoryGate: patternMemoryGate! }
+                                        : m
+                                ));
+                            }
+                        } catch (gateError) {
+                            console.warn('[Pipeline] Pattern memory gate failed:', gateError);
+                        }
+                    }
 
                     if (isAccuracyModeEnabled) {
                         // ACCURACY MODE — the moderator autoplays the whole

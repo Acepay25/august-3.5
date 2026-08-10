@@ -183,6 +183,9 @@ export interface Message {
    *  rebuild and re-dispatch the run (renders a Retry button on the error
    *  bubble). Undefined on successful runs. */
   retryOf?: { userMessageId: string };
+  /** Pattern-memory gate outcome (HALT / REDUCE_SIZE / WARNING / PASS) —
+   *  rendered as a banner on the analysis card. */
+  patternMemoryGate?: PatternMemoryGateView;
   // Multi-Timeframe Confluence Score from Hybrid Intelligence
   confluenceData?: ConfluenceData;
   // Per-run execution summary (durations, gate cap, Monte Carlo snapshot)
@@ -203,6 +206,28 @@ export interface TodayReassessment {
   /** Current market price used for the reassessment (0 = unavailable). */
   price: number;
   createdAt: string;
+}
+
+/**
+ * Pattern-memory gate outcome, surfaced on the analysis card and journal row
+ * so the user can audit when memory HALTED / downsized / warned a trade —
+ * previously the gate was prompt-only and invisible.
+ */
+export interface PatternMemoryGateView {
+  gateResult: 'PASS' | 'WARNING' | 'HALT' | 'REDUCE_SIZE';
+  /** Human-readable reason (includes the emoji severity prefix). */
+  reason: string;
+  /** Questions the moderator was forced to address. */
+  mandatoryQuestions: string[];
+  /** The most similar historical trades (compact, serializable). */
+  historicalFailures: {
+    coinName?: string;
+    direction?: string;
+    /** Display-only outcome label (the gate's synthesis uses its own set). */
+    outcome?: string;
+    /** Extracted lesson from the matched trade's post-mortem. */
+    keyLesson?: string;
+  }[];
 }
 
 export interface ImageMetadata {

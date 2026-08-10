@@ -1747,6 +1747,13 @@ const App: React.FC = () => {
         }
     }, [setLoggedTrades, loggedTradesRef]);
 
+    // Fill in / correct PnL from the journal card (autopilot-logged trades
+    // only carry the leveraged percent, so the dollar figure needs a manual
+    // entry to make the dashboard PnL math meaningful).
+    const handleUpdateTradePnL = useCallback((id: string, pnl: { pnlAmount?: number; pnlPercent?: number }) => {
+        setLoggedTrades(prev => prev.map(t => t.id === id ? { ...t, ...pnl } : t));
+    }, [setLoggedTrades]);
+
     const handleRegenerateFinalSummary = async () => {
         // Guard: an auto-refresh may already be running (the debounced
         // journal auto-refresh and the manual button share this path) —
@@ -2161,6 +2168,11 @@ const App: React.FC = () => {
         }
         stableHandleSendMessage(payload.prompt, payload.images, 'Retrying the failed analysis.');
     }, [buildRerunPayload, stableHandleSendMessage, toast]);
+
+    // Edit a sent user message's text in place (persisted to history).
+    const handleEditUserMessage = useCallback((messageId: string, text: string) => {
+        updateMessages(prev => prev.map(m => m.id === messageId ? { ...m, text } : m));
+    }, [updateMessages]);
 
     // ─── Price-triggered re-debate ("watch this setup") ────────────────────
     // A setup watch fires → launch a fresh debate for the same setup with the
@@ -2675,6 +2687,7 @@ const App: React.FC = () => {
                 currentInsightIds={currentInsightIds}
                 onUpdateTradeLeverage={handleUpdateTradeLeverage}
                 onUpdateOutcome={handleUpdateTradeOutcome}
+                onUpdatePnL={handleUpdateTradePnL}
                 familyWinRates={familyWinRates}
                 globalMemory={globalMemory}
                 threadSummary={activeConversation?.threadSummary}
@@ -2729,6 +2742,7 @@ const App: React.FC = () => {
                 currentInsightIds={currentInsightIds}
                 onUpdateTradeLeverage={handleUpdateTradeLeverage}
                 onUpdateOutcome={handleUpdateTradeOutcome}
+                onUpdatePnL={handleUpdateTradePnL}
                 familyWinRates={familyWinRates}
                 globalMemory={globalMemory}
                 threadSummary={activeConversation?.threadSummary}
@@ -2874,6 +2888,7 @@ const App: React.FC = () => {
                 setIsLivePostMortemVisible={setIsLivePostMortemVisible}
                 handleCancelAnalysis={handleCancelAll}
                 onRetryFailedRun={handleRetryFailedRun}
+                onEditUserMessage={handleEditUserMessage}
                 onDeleteMessages={handleDeleteMessages}
                 // ChatInput props
                 lensConfig={lensConfig}
