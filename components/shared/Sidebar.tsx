@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Conversation, MessageRole } from '../../types';
 import { AutomationConfig } from '../../types/automation';
+import { humanizeCron } from '../../services/automation/cronParser';
 import {
     ActivityIcon,
     BookmarkIcon,
@@ -204,11 +205,11 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                                 type="button"
                                 onClick={() => act(() => onOpenAutomation?.(a.id))()}
                                 className="w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-left transition-colors hover:bg-zinc-800/80 group"
-                                title={`${a.name} — ${a.schedule.cron}`}
+                                title={`${a.name} — ${humanizeCron(a.schedule.cron)}`}
                             >
                                 <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${a.enabled ? 'bg-emerald-400' : 'bg-zinc-700'}`} />
                                 <span className="truncate text-[11px] text-zinc-400 group-hover:text-zinc-200">{a.name}</span>
-                                <span className="ml-auto text-[9px] font-mono text-zinc-600 group-hover:text-zinc-400 shrink-0">{a.schedule.cron}</span>
+                                <span className="ml-auto text-[9px] text-zinc-600 group-hover:text-zinc-400 shrink-0">{humanizeCron(a.schedule.cron)}</span>
                             </button>
                         ))
                     )}

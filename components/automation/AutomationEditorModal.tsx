@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { AutomationConfig, AutomationInputSource, AutomationMode, AutomationModelPick } from '../../types/automation';
-import { parseCron, nextCronTime } from '../../services/automation/cronParser';
+import { parseCron, nextCronTime, humanizeCron } from '../../services/automation/cronParser';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 
@@ -9,14 +9,66 @@ export interface ModelOption {
     label: string;
 }
 
-const CRON_PRESETS: { label: string; cron: string }[] = [
-    { label: 'Every 15 min', cron: '*/15 * * * *' },
-    { label: 'Every 30 min', cron: '*/30 * * * *' },
-    { label: 'Every hour', cron: '0 * * * *' },
-    { label: 'Every 6 hours', cron: '0 */6 * * *' },
-    { label: 'Daily 09:00', cron: '0 9 * * *' },
-    { label: 'Weekdays 09:00', cron: '0 9 * * 1-5' },
+/** Days of the week in cron dow values (0 = Sunday), display order Mon..Sun. */
+const WEEK_DAYS: { dow: number; label: string }[] = [
+    { dow: 1, label: 'Mon' },
+    { dow: 2, label: 'Tue' },
+    { dow: 3, label: 'Wed' },
+    { dow: 4, label: 'Thu' },
+    { dow: 5, label: 'Fri' },
+    { dow: 6, label: 'Sat' },
+    { dow: 0, label: 'Sun' },
 ];
+
+const ALL_DAYS = WEEK_DAYS.map(d => d.dow);
+
+const DAY_PRESETS: { label: string; days: number[] }[] = [
+    { label: 'Every day', days: [0, 1, 2, 3, 4, 5, 6] },
+    { label: 'Weekdays', days: [1, 2, 3, 4, 5] },
+    { label: 'Weekends', days: [0, 6] },
+    { label: 'Every other day', days: [1, 3, 5, 0] }, // Mon, Wed, Fri, Sun
+];
+
+interface ParsedDailySchedule {
+    days: number[];
+    hour: number;
+    minute: number;
+    second: number;
+}
+
+/**
+ * Parse an existing cron into the day/time editor state. Handles the
+ * generated shapes: 6-field "s m h * * dow" and legacy 5-field "m h * * dow".
+ * Returns null when the expression is a custom schedule (kept in Advanced).
+ */
+const parseDailySchedule = (cron: string | undefined): ParsedDailySchedule | null => {
+    if (!cron) return null;
+    const parts = cron.trim().split(/\s+/);
+    const isSix = parts.length === 6;
+    const isFive = parts.length === 5;
+    if (!isSix && !isFive) return null;
+    // Shape: [second] minute hour * * dow-list
+    const dowIndex = isSix ? 5 : 4;
+    const domIndex = isSix ? 3 : 2;
+    const monthIndex = isSix ? 4 : 3;
+    if (parts[domIndex] !== '*' || parts[monthIndex] !== '*') return null;
+    const dowRaw = parts[dowIndex];
+    if (!/^[\d,]+$/.test(dowRaw)) return null;
+    const dowValues = [...new Set(dowRaw.split(',').map(Number))].map(v => (v === 7 ? 0 : v));
+    const hour = parseInt(parts[isSix ? 2 : 1], 10);
+    const minute = parseInt(parts[isSix ? 1 : 0], 10);
+    const second = isSix ? parseInt(parts[0], 10) : 0;
+    if (isNaN(hour) || isNaN(minute) || isNaN(second)) return null;
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 59) return null;
+    return { days: dowValues, hour, minute, second };
+};
+
+/** Build the storage cron from the day/time editor state (6-field, seconds first). */
+const buildDailyCron = (days: number[], hour: number, minute: number, second: number): string => {
+    const sorted = [...new Set(days)].sort((a, b) => a - b);
+    const dow = sorted.length === 0 ? '*' : sorted.join(',');
+    return `${second} ${minute} ${hour} * * ${dow}`;
+};
 
 interface AutomationEditorModalProps {
     isVisible: boolean;
@@ -37,7 +89,20 @@ const splitOption = (value: string): { providerId: string; modelId: string } => 
 
 const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible, initial, modelOptions, onClose, onSave, onDelete }) => {
     const [name, setName] = useState(initial?.name ?? '');
-    const [cron, setCron] = useState(initial?.schedule.cron ?? '0 * * * *');
+    // Schedule = days-of-week toggles + a time of day (h/m/s). The storage
+    // cron is generated from these two inputs; a custom cron can override
+    // them via the Advanced field (existing non-daily schedules).
+    const [scheduleDays, setScheduleDays] = useState<number[]>(() => parseDailySchedule(initial?.schedule.cron)?.days ?? ALL_DAYS);
+    const [scheduleTime, setScheduleTime] = useState<{ h: number; m: number; s: number }>(() => {
+        const p = parseDailySchedule(initial?.schedule.cron);
+        return p ? { h: p.hour, m: p.minute, s: p.second } : { h: 9, m: 0, s: 0 };
+    });
+    const [advancedCron, setAdvancedCron] = useState<string>(() => {
+        // Pre-fill the advanced field ONLY when the existing schedule is a
+        // custom expression the day/time UI cannot represent.
+        return parseDailySchedule(initial?.schedule.cron) ? '' : (initial?.schedule.cron ?? '');
+    });
+    const [advancedOpen, setAdvancedOpen] = useState(false);
     const [inputSource, setInputSource] = useState<AutomationInputSource>(initial?.inputSource ?? 'template');
     const [promptTemplate, setPromptTemplate] = useState(initial?.promptTemplate ?? '');
     const [mode, setMode] = useState<AutomationMode>(initial?.mode ?? 'standard');
@@ -58,8 +123,12 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
     useEscapeClose(isVisible, onClose);
     if (!isVisible) return null;
 
-    const cronValid = parseCron(cron) !== null;
-    const nextRun = cronValid ? nextCronTime(cron, new Date()) : null;
+    // The generated cron is the source of truth unless a custom cron was
+    // typed into the Advanced field.
+    const generatedCron = buildDailyCron(scheduleDays, scheduleTime.h, scheduleTime.m, scheduleTime.s);
+    const effectiveCron = advancedCron.trim() ? advancedCron.trim() : generatedCron;
+    const cronValid = parseCron(effectiveCron) !== null;
+    const nextRun = cronValid ? nextCronTime(effectiveCron, new Date()) : null;
 
     // Lens mode needs exactly 3 DISTINCT models; normal mode needs 1-3.
     const requiredSelections = useLenses ? 3 : 1;
@@ -71,7 +140,8 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
     const handleSave = () => {
         setError(null);
         if (!name.trim()) { setError('Give the automation a name.'); return; }
-        if (!cronValid) { setError('The schedule is not a valid 5-field cron expression.'); return; }
+        if (!cronValid) { setError('The schedule is not a valid cron expression.'); return; }
+        if (scheduleDays.length === 0 && !advancedCron.trim()) { setError('Toggle at least one day of the week.'); return; }
         if (inputSource === 'template' && !promptTemplate.trim()) { setError('Enter the prompt template the automation should send.'); return; }
         if (!selectionsValid) { setError(useLenses ? 'Lens mode needs 3 distinct analyst models.' : 'Pick at least one analyst model.'); return; }
         if (!moderatorSelection) { setError('Pick the moderator model.'); return; }
@@ -84,7 +154,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
             id: initial?.id ?? `automation_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
             name: name.trim(),
             enabled: initial?.enabled ?? true,
-            schedule: { cron: cron.trim() },
+            schedule: { cron: effectiveCron },
             inputSource,
             promptTemplate: inputSource === 'template' ? promptTemplate.trim() : undefined,
             mode,
@@ -146,33 +216,101 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                         />
                     </div>
 
-                    {/* Schedule */}
+                    {/* Schedule — days of the week + time of day (h/m/s) */}
                     <div>
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 block mb-1.5" htmlFor="automation-cron">Schedule (cron)</label>
-                        <input
-                            id="automation-cron"
-                            type="text"
-                            value={cron}
-                            onChange={(e) => setCron(e.target.value)}
-                            placeholder="0 * * * *"
-                            spellCheck={false}
-                            className={`w-full bg-zinc-950 border rounded-lg px-3 py-2 text-sm font-mono text-zinc-200 focus:outline-none focus:border-cyan-500/50 ${cronValid ? 'border-white/10' : 'border-rose-500/50'}`}
-                        />
-                        <p className="text-[10px] text-zinc-600 mt-1 font-mono">minute hour day month weekday · e.g. 0 * * * * = every hour, 0 9 * * 1-5 = weekdays 09:00</p>
-                        <div className="flex flex-wrap gap-1 mt-2">
-                            {CRON_PRESETS.map(p => (
-                                <button
-                                    key={p.cron}
-                                    type="button"
-                                    onClick={() => setCron(p.cron)}
-                                    className={`px-2 py-1 rounded text-[9px] font-bold uppercase tracking-wider border transition-all ${cron === p.cron ? 'bg-cyan-500/20 border-cyan-500/30 text-cyan-300' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'}`}
-                                >
-                                    {p.label}
-                                </button>
-                            ))}
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 block mb-1.5">Schedule</span>
+                        <div className="flex items-center justify-between gap-2 mb-1.5">
+                            <span className="text-[10px] font-medium text-zinc-400">Days of the week</span>
+                            <div className="flex gap-1">
+                                {DAY_PRESETS.map(p => (
+                                    <button
+                                        key={p.label}
+                                        type="button"
+                                        onClick={() => setScheduleDays(p.days)}
+                                        className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border transition-all ${JSON.stringify([...scheduleDays].sort()) === JSON.stringify([...p.days].sort()) ? 'bg-cyan-500/20 border-cyan-500/30 text-cyan-300' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'}`}
+                                    >
+                                        {p.label}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
+                        <div className="flex gap-1 flex-wrap">
+                            {WEEK_DAYS.map(d => {
+                                const on = scheduleDays.includes(d.dow);
+                                return (
+                                    <button
+                                        key={d.dow}
+                                        type="button"
+                                        onClick={() => setScheduleDays(prev => on ? prev.filter(x => x !== d.dow) : [...prev, d.dow])}
+                                        className={`w-11 h-9 rounded-lg border text-[10px] font-bold uppercase tracking-wider transition-all ${on ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'}`}
+                                        title={on ? `Remove ${d.label} — this day will not trigger` : `Add ${d.label} — this day triggers the automation`}
+                                        aria-pressed={on}
+                                    >
+                                        {d.label}
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        {/* Time of day — hour, minute, second */}
+                        <div className="flex items-center gap-2 mt-3 flex-wrap">
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Time</span>
+                            <div className="flex items-center gap-1">
+                                <select
+                                    value={scheduleTime.h}
+                                    onChange={(e) => setScheduleTime(prev => ({ ...prev, h: parseInt(e.target.value, 10) }))}
+                                    className="bg-zinc-950 border border-white/10 rounded px-1.5 py-1 text-xs font-mono text-zinc-200 focus:outline-none focus:border-cyan-500/50 cursor-pointer"
+                                    aria-label="Hour"
+                                >
+                                    {Array.from({ length: 24 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2, '0')}</option>)}
+                                </select>
+                                <span className="text-zinc-600 text-xs">:</span>
+                                <select
+                                    value={scheduleTime.m}
+                                    onChange={(e) => setScheduleTime(prev => ({ ...prev, m: parseInt(e.target.value, 10) }))}
+                                    className="bg-zinc-950 border border-white/10 rounded px-1.5 py-1 text-xs font-mono text-zinc-200 focus:outline-none focus:border-cyan-500/50 cursor-pointer"
+                                    aria-label="Minute"
+                                >
+                                    {Array.from({ length: 60 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2, '0')}</option>)}
+                                </select>
+                                <span className="text-zinc-600 text-xs">:</span>
+                                <select
+                                    value={scheduleTime.s}
+                                    onChange={(e) => setScheduleTime(prev => ({ ...prev, s: parseInt(e.target.value, 10) }))}
+                                    className="bg-zinc-950 border border-white/10 rounded px-1.5 py-1 text-xs font-mono text-zinc-200 focus:outline-none focus:border-cyan-500/50 cursor-pointer"
+                                    aria-label="Second"
+                                >
+                                    {Array.from({ length: 60 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2, '0')}</option>)}
+                                </select>
+                            </div>
+                        </div>
+
+                        <p className="text-[10px] text-emerald-400/90 mt-2">
+                            {scheduleDays.length === 0
+                                ? 'Toggle at least one day to schedule the automation.'
+                                : `${humanizeCron(generatedCron)} — the automation triggers once on each selected day at this time.`}
+                        </p>
+                        {advancedCron.trim() && (
+                            <p className="text-[10px] text-amber-400/90 mt-1">Using a custom cron (Advanced): <span className="font-mono">{advancedCron.trim()}</span> — the day/time selection above is ignored.</p>
+                        )}
+
+                        {/* Advanced: raw cron (existing custom schedules) */}
+                        <details className="mt-2" open={advancedOpen} onToggle={(e) => setAdvancedOpen((e.target as HTMLDetailsElement).open)}>
+                            <summary className="text-[10px] text-zinc-500 hover:text-zinc-300 cursor-pointer select-none font-mono">
+                                Advanced: raw cron
+                            </summary>
+                            <input
+                                type="text"
+                                value={advancedCron}
+                                onChange={(e) => setAdvancedCron(e.target.value)}
+                                placeholder="Leave empty to use the day/time schedule above"
+                                spellCheck={false}
+                                className={`w-full mt-1.5 bg-zinc-950 border rounded px-2.5 py-1.5 text-xs font-mono text-zinc-200 focus:outline-none focus:border-cyan-500/50 ${cronValid ? 'border-white/10' : 'border-rose-500/50'}`}
+                            />
+                        </details>
+
                         {nextRun && cronValid && (
-                            <p className="text-[10px] text-emerald-400/90 mt-1.5">Next run: {nextRun.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                            <p className="text-[10px] text-zinc-400 mt-1.5">Next run: <span className="text-cyan-300 font-mono">{nextRun.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span></p>
                         )}
                     </div>
 

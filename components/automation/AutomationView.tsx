@@ -4,6 +4,7 @@ import { ChevronLeftIcon, TrashIcon, EditIcon, LoadingIcon, RefreshIcon } from '
 import { EmptyState } from '../ui/EmptyState';
 import AutomationRunCard from './AutomationRunCard';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
+import { humanizeCron } from '../../services/automation/cronParser';
 import { Bookmark, Play } from 'lucide-react';
 
 /**
@@ -39,7 +40,7 @@ const AutomationView: React.FC<{
                 <div className="flex items-center gap-2.5 min-w-0">
                     <span className="w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_6px_#22d3ee66]" />
                     <h3 className="text-sm font-bold text-white truncate">{config.name}</h3>
-                    <span className="text-[10px] font-mono text-zinc-500 hidden sm:inline">{config.schedule.cron}</span>
+                    <span className="text-[10px] font-mono text-zinc-500 hidden sm:inline">{humanizeCron(config.schedule.cron)}</span>
                     <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest border ${config.enabled ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-zinc-800 border-white/10 text-zinc-500'}`}>
                         {config.enabled ? 'On' : 'Off'}
                     </span>
