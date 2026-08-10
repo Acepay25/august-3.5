@@ -41,6 +41,7 @@ const UserProfileManager = React.lazy(() => import('./components/settings/UserPr
 const SavedAnalyses = React.lazy(() => import('./components/journal/SavedAnalyses'));
 const SettingsMenu = React.lazy(() => import('./components/settings/SettingsMenu'));
 const LiveStreamView = React.lazy(() => import('./components/analysis/LiveStreamView'));
+const AnalystPanel = React.lazy(() => import('./components/analysis/AnalystPanel'));
 // (LogTradeModal was removed — the capture flow uses DataCaptureModal.)
 const PostTradeUploadModal = React.lazy(() => import('./components/modals/PostTradeUploadModal').then(m => ({ default: m.PostTradeUploadModal })));
 const SkipTradeModal = React.lazy(() => import('./components/modals/SkipTradeModal').then(m => ({ default: m.SkipTradeModal })));
@@ -153,6 +154,19 @@ const App: React.FC = () => {
         isEntryNotHitCapturing, setIsEntryNotHitCapturing,
         isRateLimited, setIsRateLimited,
     } = useUIState();
+
+    // Analyst panel (right-side slide-in for per-analyst detail + debate)
+    const [analystPanel, setAnalystPanel] = useState<{ message: Message; activeTab: string } | null>(null);
+
+    const handleOpenAnalystPanel = useCallback((msg: Message, activeTab?: string) => {
+        setAnalystPanel(prev => {
+            // If clicking the same message, just switch tab
+            if (prev?.message.id === msg.id) {
+                return { ...prev, activeTab: activeTab ?? prev.activeTab };
+            }
+            return { message: msg, activeTab: activeTab ?? '' };
+        });
+    }, []);
 
     // Provider configuration (API keys, base URLs, custom providers)
     const {
@@ -927,7 +941,7 @@ const App: React.FC = () => {
             const target = e.target as HTMLElement | null;
             const isTyping = !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable);
             if (isTyping) return;
-            const anyOverlayOpen = journalState.isOpen || isSettingsMenuVisible || isLiveMarketVisible || isCommandPaletteOpen || isSavedGalleryOpen || isUserModalOpen || isAdvancedAnalyticsOpen || isVisionDataVisible || isStrategySearchVisible || isSavedAnalysesVisible || isVersionHistoryVisible;
+            const anyOverlayOpen = journalState.isOpen || isSettingsMenuVisible || isLiveMarketVisible || isCommandPaletteOpen || isSavedGalleryOpen || isUserModalOpen || isAdvancedAnalyticsOpen || isVisionDataVisible || isStrategySearchVisible || isSavedAnalysesVisible || isVersionHistoryVisible || analystPanel !== null;
             if (anyOverlayOpen) {
                 // Overlays with their own document-level Esc handlers
                 // (SettingsMenu, command palette, Journal, LiveMarket, dialogs)
@@ -939,6 +953,7 @@ const App: React.FC = () => {
                 if (isStrategySearchVisible) setIsStrategySearchVisible(false);
                 if (isSavedAnalysesVisible) setIsSavedAnalysesVisible(false);
                 if (isVersionHistoryVisible) setIsVersionHistoryVisible(false);
+                if (analystPanel) setAnalystPanel(null);
                 return;
             }
             if (isAnalysisInProgress || isPostMortemInProgress) {
@@ -951,7 +966,7 @@ const App: React.FC = () => {
         };
         document.addEventListener('keydown', onKeyDown);
         return () => document.removeEventListener('keydown', onKeyDown);
-    }, [isAnalysisInProgress, isPostMortemInProgress, handleCancelAll, toast, journalState.isOpen, isSettingsMenuVisible, isLiveMarketVisible, isCommandPaletteOpen, isSavedGalleryOpen, isUserModalOpen, isAdvancedAnalyticsOpen, isVisionDataVisible, isStrategySearchVisible, isSavedAnalysesVisible, isVersionHistoryVisible]);
+    }, [isAnalysisInProgress, isPostMortemInProgress, handleCancelAll, toast, journalState.isOpen, isSettingsMenuVisible, isLiveMarketVisible, isCommandPaletteOpen, isSavedGalleryOpen, isUserModalOpen, isAdvancedAnalyticsOpen, isVisionDataVisible, isStrategySearchVisible, isSavedAnalysesVisible, isVersionHistoryVisible, analystPanel]);
 
     // ─── Side-by-side compare ──────────────────────────────────────────────
     const [compareState, setCompareState] = useState<{ primaryId: string; secondaryId: string | null } | null>(null);
@@ -2603,7 +2618,8 @@ const App: React.FC = () => {
         // Post-mortem "what would I do today?" re-assessment.
         onTodayReassessment: startTodayReassessment,
         todayReassessmentInFlight,
-    }), [typingMessageState, highlightedAnalysisId, expandedPostMortems, expandedPostMortemImages, savedAnalyses, activeFrameworks, copiedMessageId, modelIdToName, providerNameToId, handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy, handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, confidenceCalibration, handleRetryPostMortem, lensConfig, chatLeverage, autopilotResolutions, handleConfirmAutopilot, handleDismissAutopilot, handleCompareAnalysis, handleViewReasoning, handleReRunAnalysis, handleReplacementChoice, startTodayReassessment, todayReassessmentInFlight]);
+        onOpenAnalystPanel: handleOpenAnalystPanel,
+    }), [typingMessageState, highlightedAnalysisId, expandedPostMortems, expandedPostMortemImages, savedAnalyses, activeFrameworks, copiedMessageId, modelIdToName, providerNameToId, handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy, handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, confidenceCalibration, handleRetryPostMortem, lensConfig, chatLeverage, autopilotResolutions, handleConfirmAutopilot, handleDismissAutopilot, handleCompareAnalysis, handleViewReasoning, handleReRunAnalysis, handleReplacementChoice, startTodayReassessment, todayReassessmentInFlight, handleOpenAnalystPanel]);
 
     // ... (Rest of component remains unchanged) ...
     const isAnalysisProgressVisible = Boolean(
@@ -2937,6 +2953,21 @@ const App: React.FC = () => {
                 isExternallyOpen={isAdvancedAnalyticsOpen}
                 onClose={() => setIsAdvancedAnalyticsOpen(false)}
             />
+
+            {/* Analyst Panel — per-analyst detail + debate in a right-side slide-in */}
+            {analystPanel && (
+                <React.Suspense fallback={null}>
+                    <AnalystPanel
+                        message={analystPanel.message}
+                        activeTab={analystPanel.activeTab}
+                        modelIdToName={modelIdToName}
+                        providerNameToId={providerNameToId}
+                        lensConfig={lensConfig}
+                        onClose={() => setAnalystPanel(null)}
+                        onSelectTab={(tab) => setAnalystPanel(prev => prev ? { ...prev, activeTab: tab } : null)}
+                    />
+                </React.Suspense>
+            )}
 
             {/* Main row: persistent desktop sidebar + chat column */}
             <div className="flex-1 flex flex-row min-h-0">
