@@ -52,6 +52,11 @@ import {
     PatternFamily
 } from './PatternClassificationService';
 
+import {
+    scanCandlePatterns,
+    CandlePatternScan
+} from './CandlePatternDetector';
+
 import { parsePrice as canonicalParsePrice } from '../../utils/analysisUtils';
 
 import { getSessionContext, generateSessionSummary, SessionContext } from '../infrastructure/SessionService';
@@ -189,6 +194,18 @@ export interface HybridDataPacket {
         '1h': CandleHistory;
         '4h': CandleHistory;
     };
+
+    // ========== DETECTED CANDLE PATTERNS ==========
+    // Named classical patterns (pin bar, double top, BOS, …) over the
+    // last 30 completed candles per timeframe. This is the "what a human
+    // trader would see" layer that lets the model reason about structure
+    // it could not derive from indicators alone.
+    detectedPatterns: {
+        '5m': CandlePatternScan;
+        '15m': CandlePatternScan;
+        '1h': CandlePatternScan;
+        '4h': CandlePatternScan;
+    };
 }
 
 /**
@@ -205,10 +222,10 @@ interface CandleHistory {
 /**
  * Analyze the last N completed candles for bullish/bearish pattern
  * @param klines - Kline data array (newest last)
- * @param candleCount - Number of candles to analyze (default: 20)
+ * @param candleCount - Number of candles to analyze (default: 30)
  * @returns CandleHistory object
  */
-const analyzeCandleHistory = (klines: any[], candleCount: number = 20): CandleHistory => {
+const analyzeCandleHistory = (klines: any[], candleCount: number = 30): CandleHistory => {
     // Safety check: if insufficient data, return empty analysis
     if (!klines || klines.length < 2) {
         return {
@@ -346,7 +363,7 @@ export const fetchHybridData = async (symbol: string): Promise<HybridDataPacket>
     console.log(`  - Liquidations: ${liquidations.liquidationPressure} pressure`);
     console.log(`  - Session: ${session.sessionName} (${session.suggestedAction})`);
 
-    // Candle History Analysis (last 20 completed candles per timeframe)
+    // Candle History Analysis (last 30 completed candles per timeframe)
     // NOTE: Each timeframe uses its OWN kline data, not shared
     const candleHistory = {
         '5m': analyzeCandleHistory(snapshot.klines['5m']),
@@ -355,9 +372,19 @@ export const fetchHybridData = async (symbol: string): Promise<HybridDataPacket>
         '4h': analyzeCandleHistory(snapshot.klines['4h'])
     };
 
-
+    // Detected Candle Patterns (last 30 completed candles per timeframe).
+    // Runs the lightweight classical pattern detector over the same window
+    // so the prompt can show the model what a human trader would see on
+    // the chart: pin bars, double tops, BOS, engulfings, etc.
+    const detectedPatterns = {
+        '5m': scanCandlePatterns(snapshot.klines['5m'], 30),
+        '15m': scanCandlePatterns(snapshot.klines['15m'], 30),
+        '1h': scanCandlePatterns(snapshot.klines['1h'], 30),
+        '4h': scanCandlePatterns(snapshot.klines['4h'], 30)
+    };
 
     console.log(`  - Candle History: 5m=${candleHistory['5m'].summary}, 1h=${candleHistory['1h'].summary}`);
+    console.log(`  - Detected Patterns: 4h=${detectedPatterns['4h'].patterns.length} patterns, 1h=${detectedPatterns['1h'].patterns.length} patterns`);
 
     // Create partial packet for classification (circular dependency workaround)
     const partialData: any = {
@@ -428,7 +455,9 @@ export const fetchHybridData = async (symbol: string): Promise<HybridDataPacket>
             '4h': generateNumericChartData(snapshot.klines['4h'], '4h')
         },
         // Candle History
-        candleHistory
+        candleHistory,
+        // Detected Candle Patterns (pin bar, double top, BOS, …)
+        detectedPatterns
     };
 };
 
@@ -570,11 +599,43 @@ ${data.enhancedKeyLevels.fibLevels.levels.filter(l => ['0.382', '0.5', '0.618'].
 
 ${generateSessionSummary(data.session)}
 
- **CANDLE HISTORY (Last 20 Completed):**
+ **CANDLE HISTORY (Last 30 Completed):**
 - 5m (Entry Confirmation):  ${data.candleHistory['5m'].sequence.join('')} (${data.candleHistory['5m'].summary}) ${data.candleHistory['5m'].dominantTrend === 'bullish' ? '' : data.candleHistory['5m'].dominantTrend === 'bearish' ? '' : '↔'}
 - 15m (Market Structure): ${data.candleHistory['15m'].sequence.join('')} (${data.candleHistory['15m'].summary}) ${data.candleHistory['15m'].dominantTrend === 'bullish' ? '' : data.candleHistory['15m'].dominantTrend === 'bearish' ? '' : '↔'}
 - 1h (Key Levels):  ${data.candleHistory['1h'].sequence.join('')} (${data.candleHistory['1h'].summary}) ${data.candleHistory['1h'].dominantTrend === 'bullish' ? '' : data.candleHistory['1h'].dominantTrend === 'bearish' ? '' : '↔'}
 - 4h (Key Levels):  ${data.candleHistory['4h'].sequence.join('')} (${data.candleHistory['4h'].summary}) ${data.candleHistory['4h'].dominantTrend === 'bullish' ? '' : data.candleHistory['4h'].dominantTrend === 'bearish' ? '' : '↔'}
+
+${data.detectedPatterns ? (() => {
+            const formatTfPatterns = (tf: '5m' | '15m' | '1h' | '4h', role: string): string => {
+                const scan = data.detectedPatterns[tf];
+                if (!scan || scan.windowSize === 0) {
+                    return `- ${tf} (${role}): Insufficient data for pattern detection.`;
+                }
+                // Show the most recent / highest-strength patterns (top 5).
+                const top = [...scan.patterns]
+                    .sort((a, b) => b.strength - a.strength)
+                    .slice(0, 5);
+                if (top.length === 0) {
+                    return `- ${tf} (${role}): No notable patterns in the last ${scan.windowSize} candles.`;
+                }
+                const lines = top.map(p => {
+                    const dirIcon = p.direction === 'bullish' ? '🟢' : p.direction === 'bearish' ? '🔴' : '⚪';
+                    const level = p.priceLevel !== undefined ? ` @ $${p.priceLevel}` : '';
+                    return `     ${dirIcon} ${p.name} (idx ${p.index}, strength ${(p.strength * 100).toFixed(0)}%)${level} — ${p.note ?? ''}`;
+                });
+                // Add trend structure line
+                const struct = `     Structure: HH=${scan.higherHighs} HL=${scan.higherLows} LH=${scan.lowerHighs} LL=${scan.lowerLows}` +
+                    (scan.recentSwingHigh !== undefined ? ` | swingHi=$${scan.recentSwingHigh}` : '') +
+                    (scan.recentSwingLow !== undefined ? ` swingLo=$${scan.recentSwingLow}` : '');
+                return `- ${tf} (${role}) — last ${scan.windowSize} candles:\n${lines.join('\n')}\n${struct}`;
+            };
+            return ` **DETECTED CANDLE PATTERNS (last 30 candles per timeframe):**
+${formatTfPatterns('4h', 'HTF bias')}
+${formatTfPatterns('1h', 'Key level reactions')}
+${formatTfPatterns('15m', 'Market structure')}
+${formatTfPatterns('5m', 'Entry timing')}
+`;
+        })() : ''}
 
  **TIMEFRAME PURPOSE GUIDE:**
 - 4H & 1H: Use for key price levels and overall direction

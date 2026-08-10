@@ -51,6 +51,21 @@ export interface AggregatedStats {
     avgR: number;
     bestR: number;
     worstR: number;
+    /**
+     * Sum of negative R-multiples from losing trades. Magnitude-aware
+     * counterweight to `losses`: 2 trades at -3R is materially worse than
+     * 2 trades at -0.5R, even though the count is identical. Used by the
+     * severity-aware HALT branch in `generateMandatoryPatternCheck`.
+     * Always <= 0; 0 means "no losing trades" or "no R data".
+     */
+    sumLossR: number;
+    /**
+     * Number of losses that contributed to `sumLossR` (i.e. losses with
+     * a finite, non-zero R). Smaller than `losses` when some losses had
+     * missing SL/entry. Used to gate the severity HALT so we don't fire
+     * on a single outlier.
+     */
+    lossesWithR: number;
     regimeBreakdown: Record<string, { wins: number; losses: number; winRate: number }>;
 }
 
@@ -214,8 +229,14 @@ function extractKeyLesson(postMortem: string | undefined): string {
 
 /**
  * Calculate P&L in R multiples
+ *
+ * Exported so the post-mortem severity-insight generator in
+ * `InsightExtractionService` can use the same R-multiple math as the
+ * pattern-memory gate (single source of truth — see the comment at the
+ * LOSS branch below re: the correctedStopLoss scaling that the old
+ * hardcoded -1.0 used to flatten out).
  */
-function calculatePnlR(trade: LoggedTrade): number | undefined {
+export function calculatePnlR(trade: LoggedTrade): number | undefined {
     const analysis = trade.analysis;
     if (!analysis) return undefined;
 
@@ -326,13 +347,22 @@ export function calculateAggregatedStats(
             avgR: 0,
             bestR: 0,
             worstR: 0,
+            sumLossR: 0,
+            lossesWithR: 0,
             regimeBreakdown: {},
         };
     }
 
     // Calculate stats
     const wins = relevantTrades.filter(t => t.outcome === 'WIN').length;
-    const pnlRs = relevantTrades.map(t => calculatePnlR(t)).filter(r => r !== undefined) as number[];
+    const pnlRs = relevantTrades.map(t => calculatePnlR(t)).filter((r): r is number => r !== undefined);
+
+    // R-weighted severity counterweight: only LOSS outcomes with a finite
+    // negative R contribute, so a -0.5R tight-SL loss and a -3R disaster
+    // don't look identical to the gate.
+    const lossRs = pnlRs.filter(r => r < 0);
+    const sumLossR = lossRs.length > 0 ? +(lossRs.reduce((a, b) => a + b, 0)).toFixed(2) : 0;
+    const lossesWithR = lossRs.length;
 
     // Regime breakdown
     const regimeBreakdown: Record<string, { wins: number; losses: number; winRate: number }> = {};
@@ -362,6 +392,8 @@ export function calculateAggregatedStats(
         avgR: pnlRs.length > 0 ? +(pnlRs.reduce((a, b) => a + b, 0) / pnlRs.length).toFixed(2) : 0,
         bestR: pnlRs.length > 0 ? Math.max(...pnlRs) : 0,
         worstR: pnlRs.length > 0 ? Math.min(...pnlRs) : 0,
+        sumLossR,
+        lossesWithR,
         regimeBreakdown,
     };
 }
@@ -413,11 +445,16 @@ export function generateWarnings(
 
 /**
  * Main synthesis function - creates complete pattern memory for moderator
+ *
+ * When no insights are passed explicitly, load them from the attributed-
+ * insight store. The gate and the moderator enforcement context rely on
+ * this — otherwise severity insights recorded after a post-mortem would
+ * never reach the prompt that's supposed to quote them.
  */
 export function synthesizePatternMemory(
     setup: SetupContext,
     trades: LoggedTrade[],
-    attributedInsights: AttributedInsight[] = []
+    attributedInsights: AttributedInsight[] = loadAttributedInsights()
 ): PatternMemorySynthesis {
     const relevantTrades = findRelevantTrades(setup, trades);
     const aggregatedStats = calculateAggregatedStats(setup, trades);
@@ -529,7 +566,28 @@ export function generateSynthesizedPromptInjection(synthesis: PatternMemorySynth
     parts.push(`• Sample Size: ${synthesis.aggregatedStats.sampleSize} trades`);
     parts.push(`• Average R: ${synthesis.aggregatedStats.avgR >= 0 ? '+' : ''}${synthesis.aggregatedStats.avgR}R`);
     parts.push(`• Best/Worst: ${synthesis.aggregatedStats.bestR >= 0 ? '+' : ''}${synthesis.aggregatedStats.bestR}R / ${synthesis.aggregatedStats.worstR}R`);
+    parts.push(`• Cumulative R-Loss: ${synthesis.aggregatedStats.sumLossR}R across ${synthesis.aggregatedStats.lossesWithR} R-bearing losses`);
     parts.push('');
+
+    // Severity-tagged insights get their own block with priority. These
+    // are R-weighted post-mortem conclusions the user has produced; they
+    // carry the most actionable signal in the gate so we surface them
+    // before the generic attributed-insights list.
+    const severityInsights = synthesis.attributedInsights.filter(
+        i => i.sourceProvider === 'pattern-memory-severity-detector'
+    );
+    const genericInsights = synthesis.attributedInsights.filter(
+        i => i.sourceProvider !== 'pattern-memory-severity-detector'
+    );
+
+    if (severityInsights.length > 0) {
+        parts.push('**🩸 SEVERITY INSIGHTS (R-weighted, from your post-mortems):**');
+        severityInsights.forEach((insight, i) => {
+            parts.push(`${i + 1}. "${insight.insight}"`);
+            parts.push(`   Quality: ${insight.qualityScore}/100 | Used: ${insight.timesUsed}x | Helpful: ${insight.timesHelpful}x`);
+        });
+        parts.push('');
+    }
 
     // Regime context
     parts.push(`**Regime Context:** ${synthesis.regimeContext}`);
@@ -542,10 +600,10 @@ export function generateSynthesizedPromptInjection(synthesis: PatternMemorySynth
         parts.push('');
     }
 
-    // Attributed insights
-    if (synthesis.attributedInsights.length > 0) {
+    // Attributed insights (generic — severity is rendered above)
+    if (genericInsights.length > 0) {
         parts.push('**Provider-Attributed Insights:**');
-        synthesis.attributedInsights.forEach((insight, i) => {
+        genericInsights.forEach((insight, i) => {
             const provider = typeof insight.sourceProvider === 'string'
                 ? insight.sourceProvider
                 : AIProvider[insight.sourceProvider] || 'Unknown';
@@ -642,14 +700,20 @@ export function saveAttributedInsights(insights: AttributedInsight[]): void {
 }
 
 /**
- * Add a new attributed insight
+ * Add a new attributed insight.
+ *
+ * `id` is optional: when omitted a random id is generated. Callers that
+ * need idempotent writes (e.g. R-severity insights, whose ids are derived
+ * from the trade/setup) can pass a stable id so re-running the same job
+ * updates the existing row instead of duplicating it — dedupe/update is
+ * handled by the caller (see `InsightExtractionService.recordSeverityInsight`).
  */
 export function addAttributedInsight(
-    insight: Omit<AttributedInsight, 'id' | 'createdAt' | 'wasValidated' | 'timesUsed' | 'timesHelpful' | 'qualityScore'>
+    insight: Omit<AttributedInsight, 'id' | 'createdAt' | 'wasValidated' | 'timesUsed' | 'timesHelpful' | 'qualityScore'> & { id?: string }
 ): AttributedInsight {
     const newInsight: AttributedInsight = {
         ...insight,
-        id: `insight-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        id: insight.id ?? `insight-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         createdAt: new Date().toISOString(),
         wasValidated: false,
         timesUsed: 0,
@@ -738,6 +802,41 @@ export interface PatternMemoryGate {
     reason: string;
     mandatoryQuestions: string[];
     historicalFailures: RelevantTrade[];
+    /**
+     * Severity insights that were pulled into the gate's reasoning. Empty
+     * when none matched the current setup. Surfaced separately from the
+     * generic `attributedInsights` block so the moderator can quote the
+     * user's own past severity lesson verbatim.
+     */
+    severityInsights: AttributedInsight[];
+}
+
+/**
+ * Build a mandatory question that quotes the user's own past severity
+ * insight, if any. Returns null when no severity-tagged insight matches
+ * the current setup's family/coin/pattern scope.
+ *
+ * The synthetic provider id `pattern-memory-severity-detector` is the
+ * tag `InsightExtractionService.recordSeverityInsight` writes, so we
+ * filter on it here without polluting the general insight store.
+ */
+function buildSeverityMandatoryQuestion(
+    setup: SetupContext,
+    attributedInsights: AttributedInsight[]
+): string | null {
+    const severityMatches = attributedInsights.filter(
+        i => i.sourceProvider === 'pattern-memory-severity-detector'
+    );
+    if (severityMatches.length === 0) return null;
+
+    // Prefer the highest-quality match — the one that the user has found
+    // most helpful in the past, OR the most recent.
+    const best = [...severityMatches].sort((a, b) => {
+        if (a.qualityScore !== b.qualityScore) return b.qualityScore - a.qualityScore;
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    })[0];
+
+    return `Your pattern memory records: "${best.insight}" — what is structurally different about THIS trade that breaks the pattern?`;
 }
 
 /**
@@ -769,11 +868,28 @@ export function generateMandatoryPatternCheck(
         mandatoryQuestions.push('What specific edge has been identified that was missing before?');
     }
 
-    // Check for 3+ consecutive similar losses
+    // Check for 3+ similar losses (frequency-based HALT — unchanged)
     else if (losses.length >= 3) {
         gateResult = 'HALT';
         reason = `📛 HALT: ${losses.length} of the most similar historical trades were LOSSES. Pattern has consistent failure mode.`;
         mandatoryQuestions.push('What fundamental change would make this trade succeed where others failed?');
+    }
+
+    // Severity-aware HALT (NEW): catches "few but deep" failures.
+    // Dual-dimension — both the magnitude threshold AND a minimum loss
+    // count must hold, so a single -10R outlier (small sample) cannot
+    // flip the verdict on its own. Frequency and severity are co-equal
+    // signals: count catches repeated narrow losses, magnitude catches
+    // catastrophic ones.
+    else if (aggregatedStats.sumLossR <= -4 && aggregatedStats.lossesWithR >= 2) {
+        gateResult = 'HALT';
+        reason = `📛 HALT: Cumulative R-loss is ${aggregatedStats.sumLossR}R across ${aggregatedStats.lossesWithR} similar losses (avg ${aggregatedStats.avgR}R). Few-but-deep failure pattern — magnitude and frequency both confirm.`;
+        mandatoryQuestions.push('The pattern has not just repeated, it has bled severely. What evidence shows the next attempt will not repeat the same depth of loss?');
+        // Surface any matching severity insight from the post-mortem
+        // store as an additional mandatory question — quoting the user's
+        // own past lesson is more persuasive than generic questions.
+        const severityQuestion = buildSeverityMandatoryQuestion(setup, synthesis.attributedInsights);
+        if (severityQuestion) mandatoryQuestions.push(severityQuestion);
     }
 
     // REDUCE SIZE CONDITIONS
@@ -792,8 +908,14 @@ export function generateMandatoryPatternCheck(
 
     // WARNING CONDITIONS
     else if (losses.length >= 2 || warnings.length >= 2) {
+        // Surface avgR so the model can reason about expected value even
+        // when the threshold-based rules don't fire. Frequency + magnitude
+        // both visible to the moderator.
+        const rContext = aggregatedStats.lossesWithR > 0
+            ? ` avgR ${aggregatedStats.avgR >= 0 ? '+' : ''}${aggregatedStats.avgR}R, sumLossR ${aggregatedStats.sumLossR}R.`
+            : '.';
         gateResult = 'WARNING';
-        reason = `⚡ WARNING: ${losses.length} similar losses detected. ${warnings.length} active warnings.`;
+        reason = `⚡ WARNING: ${losses.length} similar losses detected. ${warnings.length} active warnings.${rContext}`;
         mandatoryQuestions.push('Are all warning conditions addressed in the analysis?');
     }
 
@@ -810,7 +932,10 @@ export function generateMandatoryPatternCheck(
         gateResult,
         reason,
         mandatoryQuestions,
-        historicalFailures: losses
+        historicalFailures: losses,
+        severityInsights: synthesis.attributedInsights.filter(
+            i => i.sourceProvider === 'pattern-memory-severity-detector'
+        )
     };
 }
 
@@ -837,6 +962,8 @@ ${gate.reason}
 - Sample Size: ${synthesis.aggregatedStats.sampleSize} similar trades
 - Win Rate: ${synthesis.aggregatedStats.winRate}%
 - Avg R: ${synthesis.aggregatedStats.avgR >= 0 ? '+' : ''}${synthesis.aggregatedStats.avgR}R
+- Worst R: ${synthesis.aggregatedStats.worstR}R
+- Cumulative Loss: ${synthesis.aggregatedStats.sumLossR}R (across ${synthesis.aggregatedStats.lossesWithR} R-bearing losses)
 `;
 
     // Add similar trades summary
@@ -845,6 +972,18 @@ ${gate.reason}
         synthesis.relevantTrades.forEach((t, i) => {
             const icon = t.outcome === 'WIN' ? '✅' : t.outcome === 'LOSS' ? '❌' : '⚖️';
             context += `${i + 1}. ${icon} ${t.coin} ${t.direction} (${t.similarity}% match) - "${t.keyLesson.slice(0, 80)}..."\n`;
+        });
+    }
+
+    // Surface severity-tagged insights with priority. These are the
+    // user's own R-weighted post-mortem conclusions ("this setup bled 6R
+    // total — damage is severity, not frequency") and they are the most
+    // actionable signal the moderator can quote when challenging the
+    // analysts.
+    if (gate.severityInsights.length > 0) {
+        context += `\n**🩸 SEVERITY INSIGHTS (R-weighted, from your own post-mortems):**\n`;
+        gate.severityInsights.forEach((insight, i) => {
+            context += `${i + 1}. "${insight.insight}" (quality: ${insight.qualityScore}/100)\n`;
         });
     }
 
