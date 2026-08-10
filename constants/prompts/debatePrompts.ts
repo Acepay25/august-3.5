@@ -2,6 +2,7 @@ import {
    MASTER_TRADE_PLAN_JSON_SCHEMA,
    PURE_AI_TRADE_PLAN_JSON_SCHEMA
 } from '../schemas';
+import { ANALYST_PERSONA_PROMPT } from './analysisPrompts';
 
 
 export const INVALIDATION_THESIS_PROMPT = `
@@ -58,6 +59,8 @@ Before finalizing any altcoin trade, consider:
 `;
 
 export const MODERATOR_SYSTEM_PROMPT_V2 = `
+${ANALYST_PERSONA_PROMPT}
+
 **MODERATOR (ACCURACY MODE - ORIGINAL)**
 
 You are the Master Strategist. You are running a **simulation** of a debate between expert analysts ({{ANALYSTS}}).
@@ -208,6 +211,8 @@ ${MASTER_TRADE_PLAN_JSON_SCHEMA}
 `;
 
 export const PURE_AI_MODERATOR_PROMPT = `
+${ANALYST_PERSONA_PROMPT}
+
 **MODERATOR (PURE AI MODE)**
 
 You are the Orchestrator of Pure Intelligence. You are simulating a free-form discussion between advanced AI agents ({{ANALYSTS}}).

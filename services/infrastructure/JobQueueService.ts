@@ -7,7 +7,11 @@
  */
 
 import { LoggedTrade } from '../../types';
-import { extractInsightsFromPostMortem } from '../learning/InsightExtractionService';
+import { getUserProfile } from './dbService';
+import {
+    extractInsightsFromPostMortem,
+    extractAndRecordSeverityInsights
+} from '../learning/InsightExtractionService';
 import {
     processPostMortemForLearning,
     loadLearningRules,
@@ -139,6 +143,28 @@ class JobQueueService {
      */
     private async handleExtractInsights(trade: LoggedTrade) {
         if (!trade.postMortem) return [];
+
+        // R-severity signals first: a deep loss always generates a severity
+        // insight — both the single-trade deep-loss signal (-1.5R or worse)
+        // and the cumulative setup-bleed signal (cluster sumLossR <= -3R
+        // across 2+ R-bearing losses) — independent of whether the post-mortem
+        // text contains the right keywords. The text-based extractor runs
+        // alongside; they're complementary, not redundant. Both writes are
+        // idempotent (severity ids are derived from trade/setup).
+        try {
+            const username = typeof localStorage !== 'undefined'
+                ? (localStorage.getItem('last_active_user') || 'default')
+                : 'default';
+            const profile = await getUserProfile(username);
+            const tradeLog = profile?.tradeLog ?? [];
+            const severityInsights = extractAndRecordSeverityInsights(trade, tradeLog);
+            for (const si of severityInsights) {
+                console.log(`[JobQueue] Recorded severity insight (${si.kind}, ${si.pnlR}R) for ${si.tradeId}`);
+            }
+        } catch (e) {
+            // Severity recording must never kill the rest of the job.
+            console.warn('[JobQueue] Severity insight extraction failed:', e);
+        }
 
         // Run extraction (CPU intensive part)
         const insights = extractInsightsFromPostMortem(trade.postMortem, trade);
