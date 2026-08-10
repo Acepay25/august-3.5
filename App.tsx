@@ -2785,6 +2785,15 @@ const App: React.FC = () => {
                             onToggleEnabled={() => void automations.toggleAutomationEnabled(config.id)}
                             onRefresh={() => automations.refreshRuns(config.id)}
                             modelIdToName={modelIdToName}
+                            onConfirmOutcome={(run, outcome) => {
+                                const msg = run.message;
+                                if (!msg) return;
+                                if (outcome === 'entry_not_hit') {
+                                    confirmAutopilotEntryNotHit(msg);
+                                } else {
+                                    confirmAutopilotOutcome(msg, outcome === 'win' ? TradeOutcome.WIN : TradeOutcome.LOSS);
+                                }
+                            }}
                         />
                     </div>
                 );
