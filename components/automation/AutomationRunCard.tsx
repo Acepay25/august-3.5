@@ -2,20 +2,33 @@ import React, { useState } from 'react';
 import { AutomationRun } from '../../types/automation';
 import { ChevronDownIcon, LoadingIcon } from '../shared/Icons';
 
+/** Minimal view of the stored hybrid snapshot (HybridDataPacket). */
+interface HybridSnapshot {
+    symbol?: string;
+    regime?: { regime?: string; trendDirection?: string; adx?: number };
+    confluence?: { score?: number; direction?: string; strength?: string };
+    indicators?: { '1h'?: { rsi?: { rsi14?: number }; atr?: number; currentPrice?: number } };
+    session?: { sessionName?: string; suggestedAction?: string };
+    dataTimestamp?: string;
+}
+
 /**
  * One scheduled run in the automation's card feed — the same shape as a
  * chat analysis card (direction, coin, probability, entry/SL/TP), with the
- * reasoning + debate turns + analysis JSON expandable underneath.
+ * hybrid market data it was fed, the reasoning + debate turns + analysis
+ * JSON expandable underneath.
  */
 const AutomationRunCard: React.FC<{
     run: AutomationRun;
     modelIdToName: Record<string, string>;
 }> = ({ run, modelIdToName }) => {
+    const [showHybrid, setShowHybrid] = useState(false);
     const [showReasoning, setShowReasoning] = useState(false);
     const [showDebate, setShowDebate] = useState(false);
     const [showJson, setShowJson] = useState(false);
 
     const analysis = run.message?.analysis;
+    const snapshot = (analysis?.marketSnapshot ?? undefined) as HybridSnapshot | undefined;
     const time = new Date(run.startedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
     const statusBadge = run.status === 'complete' ? (
@@ -76,6 +89,24 @@ const AutomationRunCard: React.FC<{
 
             {/* Expandable detail sections */}
             <div className="px-4 pb-3 space-y-1">
+                {snapshot && (
+                    <div>
+                        <button onClick={() => setShowHybrid(!showHybrid)} className="text-[10px] uppercase font-bold tracking-widest text-zinc-500 hover:text-cyan-300 flex items-center gap-1 transition-colors">
+                            Hybrid Intelligence market data <ChevronDownIcon className={`w-3 h-3 transition-transform ${showHybrid ? 'rotate-180' : ''}`} />
+                        </button>
+                        <div className={`collapsible-content ${showHybrid ? 'expanded' : ''}`}>
+                            <div className="p-2.5 bg-zinc-950 border border-white/5 rounded-lg flex flex-wrap gap-x-4 gap-y-1 text-[10px] font-mono text-zinc-400">
+                                {snapshot.symbol && <span>Symbol: <span className="text-zinc-200 font-bold">{snapshot.symbol}</span></span>}
+                                {snapshot.regime?.regime && <span>Regime: <span className="text-cyan-300">{snapshot.regime.regime}</span>{typeof snapshot.regime.adx === 'number' && <span className="text-zinc-500"> (ADX {snapshot.regime.adx.toFixed(1)})</span>}</span>}
+                                {typeof snapshot.confluence?.score === 'number' && <span>Confluence: <span className="text-zinc-200">{snapshot.confluence.score}/100 {snapshot.confluence.direction}{snapshot.confluence.strength ? ` (${snapshot.confluence.strength})` : ''}</span></span>}
+                                {typeof snapshot.indicators?.['1h']?.rsi?.rsi14 === 'number' && <span>RSI(1h): <span className="text-zinc-200">{snapshot.indicators['1h'].rsi.rsi14}</span></span>}
+                                {typeof snapshot.indicators?.['1h']?.atr === 'number' && <span>ATR(1h): <span className="text-zinc-200">{snapshot.indicators['1h'].atr}</span></span>}
+                                {snapshot.session?.sessionName && <span>Session: <span className="text-zinc-200">{snapshot.session.sessionName}</span></span>}
+                            </div>
+                            <p className="text-[9px] text-zinc-600 mt-1">Real-time data fetched at analysis time — 5m · 15m · 1h · 4h indicators, confluence, regime and volume were injected into every analyst prompt.</p>
+                        </div>
+                    </div>
+                )}
                 {run.message?.thoughtProcesses && Object.keys(run.message.thoughtProcesses).length > 0 && (
                     <div>
                         <button onClick={() => setShowReasoning(!showReasoning)} className="text-[10px] uppercase font-bold tracking-widest text-zinc-500 hover:text-cyan-300 flex items-center gap-1 transition-colors">

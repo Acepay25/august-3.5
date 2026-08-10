@@ -813,7 +813,11 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             currentHybridData && detectedSymbol && currentHybridData.symbol === detectedSymbol
                 ? currentHybridData
                 : null;
-        if (runEnsembleEnabled && isHybridIntelligenceEnabled && !cachedHybridData && !options?.presetHybridData) {
+        // Hybrid intelligence: automation runs ALWAYS fetch real-time market
+        // data (that data IS the point of an automated analysis) — the
+        // global toggle only gates MANUAL runs.
+        const runHybridEnabled = isAutomationRun || isHybridIntelligenceEnabled;
+        if (runEnsembleEnabled && runHybridEnabled && !cachedHybridData && !options?.presetHybridData) {
             if (!isAutomationRun) {
                 setHybridConnectionStatus(prev => (prev === 'connected' ? 'connected' : 'connecting'));
                 setIsHybridLoading(true);
@@ -866,7 +870,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             // is fetched and nothing is injected into the analyst prompts.
             // Preset data (auto-capture) always wins — it was explicitly
             // fetched for this analysis, so it is injected below regardless.
-            if (runEnsembleEnabled && isHybridIntelligenceEnabled && !options?.presetHybridData) {
+            if (runEnsembleEnabled && runHybridEnabled && !options?.presetHybridData) {
                 try {
                     devLog('[Hybrid Intelligence] Attempting to fetch data for prompt:', effectiveInput);
                     if (!isAutomationRun) setLoadingMessage('Fetching real-time market data...');
