@@ -172,6 +172,17 @@ export const analyzeBar = (
 // ============================================================================
 
 /**
+ * Render the last 5 bars as arrows in CHRONOLOGICAL order (oldest → newest,
+ * left → right) — the same reading convention as the RAW OHLC and Candle
+ * History sections of the hybrid payload. `bars` is newest-first internally;
+ * reversing the window is what makes the arrows readable as a price sequence.
+ */
+export const formatLastBarsArrows = (bars: ChartBar[]): string =>
+    bars.slice(0, 5).reverse().map(b =>
+        b.direction === 'bullish' ? '↑' : b.direction === 'bearish' ? '↓' : '→'
+    ).join('');
+
+/**
  * Detect candlestick patterns from recent bars
  */
 export const detectPattern = (bars: ChartBar[]): ChartPattern => {
@@ -446,8 +457,12 @@ export const generateNumericChartData = (
     const avgVolume = sortedKlines.reduce((sum, k) => sum + k.volume, 0) / sortedKlines.length;
     const volumes = sortedKlines.map(k => k.volume);
 
-    // Analyze each bar (last 10 for detailed view)
-    const bars: ChartBar[] = sortedKlines.slice(0, 10).map((k, i) =>
+    // Analyze each bar (last 10 COMPLETED candles for detailed view).
+    // sortedKlines[0] is the still-forming live candle — every other section
+    // of the hybrid payload (Candle History, RAW OHLC, pattern scan) uses
+    // completed candles only, so the chart block must too, or its "Last 5
+    // bars" arrows drift one candle off from the raw OHLC row.
+    const bars: ChartBar[] = sortedKlines.slice(1, 11).map((k, i) =>
         analyzeBar(k, i, avgVolume, volumes.slice(0, i))
     );
 
@@ -505,9 +520,7 @@ export const generateNumericChartData = (
     const averageClose = sortedKlines.slice(0, 20).reduce((sum, k) => sum + k.close, 0) / Math.min(20, sortedKlines.length);
 
     // Generate summary
-    const barsSummary = bars.slice(0, 5).map(b =>
-        b.direction === 'bullish' ? '↑' : b.direction === 'bearish' ? '↓' : '→'
-    ).join('');
+    const barsSummary = formatLastBarsArrows(bars);
 
     const summary = `${timeframe} ${trend.replace('_', ' ')} (${maturity}) | ${regime} | ${barsSummary} | Vol: ${volatility}`;
 
@@ -550,10 +563,9 @@ export const generateChartPromptInjection = (
     const formatTimeframe = (data: NumericChartData): string => {
         const { state, keyLevels, bars } = data;
 
-        // Direction arrows for recent bars
-        const barArrows = bars.slice(0, 5).map(b =>
-            b.direction === 'bullish' ? '↑' : b.direction === 'bearish' ? '↓' : '→'
-        ).join('');
+        // Direction arrows for recent bars — chronological (oldest → newest),
+        // matching the RAW OHLC row so the arrows can be cross-checked 1:1.
+        const barArrows = formatLastBarsArrows(bars);
 
         // Wick analysis
         const wickInfo = bars.slice(0, 3).map(b => b.wickBias).filter(w => w !== 'balanced');
