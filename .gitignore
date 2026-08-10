@@ -61,3 +61,6 @@ test-results/
 blob-report/
 coverage/
 .nyc_output/
+
+# Regenerable hybrid-injection diagnostic dump
+hybrid-injection-dump.txt
