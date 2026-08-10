@@ -377,7 +377,7 @@ export const validateSessionRisk = (
     }
 
     // Asia session + breakout = low reliability
-    if ((session.currentSession === 'asia' || session.sessionName.includes('Asia')) &&
+    if ((session.currentSession === 'asian' || session.sessionName.includes('Asia')) &&
         tradeType.toLowerCase().includes('breakout')) {
         warnings.push(' Breakout in Asia session - lower reliability due to low liquidity');
     }

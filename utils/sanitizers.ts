@@ -14,10 +14,11 @@ export const sanitizeAIResponse = (text: string): string => {
   let cleaned = text
     .replace(/^#+\s/gm, '') // Headings
     .replace(/(\*\*|__)(.*?)\1/g, '$2') // Bold
-    // Italic (*) — skip digit-adjacent asterisks so math survives the pass
-    // ("5*6*7" must not become "567"); the digit-guard below can only protect
-    // asterisks that are still present when it runs.
-    .replace(/(?<!\d)\*(.*?)(?<!\d)\*/g, '$1')
+    // Italic (*) — skip digit- AND space-adjacent asterisks so math survives
+    // the pass ("5*6*7" and "5 * 6 contracts" must not be mangled). Without
+    // the space guards "TP1 94500 * 2 R:R" had its asterisks stripped by the
+    // cleanup pass below, destroying the displayed R:R math.
+    .replace(/(?<!\d)\*(?!\s)(.*?)(?<!\s)\*(?!\d)/g, '$1')
     // Underscore-italic only at word boundaries — a bare `_` pair would
     // otherwise corrupt tickers/timeframes ("BTCUSDT_4h" → "BTCUSDT4h").
     .replace(/(?<!\w)_([^_\n]*)_(?!\w)/g, '$1')
@@ -25,10 +26,10 @@ export const sanitizeAIResponse = (text: string): string => {
     .replace(/`/g, '');                 // Code ticks
 
   // Remove remaining asterisks that might have been missed or used for
-  // decoration. Only strip asterisks that are NOT adjacent to a digit on
-  // either side, so math survives ("1.5* ATR", "3x*", "5*6") instead of being
-  // silently mangled.
-  cleaned = cleaned.replace(/(?<!\d)\*(?!\d)/g, '');
+  // decoration. Only strip asterisks that are NOT adjacent to a digit or
+  // whitespace on either side, so math survives ("1.5* ATR", "5*6",
+  // "5 * 6 contracts", "TP1 94500 * 2 R:R") instead of being mangled.
+  cleaned = cleaned.replace(/(?<!\d)(?<!\s)\*(?!\s)(?!\d)/g, '');
 
   // Aggressive XSS prevention: Strip HTML tags (loop until stable to defeat nested-tag bypasses)
   // This prevents <script>, <iframe>, <object>, etc. from being rendered if the UI ever uses dangerous HTML setting.

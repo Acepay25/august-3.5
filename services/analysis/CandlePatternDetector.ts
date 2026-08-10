@@ -217,8 +217,12 @@ function detectSingleCandlePatterns(
 
     // Belt hold: the candle opens at/near the extreme and the body fills most
     // of the range — a strong opening commitment. (Body ≤ 88% keeps marubozu
-    // the dominant "full-body" label.)
-    if (bodyRatio > 60 && bodyRatio <= 88 && lower < 10 && upper < 30) {
+    // the dominant "full-body" label.) Direction is mandatory: a bullish belt
+    // hold OPENS AT ITS LOW, a bearish one AT ITS HIGH. Without the check a
+    // bullish candle with a small upper wick fired "bearish_belt_hold", and a
+    // candle with both wicks <10% fired both patterns simultaneously — two
+    // contradictory signals in the same prompt.
+    if (isBullish(c) && bodyRatio > 60 && bodyRatio <= 88 && lower < 10 && upper < 30) {
         out.push({
             name: 'bullish_belt_hold',
             index: idx,
@@ -228,7 +232,7 @@ function detectSingleCandlePatterns(
             note: 'Opened at the low and closed near the high — buying commitment from the open.'
         });
     }
-    if (bodyRatio > 60 && bodyRatio <= 88 && upper < 10 && lower < 30) {
+    if (isBearish(c) && bodyRatio > 60 && bodyRatio <= 88 && upper < 10 && lower < 30) {
         out.push({
             name: 'bearish_belt_hold',
             index: idx,
@@ -541,27 +545,31 @@ function detectThreeCandlePatterns(
         }
     }
 
-    // Fair value gap: the newest candle's low gaps above the oldest candle's
-    // high (bullish FVG) — the untraded zone between them is unfilled
-    // liquidity the market often returns to.
-    if (curr.low > prev.high) {
+    // Fair value gap: the MIDDLE candle leaves an untraded imbalance zone
+    // above the oldest candle's high (bullish FVG) — [prev.high, mid.low] is
+    // unfilled liquidity the market often returns to. Requiring the middle
+    // candle to create the gap (mid.low > prev.high) AND the newest candle to
+    // not have filled it yet (curr.low > prev.high): the old code only tested
+    // the newest candle, so zones the middle candle had already traded
+    // through were reported as "unfilled".
+    if (mid.low > prev.high && curr.low > prev.high) {
         out.push({
             name: 'bullish_fvg',
             index: idx,
             direction: 'bullish',
             strength: 0.6,
-            priceLevel: (prev.high + curr.low) / 2,
-            note: `Unfilled gap zone between ${prev.high} and ${curr.low} — bullish fair value gap.`
+            priceLevel: (prev.high + mid.low) / 2,
+            note: `Unfilled gap zone between ${prev.high} and ${mid.low} — bullish fair value gap.`
         });
     }
-    if (curr.high < prev.low) {
+    if (mid.high < prev.low && curr.high < prev.low) {
         out.push({
             name: 'bearish_fvg',
             index: idx,
             direction: 'bearish',
             strength: 0.6,
-            priceLevel: (curr.high + prev.low) / 2,
-            note: `Unfilled gap zone between ${curr.high} and ${prev.low} — bearish fair value gap.`
+            priceLevel: (mid.high + prev.low) / 2,
+            note: `Unfilled gap zone between ${mid.high} and ${prev.low} — bearish fair value gap.`
         });
     }
 

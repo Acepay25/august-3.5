@@ -871,10 +871,19 @@ export const saveRollingWindowData = (data: RollingWindowData): void => {
  */
 export const mapFamilyToTradeType = (family: string): TradeType => {
     const f = family?.toLowerCase() || '';
-    if (f.includes('a') || f.includes('b') || f.includes('reversal') || f.includes('trap') || f.includes('exhaustion')) {
+    // Match the family IDENTIFIER with word boundaries — the old bare-letter
+    // checks matched the 'a' inside "family" itself (and the 'b' inside
+    // "breakout"), so EVERY family classified as 'reversal' and the
+    // continuation/breakout buckets stayed nearly empty. That skewed
+    // getSituationalExpertise and the situational bonuses in the dynamic
+    // ensemble weights. Mirrors mapFamilyToKey's approach.
+    if (/\bfamily\s*omega\b/.test(f) || f.includes('omega') || f.includes('momentum')) {
+        return 'continuation';
+    }
+    if (/\bfamily\s*a\b/.test(f) || /\bfamily\s*b\b/.test(f) || f.includes('reversal') || f.includes('trap') || f.includes('exhaustion')) {
         return 'reversal';
     }
-    if (f.includes('c') || f.includes('omega') || f.includes('continuation') || f.includes('momentum')) {
+    if (/\bfamily\s*c\b/.test(f) || f.includes('continuation')) {
         return 'continuation';
     }
     if (f.includes('breakout') || f.includes('break')) {

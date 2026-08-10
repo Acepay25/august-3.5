@@ -51,7 +51,10 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
     const [isProcessing, setIsProcessing] = useState(false);
     const [processingLabel, setProcessingLabel] = useState('');
     const [expandedId, setExpandedId] = useState<string | null>(null);
-    const [draft, setDraft] = useState<string>('');
+    // Per-doc drafts keyed by id — a single shared `draft` string silently
+    // discarded unsaved edits when opening another doc (or collapsing the
+    // expanded one).
+    const [drafts, setDrafts] = useState<Record<string, string>>({});
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const activeUser = username || 'default';
@@ -122,12 +125,15 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
                 createdAt: Date.now(),
                 updatedAt: Date.now(),
                 summary,
+                // Keep the raw book text so "Re-summarize" can re-run against
+                // the book instead of echoing the previous summary.
+                sourceText: fullText,
                 enabled: true,
             };
             await saveStrategyDoc(doc, activeUser);
             refresh();
             setExpandedId(doc.id);
-            setDraft(doc.summary);
+            setDrafts(prev => ({ ...prev, [doc.id]: doc.summary }));
             toast.success('Strategies added', `"${file.name}" summarized — edit it below and enable the master switch.`);
         } catch (e: any) {
             const isAbort = e?.name === 'AbortError' || e?.code === 'ABORT_ERR';
@@ -143,19 +149,28 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
 
     const openEditor = useCallback((doc: StrategyDoc) => {
         setExpandedId(expandedId === doc.id ? null : doc.id);
-        setDraft(doc.summary);
     }, [expandedId]);
 
     const handleSaveEdit = useCallback(async (doc: StrategyDoc) => {
-        await updateStrategyDoc(doc.id, { summary: draft }, activeUser);
-        refresh();
-        toast.success('Strategies saved', `Edits to "${doc.sourceName}" apply to the next analysis.`);
-    }, [activeUser, draft, refresh, toast]);
+        try {
+            await updateStrategyDoc(doc.id, { summary: drafts[doc.id] ?? doc.summary }, activeUser);
+            refresh();
+            toast.success('Strategies saved', `Edits to "${doc.sourceName}" apply to the next analysis.`);
+        } catch (e) {
+            console.error('[StrategiesManager] Save failed:', e);
+            toast.error('Could not save', e instanceof Error ? e.message : 'Unknown error');
+        }
+    }, [activeUser, drafts, refresh, toast]);
 
     const handleToggleDoc = useCallback(async (doc: StrategyDoc) => {
-        await updateStrategyDoc(doc.id, { enabled: !doc.enabled }, activeUser);
-        refresh();
-    }, [activeUser, refresh]);
+        try {
+            await updateStrategyDoc(doc.id, { enabled: !doc.enabled }, activeUser);
+            refresh();
+        } catch (e) {
+            console.error('[StrategiesManager] Toggle failed:', e);
+            toast.error('Could not update', e instanceof Error ? e.message : 'Unknown error');
+        }
+    }, [activeUser, refresh, toast]);
 
     const handleResummarize = useCallback(async (doc: StrategyDoc) => {
         if (!readyProvider) {
@@ -165,10 +180,14 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
         setIsProcessing(true);
         setProcessingLabel(`Re-summarizing ${doc.sourceName}…`);
         try {
-            const summary = await summarizeStrategiesPdf(doc.summary, doc.sourceName, readyProvider);
+            // Re-run against the ORIGINAL book text when we still have it —
+            // feeding the previous summary back into the book-extraction
+            // prompt made the model echo the existing list.
+            const source = doc.sourceText || doc.summary;
+            const summary = await summarizeStrategiesPdf(source, doc.sourceName, readyProvider);
             await updateStrategyDoc(doc.id, { summary }, activeUser);
             refresh();
-            setDraft(summary);
+            setDrafts(prev => ({ ...prev, [doc.id]: summary }));
             toast.success('Re-summarized', `"${doc.sourceName}" updated.`);
         } catch (e) {
             console.error('[StrategiesManager] Re-summarize failed:', e);
@@ -187,10 +206,20 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
             destructive: true,
         });
         if (!ok) return;
-        await deleteStrategyDoc(doc.id, activeUser);
-        refresh();
-        if (expandedId === doc.id) setExpandedId(null);
-        toast.success('Deleted', `"${doc.sourceName}" removed.`);
+        try {
+            await deleteStrategyDoc(doc.id, activeUser);
+            refresh();
+            if (expandedId === doc.id) setExpandedId(null);
+            setDrafts(prev => {
+                const next = { ...prev };
+                delete next[doc.id];
+                return next;
+            });
+            toast.success('Deleted', `"${doc.sourceName}" removed.`);
+        } catch (e) {
+            console.error('[StrategiesManager] Delete failed:', e);
+            toast.error('Could not delete', e instanceof Error ? e.message : 'Unknown error');
+        }
     }, [activeUser, confirm, expandedId, refresh, toast]);
 
     return (
@@ -285,8 +314,8 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
                             {isExpanded && (
                                 <div className="px-4 pb-4 pt-0 space-y-2.5">
                                     <textarea
-                                        value={draft}
-                                        onChange={(e) => setDraft(e.target.value)}
+                                        value={drafts[doc.id] ?? doc.summary}
+                                        onChange={(e) => setDrafts(prev => ({ ...prev, [doc.id]: e.target.value }))}
                                         spellCheck={false}
                                         className="w-full h-64 resize-y bg-zinc-950 border border-zinc-800 rounded-lg p-3 font-mono text-[11px] leading-relaxed text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-cyan-500/40 transition-colors whitespace-pre"
                                         placeholder="AI summary — edit freely; your text is what the models see."

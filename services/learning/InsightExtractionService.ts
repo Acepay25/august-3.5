@@ -456,7 +456,11 @@ export function extractSeverityInsightFromTrade(trade: LoggedTrade): SeverityIns
 
     const pnlR = calculatePnlR(trade);
     if (pnlR === undefined || !isFinite(pnlR)) return null;
-    if (pnlR > SEVERITY_DEEP_LOSS_R) return null;  // not deep enough
+    // Too shallow to deserve a severity signal: the guard used the DEEP
+    // threshold (-1.5R), which made the bleeder branch below unreachable —
+    // a -1.0R..-1.5R average loss generated nothing despite the intended
+    // -1.0R bleeder threshold. (A -0.5R loss still stays out.)
+    if (pnlR > SEVERITY_AVG_BLEEDER_R) return null;
 
     const kind: SeverityInsightKind = pnlR <= SEVERITY_DEEP_LOSS_R
         ? 'deep_single_loss'

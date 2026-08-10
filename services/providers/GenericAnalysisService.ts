@@ -80,6 +80,113 @@ function stripTagArtifacts(text: string): string {
         .trim();
 }
 
+// ─── Analyst structured-plan extraction ─────────────────────────────────────
+// Analysts write readable prose (the prompts forbid JSON), but every
+// structured consumer downstream — per-analyst Monte Carlo, the consensus
+// panel, pre-debate divergence detection, Bayesian calibration, and the
+// Gate's confidence-conflict challenge — keys on
+// analysis.entryPoints/stopLoss/takeProfit/probability. Before this parser
+// existed the pipeline stored a hardcoded Neutral/Low placeholder per
+// analyst, silently killing all of those consumers. This mines the fields
+// out of the prose: labeled values first, then the machine-readable
+// TRADE PLAN BLOCK the prompts mandate (see LENS_MODE_BASE_PROMPT /
+// MASTER_ANALYSIS_PROMPT).
+
+export interface ParsedTradePlan {
+    direction?: 'Long' | 'Short' | 'Neutral';
+    entryPoints?: string[];
+    stopLoss?: string;
+    takeProfit?: string[];
+    probability?: number;
+    confidence?: 'High' | 'Medium' | 'Low' | 'Avoid';
+}
+
+/** Price tokens out of a labeled line: "94,500 – 94,800 (limit)" → ["94,500","94,800"]. */
+const priceTokens = (line: string): string[] =>
+    (line.match(/\d[\d,]*(?:\.\d+)?/g) || []).filter(t => t !== '');
+
+const firstPriceToken = (line: string): string | undefined => priceTokens(line)[0];
+
+export const extractStructuredPlanFromProse = (text: string): ParsedTradePlan => {
+    if (!text) return {};
+    const plan: ParsedTradePlan = {};
+
+    // --- Direction: labeled forms first ("Direction:", "MACRO BIAS:",
+    // "TECHNICAL BIAS:", "VERDICT:", "Bias:"), then explicit ALL-CAPS
+    // LONG/SHORT (lens roles write "TECHNICAL BIAS: LONG"). Bare lowercase
+    // "bullish"/"bearish" in prose is never enough — sentence noise. A label
+    // whose line lists competing options ("LONG / SHORT / NO TRADE") means
+    // the model echoed the template — no verdict.
+    const dirLabel = text.match(/Direction\s*:\s*(Long|Short|Neutral|Bullish|Bearish|Buy|Sell)/i)
+        || text.match(/(?:MACRO|TECHNICAL|FINAL|TRADE|TOTAL)\s*(?:BIAS|VERDICT|RECOMMENDATION|OUTLOOK)\s*:\s*(?:(?:STRONG|WEAK|CONFIRMED)\s+)?(Long|Short|Neutral|Buy|Sell|NO\s*TRADE)/i)
+        || text.match(/(?:Bias|Verdict|Outlook|Thesis|Recommendation)\s*:\s*(Long|Short|Neutral|Bullish|Bearish|Buy|Sell|NO\s*TRADE)/i);
+    if (dirLabel) {
+        const word = dirLabel[1].toLowerCase();
+        const mapped = word.includes('long') || word.includes('bull') || word.includes('buy')
+            ? 'Long'
+            : word.includes('short') || word.includes('bear') || word.includes('sell') ? 'Short' : 'Neutral';
+        const labelEnd = (dirLabel.index ?? 0) + dirLabel[0].length;
+        const lineEnd = text.indexOf('\n', labelEnd);
+        const labelLine = text.slice(labelEnd, lineEnd === -1 ? text.length : lineEnd);
+        const echoedOptions = /(?:^|\s)(LONG|SHORT|NEUTRAL|NO\s*TRADE)\b/.test(labelLine);
+        if (!echoedOptions) plan.direction = mapped;
+    }
+    if (!plan.direction) {
+        const explicitLong = /\bLONG\b/.test(text);
+        const explicitShort = /\bSHORT\b/.test(text);
+        if (explicitLong !== explicitShort) plan.direction = explicitLong ? 'Long' : 'Short';
+    }
+
+    // --- Entry (single price or zone — both survive parsePrice) ---
+    const entryLine = text.match(/Entry(?:\s*Zone)?\s*:\s*([^\n]*)/i);
+    if (entryLine && entryLine[1] && !/N\/?A/i.test(entryLine[1])) {
+        const tokens = priceTokens(entryLine[1]);
+        if (tokens.length > 0) {
+            plan.entryPoints = [tokens.length > 1 ? `${tokens[0]} - ${tokens[tokens.length - 1]}` : tokens[0]];
+        }
+    }
+
+    // --- Stop loss ("Stop Loss:", "SL:"; "Stop Loss Percentage:" is
+    // deliberately NOT matched — the colon comes after "Percentage"). ---
+    const slLine = text.match(/(?:Stop Loss|SL)\s*(?:1)?\s*:\s*([^\n]*)/i);
+    if (slLine && slLine[1] && !/N\/?A/i.test(slLine[1])) {
+        const sl = firstPriceToken(slLine[1]);
+        if (sl) plan.stopLoss = sl;
+    }
+
+    // --- Take profits ("Take Profit 1:", "TP1:") ---
+    const tpLines = [...text.matchAll(/(?:Take Profit|TP)\s*(\d)?\s*:\s*([^\n]*)/gi)];
+    if (tpLines.length > 0) {
+        plan.takeProfit = tpLines
+            .map(m => (m[2] && !/N\/?A/i.test(m[2]) ? firstPriceToken(m[2]) : undefined))
+            .filter((t): t is string => !!t);
+    }
+
+    // --- Probability (the master prompt's "Long Probability %: 65%"; a bare
+    // "Probability: 65" too). 1–10 role scales ("MACRO CONFIDENCE: 7") are
+    // NOT probabilities and stay unmatched — the schema's confidence path
+    // handles those separately. The range-guard rejects a template echo
+    // ("<0-100>%") — "100" inside a range must not read as 100%.
+    const probMatch = text.match(/Probability\s*%?\s*:\s*(?<![-–—])(\d+(?:\.\d+)?)\s*%/i);
+    if (probMatch) {
+        const p = parseFloat(probMatch[1]);
+        if (!isNaN(p) && p > 0 && p <= 100) plan.probability = p;
+    }
+
+    // --- Confidence label ("Confidence: High") ---
+    const confMatch = text.match(/(?:Confidence|Conviction)\s*:\s*(High|Medium|Med|Low|Avoid)/i);
+    if (confMatch) {
+        const c = confMatch[1].toLowerCase();
+        plan.confidence = c === 'med' || c === 'medium' ? 'Medium'
+            : c === 'high' ? 'High'
+            : c === 'low' ? 'Low'
+            : c === 'avoid' ? 'Avoid'
+            : undefined;
+    }
+
+    return plan;
+};
+
 // ─── analyzeTradingView ─────────────────────────────────────────────────────
 
 export interface AnalyzeTradingViewParams {
@@ -174,6 +281,12 @@ export async function analyzeTradingView(
 
     // --- BUILD SYSTEM PROMPT ---
     let systemPrompt: string;
+    // Analyst Lens persona is injected in EVERY mode — the old branches for
+    // pure-AI/accuracy dropped rolePrompt silently, so Lenses + Accuracy ran
+    // with zero personas while the moderator still received lens context.
+    const roleBlock = rolePrompt
+        ? ` **SPECIALIZED ANALYST ROLE ACTIVE**\n\n${rolePrompt}\n\n---\n\n`
+        : '';
 
     if (isPureAiMode) {
         const playbookContext = isPlaybookEnabledInPureAI
@@ -186,7 +299,7 @@ export async function analyzeTradingView(
             ? `\n\n**PATTERN MEMORY REFERENCE (ENABLED BY USER):**\nAlthough this is Pure AI Mode, the user has enabled access to your historical Pattern Memory. You may use this as a reference to identify recurring patterns from the user's past trades.\n`
             : "";
 
-        systemPrompt = `${getPrompt('analysis.pure_ai', PURE_AI_MODE_PROMPT)}
+        systemPrompt = `${roleBlock}${getPrompt('analysis.pure_ai', PURE_AI_MODE_PROMPT)}
 
       ${visionDeepDive}
 
@@ -208,7 +321,7 @@ export async function analyzeTradingView(
       arrays, XML tags, or section labels.
     `;
     } else if (isAccuracyMode) {
-        systemPrompt = `${getPrompt('analysis.accuracy', ACCURACY_MODE_PROMPT)}
+        systemPrompt = `${roleBlock}${getPrompt('analysis.accuracy', ACCURACY_MODE_PROMPT)}
 
       ${getPrompt('analysis.master', MASTER_ANALYSIS_PROMPT)}
 
@@ -252,11 +365,13 @@ export async function analyzeTradingView(
 
       ${userStrategiesBlock}
 
+      ${rolePrompt ? '' : `
       **ANALYTICAL PROCESS OVERRIDE:**
       You must perform the analysis exactly as defined in the MASTER PROMPT sections 1-8.
 
       **CRITICAL: PATTERN MEMORY INTEGRATION (SECTION 4):**
       Use the **PATTERN MEMORY** and **RECENT INSIGHTS** provided below as your source of truth for user-specific patterns and corrections. Do NOT use Layer 3 Global Memory for past trade references.
+      `}
 
       ${getPrompt('analysis.risk_rules', RISK_MANAGEMENT_RULES)}
 
@@ -451,7 +566,10 @@ export async function analyzeTradingView(
     // deltas) flows to onReasoning in real-time and the live cards can render
     // it harness-style, THEN present the final output. Non-chat_completions
     // formats and Electron fall back to non-streaming inside streamChatRequest.
-    const options: ChatRequestOptions = { jsonMode: false, maxTokens: TASK_BUDGETS.analysis, signal, onReasoning };
+    // Temperature: 0.4 (the 0.7 default samples too randomly for a trading
+    // read — pro-trader discipline wants determinism; the three analysts
+    // still differ because their PROMPTS differ, not because of dice).
+    const options: ChatRequestOptions = { jsonMode: false, maxTokens: TASK_BUDGETS.analysis, temperature: 0.4, signal, onReasoning };
     let responseText = '';
     let reasoningAccumulated = '';
     try {
@@ -534,12 +652,20 @@ export async function analyzeTradingView(
         // thoughtProcess stays '' when the provider streamed no native
         // reasoning — the UI then renders no thinking block (harness-style).
 
-        // Analysts deliberately do not produce the structured trade plan.
-        // Keep a neutral internal value for legacy validation/Monte Carlo paths;
-        // only the moderator's post-debate JSON becomes the real analysis.
+        // Analysts deliberately do not produce the structured trade plan as
+        // JSON — but their prose is mined for the setup fields so the
+        // per-analyst Monte Carlo, consensus panel, divergence detection and
+        // Bayesian calibration all receive real data instead of the old
+        // hardcoded Neutral/Low placeholder (which silently dead-coded every
+        // one of those consumers).
+        const parsedPlan = extractStructuredPlanFromProse(finalOutput);
         const analysis: TradeAnalysis = sanitizeTradeAnalysis({
-            direction: 'Neutral',
-            confidence: 'Low',
+            direction: parsedPlan.direction,
+            confidence: parsedPlan.confidence,
+            probability: parsedPlan.probability,
+            entryPoints: parsedPlan.entryPoints?.map(price => ({ price, description: '' })) ?? [],
+            stopLoss: parsedPlan.stopLoss,
+            takeProfit: parsedPlan.takeProfit?.map(price => ({ price, percentage: '' })) ?? [],
             strategy: finalOutput,
         });
 
@@ -771,7 +897,9 @@ Answer **all** of the following **MANDATORY LOSS ANALYSIS QUESTIONS**:
     const result = await sendChatRequest(
         config,
         [{ role: 'user', content: analysisPrompt }],
-        { signal, onReasoning: params.onReasoning, maxTokens: TASK_BUDGETS.postMortem }
+        // 0.4: a forensic post-mortem must not roll dice on its lesson —
+        // the 0.7 default sampled "brutally honest" post-mortems randomly.
+        { signal, onReasoning: params.onReasoning, maxTokens: TASK_BUDGETS.postMortem, temperature: 0.4 }
     );
     return sanitizeAIResponse(result || "Post-mortem analysis failed.");
 }

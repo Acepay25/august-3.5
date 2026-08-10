@@ -46,6 +46,7 @@ import {
 import {
     ANALYST_ROLE_DEFINITIONS,
     getRoleForProvider,
+    getLensPromptForStyle,
 } from '../ui/AnalystLensService';
 import { generateWeightedVotingContext } from '../backtesting/ModelPerformanceService';
 import type { GateOutput } from '../validation/GateKeeperService';
@@ -983,7 +984,11 @@ export const conductDebate = (
     /** Full chart/pattern context (hybrid data + user strategies) so the
      *  moderator sees the same chart the analysts see, not just the
      *  truncated user request. */
-    hybridContext?: string
+    hybridContext?: string,
+    /** Analyst Lens config — the accuracy-mode moderator must see the same
+     *  role context the standard-mode moderator gets (the old call dropped
+     *  it, so Lenses + Accuracy ran with zero personas). */
+    lensConfig?: AnalystLensConfig
 ): AsyncGenerator<string, void, unknown> => {
 
     let tradeHistoryContext = finalTradeSummary ? `Pattern Memory Library (History):\n${truncateTextToTokens(finalTradeSummary, 3000)}` : "No past trades logged.";
@@ -1046,6 +1051,20 @@ export const conductDebate = (
     // Replace placeholders
     systemPrompt = systemPrompt.replace('{{ANALYSTS}}', analystNames.join(', '));
     systemPrompt = systemPrompt.replace('{{DIALOGUE_INSTRUCTIONS}}', dialogueInstructions);
+
+    // Analyst Lens context for the accuracy-mode moderator — the analysts
+    // received role prompts (GenericAnalysisService), so the moderator must
+    // know who is who and what each role covers (was silently missing).
+    if (lensConfig?.enabled && analystProviders && analystProviders.length > 0) {
+        const lensContext = generateLensContext(
+            analystNames,
+            analystProviders,
+            lensConfig,
+            'full',
+            lensConfig.tradingStyle === 'auto' ? 'swing' : lensConfig.tradingStyle
+        );
+        if (lensContext) systemPrompt += `\n\n${lensContext}`;
+    }
 
     // --- GATE RECONCILIATION CONTEXT ---
     const gateReconciliationContext = gateResult
@@ -2677,9 +2696,20 @@ export const conductRealDebate = async function* (
                     .map(o => `**${o.provider.name} (Round ${round - 1}):**\n${roundTexts[o.provider.name][round - 1]}`)
                     .join('\n\n') || 'No other analyst has spoken yet.';
 
-                const systemPrompt = getPrompt('debate.rebuttal', DEBATE_RESPONSE_PROMPT)
-                    .replace('{{NAME}}', analyst.provider.name)
-                    .replace('{{ROUND}}', String(round));
+                // The lens persona must survive into the rebuttal rounds —
+                // a generic "expert trading analyst" instruction let
+                // specialists drift to general analysis mid-debate.
+                const rolePrefix = lensConfig?.enabled
+                    ? getLensPromptForStyle(
+                        analyst.provider.thoughtsKey,
+                        lensConfig.assignments,
+                        lensConfig.tradingStyle === 'auto' ? 'swing' : lensConfig.tradingStyle
+                    )
+                    : '';
+                const systemPrompt = (rolePrefix ? `${rolePrefix}\n\n` : '')
+                    + getPrompt('debate.rebuttal', DEBATE_RESPONSE_PROMPT)
+                        .replace('{{NAME}}', analyst.provider.name)
+                        .replace('{{ROUND}}', String(round));
                 // Snapshot the live price ONCE per round so every analyst in
                 // the parallel batch sees the SAME current price.
                 const livePriceBlock = buildLivePriceRefreshBlock(getLivePrice?.() ?? null, `before Round ${round}`);

@@ -173,8 +173,12 @@ describe('generateMandatoryPatternCheck — extended-loss gate (B7)', () => {
     expect(gate.gateResult).toBe('HALT');
     expect(timesUsed()).toBe(before + 1);
 
-    // Enforcement context re-quotes it (selection) AND renders the 🩸 block → +2 more.
+    // Enforcement context re-quotes it (selection) AND renders the 🩸 block —
+    // but "surfaced" marks are deduped within a run (15-min window), so the
+    // same insight counts ONCE per debate run, not 3× (the old behavior
+    // diluted qualityScore = timesHelpful / timesUsed to a third of its
+    // true value).
     generatePatternMemoryEnforcementContext(setup, [t1, t2]);
-    expect(timesUsed()).toBe(before + 3);
+    expect(timesUsed()).toBe(before + 1);
   });
 });

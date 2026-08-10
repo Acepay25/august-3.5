@@ -3,7 +3,7 @@
  * Provides awareness of trading sessions, kill zones, and timing filters
  */
 
-export type TradingSession = 'asia' | 'london' | 'new_york' | 'overlap_london_ny' | 'off_hours';
+export type TradingSession = 'asian' | 'london' | 'new_york' | 'overlap' | 'off_hours';
 
 export interface SessionContext {
     currentSession: TradingSession;
@@ -34,7 +34,7 @@ export interface SessionContext {
 
 // Session times in UTC
 const SESSIONS = {
-    asia: {
+    asian: {
         start: 0,   // 00:00 UTC (Tokyo open)
         end: 9,     // 09:00 UTC
         name: 'Asian Session'
@@ -80,7 +80,7 @@ const determineCurrentSession = (hour: number): TradingSession => {
     try {
         // Check for London-NY overlap first (highest priority)
         if (hour >= 13 && hour < 16) {
-            return 'overlap_london_ny';
+            return 'overlap';
         }
 
         // Safe access with fallback values
@@ -88,8 +88,8 @@ const determineCurrentSession = (hour: number): TradingSession => {
         const nyEnd = SESSIONS?.new_york?.end ?? 22;
         const londonStart = SESSIONS?.london?.start ?? 7;
         const londonEnd = SESSIONS?.london?.end ?? 16;
-        const asiaStart = SESSIONS?.asia?.start ?? 0;
-        const asiaEnd = SESSIONS?.asia?.end ?? 9;
+        const asiaStart = SESSIONS?.asian?.start ?? 0;
+        const asiaEnd = SESSIONS?.asian?.end ?? 9;
 
         // Check individual sessions
         if (hour >= nyStart && hour < nyEnd) {
@@ -101,7 +101,7 @@ const determineCurrentSession = (hour: number): TradingSession => {
         }
 
         if (hour >= asiaStart && hour < asiaEnd) {
-            return 'asia';
+            return 'asian';
         }
 
         return 'off_hours';
@@ -153,12 +153,12 @@ const getNextSession = (currentSession: TradingSession, hour: number): { session
         const currentMinutes = hour * 60 + getCurrentUTCMinute();
 
         // Safe access with fallback values
-        const asiaStart = SESSIONS?.asia?.start ?? 0;
+        const asiaStart = SESSIONS?.asian?.start ?? 0;
         const londonStart = SESSIONS?.london?.start ?? 7;
         const nyStart = SESSIONS?.new_york?.start ?? 13;
 
         const sessionStarts = [
-            { session: 'asia' as TradingSession, startMinutes: asiaStart * 60 },
+            { session: 'asian' as TradingSession, startMinutes: asiaStart * 60 },
             { session: 'london' as TradingSession, startMinutes: londonStart * 60 },
             { session: 'new_york' as TradingSession, startMinutes: nyStart * 60 }
         ];
@@ -175,12 +175,12 @@ const getNextSession = (currentSession: TradingSession, hour: number): { session
 
         // Wrap around to next day's Asia session
         return {
-            session: 'asia',
+            session: 'asian',
             minutesUntil: (24 * 60) - currentMinutes + asiaStart * 60
         };
     } catch (error) {
         console.error('[SessionService] getNextSession failed:', error);
-        return { session: 'asia', minutesUntil: 0 };
+        return { session: 'asian', minutesUntil: 0 };
     }
 };
 
@@ -248,8 +248,8 @@ export const getAllSessionsStatus = (): SessionStatus[] => {
         const minute = getCurrentUTCMinute();
         const currentMinutes = hour * 60 + minute;
 
-        const sessions: { id: TradingSession; data: typeof SESSIONS.asia; volatility: 'High' | 'Medium' | 'Low'; liquidationLevel: 'High' | 'Medium' | 'Low' }[] = [
-            { id: 'asia', data: SESSIONS.asia, volatility: 'Low', liquidationLevel: 'Low' },
+        const sessions: { id: TradingSession; data: typeof SESSIONS.asian; volatility: 'High' | 'Medium' | 'Low'; liquidationLevel: 'High' | 'Medium' | 'Low' }[] = [
+            { id: 'asian', data: SESSIONS.asian, volatility: 'Low', liquidationLevel: 'Low' },
             { id: 'london', data: SESSIONS.london, volatility: 'Medium', liquidationLevel: 'Medium' },
             { id: 'new_york', data: SESSIONS.new_york, volatility: 'High', liquidationLevel: 'High' }
         ];
@@ -310,7 +310,7 @@ export const getSessionContext = (): SessionContext => {
         sessionEnd: '00:00',
         minutesIntoSession: 0,
         minutesToSessionEnd: 0,
-        nextSession: 'asia',
+        nextSession: 'asian',
         minutesToNextSession: 0,
         isKillZone: false,
         isHighVolatilityWindow: false,
@@ -326,7 +326,7 @@ export const getSessionContext = (): SessionContext => {
 
     try {
         // Verify SESSIONS constant is properly defined
-        if (!SESSIONS || !SESSIONS.london || !SESSIONS.asia || !SESSIONS.new_york) {
+        if (!SESSIONS || !SESSIONS.london || !SESSIONS.asian || !SESSIONS.new_york) {
             console.error('[SessionService] SESSIONS constant is not properly defined');
             return defaultContext;
         }
@@ -346,12 +346,12 @@ export const getSessionContext = (): SessionContext => {
         let minutesToSessionEnd: number;
 
         switch (currentSession) {
-            case 'asia':
-                sessionName = SESSIONS.asia.name;
-                sessionStart = formatTime(SESSIONS.asia.start);
-                sessionEnd = formatTime(SESSIONS.asia.end);
-                minutesIntoSession = currentMinutes - SESSIONS.asia.start * 60;
-                minutesToSessionEnd = SESSIONS.asia.end * 60 - currentMinutes;
+            case 'asian':
+                sessionName = SESSIONS.asian.name;
+                sessionStart = formatTime(SESSIONS.asian.start);
+                sessionEnd = formatTime(SESSIONS.asian.end);
+                minutesIntoSession = currentMinutes - SESSIONS.asian.start * 60;
+                minutesToSessionEnd = SESSIONS.asian.end * 60 - currentMinutes;
                 break;
             case 'london':
                 sessionName = SESSIONS.london.name;
@@ -367,7 +367,7 @@ export const getSessionContext = (): SessionContext => {
                 minutesIntoSession = currentMinutes - SESSIONS.new_york.start * 60;
                 minutesToSessionEnd = SESSIONS.new_york.end * 60 - currentMinutes;
                 break;
-            case 'overlap_london_ny':
+            case 'overlap':
                 sessionName = 'London/NY Overlap (High Volume)';
                 sessionStart = formatTime(13);
                 sessionEnd = formatTime(16);
@@ -415,7 +415,7 @@ export const getSessionContext = (): SessionContext => {
 
         // Determine volatility expectation
         let volatilityExpectation: 'high' | 'medium' | 'low';
-        if (killZoneCheck.isKillZone || currentSession === 'overlap_london_ny') {
+        if (killZoneCheck.isKillZone || currentSession === 'overlap') {
             volatilityExpectation = 'high';
         } else if (currentSession === 'london' || currentSession === 'new_york') {
             volatilityExpectation = 'medium';
@@ -427,11 +427,11 @@ export const getSessionContext = (): SessionContext => {
         let suggestedAction: 'optimal' | 'good' | 'caution' | 'avoid';
         if (weekend) {
             suggestedAction = 'avoid';
-        } else if (currentSession === 'overlap_london_ny' || killZoneCheck.isKillZone) {
+        } else if (currentSession === 'overlap' || killZoneCheck.isKillZone) {
             suggestedAction = 'optimal';
         } else if (currentSession === 'london' || currentSession === 'new_york') {
             suggestedAction = 'good';
-        } else if (currentSession === 'asia') {
+        } else if (currentSession === 'asian') {
             suggestedAction = 'caution';
         } else {
             suggestedAction = 'avoid';
@@ -447,7 +447,7 @@ export const getSessionContext = (): SessionContext => {
             nextSession: nextSessionInfo.session,
             minutesToNextSession: nextSessionInfo.minutesUntil,
             isKillZone: killZoneCheck.isKillZone,
-            isHighVolatilityWindow: killZoneCheck.isKillZone || currentSession === 'overlap_london_ny',
+            isHighVolatilityWindow: killZoneCheck.isKillZone || currentSession === 'overlap',
             killZoneType: killZoneCheck.type,
             dayOfWeek,
             isWeekend: weekend,

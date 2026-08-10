@@ -187,10 +187,10 @@ export const Header: React.FC<HeaderProps> = memo(({
                                             sessionContext.currentSession === 'off_hours' ? 'bg-zinc-500' : 'bg-emerald-500'
                                             }`} />
                                         <span className={sessionContext.isKillZone ? 'text-red-400' : ''}>
-                                            {sessionContext.currentSession === 'overlap_london_ny' ? 'Ldn/NY' :
+                                            {sessionContext.currentSession === 'overlap' ? 'Ldn/NY' :
                                                 sessionContext.currentSession === 'new_york' ? 'NY' :
                                                     sessionContext.currentSession === 'london' ? 'London' :
-                                                        sessionContext.currentSession === 'asia' ? 'Asia' : 'Off'}
+                                                        sessionContext.currentSession === 'asian' ? 'Asia' : 'Off'}
                                         </span>
                                     </button>
 

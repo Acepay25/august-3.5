@@ -54,6 +54,7 @@ import { generateMandatoryPatternCheck, generatePatternMemoryEnforcementContext 
 import { ANALYST_ROLE_DEFINITIONS, getLensPromptForStyle, getRoleForProvider } from '../services/ui/AnalystLensService';
 import { buildEnsembleAnalysts, buildAnalystFailureReport } from '../services/ui/EnsembleAnalystService';
 import { EnsembleModelSelection } from '../services/ui/AnalystLensService';
+import { getEffectiveStyle } from '../services/ui/TradingStyleDetector';
 import GlobalLearningService from '../services/learning/GlobalLearningService';
 
 // ─── Params Interface ──────────────────────────────────────────────────────────
@@ -161,6 +162,61 @@ const minePatternFromPrompt = (prompt: string): string | undefined => {
     if (p.includes('OMEGA') || p.includes('MOMENTUM')) return 'Family Omega';
     return undefined;
 };
+
+/**
+ * modelsUsed is a Record<providerId, modelId>, but when two lens roles share
+ * ONE provider with different models the second entry would overwrite the
+ * first (one analyst silently disappears from the model attribution). The
+ * UI's per-bubble lookup already accepts `providerId:model` keys
+ * (DebateChat.tsx), so colliding keys fall back to thoughtsKey form.
+ */
+const buildModelsUsedRecord = (analysts: { config: { id: string }; model: string; thoughtsKey: string }[]): Record<string, string> => {
+    const record: Record<string, string> = {};
+    const seen = new Set<string>();
+    for (const analyst of analysts) {
+        if (seen.has(analyst.config.id)) {
+            record[analyst.thoughtsKey] = analyst.model;
+        } else {
+            seen.add(analyst.config.id);
+            record[analyst.config.id] = analyst.model;
+        }
+    }
+    return record;
+};
+
+const MAX_INITIAL_ANALYSIS_RETRIES = 1;
+
+/**
+ * Wraps analyzeTradingView with one bounded retry for transient failures
+ * (429/5xx/network blip). The debate rounds already retry via
+ * streamWithTransientRetry, but the initial analyst streams ran bare — a
+ * single rate-limit blip silently dropped an analyst before the debate
+ * started (two rate-limited analysts killed the whole run). A retry re-runs
+ * the full call (a partial stream is discarded, never resumed), so a
+ * genuinely failing provider still surfaces its error.
+ */
+async function analyzeTradingViewWithTransientRetry(
+    config: ProviderConfig,
+    params: Parameters<typeof analyzeTradingView>[1],
+): Promise<Awaited<ReturnType<typeof analyzeTradingView>>> {
+    let lastError: unknown;
+    for (let attempt = 0; attempt <= MAX_INITIAL_ANALYSIS_RETRIES; attempt++) {
+        if (attempt > 0) await new Promise(r => setTimeout(r, 2000));
+        try {
+            return await analyzeTradingView(config, params);
+        } catch (e: any) {
+            const isAbort = e?.name === 'AbortError' || e?.code === 'ABORT_ERR' || e?.name === 'TimeoutError';
+            const transient = !isAbort && (
+                e?.status === 429 || e?.status === 502 || e?.status === 503 || e?.status === 504 ||
+                /network|econnrefused|failed to fetch|fetch failed|socket hang up/i.test(e?.message || '')
+            );
+            lastError = e;
+            if (!transient) throw e;
+            console.warn(`[Analysis] Transient failure (${e?.status ?? e?.message ?? e}); retrying once.`);
+        }
+    }
+    throw lastError;
+}
 
 // ─── Hook ──────────────────────────────────────────────────────────────────────
 
@@ -287,7 +343,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             };
         }
 
-        const result = await analyzeTradingView(config, {
+        const result = await analyzeTradingViewWithTransientRetry(config, {
             prompt,
             images: imageFiles,
             imageSummaries: params.imageSummaries ?? [],
@@ -516,7 +572,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         // Build the analyst list (model-level entries). Extracted to a pure
         // helper so the N-1 failure path is unit-testable; stale lens-assignment
         // model ids are resolved against each provider's current model list.
-        const { analysts: enabledProviders, missingAnalystRoles, hasCompleteAnalystAssignments } = buildEnsembleAnalysts(
+        const { analysts: enabledProviders, missingAnalystRoles, hasCompleteAnalystAssignments, resolvedAssignments } = buildEnsembleAnalysts(
             providerConfigs,
             lensConfig,
             ensembleModelSelection,
@@ -654,11 +710,11 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             ensembleProgress,
             ocrModelUsed: userMessage.ocrModelUsed,
             imageSummaries: userMessage.imageSummaries,
-            modelsUsed: Object.fromEntries(enabledProviders.map(provider => [provider.config.id, provider.model])),
+            modelsUsed: buildModelsUsedRecord(enabledProviders),
             isAccuracyMode: isAccuracyModeEnabled,
             isLensMode: lensConfig?.enabled ?? false,
             accuracySubMode: isAccuracyModeEnabled ? accuracySubMode : undefined,
-            tradingStyle: (lensConfig?.enabled && lensConfig.tradingStyle !== 'auto') ? (lensConfig.tradingStyle as any) : (lensConfig?.enabled ? 'swing' : undefined),
+            tradingStyle: lensConfig?.enabled && lensConfig.tradingStyle !== 'auto' ? (lensConfig.tradingStyle as any) : undefined,
         } : null;
 
         updateRequestMessages(prev => ensemblePlaceholder ? [...prev, userMessage, ensemblePlaceholder] : [...prev, userMessage]);
@@ -798,6 +854,14 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             // real debate, accuracy verification, compact retry): the same
             // chart/pattern block the analysts see + the user strategies.
             const moderatorContextBundle = [hybridDataInjection, strategiesBlock].filter(Boolean).join('\n\n');
+
+            // 'auto' trading style was hardcoded to 'swing' at every call
+            // site — the market-data detector (ADX/regime/volume/session)
+            // was never invoked. Resolve the effective style ONCE from the
+            // live data so the lens prompts, the rebuttal personas and the
+            // card's tradingStyle field all agree. Falls back to swing when
+            // no hybrid data exists (hybrid off / fetch failed).
+            const effectiveTradingStyle = getEffectiveStyle(lensConfig.tradingStyle, freshHybridData ?? undefined).style;
 
             // AI LEARNING: Generate UNIFIED learning context from all 6 learning services
             let learningInjection = '';
@@ -1211,13 +1275,15 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                         isMemoryEnabledInPureAI,
                         // Analyst Lens: pass role-specific prompt based on trading style.
                         // Custom overrides from the prompt editor win over built-ins.
+                        // resolvedAssignments (not lensConfig.assignments): a stale
+                        // persisted model id would otherwise make the role lookup
+                        // return UNASSIGNED and drop the persona silently.
                         rolePrompt: lensConfig.enabled && provider.thoughtsKey
-                            ? (customLensPrompts?.[getRoleForProvider(`${provider.config.id}::${provider.model}`, lensConfig.assignments)]
+                            ? (customLensPrompts?.[getRoleForProvider(`${provider.config.id}::${provider.model}`, resolvedAssignments)]
                                 || getLensPromptForStyle(
                                     `${provider.config.id}::${provider.model}`,
-                                    lensConfig.assignments,
-                                    // For auto mode, use swing as default (will be detected per-call with hybrid data)
-                                    lensConfig.tradingStyle === 'auto' ? 'swing' : lensConfig.tradingStyle
+                                    resolvedAssignments,
+                                    effectiveTradingStyle
                                 ))
                             : undefined,
                         // Normal mode (Lenses off): custom base prompt override.
@@ -1260,7 +1326,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             buildAnalystParams(provider),
                         )
                                  .then(result => {
-                                     analystTimings.set(provider.config.id, {
+                                     analystTimings.set(provider.thoughtsKey, {
                                          durationMs: Math.round(performance.now() - runStartedAtMs),
                                          charsOut: (result.finalOutput?.length ?? 0) + (result.thoughtProcess?.length ?? 0),
                                      });
@@ -1413,7 +1479,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                         // Non-staged runs never carried modelsUsed — the chat's
                         // per-bubble model line was blank for them.
                         modelsUsed: ensemblePlaceholder?.modelsUsed
-                                || Object.fromEntries(enabledProviders.map(p => [p.config.id, p.model])),
+                                || buildModelsUsedRecord(enabledProviders),
                         thoughtProcesses: { ...(ensemblePlaceholder?.thoughtProcesses || {}), ...thoughtMap },
                         reasoningProcesses: { ...(ensemblePlaceholder?.reasoningProcesses || {}), ...reasoningMapRef.current },
                         activeDebateSpeakers: {},
@@ -1529,7 +1595,13 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                                 fulfilledAnalysts.map(a => a.provider.config.id),
                                 // Full chart/pattern context + user strategies —
                                 // the moderator sees the same chart the analysts see.
-                                moderatorContextBundle
+                                moderatorContextBundle,
+                                // Analyst Lens config — the accuracy-mode
+                                // moderator previously got NO role context
+                                // (lenses silently inert in accuracy mode).
+                                // Assignments are resolved so stale model ids
+                                // still resolve to the right persona.
+                                lensConfig.enabled ? { ...lensConfig, assignments: resolvedAssignments } : undefined
                         );
                     } else {
                         // STANDARD MODE — REAL inter-model debate. Each analyst
@@ -1602,7 +1674,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                                 currentAbortController.signal,
                                 buildAnalystParams(replacementProvider),
                             );
-                            analystTimings.set(candidate.id, {
+                            analystTimings.set(replacementProvider.thoughtsKey, {
                                 durationMs: Math.round(performance.now() - runStartedAtMs),
                                 charsOut: (result.finalOutput?.length ?? 0) + (result.thoughtProcess?.length ?? 0),
                             });
@@ -1615,9 +1687,12 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                                 },
                             };
                             allFulfilledAnalysts.push(record);
-                            // Model line for the replacement's transcript bubbles.
+                            // Model line for the replacement's transcript
+                            // bubbles — keyed by thoughtsKey so a replacement
+                            // sharing the dropped analyst's provider cannot
+                            // overwrite the original's attribution.
                             updateRequestMessages(prev => prev.map(m => m.id === debateMessageId
-                                ? { ...m, modelsUsed: { ...m.modelsUsed, [candidate.id]: model } }
+                                ? { ...m, modelsUsed: { ...m.modelsUsed, [replacementProvider.thoughtsKey]: model } }
                                 : m));
                             return record;
                         };
@@ -1632,7 +1707,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                                 activeModModel,
                                 instructionsToUse,
                                 perAIMC,   // monteCarloResults
-                                lensConfig.enabled ? lensConfig : undefined, // lensConfig
+                                lensConfig.enabled ? { ...lensConfig, assignments: resolvedAssignments } : undefined, // lensConfig (resolved)
                                 lensConfig.enabled ? fulfilledAnalysts.map(a => a.provider.config.id) : undefined, // analystProviders
                                 activeFrameworks, // playbook
                                 tradeSummaries, // recent insights for pattern matching
@@ -2052,7 +2127,7 @@ ${accuracyVerificationNote}`
                             } : undefined,
                             isLensMode: lensConfig?.enabled ?? false,
                             // Always set tradingStyle regardless of Lens mode
-                            tradingStyle: lensConfig.tradingStyle === 'auto' ? 'swing' : lensConfig.tradingStyle
+                            tradingStyle: effectiveTradingStyle
                         };
 
                         // Per-run execution summary (compare mode + diagnostics).
@@ -2071,7 +2146,7 @@ ${accuracyVerificationNote}`
                             // delivered (initial roster + mid-debate replacements),
                             // with their model, wall time, and output size.
                             analysts: allFulfilledAnalysts.map(a => {
-                                const timing = analystTimings.get(a.provider.config.id);
+                                const timing = analystTimings.get(a.provider.thoughtsKey);
                                 return {
                                     providerId: a.provider.config.id,
                                     displayName: a.provider.name,
@@ -2233,11 +2308,11 @@ ${accuracyVerificationNote}`
                                 // Analyst Lens: pass role-specific prompt based on trading style
                                 // (custom prompt overrides from the prompt editor win).
                                 rolePrompt: lensConfig.enabled && provider.thoughtsKey
-                                    ? (customLensPrompts?.[getRoleForProvider(`${provider.config.id}::${provider.model}`, lensConfig.assignments)]
+                                    ? (customLensPrompts?.[getRoleForProvider(`${provider.config.id}::${provider.model}`, resolvedAssignments)]
                                         || getLensPromptForStyle(
                                             `${provider.config.id}::${provider.model}`,
-                                            lensConfig.assignments,
-                                            lensConfig.tradingStyle === 'auto' ? 'swing' : lensConfig.tradingStyle
+                                            resolvedAssignments,
+                                            effectiveTradingStyle
                                         ))
                                     : undefined,
                                 // Normal mode (Lenses off): custom base prompt override.
@@ -2258,7 +2333,7 @@ ${accuracyVerificationNote}`
                         isAccuracyMode: isAccuracyModeEnabled,
                         isLensMode: lensConfig?.enabled ?? false,
                         // Always set tradingStyle regardless of Lens mode
-                        tradingStyle: lensConfig.tradingStyle === 'auto' ? 'swing' : lensConfig.tradingStyle,
+                        tradingStyle: effectiveTradingStyle,
                         accuracySubMode: isAccuracyModeEnabled ? accuracySubMode : undefined,
                         // Multi-Timeframe Confluence from Hybrid Intelligence
                         confluenceData: freshHybridData?.confluence ? {
@@ -2450,7 +2525,7 @@ ${accuracyVerificationNote}`
                 analysisInFlightRef.current = false;
             }
         }
-    }, [input, images, loadingMessage, finalTradeSummary, activeFrameworks, isRateLimited, providerConfigs, isDeepAnalysis, selectedOcrModel, updateMessages, moderatorConfig, moderatorModel, activeConversationId, activeConversation, isAnalysisInProgress, globalMemory, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, lensConfig, isHybridIntelligenceEnabled, isEnsembleEnabled, selectedChatModel, loggedTrades, confidenceCalibration, insightKnowledgeBase, currentHybridData, tradeSummaries, customEnsemblePrompt, customLensPrompts]);
+    }, [input, images, loadingMessage, finalTradeSummary, activeFrameworks, isRateLimited, providerConfigs, isDeepAnalysis, selectedOcrModel, updateMessages, moderatorConfig, moderatorModel, activeConversationId, activeConversation, isAnalysisInProgress, globalMemory, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, lensConfig, isHybridIntelligenceEnabled, isEnsembleEnabled, selectedChatModel, loggedTrades, confidenceCalibration, insightKnowledgeBase, currentHybridData, tradeSummaries, customEnsemblePrompt, customLensPrompts, ensembleModelSelection, isStrategiesEnabled, confirmDialog, toast]);
 
     // ─── Cancel Analysis ───────────────────────────────────────────────────
     const handleCancelAnalysis = () => {

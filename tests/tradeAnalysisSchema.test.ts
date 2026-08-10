@@ -222,7 +222,10 @@ describe('parseTradeAnalysis — robustness', () => {
 
   it('falls back to symbol/asset for coinName', () => {
     expect(parseTradeAnalysis(rawAnalysis({ coinName: undefined, symbol: 'ETH' })).coinName).toBe('ETH');
-    expect(parseTradeAnalysis({ asset: 'SOL' }).coinName).toBe('SOL');
+    // A bare {asset} has no setup/strategy — parseTradeAnalysis marks empty
+    // payloads as unavailable; give it substance so the coinName fallback
+    // is what's under test.
+    expect(parseTradeAnalysis({ asset: 'SOL', direction: 'Long', strategy: 'test', probability: 60 }).coinName).toBe('SOL');
   });
 
   it('copies dualScenarioAnalysis and grade through (previously dropped)', () => {

@@ -125,6 +125,9 @@ During the debate, analysts MUST cover ALL of these analysis sections:
 | **D** | 40-54% | R:R < 1.2, Missing sections, HTF conflict, Pattern Memory FAIL |
 | **F** | <40% / AVOID | No clear setup, High risk, Multiple red flags |
 
+**CONFIDENCE LABEL MAPPING (MANDATORY):**
+The JSON plan's "confidence" value MUST match this mapping of the probability you assign: probability ≥ 80 → "High", 60–79 → "Medium", 40–59 → "Low", < 40 → "Low" or "Avoid". (A Grade-B plan at 75% is therefore "Medium" — emit the label the mapping demands, not a guess.)
+
 **⚠️ ANTI-HALLUCINATION RULE (CRITICAL):**
 - You MUST NOT assign confidence ≥70% unless ALL of the following are TRUE:
   1. All 9 sections were thoroughly discussed and verified
@@ -247,7 +250,7 @@ The JSON MUST be:
 - Valid JSON syntax (proper quotes, commas, brackets)
 - The LAST thing in your response (no text after </JSON_PLAN>)
 
-For 'detectedPatternFamily', use "Pure AI Analysis" or describe your custom pattern.
+For 'detectedPatternFamily', use "Pure AI Analysis" or describe your custom pattern (unless the Market Classification Families toggle is enabled — then assign Family A, B, C, or Omega as instructed above).
 
 **EXACT FORMAT REQUIRED:**
 <JSON_PLAN>
@@ -400,7 +403,7 @@ You are the Master Strategist. A REAL debate between the expert analysts ({{ANAL
 1. Read every analyst's position and rebuttals carefully before judging.
 2. Resolve each contested point explicitly: state which position won and why.
 3. Vague claims carry no weight — a claim without a specific price level, timeframe, or data reference is dismissed.
-4. Cross-check the debate against the provided market telemetry and Gate findings. The final probability MUST respect the Gate confidence cap.
+4. Cross-check the debate against the provided market telemetry and Gate findings. The final probability MUST respect the Gate confidence cap — the cap is a 0–1 value (e.g. 0.85 = 85%), while your "probability" field is on the 0–100 scale, so cap at 85 in that example.
 5. Anti-hallucination discipline: never assign confidence above 69% unless every element is present (specific entry/SL/TP, aligned timeframes, verified claims, R:R ≥ 1.2).
 6. If the debate ends unresolved or the evidence is too weak, issue an AVOID/NO TRADE verdict over forcing a trade.
 

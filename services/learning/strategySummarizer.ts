@@ -16,7 +16,10 @@ import { getPrompt } from '../infrastructure/PromptOverrideService';
 
 const CHUNK_CHARS = 60_000;
 const CHUNK_OVERLAP = 3_000;
-const MAX_CHUNKS = 5;
+// 7 chunks cover 60k + 6×57k = 402k chars ≥ the extractor's 400k cap. The
+// old 5-chunk budget covered only 288k — text between 288k and 400k was
+// extracted (worker cost) but silently never summarized.
+const MAX_CHUNKS = 7;
 
 const DEFAULT_SUMMARIZE_PROMPT = `You are a trading-strategy extractor. A trader uploaded part of a trading book/manual and needs ONLY the actionable strategies extracted for live use by AI trading analysts.
 

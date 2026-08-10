@@ -66,9 +66,11 @@ export const detectTradeType = (analysis: TradeAnalysis): ScalpDetectionResult =
     let scalpScore = 0;
     let swingScore = 0;
 
-    // Factor 1: SL Percentage
+    // Factor 1: SL Percentage. stopLossPercentage is stored signed ("-1.5%"
+    // — a loss); abs() it or every trade scores scalp (negative ≤ 1.0 is
+    // always true) and the swing branch below becomes unreachable.
     if (analysis.stopLossPercentage) {
-        const slPercent = parseFloat(analysis.stopLossPercentage.replace(/[^0-9.-]/g, ''));
+        const slPercent = Math.abs(parseFloat(analysis.stopLossPercentage.replace(/[^0-9.-]/g, '')));
         if (!isNaN(slPercent)) {
             if (slPercent <= SCALP_THRESHOLDS.maxSlPercentage) {
                 scalpScore += 3;
@@ -191,9 +193,10 @@ export const validateScalpTrade = (
         }
     }
 
-    // Rule 3: High confidence scalps need very tight SL
+    // Rule 3: High confidence scalps need very tight SL (abs: the stored
+    // percentage is negative; without it this rule was dead code).
     if (analysis.confidence === 'High' && analysis.stopLossPercentage) {
-        const slPercent = parseFloat(analysis.stopLossPercentage.replace(/[^0-9.-]/g, ''));
+        const slPercent = Math.abs(parseFloat(analysis.stopLossPercentage.replace(/[^0-9.-]/g, '')));
         if (!isNaN(slPercent) && slPercent > 0.8) {
             warnings.push(` SCALP: High confidence but SL ${slPercent}% is loose for a scalp`);
         }

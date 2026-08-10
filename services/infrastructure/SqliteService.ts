@@ -572,6 +572,17 @@ export const sqliteSaveUserProfile = async (profile: UserProfile): Promise<void>
                 // Extract settings (everything that is not a core column)
                 const { id, title, timestamp, messages, ...settings } = conv;
 
+                // A missing/corrupt timestamp used to throw RangeError here
+                // and roll back the ENTIRE profile save (trades included) —
+                // fall back to now instead of aborting.
+                let createdAt: string;
+                try {
+                    const t = new Date(timestamp);
+                    createdAt = isNaN(t.getTime()) ? new Date().toISOString() : t.toISOString();
+                } catch {
+                    createdAt = new Date().toISOString();
+                }
+
                 await db.run(`
                     INSERT OR REPLACE INTO conversations (id, username, title, createdAt, messages, settings)
                     VALUES (?, ?, ?, ?, ?, ?)
@@ -579,7 +590,7 @@ export const sqliteSaveUserProfile = async (profile: UserProfile): Promise<void>
                     conv.id,
                     profile.username,
                     conv.title,
-                    new Date(conv.timestamp).toISOString(),
+                    createdAt,
                      serializeConversationMessages(conv.messages),
                     JSON.stringify(settings) // Save extended flags and models
                 ]);
@@ -861,7 +872,14 @@ export const sqliteListConversations = async (
             title: row.title,
             timestamp: new Date(row.createdAt).getTime(),
             messages: safeParseJson(row.messages, []),
-            ...settings
+            ...settings,
+            // The Conversation type declares these non-optional — rows saved
+            // before the fields existed (or by the IndexedDB path) lack them,
+            // and consumers dereference them directly.
+            leverage: settings.leverage ?? DEFAULT_LEVERAGE,
+            ocrModel: settings.ocrModel ?? '',
+            moderatorProviderId: settings.moderatorProviderId ?? '',
+            moderatorModel: settings.moderatorModel ?? '',
         } as Conversation;
     });
 };

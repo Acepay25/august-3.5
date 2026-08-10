@@ -428,19 +428,23 @@ describe('scanCandlePatterns — three-candle timing order', () => {
         const upScan = scanCandlePatterns(up, 30);
         const upFvg = upScan.patterns.filter(p => p.name === 'bullish_fvg');
         expect(upFvg.length).toBe(1);
-        expect(upFvg[0].priceLevel).toBe((100.5 + 101.8) / 2);
+        // The untraded zone is [prev.high, mid.low] — the middle candle
+        // created the gap (mid.low 100.6 > prev.high 100.5), so the anchor is
+        // the middle candle's low, not the current candle's.
+        expect(upFvg[0].priceLevel).toBe((100.5 + 100.6) / 2);
 
         const down = buildSeries([
-            [103, 103.4, 102.4, 103.1], // context (low 102.4 — blocks an extra FVG)
-            [103.1, 103.5, 101.5, 103.2],// context (low 101.5 — blocks an extra FVG)
-            [102, 102.4, 101.4, 102.2], // prev: low 101.4
-            [101.6, 101.9, 101, 101.2], // mid
-            [100, 100.4, 99.2, 100.1],  // curr: high 100.4 < prev low 101.4 → gap
-            [100.1, 100.3, 99.8, 100]   // incomplete — excluded
+            [103, 103.4, 102.4, 103.1], // context
+            [103.1, 103.5, 101.5, 103.2],// context (low 101.5 — no gap below)
+            [102.4, 102.6, 102.0, 102.3], // prev: low 102.0
+            [101.5, 101.7, 100.9, 101.2], // mid: high 101.7 < prev low 102.0 → gap zone [101.7, 102.0]
+            [100.5, 100.9, 99.8, 100.6],  // curr: high 100.9 < prev low 102.0 → still unfilled
+            [100.6, 100.8, 100.1, 100.3]  // incomplete — excluded
         ]);
         const downScan = scanCandlePatterns(down, 30);
         const downFvg = downScan.patterns.filter(p => p.name === 'bearish_fvg');
         expect(downFvg.length).toBe(1);
+        expect(downFvg[0].priceLevel).toBe((101.7 + 102.0) / 2);
     });
 });
 

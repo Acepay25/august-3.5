@@ -82,8 +82,13 @@ export async function loadProviderConfigs(): Promise<ProviderConfig[]> {
         const apiFormat: ApiFormat = config.apiFormat === 'messages' || config.apiFormat === 'responses'
             ? config.apiFormat
             : 'chat_completions';
-        const models = Array.isArray(config.models) && config.models.length > 0
+        const models = Array.isArray(config.models)
             ? config.models.filter((model): model is string => typeof model === 'string' && model.trim().length > 0)
+            // Legacy configs predate the models array — keep the old
+            // 'default' placeholder so they still work. An EMPTY array (all
+            // models deleted via removeModelFromProvider) must STAY empty:
+            // resurrecting 'default' sent a phantom model to the API that
+            // failed on every call.
             : ['default'];
         const selectedModel = typeof config.selectedModel === 'string' && models.includes(config.selectedModel)
             ? config.selectedModel
@@ -256,8 +261,10 @@ export async function updateModelInProvider(providerId: string, oldModelId: stri
 }
 
 /**
- * Get only enabled providers that have an API key configured.
+ * Get only enabled providers that have an API key configured AND a usable
+ * model — a provider whose last model was deleted (models: []) must not be
+ * "ready" (its phantom 'default' model used to fail on every API call).
  */
 export function getReadyProviders(configs: ProviderConfig[]): ProviderConfig[] {
-    return configs.filter(c => c.isEnabled && c.apiKey.trim().length > 0);
+    return configs.filter(c => c.isEnabled && c.apiKey.trim().length > 0 && (c.models.length > 0 || !!c.selectedModel));
 }

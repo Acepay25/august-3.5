@@ -107,10 +107,16 @@ export const analyzeWithAI = async (
     const priceChange = ((currentPrice - recentCandles[0].close) / recentCandles[0].close * 100).toFixed(2);
     const avgVolatility = recentCandles.slice(-20).reduce((sum, c) => sum + (c.high - c.low), 0) / 20;
 
+    // Renumber the prompt slice 0..29 so the model's startIndex/endIndex
+    // refer to the data it actually sees. The old code sent candles carrying
+    // their 0..99 indices; a model that renumbered them 0..29 anchored every
+    // trendline ~70 candles too early.
+    const promptCandles = candleData.slice(-30).map((c, i) => ({ ...c, i }));
+
     const prompt = `You are an expert technical analyst providing real-time market commentary. Analyze this ${symbol} ${interval} chart data.
 
-PRICE DATA (last 30 candles, format: index, time, open, high, low, close):
-${JSON.stringify(candleData.slice(-30), null, 0)}
+PRICE DATA (last 30 candles, format: index 0-29 within this slice, time, open, high, low, close):
+${JSON.stringify(promptCandles, null, 0)}
 
 MARKET CONTEXT:
 - Range: ${overallLow.toFixed(2)} to ${overallHigh.toFixed(2)}
@@ -171,10 +177,15 @@ RESPOND IN THIS EXACT JSON FORMAT:
             throw new Error(`[AITrendlineService] ${providerName} returned invalid JSON: ${message}`, { cause: e });
         }
 
-        // Convert index-based trendlines to time/price based
+        // Convert index-based trendlines to time/price based. Indices are
+        // 0-based within the 30-candle prompt slice — map back into the full
+        // recentCandles array (the slice may be shorter when history is thin).
         const trendlines: TrendlineResult[] = (parsed.trendlines || []).map((tl: any) => {
-            const startCandle = recentCandles[Math.max(0, tl.startIndex)] || recentCandles[0];
-            const endCandle = recentCandles[Math.min(tl.endIndex, recentCandles.length - 1)] || recentCandles[recentCandles.length - 1];
+            const base = Math.max(0, recentCandles.length - 30);
+            const startIdx = Math.min(recentCandles.length - 1, base + Math.max(0, tl.startIndex || 0));
+            const endIdx = Math.min(recentCandles.length - 1, base + Math.max(0, tl.endIndex ?? tl.startIndex ?? 0));
+            const startCandle = recentCandles[startIdx] || recentCandles[0];
+            const endCandle = recentCandles[endIdx] || recentCandles[recentCandles.length - 1];
 
             const isResistance = tl.type === 'resistance';
             const startPrice = isResistance ? startCandle.high : startCandle.low;
