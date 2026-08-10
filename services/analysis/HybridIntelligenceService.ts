@@ -21,7 +21,8 @@ import {
     OrderBookData,
     LiquidationData,
     fetchOrderBookDepth,
-    fetchRecentLiquidations
+    fetchRecentLiquidations,
+    Kline
 } from './MarketDataService';
 
 import {
@@ -194,6 +195,11 @@ export interface HybridDataPacket {
     // trader would see" layer that lets the model reason about structure
     // it could not derive from indicators alone.
     detectedPatterns: Record<HybridTimeframe, CandlePatternScan>;
+
+    // ========== LIQUIDITY SWEEPS ==========
+    // Level-anchored price-action events from the last completed candle per
+    // timeframe (wick-through-and-reject, or close-beyond breaks).
+    liquiditySweeps: LiquiditySweep[];
 }
 
 /**
@@ -373,6 +379,29 @@ export const fetchHybridData = async (symbol: string): Promise<HybridDataPacket>
     console.log(`  - Candle History: 1d=${candleHistory['1d'].summary}, 4h=${candleHistory['4h'].summary}, 1h=${candleHistory['1h'].summary}`);
     console.log(`  - Detected Patterns: 1d=${detectedPatterns['1d'].patterns.length} patterns, 4h=${detectedPatterns['4h'].patterns.length} patterns`);
 
+    // Liquidity sweeps: did the last completed candle (per timeframe) wick
+    // through a key level (24h high/low, recent swing) and reject, or close
+    // beyond it? The "liquidity grab" read a human trader makes at a glance.
+    const liquiditySweeps = detectLiquiditySweeps(
+        (['15m', '1h', '4h', '1d'] as const).map(tf => ({
+            timeframe: tf,
+            klines: snapshot.klines[tf],
+            levels: [
+                { price: snapshot.marketData.price24hHigh, label: '24h high' },
+                { price: snapshot.marketData.price24hLow, label: '24h low' },
+                ...(detectedPatterns[tf].recentSwingHigh !== undefined
+                    ? [{ price: detectedPatterns[tf].recentSwingHigh!, label: 'swing high' }]
+                    : []),
+                ...(detectedPatterns[tf].recentSwingLow !== undefined
+                    ? [{ price: detectedPatterns[tf].recentSwingLow!, label: 'swing low' }]
+                    : [])
+            ]
+        }))
+    );
+    if (liquiditySweeps.length > 0) {
+        console.log(`  - Liquidity Sweeps: ${liquiditySweeps.length} (${liquiditySweeps[0].timeframe}: ${liquiditySweeps[0].type})`);
+    }
+
     // Create partial packet for classification (circular dependency workaround)
     const partialData: any = {
         symbol: snapshot.marketData.symbol,
@@ -443,8 +472,106 @@ export const fetchHybridData = async (symbol: string): Promise<HybridDataPacket>
         // Candle History
         candleHistory,
         // Detected Candle Patterns (pin bar, double top, BOS, …)
-        detectedPatterns
+        detectedPatterns,
+        // Level-anchored liquidity sweep events (last completed candle per TF)
+        liquiditySweeps
     };
+};
+
+/**
+ * A level-anchored price-action event from the last completed candle:
+ * either a wick swept through a key level and got rejected, or price closed
+ * beyond the level (a genuine break). This is the "liquidity grab" read a
+ * human trader makes at a glance.
+ */
+export interface LiquiditySweep {
+    timeframe: HybridTimeframe;
+    levelLabel: string;   // '24h high', 'swing low', …
+    level: number;
+    candleHigh: number;
+    candleLow: number;
+    close: number;
+    type: 'sweep_reject' | 'close_beyond';
+    direction: 'bullish' | 'bearish';
+    text: string;
+}
+
+export interface SweepLevelInput {
+    price: number;
+    label: string;
+}
+
+const fmtPx = (v: number): string => (v >= 1000 ? v.toFixed(0) : v.toFixed(2));
+
+/**
+ * Check the last COMPLETED candle of each timeframe against key levels.
+ * klines[len-1] is the still-forming live candle — same convention as the
+ * rest of the payload. Sweeps require the wick to extend strictly beyond
+ * the level (±0.05%) and the close to be back on the other side (rejection),
+ * or a close strictly beyond (break). Max `maxPerTf` events per timeframe.
+ */
+export const detectLiquiditySweeps = (
+    entries: { timeframe: HybridTimeframe; klines: Kline[]; levels: SweepLevelInput[] }[],
+    maxPerTf = 2
+): LiquiditySweep[] => {
+    const sweeps: LiquiditySweep[] = [];
+    for (const { timeframe, klines, levels } of entries) {
+        const candle = klines[klines.length - 2];
+        if (!candle) continue;
+        let found = 0;
+        for (const level of levels) {
+            if (!isFinite(level.price) || level.price <= 0) continue;
+            const beyond = level.price * 0.0005; // strict-beyond tolerance
+            const base = { timeframe, levelLabel: level.label, level: level.price, candleHigh: candle.high, candleLow: candle.low, close: candle.close };
+
+            if (candle.high > level.price + beyond && candle.close < level.price) {
+                sweeps.push({
+                    ...base,
+                    type: 'sweep_reject',
+                    direction: 'bearish',
+                    text: `wick swept ABOVE ${level.label} ($${fmtPx(level.price)} → high $${fmtPx(candle.high)}) and closed BELOW ($${fmtPx(candle.close)}) — rejection`
+                });
+                found++;
+            } else if (candle.low < level.price - beyond && candle.close > level.price) {
+                sweeps.push({
+                    ...base,
+                    type: 'sweep_reject',
+                    direction: 'bullish',
+                    text: `wick swept BELOW ${level.label} ($${fmtPx(level.price)} → low $${fmtPx(candle.low)}) and closed ABOVE ($${fmtPx(candle.close)}) — rejection`
+                });
+                found++;
+            } else if (
+                candle.close > level.price + beyond &&
+                candle.low >= level.price &&
+                // A genuine break starts from the level: the candle must have
+                // opened at/near it, or any candle trading above a level would
+                // report "closed above" forever.
+                candle.open <= level.price * (1 + 0.005)
+            ) {
+                sweeps.push({
+                    ...base,
+                    type: 'close_beyond',
+                    direction: 'bullish',
+                    text: `closed ABOVE ${level.label} ($${fmtPx(level.price)}) at $${fmtPx(candle.close)} — break`
+                });
+                found++;
+            } else if (
+                candle.close < level.price - beyond &&
+                candle.high <= level.price &&
+                candle.open >= level.price * (1 - 0.005)
+            ) {
+                sweeps.push({
+                    ...base,
+                    type: 'close_beyond',
+                    direction: 'bearish',
+                    text: `closed BELOW ${level.label} ($${fmtPx(level.price)}) at $${fmtPx(candle.close)} — breakdown`
+                });
+                found++;
+            }
+            if (found >= maxPerTf) break;
+        }
+    }
+    return sweeps;
 };
 
 /**
@@ -603,6 +730,7 @@ ${formatLiquidationsBlock(data.liquidations)}
 - OBV Trend: ${data.advancedVolume.obvTrend.toUpperCase()} | Divergence: ${data.advancedVolume.obvDivergence.toUpperCase()}
 - CVD: ${data.advancedVolume.cvdTrend.replace('_', ' ').toUpperCase()}
 - Volume POC: $${data.advancedVolume.volumeProfile.poc} (Price ${data.advancedVolume.volumeProfile.priceVsPOC} POC)
+- Profile Shape: ${data.advancedVolume.volumeProfile.shape.replace('_', ' ').toUpperCase()} | Price ${data.advancedVolume.volumeProfile.valueAreaPosition.toUpperCase()} value area ($${data.advancedVolume.volumeProfile.valueAreaLow} - $${data.advancedVolume.volumeProfile.valueAreaHigh}) | 70% area spans ${(data.advancedVolume.volumeProfile.valueAreaSpan * 100).toFixed(0)}% of range
 - Volume Bias: ${data.advancedVolume.volumeWeightedBias.toUpperCase()}
 
  **MULTI-TIMEFRAME CONFLUENCE (MTF):**
@@ -651,10 +779,15 @@ ${generateTASummary(data.indicators['15m'], '15M Timeframe')}
 **Fibonacci (${data.enhancedKeyLevels.fibLevels.trend.toUpperCase()} trend, full ladder):**
 ${formatFibLadder(data.enhancedKeyLevels.fibLevels)}
 
-**Resistance:** ${data.enhancedKeyLevels.resistance.slice(0, 3).map(r => `$${r.price} (${r.source})`).join(' | ')}
-**Support:** ${data.enhancedKeyLevels.support.slice(0, 3).map(s => `$${s.price} (${s.source})`).join(' | ')}
+**Resistance:** ${data.enhancedKeyLevels.resistance.slice(0, 3).map(r => `$${r.price} (${r.source}${r.touchCount > 0 ? `, ${r.touchCount} touch${r.touchCount === 1 ? '' : 'es'}` : ''})`).join(' | ')}
+**Support:** ${data.enhancedKeyLevels.support.slice(0, 3).map(s => `$${s.price} (${s.source}${s.touchCount > 0 ? `, ${s.touchCount} touch${s.touchCount === 1 ? '' : 'es'}` : ''})`).join(' | ')}
 
 ${generateSessionSummary(data.session)}
+
+ **RECENT LIQUIDITY SWEEPS (last completed candle per TF):**
+${data.liquiditySweeps && data.liquiditySweeps.length > 0
+            ? data.liquiditySweeps.map(s => `- ${s.timeframe}: ${s.text}`).join('\n')
+            : '- None in the last completed candle.'}
 
  **CANDLE HISTORY (Last 30 Completed):**
 - 1d (Macro trend): ${data.candleHistory['1d'].sequence.join('')} (${data.candleHistory['1d'].summary}) ${data.candleHistory['1d'].dominantTrend === 'bullish' ? '' : data.candleHistory['1d'].dominantTrend === 'bearish' ? '' : '↔'}

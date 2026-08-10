@@ -3,12 +3,15 @@ import { Kline } from '../services/analysis/MarketDataService';
 import {
     calculateADX,
     calculateRegime,
-    calculateEnhancedKeyLevels
+    calculateEnhancedKeyLevels,
+    calculateAdvancedVolume,
+    countLevelTouches
 } from '../services/analysis/TechnicalAnalysisService';
 import {
     formatLiquidationsBlock,
     formatFibLadder,
-    formatCandleHistoryInsight
+    formatCandleHistoryInsight,
+    detectLiquiditySweeps
 } from '../services/analysis/HybridIntelligenceService';
 import {
     generateNumericChartData,
@@ -286,6 +289,132 @@ describe('Chart "Last 5 bars" arrows (chronological, completed candles only)', (
         // The same window the RAW OHLC section shows (last 15 completed → last 5)
         const rawLast5 = klines.slice(10, 15).map(k => (k.close > k.open ? '↑' : k.close < k.open ? '↓' : '→')).join('');
         expect(rawLast5).toBe('↑↓↑↑↓'); // c10..c14, live candle c15 excluded
+    });
+});
+
+describe('Key level touch counts (human "tested N times" heuristic)', () => {
+    it('counts candles whose range actually reached the level', () => {
+        const klines: Kline[] = [];
+        for (let i = 0; i < 60; i++) {
+            klines.push(i < 3
+                ? { time: i, open: 60000, high: 60100, low: 59900, close: 60000, volume: 1000 }
+                : { time: i, open: 61000, high: 61100, low: 60900, close: 61000, volume: 1000 });
+        }
+        expect(countLevelTouches(klines, 60000)).toBe(3);
+        expect(countLevelTouches(klines, 61000)).toBe(57);
+        expect(countLevelTouches(klines, 65000)).toBe(0);
+    });
+});
+
+describe('Liquidity sweep detection (level-anchored price action)', () => {
+    const mk = (candles: [number, number, number, number][]): Kline[] =>
+        candles.map(([o, h, l, c], i) => ({ time: i * 3600000, open: o, high: h, low: l, close: c, volume: 1000 }));
+
+    it('flags wick-through-and-reject above a level (bearish)', () => {
+        const klines = mk([
+            [59000, 59200, 58900, 59100],   // older
+            [59100, 60100, 59000, 59900],   // last COMPLETED: swept above 60000, closed below
+            [59900, 59950, 59800, 59850]    // live candle (ignored)
+        ]);
+        const sweeps = detectLiquiditySweeps([{
+            timeframe: '15m',
+            klines,
+            levels: [{ price: 60000, label: '24h high' }]
+        }]);
+        expect(sweeps).toHaveLength(1);
+        expect(sweeps[0].type).toBe('sweep_reject');
+        expect(sweeps[0].direction).toBe('bearish');
+        expect(sweeps[0].text).toContain('swept ABOVE 24h high');
+        expect(sweeps[0].text).toContain('closed BELOW');
+    });
+
+    it('flags close-beyond as a break (bullish)', () => {
+        const klines = mk([
+            [59000, 59200, 58900, 59100],
+            [59500, 60600, 60100, 60500],   // closed above 60000, never dipped back under
+            [60500, 60550, 60400, 60450]
+        ]);
+        const sweeps = detectLiquiditySweeps([{
+            timeframe: '1h',
+            klines,
+            levels: [{ price: 60000, label: 'swing high' }]
+        }]);
+        expect(sweeps).toHaveLength(1);
+        expect(sweeps[0].type).toBe('close_beyond');
+        expect(sweeps[0].direction).toBe('bullish');
+        expect(sweeps[0].text).toContain('closed ABOVE swing high');
+    });
+
+    it('caps events per timeframe and inspects only the completed candle', () => {
+        const klines = mk([
+            [59000, 59200, 58900, 59100],
+            [59100, 61000, 58000, 59500],   // swept BOTH 60000 and 60500
+            [59500, 59550, 59400, 59450]
+        ]);
+        const sweeps = detectLiquiditySweeps([{
+            timeframe: '4h',
+            klines,
+            levels: [
+                { price: 60000, label: 'level A' },
+                { price: 60500, label: 'level B' },
+                { price: 59000, label: 'level C' }
+            ]
+        }], 2);
+        expect(sweeps).toHaveLength(2);
+        // The live candle (59500..59550) must not generate events.
+        expect(sweeps.every(s => s.timeframe === '4h')).toBe(true);
+    });
+});
+
+describe('Volume profile shape (what a human sees on the volume chart)', () => {
+    /** Realistic candles: small bodies clustered around `center` (±span). */
+    const mkBand = (n: number, center: number, span = 10, volume = 1000): Kline[] =>
+        Array.from({ length: n }, (_, i) => ({
+            time: i * 3600000,
+            open: center,
+            high: center + span,
+            low: center - span,
+            close: center + span / 3,
+            volume
+        }));
+
+    it('tight single band → single_cluster', () => {
+        // 35 candles tightly at 60000, 5 outliers widening the range so the
+        // tight candles concentrate into a few buckets while outliers spread thin.
+        const klines = [
+            ...mkBand(35, 60000),
+            ...mkBand(5, 60000, 100)
+        ];
+        expect(calculateAdvancedVolume(klines).volumeProfile.shape).toBe('single_cluster');
+    });
+
+    it('two far-apart bands → bimodal', () => {
+        const profile = calculateAdvancedVolume([
+            ...mkBand(20, 60000),
+            ...mkBand(20, 62000)
+        ]).volumeProfile;
+        expect(profile.shape).toBe('bimodal');
+    });
+
+    it('uniform distribution → flat (not bimodal)', () => {
+        // Every candle spans the whole range with equal volume: no cluster.
+        const klines = Array.from({ length: 40 }, (_, i) => ({
+            time: i * 3600000,
+            open: 60000,
+            high: 60100,
+            low: 59900,
+            close: 60000,
+            volume: 1000
+        }));
+        expect(calculateAdvancedVolume(klines).volumeProfile.shape).toBe('flat');
+    });
+
+    it('price far above the value area → position above', () => {
+        const profile = calculateAdvancedVolume([
+            ...mkBand(39, 60000),
+            { time: 999, open: 64000, high: 64010, low: 63990, close: 64000, volume: 1000 }
+        ]).volumeProfile;
+        expect(profile.valueAreaPosition).toBe('above');
     });
 });
 

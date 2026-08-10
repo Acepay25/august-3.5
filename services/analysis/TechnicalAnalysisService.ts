@@ -103,6 +103,12 @@ export interface AdvancedVolumeAnalysis {
         valueAreaHigh: number;
         valueAreaLow: number;
         priceVsPOC: 'above' | 'at' | 'below';
+        // "What a human sees" additions: is the distribution one tight
+        // cluster or two opposing clusters? Where is price vs the value
+        // area? How much of the range does the 70% area span?
+        shape: 'single_cluster' | 'bimodal' | 'flat';
+        valueAreaSpan: number;              // 0-1: fraction of range spanned by the 70% value area
+        valueAreaPosition: 'above' | 'inside' | 'below';
     };
 
     // Volume-weighted analysis
@@ -698,17 +704,29 @@ const calculateCVD = (klines: Kline[]): number => {
 };
 
 /**
- * Calculate Volume Profile (simplified - POC and Value Area)
+ * Calculate Volume Profile (simplified - POC, Value Area + distribution shape)
  */
-const calculateVolumeProfile = (klines: Kline[]): { poc: number; valueAreaHigh: number; valueAreaLow: number } => {
-    if (klines.length === 0) return { poc: 0, valueAreaHigh: 0, valueAreaLow: 0 };
+const calculateVolumeProfile = (klines: Kline[]): {
+    poc: number;
+    valueAreaHigh: number;
+    valueAreaLow: number;
+    shape: 'single_cluster' | 'bimodal' | 'flat';
+    valueAreaSpan: number;
+} => {
+    if (klines.length === 0) return { poc: 0, valueAreaHigh: 0, valueAreaLow: 0, shape: 'flat', valueAreaSpan: 0 };
 
     // Create price buckets
     const minPrice = Math.min(...klines.map(k => k.low));
     const maxPrice = Math.max(...klines.map(k => k.high));
     if (maxPrice === minPrice) {
         // Degenerate case: every candle at the same price -> POC is that price.
-        return { poc: Math.round(minPrice * 100) / 100, valueAreaHigh: Math.round(minPrice * 100) / 100, valueAreaLow: Math.round(minPrice * 100) / 100 };
+        return {
+            poc: Math.round(minPrice * 100) / 100,
+            valueAreaHigh: Math.round(minPrice * 100) / 100,
+            valueAreaLow: Math.round(minPrice * 100) / 100,
+            shape: 'single_cluster',
+            valueAreaSpan: 0
+        };
     }
     const bucketCount = 50;
     const bucketSize = (maxPrice - minPrice) / bucketCount;
@@ -718,10 +736,15 @@ const calculateVolumeProfile = (klines: Kline[]): { poc: number; valueAreaHigh: 
     for (const kline of klines) {
         // Distribute volume across the candle's range
         const lowBucket = Math.floor((kline.low - minPrice) / bucketSize);
-        const highBucket = Math.floor((kline.high - minPrice) / bucketSize);
+        const rawHighBucket = Math.floor((kline.high - minPrice) / bucketSize);
+        // Cap the top edge: a candle touching the max price can land exactly
+        // on bucket 50 (floating point) — the divisor must count only the
+        // buckets that actually receive volume, or that candle loses some.
+        const highBucket = Math.min(rawHighBucket, bucketCount - 1);
+        const span = Math.max(1, highBucket - lowBucket + 1);
 
-        for (let b = lowBucket; b <= highBucket && b < bucketCount; b++) {
-            volumeByBucket.set(b, (volumeByBucket.get(b) || 0) + kline.volume / (highBucket - lowBucket + 1));
+        for (let b = lowBucket; b <= highBucket; b++) {
+            volumeByBucket.set(b, (volumeByBucket.get(b) || 0) + kline.volume / span);
         }
     }
 
@@ -761,10 +784,32 @@ const calculateVolumeProfile = (klines: Kline[]): { poc: number; valueAreaHigh: 
         }
     }
 
+    // Distribution shape: a strong POC with no rival cluster = single_cluster
+    // (HVN — one-sided liquidity); two significant clusters ≥20% of the range
+    // apart = bimodal (two-sided battle); otherwise flat/balanced.
+    // Average is over ALL buckets (empty ones included) so a two-cluster
+    // profile with only two occupied buckets doesn't average to its own peak.
+    const avgBucketVolume = totalVolume / bucketCount;
+    const clusterMinDist = Math.round(bucketCount * 0.2);
+    let secondPeak = 0;
+    volumeByBucket.forEach((vol, bucket) => {
+        if (Math.abs(bucket - pocBucket) >= clusterMinDist && vol > secondPeak) secondPeak = vol;
+    });
+    const pocRatio = maxVolume / (avgBucketVolume || 1);
+    // 'flat' first: with no meaningful concentration (POC ≈ average bucket)
+    // a uniform profile must not read as bimodal just because the max volume
+    // appears twice. Then: two significant rival peaks = bimodal; otherwise a
+    // strong single POC = single_cluster.
+    const shape: 'single_cluster' | 'bimodal' | 'flat' =
+        pocRatio < 1.8 ? 'flat' :
+            secondPeak >= maxVolume * 0.6 ? 'bimodal' : 'single_cluster';
+
     return {
         poc: Math.round(poc * 100) / 100,
         valueAreaHigh: Math.round((minPrice + (highVABucket + 1) * bucketSize) * 100) / 100,
-        valueAreaLow: Math.round((minPrice + lowVABucket * bucketSize) * 100) / 100
+        valueAreaLow: Math.round((minPrice + lowVABucket * bucketSize) * 100) / 100,
+        shape,
+        valueAreaSpan: Math.max(1, highVABucket - lowVABucket + 1) / bucketCount
     };
 };
 
@@ -828,7 +873,11 @@ export const calculateAdvancedVolume = (klines: Kline[]): AdvancedVolumeAnalysis
             poc: vp.poc,
             valueAreaHigh: vp.valueAreaHigh,
             valueAreaLow: vp.valueAreaLow,
-            priceVsPOC
+            priceVsPOC,
+            shape: vp.shape,
+            valueAreaSpan: Math.round(vp.valueAreaSpan * 100) / 100,
+            valueAreaPosition: currentPrice > vp.valueAreaHigh ? 'above' :
+                currentPrice < vp.valueAreaLow ? 'below' : 'inside'
         },
         volumeWeightedBias
     };
@@ -1142,6 +1191,21 @@ export const detectPsychologicalLevels = (currentPrice: number): number[] => {
 };
 
 /**
+ * Count how many candles in the recent window actually reached a price level
+ * (candle range contains the level, ±tolerance). This is the "R1 has been
+ * tested 3 times" heuristic — the payload previously shipped a hardcoded 0
+ * for every level, which read as "untested" to the model.
+ */
+export const countLevelTouches = (klines: Kline[], level: number, tolerance = 0.0005, window = 60): number => {
+    if (!isFinite(level) || level <= 0) return 0;
+    const recent = klines.slice(-window);
+    return recent.filter(k =>
+        k.low <= level * (1 + tolerance) &&
+        k.high >= level * (1 - tolerance)
+    ).length;
+};
+
+/**
  * Calculate Enhanced Key Levels
  */
 export const calculateEnhancedKeyLevels = (klines: Kline[], timeframe: string): KeyLevelsEnhanced => {
@@ -1215,6 +1279,12 @@ export const calculateEnhancedKeyLevels = (klines: Kline[], timeframe: string): 
         if (entry.type === 'support' && price < currentPrice) support.push(entry);
         else if (entry.type === 'resistance' && price > currentPrice) resistance.push(entry);
     });
+
+    // Real touch counts — how many of the last 60 candles actually tested
+    // each level (±0.05%). Previously hardcoded 0 (a lie in the payload).
+    for (const level of [...support, ...resistance]) {
+        level.touchCount = countLevelTouches(klines, level.price);
+    }
 
     // Sort by proximity to current price
     support.sort((a, b) => b.price - a.price);  // Closest first
