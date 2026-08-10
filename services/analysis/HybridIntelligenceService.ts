@@ -43,7 +43,8 @@ import {
     calculateEnhancedKeyLevels,
     calculateVWAP,
     calculateIchimoku,
-    calculateMomentum
+    calculateMomentum,
+    FibonacciLevels
 } from './TechnicalAnalysisService';
 
 import {
@@ -462,6 +463,80 @@ export const fetchHybridData = async (symbol: string): Promise<HybridDataPacket>
 };
 
 /**
+ * Format the RECENT LIQUIDATIONS block for the injection.
+ * When the source is unavailable, emit explicit N/A instead of fake
+ * $0.00M / LOW pressure / BALANCED readings — an LLM weights concrete
+ * structured fields over a prose caveat, so the block itself must be honest.
+ */
+export const formatLiquidationsBlock = (liquidations: LiquidationData): string => {
+    if (liquidations.available === false) {
+        return '- N/A — source unavailable. Do NOT infer pressure or direction from this field.';
+    }
+    return `- Long Liquidations: $${(liquidations.recentLongLiquidations / 1000000).toFixed(2)}M
+- Short Liquidations: $${(liquidations.recentShortLiquidations / 1000000).toFixed(2)}M
+- Total: $${(liquidations.totalRecentLiquidations / 1000000).toFixed(2)}M (${liquidations.liquidationPressure.toUpperCase()} pressure)
+- Dominant: ${liquidations.dominantLiquidations.toUpperCase()}
+-  ${liquidations.sentiment}`;
+};
+
+/**
+ * Format the Fibonacci ladder for the injection. The full ladder is shown
+ * (including 0, 0.236, 0.786, 1) so every "(fibonacci)" label in the
+ * resistance/support lists is accounted for by a visible level.
+ */
+export const formatFibLadder = (fibLevels: FibonacciLevels): string =>
+    fibLevels.levels.map(l => `- ${l.ratio}: $${l.price}`).join('\n');
+
+/**
+ * Format the Candle History Insight summary.
+ * Each timeframe gets a ↔ marker only when its own dominantTrend is neutral —
+ * but a blanket "no trend" summary must never lump in a genuinely skewed
+ * timeframe (e.g. 5m at 63% bearish). When one side is neutral and the other
+ * is skewed, surface the skew explicitly so the model weighs it.
+ */
+export const formatCandleHistoryInsight = (candleHistory: HybridDataPacket['candleHistory']): string => {
+    const h4 = candleHistory['4h'].dominantTrend;
+    const h1 = candleHistory['1h'].dominantTrend;
+    const m15 = candleHistory['15m'].dominantTrend;
+    const m5 = candleHistory['5m'].dominantTrend;
+
+    let insight = '';
+
+    // HTF alignment
+    if (h4 === 'bullish' && h1 === 'bullish') {
+        insight += ' HTF BULLISH: Both 4H and 1H show strong bullish candle dominance. Favor long setups.';
+    } else if (h4 === 'bearish' && h1 === 'bearish') {
+        insight += ' HTF BEARISH: Both 4H and 1H show strong bearish candle dominance. Favor short setups.';
+    } else if ((h4 === 'bullish' && h1 === 'bearish') || (h4 === 'bearish' && h1 === 'bullish')) {
+        insight += ' HTF DIVERGENCE: 4H vs 1H disagree. Possible reversal or consolidation.';
+    } else if (h4 === 'neutral' && h1 === 'neutral') {
+        insight += '↔ HTF NEUTRAL: No clear HTF candle trend dominance.';
+    } else {
+        const skew4 = h4 !== 'neutral' ? `4h ${h4}-skewed (${candleHistory['4h'].summary})` : '4h neutral';
+        const skew1 = h1 !== 'neutral' ? `1h ${h1}-skewed (${candleHistory['1h'].summary})` : '1h neutral';
+        insight += ` HTF SKEW: ${skew4}, ${skew1}. Respect the skewed timeframe for key-level direction.`;
+    }
+
+    // LTF entry context
+    insight += '\n';
+    if (m15 === 'bullish' && m5 === 'bullish') {
+        insight += ' LTF ENTRY FAVORABLE: 15m structure and 5m confirmation both bullish.';
+    } else if (m15 === 'bearish' && m5 === 'bearish') {
+        insight += ' LTF ENTRY FAVORABLE: 15m structure and 5m confirmation both bearish.';
+    } else if ((m15 === 'bullish' && m5 === 'bearish') || (m15 === 'bearish' && m5 === 'bullish')) {
+        insight += ' LTF MIXED: 15m and 5m disagree. Wait for alignment before entry.';
+    } else if (m15 === 'neutral' && m5 === 'neutral') {
+        insight += '↔ LTF NEUTRAL: No clear LTF trend. Be cautious with entry timing.';
+    } else {
+        const skew15 = m15 !== 'neutral' ? `15m ${m15}-skewed (${candleHistory['15m'].summary})` : '15m neutral';
+        const skew5 = m5 !== 'neutral' ? `5m ${m5}-skewed (${candleHistory['5m'].summary})` : '5m neutral';
+        insight += ` LTF SKEW: ${skew15}, ${skew5}. Respect the skewed timeframe for entry timing.`;
+    }
+
+    return insight;
+};
+
+/**
  * Generate AI prompt injection for hybrid data
  * This is the structured data block that gets injected into AI prompts
  */
@@ -535,11 +610,7 @@ ${data.orderBook.wallDistance.nearestBuyWall ? `- Nearest Buy Wall: $${data.orde
 ${data.orderBook.wallDistance.nearestSellWall ? `- Nearest Sell Wall: $${data.orderBook.wallDistance.nearestSellWall.price} (${data.orderBook.wallDistance.nearestSellWall.distance.toFixed(2)}% above)` : ''}
 
  **RECENT LIQUIDATIONS (1H):**
-- Long Liquidations: $${(data.liquidations.recentLongLiquidations / 1000000).toFixed(2)}M
-- Short Liquidations: $${(data.liquidations.recentShortLiquidations / 1000000).toFixed(2)}M
-- Total: $${(data.liquidations.totalRecentLiquidations / 1000000).toFixed(2)}M (${data.liquidations.liquidationPressure.toUpperCase()} pressure)
-- Dominant: ${data.liquidations.dominantLiquidations.toUpperCase()}
--  ${data.liquidations.sentiment}
+${formatLiquidationsBlock(data.liquidations)}
 
  **ADVANCED VOLUME ANALYSIS:**
 - Relative Volume: ${data.advancedVolume.relativeVolume}x (${data.advancedVolume.trend})
@@ -591,8 +662,8 @@ ${generateTASummary(data.indicators['5m'], '5M Timeframe')}
 - PP: $${data.enhancedKeyLevels.pivotPoints.daily.pp}
 - S1: $${data.enhancedKeyLevels.pivotPoints.daily.s1} | S2: $${data.enhancedKeyLevels.pivotPoints.daily.s2} | S3: $${data.enhancedKeyLevels.pivotPoints.daily.s3}
 
-**Fibonacci (${data.enhancedKeyLevels.fibLevels.trend.toUpperCase()} trend):**
-${data.enhancedKeyLevels.fibLevels.levels.filter(l => ['0.382', '0.5', '0.618'].includes(l.ratio)).map(l => `- ${l.ratio}: $${l.price}`).join('\n')}
+**Fibonacci (${data.enhancedKeyLevels.fibLevels.trend.toUpperCase()} trend, full ladder):**
+${formatFibLadder(data.enhancedKeyLevels.fibLevels)}
 
 **Resistance:** ${data.enhancedKeyLevels.resistance.slice(0, 3).map(r => `$${r.price} (${r.source})`).join(' | ')}
 **Support:** ${data.enhancedKeyLevels.support.slice(0, 3).map(s => `$${s.price} (${s.source})`).join(' | ')}
@@ -673,47 +744,11 @@ ${formatCandleRow('5m', 'Entry timing')}
 - 5m: Use for entry confirmation and timing
 
  **Candle History Insight:**
-${(() => {
-            const bullish4h = data.candleHistory['4h'].dominantTrend === 'bullish';
-            const bearish4h = data.candleHistory['4h'].dominantTrend === 'bearish';
-            const bullish1h = data.candleHistory['1h'].dominantTrend === 'bullish';
-            const bearish1h = data.candleHistory['1h'].dominantTrend === 'bearish';
-            const bullish15m = data.candleHistory['15m'].dominantTrend === 'bullish';
-            const bearish15m = data.candleHistory['15m'].dominantTrend === 'bearish';
-            const bullish5m = data.candleHistory['5m'].dominantTrend === 'bullish';
-            const bearish5m = data.candleHistory['5m'].dominantTrend === 'bearish';
-
-            let insight = '';
-
-            // HTF alignment
-            if (bullish4h && bullish1h) {
-                insight += ' HTF BULLISH: Both 4H and 1H show strong bullish candle dominance. Favor long setups.';
-            } else if (bearish4h && bearish1h) {
-                insight += ' HTF BEARISH: Both 4H and 1H show strong bearish candle dominance. Favor short setups.';
-            } else if ((bullish4h && bearish1h) || (bearish4h && bullish1h)) {
-                insight += ' HTF DIVERGENCE: 4H vs 1H disagree. Possible reversal or consolidation.';
-            } else {
-                insight += '↔ HTF NEUTRAL: No clear HTF candle trend dominance.';
-            }
-
-            // LTF entry context
-            insight += '\n';
-            if (bullish15m && bullish5m) {
-                insight += ' LTF ENTRY FAVORABLE: 15m structure and 5m confirmation both bullish.';
-            } else if (bearish15m && bearish5m) {
-                insight += ' LTF ENTRY FAVORABLE: 15m structure and 5m confirmation both bearish.';
-            } else if ((bullish15m && bearish5m) || (bearish15m && bullish5m)) {
-                insight += ' LTF MIXED: 15m and 5m disagree. Wait for alignment before entry.';
-            } else {
-                insight += '↔ LTF NEUTRAL: No clear LTF trend. Be cautious with entry timing.';
-            }
-
-            return insight;
-        })()}
+${formatCandleHistoryInsight(data.candleHistory)}
 
  **CRITICAL INSTRUCTIONS:**
 1. Use EXACT prices and indicator values - they are CODE-CALCULATED.
-2. Consider REGIME (${data.regime.regime}) when choosing strategy: ${data.regime.tradingBias}
+2. Consider REGIME (${data.regime.regime}) when choosing strategy: ${data.regime.tradingBias}. NOTE: the NUMERIC CHART REPRESENTATION block below uses a separate state-based classifier and may label the same candles RANGING — when they disagree, THIS ADX REGIME IS AUTHORITATIVE for direction and bias; treat chart-representation as context only (trend maturity, momentum, structure).
 3. Check DERIVATIVES sentiment (${data.derivatives.overallSentiment}) for positioning bias.
 4. OBV Divergence "${data.advancedVolume.obvDivergence}" is a ${data.advancedVolume.obvDivergence !== 'none' ? 'KEY SIGNAL' : 'non-factor'}.
 5. Session is ${data.session.sessionName} - volatility expectation: ${data.session.volatilityExpectation}.
@@ -733,11 +768,12 @@ ${(() => {
 12. **DIVERGENCE CHECK:** ${data.momentum['1h'].rsiDivergence !== 'none' || data.momentum['4h'].rsiDivergence !== 'none' ? ' DIVERGENCE DETECTED - Increases reversal confidence' : 'No major divergence'}
 
  **REGIME TRADING RULES (ADX: ${data.regime.adx}):**
-${data.regime.adx > 25 ? `- STRONG TREND: Trade WITH the trend only. Counter-trend = AVOID.
+${data.regime.adx >= 40 ? `- STRONG TREND: Trade WITH the trend only. Counter-trend = AVOID.
 - If ${data.regime.trendDirection === 'bullish' ? 'proposing SHORT' : 'proposing LONG'}: You MUST downgrade confidence to LOW or AVOID.` :
-            data.regime.adx < 15 ? `- RANGING MARKET: Use mean-reversion strategy. Breakout trades will likely fail.
+            data.regime.adx >= 25 ? `- MODERATE TREND (ADX 25-40): Trade WITH the trend, but require extra confirmation. Counter-trend only at major structure levels.` :
+                data.regime.adx < 15 ? `- RANGING MARKET: Use mean-reversion strategy. Breakout trades will likely fail.
 - If proposing breakout trade: Add warning about low ADX range-bound price action.` :
-                `- WEAK TREND: Confirmation required. Counter-trend only at major structure levels.`}
+                    `- WEAK/NO TREND: No directional edge from ADX. Require confluence from other signals before entry.`}
 
  **DEVIL'S ADVOCATE (MANDATORY):**
 Before finalizing, you MUST provide:

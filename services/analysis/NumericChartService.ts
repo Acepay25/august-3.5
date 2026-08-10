@@ -584,6 +584,9 @@ export const generateChartPromptInjection = (
 ═══════════════════════════════════════════════════════════════
 The following provides a structured view of price action across timeframes.
 Use this to understand chart structure without visual images.
+NOTE: this is a structural (state-based) classifier. If it disagrees with the
+ADX-based MARKET REGIME block, the ADX regime is AUTHORITATIVE for direction
+and bias — use this block for trend maturity, momentum and structure context.
 
 ${formatTimeframe(data4h)}
 

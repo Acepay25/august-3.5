@@ -889,7 +889,11 @@ const calculateDM = (klines: Kline[]): { plusDM: number[]; minusDM: number[] } =
 };
 
 /**
- * Smooth values using Wilder's smoothing
+ * Smooth values using Wilder's smoothing.
+ * Wilder: Smooth = Prev - Prev/period + Current/period. The incoming value
+ * MUST be divided by period — without it each series converges to
+ * period x its true level (for TR/DM the factor cancels in the DI ratio,
+ * but ADX = smoothed DX would be amplified ~14x, e.g. 411 instead of ~29).
  */
 const wilderSmooth = (values: number[], period: number): number[] => {
     const smoothed: number[] = [];
@@ -905,7 +909,7 @@ const wilderSmooth = (values: number[], period: number): number[] => {
             }
         } else {
             const prev = smoothed[i - 1];
-            smoothed.push(prev - (prev / period) + values[i]);
+            smoothed.push(prev - (prev / period) + values[i] / period);
         }
     }
 
@@ -952,11 +956,14 @@ export const calculateADX = (klines: Kline[], period: number = 14): { adx: numbe
         }
     }
 
-    // Smooth DX to get ADX
-    const adxValues = wilderSmooth(dx.slice(period), period);
-    const latestADX = adxValues[adxValues.length - 1] || 25;
-    const latestPlusDI = plusDI[plusDI.length - 1] || 25;
-    const latestMinusDI = minusDI[minusDI.length - 1] || 25;
+    // Smooth DX to get ADX. dx[0..period-2] are the zero-padded DI warmup,
+    // dx[period-1] is the first real DX — keep it in the seed average.
+    const adxValues = wilderSmooth(dx.slice(period - 1), period);
+    // `?? 25` (not `|| 25`): a legitimate 0 reading (e.g. symmetric range)
+    // must not be replaced by the neutral default.
+    const latestADX = adxValues[adxValues.length - 1] ?? 25;
+    const latestPlusDI = plusDI[plusDI.length - 1] ?? 25;
+    const latestMinusDI = minusDI[minusDI.length - 1] ?? 25;
 
     return {
         adx: Math.round(latestADX * 10) / 10,
@@ -998,9 +1005,13 @@ export const calculateRegime = (klines: Kline[]): RegimeAnalysis => {
     } else if (isVolatile && adx < 25) {
         regime = 'volatile_chop';
     } else if (adx >= 40) {
-        regime = trendDirection === 'bullish' ? 'strong_trend_up' : 'strong_trend_down';
+        // A neutral DI gap cannot claim a directional regime — fall back to
+        // ranging instead of forcing a trend label on the wrong side.
+        regime = trendDirection === 'bullish' ? 'strong_trend_up' :
+            trendDirection === 'bearish' ? 'strong_trend_down' : 'ranging';
     } else if (adx >= 25) {
-        regime = trendDirection === 'bullish' ? 'weak_trend_up' : 'weak_trend_down';
+        regime = trendDirection === 'bullish' ? 'weak_trend_up' :
+            trendDirection === 'bearish' ? 'weak_trend_down' : 'ranging';
     } else {
         regime = 'ranging';
     }
