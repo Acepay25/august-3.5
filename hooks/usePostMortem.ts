@@ -7,6 +7,7 @@ import { sanitizeAIResponse } from '../utils/sanitizers';
 import * as ensembleService from '../services/providers/ensembleService';
 import * as MemoryService from '../services/learning/MemoryService';
 import { jobQueue, JobType } from '../services/infrastructure/JobQueueService';
+import { buildSeverityPostMortemContext } from '../services/learning/InsightExtractionService';
 import { MAX_TRADE_SUMMARIES } from './useTradeLogging';
 import { saveThinkingBatch, buildThinkingRecordId, getThinkingTradeId } from '../services/infrastructure/ThinkingStoreService';
 import { ProviderConfig } from '../types/provider';
@@ -285,6 +286,17 @@ Please investigate this discrepancy in your analysis.
             // always run first).
             const postMortemReasoning: Record<string, string> = {};
 
+            // R-severity context for the post-mortem generation: the trade's
+            // historical cluster (same numbers the gate quotes pre-trade).
+            // The trade's id equals the candidate message id (capture flows
+            // log it in the same tick); fall back to a synthetic trade so the
+            // cluster still computes against history if the save hasn't
+            // flushed yet. Empty string when the cluster is shallow — the
+            // post-mortem prompt then looks exactly as before.
+            const severityTrade = loggedTradesRef.current.find(t => t.id === candidate.message.id)
+                ?? ({ id: candidate.message.id, outcome: candidate.outcome, analysis: candidate.message.analysis } as LoggedTrade);
+            const severityContext = buildSeverityPostMortemContext(severityTrade, loggedTradesRef.current);
+
             const analysisPromises = enabledProviders.map(p =>
                 conductPostMortem(
                     p.config,
@@ -293,6 +305,7 @@ Please investigate this discrepancy in your analysis.
                         outcome: candidate.outcome,
                         history,
                         finalTradeSummary,
+                        severityContext,
                         feedback: candidate.feedback ? {
                             correctedEntry: candidate.feedback.correctedEntry,
                             correctedStopLoss: candidate.feedback.correctedStopLoss,
@@ -326,6 +339,13 @@ Please investigate this discrepancy in your analysis.
             const results = settled
                 .filter((r): r is PromiseFulfilledResult<{ provider: string; result: string }> => r.status === 'fulfilled')
                 .map(r => r.value);
+
+            // Per-provider analyst reports (keyed by display name) — persisted
+            // on the trade so the EXTRACT_INSIGHTS job can attribute KB
+            // insights to whichever AI actually produced the lesson.
+            const postMortemContributions: Record<string, string> = Object.fromEntries(
+                results.filter(r => r.result && r.result.trim()).map(r => [r.provider, r.result])
+            );
 
             // Re-check after the await — the user may have switched during the analyst calls.
             if (isRunStale(myRunId)) return;
@@ -517,7 +537,8 @@ Please investigate this discrepancy in your analysis.
                 ...t,
                 postMortem: finalPostMortemReport,
                 postMortemCreatedAt: new Date().toISOString(),
-                postMortemImages: imageUrls
+                postMortemImages: imageUrls,
+                postMortemByProvider: postMortemContributions
             } : t));
 
             // The trade was logged in the same tick that started this
@@ -566,7 +587,11 @@ Please investigate this discrepancy in your analysis.
 
                 // AI LEARNING: Extract insights and rules in BACKGROUND
                 try {
-                    const tradeWithPM = { ...tradeToUpdate, postMortem: finalPostMortemReport };
+                    const tradeWithPM = {
+                        ...tradeToUpdate,
+                        postMortem: finalPostMortemReport,
+                        postMortemByProvider: postMortemContributions
+                    };
                     jobQueue.addJob(JobType.EXTRACT_INSIGHTS, tradeWithPM);
                     jobQueue.addJob(JobType.EXTRACT_RULES, tradeWithPM);
                 } catch (insightError) {

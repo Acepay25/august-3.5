@@ -16,6 +16,7 @@ import {
     AttributedInsight,
     loadAttributedInsights,
     saveAttributedInsights,
+    markInsightUsed,
     calculateAggregatedStats,
     calculatePnlR,
     SetupContext
@@ -492,22 +493,28 @@ export function extractCumulativeBleedInsight(
         trades: LoggedTrade[];
         stats: { sumLossR: number; lossesWithR: number; avgR: number; sampleSize: number; winRate: number };
     },
-    setup?: { coin?: string; family?: string; pattern?: string; direction?: 'Long' | 'Short' }
+    setup?: SetupContext
 ): SeverityInsight | null {
     const { stats, trades } = cluster;
     if (stats.sumLossR > SEVERITY_CUMULATIVE_R) return null;
     if (stats.lossesWithR < 2) return null;
     if (trades.length === 0) return null;
 
+    // Neutral carries no directional signal — treat it as absent so the
+    // insight stays scoped to actual directional setups.
+    const direction = setup?.direction === 'Long' || setup?.direction === 'Short'
+        ? setup.direction
+        : undefined;
+
     const ctx: string[] = [];
     if (setup?.family) ctx.push(setup.family);
     if (setup?.coin) ctx.push(setup.coin);
-    if (setup?.direction) ctx.push(setup.direction);
+    if (direction) ctx.push(direction);
     if (setup?.pattern) ctx.push(setup.pattern);
     const ctxStr = ctx.length > 0 ? ` (${ctx.join(' ')})` : '';
 
     const rStr = `${stats.sumLossR}R`;
-    const id = `severity-cluster-${setup?.coin || 'unknown'}-${setup?.family || 'unknown'}-${setup?.direction || 'any'}`;
+    const id = `severity-cluster-${setup?.coin || 'unknown'}-${setup?.family || 'unknown'}-${direction || 'any'}`;
 
     return {
         id,
@@ -519,7 +526,7 @@ export function extractCumulativeBleedInsight(
             coin: setup?.coin,
             pattern: setup?.pattern,
             family: setup?.family,
-            direction: setup?.direction,
+            direction,
         },
         createdAt: new Date().toISOString(),
     };
@@ -551,7 +558,7 @@ export function recordSeverityInsight(insight: SeverityInsight): AttributedInsig
             : 'global',
         scope: insight.context.family || insight.context.coin || insight.context.pattern || insight.context.regime,
         tradeId: insight.tradeId,
-    };
+    } as Pick<AttributedInsight, 'insight' | 'sourceProvider' | 'category' | 'scope' | 'tradeId'>;
 
     if (existingIndex >= 0) {
         const updated: AttributedInsight = { ...store[existingIndex], ...base };
@@ -567,7 +574,9 @@ export function recordSeverityInsight(insight: SeverityInsight): AttributedInsig
  * Build a `SetupContext` from a closed trade so cluster extraction reuses
  * the same similarity/aggregation machinery as the pattern-memory gate.
  */
-export function buildSetupContextFromTrade(trade: LoggedTrade): SetupContext {
+export function buildSetupContextFromTrade(
+    trade: LoggedTrade
+): Omit<SetupContext, 'direction'> & { direction?: 'Long' | 'Short' } {
     const direction = trade.analysis?.direction;
     return {
         coin: trade.analysis?.coinName,
@@ -616,119 +625,100 @@ export function extractAndRecordSeverityInsights(
 
     const single = extractSeverityInsightFromTrade(trade);
     if (single) {
-        recordSeverityInsight(single);
+        const stored = recordSeverityInsight(single);
+        markStoredInsightUsed(stored.id, 'post-mortem job');
         recorded.push(single);
     }
 
     const cluster = extractCumulativeBleedInsightForTrade(trade, allTrades);
     if (cluster) {
-        recordSeverityInsight(cluster);
+        const stored = recordSeverityInsight(cluster);
+        markStoredInsightUsed(stored.id, 'post-mortem job');
         recorded.push(cluster);
     }
 
     return recorded;
 }
 
+/**
+ * Usage tracking for insights created by the post-mortem learning loop
+ * (severity + provider-attributed): once a row is live in the knowledge
+ * base it informs subsequent moderation, so it counts toward the quality
+ * ratio (timesHelpful / timesUsed). Side-effect only — never propagates.
+ */
+function markStoredInsightUsed(insightId: string, site: string): void {
+    try {
+        markInsightUsed(insightId);
+    } catch (e) {
+        console.warn(`[InsightExtraction] Failed to mark insight used (${site}):`, e);
+    }
+}
+
+/**
+ * Build the severity-aware context block for the post-mortem generation
+ * prompt. Returns '' when the trade's historical cluster shows no real
+ * severity signal (sumLossR > -3R or fewer than 2 R-bearing losses) —
+ * shallow clusters must not alter the post-mortem framing.
+ *
+ * The block quotes the same numbers the gate HALT branch and the
+ * cumulative-bleed insight use, so the AI writing the post-mortem finally
+ * sees the magnitude ("this setup has bled N R") instead of analyzing a
+ * single trade in isolation — and is instructed to frame its corrections
+ * around R-magnitude, not generic advice.
+ */
+export function buildSeverityPostMortemContext(
+    trade: LoggedTrade,
+    allTrades: LoggedTrade[]
+): string {
+    if (!trade?.analysis) return '';
+
+    const setup = buildSetupContextFromTrade(trade);
+    const merged = [trade, ...allTrades.filter(t => t.id !== trade.id)];
+    const stats = calculateAggregatedStats(setup, merged);
+
+    if (stats.sumLossR > SEVERITY_CUMULATIVE_R || stats.lossesWithR < 2) return '';
+
+    // Relevant recorded severity lessons, scoped like the gate's insight
+    // filter: family / coin / pattern overlap, unscoped (global) always.
+    const scopedLessons = loadAttributedInsights().filter(i => {
+        if (i.sourceProvider !== 'pattern-memory-severity-detector') return false;
+        const scope = (i.scope || '').toLowerCase();
+        if (!scope) return true;
+        return (setup.family || '').toLowerCase() === scope
+            || (setup.coin || '').toLowerCase() === scope
+            || (setup.pattern || '').toLowerCase() === scope;
+    });
+    const quotedLessons = scopedLessons.slice(-3);
+    const lessonQuotes = quotedLessons
+        .map(i => `"${i.insight}"`)
+        .join('\n');
+
+    // Each quoted lesson is genuinely surfaced to the post-mortem model →
+    // count it as "used" so the quality ratio (timesHelpful / timesUsed)
+    // can move. Side-effect only: usage tracking must never break prompt
+    // generation.
+    quotedLessons.forEach(l => markStoredInsightUsed(l.id, 'post-mortem quote'));
+
+    const lines = [
+        '**🩸 HISTORICAL SEVERITY CONTEXT — THE DAMAGE IS SEVERITY, NOT FREQUENCY:**',
+        `Similar setups in the user's trade history have bled **${stats.sumLossR}R** across ${stats.lossesWithR} R-bearing losses (avg ${stats.avgR}R per loss, ${stats.winRate}% win rate, N=${stats.sampleSize}).`,
+    ];
+    if (lessonQuotes) {
+        lines.push(`Recorded severity lessons from past post-mortems:\n${lessonQuotes}`);
+    }
+    lines.push(
+        '**INSTRUCTION:** Frame your corrections around R-magnitude. State how many R this setup has now bled and what must STRUCTURALLY change so the next loss is not another deep-R event. Do not fall back to generic advice.'
+    );
+
+    return lines.join('\n');
+}
+
 // ========================= PROVIDER ATTRIBUTION =========================
 
 /**
- * Extract insights from post-mortem and attribute them to specific providers.
- * This allows tracking which AI models produce the most valuable insights.
- */
-export function extractInsightsWithAttribution(
-    postMortemText: string,
-    trade: LoggedTrade,
-    providerContributions: { provider: AIProvider | string; text: string }[]
-): AttributedInsight[] {
-    const attributedInsights: AttributedInsight[] = [];
-
-    // First, try to extract insights from each provider's contribution
-    for (const { provider, text } of providerContributions) {
-        if (!text || text.length < MIN_INSIGHT_LENGTH) continue;
-
-        const insights = extractInsightsFromText(text);
-
-        for (const insightText of insights) {
-            // Determine category and scope
-            const { category, scope } = categorizeInsight(insightText, trade);
-
-            const attributed = addAttributedInsight({
-                insight: insightText,
-                sourceProvider: provider,
-                category,
-                scope,
-                tradeId: trade.id,
-            });
-
-            attributedInsights.push(attributed);
-        }
-    }
-
-    // Also extract from the combined post-mortem if no provider contributions
-    if (providerContributions.length === 0 && postMortemText) {
-        const insights = extractInsightsFromText(postMortemText);
-
-        for (const insightText of insights) {
-            const { category, scope } = categorizeInsight(insightText, trade);
-
-            const attributed = addAttributedInsight({
-                insight: insightText,
-                sourceProvider: 'moderator',
-                category,
-                scope,
-                tradeId: trade.id,
-            });
-
-            attributedInsights.push(attributed);
-        }
-    }
-
-    console.log(`[InsightExtraction] Extracted ${attributedInsights.length} attributed insights`);
-    return attributedInsights;
-}
-
-/**
- * Extract insight text using patterns (internal helper)
- */
-function extractInsightsFromText(text: string): string[] {
-    const insights: string[] = [];
-    const seenInsights = new Set<string>();
-
-    // Patterns for lessons
-    const lessonPatterns = [
-        /key lesson[:\s]+([^.]+\.)/gi,
-        /lesson[:\s]+([^.]+\.)/gi,
-        /takeaway[:\s]+([^.]+\.)/gi,
-        /next time[,\s]+([^.]+\.)/gi,
-        /should have[:\s]+([^.]+\.)/gi,
-        /mistake was[:\s]+([^.]+\.)/gi,
-        /improvement[:\s]+([^.]+\.)/gi,
-        /rule[:\s]+if[^.]+then[^.]+\./gi,
-        /if \[.+\], then \[.+\]/gi,
-    ];
-
-    for (const pattern of lessonPatterns) {
-        pattern.lastIndex = 0;
-        let match;
-
-        while ((match = pattern.exec(text)) !== null) {
-            const insightText = match[1] ? match[1].trim() : match[0].trim();
-
-            if (insightText.length >= MIN_INSIGHT_LENGTH && insightText.length <= 300) {
-                const normalized = insightText.toLowerCase();
-                if (!seenInsights.has(normalized)) {
-                    seenInsights.add(normalized);
-                    insights.push(insightText);
-                }
-            }
-        }
-    }
-
-    return insights.slice(0, 5); // Max 5 insights per text block
-}
-
-/**
- * Categorize an insight by its scope (global, coin, pattern, regime, family)
+ * Categorize an extracted insight by its scope (coin, family, regime,
+ * pattern) so attributed rows reach the right setup scopes in the gate and
+ * moderator prompts. Defaults to global.
  */
 function categorizeInsight(
     insight: string,
@@ -763,6 +753,66 @@ function categorizeInsight(
 
     // Default to global
     return { category: 'global' };
+}
+
+/**
+ * Idempotent upsert for a provider-attributed insight. The id is derived
+ * from trade + provider + position (`provider-${tradeId}-${provider}-${i}`),
+ * so re-running the job on the same trade updates the row in place (fresh
+ * text/category) instead of duplicating it. User feedback fields
+ * (timesUsed / timesHelpful / wasValidated / qualityScore) survive updates.
+ */
+function recordProviderInsight(
+    insightText: string,
+    provider: string,
+    trade: LoggedTrade,
+    index: number
+): AttributedInsight {
+    const id = `provider-${trade.id}-${provider}-${index}`;
+    const { category, scope } = categorizeInsight(insightText, trade);
+    const base = { insight: insightText, sourceProvider: provider, category, scope, tradeId: trade.id };
+
+    const store = loadAttributedInsights();
+    const existingIndex = store.findIndex(i => i.id === id);
+    if (existingIndex >= 0) {
+        const updated: AttributedInsight = { ...store[existingIndex], ...base };
+        store[existingIndex] = updated;
+        saveAttributedInsights(store);
+        return updated;
+    }
+    return addAttributedInsight({ ...base, id });
+}
+
+/**
+ * Extract + record provider-attributed insights from a trade's per-provider
+ * post-mortem contributions (`postMortemByProvider`, captured at generation
+ * time in usePostMortem). This is the data half of the Knowledge Base's
+ * by-provider view: each extracted lesson is stored with the display name
+ * of the AI that actually wrote it, so `getAttributedInsightsSummary` can
+ * show per-provider counts and average quality.
+ *
+ * Runs inside the EXTRACT_INSIGHTS job — everything is best-effort and
+ * idempotent. Insights are marked "used" at creation (they are now live in
+ * the knowledge base and inform later moderation), mirroring the severity
+ * path.
+ */
+export function extractAndRecordProviderInsights(trade: LoggedTrade): AttributedInsight[] {
+    if (!trade?.analysis || !trade.postMortemByProvider) return [];
+
+    const recorded: AttributedInsight[] = [];
+    for (const [provider, text] of Object.entries(trade.postMortemByProvider)) {
+        if (!provider || !text || text.trim().length < MIN_INSIGHT_LENGTH) continue;
+
+        // Reuse the post-mortem insight extractor for the actual lesson text
+        // (deterministic order for a given text), then attribute each hit.
+        const extracted = extractInsightsFromPostMortem(text, trade);
+        extracted.slice(0, 5).forEach((insight, i) => {
+            const stored = recordProviderInsight(insight.insight, provider, trade, i);
+            markStoredInsightUsed(stored.id, 'provider attribution');
+            recorded.push(stored);
+        });
+    }
+    return recorded;
 }
 
 /**

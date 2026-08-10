@@ -6,6 +6,12 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
+    // Harden against worker teardown flakes on heavy files (debateChat.test.tsx):
+    // vitest 4's forks pool terminates workers after `teardownTimeout` (default
+    // 10s) and logs "[vitest-pool]: Timeout terminating forks worker ..." when
+    // teardown of a large suite occasionally exceeds it — the file itself always
+    // passes. 30s gives generous headroom without delaying failure detection.
+    teardownTimeout: 30000,
     setupFiles: ['./tests/setup.ts'],
     include: ['tests/**/*.{test,spec}.{ts,tsx}', 'utils/**/*.{test,spec}.{ts,tsx}', 'services/**/*.{test,spec}.{ts,tsx}'],
     coverage: {
