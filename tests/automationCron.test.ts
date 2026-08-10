@@ -156,6 +156,20 @@ describe('humanizeCron', () => {
     });
 
     it('falls back to the raw expression for custom schedules', () => {
-        expect(humanizeCron('*/15 * * * *')).toBe('*/15 * * * *');
+        // A dom-restricted schedule (e.g. on the 1st and 15th) is not one of
+        // the generated day/time shapes → raw expression.
+        expect(humanizeCron('0 9 1,15 * *')).toBe('0 9 1,15 * *');
+        expect(humanizeCron('*/15 * * * *')).toBe('Every 15 min — Daily');
+    });
+
+    it('humanizes the every-N frequency shapes', () => {
+        // Every 30 minutes on weekdays: minute step, all hours.
+        expect(humanizeCron('*/30 * * * 1,2,3,4,5')).toBe('Every 30 min — Weekdays');
+        // Every 3 hours every day: minute 0, hour step.
+        expect(humanizeCron('0 */3 * * 0,1,2,3,4,5,6')).toBe('Every 3 h — Daily');
+        // Every hour on weekends.
+        expect(humanizeCron('0 * * * 0,6')).toBe('Every 1 h — Weekends');
+        // Every minute = step 1.
+        expect(humanizeCron('* * * * *')).toBe('Every 1 min — Daily');
     });
 });

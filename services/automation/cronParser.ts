@@ -212,32 +212,50 @@ export const hasCronFireBetween = (expr: string, from: Date, to: Date): boolean 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 /**
- * Human-readable schedule for the generated "daily at HH:MM:SS on days"
- * shape ("Weekdays at 09:00:00", "Mon, Wed at 14:30:15"); falls back to the
- * raw expression for anything else.
+ * Human-readable schedule for the generated shapes:
+ *   "Weekdays at 09:00:00", "Every 30 min — Weekdays", "Every 3 h — Daily",
+ *   "Mon, Wed at 14:30:15"; falls back to the raw expression otherwise.
  */
 export const humanizeCron = (expr: string): string => {
     const fields = parseCron(expr);
     if (!fields) return expr;
 
-    // Only humanize the generated "daily at time on days" shape — narrowing
-    // happens inline so TS sees the non-null sets.
+    // Only humanize the generated shapes — narrowing happens inline so TS
+    // sees the non-null sets. '*' fields mean the full range.
     if (fields.dom !== null || fields.month !== null) return expr;
-    if (fields.hour === null || fields.hour.size !== 1) return expr;
-    if (fields.minute === null || fields.minute.size !== 1) return expr;
-    if (fields.second !== null && fields.second.size !== 1) return expr;
 
-    const h = [...fields.hour][0];
-    const m = [...fields.minute][0];
-    const s = fields.second ? [...fields.second][0] : 0;
-    const time = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    const minutes = fields.minute !== null
+        ? [...fields.minute].sort((a, b) => a - b)
+        : Array.from({ length: 60 }, (_, i) => i);
+    const hours = fields.hour !== null
+        ? [...fields.hour].sort((a, b) => a - b)
+        : Array.from({ length: 24 }, (_, i) => i);
 
-    if (fields.dow === null || fields.dow.size === 7) return `Daily at ${time}`;
-    // Display order Mon..Sun (cron dow 0 = Sunday sorts last).
-    const days = [...fields.dow]
-        .sort((a, b) => ((a === 0 ? 7 : a) - (b === 0 ? 7 : b)))
-        .map(d => DAY_NAMES[d]);
-    if (days.join(',') === 'Mon,Tue,Wed,Thu,Fri') return `Weekdays at ${time}`;
-    if (days.join(',') === 'Sat,Sun') return `Weekends at ${time}`;
-    return `${days.join(', ')} at ${time}`;
+    // Day label from the dow set (Mon..Sun display order).
+    const dayLabel = (() => {
+        if (fields.dow === null || fields.dow.size === 7) return 'Daily';
+        const days = [...fields.dow]
+            .sort((a, b) => ((a === 0 ? 7 : a) - (b === 0 ? 7 : b)))
+            .map(d => DAY_NAMES[d]);
+        if (days.join(',') === 'Mon,Tue,Wed,Thu,Fri') return 'Weekdays';
+        if (days.join(',') === 'Sat,Sun') return 'Weekends';
+        return days.join(', ');
+    })();
+
+    // Every-N frequency shapes (a stepped minute or hour field).
+    if (minutes.length > 1 && hours.length === 24) {
+        return `Every ${minutes[1] - minutes[0]} min — ${dayLabel}`;
+    }
+    if (hours.length > 1 && minutes.length === 1) {
+        return `Every ${hours[1] - hours[0]} h — ${dayLabel}`;
+    }
+
+    // Once per day at a fixed time.
+    if (minutes.length === 1 && hours.length === 1) {
+        const s = fields.second !== null && fields.second.size === 1 ? [...fields.second][0] : 0;
+        const time = `${String(hours[0]).padStart(2, '0')}:${String(minutes[0]).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+        return `${dayLabel} at ${time}`;
+    }
+
+    return expr;
 };

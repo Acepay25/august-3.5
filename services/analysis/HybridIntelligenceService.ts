@@ -639,6 +639,34 @@ ${formatTfPatterns('5m', 'Entry timing')}
 `;
         })() : ''}
 
+${data.detectedPatterns ? (() => {
+            const fmtPrice = (v: number): string => {
+                const n = Number(v);
+                if (!isFinite(n)) return '?';
+                return n >= 1000 ? n.toFixed(0) : n >= 1 ? n.toFixed(2) : n.toFixed(6);
+            };
+            // The RAW candle data (O/H/L/C) — the "see the chart like a
+            // human" layer: wick/body structure, gaps and sweeps are visible
+            // in the numbers, not just the green/red sequence above.
+            const formatCandleRow = (tf: '5m' | '15m' | '1h' | '4h', role: string): string => {
+                const scan = data.detectedPatterns![tf];
+                if (!scan || !scan.candles || scan.candles.length === 0) {
+                    return `- ${tf} (${role}): Insufficient candle data.`;
+                }
+                const recent = scan.candles.slice(-15);
+                const row = recent
+                    .map(c => `${fmtPrice(c.open)}/${fmtPrice(c.high)}/${fmtPrice(c.low)}/${fmtPrice(c.close)}`)
+                    .join(' | ');
+                return `- ${tf} (${role}) — last ${recent.length} candles (O/H/L/C, oldest → newest):\n    ${row}`;
+            };
+            return ` **CANDLE DATA (RAW OHLC — read like a chart):**
+${formatCandleRow('4h', 'HTF bias')}
+${formatCandleRow('1h', 'Key level reactions')}
+${formatCandleRow('15m', 'Market structure')}
+${formatCandleRow('5m', 'Entry timing')}
+`;
+        })() : ''}
+
  **TIMEFRAME PURPOSE GUIDE:**
 - 4H & 1H: Use for key price levels and overall direction
 - 15m: Use for market structure (BOS, CHoCH, HH/HL, LH/LL)
