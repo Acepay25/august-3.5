@@ -2,7 +2,7 @@ import React from 'react';
 import { AutomationConfig, AutomationRun } from '../../types/automation';
 import { ChevronLeftIcon, TrashIcon, EditIcon, LoadingIcon, RefreshIcon } from '../shared/Icons';
 import { EmptyState } from '../ui/EmptyState';
-import AutomationRunCard from './AutomationRunCard';
+import AutomationRunCard, { RunOutcomeConfirm } from './AutomationRunCard';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
 import { humanizeCron } from '../../services/automation/cronParser';
 import { Bookmark, Play } from 'lucide-react';
@@ -25,7 +25,8 @@ const AutomationView: React.FC<{
     onToggleEnabled: () => void;
     onRefresh: () => void;
     modelIdToName: Record<string, string>;
-}> = ({ config, runs, isLoadingRuns, isRunning, onBack, onEdit, onDelete, onRunNow, onToggleEnabled, onRefresh, modelIdToName }) => {
+    onConfirmOutcome?: (run: AutomationRun, outcome: RunOutcomeConfirm) => void;
+}> = ({ config, runs, isLoadingRuns, isRunning, onBack, onEdit, onDelete, onRunNow, onToggleEnabled, onRefresh, modelIdToName, onConfirmOutcome }) => {
     return (
         <div className="flex flex-col h-full bg-zinc-950">
             {/* Header — Back returns to the sidebar view */}
@@ -110,7 +111,7 @@ const AutomationView: React.FC<{
                     />
                 ) : (
                     runs.map(run => (
-                        <AutomationRunCard key={run.id} run={run} modelIdToName={modelIdToName} />
+                        <AutomationRunCard key={run.id} run={run} modelIdToName={modelIdToName} onConfirmOutcome={onConfirmOutcome} />
                     ))
                 )}
             </div>
