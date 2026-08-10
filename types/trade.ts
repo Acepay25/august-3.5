@@ -2,11 +2,13 @@
 
 import { AccuracySubMode, TradeOutcome } from './enums';
 import { TradeAnalysis } from './analysis';
-import { Message, DebateTurn } from './message';
+import { Message, DebateTurn, PatternMemoryGateView } from './message';
 
 export interface LoggedTrade {
   id: string;
   analysis: TradeAnalysis;
+  /** Pattern-memory gate outcome at analysis time (journal badge). */
+  patternMemoryGate?: PatternMemoryGateView;
   tradeType?: 'scalp' | 'swing';  // Denormalized for filtering/stats
   outcome: TradeOutcome;
   timestamp: string;

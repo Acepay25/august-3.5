@@ -255,6 +255,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             // Persist debate transcript for training data
             debateTurns: message.debateTurns,
             moderatorSynthesis: message.text,
+            patternMemoryGate: message.patternMemoryGate,
         };
 
         setLoggedTrades(prev => prev.some(t => t.id === loggedTrade.id) ? prev : [loggedTrade, ...prev]);
@@ -481,7 +482,8 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             correctedEntry: candidate.correctedEntry,
             modelsUsed: candidate.message.modelsUsed,
             isAccuracyMode: candidate.message.isAccuracyMode,
-            accuracySubMode: candidate.message.accuracySubMode
+            accuracySubMode: candidate.message.accuracySubMode,
+            patternMemoryGate: candidate.message.patternMemoryGate,
         };
         // Dedupe by id — a double-confirm (e.g. retrying after a capture
         // failure that actually logged) previously appended a second row

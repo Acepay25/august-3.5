@@ -958,3 +958,123 @@ describe('awaitReplacementWithTimeout', () => {
     await expect(awaitReplacementWithTimeout(Promise.reject(new Error('boom')), undefined, 1000)).rejects.toThrow('boom');
   });
 });
+describe('conductRealDebate — transient-failure retry (streamWithTransientRetry)', () => {
+  beforeEach(() => {
+    streamMock.mockReset();
+    sendMock.mockReset();
+  });
+
+  const realAnalyst = (id: string, name: string, model: string) => ({
+    provider: {
+      config: { ...config, id, name, models: [model], selectedModel: model },
+      name,
+      model,
+      thoughtsKey: `${id}:${model}`,
+    },
+    result: {
+      thoughtProcess: `${name} internal thinking`,
+      finalOutput: `${name} opening statement: long bias on breakout.`,
+      analysis,
+    },
+  });
+
+  async function collectEvents(gen: AsyncGenerator<RealDebateTurnEvent>): Promise<RealDebateTurnEvent[]> {
+    const events: RealDebateTurnEvent[] = [];
+    for await (const e of gen) events.push(e);
+    return events;
+  }
+
+  it('retries a rate-limited rebuttal once — the analyst is NOT dropped', async () => {
+    // First rebuttal call per analyst throws 429 (no output yet); the second
+    // succeeds. The analyst must survive and speak in the next round.
+    let rebuttalCalls = 0;
+    streamMock.mockImplementation(async function* (...args: any[]) {
+      const messages = args[1] as { role: string; content: string }[];
+      const system = messages[0].content;
+      const user = messages[1].content;
+      if (system.includes('CLARIFICATION ANSWER')) {
+        yield `**${system.includes('Analyst One') ? 'Analyst One' : 'Analyst Two'}:** exact clarification answer`;
+      } else if (user.includes('CLARIFICATION JUDGMENT')) {
+        yield '<CLARIFICATION_SATISFIED>';
+      } else if (user.includes('CLARIFICATION ROUND')) {
+        yield '<CLARIFICATION_DONE>';
+      } else if (system.includes('debate moderator')) {
+        yield 'Verdict: Long on breakout with tight stop.\n';
+        yield '</DEBATE_END>\n';
+        yield '<JSON_PLAN>{"direction":"Long","confidence":"Medium","probability":60,"strategy":"s","activeStrategies":[],"entryPoints":[],"stopLoss":"","takeProfit":[],"marketConditions":{"pattern":"","candleBehavior":"","timeframeAlignment":"","rsi":"","macd":"","sentiment":""},"historicalCorrelation":""}</JSON_PLAN>';
+      } else {
+        rebuttalCalls++;
+        if (rebuttalCalls <= 2) {
+          // First round of rebuttals: BOTH analysts hit a transient 429.
+          const err: any = new Error('Too Many Requests');
+          err.status = 429;
+          throw err;
+        }
+        yield `rebuttal-${system.includes('One') ? 'one' : 'two'}-round-${user.includes('ROUND 3') ? '3' : '2'}`;
+      }
+    });
+
+    const analysts = [realAnalyst('prov-a', 'Analyst One', 'model-a'), realAnalyst('prov-b', 'Analyst Two', 'model-b')];
+    const events = await collectEvents(conductRealDebate(
+      analysts,
+      'Analyze BTCUSDT',
+      null, config, 'model-a',
+      undefined, [], undefined, undefined, undefined, undefined, null, undefined,
+      new AbortController().signal,
+    ));
+
+    // Round 2: 2 calls, both 429, both retried (4 calls). Round 3: 2 successful calls.
+    // Total 6 — the retry doubled round 2 but neither analyst dropped.
+    expect(rebuttalCalls).toBe(6);
+    // Both analysts still spoke in round 2 (after the retry) — neither dropped.
+    const round2 = events.filter(e => e.round === 2);
+    expect(round2.map(e => e.speaker).sort()).toEqual(['Analyst One', 'Analyst Two']);
+    // No replacement offer was emitted for a transient blip.
+    expect(events.some(e => e.speaker === 'System' && e.text.includes('replacement'))).toBe(false);
+  });
+
+  it('does NOT retry a failure that happens after partial output — the analyst drops', async () => {
+    // First rebuttal yields one chunk then throws a network error: the drop
+    // path purges the partial text and the analyst leaves the debate.
+    let rebuttalCalls = 0;
+    streamMock.mockImplementation(async function* (...args: any[]) {
+      const messages = args[1] as { role: string; content: string }[];
+      const system = messages[0].content;
+      const user = messages[1].content;
+      if (system.includes('CLARIFICATION ANSWER')) {
+        yield `**${system.includes('Analyst One') ? 'Analyst One' : 'Analyst Two'}:** exact clarification answer`;
+      } else if (user.includes('CLARIFICATION JUDGMENT')) {
+        yield '<CLARIFICATION_SATISFIED>';
+      } else if (user.includes('CLARIFICATION ROUND')) {
+        yield '<CLARIFICATION_DONE>';
+      } else if (system.includes('debate moderator')) {
+        yield 'Verdict: Long on breakout with tight stop.\n';
+        yield '</DEBATE_END>\n';
+        yield '<JSON_PLAN>{"direction":"Long","confidence":"Medium","probability":60,"strategy":"s","activeStrategies":[],"entryPoints":[],"stopLoss":"","takeProfit":[],"marketConditions":{"pattern":"","candleBehavior":"","timeframeAlignment":"","rsi":"","macd":"","sentiment":""},"historicalCorrelation":""}</JSON_PLAN>';
+      } else {
+        rebuttalCalls++;
+        if (rebuttalCalls === 1) {
+          // Analyst One's first rebuttal: partial output THEN a network failure.
+          yield 'partial rebuttal text';
+          throw new Error('NetworkError: failed to fetch');
+        }
+        yield `rebuttal-${system.includes('One') ? 'one' : 'two'}`;
+      }
+    });
+
+    const analysts = [realAnalyst('prov-a', 'Analyst One', 'model-a'), realAnalyst('prov-b', 'Analyst Two', 'model-b')];
+    const events = await collectEvents(conductRealDebate(
+      analysts,
+      'Analyze BTCUSDT',
+      null, config, 'model-a',
+      undefined, [], undefined, undefined, undefined, undefined, null, undefined,
+      new AbortController().signal,
+    ));
+
+    // No retry for the mid-stream failure: Analyst One's rebuttal was called
+    // exactly once, Analyst Two's once (round 2), then round 3 only has Two.
+    expect(rebuttalCalls).toBe(3);
+    const round3 = events.filter(e => e.round === 3);
+    expect(round3.map(e => e.speaker)).toEqual(['Analyst Two']);
+  });
+});

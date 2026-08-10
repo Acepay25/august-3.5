@@ -22,6 +22,8 @@ interface TradeLogContentProps {
     onUpdateTradeLeverage: (id: string, leverage: number) => void;
     /** Correct a mis-logged outcome from the expanded card. */
     onUpdateOutcome?: (id: string, outcome: TradeOutcome) => void;
+    /** Edit PnL (dollar amount + leveraged percent) from the expanded card. */
+    onUpdatePnL?: (id: string, pnl: { pnlAmount?: number; pnlPercent?: number }) => void;
     /** Active user — scopes the reasoning-record lookup per trade. */
     username?: string;
 }
@@ -70,14 +72,19 @@ const TradeLogRow: React.FC<{
     isInsight: boolean;
     onUpdateLeverage: (id: string, leverage: number) => void;
     onUpdateOutcome?: (id: string, outcome: TradeOutcome) => void;
+    onUpdatePnL?: (id: string, pnl: { pnlAmount?: number; pnlPercent?: number }) => void;
     username?: string;
-}> = ({ trade, onToggle, isExpanded, isSelected, onSelect, onViewImage, modelIdToName, isInsight, onUpdateLeverage, onUpdateOutcome, username }) => {
+}> = ({ trade, onToggle, isExpanded, isSelected, onSelect, onViewImage, modelIdToName, isInsight, onUpdateLeverage, onUpdateOutcome, onUpdatePnL, username }) => {
     const { analysis, outcome, timestamp, postMortem, postMortemImages, correctedEntry, correctedStopLoss, correctedTakeProfit, pnlAmount, pnlPercent, modelsUsed, geminiModelUsed, deepseekModelUsed, zhipuModelUsed, groqModelUsed, groqNewModelUsed, groqAlt2ModelUsed, openrouterModelUsed, moderatorModel, leverage, isAccuracyMode, accuracySubMode } = trade;
     const { direction, stopLoss, stopLossPercentage, entryPoints, takeProfit, activeStrategies, coinName, invalidationCriteria } = analysis;
     const [isInsightsVisible, setIsInsightsVisible] = useState(false);
     const [isPostMortemVisible, setIsPostMortemVisible] = useState(false);
     const [isScreenshotsVisible, setIsScreenshotsVisible] = useState(false);
     const [localLeverage, setLocalLeverage] = useState<string>(String(leverage || DEFAULT_LEVERAGE));
+    // PnL edit state (expanded card) — autopilot-logged trades only carry a
+    // percent, so the dollar figure often needs a manual fill.
+    const [pnlDraftAmount, setPnlDraftAmount] = useState<string>(pnlAmount !== undefined ? String(pnlAmount) : '');
+    const [pnlDraftPercent, setPnlDraftPercent] = useState<string>(pnlPercent !== undefined ? String(pnlPercent) : '');
 
     const safeDirection = direction || 'Neutral';
 
@@ -246,6 +253,42 @@ const TradeLogRow: React.FC<{
                                         </select>
                                     </div>
                                 )}
+
+                                {/* PnL editing — dollar amount + leveraged percent
+                                    (autopilot trades only carry the percent). */}
+                                {onUpdatePnL && (
+                                    <div className="flex items-center gap-1.5 ml-2 pl-2 border-l border-white/10">
+                                        <span className="text-[10px] text-zinc-400">PnL $</span>
+                                        <input
+                                            type="number"
+                                            value={pnlDraftAmount}
+                                            onChange={(e) => setPnlDraftAmount(e.target.value)}
+                                            placeholder={pnlAmount !== undefined ? undefined : '—'}
+                                            className="w-20 bg-zinc-800 border border-white/10 rounded px-1.5 py-0.5 text-[10px] font-mono text-zinc-300 outline-none focus:border-cyan-500/40"
+                                            aria-label="PnL in dollars"
+                                        />
+                                        <span className="text-[10px] text-zinc-400">%</span>
+                                        <input
+                                            type="number"
+                                            value={pnlDraftPercent}
+                                            onChange={(e) => setPnlDraftPercent(e.target.value)}
+                                            placeholder={pnlPercent !== undefined ? undefined : '—'}
+                                            className="w-14 bg-zinc-800 border border-white/10 rounded px-1.5 py-0.5 text-[10px] font-mono text-zinc-300 outline-none focus:border-cyan-500/40"
+                                            aria-label="PnL as leveraged percent"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => onUpdatePnL(trade.id, {
+                                                pnlAmount: pnlDraftAmount.trim() !== '' ? parseFloat(pnlDraftAmount) : undefined,
+                                                pnlPercent: pnlDraftPercent.trim() !== '' ? parseFloat(pnlDraftPercent) : undefined,
+                                            })}
+                                            className="px-1.5 py-0.5 rounded bg-cyan-600/80 hover:bg-cyan-600 text-white text-[9px] font-bold uppercase tracking-widest transition-colors"
+                                            title="Save PnL"
+                                        >
+                                            Save
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -339,6 +382,24 @@ const TradeLogRow: React.FC<{
                             {moderatorModel && <span>Mod: {modelIdToName[moderatorModel] || 'AI'}</span>}
                         </div>
 
+                        {/* Pattern-memory gate at analysis time — shows when
+                            memory halted / downsized / warned this trade. */}
+                        {trade.patternMemoryGate && trade.patternMemoryGate.gateResult !== 'PASS' && (
+                            <div className={`col-span-2 rounded-lg border px-3 py-2 ${trade.patternMemoryGate.gateResult === 'HALT'
+                                ? 'status-surface border-rose-500/40 bg-rose-500/10'
+                                : 'status-surface border-amber-500/40 bg-amber-500/10'}`}>
+                                <span className={`text-[9px] font-black uppercase tracking-widest ${trade.patternMemoryGate.gateResult === 'HALT' ? 'text-rose-400' : 'text-amber-400'}`}>
+                                    {trade.patternMemoryGate.gateResult === 'HALT' ? '⛔ Memory gate: halted' : trade.patternMemoryGate.gateResult === 'REDUCE_SIZE' ? '⚠️ Memory gate: reduce size' : '⚡ Memory gate: warning'}
+                                </span>
+                                <p className="text-[11px] text-zinc-400 mt-1 leading-relaxed">{trade.patternMemoryGate.reason}</p>
+                                {trade.patternMemoryGate.historicalFailures.length > 0 && (
+                                    <p className="text-[10px] text-zinc-500 mt-1">
+                                        Matched: {trade.patternMemoryGate.historicalFailures.map(f => `${f.outcome ?? ''}${f.coinName ? ` ${f.coinName}` : ''}${f.direction ? ` ${f.direction}` : ''}`).join(' · ')}
+                                    </p>
+                                )}
+                            </div>
+                        )}
+
                         {/* Reasoning Panel — per-analyst reasoning + debate transcript */}
                         <div className="col-span-2">
                             <ReasoningPanel tradeId={getThinkingTradeId(trade.analysis?.createdAt, trade.id)} outcome={trade.outcome} username={username} />
@@ -350,7 +411,7 @@ const TradeLogRow: React.FC<{
     );
 };
 
-const TradeLogContent: React.FC<TradeLogContentProps> = ({ trades, onDeleteTrades, onClearAllTrades, modelIdToName, onUpdateInsights, isSummarizing, currentInsightIds, onUpdateTradeLeverage, onUpdateOutcome, username }) => {
+const TradeLogContent: React.FC<TradeLogContentProps> = ({ trades, onDeleteTrades, onClearAllTrades, modelIdToName, onUpdateInsights, isSummarizing, currentInsightIds, onUpdateTradeLeverage, onUpdateOutcome, onUpdatePnL, username }) => {
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [viewerImageUrl, setViewerImageUrl] = useState<string | null>(null);
@@ -557,6 +618,7 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({ trades, onDeleteTrade
                                     isInsight={currentInsightIds.includes(trade.id)}
                                     onUpdateLeverage={onUpdateTradeLeverage}
                                     onUpdateOutcome={onUpdateOutcome}
+                                    onUpdatePnL={onUpdatePnL}
                                     username={username}
                                 />
                             </div>

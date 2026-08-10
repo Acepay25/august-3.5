@@ -56,6 +56,8 @@ export interface ChatContextProps {
     onReRunAnalysis?: (messageId: string) => void;
     /** Failed-run retry: rebuild the prompt + charts from the user message. */
     onRetryFailedRun?: (userMessageId: string) => void;
+    /** Edit a sent user message's text in place (persisted to history). */
+    onEditUserMessage?: (messageId: string, text: string) => void;
     /** Mid-debate analyst replacement: pick a candidate (providerId) or pass
      *  null to continue without. Keyed by message id so a stale click from an
      *  earlier run is ignored. */
@@ -141,6 +143,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
         onViewReasoning,
         onReRunAnalysis,
         onRetryFailedRun,
+        onEditUserMessage,
         onReplacementChoice,
         copiedMessageId,
         handleCopy,
@@ -153,6 +156,10 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
     const [isThinkingModalOpen, setIsThinkingModalOpen] = React.useState(false);
     const [isPreviousDebateExpanded, setIsPreviousDebateExpanded] = React.useState(false);
     const [isRunLedgerOpen, setIsRunLedgerOpen] = React.useState(false);
+    const [isMemoryGateExpanded, setIsMemoryGateExpanded] = React.useState(false);
+    // Inline edit of a sent user message (history correction).
+    const [editingMessageId, setEditingMessageId] = React.useState<string | null>(null);
+    const [editDraft, setEditDraft] = React.useState('');
     const thinkingEntries = Object.entries({
         ...(message.thoughtProcesses ?? {}),
         ...(message.reasoningProcesses ?? {}),
@@ -306,14 +313,114 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 </div>
                             )}
 
-                            {message.role === MessageRole.AI && displayContent.trim() && (
-                                <div className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
-                                    Final output
+                            {/* Pattern-memory gate — the user must see when
+                                memory HALTED / downsized / warned the trade. */}
+                            {message.patternMemoryGate && message.patternMemoryGate.gateResult !== 'PASS' && (
+                                <div className={`mb-3 rounded-lg border p-3 ${message.patternMemoryGate.gateResult === 'HALT'
+                                    ? 'status-surface border-rose-500/40 bg-rose-500/10'
+                                    : message.patternMemoryGate.gateResult === 'REDUCE_SIZE'
+                                        ? 'status-surface border-amber-500/40 bg-amber-500/10'
+                                        : 'status-surface border-amber-500/30 bg-amber-500/5'}`}>
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsMemoryGateExpanded(o => !o)}
+                                        className="w-full text-left flex items-start justify-between gap-2"
+                                        aria-expanded={isMemoryGateExpanded}
+                                    >
+                                        <div className="flex items-center gap-2 min-w-0">
+                                            <span className={`text-[10px] font-black uppercase tracking-widest ${message.patternMemoryGate.gateResult === 'HALT' ? 'text-rose-400' : 'text-amber-400'}`}>
+                                                {message.patternMemoryGate.gateResult === 'HALT' ? '⛔ Memory gate: halted' : message.patternMemoryGate.gateResult === 'REDUCE_SIZE' ? '⚠️ Memory gate: reduce size' : '⚡ Memory gate: warning'}
+                                            </span>
+                                        </div>
+                                        <ChevronDownIcon className={`w-3.5 h-3.5 text-zinc-500 shrink-0 transition-transform ${isMemoryGateExpanded ? 'rotate-180' : ''}`} />
+                                    </button>
+                                    <p className="text-[11px] text-zinc-300 mt-1.5 leading-relaxed">{message.patternMemoryGate.reason}</p>
+                                    {isMemoryGateExpanded && (
+                                        <div className="mt-2 space-y-1.5 animate-fade-in">
+                                            {message.patternMemoryGate.mandatoryQuestions.map((q, i) => (
+                                                <p key={i} className="text-[11px] text-zinc-400">• {q}</p>
+                                            ))}
+                                            {message.patternMemoryGate.historicalFailures.length > 0 && (
+                                                <div className="pt-1.5 border-t border-white/5">
+                                                    <p className="text-[9px] uppercase tracking-widest font-bold text-zinc-500 mb-1">Matched historical trades</p>
+                                                    {message.patternMemoryGate.historicalFailures.map((f, i) => (
+                                                        <p key={i} className="text-[11px] text-zinc-400 leading-snug">
+                                                            <span className={`font-bold ${f.outcome === 'LOSS' ? 'text-rose-400' : 'text-emerald-400'}`}>{f.outcome}</span>
+                                                            {f.coinName ? ` · ${f.coinName}` : ''}{f.direction ? ` ${f.direction}` : ''}
+                                                            {f.keyLesson ? <span className="text-zinc-500"> — {f.keyLesson}</span> : null}
+                                                        </p>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             )}
-                            <div className={`prose prose-invert prose-sm max-w-none whitespace-pre-wrap leading-[1.65] overflow-x-auto min-w-0 ${message.isPostMortem ? 'text-zinc-100' : 'text-zinc-200'}`}>
-                                <SmoothText text={displayContent} animate={message.role === MessageRole.AI && context.latestMessageId === message.id && !message.analysis} />
-                            </div>
+
+                            {message.role === MessageRole.AI && displayContent.trim() && (
+                                <div className="mb-2 flex items-center justify-between gap-2">
+                                    <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
+                                        Final output
+                                    </div>
+                                    {/* Regenerate the latest analysis card with the same
+                                        prompt + chart (appends a fresh card; the old one
+                                        stays for comparison). */}
+                                    {message.analysis && context.latestMessageId === message.id && onReRunAnalysis && (
+                                        <button
+                                            type="button"
+                                            onClick={() => onReRunAnalysis(message.id)}
+                                            className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 hover:text-cyan-400 transition-colors"
+                                            title="Adds a fresh analysis with the same prompt + chart; the old card is kept for comparison"
+                                        >
+                                            ↻ Regenerate
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+                            {isUserMessage && editingMessageId === message.id ? (
+                                <div className="flex flex-col gap-2">
+                                    <textarea
+                                        value={editDraft}
+                                        onChange={(e) => setEditDraft(e.target.value)}
+                                        autoFocus
+                                        rows={Math.min(8, Math.max(2, editDraft.split('\n').length))}
+                                        className="w-full bg-zinc-950 border border-cyan-500/40 rounded-lg p-2.5 text-sm text-zinc-100 outline-none focus:border-cyan-500 resize-y font-mono"
+                                        aria-label="Edit message"
+                                    />
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => { onEditUserMessage?.(message.id, editDraft); setEditingMessageId(null); }}
+                                            className="px-3 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white text-[10px] font-bold uppercase tracking-widest transition-colors"
+                                        >
+                                            Save
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setEditingMessageId(null)}
+                                            className="px-3 py-1 rounded-lg border border-white/10 text-zinc-400 hover:text-zinc-200 text-[10px] font-bold uppercase tracking-widest transition-colors"
+                                        >
+                                            Cancel
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className={`prose prose-invert prose-sm max-w-none whitespace-pre-wrap leading-[1.65] overflow-x-auto min-w-0 ${message.isPostMortem ? 'text-zinc-100' : 'text-zinc-200'}`}>
+                                    <SmoothText text={displayContent} animate={message.role === MessageRole.AI && context.latestMessageId === message.id && !message.analysis} />
+                                </div>
+                            )}
+
+                            {/* Edit affordance for sent user messages (hover). */}
+                            {isUserMessage && editingMessageId !== message.id && onEditUserMessage && (
+                                <button
+                                    type="button"
+                                    onClick={() => { setEditDraft(message.text); setEditingMessageId(message.id); }}
+                                    className="mt-1 opacity-0 group-hover:opacity-100 transition-opacity text-[10px] font-bold uppercase tracking-widest text-zinc-500 hover:text-zinc-300"
+                                    aria-label="Edit message"
+                                >
+                                    ✎ Edit
+                                </button>
+                            )}
 
                             {/* Failed-run retry: rebuild the same prompt + charts. */}
                             {message.retryOf && onRetryFailedRun && (

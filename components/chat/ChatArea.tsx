@@ -43,6 +43,7 @@ interface ChatAreaProps {
     setIsLivePostMortemVisible: (val: boolean) => void;
     handleCancelAnalysis: () => void;
     onRetryFailedRun?: (userMessageId: string) => void;
+    onEditUserMessage?: (messageId: string, text: string) => void;
     onDeleteMessages: (ids: string[]) => void;
     // ChatInput Props
     images: ImageMetadata[];
@@ -134,6 +135,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     setIsLivePostMortemVisible,
     handleCancelAnalysis,
     onRetryFailedRun,
+    onEditUserMessage,
     onDeleteMessages,
     // ChatInput Props
     images,
@@ -246,7 +248,8 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         onViewImage: (url: string) => setViewerImageUrl(url),
         onSelectMessageForProbability,
         onRetryFailedRun,
-    }), [chatContext, latestMessageId, isSelectionMode, selectedIds, handleToggleSelection, onSelectMessageForProbability, onRetryFailedRun]);
+        onEditUserMessage,
+    }), [chatContext, latestMessageId, isSelectionMode, selectedIds, handleToggleSelection, onSelectMessageForProbability, onRetryFailedRun, onEditUserMessage]);
 
     // Fresh sessions start with zero messages (no hardcoded intro bubble),
     // so no intro-text substitution is needed — messages pass through as-is.

@@ -11,12 +11,12 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       // Ratchet floor — set just under the measured baseline (38.2% lines /
-      // 29.9% statements) so the gate fails on regressions without failing
+      // 30.0% statements) so the gate fails on regressions without failing
       // the existing suite. Raise as coverage grows.
       thresholds: {
-        lines: 35,
+        lines: 36,
         statements: 28,
-        functions: 35,
+        functions: 36,
         branches: 30,
       },
       exclude: [

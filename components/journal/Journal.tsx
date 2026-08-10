@@ -39,6 +39,8 @@ interface JournalProps {
     onUpdateTradeLeverage: (id: string, leverage: number) => void;
     /** Correct a mis-logged outcome from the expanded card. */
     onUpdateOutcome?: (id: string, outcome: TradeOutcome) => void;
+    /** Edit PnL (dollar + percent) from the expanded card. */
+    onUpdatePnL?: (id: string, pnl: { pnlAmount?: number; pnlPercent?: number }) => void;
 
     // PerformanceReview Props
     finalSummary: string | null;
@@ -197,7 +199,7 @@ const JournalInner: React.FC<JournalProps> = ({
     isVisible, onClose, initialTab, isEmbedded = false,
     initialTradeId, onInitialTradeConsumed, username,
     // Trade Log Pass-through
-    trades, onDeleteTrades, onClearAllTrades, modelIdToName, onUpdateInsights, isSummarizing, currentInsightIds, onUpdateTradeLeverage, onUpdateOutcome,
+    trades, onDeleteTrades, onClearAllTrades, modelIdToName, onUpdateInsights, isSummarizing, currentInsightIds, onUpdateTradeLeverage, onUpdateOutcome, onUpdatePnL,
     // Performance Review Pass-through
     finalSummary, individualSummaries, isLoading, isInsightGenerating, insightProgress, newlyAddedInsightIds, summarizationProvider, summarizationModel, onSetSummarizationProvider, onSetSummarizationModel, providers = [], summaryCharLimit = 1000, onUpdateSummaryCharLimit = () => {}, onRegenerateSummary = () => {}, onDeleteInsight, useAlgorithmicSummary = false, onToggleAlgorithmicSummary = () => {},
     // Analytics Pass-through
@@ -251,6 +253,7 @@ const JournalInner: React.FC<JournalProps> = ({
                 currentInsightIds={currentInsightIds}
                 onUpdateTradeLeverage={onUpdateTradeLeverage}
                 onUpdateOutcome={onUpdateOutcome}
+                onUpdatePnL={onUpdatePnL}
                 username={activeUsername}
             />
         ) : activeTab === 'performance' ? (
