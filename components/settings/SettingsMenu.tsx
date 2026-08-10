@@ -16,8 +16,9 @@ import { Journal } from '../journal/Journal';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
 import { ActivityIcon, AISettingsIcon, BrainIcon, CloseIcon, EditIcon, HistoryIcon, BookmarkIcon, SettingsIcon, UserIcon, ExportIcon, SearchIcon, SwitchUserIcon, CodeIcon } from '../shared/Icons';
 import PromptManager from './PromptManager';
+import StrategiesManager from './StrategiesManager';
 
-export type SettingsTab = 'general' | 'models' | 'journal' | 'lenses' | 'instructions' | 'memory' | 'actions' | 'prompts';
+export type SettingsTab = 'general' | 'models' | 'journal' | 'lenses' | 'instructions' | 'memory' | 'actions' | 'prompts' | 'strategies';
 
 interface SettingsMenuProps {
     isVisible: boolean;
@@ -41,6 +42,9 @@ interface SettingsMenuProps {
     // Memory
     isGlobalMemoryEnabled?: boolean;
     setIsGlobalMemoryEnabled?: (enabled: boolean) => void;
+    // Uploaded strategy books (Settings → Strategies)
+    isStrategiesEnabled?: boolean;
+    setIsStrategiesEnabled?: (enabled: boolean) => void;
     memoryConfig?: ProviderConfig | null;
     onMemoryConfigChange?: (config: ProviderConfig | null) => void;
     // Pure AI options
@@ -98,6 +102,12 @@ interface SettingsMenuProps {
     // Models
     selectedOcrModel?: string;
     onSetOcrModel?: (modelId: string) => void;
+    /** Global vision model (Settings → AI setup → Vision Model): one model
+     *  for EVERY vision feature (chart OCR, post-trade uploads, PDF OCR). */
+    visionModel?: string;
+    onSetVisionModel?: (modelId: string) => void;
+    /** Resolved vision ProviderConfig (global → conversation → first ready). */
+    visionConfig?: ProviderConfig | null;
     moderatorProvider?: AIProvider;
     moderatorModel?: string;
     onSetModeratorProvider?: (provider: string) => void;
@@ -180,6 +190,8 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
         onToggleEntryNotHitCapturing,
         isGlobalMemoryEnabled,
         setIsGlobalMemoryEnabled,
+        isStrategiesEnabled,
+        setIsStrategiesEnabled,
         isPlaybookEnabledInPureAI,
         setIsPlaybookEnabledInPureAI,
         isFamiliesEnabledInPureAI,
@@ -188,6 +200,9 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
         setIsMemoryEnabledInPureAI,
         selectedOcrModel,
         onSetOcrModel,
+        visionModel,
+        onSetVisionModel,
+        visionConfig,
         moderatorProvider,
         moderatorModel,
         onSetModeratorProvider,
@@ -270,19 +285,22 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
         setActiveTab(readyConfigProviders.length > 0 ? 'general' : 'models');
     }, [isVisible, providerConfigsLoaded, readyConfigProviders.length]);
 
-    // Heal a stale vision-model selection: `selectedOcrModel` is a bare model
-    // id, and if its provider was disabled/removed it appears in no dropdown
+    // Heal stale vision-model selections: both the global `visionModel` and
+    // the legacy per-conversation `selectedOcrModel` are bare model ids, and
+    // if their provider was disabled/removed they appear in no dropdown
     // option (the select renders blank). Fall back to the first ready
     // provider's model so the UI and the vision path stay in sync.
     // NOTE: this effect must stay ABOVE the `!isVisible` early return — React
     // forbids conditional hook order.
     useEffect(() => {
-        if (!selectedOcrModel || readyConfigProviders.length === 0) return;
-        const known = readyConfigProviders.some(p => p.models.includes(selectedOcrModel));
-        if (!known) {
+        if (readyConfigProviders.length === 0) return;
+        if (!visionModel || !readyConfigProviders.some(p => p.models.includes(visionModel))) {
+            onSetVisionModel?.(firstReadyProvider?.selectedModel || firstReadyProvider?.models?.[0] || '');
+        }
+        if (selectedOcrModel && !readyConfigProviders.some(p => p.models.includes(selectedOcrModel))) {
             onSetOcrModel?.(firstReadyProvider?.selectedModel || firstReadyProvider?.models?.[0] || '');
         }
-    }, [readyConfigProviders, selectedOcrModel, firstReadyProvider, onSetOcrModel]);
+    }, [readyConfigProviders, selectedOcrModel, visionModel, firstReadyProvider, onSetOcrModel, onSetVisionModel]);
 
     if (!isVisible) return null;
 
@@ -361,6 +379,13 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                     onClick={() => setActiveTab('prompts')}
                                     icon={<CodeIcon className="w-4 h-4" />}
                                     label="Prompts"
+                                />
+                                <NavTabButton
+                                    id="strategies"
+                                    activeTab={activeTab}
+                                    onClick={() => setActiveTab('strategies')}
+                                    icon={<BookmarkIcon className="w-4 h-4" />}
+                                    label="Strategies"
                                 />
                                 <NavTabButton
                                     id="memory"
@@ -473,14 +498,17 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                                     Vision Model
                                                 </div>
                                                 <select
-                                                    value={selectedOcrModel}
-                                                    onChange={(e) => onSetOcrModel?.(e.target.value)}
+                                                    value={visionModel || selectedOcrModel || ''}
+                                                    onChange={(e) => onSetVisionModel?.(e.target.value)}
                                                     className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 text-sm text-zinc-100 focus:outline-none focus:border-cyan-500/60 focus:ring-1 focus:ring-cyan-500/20 transition-all duration-200 appearance-none cursor-pointer bg-no-repeat bg-[right_0.9rem_center] bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2371717a%22%20stroke-width%3D%222.5%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22/%3E%3C/svg%3E')] text-xs"
                                                 >
                                                     {readyConfigProviders.flatMap(p => p.models.map(m => (
                                                         <option key={`${p.id}-${m}`} value={m}>{p.name}: {m}</option>
                                                     )))}
                                                 </select>
+                                                <p className="text-[10px] text-zinc-600 mt-2 leading-relaxed">
+                                                    One model for every vision feature — chart OCR, post-trade uploads, and PDF book OCR.
+                                                </p>
                                             </div>
                                         )}
 
@@ -736,6 +764,19 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                             {activeTab === 'prompts' && (
                                 <div className="h-full min-h-0 animate-fade-in">
                                     <PromptManager username={props.username} />
+                                </div>
+                            )}
+
+                            {/* TAB 5b: Strategies — upload PDF books, summarize, inject */}
+                            {activeTab === 'strategies' && (
+                                <div className="h-full min-h-0 animate-fade-in">
+                                    <StrategiesManager
+                                        username={props.username}
+                                        providerConfigs={providerConfigs ?? []}
+                                        visionConfig={visionConfig ?? null}
+                                        isStrategiesEnabled={isStrategiesEnabled}
+                                        setIsStrategiesEnabled={setIsStrategiesEnabled}
+                                    />
                                 </div>
                             )}
 

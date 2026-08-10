@@ -31,6 +31,7 @@ import { sanitizeAIResponse } from '../utils/sanitizers';
 import { buildModelIdToName, isProviderReady } from '../utils/providerUtils';
 import { DEFAULT_LEVERAGE } from '../utils/conversationUtils';
 import { loadLearningRules } from '../services/learning/LearningRulesService';
+import { getEnabledStrategiesText } from '../services/infrastructure/StrategyService';
 import { StructuredRule } from '../types';
 import {
     getCachedResponse, cacheResponse, getImageHash, hashString,
@@ -105,6 +106,8 @@ export interface UseAnalysisPipelineParams {
     isAccuracyModeEnabled: boolean;
     accuracySubMode: AccuracySubMode;
     isGlobalMemoryEnabled: boolean;
+    /** Master switch for user-uploaded strategy books (Settings → Strategies). */
+    isStrategiesEnabled: boolean;
     customInstructions: CustomInstructionsMap;
     isPlaybookEnabledInPureAI: boolean;
     isFamiliesEnabledInPureAI: boolean;
@@ -180,7 +183,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         setHighlightedAnalysisId,
         setIsPostMortemInProgress, setIsLivePostMortemVisible,
         isAccuracyModeEnabled, accuracySubMode,
-        isGlobalMemoryEnabled, customInstructions,
+        isGlobalMemoryEnabled, isStrategiesEnabled, customInstructions,
         isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI,
         isHybridIntelligenceEnabled, lensConfig, activeFrameworks,
         ensembleModelSelection,
@@ -217,6 +220,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         isMemoryEnabledInPureAI: boolean;
         rolePrompt: string | undefined;
         systemPromptOverride: string | undefined;
+        /** Summaries of user-uploaded strategy books (Settings → Strategies). */
+        userStrategies: string | undefined;
         onReasoning: (reasoning: string) => void;
     }
 
@@ -258,7 +263,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         const modeContext = hashString(JSON.stringify([
             params.deepenAnalysis, params.subMode, params.rolePrompt, params.systemPromptOverride,
             params.finalTradeSummary, params.recentInsights, params.globalMemory, params.threadSummary,
-            params.customInstructions, params.isPlaybookEnabledInPureAI, params.isFamiliesEnabledInPureAI, params.isMemoryEnabledInPureAI,
+            params.customInstructions, params.userStrategies, params.isPlaybookEnabledInPureAI, params.isFamiliesEnabledInPureAI, params.isMemoryEnabledInPureAI,
             params.activeFrameworks,
             params.imageSummaries,
             historyFingerprint,                    // recent chat history (bounded)
@@ -301,6 +306,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             rolePrompt: params.rolePrompt,
             signal,
             systemPromptOverride: params.systemPromptOverride,
+            userStrategies: params.userStrategies,
             onReasoning: params.onReasoning,
         });
 
@@ -777,6 +783,22 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 completeStep('market-data');
             }
 
+            // USER STRATEGIES (Settings → Strategies): enabled book summaries
+            // are injected into every analyst prompt AND bundled with the
+            // hybrid chart block for every moderator surface — the ensemble
+            // trades like a human following the uploaded book.
+            const strategiesBlock = isStrategiesEnabled
+                ? (() => {
+                    const text = getEnabledStrategiesText();
+                    return text ? `\n**USER STRATEGIES (from uploaded books — follow these when they apply):**\n${text}` : '';
+                })()
+                : '';
+
+            // One context bundle for every moderator surface (autoplay debate,
+            // real debate, accuracy verification, compact retry): the same
+            // chart/pattern block the analysts see + the user strategies.
+            const moderatorContextBundle = [hybridDataInjection, strategiesBlock].filter(Boolean).join('\n\n');
+
             // AI LEARNING: Generate UNIFIED learning context from all 6 learning services
             let learningInjection = '';
             let moderatorLearningContext = ''; // NEW: Separate context for moderator
@@ -1200,6 +1222,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             : undefined,
                         // Normal mode (Lenses off): custom base prompt override.
                         systemPromptOverride: lensConfig.enabled ? undefined : (customEnsemblePrompt || undefined),
+                        // User-uploaded strategy summaries (Settings → Strategies).
+                        userStrategies: strategiesBlock || undefined,
                         // Streamed chain-of-thought deltas accumulate — the
                         // latest full string is pushed to the live cards.
                         onReasoning: (reasoning: string) => {
@@ -1502,7 +1526,10 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                                     thoughtMap.moderator = reasoningMapRef.current.moderator;
                                 },
                                 // Provider IDs for Bayesian calibration (keyed by id)
-                                fulfilledAnalysts.map(a => a.provider.config.id)
+                                fulfilledAnalysts.map(a => a.provider.config.id),
+                                // Full chart/pattern context + user strategies —
+                                // the moderator sees the same chart the analysts see.
+                                moderatorContextBundle
                         );
                     } else {
                         // STANDARD MODE — REAL inter-model debate. Each analyst
@@ -1640,7 +1667,9 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                                     activeDebateSpeakersRef.current,
                                 );
                             },
-                            hybridDataInjection,
+                            // Full chart/pattern context + user strategies —
+                            // the moderator sees the same chart the analysts see.
+                            moderatorContextBundle,
                             undefined, // timeoutMs (debate budget is engine-defaulted)
                             requestReplacement,
                             undefined, // replacementTimeoutMs (engine-defaulted)
@@ -1915,6 +1944,9 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                                 fullResponseText,
                                 JSON.stringify(finalAnalysis),
                                 currentAbortController.signal,
+                                // Chart context + user strategies so the
+                                // verification pass is not blind.
+                                moderatorContextBundle,
                             );
                             if (verification.verdict === 'adjusted' && verification.planJson) {
                                 const adjusted = sanitizeTradeAnalysis(extractLastJson(verification.planJson));
@@ -2210,6 +2242,8 @@ ${accuracyVerificationNote}`
                                     : undefined,
                                 // Normal mode (Lenses off): custom base prompt override.
                                 systemPromptOverride: lensConfig.enabled ? undefined : (customEnsemblePrompt || undefined),
+                                // User-uploaded strategy summaries (Settings → Strategies).
+                                userStrategies: strategiesBlock || undefined,
                                 // Streamed chain-of-thought deltas accumulate — the
                                 // multi path uses the same append pattern.
                                 onReasoning: (reasoning: string) => { soloRawReasoning += reasoning; },

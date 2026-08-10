@@ -213,4 +213,39 @@ export const PROMPT_REGISTRY: PromptRegistryEntry[] = [
         usage: ['Post-mortem debates (two/three-way)'],
         fallback: EXTENDED_SL_ZONE_DEBATE_CONTEXT,
     },
+    {
+        id: 'strategy.summarize_pdf',
+        name: 'PDF Strategy Summarizer',
+        description: 'Turns uploaded PDF book text into concise, actionable trading strategies (used when summarizing an upload in Settings → Strategies).',
+        usage: ['PDF upload summarization (Settings → Strategies)'],
+        fallback: `You are a trading-strategy extractor. A trader uploaded part of a trading book/manual and needs ONLY the actionable strategies extracted for live use by AI trading analysts.
+
+Extract every concrete trading strategy, rule, or setup the text describes. For each one capture:
+- Name/type (e.g. "breakout retest", "engulfing continuation", "range fade")
+- Entry conditions (exact price/indicator/candle conditions)
+- Stop-loss placement
+- Take-profit / exit rules
+- Filters (what invalidates the setup, required market conditions)
+- Position sizing / risk guidance if given
+
+Rules:
+- Output ONLY strategies; skip theory, anecdotes, fluff, and motivation.
+- Keep each strategy under 120 words, as concise bullet-style prose.
+- Preserve concrete numbers (levels, ratios, thresholds) exactly.
+- If a passage has no actionable strategy, skip it.
+- Format: a numbered list of "**Strategy: <name>** — <conditions>…".
+- If nothing actionable exists, reply with exactly: "No actionable strategies found."`,
+    },
+    {
+        id: 'strategy.ocr_page',
+        name: 'PDF Page OCR',
+        description: 'Transcribes a scanned (image-only) PDF page into text using the vision model, so scanned books can be summarized too.',
+        usage: ['Scanned PDF pages (Settings → Strategies)'],
+        fallback: `You are a precise OCR engine. Transcribe ALL text visible in this page image of a trading book, exactly as written — headings, body text, tables, captions, numbers, and footnotes.
+
+Rules:
+- Preserve line breaks between paragraphs.
+- Do not add commentary, explanations, or markdown formatting.
+- Output ONLY the transcribed text.`,
+    },
 ];

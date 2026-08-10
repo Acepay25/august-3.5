@@ -100,6 +100,11 @@ export interface AnalyzeTradingViewParams {
     isMemoryEnabledInPureAI?: boolean;
     rolePrompt?: string;                    // Analyst Lens: specialized role prompt
     /**
+     * Summaries of the user's uploaded strategy books (Settings → Strategies),
+     * rendered into the system prompt so every analyst persona follows them.
+     */
+    userStrategies?: string;
+    /**
      * User-edited base prompt for Normal mode (Lenses off). Replaces
      * MASTER_ANALYSIS_PROMPT as the standard-mode base while the appended
      * contract sections (rules, formatting, evidence discipline) stay intact.
@@ -117,7 +122,7 @@ export async function analyzeTradingView(
         prompt, images, imageSummaries, chatHistory, finalTradeSummary, recentInsights,
         activeFrameworks, globalMemory, threadSummary, subMode, customInstructions,
         isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI,
-        rolePrompt, systemPromptOverride, signal, onReasoning,
+        rolePrompt, systemPromptOverride, userStrategies, signal, onReasoning,
     } = params;
 
     const modelName = config.selectedModel;
@@ -147,6 +152,9 @@ export async function analyzeTradingView(
         : truncateTextToTokens(constructOptimizedContext(chatHistory, threadSummary, globalMemory), 800);
 
     const frameworksList = activeFrameworks.map((fw, index) => `${index + 1}. **${fw}**`).join('\n');
+    const userStrategiesBlock = userStrategies
+        ? `\n**USER STRATEGIES (from uploaded books — follow these when they apply):**\n${userStrategies}`
+        : '';
     const imageSummaryContext = imageSummaries.length > 0
         ? `**PRE-PROCESSED VISION ANALYSIS**...\n${imageSummaries.join('\n\n---\n\n')}`
         : "No chart data provided.";
@@ -190,6 +198,8 @@ export async function analyzeTradingView(
 
       ${memoryContextPrompt}
 
+      ${userStrategiesBlock}
+
       ${getPrompt('analysis.risk_rules', RISK_MANAGEMENT_RULES)}
 
       **SYNTHESIS & OUTPUT:**
@@ -209,6 +219,8 @@ export async function analyzeTradingView(
       **CONTEXTUAL DATA:**
       **PLAYBOOK: CORE TRADING FRAMEWORKS**
       ${frameworksList}
+
+      ${userStrategiesBlock}
 
       **CRITICAL: PATTERN MEMORY INTEGRATION (SECTION 4):**
       Use the **PATTERN MEMORY** and **RECENT INSIGHTS** provided below for user-specific patterns. Do NOT use Layer 3 Global Memory for past trade references.
@@ -237,6 +249,8 @@ export async function analyzeTradingView(
       **CONTEXTUAL DATA:**
       **PLAYBOOK: CORE TRADING FRAMEWORKS**
       ${frameworksList}
+
+      ${userStrategiesBlock}
 
       **ANALYTICAL PROCESS OVERRIDE:**
       You must perform the analysis exactly as defined in the MASTER PROMPT sections 1-8.

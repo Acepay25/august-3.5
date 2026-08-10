@@ -23,6 +23,8 @@ export interface UserSettings {
   summaryCharLimit?: number;
   summarizationProvider?: string;  // ProviderConfig id
   summarizationModel?: string;
+  /** Global vision model (bare model id) — one model for every vision feature. */
+  visionModel?: string;
   isGlobalMemoryEnabled?: boolean; // Layer 3 Toggle
   isAccuracyModeEnabled?: boolean; // Accuracy Mode Toggle
   accuracySubMode?: AccuracySubMode; // Sub-mode selection
