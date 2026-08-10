@@ -43,6 +43,21 @@ export const MASTER_TRADE_PLAN_JSON_SCHEMA = `{
           "resistance": ["96000 (4h)", "97000 (1h)"]
       },
       "detectedPatternFamily": "Family C",
+      "grade": "B",
+      "evidence": [
+        { "claim": "1H structure bullish (HH/HL) with EMA20/50 aligned", "sources": ["1H EMA20/50", "RSI(14) 58"], "state": "observed" },
+        { "claim": "Volume confirms the breakout", "sources": ["Volume 1.8x 20-period average"], "state": "partial" }
+      ],
+      "invalidationCriteria": [
+        { "level": "94500", "condition": "4H close below support", "category": "price" },
+        { "level": "6h", "condition": "Entry not triggered before expiry", "category": "time" }
+      ],
+      "devilsAdvocate": {
+        "bearCaseReasons": ["Liquidity sweep risk below entry"],
+        "failureScenarios": ["Wick through 94500 before reversal"],
+        "crowdedTradeWarning": "Funding elevated - long crowd",
+        "riskScore": 45
+      },
       "levelProbabilities": {
           "slProbability": 25,
           "slReasoning": { "indicatorBasis": "RSI/MACD alignment", "volatilityFactor": "ATR within normal range", "patternMemoryInfluence": "Similar setups had 25% SL hit rate", "aiAdjustments": "None" },

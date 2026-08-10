@@ -35,7 +35,11 @@ interface CachedResponse {
 
 const CONTEXT_CACHE_TTL = 5 * 60 * 1000;    // 5 minutes — context is session-scoped
 const IMAGE_CACHE_TTL = 30 * 60 * 1000;     // 30 minutes — images don't change
-const RESPONSE_CACHE_TTL = 10 * 60 * 1000;  // 10 minutes — market data goes stale
+// Trading signals go stale fast: the OLD 10-minute TTL served an analysis
+// computed before the last move for "the same chart". 2 minutes keeps the
+// same-chart repeat working (the cache's purpose) without selling stale
+// setups.
+const RESPONSE_CACHE_TTL = 2 * 60 * 1000;   // 2 minutes — market data goes stale
 const MAX_CACHE_SIZE = 50;                   // Prevent unbounded growth
 
 // =============================================================================
@@ -161,7 +165,10 @@ export const getCachedContext = (sessionId: string): string | undefined => {
  * the raw strings alive.
  */
 export const getImageHash = (dataURL: string): string => {
-  const dedupKey = hashString(dataURL);
+  // Length in the dedup key: two charts with a colliding 32-bit hash of
+  // their data URLs would otherwise map to one image hash and could serve
+  // each other's cached analysis.
+  const dedupKey = `${hashString(dataURL)}:${dataURL.length}`;
   const existing = imageHashCache.get(dedupKey);
   if (existing) return existing;
 
@@ -177,10 +184,13 @@ export const getImageHash = (dataURL: string): string => {
  * each other's cached analysis, and a disabled provider's output could be
  * returned for the same chart.
  * `contextKey` folds mode/role context (deep analysis, accuracy submode, lens
- * role prompt, custom ensemble prompt) into the key so a 10-minute-TTL hit can
- * never serve an analysis computed under a different mode for the same chart.
+ * role prompt, custom ensemble prompt) into the key so a TTL hit can never
+ * serve an analysis computed under a different mode for the same chart.
+ * The prompt is hashed with its length folded in — a 32-bit djb2 collision
+ * between two prompts of very different lengths can't share an entry.
  */
-const buildResponseKey = (imageHashes: string[], promptHash: string, model: string, providerId: string, contextKey?: string): string => {
+const buildResponseKey = (imageHashes: string[], prompt: string, model: string, providerId: string, contextKey?: string): string => {
+  const promptHash = `${hashString(prompt)}:${prompt.length}`;
   return `${imageHashes.sort().join('+')}:${promptHash}:${model}:${providerId}${contextKey ? `:${contextKey}` : ''}`;
 };
 
@@ -196,7 +206,7 @@ export const getCachedResponse = async (
   providerId: string,
   contextKey?: string
 ): Promise<CachedResponse | undefined> => {
-  const key = buildResponseKey(imageHashes, hashString(prompt), model, providerId, contextKey);
+  const key = buildResponseKey(imageHashes, prompt, model, providerId, contextKey);
   const hit = responseCache.get(key);
   if (hit) return hit;
 
@@ -219,7 +229,7 @@ export const cacheResponse = (
   providerId: string,
   contextKey?: string
 ): void => {
-  const key = buildResponseKey(imageHashes, hashString(prompt), model, providerId, contextKey);
+  const key = buildResponseKey(imageHashes, prompt, model, providerId, contextKey);
   const entry: CachedResponse = {
     ...response,
     model,

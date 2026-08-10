@@ -166,7 +166,12 @@ export const scanTradeOutcome = (
           result.breakevenIndex = i;
           result.breakevenTime = candleTimeStr;
         }
-      } else if (!result.slTouched && candle.low <= stopLoss) {
+      } else if (candle.low <= stopLoss) {
+        // Track the LATEST touch index, not the first: price can wick the
+        // stop, recover, then touch it again. resolveOutcomeFromScan
+        // compares the TP candle index against slTouchIndex, so a same-candle
+        // SL+TP after a re-touch must resolve LOSS (the resting stop fills
+        // first) — recording only the first touch turned those into WINS.
         result.slTouched = true;
         result.slTouchIndex = i;
         result.slTouchTime = candleTimeStr;
@@ -206,7 +211,8 @@ export const scanTradeOutcome = (
           result.breakevenIndex = i;
           result.breakevenTime = candleTimeStr;
         }
-      } else if (!result.slTouched && candle.high >= stopLoss) {
+      } else if (candle.high >= stopLoss) {
+        // Latest-touch semantics — see the Long branch above.
         result.slTouched = true;
         result.slTouchIndex = i;
         result.slTouchTime = candleTimeStr;

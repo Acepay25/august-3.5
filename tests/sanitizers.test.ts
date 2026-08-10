@@ -57,12 +57,12 @@ describe('sanitizers', () => {
       expect(result).toContain('strong');
     });
 
-    it('strips spaced-out asterisk decoration but keeps the digits', () => {
-      // "5 * 6 * 7" (spaces) is decoration, not math — asterisks go, digits stay.
+    it('preserves spaced-out asterisk math (5 * 6 is multiplication, not decoration)', () => {
+      // "5 * 6 * 7" with spaces is math, not italic decoration — the old
+      // cleanup pass stripped the asterisks (→ "5  7"), destroying displayed
+      // R:R/size math like "TP1 94500 * 2 R:R".
       const result = sanitizeAIResponse('5 * 6 * 7');
-      expect(result).not.toContain('*');
-      expect(result).toContain('5');
-      expect(result).toContain('7');
+      expect(result).toContain('5 * 6 * 7');
     });
   });
 

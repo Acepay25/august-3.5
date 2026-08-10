@@ -34,6 +34,7 @@ export interface UserSettings {
   isMemoryEnabledInPureAI?: boolean; // Toggle trade log in Pure AI mode
   isHybridIntelligenceEnabled?: boolean; // Hybrid Intelligence: Real-time data + programmatic TA
   isEnsembleEnabled?: boolean; // Ensemble debate mode (off = casual chat)
+  isStrategiesEnabled?: boolean; // Master switch: inject uploaded strategy books into analysis prompts
   isAutoCapturing?: boolean; // Prompt for post-trade result capture
   isUpdateAutoCapturing?: boolean; // Prompt for active trade updates
   isEntryNotHitCapturing?: boolean; // Prompt when entry price is not hit

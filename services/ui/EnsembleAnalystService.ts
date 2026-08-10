@@ -11,7 +11,7 @@
 //      no longer resolve counts as missing instead of running a dead model.
 
 import { ProviderConfig } from '../../types/provider';
-import { AnalystLensConfig, AnalystRole } from '../../types';
+import { AnalystLensConfig, AnalystRole, AnalystRoleAssignment } from '../../types';
 import { ANALYST_ROLE_DEFINITIONS, getRoleForProvider, EnsembleModelSelection } from './AnalystLensService';
 
 /** One ensemble participant — a model-level entry (several per provider possible). */
@@ -29,6 +29,15 @@ export interface EnsembleAnalystPlan {
     missingAnalystRoles: AnalystRole[];
     /** All 3 roles assigned to 3 distinct (resolved) provider::model identities. */
     hasCompleteAnalystAssignments: boolean;
+    /**
+     * The lens assignments with stale model ids rewritten to the model the
+     * analyst will actually run (resolveAssignedModel's fallback). Callers
+     * must use THIS for role lookups (getRoleForProvider / getLensPromptForStyle)
+     * — the raw assignments silently returned UNASSIGNED for a stale model,
+     * so the analyst passed the completeness check but ran with NO lens
+     * persona and the generic provider name.
+     */
+    resolvedAssignments: AnalystRoleAssignment[];
 }
 
 const REQUIRED_ANALYST_ROLES = [
@@ -91,6 +100,19 @@ export const buildEnsembleAnalysts = (
         return new Set(identities).size === identities.length;
     })();
 
+    // Assignments rewritten to the models the analysts will ACTUALLY run.
+    // getRoleForProvider/getLensPromptForStyle match the literal
+    // assignedModel; without this rewrite a stale persisted model id made
+    // the role lookup return UNASSIGNED even though the analyst runs (on the
+    // provider's current selectedModel) — no persona, generic name.
+    const resolvedAssignments: AnalystRoleAssignment[] = assignments
+        .filter(a => a.assignedProvider && a.role !== AnalystRole.UNASSIGNED)
+        .map(a => {
+            const provider = providerConfigs.find(p => p.id === a.assignedProvider);
+            const resolved = resolveAssignedModel(a, provider);
+            return resolved ? { ...a, assignedModel: resolved } : a;
+        });
+
     const analysts: EnsembleAnalystEntry[] = providerConfigs
         .filter(c => c.isEnabled && c.apiKey.trim().length > 0)
         .flatMap(c => {
@@ -117,7 +139,7 @@ export const buildEnsembleAnalysts = (
                 config: { ...c, selectedModel: model },
                 name: (() => {
                     if (!isEnsembleEnabled || !hasCompleteAnalystAssignments) return isEnsembleEnabled && models.length > 1 ? `${c.name} · ${model}` : c.name;
-                    const role = getRoleForProvider(`${c.id}::${model}`, assignments);
+                    const role = getRoleForProvider(`${c.id}::${model}`, resolvedAssignments);
                     return role !== AnalystRole.UNASSIGNED ? ANALYST_ROLE_DEFINITIONS[role].name : c.name;
                 })(),
                 model,
@@ -127,7 +149,7 @@ export const buildEnsembleAnalysts = (
         })
         .slice(0, 3);
 
-    return { analysts, missingAnalystRoles, hasCompleteAnalystAssignments };
+    return { analysts, missingAnalystRoles, hasCompleteAnalystAssignments, resolvedAssignments };
 };
 
 /**

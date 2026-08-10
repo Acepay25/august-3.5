@@ -571,11 +571,16 @@ export const calculateConfluenceScore = (
             alignment.push(`${tf} Stoch bearish cross`);
         }
 
-        // Bollinger Band Position (weight: 1)
-        if (ind.bollingerBands.percentB > 0.5 && ind.bollingerBands.percentB < 0.9) {
+        // Bollinger Band Position (weight: 1). %B is computed on a 0-100
+        // scale (calculateIndicators) but the thresholds here are 0-1 — the
+        // old comparison read "0.5" as 0.5%, so the bullish "upper half"
+        // branch never fired and the bearish branch only fired at the very
+        // BOTTOM of the range, inverting the confluence contribution.
+        const percentB = ind.bollingerBands.percentB / 100;
+        if (percentB > 0.5 && percentB < 0.9) {
             bullishPoints++;
             alignment.push(`${tf} BB upper half`);
-        } else if (ind.bollingerBands.percentB < 0.5 && ind.bollingerBands.percentB > 0.1) {
+        } else if (percentB < 0.5 && percentB > 0.1) {
             bearishPoints++;
             alignment.push(`${tf} BB lower half`);
         }

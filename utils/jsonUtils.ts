@@ -46,6 +46,36 @@ const stripJsonComments = (input: string): string => {
     return result;
 };
 
+/**
+ * Apply a repair regex ONLY outside JSON string literals. Several repair
+ * passes used to run over the whole text and corrupted string VALUES —
+ * `{"note":"RSI: +2 divergence"}` lost its plus, `{"reason":"if price
+ * falls,}"}` lost its comma. Mirrors stripJsonComments' string-aware walk.
+ */
+const repairOutsideStrings = (input: string, fn: (segment: string) => string): string => {
+    let result = '';
+    let i = 0;
+    while (i < input.length) {
+        if (input[i] === '"') {
+            // Copy the string literal verbatim (respecting escapes).
+            let j = i + 1;
+            while (j < input.length) {
+                if (input[j] === '\\') { j += 2; continue; }
+                if (input[j] === '"') { j++; break; }
+                j++;
+            }
+            result += input.slice(i, j);
+            i = j;
+            continue;
+        }
+        const nextQuote = input.indexOf('"', i);
+        const end = nextQuote === -1 ? input.length : nextQuote;
+        result += fn(input.slice(i, end));
+        i = end;
+    }
+    return result;
+};
+
 export const robustJsonParse = (jsonString: string): any => {
     if (!jsonString || typeof jsonString !== 'string') {
         throw new Error('Invalid input to robustJsonParse. Expected a non-empty string.');
@@ -66,7 +96,8 @@ export const robustJsonParse = (jsonString: string): any => {
     cleanedString = cleanedString.replace(/\\u(?![0-9a-fA-F]{4})/g, '\\\\u');
 
     // 3. Remove leading plus signs from numbers (e.g. : +2.38 -> : 2.38) which is invalid JSON
-    cleanedString = cleanedString.replace(/:\s*\+(\d)/g, ': $1');
+    //    STRING-AWARE: a value like "RSI: +2 divergence" must keep its plus.
+    cleanedString = repairOutsideStrings(cleanedString, (segment) => segment.replace(/:\s*\+(\d)/g, ': $1'));
 
     let repaired = '';
     let inString = false;
@@ -105,7 +136,8 @@ export const robustJsonParse = (jsonString: string): any => {
     cleanedString = repaired;
 
     // 4. Remove trailing commas in objects/arrays (common AI error)
-    cleanedString = cleanedString.replace(/,(?=\s*[}\]])/g, '');
+    //    STRING-AWARE: "reason": "if price falls,}" must keep its comma.
+    cleanedString = repairOutsideStrings(cleanedString, (segment) => segment.replace(/,(?=\s*[}\]])/g, ''));
 
     try {
         return JSON.parse(cleanedString);

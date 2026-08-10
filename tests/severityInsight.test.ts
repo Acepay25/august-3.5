@@ -47,11 +47,23 @@ describe('extractSeverityInsightFromTrade', () => {
         expect(extractSeverityInsightFromTrade(trade)).toBeNull();
     });
 
-    it('returns null for a shallow loss (R > -1.5)', () => {
-        // Default loss: entry 70000, SL 69000, loss 1000, risk 1000, R = -1.
-        // -1 > -1.5, so should NOT generate a severity insight.
-        const trade = makeLoss();
+    it('returns null for a shallow loss (R > -1.0)', () => {
+        // Corrected SL 500 wide of entry on a 1,000-risk trade → -0.5R.
+        // The severity floor is the -1.0R bleeder threshold — a -0.5R loss
+        // must not pollute the store with severity insights.
+        const trade = makeLoss({ correctedStopLoss: '69,500' });
         expect(extractSeverityInsightFromTrade(trade)).toBeNull();
+    });
+
+    it('generates a "bleeder_avg" insight for a -1.0R..-1.5R loss', () => {
+        // Default loss is exactly -1R (entry 70000, SL 69000, risk 1000).
+        // The old guard used the -1.5R deep threshold, which made the
+        // bleeder branch unreachable — -1R..-1.5R losses generated nothing.
+        const trade = makeLoss({ id: 'bleeder-1' });
+        const insight = extractSeverityInsightFromTrade(trade);
+        expect(insight).not.toBeNull();
+        expect(insight!.kind).toBe('bleeder_avg');
+        expect(insight!.pnlR).toBeCloseTo(-1, 5);
     });
 
     it('generates a "deep_single_loss" insight for -1.5R or worse', () => {

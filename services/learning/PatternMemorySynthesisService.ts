@@ -35,7 +35,9 @@ export interface SetupContext {
 export interface RelevantTrade {
     tradeId: string;
     coin: string;
-    direction: 'Long' | 'Short';
+    /** 'Neutral' when the logged trade had no direction — rendering it as
+     *  'Long' in the similar-trades list misled the moderator. */
+    direction: 'Long' | 'Short' | 'Neutral';
     outcome: 'WIN' | 'LOSS' | 'BREAKEVEN';
     pattern?: string;
     family?: string;
@@ -86,6 +88,8 @@ export interface AttributedInsight {
     wasValidated: boolean; // Did following this advice help?
     timesUsed: number;
     timesHelpful: number;
+    /** Dedupe guard for "surfaced to a prompt" marks (see markInsightSurfaced). */
+    lastSurfacedAt?: number;
     createdAt: string;
     tradeId: string;
 }
@@ -304,11 +308,15 @@ export function findRelevantTrades(
         .sort((a, b) => b.similarity - a.similarity)
         .slice(0, MAX_RELEVANT_TRADES);
 
-    // Convert to RelevantTrade format
+    // Convert to RelevantTrade format. Direction defaults to 'Neutral', NOT
+    // 'Long' — a Neutral/undefined trade rendered as "Long" in the
+    // moderator's similar-trades list (and scored as a Long setup).
     return relevant.map(({ trade, similarity }) => ({
         tradeId: trade.id,
         coin: trade.analysis?.coinName || 'Unknown',
-        direction: (trade.analysis?.direction as 'Long' | 'Short') || 'Long',
+        direction: (trade.analysis?.direction === 'Long' || trade.analysis?.direction === 'Short')
+            ? trade.analysis.direction
+            : 'Neutral',
         outcome: trade.outcome as 'WIN' | 'LOSS' | 'BREAKEVEN',
         pattern: trade.analysis?.marketConditions?.pattern,
         family: trade.analysis?.detectedPatternFamily,
@@ -590,8 +598,9 @@ export function generateSynthesizedPromptInjection(synthesis: PatternMemorySynth
             parts.push(`${i + 1}. "${insight.insight}"`);
             parts.push(`   Quality: ${insight.qualityScore}/100 | Used: ${insight.timesUsed}x | Helpful: ${insight.timesHelpful}x`);
             // Surfaced to the moderator → counts as "used" so the quality
-            // ratio (timesHelpful / timesUsed) can move.
-            markInsightUsed(insight.id);
+            // ratio (timesHelpful / timesUsed) can move. Deduped per run —
+            // the same insight is rendered in several blocks of one debate.
+            markInsightSurfaced(insight.id);
         });
         parts.push('');
     }
@@ -748,6 +757,28 @@ export function markInsightUsed(insightId: string): void {
     }
 }
 
+/** One debate run renders the same insight in the gate scan, the mandatory
+ *  question, the enforcement block AND the moderator's structured memory —
+ *  the old per-render markInsightUsed inflated timesUsed 3-5× per run and
+ *  diluted the quality ratio (timesHelpful / timesUsed) to a third of its
+ *  true value. Surfaced marks are deduped within this window instead. */
+const SURFACED_DEDUPE_MS = 15 * 60 * 1000;
+
+/**
+ * Mark an insight as surfaced to a prompt (analyst/moderator context).
+ * Deduped per SURFACED_DEDUPE_MS — explicit feedback paths
+ * (recordInsightFeedback / markStoredInsightUsed) still use markInsightUsed.
+ */
+export function markInsightSurfaced(insightId: string): void {
+    const insights = loadAttributedInsights();
+    const insight = insights.find(i => i.id === insightId);
+    if (!insight) return;
+    if (insight.lastSurfacedAt && Date.now() - insight.lastSurfacedAt < SURFACED_DEDUPE_MS) return;
+    insight.lastSurfacedAt = Date.now();
+    insight.timesUsed++;
+    saveAttributedInsights(insights);
+}
+
 /**
  * Record feedback on an insight's helpfulness
  */
@@ -816,8 +847,9 @@ function buildSeverityMandatoryQuestion(
     // This insight is now genuinely surfaced to the moderator (quoted in a
     // mandatory question) — count it so `recordInsightFeedback` can later
     // derive a quality ratio (timesHelpful / timesUsed). Without this the
-    // quality score never leaves its default of 50.
-    markInsightUsed(best.id);
+    // quality score never leaves its default of 50. Deduped per run — the
+    // enforcement block re-renders the same insight moments later.
+    markInsightSurfaced(best.id);
 
     return `Your pattern memory records: "${best.insight}" — what is structurally different about THIS trade that breaks the pattern?`;
 }
@@ -991,8 +1023,9 @@ ${gate.reason}
         gate.severityInsights.forEach((insight, i) => {
             context += `${i + 1}. "${insight.insight}" (quality: ${insight.qualityScore}/100)\n`;
             // Surfaced to the moderator → counts as "used" so the quality
-            // ratio (timesHelpful / timesUsed) can move.
-            markInsightUsed(insight.id);
+            // ratio (timesHelpful / timesUsed) can move. Deduped per run —
+            // the mandatory question already marked this insight.
+            markInsightSurfaced(insight.id);
         });
     }
 

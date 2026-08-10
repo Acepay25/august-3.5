@@ -242,6 +242,33 @@ const coercedStringArray = (): z.ZodType<string[]> =>
     Array.isArray(val) ? val.map(coerceToString).filter((s) => s.length > 0) : []
   );
 
+/**
+ * Case-insensitive confidence coercion: models write "high", "HIGH",
+ * "High (85%)", "MED" — normalize to the canonical union before the strict
+ * match, so a legitimately confident answer isn't silently downgraded to
+ * Medium/65 (the old `['High','Medium','Low','Avoid'].includes(raw.confidence)`
+ * rejected every variant).
+ */
+export const normalizeConfidence = (s: string): 'High' | 'Medium' | 'Low' | 'Avoid' | undefined => {
+  const lower = (s || '').toLowerCase().replace(/\(.*?\)/g, '').trim();
+  if (lower.includes('avoid')) return 'Avoid';
+  if (lower.includes('high')) return 'High';
+  if (lower.includes('med')) return 'Medium';
+  if (lower.includes('low')) return 'Low';
+  return undefined;
+};
+
+/** Price extraction for entry/TP objects: a nested {value|level|price} object
+ *  used to stringify to "[object Object]" and pass validation as a price. */
+const cleanNestedPrice = (val: unknown): string => {
+  if (val && typeof val === 'object') {
+    const obj = val as Record<string, unknown>;
+    const extracted = obj.price ?? obj.value ?? obj.level ?? obj.text;
+    return cleanPriceField(extracted);
+  }
+  return cleanPriceField(val);
+};
+
 /** Direction synonym mapping: bull/buy→Long, bear/sell→Short, else Neutral. */
 export const CoercedDirectionSchema = z.any().optional().transform((val): 'Long' | 'Short' | 'Neutral' => {
   const d = coerceToString(val).toLowerCase();
@@ -255,7 +282,7 @@ const CoercedEntryPointSchema = z.any().optional().transform((ep) => {
     return { price: cleanPriceField(String(ep)), description: '' };
   }
   const obj = (ep ?? {}) as Record<string, unknown>;
-  return { price: cleanPriceField(obj.price), description: coerceToString(obj.description) };
+  return { price: cleanNestedPrice(obj.price), description: coerceToString(obj.description) };
 });
 
 const CoercedTakeProfitSchema = z.any().optional().transform((tp) => {
@@ -264,7 +291,7 @@ const CoercedTakeProfitSchema = z.any().optional().transform((tp) => {
   }
   const obj = (tp ?? {}) as Record<string, unknown>;
   return {
-    price: cleanPriceField(obj.price),
+    price: cleanNestedPrice(obj.price),
     percentage: coerceToString(obj.percentage),
     originalPercentage: coerceToString(obj.originalPercentage),
   };
@@ -398,9 +425,7 @@ export const CoercedTradeAnalysisSchema = z.object({
     Array.isArray(v) ? v.map(coerceToString) : undefined
   ),
   originalConfidence: z.any().optional().transform((v) =>
-    typeof v === 'string' && ['High', 'Medium', 'Low', 'Avoid'].includes(v)
-      ? (v as 'High' | 'Medium' | 'Low' | 'Avoid')
-      : undefined
+    typeof v === 'string' ? normalizeConfidence(v) : undefined
   ),
   entryTimingScore: z.any().optional(),
   gateResult: z.any().optional(),
@@ -552,18 +577,20 @@ export const applySemanticFixups = (raw: CoercedTradeAnalysis): TradeAnalysis =>
 
     // An EXPLICIT 'Avoid' from the model stays an Avoid — the old code
     // force-fitted any number under 40 into Avoid/15, discarding genuine
-    // low-confidence signals (e.g. a real 35% estimate).
-    if (raw.confidence === 'Avoid') {
+    // low-confidence signals (e.g. a real 35% estimate). Comparison is
+    // case-insensitive so "avoid"/"AVOID" (and "High (85%)" variants) land
+    // on the right branch.
+    if (normalizeConfidence(raw.confidence) === 'Avoid') {
       analysis.confidence = 'Avoid';
     } else if (analysis.probability >= 80) analysis.confidence = 'High';
     else if (analysis.probability >= 60) analysis.confidence = 'Medium';
     else if (analysis.probability >= 40) analysis.confidence = 'Low';
     else analysis.confidence = 'Low'; // genuine 1-39% → Low, not Avoid
   } else {
-    // Fallback: derive probability from the confidence string.
-    const conf = (['High', 'Medium', 'Low', 'Avoid'].includes(raw.confidence)
-      ? raw.confidence
-      : 'Medium') as 'High' | 'Medium' | 'Low' | 'Avoid';
+    // Fallback: derive probability from the confidence string. Normalized
+    // case-insensitively ("high", "High (85%)") — previously any variant
+    // silently collapsed to Medium/65.
+    const conf = normalizeConfidence(raw.confidence) ?? 'Medium';
     analysis.confidence = conf;
     analysis.probability = conf === 'High' ? 85 : conf === 'Low' ? 45 : conf === 'Avoid' ? 15 : 65;
   }
@@ -684,5 +711,19 @@ export const parseTradeAnalysis = (raw: unknown): TradeAnalysis => {
   const obj = raw as Record<string, unknown>;
   const withCoin = obj.coinName ? obj : { ...obj, coinName: obj.symbol ?? obj.asset ?? 'Unknown Asset' };
   const result = SanitizedTradeAnalysisSchema.safeParse(withCoin);
-  return result.success ? result.data : createDefaultTradeAnalysis();
+  if (!result.success) return createDefaultTradeAnalysis();
+  const data = result.data;
+  // A parsed-but-empty payload (garbage / declined output) is NOT a real
+  // analysis — the lenient schema can't reject it (all defaults), so it used
+  // to fabricate a plausible "Medium 65%" trade that got logged, calibrated
+  // and counted in thinking records as if the model had spoken. Mark it
+  // instead. A genuine "Avoid"/no-trade verdict still has substance via its
+  // direction/confidence, so it is preserved.
+  const hasSubstance =
+    data.entryPoints.length > 0 || data.stopLoss !== '' || data.takeProfit.length > 0 ||
+    data.strategy !== '' || data.direction !== 'Neutral' || data.confidence !== 'Medium';
+  if (!hasSubstance) {
+    return { ...createDefaultTradeAnalysis(), validationWarnings: ['No trade plan extracted from the AI response.'] };
+  }
+  return data;
 };

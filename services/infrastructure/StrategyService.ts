@@ -24,6 +24,13 @@ export interface StrategyDoc {
     updatedAt: number;
     /** The AI-summarized strategy list (user-editable in Settings). */
     summary: string;
+    /**
+     * The raw extracted PDF text (capped by pdfTextExtractor). Kept so
+     * "Re-summarize" can re-run against the BOOK, not the previous summary
+     * (which made the button echo the existing list). Optional for docs
+     * saved before this field existed.
+     */
+    sourceText?: string;
     /** Whether this doc's strategies are injected into analysis prompts. */
     enabled: boolean;
 }
@@ -53,16 +60,15 @@ export const initStrategyDocs = async (username: string): Promise<void> => {
 /** Current docs (for the Settings UI and analysis injection). */
 export const getStrategyDocs = (): StrategyDoc[] => strategyCache.docs;
 
-/** Persist the cache for the active user (empty list clears the key). */
+/** Persist the cache for the active user (empty list clears the key).
+ *  Rethrows: a failed write must surface to the UI — the old catch left the
+ *  in-memory cache optimistic (the doc looked "saved") while storage never
+ *  persisted it, and the doc vanished on the next reload. */
 const persist = async (username: string): Promise<void> => {
-    try {
-        if (strategyCache.docs.length === 0) {
-            await removePreference(`${STRATEGY_KEY_PREFIX}${username}`);
-        } else {
-            await setPreferenceObject(`${STRATEGY_KEY_PREFIX}${username}`, strategyCache);
-        }
-    } catch (e) {
-        console.warn('[Strategy] Failed to persist strategy docs:', e);
+    if (strategyCache.docs.length === 0) {
+        await removePreference(`${STRATEGY_KEY_PREFIX}${username}`);
+    } else {
+        await setPreferenceObject(`${STRATEGY_KEY_PREFIX}${username}`, strategyCache);
     }
 };
 
