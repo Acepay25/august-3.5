@@ -16,6 +16,13 @@ export interface LoggedTrade {
   postMortem?: string;
   postMortemCreatedAt?: string; // Timestamp for post-mortem analysis
   postMortemImages?: string[]; // To store screenshots from the post-mortem upload
+  /**
+   * Per-provider post-mortem analyst reports, keyed by provider display
+   * name. Captured at generation time so the EXTRACT_INSIGHTS job can
+   * attribute knowledge-base insights to the AI that produced them
+   * (by-provider quality tracking in the Knowledge Base card).
+   */
+  postMortemByProvider?: Record<string, string>;
   correctedEntry?: string;
   correctedStopLoss?: string;
   correctedTakeProfit?: string;

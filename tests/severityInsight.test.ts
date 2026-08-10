@@ -4,6 +4,8 @@ import {
     extractCumulativeBleedInsight,
     extractCumulativeBleedInsightForTrade,
     extractAndRecordSeverityInsights,
+    extractAndRecordProviderInsights,
+    buildSeverityPostMortemContext,
     recordSeverityInsight,
 } from '../services/learning/InsightExtractionService';
 import {
@@ -253,5 +255,176 @@ describe('extractAndRecordSeverityInsights (post-mortem job orchestrator)', () =
         const win = { ...makeLoss({ id: 'orch-win' }), outcome: TradeOutcome.WIN };
         expect(extractAndRecordSeverityInsights(win, [])).toEqual([]);
         expect(loadAttributedInsights().length).toBe(before);
+    });
+
+    it('marks recorded insights used so the quality ratio can move', () => {
+        // Distinct family so the derived cluster id (coin-family-direction)
+        // is fresh and the store rows are genuinely new.
+        const mk = (id: string) => makeLoss({
+            id,
+            correctedStopLoss: '67,000', // -3R
+            analysis: { ...makeLoss().analysis, detectedPatternFamily: 'Family Mark' },
+        });
+        const recorded = extractAndRecordSeverityInsights(mk('orch-mark'), [mk('orch-mark-prior')]);
+        expect(recorded.length).toBe(2);
+        for (const si of recorded) {
+            const stored = loadAttributedInsights().find(i => i.id === si.id);
+            expect(stored).toBeDefined();
+            // Just created by the post-mortem loop → counts as one usage so
+            // recordInsightFeedback can derive a real quality score.
+            expect(stored!.timesUsed).toBe(1);
+        }
+    });
+
+    it('re-running the job increments usage without duplicating rows', () => {
+        const before = loadAttributedInsights().length;
+        const mk = (id: string) => makeLoss({
+            id,
+            correctedStopLoss: '67,000', // -3R
+            analysis: { ...makeLoss().analysis, detectedPatternFamily: 'Family Rerun' },
+        });
+        const first = extractAndRecordSeverityInsights(mk('orch-rerun'), [mk('orch-rerun-prior')]);
+        const second = extractAndRecordSeverityInsights(mk('orch-rerun'), [mk('orch-rerun-prior')]);
+        expect(loadAttributedInsights().length).toBe(before + 2); // still idempotent
+        for (const si of first) {
+            const stored = loadAttributedInsights().find(i => i.id === si.id);
+            // Each surfacing counts; the row itself is never duplicated.
+            expect(stored!.timesUsed).toBe(2);
+            expect(loadAttributedInsights().filter(i => i.id === si.id)).toHaveLength(1);
+        }
+        expect(second.length).toBe(2);
+    });
+});
+
+describe('buildSeverityPostMortemContext (severity-aware post-mortem generation)', () => {
+    it('returns a severity-framed block for a deep cluster', () => {
+        const current = makeLoss({ id: 'pm-cur', correctedStopLoss: '67,000' }); // -3R
+        const prior = makeLoss({ id: 'pm-prior', correctedStopLoss: '67,000' }); // -3R
+        const ctx = buildSeverityPostMortemContext(current, [prior]);
+        expect(ctx).not.toBe('');
+        expect(ctx).toContain('-6R');
+        expect(ctx).toContain('SEVERITY, NOT FREQUENCY');
+        expect(ctx).toContain('STRUCTURALLY change');
+    });
+
+    it('returns empty for a shallow cluster', () => {
+        const current = makeLoss({ id: 'pm-shallow-cur', correctedStopLoss: '67,000' }); // -3R
+        const priorWin = { ...makeLoss({ id: 'pm-shallow-prior' }), outcome: TradeOutcome.WIN };
+        expect(buildSeverityPostMortemContext(current, [priorWin])).toBe('');
+    });
+
+    it('returns empty when the trade has no analysis', () => {
+        const trade = { ...makeLoss({ id: 'pm-no-an' }), analysis: undefined } as any;
+        expect(buildSeverityPostMortemContext(trade, [])).toBe('');
+    });
+
+    it('quotes a recorded severity lesson scoped to the same family', () => {
+        addAttributedInsight({
+            insight: 'This setup bleeds — tighten the stop.',
+            sourceProvider: 'pattern-memory-severity-detector',
+            category: 'family',
+            scope: 'Family C',
+            tradeId: 'pm-seed',
+        });
+        const current = makeLoss({ id: 'pm-quote-cur', correctedStopLoss: '67,000' });
+        const prior = makeLoss({ id: 'pm-quote-prior', correctedStopLoss: '67,000' });
+        const ctx = buildSeverityPostMortemContext(current, [prior]);
+        expect(ctx).toContain('This setup bleeds — tighten the stop.');
+    });
+
+    it('marks quoted severity lessons as used (surfaced to the post-mortem model)', () => {
+        addAttributedInsight({
+            id: 'pm-lesson-seed',
+            insight: 'This family bleeds on stop hunts — widen the invalidation.',
+            sourceProvider: 'pattern-memory-severity-detector',
+            category: 'family',
+            scope: 'Family C',
+            tradeId: 'pm-seed-2',
+        });
+        const current = makeLoss({ id: 'pm-mark-cur', correctedStopLoss: '67,000' });
+        const prior = makeLoss({ id: 'pm-mark-prior', correctedStopLoss: '67,000' });
+        const ctx = buildSeverityPostMortemContext(current, [prior]);
+        // The lesson was actually quoted in the block → it counts as used.
+        expect(ctx).toContain('This family bleeds on stop hunts');
+        const stored = loadAttributedInsights().find(i => i.id === 'pm-lesson-seed');
+        expect(stored!.timesUsed).toBe(1);
+    });
+
+    it('does not mark lessons when the cluster is too shallow to quote', () => {
+        addAttributedInsight({
+            id: 'pm-noquote-seed',
+            insight: 'Shallow cluster — should never be quoted or marked.',
+            sourceProvider: 'pattern-memory-severity-detector',
+            category: 'family',
+            scope: 'Family C',
+            tradeId: 'pm-seed-3',
+        });
+        const current = makeLoss({ id: 'pm-nomark-cur', correctedStopLoss: '67,000' }); // -3R
+        const priorWin = { ...makeLoss({ id: 'pm-nomark-prior' }), outcome: TradeOutcome.WIN };
+        expect(buildSeverityPostMortemContext(current, [priorWin])).toBe('');
+        const stored = loadAttributedInsights().find(i => i.id === 'pm-noquote-seed');
+        expect(stored!.timesUsed).toBe(0);
+    });
+});
+
+describe('extractAndRecordProviderInsights (provider attribution)', () => {
+    // Sentences crafted to hit the post-mortem insight patterns: entry
+    // timing, risk management, pattern recognition.
+    const pmText = [
+        'Next time the entry should wait for the retest to confirm.',
+        'Entered too early on a weak impulse.',
+        'Position size was too large for the volatility.',
+        'Risk was too high relative to the setup.',
+        'The false breakout invalidated the thesis.',
+    ].join(' ');
+
+    it('records attributed insights per provider with scope categorization', () => {
+        const before = loadAttributedInsights().length;
+        const trade = makeLoss({
+            id: 'attr-1',
+            correctedStopLoss: '67,000',
+            postMortemByProvider: {
+                Gemini: pmText,
+                'Custom LLM': 'Missed the reversal signal before the breakdown.',
+            },
+        });
+        const recorded = extractAndRecordProviderInsights(trade);
+        // Gemini text → 5 pattern hits; Custom LLM text → 1.
+        expect(recorded.length).toBe(6);
+        expect(recorded.filter(i => i.sourceProvider === 'Gemini')).toHaveLength(5);
+        expect(recorded.filter(i => i.sourceProvider === 'Custom LLM')).toHaveLength(1);
+        expect(loadAttributedInsights().length).toBe(before + 6);
+
+        // Scope categorization: the false-breakout lesson is pattern-scoped.
+        const breakout = recorded.find(i => i.insight.includes('false breakout'))!;
+        expect(breakout.category).toBe('pattern');
+        expect(breakout.scope).toBe('Breakout');
+
+        // Created by the job → marked used once so the quality ratio can move.
+        expect(loadAttributedInsights().find(i => i.id === breakout.id)!.timesUsed).toBe(1);
+    });
+
+    it('is idempotent — re-running updates in place, never duplicates', () => {
+        const before = loadAttributedInsights().length;
+        const trade = makeLoss({ id: 'attr-2', correctedStopLoss: '67,000', postMortemByProvider: { Gemini: pmText } });
+        const first = extractAndRecordProviderInsights(trade);
+        const second = extractAndRecordProviderInsights(trade);
+        expect(loadAttributedInsights().length).toBe(before + 5);
+        expect(second.length).toBe(5);
+        for (const insight of first) {
+            const stored = loadAttributedInsights().find(s => s.id === insight.id);
+            expect(stored).toBeDefined();
+            expect(loadAttributedInsights().filter(s => s.id === insight.id)).toHaveLength(1);
+            // Each surfacing counts; the row itself is never duplicated.
+            expect(stored!.timesUsed).toBe(2);
+        }
+    });
+
+    it('records nothing without contributions, without analysis, or for tiny texts', () => {
+        expect(extractAndRecordProviderInsights(makeLoss({ id: 'attr-none' }))).toEqual([]);
+        const noAnalysis = { ...makeLoss({ id: 'attr-no-an' }), analysis: undefined } as any;
+        expect(extractAndRecordProviderInsights(noAnalysis)).toEqual([]);
+        const shortTrade = makeLoss({ id: 'attr-short', postMortemByProvider: { Gemini: 'Too short.' } });
+        expect(extractAndRecordProviderInsights(shortTrade)).toEqual([]);
     });
 });

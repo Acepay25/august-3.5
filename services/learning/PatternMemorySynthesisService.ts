@@ -8,6 +8,10 @@
 import { LoggedTrade, AIProvider } from '../../types';
 import { getPreferenceObject, setPreferenceObject, PREF_KEYS } from '../infrastructure/PreferencesService';
 import { parsePrice } from '../../utils/analysisUtils';
+// Cyclic-import note: InsightExtractionService imports several helpers from
+// this module. The cycle is safe — both sides only reference the other's
+// exports inside function bodies, never at module-evaluation time.
+import { extractCumulativeBleedInsight, recordSeverityInsight } from './InsightExtractionService';
 
 // ========================= INTERFACES =========================
 
@@ -585,6 +589,9 @@ export function generateSynthesizedPromptInjection(synthesis: PatternMemorySynth
         severityInsights.forEach((insight, i) => {
             parts.push(`${i + 1}. "${insight.insight}"`);
             parts.push(`   Quality: ${insight.qualityScore}/100 | Used: ${insight.timesUsed}x | Helpful: ${insight.timesHelpful}x`);
+            // Surfaced to the moderator → counts as "used" so the quality
+            // ratio (timesHelpful / timesUsed) can move.
+            markInsightUsed(insight.id);
         });
         parts.push('');
     }
@@ -761,36 +768,6 @@ export function recordInsightFeedback(insightId: string, wasHelpful: boolean): v
     }
 }
 
-/**
- * Get insights by provider for quality analysis
- */
-export function getInsightsByProvider(): Record<string, { count: number; avgQuality: number }> {
-    const insights = loadAttributedInsights();
-    const byProvider: Record<string, { totalQuality: number; count: number }> = {};
-
-    for (const insight of insights) {
-        const provider = typeof insight.sourceProvider === 'string'
-            ? insight.sourceProvider
-            : AIProvider[insight.sourceProvider] || 'Unknown';
-
-        if (!byProvider[provider]) {
-            byProvider[provider] = { totalQuality: 0, count: 0 };
-        }
-        byProvider[provider].totalQuality += insight.qualityScore;
-        byProvider[provider].count++;
-    }
-
-    const result: Record<string, { count: number; avgQuality: number }> = {};
-    for (const [provider, data] of Object.entries(byProvider)) {
-        result[provider] = {
-            count: data.count,
-            avgQuality: data.count > 0 ? Math.round(data.totalQuality / data.count) : 50,
-        };
-    }
-
-    return result;
-}
-
 // ========================= MANDATORY PATTERN MEMORY CHECK (STRICT) =========================
 
 /**
@@ -835,6 +812,12 @@ function buildSeverityMandatoryQuestion(
         if (a.qualityScore !== b.qualityScore) return b.qualityScore - a.qualityScore;
         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     })[0];
+
+    // This insight is now genuinely surfaced to the moderator (quoted in a
+    // mandatory question) — count it so `recordInsightFeedback` can later
+    // derive a quality ratio (timesHelpful / timesUsed). Without this the
+    // quality score never leaves its default of 50.
+    markInsightUsed(best.id);
 
     return `Your pattern memory records: "${best.insight}" — what is structurally different about THIS trade that breaks the pattern?`;
 }
@@ -950,6 +933,29 @@ export function generatePatternMemoryEnforcementContext(
     const gate = generateMandatoryPatternCheck(setup, trades);
     const synthesis = synthesizePatternMemory(setup, trades);
 
+    // Severity auto-record (analysis-time): if the historical cluster for
+    // this setup is a cumulative bleed (sumLossR <= -3R across 2+ R-bearing
+    // losses), record it NOW — pre-trade — so the moderator quotes the
+    // user's own "this setup bled N R" lesson while they're still deciding.
+    // Shares the exact trigger with the post-mortem job (same
+    // extractCumulativeBleedInsight threshold), so the pre-trade warning and
+    // the post-trade lesson stay in sync. Self-gating (shallow clusters
+    // write nothing) and idempotent (re-runs update in place), and it
+    // reuses synthesis.aggregatedStats — no extra aggregation cost.
+    try {
+        const bleedInsight = extractCumulativeBleedInsight(
+            { trades, stats: synthesis.aggregatedStats },
+            setup
+        );
+        if (bleedInsight) {
+            recordSeverityInsight(bleedInsight);
+            console.log(`[PatternMemory] Auto-recorded cumulative-bleed insight (${bleedInsight.pnlR}R) for ${setup.coin || 'any'}/${setup.family || 'any'}`);
+        }
+    } catch (e) {
+        // The record must never break the enforcement context build.
+        console.warn('[PatternMemory] Severity auto-record failed:', e);
+    }
+
     let context = `
 **🧠 MANDATORY PATTERN MEMORY CHECK**
 
@@ -984,6 +990,9 @@ ${gate.reason}
         context += `\n**🩸 SEVERITY INSIGHTS (R-weighted, from your own post-mortems):**\n`;
         gate.severityInsights.forEach((insight, i) => {
             context += `${i + 1}. "${insight.insight}" (quality: ${insight.qualityScore}/100)\n`;
+            // Surfaced to the moderator → counts as "used" so the quality
+            // ratio (timesHelpful / timesUsed) can move.
+            markInsightUsed(insight.id);
         });
     }
 

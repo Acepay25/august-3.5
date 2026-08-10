@@ -10,7 +10,8 @@ import { LoggedTrade } from '../../types';
 import { getUserProfile } from './dbService';
 import {
     extractInsightsFromPostMortem,
-    extractAndRecordSeverityInsights
+    extractAndRecordSeverityInsights,
+    extractAndRecordProviderInsights
 } from '../learning/InsightExtractionService';
 import {
     processPostMortemForLearning,
@@ -164,6 +165,20 @@ class JobQueueService {
         } catch (e) {
             // Severity recording must never kill the rest of the job.
             console.warn('[JobQueue] Severity insight extraction failed:', e);
+        }
+
+        // Provider attribution: per-provider post-mortem reports (captured at
+        // generation time in usePostMortem) → attributed insights so the
+        // Knowledge Base can track which AI produced which lesson. Idempotent
+        // (derived ids) — re-running the job updates in place.
+        try {
+            const attributed = extractAndRecordProviderInsights(trade);
+            if (attributed.length > 0) {
+                console.log(`[JobQueue] Recorded ${attributed.length} provider-attributed insights`);
+            }
+        } catch (e) {
+            // Attribution must never kill the rest of the job.
+            console.warn('[JobQueue] Provider insight attribution failed:', e);
         }
 
         // Run extraction (CPU intensive part)

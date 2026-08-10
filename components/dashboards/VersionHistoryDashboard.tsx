@@ -10,6 +10,7 @@ import { ReinforcementSignalService, ReinforcementSignal } from '../../services/
 import { getCalibrationSummary, initializeCalibration } from '../../services/validation/ConfidenceCalibrationService';
 import { storageService } from '../../services/infrastructure/StorageService';
 import { getAttributedInsightsSummary } from '../../services/learning/InsightExtractionService';
+import { recordInsightFeedback } from '../../services/learning/PatternMemorySynthesisService';
 import { jobQueue } from '../../services/infrastructure/JobQueueService'; // Import JobQueue
 import { ConfidenceCalibration, LearningRule } from '../../types';
 import {
@@ -48,6 +49,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
     const [calibration, setCalibration] = useState<ConfidenceCalibration | undefined>(undefined);
     const [rules, setRules] = useState<LearningRule[]>([]);
     const [insights, setInsights] = useState<any[]>([]);
+    const [providerStats, setProviderStats] = useState<Record<string, { count: number; avgQuality: number }>>({});
 
     // Real-time System Stats
     const [queueSize, setQueueSize] = useState<number>(0);
@@ -83,6 +85,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
             const topInsights = iStats.topInsights || [];
             setInsights(topInsights);
             setSelectedInsightIndex(i => Math.min(i, Math.max(0, topInsights.length - 1)));
+            setProviderStats(iStats.byProvider || {});
 
             // 2. System Data
             setQueueSize(jobQueue.getQueueLength());
@@ -94,6 +97,20 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
             console.error('[VersionHistoryDashboard] Failed to load data:', error);
         }
     };
+
+    // Insight quality feedback: records helpful/not-helpful so the store can
+    // derive a real quality ratio (timesHelpful / timesUsed) instead of the
+    // default 50. Reloads immediately so the counters update in place.
+    const handleInsightFeedback = (insightId: string | undefined, wasHelpful: boolean) => {
+        if (!insightId) return;
+        recordInsightFeedback(insightId, wasHelpful);
+        loadData();
+    };
+
+    // Human-friendly label for the synthetic severity tag (the store's
+    // sourceProvider is a stable id, not a display name).
+    const providerLabel = (provider: string): string =>
+        provider === 'pattern-memory-severity-detector' ? 'Severity Detector' : provider;
 
     // -- Modern Card Component --
     const ModernCard = ({ title, value, subtitle, icon, accent = "blue", large = false, children }: any) => {
@@ -252,9 +269,48 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                                             "{insights[selectedInsightIndex]?.insight}"
                                         </p>
                                     </div>
+                                    <div className="flex items-center justify-between px-3 py-1.5 border-t border-amber-500/10">
+                                        <span className="text-[9px] text-amber-200/50 font-mono">
+                                            {insights[selectedInsightIndex]?.qualityScore ?? 50}/100 · {insights[selectedInsightIndex]?.timesUsed ?? 0} used · {insights[selectedInsightIndex]?.timesHelpful ?? 0} helpful
+                                        </span>
+                                        <div className="flex gap-1">
+                                            <button
+                                                onClick={() => handleInsightFeedback(insights[selectedInsightIndex]?.id, true)}
+                                                className="px-1.5 py-0.5 rounded text-[9px] bg-amber-500/10 hover:bg-amber-500/25 text-amber-200/80 hover:text-amber-200 transition-colors"
+                                                title="Mark helpful"
+                                            >
+                                                👍
+                                            </button>
+                                            <button
+                                                onClick={() => handleInsightFeedback(insights[selectedInsightIndex]?.id, false)}
+                                                className="px-1.5 py-0.5 rounded text-[9px] bg-amber-500/10 hover:bg-amber-500/25 text-amber-200/80 hover:text-amber-200 transition-colors"
+                                                title="Mark not helpful"
+                                            >
+                                                👎
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
                             ) : (
                                 <div className="mt-auto text-xs text-white/30 italic">No insights stored yet.</div>
+                            )}
+
+                            {/* By-provider breakdown: which AI produced the
+                                lessons and how their quality is tracking. */}
+                            {Object.keys(providerStats).length > 0 && (
+                                <div className="mt-2 pt-2 border-t border-amber-500/10">
+                                    <div className="text-[9px] text-amber-200/50 font-mono mb-1">BY PROVIDER</div>
+                                    <div className="flex flex-col gap-0.5">
+                                        {Object.entries(providerStats)
+                                            .sort((a, b) => b[1].count - a[1].count)
+                                            .map(([provider, stat]) => (
+                                                <div key={provider} className="flex items-center justify-between text-[9px] font-mono">
+                                                    <span className="text-amber-200/70 truncate pr-2" title={provider}>{providerLabel(provider)}</span>
+                                                    <span className="text-amber-200/40 whitespace-nowrap">{stat.count} · {stat.avgQuality}/100</span>
+                                                </div>
+                                            ))}
+                                    </div>
+                                </div>
                             )}
                         </ModernCard>
 

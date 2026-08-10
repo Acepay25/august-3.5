@@ -555,6 +555,8 @@ export interface ConductPostMortemParams {
     finalTradeSummary: string | null;
     feedback?: { correctedEntry?: string; correctedStopLoss?: string; correctedTakeProfit?: string };
     postTradeImageSummaries?: string[];
+    /** R-severity context for the setup's historical cluster (see `buildSeverityPostMortemContext`). */
+    severityContext?: string;
     signal?: AbortSignal;
     /** Chain-of-thought side channel (reasoning_content / thinking blocks). */
     onReasoning?: (reasoning: string) => void;
@@ -564,12 +566,13 @@ export async function conductPostMortem(
     config: ProviderConfig,
     params: ConductPostMortemParams
 ): Promise<string> {
-    const { previousMessage, outcome, finalTradeSummary, feedback, postTradeImageSummaries, signal } = params;
+    const { previousMessage, outcome, finalTradeSummary, feedback, postTradeImageSummaries, signal, severityContext } = params;
     const { correctedEntry, correctedStopLoss, correctedTakeProfit } = feedback ?? {};
     let analysisPrompt: string;
 
     const postTradeContext = postTradeImageSummaries?.length ? `** VERIFIED TRADE OUTCOME DATA (HIGHEST PRIORITY):**\n---\n${postTradeImageSummaries.join('\n\n---\n\n')}\n---\n` : '';
     const tradeHistoryContext = finalTradeSummary ? `**PATTERN MEMORY LIBRARY (Historical Context):**\n${truncateTextToTokens(finalTradeSummary)}` : "No past trades logged.";
+    const severityContextBlock = severityContext ? `\n${severityContext}\n` : '';
 
     const origEntry = previousMessage.analysis?.entryPoints?.[0]?.price || 'N/A';
     const origSL = previousMessage.analysis?.stopLoss || 'N/A';
@@ -664,7 +667,7 @@ ${userFeedbackBlock}
 
 ${tradeHistoryContext}
 
-${groundingDirective}
+${severityContextBlock}${groundingDirective}
 
 ${getPrompt('postmortem.entry_not_hit_questions', ENTRY_NOT_HIT_ANALYSIS_QUESTIONS)}`;
     } else if (outcome === TradeOutcome.WIN) {
@@ -689,7 +692,7 @@ ${feedbackBlock}
 
 ${tradeHistoryContext}
 
-${groundingDirective}
+${severityContextBlock}${groundingDirective}
 
 **Instructions:**
 Answer **all** of the following **MANDATORY WIN ANALYSIS QUESTIONS**:
@@ -727,7 +730,7 @@ ${feedbackBlock}
 
 ${tradeHistoryContext}
 
-${groundingDirective}
+${severityContextBlock}${groundingDirective}
 
 ${extendedSLZoneContext}
 

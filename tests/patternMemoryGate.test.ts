@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateMandatoryPatternCheck, calculateSimilarity, addAttributedInsight } from '../services/learning/PatternMemorySynthesisService';
+import { generateMandatoryPatternCheck, generatePatternMemoryEnforcementContext, calculateSimilarity, addAttributedInsight, loadAttributedInsights } from '../services/learning/PatternMemorySynthesisService';
 import { LoggedTrade, TradeOutcome } from '../types';
 
 // B7 regression tests: calculatePnlR used parseFloat (comma-formatted prices
@@ -129,5 +129,52 @@ describe('generateMandatoryPatternCheck — extended-loss gate (B7)', () => {
     const severityQuestion = gate.mandatoryQuestions.find(q => q.includes('Your pattern memory records'));
     expect(severityQuestion).toBeDefined();
     expect(severityQuestion).toContain('SL placement');
+  });
+
+  it('auto-records a cumulative-bleed insight when the enforcement context is built over a deep cluster', () => {
+    const before = loadAttributedInsights().length;
+    // Two -3R losses → sumLossR -6, lossesWithR 2 → cumulative bleed fires.
+    const t1 = makeLossTrade({ id: 'auto-rec-1', correctedStopLoss: '68,000' });
+    const t2 = makeLossTrade({ id: 'auto-rec-2', correctedStopLoss: '68,000' });
+    generatePatternMemoryEnforcementContext(setup, [t1, t2]);
+    const after = loadAttributedInsights();
+    expect(after.length).toBe(before + 1);
+    const recorded = after.find(i => i.sourceProvider === 'pattern-memory-severity-detector' && i.tradeId === t1.id);
+    expect(recorded).toBeDefined();
+    expect(recorded!.insight).toContain('-6R');
+    expect(recorded!.insight).toContain('Family C');
+  });
+
+  it('auto-record writes nothing when the cluster is shallow', () => {
+    const before = loadAttributedInsights().length;
+    // Two -1R losses → sumLossR -2 (shallow) → no bleed insight, no write.
+    const t1 = makeLossTrade({ id: 'auto-shallow-1' });
+    const t2 = makeLossTrade({ id: 'auto-shallow-2' });
+    generatePatternMemoryEnforcementContext(setup, [t1, t2]);
+    expect(loadAttributedInsights().length).toBe(before);
+  });
+
+  it('marks surfaced severity insights as used (gate question + enforcement render)', () => {
+    const seeded = addAttributedInsight({
+      insight: 'Single -3R loss (Family C) — review stop placement.',
+      sourceProvider: 'pattern-memory-severity-detector',
+      category: 'family',
+      scope: 'Family C',
+      tradeId: 'use-seed',
+    });
+    const timesUsed = () => loadAttributedInsights().find(i => i.id === seeded.id)!.timesUsed;
+    const before = timesUsed();
+
+    const t1 = makeLossTrade({ id: 'use-1', correctedStopLoss: '68,000' }); // -3R
+    const t2 = makeLossTrade({ id: 'use-2', correctedStopLoss: '68,000' }); // -3R
+
+    // Gate quotes the seeded insight in the severity-HALT mandatory question → +1.
+    const gate = generateMandatoryPatternCheck(setup, [t1, t2]);
+    expect(gate.gateResult).toBe('HALT');
+    expect(timesUsed()).toBe(before + 1);
+
+    // Enforcement context re-quotes it (selection) AND renders the 🩸 block → +2 more.
+    generatePatternMemoryEnforcementContext(setup, [t1, t2]);
+    expect(timesUsed()).toBe(before + 3);
   });
 });
