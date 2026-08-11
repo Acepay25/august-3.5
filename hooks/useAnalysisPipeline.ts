@@ -1058,9 +1058,19 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             // outcomes for this ticker, not only generic extracted rules.
             try {
                 const reflectionBlock = buildDecisionReflectionContext(loggedTrades, finalSymbol);
-                if (reflectionBlock) enhancedPrompt = `${reflectionBlock}
+                if (reflectionBlock) {
+                    enhancedPrompt = `${reflectionBlock}
 
 ${enhancedPrompt}`;
+                    // Shared harness memory: the moderator must weigh the same
+                    // recent decisions the analysts see — its verdict grounds
+                    // in the same memory, not a condensed subset.
+                    moderatorLearningContext = moderatorLearningContext
+                        ? `${moderatorLearningContext}
+
+${reflectionBlock}`
+                        : reflectionBlock;
+                }
             } catch { /* reflection is best-effort */ }
 
             let gateInjection = '';

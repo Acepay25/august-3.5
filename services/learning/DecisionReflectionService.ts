@@ -40,7 +40,12 @@ export const buildDecisionReflectionContext = (
             .replace(/\s+/g, ' ')
             .trim()
             .slice(0, 140);
-        return `- ${date} · ${a?.coinName ?? '?'} ${dir}${pnl ? ` (${pnl})` : ''}${lesson ? ` — ${lesson}` : ''}`;
+        // Outcome weighting: the biggest lessons get flagged so the model
+        // weighs them by impact (a -3R loss teaches more than a -0.3R one).
+        const severity = typeof t.pnlPercent === 'number' && Math.abs(t.pnlPercent) >= 2
+            ? (t.pnlPercent > 0 ? ' ✅ BIG WIN' : ' ⚠️ BIG LOSS')
+            : '';
+        return `- ${date} · ${a?.coinName ?? '?'} ${dir}${pnl ? ` (${pnl})` : ''}${severity}${lesson ? ` — ${lesson}` : ''}`;
     };
 
     const rows: string[] = [];

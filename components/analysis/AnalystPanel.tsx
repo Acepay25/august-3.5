@@ -177,6 +177,17 @@ const AnalystPanel: React.FC<AnalystPanelProps> = ({
                             {a.displayName.split(' ').pop() ?? a.displayName}
                         </button>
                     ))}
+                    <button
+                        type="button"
+                        onClick={() => onSelectTab('__memory__')}
+                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all shrink-0 ${
+                            currentTab === '__memory__'
+                                ? 'bg-zinc-800 text-zinc-100 border border-white/10'
+                                : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50 border border-transparent'
+                        }`}
+                    >
+                        Memory
+                    </button>
                     {debateTurns.length > 0 && (
                         <button
                             type="button"
@@ -194,7 +205,65 @@ const AnalystPanel: React.FC<AnalystPanelProps> = ({
 
                 {/* Content area */}
                 <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-4 space-y-4">
-                    {currentTab === '__debate__' ? (
+                    {currentTab === '__memory__' ? (
+                        /* ── Harness Memory — what the harness has learned ── */
+                        (() => {
+                            const cal = GlobalLearningService.getCalibration();
+                            const levels = (['High', 'Medium', 'Low', 'Avoid'] as const).map(l => ({
+                                level: l,
+                                stats: cal?.[l.toLowerCase() as 'high' | 'medium' | 'low' | 'avoid'],
+                            }));
+                            const totalTrades = levels.reduce((s, l) => s + (l.stats?.total ?? 0), 0);
+                            const totalWins = levels.reduce((s, l) => s + (l.stats?.wins ?? 0), 0);
+                            return (
+                                <div className="space-y-4">
+                                    <div>
+                                        <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2">Harness Memory — shared by all analysts + moderator</p>
+                                        <p className="text-[10px] text-zinc-600 leading-relaxed">
+                                            The learning context below (profile, mistakes, rules, insights, recent decisions)
+                                            is injected into every analyst prompt and the moderator&apos;s verdict.
+                                        </p>
+                                    </div>
+                                    {totalTrades > 0 && (
+                                        <div className="rounded-xl border border-white/5 bg-zinc-900/60 p-3">
+                                            <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-1.5">Overall accuracy</p>
+                                            <p className="text-lg font-mono font-black text-zinc-100">
+                                                {Math.round((totalWins / totalTrades) * 100)}%<span className="text-xs text-zinc-500 font-normal ml-1.5">win rate · {totalTrades} trades</span>
+                                            </p>
+                                            <div className="mt-2 space-y-1">
+                                                {levels.map(l => l.stats && l.stats.total > 0 ? (
+                                                    <div key={l.level} className="flex items-center justify-between text-[10px] font-mono">
+                                                        <span className="text-zinc-400">{l.level}</span>
+                                                        <span className="text-zinc-300">{Math.round((l.stats.wins / l.stats.total) * 100)}% · n={l.stats.total}</span>
+                                                    </div>
+                                                ) : null)}
+                                            </div>
+                                        </div>
+                                    )}
+                                    <div>
+                                        <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2">Per-model track record (this is what routing uses)</p>
+                                        <div className="space-y-1.5">
+                                            {Object.entries(providerWinRates).map(([pid, stats]) => (
+                                                <div key={pid} className="flex items-center justify-between rounded-lg border border-white/5 bg-zinc-900/40 px-2.5 py-1.5 text-[10px] font-mono">
+                                                    <span className="text-zinc-400 truncate max-w-[60%]">{pid}</span>
+                                                    <span className={`font-bold ${stats.winRate >= 55 ? 'text-emerald-300' : stats.winRate >= 40 ? 'text-zinc-300' : 'text-rose-300'}`}>
+                                                        {stats.winRate}% · n={stats.total}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                            {Object.keys(providerWinRates).length === 0 && (
+                                                <p className="text-[10px] text-zinc-600 italic">No per-model stats yet — log a few trades and the harness starts scoring each analyst.</p>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <p className="text-[10px] text-zinc-600 leading-relaxed">
+                                        Every outcome updates this memory (per-analyst credit assignment, thinking corpus,
+                                        learning rules, pattern memory). The next run reasons with it.
+                                    </p>
+                                </div>
+                            );
+                        })()
+                    ) : currentTab === '__debate__' ? (
                         /* ── Debate section ── */
                         <div className="space-y-3">
                             <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Debate ({debateTurns.length} turns)</p>
