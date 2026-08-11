@@ -106,6 +106,11 @@ export interface TradeAnalysis {
   };
   // Trade validity window - how long this setup remains valid from createdAt
   validityDurationMinutes?: number; // e.g., 330 = 5h 30m valid from analysis time
+  /** Deterministic risk veto applied AFTER the moderator's verdict — the
+   *  ensemble agreeing on something is not risk control. Populated by the
+   *  pipeline when the gate blocked, the verdict contradicts pattern-memory
+   *  direction, or the plan is incomplete (missing SL/TP). */
+  riskVeto?: string;
   // Gate Keeper result - two-stage scan data
   gateResult?: {
     passed: boolean;

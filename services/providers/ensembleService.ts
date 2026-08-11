@@ -2755,7 +2755,7 @@ export const conductRealDebate = async function* (
                         // (the drop path asks the user to pick a replacement).
                     await streamWithTransientRetry(
                         () => streamChatRequest(analyst.provider.config, messages, {
-                            temperature: 0.4,
+                            temperature: 0.7,
                             signal,
                             maxTokens: TASK_BUDGETS.rebuttal,
                             onReasoning: (reasoning: string) => onAnalystReasoning?.(analyst.provider.name, reasoning),

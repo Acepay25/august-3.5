@@ -618,7 +618,7 @@ export async function analyzeTradingView(
     // Temperature: 0.4 (the 0.7 default samples too randomly for a trading
     // read — pro-trader discipline wants determinism; the three analysts
     // still differ because their PROMPTS differ, not because of dice).
-    const options: ChatRequestOptions = { jsonMode: false, maxTokens: TASK_BUDGETS.analysis, temperature: 0.4, signal, onReasoning };
+    const options: ChatRequestOptions = { jsonMode: false, maxTokens: TASK_BUDGETS.analysis, temperature: 0.7, signal, onReasoning };
     let responseText = '';
     let reasoningAccumulated = '';
     try {
