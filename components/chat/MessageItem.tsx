@@ -510,9 +510,17 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
 
                             {/* Live debate is shown in the right-side panel now. */}
                             {message.isDebating && (
-                                <div className="text-[10px] text-zinc-500 px-3 py-2">
-                                    {debateTurns.length > 0 ? `${debateTurns.length} debate turn${debateTurns.length === 1 ? '' : 's'} in progress — open the analyst panel to view.` : 'Debate starting…'}
-                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => onOpenAnalystPanel?.(message, '__debate__')}
+                                    className="text-[10px] text-zinc-500 px-3 py-2 hover:text-cyan-300 transition-colors flex items-center gap-1.5"
+                                    title="Open the analyst panel on the live debate"
+                                >
+                                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                                    {debateTurns.length > 0
+                                        ? `${debateTurns.length} debate turn${debateTurns.length === 1 ? '' : 's'} in progress — click to view live.`
+                                        : 'Debate starting… click to watch.'}
+                                </button>
                             )}
 
                             {/* Per-run summary — durations, gate cap, Monte Carlo (from runStats) */}

@@ -401,7 +401,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
     }, [coinName, safeDirectionString, confidence, probability, entryPoints, stopLoss, takeProfit, rrRatio, hasValidRR, strategy, summarySnapshot]);
 
     return (
-        <div ref={cardRef} className="analysis-card mt-6 sm:mt-8 w-full pb-28 sm:pb-8">
+        <div ref={cardRef} className={`analysis-card mt-6 sm:mt-8 w-full ${isDetailsVisible ? 'pb-28 sm:pb-8' : 'pb-2 sm:pb-4'}`}>
 
             {/* Chat-style signal summary — the "Trading workspace" look */}
             <div className="rounded-2xl border border-white/5 bg-zinc-900/80 p-4 sm:p-5 shadow-lg">
@@ -594,18 +594,8 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
 
             {/* Header Card (Collapsible Trigger) - Modern Glassmorphism */}
             <div
-                className={`relative overflow-hidden ${isDetailsVisible ? 'rounded-t-3xl sm:rounded-t-[2rem] border-b-0' : 'rounded-3xl sm:rounded-[2rem] hover:scale-[1.01] cursor-pointer'} border-2 bg-zinc-900 transition-all duration-500 group shadow-2xl hover:shadow-3xl`}
+                className="relative overflow-hidden rounded-t-3xl sm:rounded-t-[2rem] border-b-0 border-2 bg-zinc-900 transition-all duration-500 group shadow-2xl"
                 style={{ borderColor: directionVisual.border }}
-                role="button"
-                tabIndex={0}
-                aria-expanded={isDetailsVisible}
-                onClick={() => setIsDetailsVisible(!isDetailsVisible)}
-                onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        setIsDetailsVisible(!isDetailsVisible);
-                    }
-                }}
             >
                 {/* Premium Gradient Overlay */}
                 <div className="absolute inset-0" style={{ background: directionVisual.gradient }}></div>
@@ -686,8 +676,8 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                                 <span>ACTIVE</span>
                             </div>
                         )}
-                        <div className={`p-2 rounded-full border border-white/10 bg-zinc-800 text-zinc-400 transition-transform duration-300 ${isDetailsVisible ? 'rotate-180' : 'group-hover:text-white group-hover:border-white/20'}`}>
-                            <ChevronDownIcon className="w-4 h-4" />
+                        <div className="p-2 rounded-full border border-white/10 bg-zinc-800 text-zinc-500">
+                            <span className="text-[9px] font-bold uppercase tracking-widest">Details</span>
                         </div>
                     </div>
                 </div>
