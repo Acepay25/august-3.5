@@ -289,7 +289,7 @@ const JournalInner: React.FC<JournalProps> = ({
             </div>
         ) : activeTab === 'learning' ? (
             <div className="h-full overflow-y-auto">
-                <LearningDashboard trades={trades} />
+                <LearningDashboard trades={trades} username={activeUsername} />
             </div>
         ) : activeTab === 'models' ? (
             <div className="p-4 sm:p-6 overflow-y-auto h-full">

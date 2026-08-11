@@ -1,13 +1,17 @@
 
-import React, { useMemo } from 'react';
-import { BrainCircuit } from 'lucide-react';
-import { LoggedTrade } from '../../types';
+import React, { useMemo, useState, useEffect } from 'react';
+import { BrainCircuit, ChevronDownIcon } from 'lucide-react';
+import { LoggedTrade, MemoryFile, MemoryFolder, TradeOutcome } from '../../types';
 import { computeLearningProfile, PersonalizedLearningProfile } from '../../services/learning/SelfLearningService';
 import { loadLearningRules } from '../../services/learning/LearningRulesService';
+import { initMemoryFiles, getMemoryFiles, computeTopLessons, TopLesson } from '../../services/learning/MemoryFilesService';
+import { summarizeSimilarSetups, COLD_START_MIN } from '../../services/learning/SetupMemoryService';
 import { EmptyState } from '../ui/EmptyState';
 
 interface LearningDashboardProps {
     trades: LoggedTrade[];
+    /** Active user — loads the right Trader Notebook files. */
+    username?: string;
 }
 
 // Stat card component
@@ -73,13 +77,360 @@ const CalibrationBar: React.FC<{ label: string; actual: number; expected: number
     );
 };
 
-export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades }) => {
+export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, username }) => {
     const profile = useMemo(() => computeLearningProfile(trades), [trades]);
     // Memoized — loadLearningRules parses localStorage; running it inline in
     // the JSX re-parsed on every render of the dashboard. Keyed on `trades` so
     // newly learned rules (post-mortems append to the trade log) appear while
     // the tab is open instead of only after a remount.
     const learnedRules = useMemo(() => loadLearningRules().rules || [], [trades]);
+
+    // Trader Notebook — the markdown memory files the harness writes and the
+    // model reads (diary entries, recurring mistakes, profile memory, AI notes).
+    const [notebook, setNotebook] = useState<{ folders: MemoryFolder[]; files: MemoryFile[] }>({ folders: [], files: [] });
+    useEffect(() => {
+        let cancelled = false;
+        const user = username || localStorage.getItem('last_active_user') || 'default';
+        initMemoryFiles(user).then(() => {
+            if (cancelled) return;
+            const { folders, files } = getMemoryFiles();
+            setNotebook({ folders, files });
+        });
+        return () => { cancelled = true; };
+    }, [username]);
+
+    // Outcome-weighted clusters — losses first (fix list), then wins (repeat list).
+    const topLessons = useMemo(() => computeTopLessons(trades, 6), [trades]);
+
+    // ─── Harness accuracy (②): the similar-setup pool itself ───────────────
+    // Time window on the top metrics so stale early-period data never
+    // masquerades as current accuracy.
+    const [windowDays, setWindowDays] = useState<0 | 30 | 90>(0);
+    const windowedTrades = useMemo(() => {
+        if (windowDays === 0) return trades;
+        const cutoff = Date.now() - windowDays * 86_400_000;
+        return trades.filter(t => new Date(t.timestamp).getTime() >= cutoff);
+    }, [trades, windowDays]);
+
+    const isClosed = (t: LoggedTrade) => t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS;
+    const closedWindowed = useMemo(() => windowedTrades.filter(isClosed), [windowedTrades]);
+
+    // Pool stats: setups indexed + avg matches per query (sampled for cost)
+    // + how many queries hit the cold-start flag.
+    const poolStats = useMemo(() => {
+        const sample = closedWindowed.slice(-50);
+        let matches = 0, queries = 0, coldStarts = 0;
+        for (const t of sample) {
+            const s = summarizeSimilarSetups(
+                { coinName: t.analysis?.coinName, direction: t.analysis?.direction, detectedPatternFamily: t.analysis?.detectedPatternFamily },
+                closedWindowed.filter(x => x.id !== t.id),
+                t.marketRegime
+            );
+            if (s) { matches += s.total; queries += 1; if (s.isColdStart) coldStarts += 1; }
+        }
+        return { indexed: closedWindowed.length, avgMatches: queries ? matches / queries : 0, coldStartQueries: coldStarts, sampled: queries };
+    }, [closedWindowed]);
+
+    // Drawdown — explicitly split: current (open) vs historical max.
+    const drawdown = useMemo(() => {
+        const ordered = [...closedWindowed].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+        let equity = 0, peak = 0, open = 0, max = 0;
+        for (const t of ordered) {
+            equity += typeof t.pnlPercent === 'number' ? t.pnlPercent : (t.outcome === TradeOutcome.WIN ? 2 : -1);
+            if (equity > peak) peak = equity;
+            open = Math.min(open, equity - peak);
+            max = Math.min(max, equity - peak);
+        }
+        return { open, max };
+    }, [closedWindowed]);
+
+    // Per-model × regime leaderboard (win % + n), with a numeric delta over
+    // the model's LAST 20 closed trades vs its overall — replaces the vague
+    // trend arrow.
+    const leaderboard = useMemo(() => {
+        const rows: { key: string; byRegime: Record<string, { w: number; l: number }>; total: number; wins: number; last20WinRate: number | null; last20N: number }[] = [];
+        const byKey = new Map<string, { byRegime: Record<string, { w: number; l: number }>; total: number; wins: number; recent: LoggedTrade[] }>();
+        for (const t of closedWindowed) {
+            const used = t.modelsUsed ?? {};
+            const entries = Object.entries(used);
+            const key = entries.length > 0 ? `${entries[0][0]}::${entries[0][1]}` : 'unknown';
+            const c = byKey.get(key) ?? { byRegime: {}, total: 0, wins: 0, recent: [] };
+            c.total += 1;
+            if (t.outcome === TradeOutcome.WIN) c.wins += 1;
+            const regime = t.marketRegime ?? 'unknown';
+            c.byRegime[regime] = c.byRegime[regime] ?? { w: 0, l: 0 };
+            c.byRegime[regime][t.outcome === TradeOutcome.WIN ? 'w' : 'l'] += 1;
+            c.recent.push(t);
+            byKey.set(key, c);
+        }
+        for (const [key, c] of byKey) {
+            if (c.total < 3) continue;
+            const last20 = c.recent.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()).slice(-20);
+            const last20Wins = last20.filter(t => t.outcome === TradeOutcome.WIN).length;
+            rows.push({
+                key,
+                byRegime: c.byRegime,
+                total: c.total,
+                wins: c.wins,
+                last20WinRate: last20.length >= 5 ? (last20Wins / last20.length) * 100 : null,
+                last20N: last20.length,
+            });
+        }
+        return rows.sort((a, b) => b.total - a.total);
+    }, [closedWindowed]);
+
+    const REGIMES = ['trending', 'ranging', 'volatile', 'compression'] as const;
+
+    // ─── View-trades on lessons: fixed filter set for v1 (regime + PnL
+    //      threshold — direction/outcome are implied by the cluster). ─────
+    const [expandedLesson, setExpandedLesson] = useState<number | null>(null);
+    const [lessonRegimeFilter, setLessonRegimeFilter] = useState<string>('all');
+    const [lessonPnlThreshold, setLessonPnlThreshold] = useState(false); // ≤ -2% only
+
+    const lessonMatches = (lesson: TopLesson): LoggedTrade[] => {
+        const splitAt = lesson.label.lastIndexOf(' ');
+        const coin = lesson.label.slice(0, splitAt);
+        const direction = lesson.label.slice(splitAt + 1);
+        return closedWindowed.filter(t =>
+            (t.analysis?.coinName ?? '') === coin
+            && (t.analysis?.direction ?? '') === direction
+            && (lesson.kind === 'win' ? t.outcome === TradeOutcome.WIN : t.outcome === TradeOutcome.LOSS)
+            && (lessonRegimeFilter === 'all' || (t.marketRegime ?? 'unknown') === lessonRegimeFilter)
+            && (!lessonPnlThreshold || (typeof t.pnlPercent === 'number' && t.pnlPercent <= -2))
+        )
+            .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+            .slice(-15);
+    };
+
+    const notebookSection = (
+        <div className="bg-zinc-800 rounded-xl border border-white/5 p-3 sm:p-4">
+            <h4 className="text-[10px] sm:text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2 sm:mb-3">
+                📓 Trader Notebook — what the model reads
+            </h4>
+            {notebook.files.length === 0 ? (
+                <p className="text-xs text-zinc-600 italic">
+                    No notebook files yet — the harness writes diary entries after every logged trade.
+                </p>
+            ) : (
+                <div className="space-y-2">
+                    {notebook.folders.map(folder => {
+                        const files = notebook.files.filter(f => f.folderId === folder.id);
+                        if (files.length === 0) return null;
+                        return (
+                            <div key={folder.id}>
+                                <p className="text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-wider">{folder.name}/</p>
+                                <div className="mt-1 space-y-1">
+                                    {files.map(f => {
+                                        const entries = folder.name === 'trader-diary' ? f.content.split('\n## ').length - 1 : 0;
+                                        return (
+                                            <div key={f.id} className="flex items-center justify-between rounded-lg bg-zinc-950/60 border border-white/5 px-2.5 py-1.5 text-[11px]">
+                                                <span className="text-zinc-300 truncate pr-2 flex items-center gap-1.5">
+                                                    {f.name}
+                                                    {f.autoManaged && (
+                                                        <span className="px-1 py-0.5 rounded text-[8px] font-bold uppercase tracking-widest bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">auto</span>
+                                                    )}
+                                                </span>
+                                                <span className="text-[10px] font-mono text-zinc-500 shrink-0">
+                                                    {entries > 0 ? `${entries} entries` : `${f.content.length.toLocaleString()} chars`}
+                                                </span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+        </div>
+    );
+
+    const lessonsSection = (
+        <div className="bg-zinc-800 rounded-xl border border-white/5 p-3 sm:p-4">
+            <h4 className="text-[10px] sm:text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2 sm:mb-3">Top Lessons (outcome-weighted)</h4>
+            {topLessons.length === 0 ? (
+                <p className="text-xs text-zinc-600 italic">Log at least 2 trades on the same coin + direction to see clusters.</p>
+            ) : (
+                <div className="space-y-1.5">
+                    {topLessons.map((l, i) => {
+                        const matches = lessonMatches(l);
+                        const isOpen = expandedLesson === i;
+                        return (
+                            <div key={i} className="rounded-lg border border-white/5 bg-zinc-950/40 px-2.5 py-2">
+                                <div className="flex items-center justify-between text-sm">
+                                    <span className="text-zinc-300 truncate pr-2 flex items-center gap-1.5">
+                                        <span className={l.kind === 'loss' ? 'text-rose-400' : 'text-emerald-400'}>{l.kind === 'loss' ? '⚠️' : '✅'}</span>
+                                        {l.label}
+                                        <span className="text-[10px] text-zinc-500">×{l.count}</span>
+                                    </span>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        {l.avgPnl !== null && (
+                                            <span className={`text-xs font-bold ${l.avgPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                                {l.avgPnl > 0 ? '+' : ''}{l.avgPnl.toFixed(1)}%
+                                            </span>
+                                        )}
+                                        <button
+                                            onClick={() => setExpandedLesson(isOpen ? null : i)}
+                                            className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 hover:text-cyan-300 transition-colors flex items-center gap-1"
+                                        >
+                                            View {matches.length} trades <ChevronDownIcon className={`w-3 h-3 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className={`collapsible-content ${isOpen ? 'expanded' : ''}`}>
+                                    <div className="mt-2 space-y-1.5">
+                                        {/* Fixed filter set (v1): regime + PnL threshold */}
+                                        <div className="flex items-center gap-1 flex-wrap">
+                                            <button
+                                                onClick={() => setLessonRegimeFilter('all')}
+                                                className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border transition-colors ${
+                                                    lessonRegimeFilter === 'all' ? 'bg-cyan-500/20 border-cyan-500/30 text-cyan-400' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'
+                                                }`}
+                                            >
+                                                all regimes
+                                            </button>
+                                            {REGIMES.map(r => (
+                                                <button
+                                                    key={r}
+                                                    onClick={() => setLessonRegimeFilter(prev => prev === r ? 'all' : r)}
+                                                    className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border transition-colors ${
+                                                        lessonRegimeFilter === r ? 'bg-cyan-500/20 border-cyan-500/30 text-cyan-400' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'
+                                                    }`}
+                                                >
+                                                    {r}
+                                                </button>
+                                            ))}
+                                            <button
+                                                onClick={() => setLessonPnlThreshold(v => !v)}
+                                                className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border transition-colors ${
+                                                    lessonPnlThreshold ? 'bg-rose-500/20 border-rose-500/30 text-rose-400' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'
+                                                }`}
+                                            >
+                                                ≤ −2% only
+                                            </button>
+                                        </div>
+                                        {matches.length === 0 ? (
+                                            <p className="text-[10px] text-zinc-600 italic">No trades match these filters in the current time window.</p>
+                                        ) : (
+                                            matches.slice(-8).map(t => (
+                                                <div key={t.id} className="flex items-center justify-between rounded bg-zinc-900/60 border border-white/5 px-2 py-1 text-[10px] font-mono">
+                                                    <span className="text-zinc-400 truncate pr-2">
+                                                        {new Date(t.timestamp).toLocaleDateString()} · {t.analysis?.direction}
+                                                        <span className="text-zinc-600"> · {t.marketRegime ?? '?'}</span>
+                                                    </span>
+                                                    <span className={`shrink-0 font-bold ${t.outcome === TradeOutcome.WIN ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                                        {t.outcome}{typeof t.pnlPercent === 'number' ? ` (${t.pnlPercent > 0 ? '+' : ''}${t.pnlPercent.toFixed(1)}%)` : ''}
+                                                    </span>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+        </div>
+    );
+
+    // ─── Harness accuracy section (②): pool stats, drawdown, leaderboard ──
+    const harnessSection = (
+        <div className="space-y-3 sm:space-y-4">
+            {/* Time-window control — stale early data must not masquerade as current */}
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+                <h4 className="text-[10px] sm:text-xs font-bold text-zinc-500 uppercase tracking-wider">Harness Accuracy — the similar-setup pool</h4>
+                <div className="flex items-center gap-1">
+                    {([0, 30, 90] as const).map(d => (
+                        <button
+                            key={d}
+                            onClick={() => setWindowDays(d)}
+                            className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border transition-colors ${
+                                windowDays === d ? 'bg-cyan-500/20 border-cyan-500/30 text-cyan-400' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'
+                            }`}
+                        >
+                            {d === 0 ? 'all time' : `${d}d`}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            {/* Pool stats */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="bg-zinc-800 rounded-xl border border-white/5 p-3">
+                    <p className="text-[9px] text-zinc-500 uppercase tracking-wider mb-1">Setups indexed</p>
+                    <p className="text-xl font-black text-white">{poolStats.indexed}</p>
+                    <p className="text-[9px] text-zinc-600">closed trades in pool</p>
+                </div>
+                <div className="bg-zinc-800 rounded-xl border border-white/5 p-3">
+                    <p className="text-[9px] text-zinc-500 uppercase tracking-wider mb-1">Avg matches / query</p>
+                    <p className="text-xl font-black text-white">{poolStats.avgMatches.toFixed(1)}</p>
+                    <p className="text-[9px] text-zinc-600">sampled {poolStats.sampled} queries</p>
+                </div>
+                <div className="bg-zinc-800 rounded-xl border border-white/5 p-3">
+                    <p className="text-[9px] text-zinc-500 uppercase tracking-wider mb-1">Cold-start queries</p>
+                    <p className={`text-xl font-black ${poolStats.coldStartQueries > 0 ? 'text-amber-300' : 'text-emerald-400'}`}>
+                        {poolStats.sampled > 0 ? `${Math.round((poolStats.coldStartQueries / poolStats.sampled) * 100)}%` : '—'}
+                    </p>
+                    <p className="text-[9px] text-zinc-600">below {COLD_START_MIN} matches → confidence scaled down</p>
+                </div>
+                <div className="bg-zinc-800 rounded-xl border border-white/5 p-3">
+                    <p className="text-[9px] text-zinc-500 uppercase tracking-wider mb-1">Drawdown</p>
+                    <p className="text-xl font-black text-rose-400">{drawdown.open.toFixed(1)}%</p>
+                    <p className="text-[9px] text-zinc-600">open · historical max {drawdown.max.toFixed(1)}%</p>
+                </div>
+            </div>
+
+            {/* Per-model × regime leaderboard */}
+            <div className="bg-zinc-800 rounded-xl border border-white/5 p-3 sm:p-4">
+                <h4 className="text-[10px] sm:text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2 sm:mb-3">Per-model track record by regime</h4>
+                {leaderboard.length === 0 ? (
+                    <p className="text-xs text-zinc-600 italic">Log ≥3 trades per model to see the leaderboard.</p>
+                ) : (
+                    <div className="overflow-x-auto custom-scrollbar">
+                        <table className="w-full text-left text-[10px] font-mono">
+                            <thead>
+                                <tr className="text-zinc-600 border-b border-white/5">
+                                    <th className="py-1.5 pr-3 font-bold">Model</th>
+                                    {REGIMES.map(r => <th key={r} className="py-1.5 px-2 font-bold">{r}</th>)}
+                                    <th className="py-1.5 px-2 font-bold">Overall</th>
+                                    <th className="py-1.5 px-2 font-bold">Δ last 20</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {leaderboard.map(row => {
+                                    const overall = row.total > 0 ? (row.wins / row.total) * 100 : 0;
+                                    const delta = row.last20WinRate !== null ? row.last20WinRate - overall : null;
+                                    return (
+                                        <tr key={row.key} className="border-b border-white/5 last:border-0">
+                                            <td className="py-1.5 pr-3 text-zinc-300 truncate max-w-[140px]" title={row.key}>{row.key}</td>
+                                            {REGIMES.map(r => {
+                                                const s = row.byRegime[r];
+                                                if (!s || s.w + s.l === 0) return <td key={r} className="py-1.5 px-2 text-zinc-700">—</td>;
+                                                const wr = (s.w / (s.w + s.l)) * 100;
+                                                return (
+                                                    <td key={r} className={`py-1.5 px-2 ${wr >= 60 ? 'text-emerald-400' : wr >= 45 ? 'text-zinc-300' : 'text-rose-400'}`}>
+                                                        {wr.toFixed(0)}% <span className="text-zinc-600">({s.w + s.l})</span>
+                                                    </td>
+                                                );
+                                            })}
+                                            <td className="py-1.5 px-2 text-zinc-300">{overall.toFixed(0)}% <span className="text-zinc-600">({row.total})</span></td>
+                                            <td className={`py-1.5 px-2 ${delta === null ? 'text-zinc-700' : delta >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                                {delta === null ? '—' : `${delta >= 0 ? '+' : ''}${delta.toFixed(0)} pts / ${row.last20N}`}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+                <p className="text-[9px] text-zinc-600 mt-2 leading-relaxed">
+                    Regime classification: ADX thresholds — ADX ≥ 25 trend, &lt; 20 range, ATR-relative volatility; the regime is captured from the hybrid market data at log time.
+                </p>
+            </div>
+        </div>
+    );
 
     const getWinRateColor = (rate: number) => {
         if (rate >= 65) return 'text-emerald-400';
@@ -89,17 +440,25 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades }) 
 
     if (profile.totalAnalyzedTrades < 3) {
         return (
-            <EmptyState
-                icon={<BrainCircuit className="w-8 h-8" />}
-                title="Building Your Profile"
-                description={`Log at least 3 trades (WIN or LOSS) to start seeing personalized AI learnings. Current: ${profile.totalAnalyzedTrades} / 3 trades.`}
-                className="h-64"
-            />
+            <div className="space-y-4 p-3 sm:p-4 overflow-y-auto custom-scrollbar">
+                {harnessSection}
+                {notebookSection}
+                {lessonsSection}
+                <EmptyState
+                    icon={<BrainCircuit className="w-8 h-8" />}
+                    title="Building Your Profile"
+                    description={`Log at least 3 trades (WIN or LOSS) to start seeing personalized AI learnings. Current: ${profile.totalAnalyzedTrades} / 3 trades.`}
+                    className="h-64"
+                />
+            </div>
         );
     }
 
     return (
         <div className="space-y-4 sm:space-y-6 p-3 sm:p-4 overflow-y-auto custom-scrollbar">
+            {harnessSection}
+            {notebookSection}
+            {lessonsSection}
             {/* Header */}
             <div className="text-center pb-3 sm:pb-4 border-b border-white/5">
                 <h2 className="text-base sm:text-lg font-bold text-cyan-400 mb-1">AI Learning Profile</h2>

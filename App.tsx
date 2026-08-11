@@ -7,6 +7,8 @@ import { generateFinalSummary } from './services/providers/GenericAnalysisServic
 import * as dbService from './services/infrastructure/dbService';
 import { initPromptOverrides } from './services/infrastructure/PromptOverrideService';
 import { initStrategyDocs } from './services/infrastructure/StrategyService';
+import { initMemoryFiles, syncProfileMemory, syncRecurringMistakes } from './services/learning/MemoryFilesService';
+import { computeRegimeProviderStats } from './services/learning/SetupMemoryService';
 import { ANALYST_ROLE_DEFINITIONS, getRoleForProvider } from './services/ui/AnalystLensService';
 import { AnalystRole } from './types/enums';
 import { ProbabilityEngineService } from './services/analysis/ProbabilityEngineService';
@@ -529,6 +531,14 @@ const App: React.FC = () => {
         toast,
         confirmDialog,
     });
+
+    // Regime-matched provider win rates for the CURRENT market regime — feeds
+    // the lens auto-assign (Team modal) so routing prefers who actually wins
+    // in this kind of market, not a blended all-time number.
+    const regimeProviderStats = useMemo(
+        () => computeRegimeProviderStats(loggedTrades, (currentHybridData as any)?.regime?.regime),
+        [loggedTrades, currentHybridData]
+    );
 
     // Warn when ensemble is switched on without the required configuration
     // (2–3 enabled models + a selected moderator). The toggle still turns
@@ -1078,6 +1088,10 @@ const App: React.FC = () => {
         // Same per-user treatment for uploaded strategy docs (Settings →
         // Strategies) — the sync cache feeds the analysis-prompt injection.
         await initStrategyDocs(username);
+        // Trader Notebook (Settings → Personal edge → Memory files): load the
+        // user's markdown memory into the sync cache (seeds the default
+        // folders + starter templates on first boot).
+        await initMemoryFiles(username);
         // Native (Capacitor) loads the lens config asynchronously, after the
         // useAppSettings lazy initializer already ran with an empty default —
         // push the cached config into React state so the lens dropdowns don't
@@ -1110,6 +1124,15 @@ const App: React.FC = () => {
 
         const profile = await dbService.getUserProfile(username);
         if (profile) {
+            // Refresh the harness-maintained notebook files from the loaded
+            // profile: profile/memory.md (who the trader is) and
+            // rules/recurring-mistakes.md (loss clusters). Best-effort.
+            try {
+                await syncProfileMemory(profile, username);
+                await syncRecurringMistakes(profile.tradeLog || [], username);
+            } catch (e) {
+                console.warn('[TraderNotebook] Initial sync failed:', e);
+            }
             const correctedConvs = (profile.conversations || []).map(conv => {
                 const leverage = conv.leverage || DEFAULT_LEVERAGE;
                 const correctedMessages = (conv.messages || []).map(msg => {
@@ -3043,6 +3066,7 @@ const App: React.FC = () => {
                 messages={messages}
                 analysisSteps={analysisSteps}
                 isAnalysisActive={!!loadingMessage}
+                regimeProviderStats={regimeProviderStats}
                 onSelectMessageForProbability={handleSelectMessageForProbability}
                 chatContext={chatContext}
                 virtuosoRef={virtuosoRef}

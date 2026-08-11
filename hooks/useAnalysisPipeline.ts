@@ -21,12 +21,11 @@ import { getGateAnalysis, GateOutput } from '../services/validation/GateKeeperSe
 
 // Utils
 import { isQuotaError } from '../utils/errorUtils';
-import { recalculateAnalysisMetrics, sanitizeTradeAnalysis, clampProbabilityToGate, parsePrice } from '../utils/analysisUtils';
+import { recalculateAnalysisMetrics, sanitizeTradeAnalysis, clampProbabilityToGate, parsePrice, parseProseTradePlan, parseMarkdownTradePlan, tradePlanToAnalysis, stripPlanTags } from '../utils/analysisUtils';
 import { saveThinkingBatch, buildThinkingRecordId, getThinkingTradeId, getThinkingExemplars } from '../services/infrastructure/ThinkingStoreService';
 import { offlineQueue } from '../services/infrastructure/OfflineQueueService';
 import { notifyAnalysisComplete } from '../services/infrastructure/CompletionNotifications';
 import { ThinkingRecord } from '../types/thinking';
-import { extractLastJson } from '../utils/jsonUtils';
 import { sanitizeAIResponse } from '../utils/sanitizers';
 import { buildModelIdToName, isProviderReady } from '../utils/providerUtils';
 import { DEFAULT_LEVERAGE } from '../utils/conversationUtils';
@@ -46,11 +45,20 @@ import { useRafThrottle } from './useRafThrottle';
 // faults must always surface).
 const devLog = (...args: unknown[]) => { if ((import.meta as any).env?.DEV) console.log(...args); };
 
+// ─── Trader Notebook quick-save intent ────────────────────────────────────
+// "Save this to the notebook / write it down in my memory / add this to my
+// notes" — anchored on a memory noun so plain phrases ("note that…",
+// "remember to…") never hijack a normal analysis.
+const NOTEBOOK_SAVE_PATTERN = /\b(save|store|write|add|log|remember|record|put)\b[^\n]{0,60}\b(notebook|memory|journal|diary|notes?)\b|\b(notebook|memory|journal|diary|notes?)\b[^\n]{0,60}\b(save|store|write|add|log|remember|record|put)\b/i;
+
 // Learning services
 import { generateLearningFromPrompt, isLearningEnabled } from '../services/learning/LearningPromptService';
 import { generatePersonalizedInjection } from '../services/ui/PersonalizedPromptService';
 import { PriceAlertService } from '../services/ui/PriceAlertService';
 import { buildUnifiedLearningContext } from '../services/learning/UnifiedLearningBuilder';
+import { getMemoryFilesContext, writeModelNote } from '../services/learning/MemoryFilesService';
+import { writeNotebookNoteFromRequest } from '../services/learning/NotebookWriterService';
+import { buildSimilarSetupsContext, buildRegimeWeightingContext } from '../services/learning/SetupMemoryService';
 import { generateMandatoryPatternCheck, generatePatternMemoryEnforcementContext } from '../services/learning/PatternMemorySynthesisService';
 import { ANALYST_ROLE_DEFINITIONS, getLensPromptForStyle, getRoleForProvider } from '../services/ui/AnalystLensService';
 import { buildEnsembleAnalysts, buildAnalystFailureReport } from '../services/ui/EnsembleAnalystService';
@@ -682,6 +690,61 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             );
             return;
         }
+
+        // ─── TRADER NOTEBOOK QUICK-SAVE ────────────────────────────────
+        // "Save this to the notebook" short-circuits the ensemble: no chart
+        // analysis, just the notebook write + a confirmation message. The
+        // model reads the current notebook index and decides skip / append /
+        // create (see writeNotebookNoteFromRequest).
+        if (!isAutomationRun && NOTEBOOK_SAVE_PATTERN.test(effectiveInput)) {
+            const provider = enabledProviders[0]?.config;
+            try {
+                setLoadingMessage('Writing to your notebook…');
+                const username = localStorage.getItem('last_active_user') || 'default';
+                // Give the model something concrete to write about: the most
+                // recent analysis card in this conversation, if any.
+                let notebookContext = '';
+                for (let i = messagesRef.current.length - 1; i >= 0; i--) {
+                    const a = messagesRef.current[i].analysis;
+                    if (a) {
+                        notebookContext = `${a.coinName ?? '?'} ${a.direction ?? '?'} ${a.confidence ?? ''} — ${(a.strategy ?? '').slice(0, 400)}`;
+                        break;
+                    }
+                }
+                const note = provider ? await writeNotebookNoteFromRequest(effectiveInput, notebookContext, provider) : null;
+                const notebookMsgId = `notebook-${Date.now()}`;
+                if (note) {
+                    const file = await writeModelNote(note, username);
+                    updateMessages(prev => [...prev, {
+                        id: notebookMsgId,
+                        role: MessageRole.AI,
+                        text: `📓 **Saved to your Trader Notebook** — \`${note.folder}/${file.name}\` (${note.decision === 'append' ? 'appended a new section to the existing file' : 'new file'}).\n\nThe model will read this on every future analysis. Manage everything in **Settings → Personal edge → Trader Notebook**.`,
+                        createdAt: new Date().toISOString(),
+                        isDebating: false,
+                    }], activeConversationId);
+                } else {
+                    updateMessages(prev => [...prev, {
+                        id: notebookMsgId,
+                        role: MessageRole.AI,
+                        text: `📓 **Notebook: nothing written** — the model found this already covered (or nothing concrete to save). You can still add it manually in **Settings → Personal edge → Trader Notebook**.`,
+                        createdAt: new Date().toISOString(),
+                        isDebating: false,
+                    }], activeConversationId);
+                }
+            } catch (quickSaveError) {
+                console.error('[TraderNotebook] Quick-save failed:', quickSaveError);
+                updateMessages(prev => [...prev, {
+                    id: `notebook-err-${Date.now()}`,
+                    role: MessageRole.AI,
+                    text: `📓 **Notebook write failed** — ${(quickSaveError as Error)?.message ?? 'unknown error'}. The diary keeps recording trades automatically; this manual save did not go through.`,
+                    createdAt: new Date().toISOString(),
+                    isDebating: false,
+                }], activeConversationId);
+            } finally {
+                setLoadingMessage(null);
+            }
+            return;
+        }
         if (runEnsembleEnabled && !isAutomationRun) {
             // Role-assignment requirements only apply when Lenses are ON —
             // with Lenses off, the ordinary "Debate Models" picker (or the
@@ -948,10 +1011,45 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 })()
                 : '';
 
+            // TRADER NOTEBOOK (Settings → Personal edge → Memory files): the
+            // user's own markdown notes + the harness's trade diary. Full
+            // content of every enabled file, injected into the analyst prompt
+            // AND the moderator bundle (the bundle bypasses the 500-token
+            // learning-context truncation) so the whole ensemble reasons with
+            // the user's accumulated experience.
+            const memoryFilesContext = getMemoryFilesContext();
+
+            // Coin detection for learning context: match only uppercase
+            // tickers (no /i flag, which would match any word) and exclude
+            // common command words, mirroring the GateKeeper commonWords
+            // exclusion list. Hoisted ABOVE the moderator bundle so the
+            // journal-driven accuracy blocks can join it.
+            const learningCommonWords = COMMON_WORDS;
+            const detectedCoinRaw = effectiveInput.match(/\b([A-Z]{2,10})(?:USDT?)?/)?.[1]?.toUpperCase();
+            const detectedLearningCoin = detectedCoinRaw && !learningCommonWords.includes(detectedCoinRaw) ? detectedCoinRaw : undefined;
+            const pendingDirection = effectiveInput.toLowerCase().includes('long') ? 'Long' :
+                effectiveInput.toLowerCase().includes('short') ? 'Short' : 'Neutral';
+            const pendingPattern = minePatternFromPrompt(effectiveInput);
+
+            // JOURNAL-DRIVEN ACCURACY (SetupMemoryService): before the
+            // analysts answer, they see their own logged track record on
+            // setups like this one (similar-setup outcomes), and the
+            // moderator sees each model's win rate in the CURRENT regime.
+            // Code-side, zero AI cost — the journal is the model's edge.
+            const similarSetupsContext = buildSimilarSetupsContext(
+                { coinName: detectedLearningCoin, direction: pendingDirection, detectedPatternFamily: pendingPattern },
+                loggedTrades,
+                freshHybridData?.regime?.regime
+            );
+            const regimeWeightingContext = buildRegimeWeightingContext(
+                loggedTrades,
+                freshHybridData?.regime?.regime
+            );
+
             // One context bundle for every moderator surface (autoplay debate,
             // real debate, accuracy verification, compact retry): the same
             // chart/pattern block the analysts see + the user strategies.
-            const moderatorContextBundle = [hybridDataInjection, strategiesBlock].filter(Boolean).join('\n\n');
+            const moderatorContextBundle = [memoryFilesContext, similarSetupsContext, regimeWeightingContext, hybridDataInjection, strategiesBlock].filter(Boolean).join('\n\n');
 
             // 'auto' trading style was hardcoded to 'swing' at every call
             // site — the market-data detector (ADX/regime/volume/session)
@@ -965,21 +1063,13 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             let learningInjection = '';
             let moderatorLearningContext = ''; // NEW: Separate context for moderator
 
-            // Coin detection for learning context: match only uppercase tickers (no /i flag,
-            // which would match any word) and exclude common command words, mirroring the
-            // GateKeeper commonWords exclusion list further below.
-            const learningCommonWords = COMMON_WORDS;
-            const detectedCoinRaw = effectiveInput.match(/\b([A-Z]{2,10})(?:USDT?)?/)?.[1]?.toUpperCase();
-            const detectedLearningCoin = detectedCoinRaw && !learningCommonWords.includes(detectedCoinRaw) ? detectedCoinRaw : undefined;
-
             // Use UnifiedLearningBuilder to consolidate all learning services
             const unifiedLearning = buildUnifiedLearningContext(
                 loggedTrades,
                 {
                     coin: detectedLearningCoin,
-                    pattern: minePatternFromPrompt(effectiveInput),
-                    direction: effectiveInput.toLowerCase().includes('long') ? 'Long' :
-                        effectiveInput.toLowerCase().includes('short') ? 'Short' : 'Neutral'
+                    pattern: pendingPattern,
+                    direction: pendingDirection
                 },
                 enabledProviders.map(p => p.config.id),
                 insightKnowledgeBase
@@ -995,8 +1085,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     learningInjection = generatePersonalizedInjection(
                         loggedTrades,
                         detectedLearningCoin,
-                        effectiveInput.toLowerCase().includes('long') ? 'Long' :
-                            effectiveInput.toLowerCase().includes('short') ? 'Short' : 'Neutral'
+                        pendingDirection
                     );
                     if (learningInjection) {
                         devLog('[AI Learning] Fallback: personalized injection, length:', learningInjection.length);
@@ -1031,10 +1120,15 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 devLog('[Recent Insights] Generated from tradeSummaries array, length:', recentInsightsString.length);
             }
 
-            // Enhance prompt with hybrid data AND learning context if available
+            // Enhance prompt with memory files, similar setups, hybrid data AND learning context
             let enhancedPrompt = promptToSend;
-            if (hybridDataInjection || learningInjection) {
+            if (memoryFilesContext || similarSetupsContext || hybridDataInjection || learningInjection) {
                 const contextParts: string[] = [];
+                // The notebook comes first — identity, rules and lessons set
+                // the frame everything else is read against. Then the user's
+                // own track record on THIS kind of setup.
+                if (memoryFilesContext) contextParts.push(memoryFilesContext);
+                if (similarSetupsContext) contextParts.push(similarSetupsContext);
                 if (hybridDataInjection) contextParts.push(hybridDataInjection);
                 if (learningInjection) contextParts.push(learningInjection);
                 enhancedPrompt = `${contextParts.join('\n\n')}\n\n${promptToSend}`;
@@ -2151,21 +2245,30 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
 
                     let finalAnalysis: TradeAnalysis;
                     try {
-                        // Layered extraction: prefer the moderator's post-debate
-                        // section, but never hard-fail when the moderator omits
-                        // </DEBATE_END> — fall back to the last JSON in the whole
-                        // response so a formatting hiccup can't turn the run into
-                        // a Neutral "no signal" card.
+                        // The moderator's final output is MARKDOWN: verdict
+                        // prose + a labeled **FINAL TRADE PLAN** block (no
+                        // JSON anywhere). Parse the plan deterministically;
+                        // the parser itself falls back to free-form prose.
                         const moderatorErrorMatch = fullResponseText.match(/<MODERATOR_ERROR>([\s\S]*?)<\/MODERATOR_ERROR>/);
                         const debateEnd = fullResponseText.match(/<\/?DEBATE_END>/i);
                         const candidate = debateEnd && debateEnd.index !== undefined
                             ? fullResponseText.slice(debateEnd.index + debateEnd[0].length)
                             : fullResponseText;
                         try {
-                            finalAnalysis = extractLastJson(candidate);
+                            const plan = parseMarkdownTradePlan(candidate);
+                            if (!plan || (!plan.coinName && !plan.direction && !plan.entry && !plan.stopLoss && !plan.takeProfit)) {
+                                throw new Error('No markdown trade plan found in the moderator response');
+                            }
+                            finalAnalysis = sanitizeTradeAnalysis({
+                                ...tradePlanToAnalysis(plan),
+                                // The card renders the moderator's own markdown
+                                // verdict + plan — the same markdown format as
+                                // the workspace, never a JSON schema.
+                                strategy: stripPlanTags(candidate).slice(0, 3000),
+                            });
                         } catch (e) {
                             // Only surface the moderator error marker when no
-                            // valid JSON plan could be recovered at all.
+                            // plan could be recovered at all.
                             if (moderatorErrorMatch) {
                                 throw new Error(`Moderator Error: ${moderatorErrorMatch[1]}`, { cause: e });
                             }
@@ -2175,12 +2278,29 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                         console.error("Failed to parse final debate JSON:", e);
                         const errorMessage = e instanceof Error ? e.message : 'Unknown error';
                         const isModeratorError = errorMessage.includes('Moderator Error');
+                        // Prose rescue: the moderator's markdown verdict often
+                        // carries the whole plan in WORDS even when the JSON
+                        // failed — parse the labeled fields so the card shows a
+                        // REAL signal (coin name, direction, entry/SL/TP,
+                        // probability) in the same markdown format, never a
+                        // dead "Unknown Asset · Neutral" card. The verdict
+                        // prose itself becomes the card's strategy text (tags
+                        // stripped — the JSON schema never renders).
+                        const prosePlan = parseProseTradePlan(fullResponseText);
+                        const fallbackStrategy = isModeratorError
+                            ? `Connection Error: ${errorMessage}. Please try again.`
+                            : 'Parsing Error: The moderator failed to generate a valid JSON plan. Please review the debate transcript above for the consensus.';
                         finalAnalysis = sanitizeTradeAnalysis({
-                            strategy: isModeratorError
-                                ? `Connection Error: ${errorMessage}. Please try again.`
-                                : 'Parsing Error: The moderator failed to generate a valid JSON plan. Please review the debate transcript above for the consensus.',
-                            direction: 'Neutral',
-                            confidence: 'Low'
+                            coinName: prosePlan?.coinName ?? finalSymbol ?? undefined,
+                            direction: prosePlan?.direction ?? pendingDirection ?? 'Neutral',
+                            confidence: prosePlan?.confidence ?? 'Low',
+                            probability: prosePlan?.probability,
+                            entryPoints: prosePlan?.entry ? [{ price: prosePlan.entry }] : undefined,
+                            stopLoss: prosePlan?.stopLoss,
+                            takeProfit: prosePlan?.takeProfit ? [{ price: prosePlan.takeProfit }] : undefined,
+                            strategy: prosePlan
+                                ? (stripPlanTags(fullResponseText).slice(0, 3000) || fallbackStrategy)
+                                : fallbackStrategy,
                         });
                     }
 
@@ -2205,10 +2325,13 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 moderatorContextBundle,
                             );
                             if (verification.verdict === 'adjusted' && verification.planJson) {
-                                const adjusted = sanitizeTradeAnalysis(extractLastJson(verification.planJson));
-                                if (adjusted && adjusted.direction && adjusted.direction !== 'Neutral') {
-                                    finalAnalysis = adjusted;
-                                    accuracyVerificationNote = verification.note;
+                                const adjustedPlan = parseMarkdownTradePlan(verification.planJson);
+                                if (adjustedPlan && adjustedPlan.direction) {
+                                    const adjusted = sanitizeTradeAnalysis(tradePlanToAnalysis(adjustedPlan));
+                                    if (adjusted.direction !== 'Neutral') {
+                                        finalAnalysis = adjusted;
+                                        accuracyVerificationNote = verification.note;
+                                    }
                                 }
                             } else {
                                 accuracyVerificationNote = verification.note || 'Plan verified by the accuracy pass.';

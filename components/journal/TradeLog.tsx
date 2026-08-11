@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Virtuoso } from 'react-virtuoso';
 import { Bookmark } from 'lucide-react';
 import { LoggedTrade, TradeOutcome, AccuracySubMode } from '../../types';
@@ -10,6 +10,7 @@ import { ReasoningPanel } from './ReasoningPanel';
 import { getThinkingTradeId } from '../../services/infrastructure/ThinkingStoreService';
 import { DEFAULT_LEVERAGE } from '../../utils/conversationUtils';
 import SetupLifecycleCard from '../analysis/SetupLifecycleCard';
+import { summarizeSimilarSetups, SimilarSetupSummary } from '../../services/learning/SetupMemoryService';
 
 interface TradeLogContentProps {
     trades: LoggedTrade[];
@@ -380,7 +381,10 @@ const TradeLogRow: React.FC<{
     onSelect: (id: string) => void;
     modelIdToName: Record<string, string>;
     isInsight: boolean;
-}> = ({ trade, onOpenDetail, isSelected, onSelect, modelIdToName, isInsight }) => {
+    /** Similar-setup stats for this trade, computed once in the parent. */
+    similarSummary?: SimilarSetupSummary | null;
+}> = ({ trade, onOpenDetail, isSelected, onSelect, modelIdToName, isInsight, similarSummary }) => {
+    const [similarOpen, setSimilarOpen] = useState(false);
     const { analysis, outcome, timestamp, pnlAmount, pnlPercent, modelsUsed, geminiModelUsed, deepseekModelUsed, zhipuModelUsed, groqModelUsed, groqNewModelUsed, groqAlt2ModelUsed, openrouterModelUsed, moderatorModel, isAccuracyMode, accuracySubMode } = trade;
     const { direction, stopLoss, entryPoints, activeStrategies, coinName } = analysis;
 
@@ -475,6 +479,43 @@ const TradeLogRow: React.FC<{
                     </div>
                 </div>
             </div>
+
+            {/* Similar-setup drill-down — this trade's own track record in
+                the journal (computed in the parent, self excluded). */}
+            {similarSummary && (
+                <div className="px-4 pb-3" onClick={(e) => e.stopPropagation()}>
+                    <button
+                        onClick={() => setSimilarOpen(v => !v)}
+                        className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-zinc-950/60 border border-white/5 text-[10px] font-mono hover:border-cyan-500/30 transition-colors"
+                        aria-expanded={similarOpen}
+                    >
+                        <span className="text-zinc-400">⛓ {similarSummary.total} similar setups in your journal</span>
+                        <span className="flex items-center gap-2 shrink-0">
+                            <span className={similarSummary.winRate >= 55 ? 'text-emerald-400' : similarSummary.winRate >= 40 ? 'text-amber-300' : 'text-rose-400'}>
+                                {similarSummary.winRate.toFixed(0)}% win
+                            </span>
+                            <span className="text-zinc-500">EV {similarSummary.expectedValue >= 0 ? '+' : ''}{similarSummary.expectedValue.toFixed(1)}%</span>
+                            <ChevronDownIcon className={`w-3 h-3 text-zinc-600 transition-transform ${similarOpen ? 'rotate-180' : ''}`} />
+                        </span>
+                    </button>
+                    <div className={`collapsible-content ${similarOpen ? 'expanded' : ''}`}>
+                        <div className="mt-1.5 p-2.5 rounded-lg bg-zinc-950/60 border border-white/5 space-y-1">
+                            {similarSummary.recent.map((r, i) => (
+                                <p key={i} className="text-[10px] font-mono text-zinc-500">
+                                    {r.date} · {r.coin} {r.direction}{' '}
+                                    <span className={r.outcome === 'WIN' ? 'text-emerald-400' : 'text-rose-400'}>{r.outcome}</span>{' '}
+                                    <span className={r.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}>({r.pnl > 0 ? '+' : ''}{r.pnl.toFixed(1)}%)</span>
+                                </p>
+                            ))}
+                            {similarSummary.sameCoinCount > 1 && similarSummary.sameCoinWinRate !== null && (
+                                <p className="text-[10px] font-mono text-zinc-600 pt-1 border-t border-white/5">
+                                    {similarSummary.sameCoinCount} closed trades on this coin overall · {similarSummary.sameCoinWinRate.toFixed(0)}% win
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
@@ -529,6 +570,25 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({ trades, onDeleteTrade
 
     const duplicateCount = selectedIds.filter(id => currentInsightIds.includes(id)).length;
     const newCount = selectedIds.length - duplicateCount;
+
+    // Similar-setup stats per trade, computed ONCE (the virtualized list must
+    // stay cheap). The trade itself is excluded — the drill-down shows what
+    // OTHER journal trades like this one did.
+    const similarByTrade = useMemo(() => {
+        const map = new Map<string, SimilarSetupSummary | null>();
+        for (const t of trades) {
+            map.set(t.id, summarizeSimilarSetups(
+                {
+                    coinName: t.analysis?.coinName,
+                    direction: t.analysis?.direction,
+                    detectedPatternFamily: t.analysis?.detectedPatternFamily,
+                },
+                trades.filter(x => x.id !== t.id),
+                t.marketRegime
+            ));
+        }
+        return map;
+    }, [trades]);
 
     // Trade type filter
     const [tradeTypeFilter, setTradeTypeFilter] = useState<'all' | 'scalp' | 'swing'>('all');
@@ -697,6 +757,7 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({ trades, onDeleteTrade
                                     onSelect={handleSelect}
                                     modelIdToName={modelIdToName}
                                     isInsight={currentInsightIds.includes(trade.id)}
+                                    similarSummary={similarByTrade.get(trade.id) ?? null}
                                 />
                             </div>
                         )}

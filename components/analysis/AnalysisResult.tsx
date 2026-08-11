@@ -432,6 +432,66 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                     <span className="font-black text-sm tracking-wider uppercase" style={{ color: directionVisual.accent }}>{safeDirectionString}</span>
                     <span className="font-mono text-xs font-bold text-zinc-300">{coinName}</span>
                     <span className="text-[10px] text-zinc-400 uppercase tracking-wider">{confidence} ({probability}%)</span>
+                    {(() => {
+                        // Empirical trust badge — what this confidence tier has
+                        // ACTUALLY won in the user's journal. When a tier is
+                        // overconfident (actual < expected − 10), the badge
+                        // shows the deterministic downgrade so the displayed
+                        // confidence can't oversell the setup.
+                        const tierKey = (typeof confidence === 'string' ? confidence : '').toLowerCase() as 'high' | 'medium' | 'low' | 'avoid';
+                        const stats = confidenceCalibration?.[tierKey];
+                        if (!stats || stats.total < 3 || tierKey === 'avoid') return null;
+                        const expected = tierKey === 'high' ? 70 : tierKey === 'medium' ? 55 : 40;
+                        const actual = (stats.wins / stats.total) * 100;
+                        const overconfident = actual < expected - 10;
+                        const downgrade = overconfident
+                            ? (tierKey === 'high' ? 'Medium' : tierKey === 'medium' ? 'Low' : 'Avoid')
+                            : null;
+                        const tone = actual >= expected - 5 ? 'text-emerald-300' : actual >= expected - 15 ? 'text-amber-300' : 'text-rose-300';
+                        return (
+                            <span
+                                className={`px-1.5 py-0.5 rounded text-[9px] font-bold bg-zinc-950 border border-white/10 ${tone}`}
+                                title={`This confidence tier historically wins ${actual.toFixed(0)}% (n=${stats.total}). ${overconfident ? 'Deterministically downgraded because the tier underdelivers.' : 'Calibrated against your own journal.'}`}
+                            >
+                                {downgrade ? `${confidence} → ${downgrade}` : `cal ${actual.toFixed(0)}%`} · n={stats.total}
+                            </span>
+                        );
+                    })()}
+                    {(() => {
+                        // Divergence badge: raw analyst probabilities vs the
+                        // harness-adjusted verdict probability (calibration +
+                        // pattern memory applied). A meaningful gap means the
+                        // harness adjusted the number — show it.
+                        const rawProbs = (analysis?.analystConsensus?.entries ?? [])
+                            .map(e => e.probability)
+                            .filter((p): p is number => typeof p === 'number');
+                        const rawAvg = rawProbs.length > 0 ? rawProbs.reduce((a, b) => a + b, 0) / rawProbs.length : null;
+                        const adjusted = typeof analysis?.probability === 'number' ? analysis.probability : null;
+                        if (rawAvg === null || adjusted === null || Math.abs(rawAvg - adjusted) < 8) return null;
+                        return (
+                            <span
+                                className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/10 border border-amber-500/30 text-amber-300"
+                                title="Raw analyst probabilities vs the harness-adjusted verdict probability (calibration + pattern memory applied)."
+                            >
+                                raw {Math.round(rawAvg)}% → {Math.round(adjusted)}% adj
+                            </span>
+                        );
+                    })()}
+                    {(() => {
+                        // Dissent flag — any analyst whose direction differs
+                        // from the verdict.
+                        const dissents = (analysis?.analystConsensus?.entries ?? [])
+                            .filter(e => e.direction && e.direction !== safeDirectionString).length;
+                        if (dissents === 0) return null;
+                        return (
+                            <span
+                                className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/10 border border-amber-500/30 text-amber-300"
+                                title={`${dissents} analyst${dissents > 1 ? 's' : ''} ${dissents > 1 ? 'dissent' : 'dissents'} from the verdict direction`}
+                            >
+                                {dissents} dissent{dissents > 1 ? 's' : ''}
+                            </span>
+                        );
+                    })()}
                     {isUpdate && (
                         <span className="text-[10px] font-black uppercase tracking-widest text-cyan-300 flex items-center gap-1">
                             <UpdateIcon className="w-3 h-3" /> Updated {updateInterval ? `(+${updateInterval})` : ''}
@@ -445,6 +505,41 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                 <div className="prose-sm">
                     <MarkdownRenderer content={summaryMarkdown} />
                 </div>
+
+                {/* Team verdicts — every analyst's call vs this verdict, so the
+                    disagreement is visible in the chat itself (the full panel
+                    opens from the analyst rows above the card). */}
+                {(() => {
+                    const entries = analysis?.analystConsensus?.entries ?? [];
+                    if (entries.length === 0) return null;
+                    return (
+                        <div className="mt-3 pt-3 border-t border-white/5 flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-600 mr-0.5">Team</span>
+                            {entries.map((e, i) => {
+                                const agrees = e.direction === safeDirectionString;
+                                const short = (e.displayName || e.thoughtsKey || e.providerId || '?').split(' ').pop();
+                                return (
+                                    <span
+                                        key={i}
+                                        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-zinc-950 border border-white/5 text-[10px] font-mono"
+                                        title={`${e.displayName}: ${e.direction ?? 'no call'} · ${e.confidence ?? ''}`}
+                                    >
+                                        <span className="text-zinc-400 max-w-[80px] truncate">{short}</span>
+                                        <span className={e.direction === 'Long' ? 'text-emerald-400' : e.direction === 'Short' ? 'text-rose-400' : 'text-zinc-500'}>
+                                            {e.direction === 'Long' ? '▲' : e.direction === 'Short' ? '▼' : '—'}
+                                        </span>
+                                        {typeof e.probability === 'number'
+                                            ? <span className="text-zinc-300">{Math.round(e.probability)}%</span>
+                                            : e.confidence ? <span className="text-zinc-300">{e.confidence}</span> : null}
+                                        <span className={agrees ? 'text-emerald-400' : 'text-rose-400'} title={agrees ? 'Agrees with the verdict' : 'Dissents from the verdict'}>
+                                            {agrees ? '✓' : '✗'}
+                                        </span>
+                                    </span>
+                                );
+                            })}
+                        </div>
+                    );
+                })()}
 
                 {/* Outcome Autopilot — detected SL/TP hit, one-click confirmation.
                     Buttons styled like the workspace action buttons. */}

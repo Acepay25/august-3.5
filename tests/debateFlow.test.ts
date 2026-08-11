@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Mock } from 'vitest';
 import { TradeAnalysis } from '../types';
 import type { ProviderConfig } from '../types/provider';
-import { extractLastJson } from '../utils/jsonUtils';
+import { parseMarkdownTradePlan } from '../utils/analysisUtils';
 
 // Mock the transport layer so the debate generators run with scripted chunks
 // and NO network/SDK calls (this also makes the abort/error paths observable).
@@ -66,12 +66,26 @@ const analysis: TradeAnalysis = {
 
 const analyst = { analysis, thoughtProcess: 'Detailed reasoning for the setup.' };
 
+/**
+ * The moderator's FINAL TRADE PLAN contract is MARKDOWN — labeled bullet
+ * lines, no JSON anywhere. The pipeline parses it with parseMarkdownTradePlan.
+ */
+const MARKDOWN_PLAN = (direction: string, confidence = 'Medium', probability = 60): string =>
+  `**FINAL TRADE PLAN**
+- **Coin:** BTCUSDT
+- **Direction:** ${direction}
+- **Entry:** 95000 — Support retest
+- **Stop Loss:** 94500
+- **Take Profit 1:** 96000 (2%)
+- **Take Profit 2:** 97000 (4%)
+- **Confidence:** ${confidence}
+- **Probability:** ${probability}%
+- **Strategy:** Trend continuation`;
+
 const FULL_DEBATE = [
   '**Analyst One:** thesis presented\n\n',
   '**Analyst Two:** counter-thesis presented\n\n',
-  '<DEBATE_START>\n**Moderator:** synthesis verdict\n\n<JSON_PLAN>\n' +
-    JSON.stringify({ ...analysis, thoughtProcess: 'moderator thinking' }) +
-    '\n</JSON_PLAN>',
+  '<DEBATE_START>\n**Moderator:** synthesis verdict\n\n' + MARKDOWN_PLAN('Long'),
 ];
 
 /** Collect all chunks an async generator yields. */
@@ -98,27 +112,26 @@ describe('ensemble debate generators (mocked transport)', () => {
     ));
 
     expect(output).toContain('**Analyst One:** thesis presented');
-    expect(output).toContain('<JSON_PLAN>');
+    expect(output).toContain('FINAL TRADE PLAN');
     // Moderator messages: fixed system role + user prompt that names the analysts.
     const [cfg, messages] = streamMock.mock.calls[0];
     expect(messages[0].role).toBe('system');
     const userPrompt = messages[1].content as string;
     expect(userPrompt).toContain('<DEBATE_START>');
-    expect(userPrompt).toContain('<JSON_PLAN>');
+    expect(userPrompt).toContain('FINAL TRADE PLAN');
     expect(userPrompt.toUpperCase()).toContain('ANALYST ONE');
     expect(userPrompt.toUpperCase()).toContain('ANALYST TWO');
-    // The embedded JSON plan is extractable end-to-end.
-    const plan = extractLastJson(output);
-    expect(plan.direction).toBe('Long');
-    expect(plan.entryPoints[0].price).toBe('95000');
-    expect(plan.invalidationCriteria).toBeUndefined(); // input had none
+    // The embedded markdown plan is extractable end-to-end.
+    const plan = parseMarkdownTradePlan(output);
+    expect(plan?.direction).toBe('Long');
+    expect(plan?.entry).toBe('95000');
     void cfg;
   });
 
   it('conductThreeWayDebate yields and preserves all three analyst names in the prompt', async () => {
     streamMock.mockImplementation(async function* () {
       yield 'three-way synthesis';
-      yield '<JSON_PLAN>{"direction":"Long"}</JSON_PLAN>';
+      yield MARKDOWN_PLAN('Long');
     });
 
     const output = await collect(conductThreeWayDebate(
@@ -139,7 +152,7 @@ describe('ensemble debate generators (mocked transport)', () => {
   it('conductDebate (accuracy mode) yields moderator output', async () => {
     streamMock.mockImplementation(async function* () {
       yield 'accuracy moderator chunk';
-      yield '<JSON_PLAN>{"direction":"Short","confidence":"Medium","probability":55,"strategy":"s","activeStrategies":[],"entryPoints":[],"stopLoss":"","takeProfit":[],"marketConditions":{"pattern":"","candleBehavior":"","timeframeAlignment":"","rsi":"","macd":"","sentiment":""},"historicalCorrelation":""}</JSON_PLAN>';
+      yield MARKDOWN_PLAN('Short', 'Medium', 55);
     });
 
     const output = await collect(conductDebate(
@@ -148,7 +161,7 @@ describe('ensemble debate generators (mocked transport)', () => {
       config, 'model-a', false, true, null, [], '',
     ));
     expect(output).toContain('accuracy moderator chunk');
-    expect(extractLastJson(output).direction).toBe('Short');
+    expect(parseMarkdownTradePlan(output)?.direction).toBe('Short');
   });
 
   it('propagates user cancellation as AbortError (no <MODERATOR_ERROR> marker)', async () => {
@@ -241,7 +254,7 @@ describe('conductRealDebate (real inter-model debate)', () => {
       } else if (system.includes('debate moderator')) {
         yield 'Verdict: Long on breakout with tight stop.\n';
         yield '</DEBATE_END>\n';
-        yield '<JSON_PLAN>{"direction":"Long","confidence":"Medium","probability":60,"strategy":"s","activeStrategies":[],"entryPoints":[],"stopLoss":"","takeProfit":[],"marketConditions":{"pattern":"","candleBehavior":"","timeframeAlignment":"","rsi":"","macd":"","sentiment":""},"historicalCorrelation":""}</JSON_PLAN>';
+        yield MARKDOWN_PLAN('Long', 'Medium', 60);
       } else {
         yield `rebuttal-${system.includes('One') ? 'one' : 'two'}`;
       }
@@ -279,12 +292,13 @@ describe('conductRealDebate (real inter-model debate)', () => {
     expect(firstRebuttal.system).toContain('ROUND 2');
     expect(firstRebuttal.user).toContain('YOUR POSITION (Round 1)');
 
-    // The moderator verdict round streams the </DEBATE_END> + <JSON_PLAN> contract.
+    // The moderator verdict round streams the </DEBATE_END> + FINAL TRADE PLAN
+    // markdown block contract.
     const moderatorEvents = events.filter(e => e.speaker === 'Moderator');
     expect(moderatorEvents.length).toBeGreaterThan(0);
     const modText = moderatorEvents.map(e => e.text).join('');
     expect(modText).toContain('</DEBATE_END>');
-    expect(extractLastJson(modText).direction).toBe('Long');
+    expect(parseMarkdownTradePlan(modText)?.direction).toBe('Long');
 
     // Round structure: the questions round is reserved (even when the moderator
     // short-circuits with <CLARIFICATION_DONE>) so the verdict gets its own
@@ -308,7 +322,7 @@ describe('conductRealDebate (real inter-model debate)', () => {
         return;
       }
       if (system.includes('debate moderator')) {
-        yield '</DEBATE_END>\n<JSON_PLAN>{"direction":"Short","confidence":"Low","probability":45,"strategy":"s","activeStrategies":[],"entryPoints":[],"stopLoss":"","takeProfit":[],"marketConditions":{"pattern":"","candleBehavior":"","timeframeAlignment":"","rsi":"","macd":"","sentiment":""},"historicalCorrelation":""}</JSON_PLAN>';
+        yield '</DEBATE_END>\n' + MARKDOWN_PLAN('Short', 'Low', 45);
         return;
       }
       if (system.includes('Analyst Two')) {
@@ -372,7 +386,7 @@ describe('conductRealDebate (real inter-model debate)', () => {
       if (messages[1].content.includes('CLARIFICATION ROUND')) {
         yield '<CLARIFICATION_DONE>';
       } else if (messages[0].content.includes('debate moderator')) {
-        yield 'Moderator verdict text.\n</DEBATE_END>\n<JSON_PLAN>{"direction":"Long","confidence":"Medium","probability":60,"strategy":"s","activeStrategies":[],"entryPoints":[],"stopLoss":"","takeProfit":[],"marketConditions":{"pattern":"","candleBehavior":"","timeframeAlignment":"","rsi":"","macd":"","sentiment":""},"historicalCorrelation":""}</JSON_PLAN>';
+        yield 'Moderator verdict text.\n</DEBATE_END>\n' + MARKDOWN_PLAN('Long', 'Medium', 60);
       } else {
         yield 'rebuttal-from-analyst';
       }
@@ -397,7 +411,7 @@ describe('conductRealDebate (real inter-model debate)', () => {
     const moderatorText = events.filter(e => e.speaker === 'Moderator').map(e => e.text).join('');
     expect(moderatorText).toContain('Moderator verdict text');
     expect(moderatorText).not.toContain('rebuttal-from-analyst');
-    expect(moderatorText).toContain('<JSON_PLAN>');
+    expect(moderatorText).toContain('FINAL TRADE PLAN');
   });
 
   it('retries the moderator once with a compact prompt when the first attempt errors', async () => {
@@ -418,7 +432,7 @@ describe('conductRealDebate (real inter-model debate)', () => {
           yield '<MODERATOR_ERROR>provider exploded</MODERATOR_ERROR>';
           return;
         }
-        yield '</DEBATE_END>\n<JSON_PLAN>{"direction":"Short","confidence":"Low","probability":45,"strategy":"s","activeStrategies":[],"entryPoints":[],"stopLoss":"","takeProfit":[],"marketConditions":{"pattern":"","candleBehavior":"","timeframeAlignment":"","rsi":"","macd":"","sentiment":""},"historicalCorrelation":""}</JSON_PLAN>';
+        yield '</DEBATE_END>\n' + MARKDOWN_PLAN('Short', 'Low', 45);
       } else {
         yield 'rebuttal';
       }
@@ -435,8 +449,8 @@ describe('conductRealDebate (real inter-model debate)', () => {
     // Second attempt uses the compact prompt (no full context blocks).
     expect(moderatorPrompts[1]).toContain('COMPACT');
     const moderatorText = events.filter(e => e.speaker === 'Moderator').map(e => e.text).join('');
-    expect(moderatorText).toContain('<JSON_PLAN>');
-    expect(moderatorText).toContain('"direction":"Short"');
+    expect(moderatorText).toContain('FINAL TRADE PLAN');
+    expect(moderatorText).toContain('- **Direction:** Short');
   });
 
   it('still completes the stream when both moderator attempts fail (hook falls back)', async () => {
@@ -463,7 +477,7 @@ describe('conductRealDebate (real inter-model debate)', () => {
     expect(events.some(e => e.speaker === 'Analyst One')).toBe(true);
   });
 
-  const verdictJson = '<JSON_PLAN>{"direction":"Long","confidence":"Medium","probability":60,"strategy":"s","activeStrategies":[],"entryPoints":[],"stopLoss":"","takeProfit":[],"marketConditions":{"pattern":"","candleBehavior":"","timeframeAlignment":"","rsi":"","macd":"","sentiment":""},"historicalCorrelation":""}</JSON_PLAN>';
+  const verdictJson = MARKDOWN_PLAN('Long', 'Medium', 60);
   const clarificationAnalysts = () => [realAnalyst('prov-a', 'Analyst One', 'model-a'), realAnalyst('prov-b', 'Analyst Two', 'model-b')];
 
   const scriptedClarificationStreams = (judgments: string[], options: { done?: boolean; failQuestion?: boolean; failAnswer?: string; failJudgment?: boolean } = {}) => {
@@ -700,7 +714,7 @@ describe('conductRealDebate (real inter-model debate)', () => {
     expect(moderatorEvents.length).toBeGreaterThan(0);
     const modText = moderatorEvents.map(e => e.text).join('');
     expect(modText).toContain('</DEBATE_END>');
-    expect(extractLastJson(modText).direction).toBe('Long');
+    expect(parseMarkdownTradePlan(modText)?.direction).toBe('Long');
     // The questions round is reserved even on <CLARIFICATION_DONE> — the
     // verdict gets its own round (5) instead of sharing round 4.
     expect([...new Set(events.map(e => e.round))]).toEqual([1, 2, 3, 4, 5]);
@@ -836,7 +850,7 @@ describe('conductRealDebate (real inter-model debate)', () => {
     expect(events.filter(e => e.round === 3).map(e => e.speaker).sort()).toEqual(['Analyst One', 'Analyst Three']);
     // The moderator verdict still arrives.
     const moderatorText = events.filter(e => e.speaker === 'Moderator').map(e => e.text).join('');
-    expect(extractLastJson(moderatorText).direction).toBe('Long');
+    expect(parseMarkdownTradePlan(moderatorText)?.direction).toBe('Long');
   });
 
   it('continues without a replacement when the user skips', async () => {
@@ -1001,7 +1015,7 @@ describe('conductRealDebate — transient-failure retry (streamWithTransientRetr
       } else if (system.includes('debate moderator')) {
         yield 'Verdict: Long on breakout with tight stop.\n';
         yield '</DEBATE_END>\n';
-        yield '<JSON_PLAN>{"direction":"Long","confidence":"Medium","probability":60,"strategy":"s","activeStrategies":[],"entryPoints":[],"stopLoss":"","takeProfit":[],"marketConditions":{"pattern":"","candleBehavior":"","timeframeAlignment":"","rsi":"","macd":"","sentiment":""},"historicalCorrelation":""}</JSON_PLAN>';
+        yield MARKDOWN_PLAN('Long', 'Medium', 60);
       } else {
         rebuttalCalls++;
         if (rebuttalCalls <= 2) {
@@ -1050,7 +1064,7 @@ describe('conductRealDebate — transient-failure retry (streamWithTransientRetr
       } else if (system.includes('debate moderator')) {
         yield 'Verdict: Long on breakout with tight stop.\n';
         yield '</DEBATE_END>\n';
-        yield '<JSON_PLAN>{"direction":"Long","confidence":"Medium","probability":60,"strategy":"s","activeStrategies":[],"entryPoints":[],"stopLoss":"","takeProfit":[],"marketConditions":{"pattern":"","candleBehavior":"","timeframeAlignment":"","rsi":"","macd":"","sentiment":""},"historicalCorrelation":""}</JSON_PLAN>';
+        yield MARKDOWN_PLAN('Long', 'Medium', 60);
       } else {
         rebuttalCalls++;
         if (rebuttalCalls === 1) {

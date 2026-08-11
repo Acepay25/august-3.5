@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractAndParseJson, extractLastJson } from '../utils/jsonUtils';
+import { extractAndParseJson, extractLastJson, repairTruncatedJson } from '../utils/jsonUtils';
 
 describe('jsonUtils', () => {
   describe('extractAndParseJson', () => {
@@ -36,6 +36,36 @@ describe('jsonUtils', () => {
       const input = 'First: {"a": 1} Then: {"b": 2}';
       const result = extractLastJson(input);
       expect(result).toEqual({ b: 2 });
+    });
+  });
+
+  describe('truncated-JSON rescue (moderator plan cut at the token limit)', () => {
+    it('recovers a plan truncated mid-object via brace repair', () => {
+      // The classic failure: the moderator's plan gets cut before the closing
+      // braces — previously surfaced as an "Unknown Asset · Neutral" card.
+      const truncated = 'Here is my verdict:\n{"coinName": "BTCUSDT", "direction": "Short", "confidence": "High", "entryPoints": [{"price": "64000"';
+      const result = extractLastJson(truncated);
+      expect(result).not.toBeNull();
+      expect(result.direction).toBe('Short');
+      expect(result.coinName).toBe('BTCUSDT');
+    });
+
+    it('repairTruncatedJson returns null for prose without JSON', () => {
+      expect(repairTruncatedJson('The market looks bearish today, no plan.')).toBeNull();
+    });
+
+    it('repairTruncatedJson returns null for empty input', () => {
+      expect(repairTruncatedJson('')).toBeNull();
+      expect(repairTruncatedJson(null as unknown as string)).toBeNull();
+    });
+
+    it('does not disturb already-valid JSON (depth 0 succeeds)', () => {
+      expect(repairTruncatedJson('{"a": 1}')).toBe('{"a": 1}');
+    });
+
+    it('gives up on unrecoverable truncation (string cut mid-value)', () => {
+      const cutString = '{"coinName": "BTCUSDT", "direction": "Shor';
+      expect(repairTruncatedJson(cutString)).toBeNull();
     });
   });
 

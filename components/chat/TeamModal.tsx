@@ -1,8 +1,10 @@
 import React, { useMemo } from 'react';
-import { ProviderConfig } from '../../types';
-import { AnalystLensConfig, AnalystRole } from '../../types';
+import { ProviderConfig } from '../../types/provider';
+import { AnalystRole } from '../../types/enums';
+import { AnalystLensConfig } from '../../types/lens';
 import { EnsembleModelSelection } from '../../services/ui/AnalystLensService';
 import GlobalLearningService from '../../services/learning/GlobalLearningService';
+import { RegimeProviderStatsMap } from '../../services/learning/SetupMemoryService';
 import { ANALYST_ROLE_DEFINITIONS } from '../../services/ui/AnalystLensService';
 import { CloseIcon } from '../shared/Icons';
 
@@ -15,6 +17,13 @@ interface TeamModalProps {
     setLensConfig: (config: AnalystLensConfig) => void;
     ensembleModelSelection: EnsembleModelSelection;
     setEnsembleModelSelection: (selection: EnsembleModelSelection) => void;
+    /**
+     * Regime-matched provider win rates (providerId → {wr, n}) for the
+     * CURRENT market regime. Auto-assign prefers these — a blended all-time
+     * number would defeat the regime mechanism. Empty/absent → fall back to
+     * overall calibration.
+     */
+    regimeProviderStats?: RegimeProviderStatsMap;
     onClose: () => void;
 }
 
@@ -34,6 +43,7 @@ const STYLES = ['auto', 'position', 'swing', 'scalp'] as const;
 const TeamModal: React.FC<TeamModalProps> = ({
     isOpen, providers, isEnsembleEnabled, setIsEnsembleEnabled,
     lensConfig, setLensConfig, ensembleModelSelection, setEnsembleModelSelection,
+    regimeProviderStats,
     onClose,
 }) => {
     const readyProviders = useMemo(
@@ -51,18 +61,25 @@ const TeamModal: React.FC<TeamModalProps> = ({
 
     const setMode = (next: 'normal' | 'lenses') => {
         if (next === 'lenses' && lensConfig.assignments.length === 0) {
-            // Auto-assign: prefer the BEST-CALIBRATED ready providers (the
-            // user's own per-provider win rates) — routing reflects what
-            // actually works, not just "first three providers".
+            // Auto-assign: prefer the BEST-CALIBRATED ready providers. When
+            // the current market regime is known, "best" means the providers
+            // that actually WIN in THIS regime (ranging vs trending vs
+            // volatile) — blended all-time numbers defeat the mechanism.
             let providerOrder = [...readyProviders];
             try {
-                const byProvider = GlobalLearningService.getCalibration()?.granular?.byProvider;
-                if (byProvider) {
-                    providerOrder = [...readyProviders].sort((a, b) => {
-                        const wa = byProvider[a.id]?.total >= 3 ? byProvider[a.id].wins / byProvider[a.id].total : -1;
-                        const wb = byProvider[b.id]?.total >= 3 ? byProvider[b.id].wins / byProvider[b.id].total : -1;
-                        return wb - wa;
-                    });
+                if (regimeProviderStats && regimeProviderStats.size > 0) {
+                    providerOrder = [...readyProviders].sort((a, b) =>
+                        (regimeProviderStats.get(b.id)?.wr ?? -1) - (regimeProviderStats.get(a.id)?.wr ?? -1)
+                    );
+                } else {
+                    const byProvider = GlobalLearningService.getCalibration()?.granular?.byProvider;
+                    if (byProvider) {
+                        providerOrder = [...readyProviders].sort((a, b) => {
+                            const wa = byProvider[a.id]?.total >= 3 ? byProvider[a.id].wins / byProvider[a.id].total : -1;
+                            const wb = byProvider[b.id]?.total >= 3 ? byProvider[b.id].wins / byProvider[b.id].total : -1;
+                            return wb - wa;
+                        });
+                    }
                 }
             } catch { /* calibration read is best-effort */ }
             const distinct = [...new Map(providerOrder.map(p => [p.id, p])).values()].slice(0, 3);

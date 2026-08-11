@@ -299,6 +299,68 @@ export const extractLastJson = (text: string): any => {
         idx = text.lastIndexOf('}', idx - 1);
     }
 
+    // 3b. Truncated-JSON rescue: the moderator's output may have been cut at
+    // the token limit mid-object — a repaired plan beats no plan. Bounded:
+    // only the last '{', only closing braces appended, max 16 depth.
+    try {
+        const repaired = repairTruncatedJson(text);
+        if (repaired) return robustJsonParse(repaired);
+    } catch (e) {
+        console.warn("Truncated-JSON repair failed:", e);
+    }
+
     // 4. Fallback to forward scan if backwards scan failed (or if it was an array)
     return extractAndParseJson(text);
+};
+
+/**
+ * Bounded repair for TRUNCATED JSON (output cut at the token limit). The cut
+ * usually lands mid-object or mid-array, so a pure brace-append is not enough
+ * — unclosed arrays need ']' too. Strategy: take each of the last few '{'
+ * as a candidate root (outer object first in practice), and try appending
+ * short closures over the alphabet '}' / ']' (length ≤ 6, shortest first)
+ * until the object parses. Returns the repaired string or null. Only a last
+ * resort — a repaired plan beats no plan.
+ */
+export const repairTruncatedJson = (text: string): string | null => {
+    if (!text || typeof text !== 'string') return null;
+
+    // Candidate roots: opening braces from the FIRST '{' forward (bounded to
+    // 4) — the outermost object is the plan; the LAST '{' is usually an inner
+    // field that parses trivially and would shadow the real plan.
+    const roots: number[] = [];
+    let idx = text.indexOf('{');
+    while (idx !== -1 && roots.length < 4) {
+        roots.push(idx);
+        idx = text.indexOf('{', idx + 1);
+    }
+    if (roots.length === 0) return null;
+
+    // Closure candidates over '}' and ']', shortest first (length ≤ 6).
+    const closures: string[] = [];
+    for (let len = 1; len <= 6; len++) {
+        for (let mask = 0; mask < 1 << len; mask++) {
+            let s = '';
+            for (let i = 0; i < len; i++) s += (mask & (1 << i)) ? ']' : '}';
+            closures.push(s);
+        }
+    }
+
+    for (const root of roots) {
+        const candidate = text.slice(root).trim();
+        if (candidate.length > 20000) continue;
+        // The bare candidate first — already-valid JSON must stay untouched.
+        try {
+            const parsed = robustJsonParse(candidate);
+            if (parsed && typeof parsed === 'object') return candidate;
+        } catch { /* keep closing */ }
+        for (const closure of closures) {
+            const repaired = `${candidate}${closure}`;
+            try {
+                const parsed = robustJsonParse(repaired);
+                if (parsed && typeof parsed === 'object') return repaired;
+            } catch { /* try next closure */ }
+        }
+    }
+    return null;
 };

@@ -237,6 +237,62 @@ Rules:
 - If nothing actionable exists, reply with exactly: "No actionable strategies found."`,
     },
     {
+        id: 'notebook.note',
+        name: 'Trader Notebook Note Writer',
+        description: 'After each closed trade, decides what the Trader Notebook (Settings → Personal edge) needs: SKIP when the lesson is already covered, APPEND a new section to an existing file, or CREATE a new file/folder. The current notebook index (folders + files + excerpts) is appended by the service so the model always reads the real notebook before writing.',
+        usage: ['After every logged WIN/LOSS post-mortem (AI memory writer)'],
+        fallback: `You maintain the trader's notebook — markdown files the AI ensemble reads before EVERY future analysis. After each closed trade you decide whether to write, and how.
+
+The CURRENT NOTEBOOK block below lists every folder and file with a short excerpt. READ IT FIRST — it is the only way to write smartly.
+
+DECIDE:
+- "skip" — when this trade's lesson is already fully covered by an existing file, or nothing new or valuable emerged. Writing junk hurts future analyses.
+- "append" — when an existing file already covers this topic: your content becomes a NEW SECTION appended to that file (own ## heading, --- separated). Never repeat what that file already says.
+- "create" — when the topic is new: a new file. A new folder ONLY when the topic family has no home (market-conditions / rules / lessons are the usual homes). trader-diary is reserved for the automatic diary — never write there.
+
+Content rules:
+- Actionable and TIMELESS: what to REPEAT or AVOID next time the same situation appears. No PnL, no dates, no trade ids.
+- Written in first person ("When I…", "I will…") as the trader's own lesson.
+- 10-40 lines of clean markdown per section: a short heading, 3-8 bullet points, optional "Trigger" / "Invalidates" lines.
+- Precise: keep the concrete levels, indicators, regime, and patterns that actually mattered in this trade.
+
+Output ONLY valid JSON with exactly these fields:
+{
+  "decision": "skip" | "append" | "create",
+  "folder": "existing-or-new-kebab-folder",
+  "fileName": "short-kebab-name.md",
+  "content": "markdown (append: the new section with its own ## heading; create: the whole file)"
+}`,
+    },
+    {
+        id: 'notebook.chat_note',
+        name: 'Trader Notebook Quick-Save (chat)',
+        description: 'Runs when the user asks mid-conversation to save something to the notebook ("save this to the notebook"). The model reads the current notebook index, then decides skip / append to an existing file / create a new file or folder.',
+        usage: ['Chat quick-save requests (short-circuits the analysis pipeline)'],
+        fallback: `The user asked you to save something to their trader notebook — markdown files the AI ensemble reads before EVERY future analysis. Decide what the notebook needs.
+
+The CURRENT NOTEBOOK block below lists every folder and file with a short excerpt. READ IT FIRST.
+
+DECIDE:
+- "skip" — when the request has no concrete, reusable lesson/rule/playbook, or it is already fully covered by an existing file.
+- "append" — when an existing file already covers this topic: your content becomes a NEW SECTION on that file (own ## heading, --- separated). Never repeat what that file already says.
+- "create" — when the topic is new: a new file. A new folder ONLY when the topic family has no home (market-conditions / rules / lessons are the usual homes). trader-diary is reserved for the automatic diary — never write there.
+
+Content rules:
+- Actionable and TIMELESS: what to REPEAT or AVOID next time the same situation appears. No PnL, no dates, no trade ids.
+- Written in first person ("When I…", "I will…") as the trader's own lesson.
+- 10-40 lines of clean markdown per section: a short heading, 3-8 bullet points, optional "Trigger" / "Invalidates" lines.
+- If the user references the CONTEXT below (their most recent analysis), write about THAT setup.
+
+Output ONLY valid JSON with exactly these fields:
+{
+  "decision": "skip" | "append" | "create",
+  "folder": "existing-or-new-kebab-folder",
+  "fileName": "short-kebab-name.md",
+  "content": "markdown"
+}`,
+    },
+    {
         id: 'strategy.ocr_page',
         name: 'PDF Page OCR',
         description: 'Transcribes a scanned (image-only) PDF page into text using the vision model, so scanned books can be summarized too.',

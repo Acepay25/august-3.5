@@ -90,8 +90,11 @@ const MIN_MATCHES_FOR_CONFIDENCE = 5;
 const normalizeRegime = (regime: string): string => {
     const r = (regime || '').toLowerCase();
     if (r.includes('trend')) return 'trending';
-    if (r.includes('range') || r.includes('consolidat')) return 'ranging';
-    if (r === 'volatile' || r.includes('volatile') || r.includes('chop')) return 'volatile';
+    // NOTE: 'ranging'.includes('range') is FALSE — the literal normalized
+    // forms need their own stems ('rang', 'volat') or regime matching never
+    // fires for already-normalized labels.
+    if (r.includes('rang') || r.includes('consolidat')) return 'ranging';
+    if (r === 'volatile' || r.includes('volat') || r.includes('chop')) return 'volatile';
     if (r === 'compression' || r.includes('compression')) return 'compression';
     return 'unknown';
 };

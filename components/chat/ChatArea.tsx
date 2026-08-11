@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Message, ImageMetadata, AccuracySubMode, AnalysisStep, AnalystLensConfig, LiveThoughts, ProviderConfig } from '../../types';
 import { EnsembleModelSelection } from '../../services/ui/AnalystLensService';
+import { RegimeProviderStatsMap } from '../../services/learning/SetupMemoryService';
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
 import MessageItem, { ChatContextProps } from './MessageItem';
 import { ChatInput } from './ChatInput';
@@ -10,6 +11,7 @@ import HybridDataPanel from '../analysis/HybridDataPanel';
 import ImageViewerModal from '../modals/ImageViewerModal';
 import AnalysisProgress from '../analysis/AnalysisProgress';
 import WorkspaceWelcome, { WorkspaceWelcomeProps } from './WorkspaceWelcome';
+import InjectionContextBar from './InjectionContextBar';
 
 // Hoisted list components to prevent re-creation on each render
 const ListHeader = () => <div className="h-16"></div>;
@@ -84,6 +86,8 @@ interface ChatAreaProps {
     // Ensemble mode toggle (casual chat vs chart analysis)
     isEnsembleEnabled: boolean;
     setIsEnsembleEnabled: (v: boolean) => void;
+    /** Regime-matched provider win rates for the composer dropdown + lens auto-assign. */
+    regimeProviderStats?: RegimeProviderStatsMap;
     // Casual-chat model (ensemble off)
     selectedChatModel: string;
     setSelectedChatModel: (modelId: string) => void;
@@ -172,6 +176,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     isEnsembleEnabled,
     setIsEnsembleEnabled,
     selectedChatModel,
+    regimeProviderStats,
     setSelectedChatModel,
     hybridData,
     isHybridLoading,
@@ -309,7 +314,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         setEnsembleModelSelection, customEnsemblePrompt,
         setCustomEnsemblePrompt, customLensPrompts, setCustomLensPrompts,
         isEnsembleEnabled, setIsEnsembleEnabled, selectedChatModel,
-        setSelectedChatModel,
+        setSelectedChatModel, regimeProviderStats,
     ]);
 
     return (
@@ -471,6 +476,15 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 </div>
                 {/* Keep the composer mounted during generation so its send
                     control changes into the active Stop control. */}
+                <div className="w-full">
+                    <InjectionContextBar
+                        providers={providers}
+                        isEnsembleEnabled={isEnsembleEnabled}
+                        isAccuracyModeEnabled={isAccuracyModeEnabled}
+                        hybridConnectionStatus={hybridConnectionStatus}
+                        hybridData={hybridData}
+                    />
+                </div>
                 <ChatInput {...chatInputProps} />
                 </>
             ) : messages.length === 0 ? (
@@ -488,6 +502,12 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                             </h1>
                         )}
                         <div className={`w-full max-w-3xl ${homeDashboard ? '' : 'mt-8'}`}>
+                            <InjectionContextBar
+                                providers={providers}
+                                isEnsembleEnabled={isEnsembleEnabled}
+                                isAccuracyModeEnabled={isAccuracyModeEnabled}
+                                hybridConnectionStatus={hybridConnectionStatus}
+                            />
                             <ChatInput centered {...chatInputProps} />
                         </div>
                         <div className="w-full max-w-3xl mt-4">
@@ -518,6 +538,14 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                                 disableNewAnalysis={messages.length === 0}
                             />
                         </div>
+                    </div>
+                    <div className="w-full">
+                        <InjectionContextBar
+                            providers={providers}
+                            isEnsembleEnabled={isEnsembleEnabled}
+                            isAccuracyModeEnabled={isAccuracyModeEnabled}
+                            hybridConnectionStatus={hybridConnectionStatus}
+                        />
                     </div>
                     <ChatInput {...chatInputProps} />
                 </>

@@ -22,9 +22,9 @@ import {
     ANALYST_CLARIFICATION_RESPONSE_PROMPT,
     MODERATOR_CLARIFICATION_JUDGMENT_PROMPT
 } from '../../constants/prompts';
-import { DUAL_SCENARIO_JSON_SCHEMA } from '../../constants/schemas';
+import { DUAL_SCENARIO_JSON_SCHEMA, MASTER_TRADE_PLAN_MARKDOWN } from '../../constants/schemas';
 import { parseLiveMarketData } from '../../utils/liveMarketParser';
-import { truncateTextToTokens, parsePrice } from '../../utils/analysisUtils';
+import { truncateTextToTokens, parsePrice, parseMarkdownTradePlan } from '../../utils/analysisUtils';
 import { generateEnhancedDebateContext, EnhancedDebateContext } from '../ui/EnhancedDebateService';
 import { MarketRegime } from '../analysis/TechnicalAnalysisService';
 import {
@@ -254,10 +254,10 @@ CRITICAL RULES:
 1. ALWAYS provide specific numeric prices for Entry, Stop Loss, and Take Profit - NEVER output "N/A" or "Not Available"
 2. If analysts provide prices in their analysis, USE THOSE EXACT PRICES
 3. If prices are unclear, ESTIMATE based on the discussion context
-4. The JSON_PLAN must contain real price values, not placeholders
+4. The FINAL TRADE PLAN must contain real price values, not placeholders
 5. Every trade setup needs: direction, entry price, stop loss price, take profit price(s)
 
-You must complete the ENTIRE response including the JSON_PLAN block at the end.`;
+You must complete the ENTIRE response including the **FINAL TRADE PLAN** markdown block at the end.`;
 
 /**
  * Stream the moderator analysis from any configured provider via the generic client.
@@ -273,7 +273,11 @@ const getModeratorAnalysisStream = async function* (config: ProviderConfig, mode
     try {
         // maxTokens guards reasoning-heavy moderators against truncating the
         // response mid-JSON (which previously surfaced as a Neutral card).
-        for await (const chunk of streamChatRequest(effectiveConfig, messages, { temperature: 0.1, maxTokens: 8192, signal, onReasoning })) {
+        // 12288: the debate prose + the final JSON plan share one stream, and
+        // the context grew (notebook files, similar setups, regime weighting)
+        // — 8192 truncates the plan at the end when the moderator writes long
+        // rebuttal prose.
+        for await (const chunk of streamChatRequest(effectiveConfig, messages, { temperature: 0.1, maxTokens: 12288, signal, onReasoning })) {
             if (chunk) yield chunk;
         }
     } catch (e: any) {
@@ -354,7 +358,7 @@ export const generateLensContext = (
         return `
 **🎭 LENS MODE** **${styleName}** | TFs: ${styleTimeframes} | Min R:R: ${styleMinRR}
 Roles: ${macroAnalyst ? `${macroAnalyst}` : ''} ${techAnalyst ? `${techAnalyst}` : ''} ${riskAnalyst ? `${riskAnalyst}` : ''}
- MANDATORY: Output complete JSON_PLAN with coinName, direction, entryPoints, stopLoss, takeProfit.
+ MANDATORY: End with the **FINAL TRADE PLAN** markdown block (Coin, Direction, Entry, Stop Loss, Take Profit 1/2, Confidence, Probability).
 `;
     }
 
@@ -392,7 +396,7 @@ ${riskAnalyst ? `-  ${riskAnalyst}: "What's the R:R? Top 3 failure scenarios? Ca
 - Entry level conflicts → Weight Risk Analyst
 - Risk Grade D/F → Mark trade CONDITIONAL or AVOID
 
-**MANDATORY:** After debate, you MUST output the complete JSON_PLAN block with all required trade details (coinName, direction, entryPoints, stopLoss, takeProfit, confidence, probability, strategy).
+**MANDATORY:** After debate, you MUST end with the complete **FINAL TRADE PLAN** markdown block (Coin, Direction, Entry, Stop Loss, Take Profit 1/2, Confidence, Probability, Strategy).
 `;
     }
 
@@ -640,8 +644,7 @@ Your verdict MUST address all three domains:
 
 ---
 
- **CRITICAL REMINDER:** After the debate, you MUST output a complete <JSON_PLAN> block with:
-coinName, direction, entryPoints, stopLoss, takeProfit, confidence, probability, strategy, marketConditions, detectedPatternFamily, keyLevels
+ **CRITICAL REMINDER:** After the debate, you MUST end with a complete **FINAL TRADE PLAN** markdown block (Coin, Direction, Entry, Stop Loss, Take Profit 1/2, Confidence, Probability, Strategy, Pattern Family, Support/Resistance).
 `;
 };
 
@@ -955,18 +958,18 @@ ${planJson.slice(0, 6000)}
 
     if (/<ACCURACY_ADJUST>/i.test(text)) {
         try {
-            const adjustedJson = extractLastJson(text);
-            if (adjustedJson) {
-                // Human note only — the raw corrected JSON must not become the
-                // chat bubble text (the model was told to output JSON after
-                // the marker and nothing else).
-                return { verdict: 'adjusted', note: 'Plan adjusted by the accuracy pass.', planJson: typeof adjustedJson === 'string' ? adjustedJson : JSON.stringify(adjustedJson) };
+            const adjustedPlan = parseMarkdownTradePlan(text);
+            if (adjustedPlan) {
+                // Human note only — the raw corrected markdown must not become
+                // the chat bubble text (the model was told to output the plan
+                // after the marker and nothing else).
+                return { verdict: 'adjusted', note: 'Plan adjusted by the accuracy pass.', planJson: text };
             }
         } catch {
             // fall through to the clean note below — never discard the plan
         }
-        // Marker present but no parseable JSON: return a clean note instead
-        // of the raw body (which may contain half-emitted JSON) so the
+        // Marker present but no parseable plan: return a clean note instead
+        // of the raw body (which may contain a half-emitted plan) so the
         // malformed payload never leaks into the chat bubble.
         return { verdict: 'confirmed', note: 'Plan verified by the accuracy pass.' };
     }
@@ -1598,55 +1601,15 @@ export const conductTwoWayDebate = async function* (
               **Verdict Rationale:**
               [Complete synthesis explaining: 1) Which evidence was most compelling, 2) How disagreements were resolved, 3) Family Classification, 4) Pattern Memory alignment. Do not stop mid-sentence.]
 
-      12.  **JSON PLAN (CRITICAL - FAILURE WILL BREAK THE SYSTEM)**
+      12.  **FINAL TRADE PLAN (MARKDOWN — LAST THING IN YOUR RESPONSE)**
           
-           YOU MUST OUTPUT VALID, COMPLETE JSON OR THE SYSTEM WILL FAIL 
-          
-          *   Only AFTER the complete text verdict, output the final JSON wrapped in <JSON_PLAN> and </JSON_PLAN>.
-          *   **CRITICAL:** The JSON block must be the ABSOLUTE LAST THING in your response.
-          *   **CRITICAL:** Do NOT write any text after </JSON_PLAN>.
-          *   **CRITICAL:** Complete the ENTIRE JSON object - do not stop mid-generation.
+          *   Only AFTER the complete text verdict, output the final trade plan as MARKDOWN — labeled bullet lines, NO JSON anywhere.
+          *   **CRITICAL:** The plan block must be the ABSOLUTE LAST THING in your response.
           *   **CRITICAL:** Use actual price values, not "..." placeholders.
+          *   **CRITICAL:** Keep every field on ONE line — the harness parses these labels.
           
-          **EXACT EXAMPLE FORMAT:**
-          <JSON_PLAN>
-          {
-              "coinName": "BTCUSDT",
-              "direction": "Long",
-              "entryPoints": [{ "price": "95000", "description": "Key support retest" }],
-              "stopLoss": "94500",
-              "takeProfit": [{ "price": "96000", "percentage": "2%" }, { "price": "97000", "percentage": "4%" }],
-              "confidence": "High",
-              "probability": 75,
-              "grade": "B",
-              "strategy": "Trend continuation after pullback",
-              "historicalCorrelation": "Similar to previous winning setups",
-              "marketConditions": { 
-                  "pattern": "Bull Flag", 
-                  "candleBehavior": "Higher lows forming", 
-                  "timeframeAlignment": "3 of 4 bullish", 
-                  "rsi": "55", 
-                  "macd": "Bullish crossover", 
-                  "sentiment": "Neutral",
-                  "prices": { "5m": "95100", "15m": "95050", "1h": "95000", "4h": "94800" }
-              },
-              "detectedPatternFamily": "Family C",
-              "detectedPatterns": [{ "name": "Bull Flag", "timeframe": "1h", "type": "Bullish", "confidence": "High", "description": "Consolidation above support" }],
-              "keyLevels": { "support": ["94500 (4h)", "94000 (1h)"], "resistance": ["96000 (4h)", "97000 (1h)"] },
-              "validityDurationMinutes": 330,
-              "dualScenarioAnalysis": {
-                  "bullish": { "trigger": "95500", "confirmation": "4H close above with volume", "target": "97000", "invalidation": "94500" },
-                  "bearish": { "trigger": "94000", "confirmation": "4H close below", "target": "92000", "invalidation": "95500" },
-                  "selectedScenario": "bullish",
-                  "selectionReasoning": "HTF trend bullish, volume supports breakout, Pattern Memory shows 70% win rate",
-                  "confidenceInSelection": 75
-              },
-              "invalidationCriteria": [
-                  { "level": "94500", "condition": "4H close below this support", "category": "price", "note": "Bullish thesis dead" },
-                  { "level": "5h30m from analysis", "condition": "No breakout before validity expiry", "category": "time" }
-              ]
-          }
-          </JSON_PLAN>
+          **EXACT FORMAT REQUIRED:**
+${MASTER_TRADE_PLAN_MARKDOWN}
 
       **FORMATTING RULES:**
       *   Use strict "Speaker:" format (e.g. "${analyst1Name}:", "Moderator:", "Moderator to ${analyst1Name}:").
@@ -2222,56 +2185,15 @@ Immediately after </DEBATE_END>, write:
 
 ---
 
-##  11. JSON PLAN (CRITICAL - FAILURE WILL BREAK THE SYSTEM)
+##  11. FINAL TRADE PLAN (MARKDOWN — LAST THING IN YOUR RESPONSE)
 
- YOU MUST OUTPUT VALID, COMPLETE JSON OR THE SYSTEM WILL FAIL 
-
-Only **after** writing the complete text verdict, output the structured JSON object.
-- The JSON must be wrapped in <JSON_PLAN> and </JSON_PLAN> tags
-- The JSON must be the ABSOLUTE LAST thing in your response
-- Do NOT write any text after </JSON_PLAN>
-- Complete the ENTIRE JSON object - do not stop mid-generation
+Only **after** writing the complete text verdict, output the final trade plan as MARKDOWN — labeled bullet lines, NO JSON anywhere.
+- The plan block must be the ABSOLUTE LAST thing in your response
 - Use actual price values, not "..." placeholders
+- Keep every field on ONE line — the harness parses these labels
 
-**EXACT EXAMPLE FORMAT:**
-<JSON_PLAN>
-{
-    "coinName": "BTCUSDT",
-    "direction": "Long",
-    "entryPoints": [{ "price": "95000", "description": "Key support level" }],
-    "stopLoss": "94500",
-    "takeProfit": [{ "price": "96000", "percentage": "2%" }, { "price": "97000", "percentage": "4%" }],
-    "confidence": "High",
-    "probability": 75,
-    "grade": "B",
-    "strategy": "Trend continuation with pullback entry",
-    "historicalCorrelation": "Similar to past winning setups",
-    "marketConditions": { 
-        "pattern": "Bull Flag", 
-        "candleBehavior": "Higher lows", 
-        "timeframeAlignment": "3 of 4 bullish", 
-        "rsi": "55", 
-        "macd": "Bullish crossover", 
-        "sentiment": "Neutral",
-        "prices": { "5m": "95100", "15m": "95050", "1h": "95000", "4h": "94800" }
-    },
-    "detectedPatternFamily": "Family C",
-    "detectedPatterns": [{ "name": "Bull Flag", "timeframe": "1h", "type": "Bullish", "confidence": "High", "description": "Consolidation above support" }],
-    "keyLevels": { "support": ["94500 (4h)", "94000 (1h)"], "resistance": ["96000 (4h)", "97000 (1h)"] },
-    "validityDurationMinutes": 330,
-    "dualScenarioAnalysis": {
-        "bullish": { "trigger": "95500", "confirmation": "4H close above with volume", "target": "97000", "invalidation": "94500" },
-        "bearish": { "trigger": "94000", "confirmation": "4H close below", "target": "92000", "invalidation": "95500" },
-        "selectedScenario": "bullish",
-        "selectionReasoning": "HTF trend bullish, volume supports breakout, Pattern Memory shows 70% win rate",
-        "confidenceInSelection": 75
-    },
-    "invalidationCriteria": [
-        { "level": "94500", "condition": "4H close below this support", "category": "price", "note": "Bullish thesis dead" },
-        { "level": "5h30m from analysis", "condition": "No breakout before validity expiry", "category": "time" }
-    ]
-}
-</JSON_PLAN>
+**EXACT FORMAT REQUIRED:**
+${MASTER_TRADE_PLAN_MARKDOWN}
 
 ---
 
@@ -2281,14 +2203,11 @@ Only **after** writing the complete text verdict, output the structured JSON obj
 - Ensure EACH analyst gets their OWN dedicated turn - do not combine responses.
 - Keep individual responses concise (max 100 words each) to fit all turns.
 
-**⚠️ CRITICAL: DUAL SCENARIO FIELD IS MANDATORY**
-The "dualScenarioAnalysis" field in the JSON is NOT OPTIONAL. Your JSON will be REJECTED if:
-- Either "bullish" or "bearish" scenario is missing
-- Price levels (trigger, target, invalidation) are empty or vague
-- "selectionReasoning" doesn't explain why one scenario won
+**⚠️ CRITICAL: DUAL SCENARIO IS PART OF THE VERDICT PROSE**
+The "Dual Scenario Analysis" (bullish trigger/confirmation/target/invalidation vs bearish) must appear in your verdict PROSE — both scenarios with concrete levels, and which one you selected and why. A missing scenario or vague levels will be treated as an incomplete verdict.
 
 **⚠️ CRITICAL: INVALIDATION CRITERIA ARE MANDATORY**
-The "invalidationCriteria" array must contain 2-4 items stating exactly what kills the selected setup. Your JSON will be REJECTED if:
+The plan's **Invalidation** line must state 2-4 conditions that kill the selected setup. Your plan will be treated as incomplete if:
 - The array is missing or empty
 - No "price" category criterion with a concrete level is present
 
@@ -2523,8 +2442,9 @@ const buildDebateTranscript = (
  * 4. Final — the moderator (moderatorConfig + moderatorModel) receives the
  *    full transcript plus the usual context blocks (gate reconciliation,
  *    Monte Carlo, lens roles, learning context, recent insights, market
- *    telemetry) and streams the verdict + </DEBATE_END> + <JSON_PLAN>
- *    contract that the pipeline parses into the final trade card.
+ *    telemetry) and streams the verdict + </DEBATE_END> + the **FINAL TRADE
+ *    PLAN** markdown block contract that the pipeline parses into the final
+ *    trade card.
  * `onSpeakerStatus` is invoked with (speaker, round, active) around every
  * stream so the UI can show exactly which models are currently generating.
  */
@@ -3219,21 +3139,21 @@ export const conductRealDebate = async function* (
             onSpeakerStatus?.('Moderator', finalRound, false);
         }
         // Retry only when the attempt clearly failed: a thrown error, an error
-        // marker, or no JSON plan anywhere in the response. The moderator call
-        // is always a fresh streamChatRequest with its own prompt — never a
-        // reused analyst result, even when the same model fills both roles.
-        // The <JSON_PLAN> tag must be CLOSED: an opening tag with no closing
-        // tag means the JSON got truncated mid-stream — treating it as a
-        // success skipped the compact-prompt retry and sent broken JSON to
-        // the parser.
-        const hasJsonPlan = !streamFailed && (
-            /<JSON_PLAN>[\s\S]*<\/JSON_PLAN>/i.test(moderatorText)
-            || /```json[\s\S]*```/i.test(moderatorText)
+        // marker, or no FINAL TRADE PLAN markdown block anywhere in the
+        // response. The moderator call is always a fresh streamChatRequest
+        // with its own prompt — never a reused analyst result, even when the
+        // same model fills both roles. The plan labels must be PRESENT: a
+        // truncated response with an opening label but no values would skip
+        // the compact-prompt retry and send a broken plan to the parser.
+        const hasMarkdownPlan = !streamFailed && (
+            /\*\*FINAL TRADE PLAN\*\*/i.test(moderatorText)
+            || /(?:^|\n)\s*-\s*\*\*?(?:Coin|Direction|Entry|Stop Loss|Take Profit)\*\*?\s*[:：]/i.test(moderatorText)
+            || /(?:^|\n)\s*(?:Coin|Direction|Entry|Stop Loss)\s*[:：]/i.test(moderatorText)
         );
         const hasErrorMarker = !streamFailed && /<MODERATOR_ERROR>/.test(moderatorText);
-        if (hasJsonPlan && !hasErrorMarker) break;
+        if (hasMarkdownPlan && !hasErrorMarker) break;
         if (attempt === attempts.length - 1) break;
-        console.warn(`[RealDebate] Moderator attempt ${attempt + 1} failed (jsonPlan=${hasJsonPlan}, errorMarker=${hasErrorMarker}); retrying with compact prompt.`);
+        console.warn(`[RealDebate] Moderator attempt ${attempt + 1} failed (markdownPlan=${hasMarkdownPlan}, errorMarker=${hasErrorMarker}); retrying with compact prompt.`);
         // Reset the consumer's accumulated text for this round before the
         // retry streams — otherwise the failed attempt's partial prose
         // concatenates with the successful verdict in one bubble.

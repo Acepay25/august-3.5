@@ -19,6 +19,9 @@ interface AnalystPanelProps {
 
 const ACCENT_COLORS = ['#8aabd8', '#34d399', '#fb7185'];
 
+const directionArrow = (d?: string): string => (d === 'Long' ? '▲' : d === 'Short' ? '▼' : '—');
+const directionTone = (d?: string): string => (d === 'Long' ? 'text-emerald-400' : d === 'Short' ? 'text-rose-400' : 'text-zinc-500');
+
 const speakerColor = (speaker: string): string => {
     const s = String(speaker).toLowerCase();
     if (s.includes('moderator') || s.includes('master strategist')) return '#a1a1aa';
@@ -160,6 +163,34 @@ const AnalystPanel: React.FC<AnalystPanelProps> = ({
                     </button>
                 </div>
 
+                {/* Team verdicts — every analyst's call vs the final verdict,
+                    visible on every tab. */}
+                {(() => {
+                    const entries = analysis?.analystConsensus?.entries ?? [];
+                    if (entries.length === 0) return null;
+                    const finalDir = analysis?.direction ?? 'Neutral';
+                    return (
+                        <div className="px-3 py-2 border-b border-white/5 flex items-center gap-1.5 overflow-x-auto shrink-0 custom-scrollbar">
+                            {entries.map((e, i) => {
+                                const agrees = e.direction === finalDir;
+                                const short = (e.displayName || e.thoughtsKey || e.providerId || '?').split(' ').pop();
+                                return (
+                                    <span key={i} className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-zinc-900 border border-white/5 text-[10px] font-mono">
+                                        <span className="text-zinc-400 truncate max-w-[80px]">{short}</span>
+                                        <span className={directionTone(e.direction)}>{directionArrow(e.direction)}</span>
+                                        {typeof e.probability === 'number'
+                                            ? <span className="text-zinc-300">{Math.round(e.probability)}%</span>
+                                            : e.confidence ? <span className="text-zinc-300">{e.confidence}</span> : null}
+                                        <span className={agrees ? 'text-emerald-400' : 'text-rose-400'} title={agrees ? 'Agrees with the final verdict' : 'Dissents from the final verdict'}>
+                                            {agrees ? '✓' : '✗'}
+                                        </span>
+                                    </span>
+                                );
+                            })}
+                        </div>
+                    );
+                })()}
+
                 {/* Analyst tabs */}
                 <div className="px-3 py-2 border-b border-white/5 flex gap-1.5 overflow-x-auto shrink-0 custom-scrollbar">
                     {analysts.map(a => (
@@ -266,6 +297,79 @@ const AnalystPanel: React.FC<AnalystPanelProps> = ({
                     ) : currentTab === '__debate__' ? (
                         /* ── Debate section ── */
                         <div className="space-y-3">
+                            {/* Verdict summary — pinned so the result is visible
+                                without scrolling through every turn. */}
+                            {analysis && (
+                                <div className="rounded-xl border border-white/5 bg-zinc-900/60 p-3">
+                                    <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2">Verdict</p>
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <span className={`font-black text-sm uppercase ${directionTone(analysis.direction)}`}>{analysis.direction ?? 'Neutral'}</span>
+                                        {analysis.confidence && <span className="text-xs text-zinc-300">{analysis.confidence}</span>}
+                                        {typeof analysis.probability === 'number' && (
+                                            <span className="text-[10px] font-mono text-zinc-500">({Math.round(analysis.probability)}%)</span>
+                                        )}
+                                    </div>
+                                    {(() => {
+                                        const entries = analysis.analystConsensus?.entries ?? [];
+                                        if (entries.length === 0) return null;
+                                        const agreeing = entries.filter(e => e.direction === analysis.direction).length;
+                                        const div = analysis.analystConsensus?.divergence;
+                                        return (
+                                            <p className="mt-1.5 text-[10px] text-zinc-500">
+                                                <span className={agreeing === entries.length ? 'text-emerald-400' : agreeing >= entries.length / 2 ? 'text-amber-300' : 'text-rose-400'}>
+                                                    {agreeing}/{entries.length} analysts agree
+                                                </span>
+                                                {div && div.score > 0 ? ` · divergence ${div.score}/100 (${div.divergenceType})` : ''}
+                                            </p>
+                                        );
+                                    })()}
+                                </div>
+                            )}
+
+                            {/* Round timeline — who spoke in which round, at a glance.
+                                Rounds are labeled: R1 thesis → R2 rebuttal →
+                                R3 clarification → verdict (the clarification
+                                step has been missing from every debate mockup —
+                                it is part of the standard flow). */}
+                            {(() => {
+                                const rounds = new Map<number, DebateTurn[]>();
+                                for (const turn of debateTurns) {
+                                    const r = turn.round ?? 1;
+                                    rounds.set(r, [...(rounds.get(r) ?? []), turn]);
+                                }
+                                const roundKeys = [...rounds.keys()];
+                                if (roundKeys.length <= 1) return null;
+                                const roundLabel = (r: number): string =>
+                                    r === 1 ? 'thesis' : r === 2 ? 'rebuttal' : r === 3 ? 'clarification' : `round ${r}`;
+                                return (
+                                    <div className="rounded-xl border border-white/5 bg-zinc-900/40 p-3">
+                                        <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2">Round timeline</p>
+                                        <div className="flex items-center gap-1 overflow-x-auto custom-scrollbar">
+                                            {roundKeys.map((r, i) => (
+                                                <React.Fragment key={r}>
+                                                    <div className="shrink-0 flex flex-col items-center gap-1 px-1">
+                                                        <span className="text-[9px] font-mono text-zinc-500" title={`${roundLabel(r)} round`}>
+                                                            R{r} {roundLabel(r)}
+                                                        </span>
+                                                        <div className="flex gap-0.5">
+                                                            {rounds.get(r)!.map((t, j) => (
+                                                                <span key={j} className="w-1.5 h-1.5 rounded-full" style={{ background: speakerColor(t.speaker) }} title={t.speaker} />
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                    {i < roundKeys.length - 1 && <span className="text-zinc-700 text-[10px]">→</span>}
+                                                </React.Fragment>
+                                            ))}
+                                            <span className="text-zinc-700 text-[10px]">→</span>
+                                            <div className="shrink-0 flex flex-col items-center gap-1 px-1">
+                                                <span className="text-[9px] font-mono text-zinc-500">verdict</span>
+                                                <span className="w-2 h-2 rounded-full bg-cyan-400" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+
                             <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Debate ({debateTurns.length} turns)</p>
                             {debateTurns.map((turn, i) => (
                                 <div key={i} className="rounded-xl border border-white/5 bg-zinc-900/60 p-3 space-y-1.5">
