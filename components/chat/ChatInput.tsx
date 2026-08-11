@@ -164,6 +164,11 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
         const assignment = lensConfig.assignments?.find(item => item.role === role);
         if (!assignment?.assignedProvider) return '';
         const provider = providers.find(item => item.id === assignment.assignedProvider);
+        // A DISABLED / key-less provider must render as unassigned — the
+        // dropdown options only list ready providers, so a non-empty value
+        // with no matching option rendered a BLANK select while the footer
+        // claimed "All roles assigned — ready to start the ensemble".
+        if (!provider || !(provider.isEnabled && provider.apiKey.trim().length > 0)) return '';
         const availableModels = provider ? selectedModelsForLens(provider) : [];
         const model = assignment.assignedModel || provider?.selectedModel || '';
         return model && availableModels.includes(model) ? `${assignment.assignedProvider}::${model}` : '';

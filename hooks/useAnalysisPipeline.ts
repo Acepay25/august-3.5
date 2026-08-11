@@ -1381,7 +1381,13 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                         // Streamed chain-of-thought deltas accumulate — the
                         // latest full string is pushed to the live cards.
                         onReasoning: (reasoning: string) => {
-                             reasoningMapRef.current[provider.name] = (reasoningMapRef.current[provider.name] || '') + reasoning;
+                             // Key reasoning by the SAME thoughtsKey used
+                             // everywhere else (provider::model). Keying by
+                             // provider.name here produced a duplicate entry
+                             // per analyst — 6 rows/tabs for 3 analysts — and
+                             // the name-keyed copy resolved to UNASSIGNED.
+                             const reasoningKey = provider.thoughtsKey || provider.name;
+                             reasoningMapRef.current[reasoningKey] = (reasoningMapRef.current[reasoningKey] || '') + reasoning;
                              if (isStagedEnsemble && provider.thoughtsKey) {
                                  // Coalesced to one update per animation frame —
                                  // per-token updates re-render the whole chat.
@@ -1389,7 +1395,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                                      requestConversationId,
                                      placeholderId,
                                      provider.thoughtsKey,
-                                     reasoningMapRef.current[provider.name],
+                                     reasoningMapRef.current[reasoningKey],
                                  );
                              }
                          },
@@ -1427,7 +1433,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                                                      status: 'complete',
                                                      finalOutput: result.finalOutput || result.thoughtProcess,
                                                      thoughtProcess: result.thoughtProcess,
-                                                     reasoning: reasoningMapRef.current[provider.name],
+                                                     reasoning: reasoningMapRef.current[provider.thoughtsKey || provider.name],
                                                  }
                                                  : analyst),
                                          }));
@@ -1478,7 +1484,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                         if (settled.status === 'fulfilled') {
                                 const providerKey = enabledProviders[index].thoughtsKey;
                                 thoughtMap[providerKey] = settled.value.thoughtProcess;
-                                thoughtMap[enabledProviders[index].name] = settled.value.thoughtProcess;
                         }
                     });
 
@@ -2219,7 +2224,7 @@ ${accuracyVerificationNote}`
                                 conflictingSignals: freshHybridData.confluence.conflicts,
                                 timeframeCount: 4 // 5m, 15m, 1h, 4h
                             } : undefined,
-                            isLensMode: lensConfig?.enabled ?? false,
+                            isLensMode: runLensConfig?.enabled ?? lensConfig?.enabled ?? false,
                             // Always set tradingStyle regardless of Lens mode
                             tradingStyle: effectiveTradingStyle
                         };

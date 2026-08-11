@@ -18,13 +18,14 @@ interface AnalystPanelProps {
 
 const ACCENT_COLORS = ['#8aabd8', '#34d399', '#fb7185'];
 
-const speakerColor = (speaker: DebateSpeaker): string => {
-    switch (speaker) {
-        case 'Analyst 1': return ACCENT_COLORS[0];
-        case 'Analyst 2': return ACCENT_COLORS[1];
-        case 'Analyst 3': return ACCENT_COLORS[2];
-        default: return '#a1a1aa'; // moderator
-    }
+const speakerColor = (speaker: string): string => {
+    const s = String(speaker).toLowerCase();
+    if (s.includes('moderator') || s.includes('master strategist')) return '#a1a1aa';
+    // Deterministic color from the speaker name so real debates (which emit
+    // provider/role names, not "Analyst 1/2/3") keep per-speaker colors.
+    let hash = 0;
+    for (let i = 0; i < s.length; i++) hash = (hash * 31 + s.charCodeAt(i)) >>> 0;
+    return ACCENT_COLORS[hash % ACCENT_COLORS.length];
 };
 
 /**
@@ -46,7 +47,13 @@ const AnalystPanel: React.FC<AnalystPanelProps> = ({
     const analysts = useMemo(() => {
         const map = new Map<string, { providerId: string; displayName: string; modelName: string; emoji?: string; roleColor?: string; reasoning: string; finalOutput: string; consensus?: AnalystConsensusEntry }>();
 
-        // From thoughtProcesses / reasoningProcesses
+        // Match a consensus entry by its unique thoughtsKey first, then by
+        // the config id (entries built before thoughtsKey existed).
+        const findConsensus = (key: string): AnalystConsensusEntry | undefined =>
+            analysis?.analystConsensus?.entries.find(e => e.thoughtsKey === key || e.providerId === key);
+
+        // From thoughtProcesses / reasoningProcesses (keyed by thoughtsKey
+        // — provider::model — after the pipeline key-normalization fix).
         const thinkingEntries = Object.entries({
             ...(message.thoughtProcesses ?? {}),
             ...(message.reasoningProcesses ?? {}),
@@ -56,7 +63,6 @@ const AnalystPanel: React.FC<AnalystPanelProps> = ({
             const roleDisplay = lensConfig ? getRoleDisplayForProvider(key, lensConfig.assignments) : null;
             const modelId = message.modelsUsed?.[key];
             const modelName = modelIdToName[modelId ?? ''] ?? modelId ?? '';
-            const idx = map.size;
             map.set(key, {
                 providerId: key,
                 displayName: roleDisplay?.name ?? modelIdToName[key] ?? key,
@@ -65,27 +71,31 @@ const AnalystPanel: React.FC<AnalystPanelProps> = ({
                 roleColor: undefined,
                 reasoning: text,
                 finalOutput: '',
-                consensus: analysis?.analystConsensus?.entries.find(e => e.providerId === key),
+                consensus: findConsensus(key),
             });
         }
 
-        // Supplement from ensembleProgress if available
+        // Supplement from ensembleProgress if available. Progress entries are
+        // keyed by config id — normalize to the same thoughtsKey shape
+        // (provider::model) so they MERGE with the thinking entries instead
+        // of spawning duplicate tabs.
         const ep = message.ensembleProgress;
         if (ep) {
             for (const ap of ep.analysts) {
-                const existing = map.get(ap.providerId);
+                const thoughtsKey = ap.providerId && ap.modelId ? `${ap.providerId}::${ap.modelId}` : ap.providerId;
+                const existing = map.get(thoughtsKey) ?? (ap.providerId ? map.get(ap.providerId) : undefined);
                 if (existing) {
                     if (ap.finalOutput) existing.finalOutput = ap.finalOutput;
                 } else if (ap.thoughtProcess || ap.reasoning || ap.finalOutput) {
-                    const roleDisplay = lensConfig ? getRoleDisplayForProvider(ap.providerId, lensConfig.assignments) : null;
-                    map.set(ap.providerId, {
+                    const roleDisplay = lensConfig ? getRoleDisplayForProvider(thoughtsKey, lensConfig.assignments) : null;
+                    map.set(thoughtsKey, {
                         providerId: ap.providerId,
                         displayName: roleDisplay?.name ?? ap.displayName,
                         modelName: ap.modelName,
                         emoji: roleDisplay?.emoji,
                         reasoning: ap.reasoning || ap.thoughtProcess || '',
                         finalOutput: ap.finalOutput || '',
-                        consensus: analysis?.analystConsensus?.entries.find(e => e.providerId === ap.providerId),
+                        consensus: findConsensus(thoughtsKey),
                     });
                 }
             }

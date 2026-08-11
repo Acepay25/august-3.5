@@ -790,14 +790,25 @@ Before proceeding to the final verdict, the moderator MUST:
  * by the pipeline (app-computed, never AI-generated) so the final call can be
  * audited against its own inputs — in the live card, history, and journal.
  */
+/** Minimal analyst shape buildAnalystConsensus needs (RealDebateAnalyst
+ *  satisfies it; tests may pass lighter fixtures). */
+type ConsensusAnalyst = {
+    provider: { config: { id: string }; name: string; thoughtsKey?: string };
+    result: { analysis: TradeAnalysis };
+};
+
 export const buildAnalystConsensus = (
-    analysts: { provider: { config: { id: string }; name: string }; result: { analysis: TradeAnalysis } }[]
+    analysts: ConsensusAnalyst[]
 ): AnalystConsensus | undefined => {
     if (analysts.length < 1) return undefined;
     const entries: AnalystConsensus['entries'] = analysts.map((a) => {
         const analysis = a.result.analysis;
         return {
+            // thoughtsKey (provider::model) is the unique identity — two lens
+            // roles on one provider previously collided under config.id, so
+            // the panel showed the first role's call for both.
             providerId: a.provider.config.id,
+            thoughtsKey: a.provider.thoughtsKey,
             displayName: a.provider.name,
             direction: analysis.direction,
             entry: analysis.entryPoints?.[0]?.price ? String(analysis.entryPoints[0].price) : undefined,

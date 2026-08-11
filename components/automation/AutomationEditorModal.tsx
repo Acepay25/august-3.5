@@ -156,6 +156,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
     const [promptTemplate, setPromptTemplate] = useState(initial?.promptTemplate ?? '');
     const [mode, setMode] = useState<AutomationMode>(initial?.mode ?? 'standard');
     const [useLenses, setUseLenses] = useState(initial?.useLenses ?? false);
+    const [lensTradingStyle, setLensTradingStyle] = useState<'position' | 'swing' | 'scalp' | 'auto'>(initial?.lensTradingStyle ?? 'swing');
     const [analystSelections, setAnalystSelections] = useState<string[]>(() => {
         const picks = initial?.analystModels ?? [];
         return [0, 1, 2].map(i => {
@@ -220,6 +221,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
             promptTemplate: inputSource === 'template' ? promptTemplate.trim() : undefined,
             mode,
             useLenses,
+            lensTradingStyle,
             analystModels,
             moderatorModel,
             createdAt: initial?.createdAt ?? now,
@@ -487,6 +489,26 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                             })}
                         </div>
                     </div>
+
+                    {/* Lens trading style — position/scalp/auto were previously
+                        impossible in automations (runtime hardcoded 'swing'). */}
+                    {useLenses && (
+                        <div>
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 block mb-1.5">Lens trading style</span>
+                            <div className="flex gap-1.5">
+                                {(['auto', 'position', 'swing', 'scalp'] as const).map(style => (
+                                    <button
+                                        key={style}
+                                        type="button"
+                                        onClick={() => setLensTradingStyle(style)}
+                                        className={`flex-1 px-2 py-1.5 rounded-lg border text-[9px] font-bold uppercase tracking-widest transition-all ${lensTradingStyle === style ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-300' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'}`}
+                                    >
+                                        {style}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     {/* Moderator */}
                     {modelSelect('Moderator model', moderatorSelection, setModeratorSelection, 'Select provider/model', undefined)}
