@@ -365,14 +365,24 @@ export const generateLearningRulesPrompt = (
 
     const rulesText = relevantRules.map((rule, i) => {
         const source = rule.outcome === 'LOSS' ? '❌ From past LOSS' : '✅ From past WIN';
-        return `${i + 1}. **IF** ${rule.ifCondition} **THEN** ${rule.thenAction}\n   (${source}${rule.coin ? ` on ${rule.coin}` : ''})`;
+        // Unvalidated rules (never used) must not ride as MANDATORY mandates —
+        // a single loss used to create a permanent "MUST" that could veto
+        // unrelated setups forever.
+        const validated = (rule.useCount ?? 0) > 0;
+        return `${i + 1}. **IF** ${rule.ifCondition} **THEN** ${rule.thenAction}\n   (${source}${rule.coin ? ` on ${rule.coin}` : ''}${validated ? '' : ' — unvalidated: advisory only'})`;
     }).join('\n\n');
+
+    // Track usage so rules can be validated against later outcomes (decay
+    // and retirement depend on useCount). markRuleAsUsed was dead code.
+    for (const rule of relevantRules) {
+        try { markRuleAsUsed(storage, rule.id); } catch { /* non-fatal */ }
+    }
 
     return `
 📚 **LEARNING RULES FROM PATTERN MEMORY**
 
 The following rules were extracted from your post-mortem analyses.
-**MANDATORY:** Apply these rules when evaluating this trade:
+**INSTRUCTION:** Apply these rules when evaluating this trade:
 
 ${rulesText}
 

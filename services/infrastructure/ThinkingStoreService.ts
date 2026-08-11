@@ -763,3 +763,35 @@ export const getAllThinkingRecordsByUser = async (username: string): Promise<Thi
     const db = await initIndexedDB();
     return db.getAllFromIndex(STORE_NAME, 'username', username);
 };
+
+/**
+ * Retrieve WIN-conditioned reasoning exemplars for a provider — the "read
+ * the thinking corpus back" step. The corpus was write-only: outcome-
+ * correlated reasoning was stored but never injected into prompts. These
+ * few-shot exemplars let each model see its OWN best past reasoning on
+ * similar setups before analyzing a new chart.
+ */
+export const getThinkingExemplars = async (
+    provider: string,
+    limit = 2
+): Promise<{ coin: string | null; reasoning: string; confidence?: string; probability?: number }[]> => {
+    const records = await getThinkingByProvider(provider, { limit: Math.max(limit, 20), outcome: TradeOutcome.WIN });
+    return records
+        .filter(r => Boolean(r.reasoning || r.finalOutput))
+        .slice(0, limit)
+        .map(r => {
+            let coin: string | null = null;
+            if (r.analysisJson) {
+                try {
+                    const parsed = JSON.parse(r.analysisJson);
+                    coin = parsed?.coinName ?? null;
+                } catch { /* non-fatal */ }
+            }
+            return {
+                coin,
+                reasoning: (r.reasoning || r.finalOutput || '').slice(0, 400),
+                confidence: r.confidence,
+                probability: r.probability,
+            };
+        });
+};

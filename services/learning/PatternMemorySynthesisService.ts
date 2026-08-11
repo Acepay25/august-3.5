@@ -88,6 +88,10 @@ export interface AttributedInsight {
     wasValidated: boolean; // Did following this advice help?
     timesUsed: number;
     timesHelpful: number;
+    /** Negative explicit feedback — lets qualityScore reflect feedback only,
+     *  not mere surface marks (timesUsed counts displays, which inflated the
+     *  denominator and diluted the ratio). */
+    timesNotHelpful?: number;
     /** Dedupe guard for "surfaced to a prompt" marks (see markInsightSurfaced). */
     lastSurfacedAt?: number;
     createdAt: string;
@@ -789,10 +793,14 @@ export function recordInsightFeedback(insightId: string, wasHelpful: boolean): v
         insight.wasValidated = true;
         if (wasHelpful) {
             insight.timesHelpful++;
+        } else {
+            insight.timesNotHelpful = (insight.timesNotHelpful ?? 0) + 1;
         }
-        // Update quality score based on helpfulness ratio
-        if (insight.timesUsed > 0) {
-            insight.qualityScore = Math.round((insight.timesHelpful / insight.timesUsed) * 100);
+        // Quality = feedback ratio ONLY (timesUsed counts mere display —
+        // including it diluted every surfaced-but-unrated insight to near 0).
+        const feedbackTotal = insight.timesHelpful + (insight.timesNotHelpful ?? 0);
+        if (feedbackTotal > 0) {
+            insight.qualityScore = Math.round((insight.timesHelpful / feedbackTotal) * 100);
         }
         saveAttributedInsights(insights);
         console.log(`[PatternMemorySynthesis] Insight feedback: ${insightId} - helpful: ${wasHelpful}`);

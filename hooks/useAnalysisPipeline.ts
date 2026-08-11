@@ -22,7 +22,7 @@ import { getGateAnalysis, GateOutput } from '../services/validation/GateKeeperSe
 // Utils
 import { isQuotaError } from '../utils/errorUtils';
 import { recalculateAnalysisMetrics, sanitizeTradeAnalysis, clampProbabilityToGate } from '../utils/analysisUtils';
-import { saveThinkingBatch, buildThinkingRecordId, getThinkingTradeId } from '../services/infrastructure/ThinkingStoreService';
+import { saveThinkingBatch, buildThinkingRecordId, getThinkingTradeId, getThinkingExemplars } from '../services/infrastructure/ThinkingStoreService';
 import { offlineQueue } from '../services/infrastructure/OfflineQueueService';
 import { notifyAnalysisComplete } from '../services/infrastructure/CompletionNotifications';
 import { ThinkingRecord } from '../types/thinking';
@@ -1410,15 +1410,34 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             }));
                         }
                         const runStartedAtMs = performance.now();
-                        return cachedAnalyzeTradingView(
-                            provider.config,
-                            provider.model,
-                            enhancedPrompt,
-                            imageFiles,
-                            dataURLs,
-                            currentAbortController.signal,
-                            buildAnalystParams(provider),
-                        )
+                        // Thinking-corpus exemplars: this model's own past
+                        // WINNING reasoning (few-shot) — the corpus was
+                        // write-only before; reading it back is what lets a
+                        // deployed model improve. Non-fatal: a slow store
+                        // must never delay or fail an analysis.
+                        return (async () => {
+                            let exemplarBlock = '';
+                            try {
+                                const exemplars = await getThinkingExemplars(provider.thoughtsKey || provider.config.id, 1);
+                                if (exemplars.length > 0 && exemplars[0].reasoning.trim()) {
+                                    const ex = exemplars[0];
+                                    exemplarBlock = `
+
+ **YOUR OWN PAST WINNING REASONING (EXEMPLAR — study the reasoning pattern, do not copy the numbers):**
+${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` | Confidence: ${ex.confidence}` : ''}${typeof ex.probability === 'number' ? ` | Probability: ${ex.probability}%` : ''}
+> ${ex.reasoning.replace(/\n/g, '\n> ')}`;
+                                }
+                            } catch { /* corpus read is best-effort */ }
+                            return cachedAnalyzeTradingView(
+                                provider.config,
+                                provider.model,
+                                enhancedPrompt + exemplarBlock,
+                                imageFiles,
+                                dataURLs,
+                                currentAbortController.signal,
+                                buildAnalystParams(provider),
+                            );
+                        })()
                                  .then(result => {
                                      analystTimings.set(provider.thoughtsKey, {
                                          durationMs: Math.round(performance.now() - runStartedAtMs),
