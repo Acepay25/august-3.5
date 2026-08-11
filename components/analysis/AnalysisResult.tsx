@@ -1,7 +1,8 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { TradeAnalysis, TradeOutcome, AccuracySubMode, ConfidenceCalibration, ConfluenceData, DualScenarioAnalysis, LevelProbabilities, ProbabilityReasoning, TradingStyle } from '../../types';
 import { ChevronDownIcon, BookmarkIcon, BookmarkSolidIcon, BrainIcon, UpdateIcon, ActivityIcon, SkipIcon } from '../shared/Icons';
+import MarkdownRenderer from '../shared/MarkdownRenderer';
 import { FAMILY_UI_DATA } from '../../constants/models';
 import { ConfidenceLevel } from '../../services/validation/ConfidenceCalibrationService';
 import { DEFAULT_LEVERAGE } from '../../utils/conversationUtils';
@@ -157,7 +158,10 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
     } = analysis || {};
 
     const [isConditionsVisible, setIsConditionsVisible] = useState(false);
-    const [isDetailsVisible, setIsDetailsVisible] = useState(true);
+    // Details grid starts collapsed — the card opens as the minimal chat-style
+    // summary; the full grid (levels, patterns, scenarios, gate, calibration)
+    // is one "Details" click away.
+    const [isDetailsVisible, setIsDetailsVisible] = useState(false);
     const [showRRTooltip, setShowRRTooltip] = useState(false);
 
     // === AUTO-POLLING FOR ENTRY DETECTION ===
@@ -369,32 +373,73 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
     // Safe RR check - check if it is defined and is a valid number > 0
     const hasValidRR = rrRatio !== undefined && rrRatio !== null && !isNaN(rrRatio) && rrRatio > 0;
 
+    // Hybrid snapshot subset for the summary line (same shape the automation
+    // cards use) — regime / confluence / session injected at analysis time.
+    const summarySnapshot = (analysis?.marketSnapshot ?? undefined) as {
+        regime?: { regime?: string; trendDirection?: string; adx?: number };
+        confluence?: { score?: number; direction?: string; strength?: string };
+        session?: { sessionName?: string; suggestedAction?: string };
+    } | undefined;
+
+    // Chat-style markdown summary — the "Trading workspace" presentation.
+    const summaryMarkdown = useMemo(() => {
+        const lines: string[] = [];
+        lines.push(`**${coinName} · ${safeDirectionString} · ${confidence} (${probability}%)**`);
+        lines.push('');
+        lines.push(`- **Entry:** ${entryPoints?.[0]?.price ?? 'N/A'} · **SL:** ${stopLoss ?? 'N/A'} · **TP1:** ${takeProfit?.[0]?.price ?? 'N/A'}${hasValidRR ? ` · **R:R:** ${rrRatio}:1` : ''}`);
+        if (summarySnapshot?.regime?.regime) {
+            lines.push(`- **Regime:** ${summarySnapshot.regime.regime.replace(/_/g, ' ')}${typeof summarySnapshot.regime.adx === 'number' ? ` (ADX ${summarySnapshot.regime.adx.toFixed(1)})` : ''}${typeof summarySnapshot.confluence?.score === 'number' ? ` · **Confluence:** ${summarySnapshot.confluence.score}/100 ${summarySnapshot.confluence.direction ?? ''}` : ''}`);
+        }
+        if (summarySnapshot?.session?.sessionName) {
+            lines.push(`- **Session:** ${summarySnapshot.session.sessionName}${summarySnapshot.session.suggestedAction ? ` — ${summarySnapshot.session.suggestedAction}` : ''}`);
+        }
+        if (strategy && strategy !== 'Analysis pending...') {
+            lines.push('');
+            lines.push(strategy.length > 400 ? `${strategy.slice(0, 400)}…` : strategy);
+        }
+        return lines.join('\n');
+    }, [coinName, safeDirectionString, confidence, probability, entryPoints, stopLoss, takeProfit, rrRatio, hasValidRR, strategy, summarySnapshot]);
+
     return (
         <div ref={cardRef} className="analysis-card mt-6 sm:mt-8 w-full pb-28 sm:pb-8">
 
-            {/* Coin Name Header */}
-            <div className="mb-4 sm:mb-6 flex items-center px-1 justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-3 sm:gap-4 overflow-hidden min-w-0">
-                    <div className="w-1.5 h-10 sm:w-2 sm:h-14 rounded-full shrink-0" style={{ background: `linear-gradient(to bottom, ${directionVisual.accent}, ${directionVisual.accent}99)`, boxShadow: `0 0 20px ${directionVisual.glow}` }}></div>
-                    <h3 className="text-2xl sm:text-4xl font-black text-white tracking-tight uppercase truncate min-w-0 drop-shadow-lg">{coinName}</h3>
-                    <span className="px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-[10px] sm:text-xs font-bold bg-zinc-800 text-zinc-300 border border-white/10 uppercase tracking-wider shrink-0 shadow-lg">FUTURES</span>
-                </div>
-                <div className="flex items-center gap-2 flex-wrap mt-1 sm:mt-0">
+            {/* Chat-style signal summary — the "Trading workspace" look */}
+            <div className="rounded-2xl border border-white/5 bg-zinc-900/80 p-4 sm:p-5 shadow-lg">
+                <div className="flex items-center gap-2 mb-3 flex-wrap">
                     {modeBadge}
                     {lensBadge}
+                    <span className="font-black text-sm tracking-wider uppercase" style={{ color: directionVisual.accent }}>{safeDirectionString}</span>
+                    <span className="font-mono text-xs font-bold text-zinc-300">{coinName}</span>
+                    <span className="text-[10px] text-zinc-400 uppercase tracking-wider">{confidence} ({probability}%)</span>
+                    {isUpdate && (
+                        <span className="text-[10px] font-black uppercase tracking-widest text-cyan-300 flex items-center gap-1">
+                            <UpdateIcon className="w-3 h-3" /> Updated {updateInterval ? `(+${updateInterval})` : ''}
+                        </span>
+                    )}
+                    <span className="ml-auto text-[10px] font-mono text-zinc-500">
+                        {createdAt ? new Date(createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
+                    </span>
+                </div>
+
+                <div className="prose-sm">
+                    <MarkdownRenderer content={summaryMarkdown} />
+                </div>
+
+                {/* Action row — like the workspace buttons */}
+                <div className="mt-3 flex flex-wrap gap-2">
                     {onSelectForProbability && (
                         <button
                             onClick={() => onSelectForProbability(messageId)}
-                            className="px-2 py-1 rounded text-[9px] font-bold bg-purple-950/80 border border-purple-500/40 text-purple-300 uppercase tracking-widest flex items-center gap-1 hover:bg-purple-500/30 transition-colors shadow-[0_0_10px_-3px_rgba(161,161,170,0.4)]"
+                            className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-purple-950/80 border border-purple-500/40 text-purple-300 uppercase tracking-widest hover:bg-purple-500/30 transition-colors"
                             title="View AI Probability estimations in side panel"
                         >
-                             VIEW PROBABILITIES
+                             View Probabilities
                         </button>
                     )}
                     {onCompare && (
                         <button
                             onClick={() => onCompare(messageId)}
-                            className="px-2 py-1 rounded text-[9px] font-bold bg-zinc-800 border border-white/10 text-zinc-300 uppercase tracking-widest flex items-center gap-1 hover:border-cyan-400/30 hover:text-cyan-300 transition-colors"
+                            className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-zinc-800 border border-white/10 text-zinc-300 uppercase tracking-widest hover:border-cyan-400/30 hover:text-cyan-300 transition-colors"
                             title="Compare this analysis side-by-side with another"
                         >
                             ⧉ Compare
@@ -402,23 +447,22 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                     )}
                     <button
                         onClick={handleSetAlerts}
-                        className={`px-2 py-1 rounded text-[9px] font-bold uppercase tracking-widest flex items-center gap-1 transition-colors ${alertsSet
+                        className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-colors ${alertsSet
                             ? 'bg-emerald-500/15 border border-emerald-500/40 text-emerald-300'
                             : 'bg-zinc-800 border border-white/10 text-zinc-300 hover:border-cyan-400/30 hover:text-cyan-300'}`}
                         title="Create price alerts for this setup's entry, stop loss and take profit levels"
                     >
                         {alertsSet ? '✓ Alerts set' : '⏰ Set alerts'}
                     </button>
+                    <button
+                        onClick={() => setIsDetailsVisible(v => !v)}
+                        className="ml-auto px-3 py-1.5 rounded-lg text-[10px] font-bold bg-zinc-800 border border-white/10 text-zinc-400 uppercase tracking-widest hover:text-zinc-200 transition-colors flex items-center gap-1"
+                        aria-expanded={isDetailsVisible}
+                    >
+                        {isDetailsVisible ? 'Hide details' : 'Details'}
+                        <ChevronDownIcon className={`w-3 h-3 transition-transform ${isDetailsVisible ? 'rotate-180' : ''}`} />
+                    </button>
                 </div>
-
-                {isUpdate && (
-                    <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-900/50 to-cyan-800/30 border border-cyan-400/40 text-cyan-300 shadow-[0_0_25px_-5px_rgba(176, 176, 182,0.4)] animate-pulse">
-                        <UpdateIcon className="w-4 h-4" />
-                        <span className="text-[10px] font-black uppercase tracking-widest">
-                            Updated Setup {updateInterval ? `(+${updateInterval})` : ''}
-                        </span>
-                    </div>
-                )}
             </div>
 
             {/* Consensus explainability — audit the verdict against its analysts */}
