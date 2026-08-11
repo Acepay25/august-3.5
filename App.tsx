@@ -1549,6 +1549,37 @@ const App: React.FC = () => {
         saveEnsembleModelSelection(selection.slice(0, 3));
     }, [setEnsembleModelSelection]);
 
+    // Seed the ordinary (normal-mode) debate-model selection from the ready
+    // providers' ensembleModels when nothing has been picked yet. The run
+    // falls back to those models anyway — without the seed the chat pickers
+    // look empty while three "hardcoded" models silently run. Once seeded
+    // (or cleared by the user), never re-seed this session.
+    const ensembleSelectionSeededRef = useRef(false);
+    useEffect(() => {
+        if (!providerConfigsLoaded || ensembleSelectionSeededRef.current) return;
+        if (ensembleModelSelection && ensembleModelSelection.length > 0) {
+            ensembleSelectionSeededRef.current = true;
+            return;
+        }
+        const ready = providerConfigs.filter(c => c.isEnabled && c.apiKey.trim().length > 0);
+        if (ready.length === 0) return;
+        const seeded: EnsembleModelSelection = [];
+        for (const c of ready) {
+            const models = (c.ensembleModels?.filter(m => c.models.includes(m)) ?? []).slice(0, 3);
+            if (models.length === 0 && c.selectedModel && c.models.includes(c.selectedModel)) models.push(c.selectedModel);
+            for (const m of models) {
+                if (seeded.length >= 3) break;
+                const key = `${c.id}::${m}`;
+                if (!seeded.some(e => `${e.providerId}::${e.model}` === key)) seeded.push({ providerId: c.id, model: m });
+            }
+            if (seeded.length >= 3) break;
+        }
+        if (seeded.length > 0) {
+            ensembleSelectionSeededRef.current = true;
+            handleSetEnsembleModelSelection(seeded);
+        }
+    }, [providerConfigsLoaded, providerConfigs, ensembleModelSelection, handleSetEnsembleModelSelection]);
+
     // Custom prompt overrides (prompt editor) — persist so they survive reloads.
     const handleSetCustomEnsemblePrompt = useCallback((prompt: string | null) => {
         setCustomEnsemblePrompt(prompt);
