@@ -169,6 +169,18 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
     });
     const [error, setError] = useState<string | null>(null);
 
+    // Runs-per-day estimate for the frequency modes (selected days only).
+    // NOTE: this must live BEFORE the `if (!isVisible) return null;` early
+    // return — the modal stays mounted and is toggled via isVisible, so a
+    // hook after the conditional return changes the hook count when the
+    // editor opens ("Rendered more hooks than during the previous render").
+    const runsPerDay = useMemo(() => {
+        const dayCount = Math.max(1, scheduleDays.length) / 7;
+        if (frequencyMode === 'minutes') return Math.round((1440 / Math.max(1, frequencyEvery)) * dayCount);
+        if (frequencyMode === 'hours') return Math.round((24 / Math.max(1, frequencyEvery)) * dayCount);
+        return dayCount;
+    }, [frequencyMode, frequencyEvery, scheduleDays.length]);
+
     useEscapeClose(isVisible, onClose);
     if (!isVisible) return null;
 
@@ -178,14 +190,6 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
     const effectiveCron = advancedCron.trim() ? advancedCron.trim() : generatedCron;
     const cronValid = parseCron(effectiveCron) !== null;
     const nextRun = cronValid ? nextCronTime(effectiveCron, new Date()) : null;
-
-    // Runs-per-day estimate for the frequency modes (selected days only).
-    const runsPerDay = useMemo(() => {
-        const dayCount = Math.max(1, scheduleDays.length) / 7;
-        if (frequencyMode === 'minutes') return Math.round((1440 / Math.max(1, frequencyEvery)) * dayCount);
-        if (frequencyMode === 'hours') return Math.round((24 / Math.max(1, frequencyEvery)) * dayCount);
-        return dayCount;
-    }, [frequencyMode, frequencyEvery, scheduleDays.length]);
 
     // Lens mode needs exactly 3 DISTINCT models; normal mode needs 1-3.
     const requiredSelections = useLenses ? 3 : 1;
