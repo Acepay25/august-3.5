@@ -92,6 +92,37 @@ export interface LearningRule {
 }
 
 /**
+ * A single markdown file in the Trader Notebook (Settings → Personal edge).
+ * The harness AND the user write these; every enabled file's full content is
+ * injected into analyst, moderator, and post-mortem prompts so the ensemble
+ * reasons with the user's accumulated experience (not just extracted rules).
+ */
+export interface MemoryFile {
+  id: string;
+  folderId: string;
+  /** File name including the .md extension (e.g. "memory.md"). */
+  name: string;
+  content: string;
+  /** When true the full content is injected into prompts. */
+  enabled: boolean;
+  /**
+   * Harness-managed file (trade diary, profile memory, recurring mistakes) —
+   * the app rewrites these; the UI labels them "auto" so the user knows.
+   */
+  autoManaged?: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** A folder in the Trader Notebook (profile, trader-diary, …). */
+export interface MemoryFolder {
+  id: string;
+  name: string;
+  /** Lower-order folders are injected first (profile is always first). */
+  order: number;
+}
+
+/**
  * Enhanced structured rule with enforceable constraints
  */
 export interface StructuredRule extends LearningRule {

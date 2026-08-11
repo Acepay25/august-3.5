@@ -8,6 +8,8 @@ import * as ensembleService from '../services/providers/ensembleService';
 import * as MemoryService from '../services/learning/MemoryService';
 import { jobQueue, JobType } from '../services/infrastructure/JobQueueService';
 import { buildSeverityPostMortemContext } from '../services/learning/InsightExtractionService';
+import { appendDiaryEntry, syncRecurringMistakes, writeModelNote } from '../services/learning/MemoryFilesService';
+import { writeNotebookNoteFromPostMortem } from '../services/learning/NotebookWriterService';
 import { MAX_TRADE_SUMMARIES } from './useTradeLogging';
 import { saveThinkingBatch, buildThinkingRecordId, getThinkingTradeId } from '../services/infrastructure/ThinkingStoreService';
 import { ProviderConfig } from '../types/provider';
@@ -609,6 +611,42 @@ Please investigate this discrepancy in your analysis.
                     jobQueue.addJob(JobType.EXTRACT_RULES, tradeWithPM);
                 } catch (insightError) {
                     console.error('[AI Learning] Failed to queue background jobs:', insightError);
+                }
+
+                // TRADER NOTEBOOK (memory files): append the closed trade to
+                // its symbol diary and re-sync the recurring-mistakes file so
+                // the NEXT analysis reads the accumulated outcome. Best-effort
+                // — the report is already saved, a diary failure must never
+                // fail the post-mortem.
+                try {
+                    const notebookUser = localStorage.getItem('last_active_user') || 'default';
+                    await appendDiaryEntry({ ...tradeToUpdate, postMortem: finalPostMortemReport }, notebookUser);
+                    await syncRecurringMistakes(loggedTradesRef.current, notebookUser);
+                } catch (notebookError) {
+                    console.warn('[TraderNotebook] Memory-file sync failed (non-fatal):', notebookError);
+                }
+
+                // TRADER NOTEBOOK (AI writer): distill the post-mortem into a
+                // timeless knowledge note — the model may create its own
+                // folder and file (sanitized + deduped by writeModelNote).
+                // Uses the memory provider when configured, else the first
+                // ready analyst provider. Best-effort: the diary above is the
+                // guaranteed record.
+                try {
+                    const notebookUser = localStorage.getItem('last_active_user') || 'default';
+                    const writerConfig = memoryConfig ?? enabledProviders[0]?.config;
+                    if (writerConfig) {
+                        const note = await writeNotebookNoteFromPostMortem(
+                            { ...tradeToUpdate, postMortem: finalPostMortemReport },
+                            writerConfig
+                        );
+                        if (note) {
+                            const created = await writeModelNote(note, notebookUser);
+                            console.log('[TraderNotebook] AI wrote notebook note:', created.name, 'in', note.folder);
+                        }
+                    }
+                } catch (notebookError) {
+                    console.warn('[TraderNotebook] AI note write failed (non-fatal):', notebookError);
                 }
             }
 

@@ -1,6 +1,5 @@
 import {
-   MASTER_TRADE_PLAN_JSON_SCHEMA,
-   PURE_AI_TRADE_PLAN_JSON_SCHEMA
+   MASTER_TRADE_PLAN_MARKDOWN,
 } from '../schemas';
 import { ANALYST_PERSONA_PROMPT } from './analysisPrompts';
 
@@ -186,31 +185,32 @@ Assign the confidence grade the evidence supports; do not inflate confidence to 
 
 Immediately after your verdict text, on its own line, output exactly: </DEBATE_END>
 
-10. **MANDATORY JSON OUTPUT** (Last — must come AFTER </DEBATE_END>)
+10. **FINAL TRADE PLAN (MARKDOWN)** (Last — must come AFTER </DEBATE_END>)
 
-**MANDATORY JSON OUTPUT (CRITICAL - READ CAREFULLY):**
+After the verdict prose, output the final trade plan as MARKDOWN — labeled bullet lines, NO JSON anywhere:
 
-⚠️ **FAILURE TO OUTPUT VALID JSON WILL BREAK THE SYSTEM** ⚠️
+**FINAL TRADE PLAN**
+- **Coin:** BTCUSDT
+- **Direction:** Long
+- **Entry:** 95000 — Support retest
+- **Stop Loss:** 94500
+- **Take Profit 1:** 96000 (2%)
+- **Take Profit 2:** 97000 (4%)
+- **Confidence:** Medium
+- **Probability:** 65%
+- **Grade:** B
+- **Strategy:** One-line strategy summary
+- **Pattern Family:** Family C
+- **Support:** 94500 (4h), 94000 (1h)
+- **Resistance:** 96000 (4h), 97000 (1h)
+- **Validity Window:** 4h
+- **Invalidation:** What breaks this trade
 
-At the ABSOLUTE END of your response, you MUST output the final trade plan wrapped in <JSON_PLAN> tags.
-The JSON MUST be:
-   - Complete (no truncation, no "..." placeholders except in description fields)
-   - Valid JSON syntax (proper quotes, commas, brackets)
-   - The LAST thing in your response (no text after </JSON_PLAN>)
-   
-   Even if the decision is "Avoid", you must fill ALL fields with actual values.
-
-   **EXACT FORMAT REQUIRED:**
-   <JSON_PLAN>
-${MASTER_TRADE_PLAN_JSON_SCHEMA}
-   </JSON_PLAN>
-
-   **JSON GENERATION RULES:**
-   1. Do NOT use markdown code blocks - use <JSON_PLAN> and </JSON_PLAN> tags ONLY
-   2. Do NOT write any text after </JSON_PLAN>
-   3. Do NOT stop mid-JSON - complete the entire object
-   4. Use actual numeric values, not placeholders like "..."
-   5. Ensure all brackets and braces are properly closed
+**PLAN RULES:**
+1. The plan is the ABSOLUTE LAST thing in your response.
+2. Use real values — never "..." or "N/A" placeholders.
+3. If the decision is Avoid, still fill the plan with the concrete setup and set Confidence to "Avoid".
+4. Keep every field on ONE line — the harness parses these labels.
 `;
 
 export const PURE_AI_MODERATOR_PROMPT = `
@@ -240,29 +240,32 @@ Generate the entire dialogue in one response:
 {{DIALOGUE_INSTRUCTIONS}}
    - **Moderator (You):** Synthesize the raw intelligence.
 
-**MANDATORY JSON OUTPUT (CRITICAL - READ CAREFULLY):**
+**FINAL TRADE PLAN (MARKDOWN) — LAST THING IN YOUR RESPONSE:**
 
-⚠️ **FAILURE TO OUTPUT VALID JSON WILL BREAK THE SYSTEM** ⚠️
+After the verdict prose, output the final trade plan as MARKDOWN — labeled bullet lines, NO JSON anywhere:
 
-At the ABSOLUTE END of your response, you MUST output the final trade plan wrapped in <JSON_PLAN> tags.
-The JSON MUST be:
-- Complete (no truncation)
-- Valid JSON syntax (proper quotes, commas, brackets)
-- The LAST thing in your response (no text after </JSON_PLAN>)
+**FINAL TRADE PLAN**
+- **Coin:** BTCUSDT
+- **Direction:** Long
+- **Entry:** 95000 — Key support level
+- **Stop Loss:** 94500
+- **Take Profit 1:** 96000 (2%)
+- **Take Profit 2:** 97000 (4%)
+- **Confidence:** Medium
+- **Probability:** 65%
+- **Grade:** B
+- **Strategy:** One-line strategy summary
+- **Pattern Family:** Pure AI Analysis
+- **Support:** 94500 (4h), 94000 (1h)
+- **Resistance:** 96000 (4h), 97000 (1h)
+- **Validity Window:** 4h
+- **Invalidation:** What breaks this trade
 
-For 'detectedPatternFamily', use "Pure AI Analysis" or describe your custom pattern (unless the Market Classification Families toggle is enabled — then assign Family A, B, C, or Omega as instructed above).
-
-**EXACT FORMAT REQUIRED:**
-<JSON_PLAN>
-${PURE_AI_TRADE_PLAN_JSON_SCHEMA}
-</JSON_PLAN>
-
-**JSON GENERATION RULES:**
-1. Do NOT use markdown code blocks - use <JSON_PLAN> and </JSON_PLAN> tags ONLY
-2. Do NOT write any text after </JSON_PLAN>
-3. Do NOT stop mid-JSON - complete the entire object
-4. Use actual numeric values for prices, not "..." placeholders
-5. Ensure all brackets and braces are properly closed
+**PLAN RULES:**
+1. The plan is the ABSOLUTE LAST thing in your response.
+2. Use real values — never "..." or "N/A" placeholders.
+3. If the decision is Avoid, still fill the plan with the concrete setup and set Confidence to "Avoid".
+4. Keep every field on ONE line — the harness parses these labels.
 `;
 
 /**
@@ -410,17 +413,16 @@ You are the Master Strategist. A REAL debate between the expert analysts ({{ANAL
 **MANDATORY OUTPUT FORMAT (STRICT ORDER):**
 1. **MODERATOR VERDICT** — readable prose (2-4 paragraphs): direction, entry zone with conditions, stop loss, take profit targets, probability %, confidence grade, and the key risks that survived the debate.
 2. On its own line immediately after the verdict, output exactly: </DEBATE_END>
-3. Then output the final structured trade plan wrapped in <JSON_PLAN> and </JSON_PLAN> tags.
+3. Then the final trade plan as MARKDOWN — labeled bullet lines, NO JSON anywhere.
 
-**JSON RULES (CRITICAL — FAILURE BREAKS THE SYSTEM):**
-- The <JSON_PLAN> block MUST be the ABSOLUTE LAST thing in your response (no text after </JSON_PLAN>).
-- Complete JSON only — never truncate, never use "N/A", "..." or empty arrays for price fields.
-- If the verdict is AVOID/NO TRADE, still fill the JSON with the concrete setup the analysts proposed and set confidence to "Avoid" with a low probability.
+**PLAN RULES (CRITICAL — THE SYSTEM PARSES THESE LABELS):**
+- The plan block MUST be the ABSOLUTE LAST thing in your response (no text after the last line).
+- Complete values only — never truncate, never use "N/A", "..." or empty placeholders.
+- If the verdict is AVOID/NO TRADE, still fill the plan with the concrete setup the analysts proposed and set confidence to "Avoid" with a low probability.
+- Keep every field on ONE line.
 
 **EXACT FORMAT REQUIRED:**
-<JSON_PLAN>
-${MASTER_TRADE_PLAN_JSON_SCHEMA}
-</JSON_PLAN>
+${MASTER_TRADE_PLAN_MARKDOWN}
 `;
 
 /**
@@ -437,7 +439,7 @@ You are the Master Strategist. A debate between expert analysts ({{ANALYSTS}}) h
 **MANDATORY OUTPUT FORMAT (STRICT ORDER):**
 1. **MODERATOR VERDICT** — concise readable prose (1-2 paragraphs): direction, entry zone, stop loss, take profit targets, probability %, confidence grade, and key risks.
 2. On its own line immediately after the verdict, output exactly: </DEBATE_END>
-3. Then the final structured trade plan wrapped in <JSON_PLAN> and </JSON_PLAN> tags.
+3. Then the final trade plan as MARKDOWN — labeled bullet lines, NO JSON anywhere.
 
 **SELF-REFINE CHECKLIST (run ONCE on your draft verdict before outputting it):**
 - Did you address EVERY analyst's key claim, including the one you disagree with?
@@ -447,16 +449,15 @@ You are the Master Strategist. A debate between expert analysts ({{ANALYSTS}}) h
 - Does the probability match the confidence grade you assigned?
 Only refine when a checklist item fails — do not restate the whole debate.
 
-**JSON RULES (CRITICAL — FAILURE BREAKS THE SYSTEM):**
-- The <JSON_PLAN> block MUST be the ABSOLUTE LAST thing in your response (no text after </JSON_PLAN>).
-- Complete JSON only — never truncate, never use "N/A", "..." or empty arrays for price fields.
-- If the verdict is AVOID/NO TRADE, still fill the JSON with the concrete setup the analysts proposed and set confidence to "Avoid" with a low probability.
+**PLAN RULES (CRITICAL — THE SYSTEM PARSES THESE LABELS):**
+- The plan block MUST be the ABSOLUTE LAST thing in your response.
+- Complete values only — never truncate, never use "N/A", "..." or empty placeholders.
+- If the verdict is AVOID/NO TRADE, still fill the plan with the concrete setup the analysts proposed and set confidence to "Avoid" with a low probability.
 - Respect any Gate confidence cap mentioned in the transcript.
+- Keep every field on ONE line.
 
 **EXACT FORMAT REQUIRED:**
-<JSON_PLAN>
-${MASTER_TRADE_PLAN_JSON_SCHEMA}
-</JSON_PLAN>
+${MASTER_TRADE_PLAN_MARKDOWN}
 `;
 
 /**

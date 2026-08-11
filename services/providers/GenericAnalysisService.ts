@@ -29,6 +29,7 @@ import {
 } from './GenericProviderService';
 import { TASK_BUDGETS } from './taskBudgets';
 import { getPrompt } from '../infrastructure/PromptOverrideService';
+import { getMemoryFilesContext } from '../learning/MemoryFilesService';
 
 import { isVisionModel } from '../../utils/modelUtils';
 
@@ -762,6 +763,13 @@ export async function conductPostMortem(
     const postTradeContext = postTradeImageSummaries?.length ? `** VERIFIED TRADE OUTCOME DATA (HIGHEST PRIORITY):**\n---\n${postTradeImageSummaries.join('\n\n---\n\n')}\n---\n` : '';
     const tradeHistoryContext = finalTradeSummary ? `**PATTERN MEMORY LIBRARY (Historical Context):**\n${truncateTextToTokens(finalTradeSummary)}` : "No past trades logged.";
     const severityContextBlock = severityContext ? `\n${severityContext}\n` : '';
+    // TRADER NOTEBOOK (memory files): the user's notes + trade diary are
+    // replayed during the post-mortem too — the report learns from the same
+    // accumulated knowledge the analysis used.
+    const memoryFilesBlock = (() => {
+        const ctx = getMemoryFilesContext();
+        return ctx ? `\n${ctx}\n` : '';
+    })();
 
     const origEntry = previousMessage.analysis?.entryPoints?.[0]?.price || 'N/A';
     const origSL = previousMessage.analysis?.stopLoss || 'N/A';
@@ -856,7 +864,7 @@ ${userFeedbackBlock}
 
 ${tradeHistoryContext}
 
-${severityContextBlock}${groundingDirective}
+${severityContextBlock}${memoryFilesBlock}${groundingDirective}
 
 ${getPrompt('postmortem.entry_not_hit_questions', ENTRY_NOT_HIT_ANALYSIS_QUESTIONS)}`;
     } else if (outcome === TradeOutcome.WIN) {
@@ -881,7 +889,7 @@ ${feedbackBlock}
 
 ${tradeHistoryContext}
 
-${severityContextBlock}${groundingDirective}
+${severityContextBlock}${memoryFilesBlock}${groundingDirective}
 
 **Instructions:**
 Answer **all** of the following **MANDATORY WIN ANALYSIS QUESTIONS**:
@@ -919,7 +927,7 @@ ${feedbackBlock}
 
 ${tradeHistoryContext}
 
-${severityContextBlock}${groundingDirective}
+${severityContextBlock}${memoryFilesBlock}${groundingDirective}
 
 ${extendedSLZoneContext}
 

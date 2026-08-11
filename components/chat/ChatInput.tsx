@@ -4,6 +4,8 @@ import ImagePreview from '../shared/ImagePreview';
 import { PlusIcon, LoadingIcon, SendIcon, StopIcon, ChevronDownIcon, ChevronUpIcon, BotIcon } from '../shared/Icons';
 import { ImageMetadata, AnalystLensConfig, AnalystRole } from '../../types';
 import { EnsembleModelSelection, ANALYST_ROLE_DEFINITIONS, getLensPromptForRole } from '../../services/ui/AnalystLensService';
+import { RegimeProviderStatsMap } from '../../services/learning/SetupMemoryService';
+import GlobalLearningService from '../../services/learning/GlobalLearningService';
 import { MASTER_ANALYSIS_PROMPT } from '../../constants/prompts';
 import PromptEditorModal from '../settings/PromptEditorModal';
 import TeamModal from './TeamModal';
@@ -61,6 +63,12 @@ interface ChatInputProps {
     // Stored app-wide (Preferences); falls back to the first ready model.
     selectedChatModel: string;
     setSelectedChatModel: (modelId: string) => void;
+    /**
+     * Regime-matched provider win rates for the CURRENT market regime —
+     * feeds the lens auto-assign so routing prefers who wins in THIS
+     * regime, not blended all-time.
+     */
+    regimeProviderStats?: RegimeProviderStatsMap;
     // Fresh-session layout: center the input until the first message exists.
     centered?: boolean;
 }
@@ -102,6 +110,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
     isEnsembleEnabled,
     setIsEnsembleEnabled,
     selectedChatModel,
+    regimeProviderStats,
     setSelectedChatModel,
     // Fresh-session layout: static centered input until the first message
     // exists, then it docks at the bottom.
@@ -247,6 +256,9 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
         | null;
     const [promptEditor, setPromptEditor] = useState<PromptEditorTarget>(null);
     const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
+    // ⑥: the composer team dropdown — quick roster + auto-assign, with the
+    // modal one click away for full role editing.
+    const [isTeamDropdownOpen, setIsTeamDropdownOpen] = useState(false);
 
     const openLensPromptEditor = (role: AnalystRole) => {
         const style = (lensConfig.tradingStyle === 'auto' ? 'swing' : lensConfig.tradingStyle) as 'position' | 'swing' | 'scalp';
@@ -542,16 +554,128 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                 )}
                             </div>
 
-                            {/* Team — one-click launch modal for the analyst roster */}
-                            <button
-                                type="button"
-                                onClick={() => setIsTeamModalOpen(true)}
-                                className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 lg:py-2 rounded-full transition-all text-xs sm:text-sm bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700 focus-visible:ring-2 focus-visible:ring-cyan-400"
-                                title="Configure the analyst team (roles, models, style)"
-                                aria-label="Configure analyst team"
-                            >
-                                <span className="font-medium">Team</span>
-                            </button>
+                            {/* Team — composer dropdown: quick roster with
+                                regime-matched win rates + auto-assign; full
+                                role editing stays one click away in the modal */}
+                            <div className="relative">
+                                <button
+                                    type="button"
+                                    onClick={() => { setIsTeamDropdownOpen(v => !v); setIsTeamModalOpen(false); }}
+                                    className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 lg:py-2 rounded-full transition-all text-xs sm:text-sm focus-visible:ring-2 focus-visible:ring-cyan-400 ${isTeamDropdownOpen ? 'bg-zinc-700 text-white' : 'bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700'}`}
+                                    title="Team: pick analysts (win rate matched to the current regime), auto-assign, or edit roles"
+                                    aria-expanded={isTeamDropdownOpen}
+                                    aria-haspopup="menu"
+                                >
+                                    <span className="font-medium">Team</span>
+                                    <ChevronDownIcon className={`w-3 h-3 transition-transform ${isTeamDropdownOpen ? 'rotate-180' : ''}`} />
+                                    {!lensConfig.enabled && (
+                                        <span className="text-[9px] font-mono text-zinc-500">{ensembleModelSelection.filter(e => e.providerId).length}</span>
+                                    )}
+                                </button>
+
+                                {isTeamDropdownOpen && (
+                                    <div role="menu" aria-label="Team roster" className="absolute bottom-full left-0 mb-2 w-72 overflow-hidden rounded-2xl border border-white/10 bg-zinc-950/95 shadow-[0_18px_50px_rgba(0,0,0,0.45)] backdrop-blur-xl animate-fade-in">
+                                        <div className="border-b border-white/10 bg-zinc-900 px-3 py-2.5">
+                                            <div className="text-[10px] font-black uppercase tracking-[0.16em] text-cyan-300">Team</div>
+                                            <div className="mt-1 text-[10px] text-zinc-500">
+                                                {lensConfig.enabled ? 'Lenses on — roles drive the roster.' : 'Win rates matched to the current market regime.'}
+                                            </div>
+                                        </div>
+                                        <div className="p-1.5 space-y-0.5 max-h-72 overflow-y-auto custom-scrollbar">
+                                            {providers.filter(p => p.isEnabled && p.apiKey.trim().length > 0).map(provider => {
+                                                const wr = (() => {
+                                                    const s = regimeProviderStats?.get(provider.id);
+                                                    if (s) return { label: `${s.wr.toFixed(0)}% (n=${s.n})`, title: `Win rate in the current regime (${s.n} trades)` };
+                                                    try {
+                                                        const stats = GlobalLearningService.getCalibration()?.granular?.byProvider?.[provider.id];
+                                                        if (stats && stats.total >= 3) {
+                                                            return { label: `${Math.round((stats.wins / stats.total) * 100)}% (n=${stats.total})`, title: 'Overall win rate — no current-regime data yet' };
+                                                        }
+                                                    } catch { /* calibration is best-effort */ }
+                                                    return null;
+                                                })();
+                                                const selected = lensConfig.enabled
+                                                    ? lensConfig.assignments.some(a => a.assignedProvider === provider.id)
+                                                    : ensembleModelSelection.some(e => e.providerId === provider.id);
+                                                return (
+                                                    <button
+                                                        key={provider.id}
+                                                        type="button"
+                                                        disabled={lensConfig.enabled}
+                                                        onClick={() => {
+                                                            const providerConfig = providers.find(p => p.id === provider.id);
+                                                            if (!providerConfig) return;
+                                                            const model = providerConfig.selectedModel || providerConfig.models[0] || '';
+                                                            if (ensembleModelSelection.some(e => e.providerId === provider.id)) {
+                                                                const idx = ensembleModelSelection.findIndex(e => e.providerId === provider.id);
+                                                                const next = [...ensembleModelSelection];
+                                                                if (idx >= 0) { next.splice(idx, 1); next.push({ providerId: '', model: '' }); }
+                                                                setEnsembleModelSelection(next);
+                                                            } else {
+                                                                const next = [...ensembleModelSelection];
+                                                                const empty = next.findIndex(e => !e.providerId);
+                                                                if (empty >= 0) next[empty] = { providerId: provider.id, model };
+                                                                else if (next.length < 3) next.push({ providerId: provider.id, model });
+                                                                setEnsembleModelSelection(next);
+                                                            }
+                                                        }}
+                                                        className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left text-[11px] transition-colors ${
+                                                            selected ? 'bg-zinc-800 text-white' : 'hover:bg-zinc-900 text-zinc-400 hover:text-zinc-200'
+                                                        } ${lensConfig.enabled ? 'cursor-default' : ''}`}
+                                                        title={wr?.title}
+                                                    >
+                                                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${selected ? 'bg-cyan-400' : 'bg-zinc-700'}`} />
+                                                        <span className="truncate font-semibold">{provider.name}</span>
+                                                        <span className="ml-auto shrink-0 font-mono text-[9px] text-zinc-500">{wr?.label ?? 'no stats'}</span>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                        {!lensConfig.enabled && (
+                                            <div className="border-t border-white/10 p-1.5">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const ready = providers.filter(p => p.isEnabled && p.apiKey.trim().length > 0);
+                                                        let ordered = [...ready];
+                                                        if (regimeProviderStats && regimeProviderStats.size > 0) {
+                                                            ordered.sort((a, b) => (regimeProviderStats.get(b.id)?.wr ?? -1) - (regimeProviderStats.get(a.id)?.wr ?? -1));
+                                                        } else {
+                                                            try {
+                                                                const byProvider = GlobalLearningService.getCalibration()?.granular?.byProvider;
+                                                                if (byProvider) {
+                                                                    ordered.sort((a, b) => {
+                                                                        const wa = byProvider[a.id]?.total >= 3 ? byProvider[a.id].wins / byProvider[a.id].total : -1;
+                                                                        const wb = byProvider[b.id]?.total >= 3 ? byProvider[b.id].wins / byProvider[b.id].total : -1;
+                                                                        return wb - wa;
+                                                                    });
+                                                                }
+                                                            } catch { /* best-effort */ }
+                                                        }
+                                                        const top = ordered.slice(0, 3).map(p => ({ providerId: p.id, model: p.selectedModel || p.models[0] || '' }));
+                                                        const next = [...ensembleModelSelection];
+                                                        for (let i = 0; i < 3; i++) next[i] = top[i] ?? { providerId: '', model: '' };
+                                                        setEnsembleModelSelection(next);
+                                                        setIsTeamDropdownOpen(false);
+                                                    }}
+                                                    className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left text-[11px] font-bold text-cyan-400 hover:bg-cyan-500/10 transition-colors"
+                                                >
+                                                    ⚡ Auto-assign by win rate
+                                                </button>
+                                            </div>
+                                        )}
+                                        <div className="border-t border-white/10 p-1.5">
+                                            <button
+                                                type="button"
+                                                onClick={() => { setIsTeamDropdownOpen(false); setIsTeamModalOpen(true); }}
+                                                className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left text-[11px] font-semibold text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200 transition-colors"
+                                            >
+                                                Edit roles & lenses…
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                             </>}
 
                         </div>
@@ -742,6 +866,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                 setIsEnsembleEnabled={setIsEnsembleEnabled}
                 lensConfig={lensConfig}
                 setLensConfig={setLensConfig}
+                regimeProviderStats={regimeProviderStats}
                 ensembleModelSelection={ensembleModelSelection}
                 setEnsembleModelSelection={setEnsembleModelSelection}
                 onClose={() => setIsTeamModalOpen(false)}

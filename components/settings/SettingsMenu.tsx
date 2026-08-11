@@ -16,6 +16,7 @@ import { ToggleSwitch } from '../shared/ToggleSwitch';
 import { ActivityIcon, AISettingsIcon, BrainIcon, CloseIcon, EditIcon, HistoryIcon, BookmarkIcon, SettingsIcon, UserIcon, ExportIcon, SearchIcon, SwitchUserIcon, CodeIcon } from '../shared/Icons';
 import PromptManager from './PromptManager';
 import StrategiesManager from './StrategiesManager';
+import MemoryFilesManager from './MemoryFilesManager';
 
 export type SettingsTab = 'general' | 'models' | 'journal' | 'lenses' | 'instructions' | 'memory' | 'actions' | 'prompts' | 'strategies';
 
@@ -761,6 +762,14 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         memoryConfig={memoryConfig}
                                         onMemoryConfigChange={onMemoryConfigChange}
                                     />
+                                    {/* Trader Notebook — markdown memory files the model reads
+                                        on every analysis (full editor in a fixed-height pane so
+                                        the settings page keeps its scroll). */}
+                                    <div className="border-t border-zinc-800 pt-4">
+                                        <div className="h-[440px]">
+                                            <MemoryFilesManager username={username} />
+                                        </div>
+                                    </div>
                                 </div>
                             )}
 

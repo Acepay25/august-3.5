@@ -15,14 +15,15 @@ import { jobQueue } from '../../services/infrastructure/JobQueueService'; // Imp
 import { ConfidenceCalibration, LearningRule } from '../../types';
 import {
     GATE_SCAN_JSON_SCHEMA,
-    MASTER_TRADE_PLAN_JSON_SCHEMA,
+    MASTER_TRADE_PLAN_MARKDOWN,
     DUAL_SCENARIO_JSON_SCHEMA
 } from '../../constants/schemas';
 
-// Map schemas for display
+// Map schemas for display — the trade plan is MARKDOWN now (no JSON anywhere
+// in the output contract), shown as text.
 const validationSchemas: Record<string, any> = {
     tradeValidation: JSON.parse(GATE_SCAN_JSON_SCHEMA),
-    marketAnalysis: JSON.parse(MASTER_TRADE_PLAN_JSON_SCHEMA),
+    marketAnalysis: MASTER_TRADE_PLAN_MARKDOWN,
     postMortem: JSON.parse(DUAL_SCENARIO_JSON_SCHEMA)
 };
 
@@ -368,7 +369,9 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                                 </div>
                                 <div className="flex-1 bg-zinc-800 rounded-xl p-3 font-mono text-[9px] text-zinc-400 overflow-auto border border-white/5 custom-scrollbar">
                                     <div className="whitespace-pre">
-                                        {JSON.stringify(validationSchemas[selectedSchema] || { type: 'object' }, null, 2)}
+                                        {typeof validationSchemas[selectedSchema] === 'string'
+                                            ? validationSchemas[selectedSchema]
+                                            : JSON.stringify(validationSchemas[selectedSchema] || { type: 'object' }, null, 2)}
                                     </div>
                                 </div>
                             </div>

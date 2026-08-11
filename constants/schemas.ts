@@ -16,95 +16,80 @@ export const DUAL_SCENARIO_JSON_SCHEMA = `{
   }
 }`;
 
-export const MASTER_TRADE_PLAN_JSON_SCHEMA = `{
-      "coinName": "BTCUSDT",
-      "direction": "Long/Short",
-      "entryPoints": [{ "price": "95000", "description": "Support retest" }],
-      "stopLoss": "94500",
-      "takeProfit": [{ "price": "96000", "percentage": "2%" }, { "price": "97000", "percentage": "4%" }],
-      "confidence": "Medium",
-      "probability": 65,
-      "strategy": "Trend continuation on pullback",
-      "historicalCorrelation": "Similar to past winning setups",
-      "marketConditions": { 
-          "pattern": "Bull Flag", 
-          "candleBehavior": "Higher lows forming", 
-          "timeframeAlignment": "3 of 4 bullish", 
-          "rsi": "55", 
-          "macd": "Bullish crossover", 
-          "sentiment": "Neutral",
-          "prices": { "5m": "95100", "15m": "95050", "1h": "95000", "4h": "94800" }
-      },
-      "detectedPatterns": [
-          { "name": "Bull Flag", "timeframe": "1h", "type": "Bullish", "confidence": "High", "description": "Consolidating above support" }
-      ],
-      "keyLevels": {
-          "support": ["94500 (4h)", "94000 (1h)"],
-          "resistance": ["96000 (4h)", "97000 (1h)"]
-      },
-      "detectedPatternFamily": "Family C",
-      "grade": "B",
-      "evidence": [
-        { "claim": "1H structure bullish (HH/HL) with EMA20/50 aligned", "sources": ["1H EMA20/50", "RSI(14) 58"], "state": "observed" },
-        { "claim": "Volume confirms the breakout", "sources": ["Volume 1.8x 20-period average"], "state": "partial" }
-      ],
-      "invalidationCriteria": [
-        { "level": "94500", "condition": "4H close below support", "category": "price" },
-        { "level": "6h", "condition": "Entry not triggered before expiry", "category": "time" }
-      ],
-      "devilsAdvocate": {
-        "bearCaseReasons": ["Liquidity sweep risk below entry"],
-        "failureScenarios": ["Wick through 94500 before reversal"],
-        "crowdedTradeWarning": "Funding elevated - long crowd",
-        "riskScore": 45
-      },
-      "levelProbabilities": {
-          "slProbability": 25,
-          "slReasoning": { "indicatorBasis": "RSI/MACD alignment", "volatilityFactor": "ATR within normal range", "patternMemoryInfluence": "Similar setups had 25% SL hit rate", "aiAdjustments": "None" },
-          "tpProbabilities": [
-              { "level": 1, "probability": 70, "reasoning": { "indicatorBasis": "Strong momentum", "volatilityFactor": "Close target", "patternMemoryInfluence": "70% hit rate historically", "aiAdjustments": "+5% for trend strength" } },
-              { "level": 2, "probability": 55, "reasoning": { "indicatorBasis": "Moderate resistance", "volatilityFactor": "Normal range", "patternMemoryInfluence": "55% hit rate", "aiAdjustments": "None" } },
-              { "level": 3, "probability": 35, "reasoning": { "indicatorBasis": "Major resistance zone", "volatilityFactor": "Extended target", "patternMemoryInfluence": "35% hit rate", "aiAdjustments": "-10% for distance" } }
-          ]
-      }
-   }`;
+/**
+ * The moderator's final trade plan — MARKDOWN ONLY (no JSON anywhere in the
+ * output contract). Carries EVERY field the old JSON schema carried, organized
+ * in labeled sections that `parseMarkdownTradePlan` extracts deterministically.
+ * The block itself renders as the card's strategy markdown, so what the model
+ * writes IS what the user sees.
+ */
+export const MASTER_TRADE_PLAN_MARKDOWN = `**FINAL TRADE PLAN**
 
-export const PURE_AI_TRADE_PLAN_JSON_SCHEMA = `{
-   "coinName": "BTCUSDT",
-   "direction": "Long",
-   "entryPoints": [{ "price": "95000", "description": "Key support level" }],
-   "stopLoss": "94500",
-   "takeProfit": [{ "price": "96000", "percentage": "2%" }, { "price": "97000", "percentage": "4%" }],
-   "confidence": "Medium",
-   "probability": 65,
-   "strategy": "Pure AI trend analysis",
-   "historicalCorrelation": "N/A - Pure AI Mode",
-   "marketConditions": { 
-       "pattern": "Custom structure identified", 
-       "candleBehavior": "Bullish momentum", 
-       "timeframeAlignment": "Mixed signals", 
-       "rsi": "55", 
-       "macd": "Bullish", 
-       "sentiment": "Neutral",
-       "prices": { "5m": "95100", "15m": "95050", "1h": "95000", "4h": "94800" }
-   },
-   "detectedPatterns": [
-       { "name": "Custom Pattern", "timeframe": "1h", "type": "Bullish", "confidence": "Medium", "description": "AI-identified structure" }
-   ],
-   "keyLevels": {
-       "support": ["94500 (4h)", "94000 (1h)"],
-       "resistance": ["96000 (4h)", "97000 (1h)"]
-   },
-   "detectedPatternFamily": "Pure AI Analysis",
-   "levelProbabilities": {
-       "slProbability": 25,
-       "slReasoning": { "indicatorBasis": "AI momentum analysis", "volatilityFactor": "ATR assessment", "patternMemoryInfluence": "N/A - Pure AI", "aiAdjustments": "AI confidence adjustment" },
-       "tpProbabilities": [
-           { "level": 1, "probability": 70, "reasoning": { "indicatorBasis": "Strong target identification", "volatilityFactor": "Close target", "patternMemoryInfluence": "N/A - Pure AI", "aiAdjustments": "AI pattern recognition" } },
-           { "level": 2, "probability": 55, "reasoning": { "indicatorBasis": "Extended target analysis", "volatilityFactor": "Normal range", "patternMemoryInfluence": "N/A - Pure AI", "aiAdjustments": "Distance penalty" } }
-       ]
-   }
-}`;
+**Setup**
+- **Coin:** BTCUSDT
+- **Direction:** Long
+- **Grade:** B
+- **Pattern Family:** Family C
+- **Validity Window:** 4h
+
+**Levels**
+- **Entry:** 95000 — Key support retest
+- **Stop Loss:** 94500
+- **Take Profit 1:** 96000 (2%)
+- **Take Profit 2:** 97000 (4%)
+- **Take Profit 3:** 98500 (6%)
+
+**Odds**
+- **Confidence:** Medium
+- **Probability:** 65%
+- **SL Probability:** 25%
+- **TP1 Probability:** 70%
+- **TP2 Probability:** 55%
+- **TP3 Probability:** 35%
+
+**Strategy**
+- **Strategy:** Trend continuation on pullback
+- **Historical Correlation:** Similar to past winning setups
+
+**Market Conditions**
+- **Pattern:** Bull Flag
+- **Candle Behavior:** Higher lows forming
+- **Timeframe Alignment:** 3 of 4 bullish
+- **RSI:** 55
+- **MACD:** Bullish crossover
+- **Sentiment:** Neutral
+- **Prices:** 5m 95100 · 15m 95050 · 1h 95000 · 4h 94800
+
+**Detected Patterns**
+- **Pattern 1:** Bull Flag (1h, bullish, high confidence) — Consolidating above support
+
+**Key Levels**
+- **Support:** 94500 (4h), 94000 (1h)
+- **Resistance:** 96000 (4h), 97000 (1h)
+
+**Dual Scenario**
+- **Bullish Trigger:** 95500 — 4H close above with volume
+- **Bullish Target:** 97000
+- **Bullish Invalidation:** 94500
+- **Bearish Trigger:** 94000 — 4H close below
+- **Bearish Target:** 92000
+- **Bearish Invalidation:** 95500
+- **Selected Scenario:** Bullish — HTF trend bullish, volume supports breakout
+- **Scenario Confidence:** 75%
+
+**Invalidation Criteria**
+- **Invalidation 1:** 94500 (price) — 4H close below support — Bullish thesis dead
+- **Invalidation 2:** 5h30m (time) — No breakout before validity expiry
+
+**Devil's Advocate**
+- **Bear Case:** Liquidity sweep risk below entry
+- **Failure Scenarios:** Wick through 94500 before reversal
+- **Crowded Trade Warning:** Funding elevated — long crowd
+- **Risk Score:** 45
+
+**Evidence**
+- **Evidence 1:** 1H structure bullish (HH/HL) with EMA20/50 aligned — observed — sources: 1H EMA20/50, RSI(14) 58
+- **Evidence 2:** Volume confirms the breakout — partial — sources: Volume 1.8x 20-period average`;
 
 export const GATE_SCAN_JSON_SCHEMA = `{
   "symbol": "BTCUSDT",
