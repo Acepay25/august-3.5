@@ -21,7 +21,7 @@ import { getGateAnalysis, GateOutput } from '../services/validation/GateKeeperSe
 
 // Utils
 import { isQuotaError } from '../utils/errorUtils';
-import { recalculateAnalysisMetrics, sanitizeTradeAnalysis, clampProbabilityToGate } from '../utils/analysisUtils';
+import { recalculateAnalysisMetrics, sanitizeTradeAnalysis, clampProbabilityToGate, parsePrice } from '../utils/analysisUtils';
 import { saveThinkingBatch, buildThinkingRecordId, getThinkingTradeId, getThinkingExemplars } from '../services/infrastructure/ThinkingStoreService';
 import { offlineQueue } from '../services/infrastructure/OfflineQueueService';
 import { notifyAnalysisComplete } from '../services/infrastructure/CompletionNotifications';
@@ -1129,6 +1129,38 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                             insights: capturedGateResult.insights.slice(0, 2)
                         };
                         devLog(`[GateKeeper] Result stored in analysis: cap=${(capturedGateResult.confidenceCap * 100).toFixed(0)}%`);
+                    }
+                    // ========== DETERMINISTIC RISK VETO ==========
+                    // Rules-based veto between the moderator's verdict and the
+                    // final signal (TradingAgents-style: consensus among models
+                    // is not risk control). Hard checks only — no LLM involved.
+                    if (capturedGateResult) {
+                        const vetoNotes: string[] = [];
+                        if (capturedGateResult.pass === false) {
+                            vetoNotes.push('GATE VETO: insufficient data — this signal must not be traded on its own.');
+                        }
+                        const verdictDir = finalAnalysis.direction?.toLowerCase();
+                        const gateDir = capturedGateResult.suggestedDirection?.toLowerCase();
+                        if (gateDir && verdictDir && gateDir !== verdictDir && (capturedGateResult.confidencePenalties?.patternMemory ?? 0) > 0.15) {
+                            vetoNotes.push(`PATTERN-MEMORY CONTRADICTION: gate favors ${capturedGateResult.suggestedDirection}, verdict is ${finalAnalysis.direction}.`);
+                            finalAnalysis.originalConfidence = finalAnalysis.originalConfidence ?? finalAnalysis.confidence;
+                            if (finalAnalysis.confidence === 'High') finalAnalysis.confidence = 'Medium';
+                        }
+                        const hasSL = parsePrice(finalAnalysis.stopLoss || '') > 0;
+                        const hasTP = finalAnalysis.takeProfit?.[0]?.price != null;
+                        if (!hasSL || !hasTP) {
+                            vetoNotes.push('INCOMPLETE PLAN: missing stop loss or take profit — not tradeable as-is.');
+                            if (finalAnalysis.confidence === 'High') {
+                                finalAnalysis.originalConfidence = finalAnalysis.originalConfidence ?? finalAnalysis.confidence;
+                                finalAnalysis.confidence = 'Medium';
+                            }
+                        }
+                        if (vetoNotes.length > 0) {
+                            if (!finalAnalysis.validationWarnings) finalAnalysis.validationWarnings = [];
+                            finalAnalysis.validationWarnings.push(...vetoNotes);
+                            finalAnalysis.riskVeto = vetoNotes.join(' ');
+                            devLog(`[RiskVeto] ${vetoNotes.join(' | ')}`);
+                        }
                     }
                     // ========== END GATE KEEPER RESULT ==========
 

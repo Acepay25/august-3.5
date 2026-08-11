@@ -439,6 +439,14 @@ You are the Master Strategist. A debate between expert analysts ({{ANALYSTS}}) h
 2. On its own line immediately after the verdict, output exactly: </DEBATE_END>
 3. Then the final structured trade plan wrapped in <JSON_PLAN> and </JSON_PLAN> tags.
 
+**SELF-REFINE CHECKLIST (run ONCE on your draft verdict before outputting it):**
+- Did you address EVERY analyst's key claim, including the one you disagree with?
+- Is direction separated from magnitude (direction + size/risk are different claims)?
+- Are ALL numeric claims (prices, R:R, percentages) traceable to the injected data — never invented?
+- Did you state the uncertainty (what would invalidate this call)?
+- Does the probability match the confidence grade you assigned?
+Only refine when a checklist item fails — do not restate the whole debate.
+
 **JSON RULES (CRITICAL — FAILURE BREAKS THE SYSTEM):**
 - The <JSON_PLAN> block MUST be the ABSOLUTE LAST thing in your response (no text after </JSON_PLAN>).
 - Complete JSON only — never truncate, never use "N/A", "..." or empty arrays for price fields.
