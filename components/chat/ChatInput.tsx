@@ -6,6 +6,7 @@ import { ImageMetadata, AnalystLensConfig, AnalystRole } from '../../types';
 import { EnsembleModelSelection, ANALYST_ROLE_DEFINITIONS, getLensPromptForRole } from '../../services/ui/AnalystLensService';
 import { MASTER_ANALYSIS_PROMPT } from '../../constants/prompts';
 import PromptEditorModal from '../settings/PromptEditorModal';
+import TeamModal from './TeamModal';
 
 import { ProviderConfig } from '../../types/provider';
 
@@ -245,6 +246,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
         | { kind: 'lens'; role: AnalystRole; defaultPrompt: string }
         | null;
     const [promptEditor, setPromptEditor] = useState<PromptEditorTarget>(null);
+    const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
 
     const openLensPromptEditor = (role: AnalystRole) => {
         const style = (lensConfig.tradingStyle === 'auto' ? 'swing' : lensConfig.tradingStyle) as 'position' | 'swing' | 'scalp';
@@ -539,6 +541,17 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                     </div>
                                 )}
                             </div>
+
+                            {/* Team — one-click launch modal for the analyst roster */}
+                            <button
+                                type="button"
+                                onClick={() => setIsTeamModalOpen(true)}
+                                className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 lg:py-2 rounded-full transition-all text-xs sm:text-sm bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700 focus-visible:ring-2 focus-visible:ring-cyan-400"
+                                title="Configure the analyst team (roles, models, style)"
+                                aria-label="Configure analyst team"
+                            >
+                                <span className="font-medium">Team</span>
+                            </button>
                             </>}
 
                         </div>
@@ -719,6 +732,19 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                     setPromptEditor(null);
                 }}
                 onClose={() => setPromptEditor(null)}
+            />
+
+            {/* Team launch modal */}
+            <TeamModal
+                isOpen={isTeamModalOpen}
+                providers={providers}
+                isEnsembleEnabled={isEnsembleEnabled}
+                setIsEnsembleEnabled={setIsEnsembleEnabled}
+                lensConfig={lensConfig}
+                setLensConfig={setLensConfig}
+                ensembleModelSelection={ensembleModelSelection}
+                setEnsembleModelSelection={setEnsembleModelSelection}
+                onClose={() => setIsTeamModalOpen(false)}
             />
         </div>
     );
