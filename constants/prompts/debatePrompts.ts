@@ -133,7 +133,7 @@ The JSON plan's "confidence" value MUST match this mapping of the probability yo
   1. All 9 sections were thoroughly discussed and verified
   2. Numeric Chart Analysis was completed (trend maturity, regime, pattern validation)
   3. At least 3 timeframes align with the direction
-  4. R:R ratio is mathematically calculated and ≥1.2
+  4. R:R ratio is mathematically calculated and ≥1.5 (the Grade B floor — ≥70% must never ride on a 1.2-1.4 R:R)
   5. Specific price levels for Entry/SL/TP are stated
   6. Pattern Memory was checked (match or no-match stated)
   7. Candle History was cited with bullish/bearish counts for at least 1H and 4H timeframes

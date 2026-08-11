@@ -52,8 +52,13 @@ abstract. You are the desk.
 export const RISK_MANAGEMENT_RULES = `
 **MANDATORY RISK MANAGEMENT & MATH:**
 1. **R:R Calculation:** You MUST calculate Risk/Reward Ratio. (Target - Entry) / (Entry - Stop Loss).
-2. **1.2x Rule:** A valid trade MUST have R:R >= 1.2.
-3. **Conditionality:** If R:R < 1.2, mark as "CONDITIONAL" or "Avoid" until entry improves.
+2. **R:R Confidence Ladder (ONE source of truth, mirrors the validation gate):**
+   | Confidence | Min R:R |
+   |------------|---------|
+   | High       | 2.0:1   |
+   | Medium     | 1.5:1   |
+   | Low        | 1.2:1   |
+3. **1.2x Floor:** A trade with R:R < 1.2 is INVALID — mark "CONDITIONAL" or "Avoid" until entry improves.
 4. **Percentages:** Calculate and output precise % gain for Targets and % loss for Stop Loss.
 `;
 
@@ -74,7 +79,7 @@ export const ACCURACY_MODE_PROMPT = `
 You are operating in **High-Precision Accuracy Mode (Original)**.
 Shallow analysis is strictly forbidden. You must execute the following 11-layer pipeline before generating any conclusion.
 
-1. **Multi-Frame Market Regime**: Determine if 5m/15m/1h/4h are Trending, Ranging, or Compressing.
+1. **Multi-Frame Market Regime**: Determine if 15m/1h/4h/1d are Trending, Ranging, or Compressing.
 2. **Volume-Based Verification**: Analyze Volume Delta, VWAP tests, and Exhaustion Climax. Reject if volume contradicts price.
 3. **Weighted Ensemble Logic**:
    - Analyst A — Volatility & Macro Focus.
@@ -130,7 +135,7 @@ Recommended structure (flexible):
    Example: "The current regime for BTCUSDT is defined by an EXTREMELY STRONG TREND DOWN (ADX: 53.2). This dictates a strict trend-following bias towards Short trades. The current price ($89601.38) is testing a confluence of technical levels..."
 
 2. **MULTI-TIMEFRAME ANALYSIS** (1 paragraph)
-   Describe how shorter timeframes (5m/15m/1H) compare to higher timeframes (4H/Daily).
+   Describe how shorter timeframes (15m/1H) compare to higher timeframes (4H/1D).
    Note any divergences or conflicting signals. Be specific about RSI, MACD, Stochastic values.
 
 3. **STRATEGY RATIONALE** (1 paragraph)
@@ -236,7 +241,7 @@ If the market can logically do it, don't forbid it — only reduce confidence.
 **INPUT PROVIDED**
 - Symbol (e.g., BTCUSDT)
 - Market Data (price, 24h change, volume)
-- Technical Indicators (RSI, MACD, EMA across 5m/15m/1h/4h)
+- Technical Indicators (RSI, MACD, EMA across 15m/1h/4h/1d)
 - Pattern Memory (historical trades with outcomes)
 
 **PENALTY CHECKS (Calculate ALL)**
@@ -317,7 +322,7 @@ RULE PRIORITY:
 
 **SECTION 1 — MULTI-TIMEFRAME STRUCTURE**
 Provide concise analysis for:
-5m | 15m | 1h | 4h
+15m | 1h | 4h | 1d
 
 **USE NUMERIC CHART REPRESENTATION:**
 You have access to structured chart data. For each timeframe, cross-reference:
@@ -394,7 +399,7 @@ Formatting rules:
 - No strategy names or options terms
 
 **MANDATORY FIELDS (COVER IN PROSE):**
-- marketConditions.prices (5m, 15m, 1h, 4h)
+- marketConditions.prices (15m, 1h, 4h, 1d)
 - detectedPatterns (name, timeframe, type, confidence, description)
 - keyLevels (support/resistance with timeframe)
 
@@ -413,7 +418,7 @@ You MUST explicitly reference this data to validate your thesis.
 | 4H | [trend] | [early/mid/late] | [trend/range/compression/breakout] | [✅/❌] |
 | 1H | [trend] | [early/mid/late] | [regime] | [✅/❌] |
 | 15M | [trend] | [early/mid/late] | [regime] | [✅/❌] |
-| 5M | [trend] | [early/mid/late] | [regime] | [✅/❌] |
+| 1D | [trend] | [early/mid/late] | [regime] | [✅/❌] |
 
 **CHART VALIDATION CRITERIA:**
 1. **Trend Maturity Check:**
@@ -442,7 +447,7 @@ You MUST explicitly reference this data to validate your thesis.
    - State: "Wick bias is [X], volume is [Y], [supports/contradicts] thesis"
 
 5. **Multi-Timeframe Alignment:**
-   - 4H-1H aligned + 15M-5M aligned = High confidence
+   - 4H-1D aligned + 1H-15M aligned = High confidence
    - HTF-LTF divergence = Reduce confidence by 15%
    - State: "MTF alignment: [aligned/divergent]"
 
@@ -474,7 +479,7 @@ Before confirming ANY trade direction, you MUST complete this checklist:
 
 ☐ **Risk:Reward Mathematical Validation**
    Calculate: R:R = (TP Distance) ÷ (SL Distance)
-   R:R MUST be ≥ 1.2 or trade is INVALID
+   R:R MUST be ≥ 1.2 or trade is INVALID (High confidence needs ≥ 2.0, Medium ≥ 1.5)
    Show the math explicitly
 
 ☐ **Pattern Memory Lookup**
@@ -619,7 +624,7 @@ You are a CRYPTO FUTURES analysis engine.
 - invalidationCriteria: 2-3 items, at least one concrete price level that kills the setup
 
 **ANALYSIS STRUCTURE (Keep brief):**
-1. Multi-TF Bias (5m/15m/1h/4h) - One line each
+1. Multi-TF Bias (15m/1h/4h/1d) - One line each
 2. Family Classification (A=Trap, B=Reversal, C=Continuation, Omega=Super Continuation)
 3. Trade Setup: Direction, Entry, SL, TP1/TP2/TP3
 4. Key Risks (2-3 bullet points)

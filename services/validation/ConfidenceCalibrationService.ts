@@ -292,12 +292,34 @@ export const getCalibrationDrift = (
  * This informs the AI about its historical accuracy at each confidence level
  */
 export const generateCalibrationPromptInjection = (
-    calibration: ConfidenceCalibration | undefined
+    calibration: ConfidenceCalibration | undefined,
+    provider?: AIProvider | string
 ): string => {
     if (!calibration) {
         return `
  **CONFIDENCE CALIBRATION DATA**
 No historical data available yet. As trades are logged, this section will show your actual accuracy for each confidence level.
+`;
+    }
+
+    // Per-model calibration: when a provider key is known and that model has
+    // enough trades of its own, inject ONLY its stats — the blended table
+    // corrected model A with model B's errors.
+    const providerKey = provider !== undefined ? String(provider) : undefined;
+    const providerStats = providerKey ? calibration.granular?.byProvider?.[providerKey] : undefined;
+    if (providerStats && providerStats.total >= MIN_TRADES_FOR_CALIBRATION) {
+        const wr = Math.round((providerStats.wins / Math.max(1, providerStats.total)) * 100);
+        return `
+ **CONFIDENCE CALIBRATION DATA (THIS MODEL — ${providerKey})**
+
+YOUR HISTORICAL ACCURACY (this model's OWN trades):
+| Dimension | Win Rate | Trades |
+|-----------|----------|--------|
+| Overall   | ${wr}%    | n=${providerStats.total} |
+
+**INSTRUCTION:** Adjust your confidence ratings based on THIS model's own
+historical accuracy. If your own "High" calls win below expectation, be more
+conservative; if they outperform, your thresholds are well-calibrated.
 `;
     }
 
@@ -1034,16 +1056,18 @@ export const detectStreak = (
         // Determine mandatory cap
         if (streakLength >= 5) {
             mandatoryConfidenceCap = 'Low';
-            promptInjection = ` CRITICAL COLD STREAK: ${streakLength} consecutive losses.
-MANDATORY INSTRUCTION: Cap ALL confidence levels at LOW or AVOID.
-Do NOT suggest "High" or "Medium" confidence under any circumstances.
-Consider recommending the user takes a break from trading.`;
+            // The cap is enforced APP-SIDE (mandatoryConfidenceCap) — the
+            // model must NOT be told to cap its own estimate from the USER's
+            // trading history (correlation without causation; it used to bias
+            // the probability estimate and then entrench itself in the same
+            // calibration stats). The prompt gets factual context + an
+            // explicit anti-bias instruction instead.
+            promptInjection = ` USER JOURNAL CONTEXT: ${streakLength} consecutive losses in the user's log.
+IMPORTANT: this is the USER's trading history, not market evidence. It must NOT change your probability estimate or confidence grade — assess this setup on its own evidence. (The app applies its own caution separately.)`;
         } else if (streakLength >= STREAK_THRESHOLD) {
             mandatoryConfidenceCap = 'Medium';
-            promptInjection = ` COLD STREAK ALERT: ${streakLength} consecutive losses.
-MANDATORY INSTRUCTION: Cap confidence at MEDIUM or lower.
-If you would normally suggest "High" confidence, you MUST downgrade to "Medium".
-User's recent performance suggests increased caution is required.`;
+            promptInjection = ` USER JOURNAL CONTEXT: ${streakLength} consecutive losses in the user's log.
+IMPORTANT: do not let the user's recent results change your confidence — judge this setup on its own evidence. (The app applies its own caution separately.)`;
         }
     } else if (streakType === 'hot' && streakLength >= STREAK_THRESHOLD) {
         // Hot streak doesn't add penalty but informs AI
@@ -1222,18 +1246,14 @@ export const getSessionCalibrationState = (
         sessionPerformance = 'critical';
         mandatoryAction = 'suggest_stop';
         penalty = MAX_SESSION_PENALTY;
-        promptInjection = ` CRITICAL SESSION ALERT: ${todayWins}W-${todayLosses}L today.
-MANDATORY INSTRUCTION: ALL confidence levels capped at LOW.
-Strongly recommend user STOPS TRADING for today.
-Multiple losses indicate conditions are unfavorable or emotional trading has begun.
-If user insists on trading, set confidence to AVOID unless setup is exceptional.`;
+        promptInjection = ` USER SESSION CONTEXT: ${todayWins}W-${todayLosses}L today.
+IMPORTANT: this is the USER's session performance, not market evidence — it must NOT change your probability estimate or confidence grade. Assess the setup on its own evidence. (The app applies its own session caution separately.)`;
     } else if (todayLosses >= SESSION_THRESHOLDS.POOR || todayStreak <= -SESSION_THRESHOLDS.POOR) {
         sessionPerformance = 'poor';
         mandatoryAction = 'cap_confidence';
         penalty = Math.round(MAX_SESSION_PENALTY * 0.6);
-        promptInjection = ` POOR SESSION: ${todayWins}W-${todayLosses}L today (streak: ${todayStreak}).
-INSTRUCTION: Cap confidence at MEDIUM. Do not suggest "High" confidence.
-User should consider reducing position size or taking a break.`;
+        promptInjection = ` USER SESSION CONTEXT: ${todayWins}W-${todayLosses}L today (streak: ${todayStreak}).
+IMPORTANT: this is the USER's session performance, not market evidence — it must NOT change your probability estimate or confidence grade. Assess the setup on its own evidence.`;
     } else if (todayWins > 0 && todayLosses === 0) {
         sessionPerformance = 'good';
         mandatoryAction = 'none';
@@ -1696,7 +1716,7 @@ export const generateEnhancedCalibrationPromptInjection = (
     const penalty = calculateCalibrationPenalty(calibration, proposedConfidence, context);
 
     // 7. Add base calibration summary
-    const baseSummary = generateCalibrationPromptInjection(calibration);
+    const baseSummary = generateCalibrationPromptInjection(calibration, context?.provider);
     if (baseSummary && !baseSummary.includes('No historical data')) {
         parts.unshift(baseSummary);
     }

@@ -144,7 +144,16 @@ export const extractStructuredPlanFromProse = (text: string): ParsedTradePlan =>
         const labelEnd = (dirLabel.index ?? 0) + dirLabel[0].length;
         const lineEnd = text.indexOf('\n', labelEnd);
         const labelLine = text.slice(labelEnd, lineEnd === -1 ? text.length : lineEnd);
-        const echoedOptions = /(?:^|\s)(LONG|SHORT|NEUTRAL|NO\s*TRADE)\b/.test(labelLine);
+        // Echo detection: the template prints "Long/Short/Neutral" (lowercase,
+        // slash-separated) — the old case-sensitive single-word check never
+        // caught it, so a literal template echo parsed as a real verdict.
+        // A line listing ≥2 distinct options means the model echoed the
+        // template, not a decision.
+        const optionWords = ['LONG', 'SHORT', 'NEUTRAL', 'NO TRADE'];
+        const echoedCount = optionWords.filter(w =>
+            new RegExp(w.replace(' ', '\\s+'), 'i').test(labelLine)
+        ).length;
+        const echoedOptions = echoedCount >= 2;
         if (!echoedOptions) plan.direction = mapped;
     }
     if (!plan.direction) {
@@ -202,12 +211,26 @@ export const extractStructuredPlanFromProse = (text: string): ParsedTradePlan =>
     // --- Confidence label ("Confidence: High") ---
     const confMatch = text.match(/(?:Confidence|Conviction)\s*\*{0,2}\s*:\s*\*{0,2}\s*(High|Medium|Med|Low|Avoid)/i);
     if (confMatch) {
-        const c = confMatch[1].toLowerCase();
-        plan.confidence = c === 'med' || c === 'medium' ? 'Medium'
-            : c === 'high' ? 'High'
-            : c === 'low' ? 'Low'
-            : c === 'avoid' ? 'Avoid'
-            : undefined;
+        // Echo guard: "**Family Confidence:** High / Medium / Low" (a template
+        // echo listing multiple options) must not parse as a real label —
+        // the old check turned it into confidence='High'.
+        const labelEnd = (confMatch.index ?? 0) + confMatch[0].length;
+        const lineEnd = text.indexOf('\n', labelEnd);
+        const labelLine = text.slice(labelEnd, lineEnd === -1 ? text.length : lineEnd);
+        const confOptions = ['HIGH', 'MEDIUM', 'LOW', 'AVOID'];
+        const confEchoed = confOptions.filter(w =>
+            new RegExp(w, 'i').test(labelLine)
+        ).length >= 2;
+        if (confEchoed) {
+            plan.confidence = undefined;
+        } else {
+            const c = confMatch[1].toLowerCase();
+            plan.confidence = c === 'med' || c === 'medium' ? 'Medium'
+                : c === 'high' ? 'High'
+                : c === 'low' ? 'Low'
+                : c === 'avoid' ? 'Avoid'
+                : undefined;
+        }
     }
 
     return plan;
@@ -873,7 +896,7 @@ Answer **all** of the following **MANDATORY WIN ANALYSIS QUESTIONS**:
 * Generate **one IF / THEN rule** that captures the WINNING FORMULA
 * Flag for **PATTERN MEMORY STORAGE** with tag: "CONFIRMED_WIN_PATTERN"
 
-**Tone:** Celebratory but analytical. Focus on what to REPEAT.`;
+**Tone:** Analytical and evidence-based — the same forensic standard as a loss. Wins must be justified by entry-time facts, not hindsight. Focus on what to REPEAT and what could still be improved.`;
     } else {
         const feedbackBlock = `**USER FEEDBACK (TRADE OUTCOME):**
 ${correctedStopLoss ? `- Corrected SL: ${correctedStopLoss}` : ''}
@@ -1262,7 +1285,7 @@ export async function getStrategyDescription(
     signal?: AbortSignal
 ): Promise<string> {
     const prompt = `Provide a concise, one-paragraph explanation of the "${strategyName}" trading strategy.`;
-    const result = await sendChatRequest(config, [{ role: 'user', content: prompt }], { signal });
+    const result = await sendChatRequest(config, [{ role: 'user', content: prompt }], { signal, temperature: 0.25 });
     return sanitizeAIResponse(result || "Failed to retrieve strategy description.");
 }
 
@@ -1307,7 +1330,7 @@ You MUST include a 2-3 sentence summary (67 words MAX) of the post-mortem analys
 ${JSON.stringify(tradeForAnalysis, null, 2)}
     `;
 
-    const result = await sendChatRequest(config, [{ role: 'user', content: prompt }], { signal });
+    const result = await sendChatRequest(config, [{ role: 'user', content: prompt }], { signal, temperature: 0.25 });
     return sanitizeAIResponse(result || "Summary generation failed.");
 }
 
@@ -1365,7 +1388,7 @@ Return ONLY the structured summary.
     // maxTokens is raised well above the ~4000-char summary: with the default
     // 4096 tokens, a long reasoning trace can truncate the response BEFORE
     // the answer is emitted, leaving only chain of thought behind.
-    const request = (content: string) => sendChatRequest(config, [{ role: 'user', content }], { signal, maxTokens: 8192 });
+    const request = (content: string) => sendChatRequest(config, [{ role: 'user', content }], { signal, maxTokens: 8192, temperature: 0.25 });
 
     let raw = sanitizeAIResponse(await request(prompt) || '');
     let structured = extractStructuredSummary(raw);
@@ -1488,7 +1511,7 @@ Discard redundant details.
 Return ONLY the new compressed summary text.
     `;
 
-    const result = await sendChatRequest(config, [{ role: 'user', content: prompt }], { maxTokens: 2048, signal });
+    const result = await sendChatRequest(config, [{ role: 'user', content: prompt }], { maxTokens: 2048, signal, temperature: 0.25 });
     return sanitizeAIResponse(result || "Memory compression failed.");
 }
 
@@ -1524,7 +1547,7 @@ ${tradeSummaries}
 Generate the updated Global Memory JSON object.
     `;
 
-    const result = await sendChatRequest(config, [{ role: 'user', content: prompt }], { jsonMode: true, maxTokens: 2048, signal });
+    const result = await sendChatRequest(config, [{ role: 'user', content: prompt }], { jsonMode: true, maxTokens: 2048, signal, temperature: 0.25 });
     try {
         const parsed = parseGlobalMemory(extractAndParseJson(result) || {});
         if (parsed) return parsed;

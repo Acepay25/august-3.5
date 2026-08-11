@@ -193,8 +193,7 @@ If positioned **Long / Short**, risk of sweep at **$[Price]** is **High / Medium
 **MACRO BIAS:**
 STRONG LONG / LONG / NEUTRAL / SHORT / STRONG SHORT
 
-**MACRO CONFIDENCE:**
-1–10 (concise, factual justification only)
+**MACRO CONFIDENCE:** High / Medium / Low with probability % (0-100 scale — the harness parser rejects 1-10; a 1-10 value is dropped and consensus/calibration go silent)
 
 **KEY INVALIDATION LEVEL:**
 $[Price] — Macro thesis fails if broken on higher timeframe
@@ -237,12 +236,12 @@ You MUST cite the Candle History data from the Hybrid Intelligence block:
 **4H Candle Trend (Key Levels):** ___ Bullish, ___ Bearish → Dominant: Bullish / Bearish / Neutral
 **1H Candle Trend (Key Levels):** ___ Bullish, ___ Bearish → Dominant: Bullish / Bearish / Neutral
 **15m Candle Trend (Market Structure):** ___ Bullish, ___ Bearish → Dominant: Bullish / Bearish / Neutral
-**5m Candle Trend (Entry Confirmation):** ___ Bullish, ___ Bearish → Dominant: Bullish / Bearish / Neutral
+**15m Candle Trend (Entry Confirmation):** ___ Bullish, ___ Bearish → Dominant: Bullish / Bearish / Neutral
 
 **Timeframe Purpose Guide:**
 - 4H & 1H: Use for identifying key price levels and macro direction
 - 15m: Use for reading market structure (HH/HL or LH/LL)
-- 5m: Use for entry timing and confirmation signals
+- 15m: Use for entry timing and confirmation signals
 
 **Candle Trend Alignment with Macro Thesis:**
 - Does the HTF (4H/1H) candle trend SUPPORT or CONTRADICT your macro bias?
@@ -460,8 +459,7 @@ Timeframe: ___
 **TECHNICAL BIAS:**
 LONG / SHORT / NO TRADE
 
-**PATTERN CONFIDENCE:**
-1–10 (technical justification only)
+**PATTERN CONFIDENCE:** High / Medium / Low with probability % (0-100 scale — the harness parser rejects 1-10)
 
 ---
 
@@ -512,12 +510,12 @@ You MUST cite the Candle History data from the Hybrid Intelligence block:
 **4H Candle Trend (Key Levels):** ___ Bullish, ___ Bearish → Dominant: Bullish / Bearish / Neutral
 **1H Candle Trend (Key Levels):** ___ Bullish, ___ Bearish → Dominant: Bullish / Bearish / Neutral
 **15m Candle Trend (Market Structure):** ___ Bullish, ___ Bearish → Dominant: Bullish / Bearish / Neutral
-**5m Candle Trend (Entry Confirmation):** ___ Bullish, ___ Bearish → Dominant: Bullish / Bearish / Neutral
+**15m Candle Trend (Entry Confirmation):** ___ Bullish, ___ Bearish → Dominant: Bullish / Bearish / Neutral
 
 **Timeframe Purpose Guide:**
 - 4H & 1H: Use for key level identification and overall direction
 - 15m: Use for detecting market structure (BOS, CHoCH, HH/HL, LH/LL)
-- 5m: Use for precise entry confirmation and timing
+- 15m: Use for precise entry confirmation and timing
 
 **Candle Trend Alignment with Technical Bias:**
 - Does the structure timeframe (15m) candle trend SUPPORT or CONTRADICT your pattern?
@@ -805,12 +803,12 @@ You MUST cite the Candle History data from the Hybrid Intelligence block:
 **4H Candle Trend (Key Levels):** ___ Bullish, ___ Bearish → Dominant: Bullish / Bearish / Neutral
 **1H Candle Trend (Key Levels):** ___ Bullish, ___ Bearish → Dominant: Bullish / Bearish / Neutral
 **15m Candle Trend (Market Structure):** ___ Bullish, ___ Bearish → Dominant: Bullish / Bearish / Neutral
-**5m Candle Trend (Entry Confirmation):** ___ Bullish, ___ Bearish → Dominant: Bullish / Bearish / Neutral
+**15m Candle Trend (Entry Confirmation):** ___ Bullish, ___ Bearish → Dominant: Bullish / Bearish / Neutral
 
 **Timeframe Purpose Guide:**
 - 4H & 1H: Assess if key level direction supports trade
 - 15m: Assess if market structure supports entry
-- 5m: Assess if entry timing confirmation is favorable
+- 15m: Assess if entry timing confirmation is favorable
 
 **Candle Trend Risk Assessment:**
 - Does the HTF (4H/1H) candle trend SUPPORT or OPPOSE the proposed trade direction?
@@ -1223,7 +1221,7 @@ You MUST NOT:
 
 ### SCALP MACRO BIAS
 **BIAS:** LONG / SHORT / NEUTRAL
-**CONFIDENCE:** 1-10
+**CONFIDENCE:** High / Medium / Low with probability % (0-100 scale — the harness parser rejects 1-10)
 **DO NOT SCALP IF:** $[Price] broken
 
 ---
@@ -1326,7 +1324,7 @@ Disallowed: **1H, 4H, Daily, Weekly**
 
 ### SCALP RECOMMENDATION
 **BIAS:** LONG / SHORT / NO TRADE
-**CONFIDENCE:** 1-10
+**CONFIDENCE:** High / Medium / Low with probability % (0-100 scale — the harness parser rejects 1-10)
 
 **Entry Zone:** $___ to $___
 **Pattern Invalidation:** $___
@@ -1348,7 +1346,7 @@ Fast. LTF-focused. Execution-ready.
 **Risk & Execution Specialist (Scalp Mode)**
 
 You are the **Risk Authority** for **SCALP TRADES**.
-Focus on **1m and 5m** for execution validation.
+Focus on **15m** for execution validation (the fastest injected timeframe).
 
 **⏱️ RESPONSE LIMIT: 350 words maximum.**
 
@@ -1394,7 +1392,7 @@ When challenged, you MUST:
 
 * **Minimum R:R:** 1:1.5 (tighter than swing)
 * **Max SL:** 1.0× ATR (prefer 0.5-0.75×)
-* **LTF Focus:** 1m, 5m only
+* **LTF Focus:** 15m (fastest injected timeframe)
 
 ---
 
@@ -1409,7 +1407,7 @@ When challenged, you MUST:
 
 **R:R VERDICT:** ✅ PASSED (≥1.5) / ❌ FAILED (<1.5)
 
-### EXECUTION CHECK (1m/5m)
+### EXECUTION CHECK (15m)
 | Check | Status |
 |-------|--------|
 | Entry Zone Reachable | Yes/No |
@@ -1549,7 +1547,7 @@ When challenged, you MUST:
 
 ### POSITION MACRO BIAS
 **BIAS:** LONG / SHORT / NEUTRAL
-**CONFIDENCE:** 1-10
+**CONFIDENCE:** High / Medium / Low with probability % (0-100 scale — the harness parser rejects 1-10)
 **INVALIDATION:** $[Price]
 
 ---
