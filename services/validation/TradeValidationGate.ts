@@ -326,7 +326,10 @@ export const detectCrowdedTrade = (
     }
 
     // Check Long/Short ratio
-    const lsRatio = hybridData.derivatives.longShortRatio.ratio;
+    // Optional chaining: on a DEGRADED packet (derivatives unavailable) the
+    // nested fields can be missing — a throw here used to kill the entire
+    // validation gate + confidence cap + MC + backtest for the run.
+    const lsRatio = hybridData.derivatives?.longShortRatio?.ratio;
 
     if (proposedDirection === 'Long' && lsRatio > LS_RATIO_EXTREME_LONG_THRESHOLD) {
         warnings.push(`L/S Ratio ${lsRatio.toFixed(2)} - Extreme long positioning, contrarian signal`);
@@ -529,6 +532,22 @@ ${patternMatch.warning ? `\n PATTERN MEMORY:\n${patternMatch.warning}` : ''}
     }
 
     // ====== STEP 3: FULL VALIDATION WITH HYBRID DATA ======
+    // Per-check containment: ONE check throwing on a degraded packet (e.g.
+    // missing derivatives fields) must not kill the whole gate — the caller
+    // wraps this in a single try/catch that also silences the confidence cap,
+    // Monte Carlo and backtest for the run. Record the failure and continue
+    // with whatever was computed.
+    // Results referenced by STEP 4 must be declared OUTSIDE the try block
+    // (block-scoped `let` would vanish with the catch).
+    let devilsAdvocate: DevilsAdvocateResult | undefined;
+    let crowdedTradeWarning: string | null = null;
+    let patternMatchWarning: string | null = null;
+    let entryTiming: EntryTimingResult | null = null;
+    let slOptimization: SLOptimization | null = null;
+    let calibrationNote: string | null = null;
+    let tradeTypeDetection: ScalpDetectionResult | null = null;
+    let detectedTradeType: TradeType = 'swing';
+    try {
     // Check if direction is tradeable (not Neutral)
     const analysisDirection = analysis.direction;
     const isTradeableDirection = analysisDirection === 'Long' || analysisDirection === 'Short';
@@ -622,7 +641,7 @@ ${patternMatch.warning ? `\n PATTERN MEMORY:\n${patternMatch.warning}` : ''}
     }
 
     // 3.5 Devil's Advocate Analysis
-    let devilsAdvocate: DevilsAdvocateResult | undefined;
+    devilsAdvocate = undefined;
     if (isTradeableDirection && entryPrice > 0 && stopLoss > 0) {
         const direction = analysisDirection as TradeDirection;
         devilsAdvocate = generateDevilsAdvocateAnalysis(hybridData, direction, entryPrice, stopLoss);
@@ -653,7 +672,7 @@ ${patternMatch.warning ? `\n PATTERN MEMORY:\n${patternMatch.warning}` : ''}
     }
 
     // 3.7 Crowded Trade Detection
-    let crowdedTradeWarning: string | null = null;
+    crowdedTradeWarning = null;
     if (isTradeableDirection) {
         const direction = analysisDirection as TradeDirection;
         const crowdedResult = detectCrowdedTrade(hybridData, direction);
@@ -675,7 +694,7 @@ ${patternMatch.warning ? `\n PATTERN MEMORY:\n${patternMatch.warning}` : ''}
     }
 
     // 3.9 Pattern Memory Matching
-    let patternMatchWarning: string | null = null;
+    patternMatchWarning = null;
     if (tradeHistory && tradeHistory.length > 0) {
         const patternMatch = matchPatternMemory(analysis, tradeHistory);
         patternMatchWarning = patternMatch.warning;
@@ -690,7 +709,7 @@ ${patternMatch.warning ? `\n PATTERN MEMORY:\n${patternMatch.warning}` : ''}
     }
 
     // 3.10 Entry Timing Score (NEW)
-    let entryTiming: EntryTimingResult | null = null;
+    entryTiming = null;
     if (isTradeableDirection) {
         entryTiming = calculateEntryTimingScore(analysis, hybridData);
 
@@ -708,7 +727,7 @@ ${patternMatch.warning ? `\n PATTERN MEMORY:\n${patternMatch.warning}` : ''}
     }
 
     // 3.11 SL Optimization Check (NEW)
-    let slOptimization: SLOptimization | null = null;
+    slOptimization = null;
     if (tradeHistory && tradeHistory.length >= 5) {
         slOptimization = calculateOptimalSL(tradeHistory, {
             coin: analysis.coinName,
@@ -724,7 +743,7 @@ ${patternMatch.warning ? `\n PATTERN MEMORY:\n${patternMatch.warning}` : ''}
     }
 
     // 3.12 Calibration Note
-    let calibrationNote: string | null = null;
+    calibrationNote = null;
     if (calibration) {
         const summary = getCalibrationSummary(calibration);
         const levelKey = adjustedConfidence.toLowerCase() as 'high' | 'medium' | 'low' | 'avoid';
@@ -825,8 +844,8 @@ ${patternMatch.warning ? `\n PATTERN MEMORY:\n${patternMatch.warning}` : ''}
     // warnings, and the report must reflect the FINAL state (it used to be
     // stringified first, so it could say "FINAL CONFIDENCE: High" while the
     // returned state was Medium, and the scalp warnings were missing entirely).
-    const tradeTypeDetection = detectTradeType(analysis);
-    const detectedTradeType = tradeTypeDetection.detectedType;
+    tradeTypeDetection = detectTradeType(analysis);
+    detectedTradeType = tradeTypeDetection.detectedType;
 
     // Scalp vs Swing specific validation
     if (detectedTradeType === 'scalp') {
@@ -842,6 +861,10 @@ ${patternMatch.warning ? `\n PATTERN MEMORY:\n${patternMatch.warning}` : ''}
     } else {
         const swingValidation = validateSwingTrade(analysis);
         warnings.push(...swingValidation.warnings);
+    }
+    } catch (e) {
+        warnings.push(` VALIDATION CHECK FAILED: ${e instanceof Error ? e.message : String(e)}`);
+        console.warn('[ValidationGate] A validation check failed — continuing with partial validation:', e);
     }
 
     // ====== STEP 4: GENERATE REPORT ======

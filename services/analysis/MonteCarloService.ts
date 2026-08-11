@@ -176,24 +176,43 @@ const evaluatePath = (
     const tp2 = takeProfits[1] || (isLong ? entry * 1.04 : entry * 0.96);
     const tp3 = takeProfits[2] || (isLong ? entry * 1.06 : entry * 0.94);
 
+    // Per-step volatility estimate from the path's own log returns — used to
+    // synthesize intra-step high/low. A TP/SL touch between closes was
+    // previously invisible (only step CLOSES were tested), making MC win
+    // rates systematically pessimistic vs. the candle-based outcome engine.
+    let stepSigma = 0.01;
+    if (path.length > 2) {
+        const logReturns: number[] = [];
+        for (let i = 1; i < path.length; i++) logReturns.push(Math.log(path[i] / path[i - 1]));
+        const mean = logReturns.reduce((a, b) => a + b, 0) / logReturns.length;
+        const variance = logReturns.reduce((a, b) => a + (b - mean) ** 2, 0) / logReturns.length;
+        if (variance > 0) stepSigma = Math.sqrt(variance);
+    }
+
     for (let i = 1; i < path.length; i++) {
+        const prevPrice = path[i - 1];
         const price = path[i];
 
-        // Calculate drawdown from entry
+        // Intra-step extremes (a candle's high/low, not just its close).
+        const stepHigh = Math.max(prevPrice, price) * Math.exp(0.5 * stepSigma);
+        const stepLow = Math.min(prevPrice, price) * Math.exp(-0.5 * stepSigma);
+
+        // Calculate drawdown from entry (worst intra-step extreme)
         if (isLong) {
-            currentDrawdown = Math.max(0, (entry - price) / entry);
+            currentDrawdown = Math.max(0, (entry - stepLow) / entry);
         } else {
-            currentDrawdown = Math.max(0, (price - entry) / entry);
+            currentDrawdown = Math.max(0, (stepHigh - entry) / entry);
         }
         maxDrawdown = Math.max(maxDrawdown, currentDrawdown);
 
-        // Check stop loss
-        if (isLong && price <= stopLoss) {
+        // Check stop loss FIRST (same-candle SL+TP → the resting stop filled
+        // first — same semantics as the outcome engine).
+        if (isLong && stepLow <= stopLoss) {
             outcome = 'SL';
             exitPrice = stopLoss;
             stepsToOutcome = i;
             break;
-        } else if (!isLong && price >= stopLoss) {
+        } else if (!isLong && stepHigh >= stopLoss) {
             outcome = 'SL';
             exitPrice = stopLoss;
             stepsToOutcome = i;
@@ -202,34 +221,34 @@ const evaluatePath = (
 
         // Check take profits (check higher TPs first for shorts, lower for longs)
         if (isLong) {
-            if (price >= tp3) {
+            if (stepHigh >= tp3) {
                 outcome = 'TP3';
                 exitPrice = tp3;
                 stepsToOutcome = i;
                 break;
-            } else if (price >= tp2) {
+            } else if (stepHigh >= tp2) {
                 outcome = 'TP2';
                 exitPrice = tp2;
                 stepsToOutcome = i;
                 break;
-            } else if (price >= tp1) {
+            } else if (stepHigh >= tp1) {
                 outcome = 'TP1';
                 exitPrice = tp1;
                 stepsToOutcome = i;
                 break;
             }
         } else {
-            if (price <= tp3) {
+            if (stepLow <= tp3) {
                 outcome = 'TP3';
                 exitPrice = tp3;
                 stepsToOutcome = i;
                 break;
-            } else if (price <= tp2) {
+            } else if (stepLow <= tp2) {
                 outcome = 'TP2';
                 exitPrice = tp2;
                 stepsToOutcome = i;
                 break;
-            } else if (price <= tp1) {
+            } else if (stepLow <= tp1) {
                 outcome = 'TP1';
                 exitPrice = tp1;
                 stepsToOutcome = i;

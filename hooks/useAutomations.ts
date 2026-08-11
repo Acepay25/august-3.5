@@ -186,7 +186,7 @@ export function useAutomations(params: UseAutomationsParams) {
     const runsByAutomationRef = useRef<Record<string, AutomationRun[]>>({});
 
     // ─── Execute one run ──────────────────────────────────────────────────
-    const runAutomation = useCallback(async (config: AutomationConfig, isCatchUp = false) => {
+    const runAutomation = useCallback(async (config: AutomationConfig, isCatchUp = false): Promise<void> => {
         if (inFlightRef.current) return; // one run at a time (manual or automation)
         if (params.isAnalysisInProgress) return;
         const username = usernameRef.current;
@@ -235,6 +235,12 @@ export function useAutomations(params: UseAutomationsParams) {
             threadSummary: undefined,
         };
 
+        // A promise that resolves when the run actually completes (or bails)
+        // — lets the catch-up loop chain runs instead of no-oping on the
+        // in-flight guard (the pipeline itself is fire-and-forget).
+        let resolveDone: () => void = () => { };
+        const done = new Promise<void>(res => { resolveDone = res; });
+        let finished = false;
         const finish = (run: Partial<AutomationRun> & { status: AutomationRun['status'] }) => {
             const finishedAt = new Date().toISOString();
             appendRun(config.id, {
@@ -253,6 +259,10 @@ export function useAutomations(params: UseAutomationsParams) {
             void persistConfigs(nextConfigs);
             inFlightRef.current = null;
             setRunningAutomationId(null);
+            if (!finished) {
+                finished = true;
+                resolveDone();
+            }
         };
 
         runPipeline(prompt, images, undefined, {
@@ -272,6 +282,10 @@ export function useAutomations(params: UseAutomationsParams) {
                 },
             },
         });
+
+        // Wait for the run to complete (finish callback) so callers that
+        // await this (catch-up chaining) serialize correctly.
+        await done;
     }, [params.isAnalysisInProgress, providerConfigs, toast, appendRun, persistConfigs, runPipeline]);
 
     // ─── Scheduler: tick loop + catch-up on init ──────────────────────────
@@ -325,8 +339,18 @@ export function useAutomations(params: UseAutomationsParams) {
             const usernameNow = usernameRef.current;
             if (!usernameNow) return;
             await saveAutomationLastSeen(usernameNow, Date.now());
-            if (inFlightRef.current || params.isAnalysisInProgress) return;
             const now = Date.now();
+            if (inFlightRef.current || params.isAnalysisInProgress) {
+                // A run that lasts longer than the cron cadence must NOT look
+                // like N missed fires when it finishes: advance every
+                // automation's checkpoint even while one is in flight, or the
+                // next tick's window spans the whole run and re-fires it
+                // (back-to-back runs for every-N-minute crons).
+                for (const config of configsRef.current) {
+                    lastCheckedRef.current.set(config.id, now);
+                }
+                return;
+            }
             for (const config of configsRef.current) {
                 if (!config.enabled) continue;
                 const lastCheck = lastCheckedRef.current.get(config.id)

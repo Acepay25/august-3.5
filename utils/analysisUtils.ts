@@ -73,7 +73,10 @@ export const parsePrice = (priceStr: string): number => {
     if (range) {
         return (parseFloat(range[1]) + parseFloat(range[2])) / 2;
     }
-    const match = cleanStr.match(/(\d+(?:\.\d+)?)/);
+    // Optional leading minus: a signed value like "-100" must parse as -100,
+    // not 100 (the old pattern dropped the sign). The minus only binds when
+    // it immediately precedes the digits.
+    const match = cleanStr.match(/(-?\d+(?:\.\d+)?)/);
     if (match) {
         return parseFloat(match[0]);
     }

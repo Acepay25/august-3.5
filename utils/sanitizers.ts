@@ -18,7 +18,9 @@ export const sanitizeAIResponse = (text: string): string => {
     // the pass ("5*6*7" and "5 * 6 contracts" must not be mangled). Without
     // the space guards "TP1 94500 * 2 R:R" had its asterisks stripped by the
     // cleanup pass below, destroying the displayed R:R math.
-    .replace(/(?<!\d)\*(?!\s)(.*?)(?<!\s)\*(?!\d)/g, '$1')
+    // (.+? not .*? — adjacent `**` pairs with empty content must not match,
+    // e.g. "96000 ** 2" previously became "96000  2".)
+    .replace(/(?<!\d)\*(?!\s)(.+?)(?<!\s)\*(?!\d)/g, '$1')
     // Underscore-italic only at word boundaries — a bare `_` pair would
     // otherwise corrupt tickers/timeframes ("BTCUSDT_4h" → "BTCUSDT4h").
     .replace(/(?<!\w)_([^_\n]*)_(?!\w)/g, '$1')

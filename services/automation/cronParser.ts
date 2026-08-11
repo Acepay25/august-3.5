@@ -157,12 +157,28 @@ export const nextCronTime = (expr: string, from: Date, maxLookaheadMs = 30 * 24 
 
 /**
  * Count how many times the cron fired in the half-open interval
- * (since, now]. Capped at `cap` (catch-up runs are bounded). Minute
- * granularity: a matched minute counts once regardless of its second.
+ * (since, now]. Capped at `cap` (catch-up runs are bounded).
+ * Second-exact when the expression carries a seconds field (mirrors
+ * hasCronFireBetween) — otherwise minute granularity counts a matched
+ * minute once regardless of its second.
  */
 export const countMissedRuns = (expr: string, since: Date, now: Date, cap = 3): number => {
     const fields = parseCron(expr);
     if (!fields || !since || !now || now.getTime() <= since.getTime()) return 0;
+
+    // Second-exact: a cron like "30 0 * * * *" must not be counted as a
+    // missed run at 00:00:10 — its 00:00:30 fire hasn't happened yet
+    // (the minute-granular path below would pre-fire it on catch-up).
+    if (fields.second !== null) {
+        let count = 0;
+        const cursor = new Date(since.getTime() + 1000);
+        cursor.setMilliseconds(0);
+        while (cursor.getTime() <= now.getTime() && count < cap) {
+            if (cronMatches(expr, cursor)) count++;
+            cursor.setTime(cursor.getTime() + 1000);
+        }
+        return count;
+    }
 
     const cursor = new Date(since.getTime());
     cursor.setSeconds(0, 0);
