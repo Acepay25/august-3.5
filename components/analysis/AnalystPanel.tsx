@@ -2,6 +2,7 @@ import React, { useState, useMemo, useCallback } from 'react';
 import { Message, DebateSpeaker, EnsembleProgress, DebateTurn } from '../../types';
 import { TradeAnalysis, AnalystConsensusEntry } from '../../types/analysis';
 import { getRoleDisplayForProvider } from '../../services/ui/AnalystLensService';
+import GlobalLearningService from '../../services/learning/GlobalLearningService';
 import { CloseIcon, ChevronDownIcon } from '../shared/Icons';
 import MarkdownContent from '../shared/MarkdownContent';
 import { AnalystLensConfig } from '../../types';
@@ -104,6 +105,20 @@ const AnalystPanel: React.FC<AnalystPanelProps> = ({
         return Array.from(map.values());
     }, [message.thoughtProcesses, message.reasoningProcesses, message.modelsUsed, message.ensembleProgress, modelIdToName, lensConfig, analysis]);
 
+    // Per-provider win rate from the user's own calibration (this model's
+    // actual track record — routing + trust signal).
+    const providerWinRates = useMemo(() => {
+        const byProvider = GlobalLearningService.getCalibration()?.granular?.byProvider;
+        if (!byProvider) return {} as Record<string, { winRate: number; total: number }>;
+        const out: Record<string, { winRate: number; total: number }> = {};
+        for (const [pid, stats] of Object.entries(byProvider)) {
+            if (stats.total >= 3) {
+                out[pid] = { winRate: Math.round((stats.wins / stats.total) * 100), total: stats.total };
+            }
+        }
+        return out;
+    }, []);
+
     // Resolve active tab
     const currentTab = useMemo(() => {
         if (analysts.some(a => a.providerId === activeTab)) return activeTab;
@@ -127,7 +142,7 @@ const AnalystPanel: React.FC<AnalystPanelProps> = ({
             {/* Mobile backdrop */}
             <div className="fixed inset-0 bg-black/60 z-20 md:hidden" onClick={onClose} />
 
-            <div className="fixed right-0 top-0 h-full w-80 sm:w-[380px] lg:w-[420px] transform transition-transform duration-300 ease-out z-30 flex flex-col border-l border-white/10 bg-zinc-950 shadow-2xl translate-x-0">
+            <div className="fixed right-0 top-0 h-full w-80 sm:w-[380px] lg:w-[420px] z-30 flex flex-col border-l border-white/10 bg-zinc-950 shadow-2xl panel-slide-in">
                 {/* Header */}
                 <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between shrink-0">
                     <div className="flex items-center gap-2 min-w-0">
@@ -214,7 +229,20 @@ const AnalystPanel: React.FC<AnalystPanelProps> = ({
                                 </span>
                                 <div>
                                     <p className="text-sm font-bold text-zinc-100">{currentAnalyst.displayName}</p>
-                                    <p className="text-[10px] text-zinc-500">{currentAnalyst.modelName || currentAnalyst.providerId}</p>
+                                    <p className="text-[10px] text-zinc-500 flex items-center gap-2">
+                                        {currentAnalyst.modelName || currentAnalyst.providerId}
+                                        {(() => {
+                                            const pid = currentAnalyst.providerId.split('::')[0];
+                                            const stats = providerWinRates[pid];
+                                            if (!stats) return null;
+                                            return (
+                                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${stats.winRate >= 55 ? 'bg-emerald-500/10 text-emerald-300' : stats.winRate >= 40 ? 'bg-zinc-800 text-zinc-400' : 'bg-rose-500/10 text-rose-300'}`}
+                                                    title={`This model's own track record (${stats.total} trades)`}>
+                                                    WR {stats.winRate}% · n={stats.total}
+                                                </span>
+                                            );
+                                        })()}
+                                    </p>
                                 </div>
                             </div>
 
