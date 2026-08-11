@@ -425,8 +425,95 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                     <MarkdownRenderer content={summaryMarkdown} />
                 </div>
 
+                {/* Outcome Autopilot — detected SL/TP hit, one-click confirmation.
+                    Buttons styled like the workspace action buttons. */}
+                {autopilotResolution && outcome === TradeOutcome.PENDING && (() => {
+                    const r = autopilotResolution;
+                    const isWin = r.outcome === TradeOutcome.WIN;
+                    const isLoss = r.outcome === TradeOutcome.LOSS;
+                    const tint = r.expiredOpen
+                        ? 'bg-amber-500/5 border-amber-500/20 text-amber-200'
+                        : isWin
+                            ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-200'
+                            : isLoss
+                                ? 'bg-rose-500/5 border-rose-500/20 text-rose-200'
+                                : 'bg-amber-500/5 border-amber-500/20 text-amber-200';
+                    // Confidence tiers: which TP was hit and whether the SL was
+                    // touched first — a "recovered" win is weaker than a clean one.
+                    const winTier = isWin && r.hitTarget ? ` · ${r.hitTarget}${r.recoveredAfterSlTouch ? ' · recovered after SL touch' : ' · clean'}` : '';
+                    const confirmLabel = r.expiredOpen
+                        ? null
+                        : r.outcome === TradeOutcome.ENTRY_NOT_HIT
+                            ? 'Entry not hit'
+                            : isWin
+                                ? `WIN${r.pnlPercent !== undefined ? ` (+${r.pnlPercent}%)` : ''}${winTier}`
+                                : `LOSS${r.pnlPercent !== undefined ? ` (${r.pnlPercent}%)` : ''}`;
+                    return (
+                        <div className={`mt-3 px-4 py-3 rounded-xl border ${tint}`}>
+                            <div className="flex items-start justify-between gap-3 flex-wrap">
+                                <div className="min-w-0">
+                                    <div className="text-[10px] font-black uppercase tracking-widest opacity-80">Autopilot Detection</div>
+                                    <div className="text-xs sm:text-sm font-semibold mt-1">{r.detail}</div>
+                                    {r.timeToOutcome && <div className="text-[10px] opacity-60 mt-0.5">Resolved {r.timeToOutcome} after analysis</div>}
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                                    {confirmLabel && onConfirmAutopilot && (
+                                        <button
+                                            onClick={() => onConfirmAutopilot(messageId)}
+                                            className={`status-surface rounded-xl px-4 py-2 text-xs font-bold uppercase tracking-wider transition-colors ${
+                                                isWin
+                                                    ? 'bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25'
+                                                    : isLoss
+                                                        ? 'bg-rose-500/15 border border-rose-500/40 text-rose-300 hover:bg-rose-500/25'
+                                                        : 'bg-amber-500/15 border border-amber-500/40 text-amber-300 hover:bg-amber-500/25'
+                                            }`}
+                                        >
+                                            Confirm {confirmLabel}
+                                        </button>
+                                    )}
+                                    {!r.expiredOpen && (isWin || isLoss) && (
+                                        <button
+                                            onClick={() => onLogTrade(messageId, r.outcome as TradeOutcome.WIN | TradeOutcome.LOSS)}
+                                            className="rounded-xl border border-white/10 bg-zinc-800 px-4 py-2 text-xs font-bold text-zinc-200 transition-colors hover:bg-zinc-700"
+                                            title="Open the capture flow to attach a chart screenshot"
+                                        >
+                                             Attach Screenshot
+                                        </button>
+                                    )}
+                                    {onDismissAutopilot && (
+                                        <button
+                                            onClick={() => onDismissAutopilot(messageId)}
+                                            className="rounded-xl border border-white/10 bg-zinc-800 px-4 py-2 text-xs font-bold text-zinc-400 transition-colors hover:bg-zinc-700 hover:text-zinc-200 opacity-70 hover:opacity-100"
+                                        >
+                                            Dismiss
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })()}
+
                 {/* Action row — like the workspace buttons */}
                 <div className="mt-3 flex flex-wrap gap-2">
+                    {outcome === TradeOutcome.PENDING && !autopilotResolution && (
+                        <>
+                            <button
+                                onClick={() => onLogTrade(messageId, TradeOutcome.WIN)}
+                                className="status-surface rounded-xl bg-emerald-500/15 border border-emerald-500/40 px-4 py-2 text-xs font-bold text-emerald-300 transition-colors hover:bg-emerald-500/25"
+                                title="Log this trade as a win (opens the capture flow)"
+                            >
+                                Win
+                            </button>
+                            <button
+                                onClick={() => onLogTrade(messageId, TradeOutcome.LOSS)}
+                                className="status-surface rounded-xl bg-rose-500/15 border border-rose-500/40 px-4 py-2 text-xs font-bold text-rose-300 transition-colors hover:bg-rose-500/25"
+                                title="Log this trade as a loss (opens the capture flow)"
+                            >
+                                Loss
+                            </button>
+                        </>
+                    )}
                     {onSelectForProbability && (
                         <button
                             onClick={() => onSelectForProbability(messageId)}
@@ -486,73 +573,6 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                     </div>
                 );
             })() : null}
-
-            {/* Outcome Autopilot — detected SL/TP hit, one-click confirmation */}
-            {autopilotResolution && outcome === TradeOutcome.PENDING && (() => {
-                const r = autopilotResolution;
-                const isWin = r.outcome === TradeOutcome.WIN;
-                const isLoss = r.outcome === TradeOutcome.LOSS;
-                const theme = r.expiredOpen
-                    ? 'from-amber-900/40 to-amber-800/20 border-amber-400/40 text-amber-200'
-                    : isWin
-                        ? 'from-emerald-900/40 to-emerald-800/20 border-emerald-400/40 text-emerald-200'
-                        : isLoss
-                            ? 'from-rose-900/40 to-rose-800/20 border-rose-400/40 text-rose-200'
-                            : 'from-amber-900/40 to-amber-800/20 border-amber-400/40 text-amber-200';
-                // Confidence tiers: which TP was hit and whether the SL was
-                // touched first — a "recovered" win is weaker than a clean one.
-                const winTier = isWin && r.hitTarget ? ` · ${r.hitTarget}${r.recoveredAfterSlTouch ? ' · recovered after SL touch' : ' · clean'}` : '';
-                const confirmLabel = r.expiredOpen
-                    ? null
-                    : r.outcome === TradeOutcome.ENTRY_NOT_HIT
-                        ? 'Confirm Entry Not Hit'
-                        : isWin
-                            ? `Confirm WIN${r.pnlPercent !== undefined ? ` (+${r.pnlPercent}%)` : ''}${winTier}`
-                            : `Confirm LOSS${r.pnlPercent !== undefined ? ` (${r.pnlPercent}%)` : ''}`;
-                return (
-                    <div className={`mb-4 px-4 py-3 rounded-2xl bg-gradient-to-r ${theme} border shadow-lg animate-fade-in`}>
-                        <div className="flex items-start justify-between gap-3 flex-wrap">
-                            <div className="min-w-0">
-                                <div className="text-[10px] font-black uppercase tracking-widest opacity-80"> Autopilot Detection</div>
-                                <div className="text-xs sm:text-sm font-semibold mt-1">{r.detail}</div>
-                                {r.timeToOutcome && <div className="text-[10px] opacity-60 mt-0.5">Resolved {r.timeToOutcome} after analysis</div>}
-                            </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                                {confirmLabel && onConfirmAutopilot && (
-                                    <button
-                                        onClick={() => onConfirmAutopilot(messageId)}
-                                        className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${isWin
-                                            ? 'bg-emerald-500 hover:bg-emerald-400 text-emerald-950'
-                                            : isLoss
-                                                ? 'bg-rose-500 hover:bg-rose-400 text-rose-950'
-                                                : 'bg-amber-500 hover:bg-amber-400 text-amber-950'
-                                            }`}
-                                    >
-                                        {confirmLabel}
-                                    </button>
-                                )}
-                                {!r.expiredOpen && (isWin || isLoss) && (
-                                    <button
-                                        onClick={() => onLogTrade(messageId, r.outcome as TradeOutcome.WIN | TradeOutcome.LOSS)}
-                                        className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-zinc-700 hover:bg-zinc-600 border border-white/20 transition-all"
-                                        title="Open the capture flow to attach a chart screenshot"
-                                    >
-                                         Attach Screenshot
-                                    </button>
-                                )}
-                                {onDismissAutopilot && (
-                                    <button
-                                        onClick={() => onDismissAutopilot(messageId)}
-                                        className="px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-zinc-800 hover:bg-zinc-700 border border-white/10 transition-all opacity-70 hover:opacity-100"
-                                    >
-                                        Dismiss
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                );
-            })()}
 
             {/* Live Probability Widget */}
             {confidenceCalibration && confidence && (
