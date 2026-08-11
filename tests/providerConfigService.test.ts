@@ -20,6 +20,7 @@ import {
   removeModelFromProvider,
   updateModelInProvider,
   getReadyProviders,
+  discoverProviderModels,
 } from '../services/infrastructure/ProviderConfigService';
 import type { ProviderConfig } from '../types/provider';
 
@@ -135,6 +136,46 @@ describe('ProviderConfigService', () => {
       const configs = [makeConfig()];
       await saveProviderConfigs(configs);
       expect(store).toEqual(configs);
+    });
+  });
+
+  describe('discoverProviderModels (/models endpoint)', () => {
+    const okResponse = (body: unknown) => ({ ok: true, status: 200, json: async () => body } as Response);
+
+    beforeEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('parses the OpenAI-compatible { data: [{ id }] } shape', async () => {
+      const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        okResponse({ data: [{ id: 'deepseek-v4-flash-free' }, { id: 'nemotron-3-ultra-free' }, { id: 'deepseek-v4-flash-free' }] })
+      );
+      const models = await discoverProviderModels({ baseUrl: 'https://opencode.ai/zen/v1', apiKey: 'sk-test', apiFormat: 'chat_completions' });
+      expect(models).toEqual(['deepseek-v4-flash-free', 'nemotron-3-ultra-free']);
+      const [url, init] = fetchMock.mock.calls[0];
+      expect(url).toBe('https://opencode.ai/zen/v1/models');
+      expect((init as RequestInit).headers).toMatchObject({ Authorization: 'Bearer sk-test' });
+    });
+
+    it('parses the Gemini { models: [{ name }] } shape with a key query param', async () => {
+      const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        okResponse({ models: [{ name: 'models/gemini-2.0-flash' }, { name: 'models/gemini-2.5-pro' }] })
+      );
+      const models = await discoverProviderModels({ baseUrl: 'https://generativelanguage.googleapis.com/v1beta', apiKey: 'gk-test', apiFormat: 'chat_completions' });
+      expect(models).toEqual(['gemini-2.0-flash', 'gemini-2.5-pro']);
+      expect(fetchMock.mock.calls[0][0]).toBe('https://generativelanguage.googleapis.com/v1beta/models?key=gk-test');
+    });
+
+    it('throws a user-safe error on HTTP failure', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue({ ok: false, status: 401, json: async () => ({ error: { message: 'Invalid API key' } }) } as Response);
+      await expect(discoverProviderModels({ baseUrl: 'https://x.example/v1', apiKey: 'bad', apiFormat: 'chat_completions' }))
+        .rejects.toThrow('Invalid API key');
+    });
+
+    it('throws when the response carries no models', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(okResponse({ data: [] }));
+      await expect(discoverProviderModels({ baseUrl: 'https://x.example/v1', apiKey: 'k', apiFormat: 'chat_completions' }))
+        .rejects.toThrow('returned no models');
     });
   });
 });

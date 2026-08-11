@@ -268,3 +268,99 @@ export async function updateModelInProvider(providerId: string, oldModelId: stri
 export function getReadyProviders(configs: ProviderConfig[]): ProviderConfig[] {
     return configs.filter(c => c.isEnabled && c.apiKey.trim().length > 0 && (c.models.length > 0 || !!c.selectedModel));
 }
+
+/**
+ * Discover a provider's available models through its /models endpoint.
+ *
+ * Endpoint + auth per API format:
+ *  - OpenAI-compatible (chat_completions / responses): GET {baseUrl}/models
+ *    with `Authorization: Bearer <key>` → { data: [{ id }] }
+ *  - Anthropic (messages): GET {baseUrl}/models with `x-api-key` +
+ *    `anthropic-version` headers → { data: [{ id }] }
+ *  - Gemini (generativelanguage baseUrl): GET {baseUrl}/models?key=<key>
+ *    → { models: [{ name: "models/..." }] } (the "models/" prefix is stripped)
+ *
+ * Returns the model ids, deduped and in the provider's order. Throws
+ * user-safe errors (network / HTTP status / unparseable / empty).
+ */
+export async function discoverProviderModels(config: {
+    baseUrl: string;
+    apiKey: string;
+    apiFormat: ApiFormat;
+}): Promise<string[]> {
+    const base = (config.baseUrl || '').trim().replace(/\/+$/, '');
+    const key = (config.apiKey || '').trim();
+    if (!base) throw new Error('Base URL is required to discover models.');
+    if (!key) throw new Error('API key is required to discover models.');
+
+    const isGemini = /generativelanguage/i.test(base);
+    const isAnthropic = config.apiFormat === 'messages' && !isGemini;
+    const url = isGemini ? `${base}/models?key=${encodeURIComponent(key)}` : `${base}/models`;
+
+    const headers: Record<string, string> = {};
+    if (isAnthropic) {
+        headers['x-api-key'] = key;
+        headers['anthropic-version'] = '2023-06-01';
+    } else if (!isGemini) {
+        headers['Authorization'] = `Bearer ${key}`;
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    let res: Response;
+    try {
+        res = await fetch(url, { headers, signal: controller.signal });
+    } catch (e) {
+        if ((e as Error)?.name === 'AbortError') {
+            throw new Error('Model discovery timed out — check the base URL.');
+        }
+        throw new Error('Could not reach the provider — check the base URL and your network.');
+    } finally {
+        clearTimeout(timer);
+    }
+
+    if (!res.ok) {
+        let detail = '';
+        try {
+            const body = await res.json();
+            detail = body?.error?.message ?? body?.message ?? '';
+        } catch { /* unreadable body — fall through to the status message */ }
+        throw new Error(
+            detail
+                ? `Discovery failed (HTTP ${res.status}): ${detail}`
+                : `Discovery failed (HTTP ${res.status}) — check the API key and base URL.`
+        );
+    }
+
+    let body: unknown;
+    try {
+        body = await res.json();
+    } catch {
+        throw new Error('The provider returned an unreadable response.');
+    }
+
+    const ids: string[] = [];
+    const data = (body as { data?: unknown[] })?.data;
+    if (Array.isArray(data)) {
+        for (const m of data) {
+            if (m && typeof (m as { id?: unknown }).id === 'string' && (m as { id: string }).id.trim()) {
+                ids.push((m as { id: string }).id.trim());
+            }
+        }
+    } else {
+        const models = (body as { models?: unknown[] })?.models;
+        if (Array.isArray(models)) {
+            for (const m of models) {
+                const name = (m as { name?: unknown })?.name;
+                if (typeof name === 'string' && name.trim()) {
+                    ids.push(name.trim().replace(/^models\//, ''));
+                }
+            }
+        }
+    }
+
+    if (ids.length === 0) {
+        throw new Error('The provider returned no models — its /models endpoint may be unsupported.');
+    }
+    return [...new Set(ids)];
+}

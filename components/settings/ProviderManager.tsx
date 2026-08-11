@@ -10,9 +10,12 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { ProviderConfig, ApiFormat, API_FORMAT_LABELS } from '../../types/provider';
 import { testConnection } from '../../services/providers/GenericProviderService';
+import { discoverProviderModels } from '../../services/infrastructure/ProviderConfigService';
 import { getProviderHealth, resetProviderHealth } from '../../services/infrastructure/ProviderHealthService';
 import { validateProviderUrl } from '../../utils/providerUrlValidation';
 import { useConfirmDialog } from '../shared/ConfirmDialog';
+import { useToastActions } from '../shared/Toast';
+import { LoadingIcon } from '../shared/Icons';
 
 interface ProviderManagerProps {
     configs: ProviderConfig[];
@@ -127,6 +130,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
     onDirtyChange,
 }) => {
     const { confirm, ConfirmDialogComponent } = useConfirmDialog();
+    const toast = useToastActions();
     const [selectedId, setSelectedId] = useState<string>(configs[0]?.id || '');
     const [isEditingName, setIsEditingName] = useState(false);
     const [nameDraft, setNameDraft] = useState('');
@@ -141,6 +145,9 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
     const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
     const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
     const [isTesting, setIsTesting] = useState(false);
+    // "Discover models" — /models endpoint import (per-provider + add form).
+    const [isDiscovering, setIsDiscovering] = useState(false);
+    const [isDiscoveringNew, setIsDiscoveringNew] = useState(false);
 
     // Add new model inline state
     const [showAddModelInput, setShowAddModelInput] = useState(false);
@@ -290,6 +297,49 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
         setNewModelInput('');
         setShowAddModelInput(false);
     }, [selected, newModelInput, onAddModel, onUpdateProvider]);
+
+    // Discover every model the provider exposes via /models and merge the
+    // fresh ids into the model list (existing ids are kept untouched).
+    const handleDiscoverModels = useCallback(async () => {
+        if (!selected) return;
+        setIsDiscovering(true);
+        try {
+            const discovered = await discoverProviderModels({
+                baseUrl: draftUrl || selected.baseUrl,
+                apiKey: draftKey || selected.apiKey,
+                apiFormat: draftFormat || selected.apiFormat,
+            });
+            const existing = new Set(selected.models);
+            const fresh = discovered.filter(m => !existing.has(m));
+            if (fresh.length === 0) {
+                toast.success('Models up to date', 'All models from this provider are already in the list.');
+            } else {
+                await onUpdateProvider(selected.id, { models: [...selected.models, ...fresh] });
+                toast.success('Models discovered', `Added ${fresh.length} model${fresh.length === 1 ? '' : 's'} from /models.`);
+            }
+        } catch (e) {
+            console.error('[ProviderManager] Model discovery failed:', e);
+            toast.error('Model discovery failed', e instanceof Error ? e.message : 'Unknown error');
+        } finally {
+            setIsDiscovering(false);
+        }
+    }, [selected, draftUrl, draftKey, draftFormat, onUpdateProvider, toast]);
+
+    // Discover models into the Add-Provider form's comma-separated field.
+    const handleDiscoverNewModels = useCallback(async () => {
+        setIsDiscoveringNew(true);
+        try {
+            const discovered = await discoverProviderModels({ baseUrl: newUrl, apiKey: newKey, apiFormat: newFormat });
+            setNewModels(discovered.join(', '));
+            setAddError('');
+            toast.success('Models discovered', `${discovered.length} models found — review them, then create the provider.`);
+        } catch (e) {
+            console.error('[ProviderManager] Model discovery failed (new provider):', e);
+            toast.error('Model discovery failed', e instanceof Error ? e.message : 'Unknown error');
+        } finally {
+            setIsDiscoveringNew(false);
+        }
+    }, [newUrl, newKey, newFormat, toast]);
 
     const handleRemoveModelSubmit = useCallback(async (modelId: string) => {
         if (!selected) return;
@@ -457,13 +507,24 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
 
                             <div>
                                 <FieldLabel>Model List (comma-separated)</FieldLabel>
-                                <input
-                                    type="text"
-                                    value={newModels}
-                                    onChange={(e) => { setNewModels(e.target.value); setAddError(''); }}
-                                    placeholder="deepseek-v4-flash-free, nemotron-3-ultra-free"
-                                    className={inputBase}
-                                />
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        value={newModels}
+                                        onChange={(e) => { setNewModels(e.target.value); setAddError(''); }}
+                                        placeholder="deepseek-v4-flash-free, nemotron-3-ultra-free"
+                                        className={`${inputBase} flex-1 min-w-0`}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={handleDiscoverNewModels}
+                                        disabled={isDiscoveringNew || !newUrl.trim() || !newKey.trim()}
+                                        className="shrink-0 px-3 py-2 rounded-xl border border-zinc-700 bg-zinc-900 text-[10px] font-bold uppercase tracking-widest text-zinc-300 hover:text-cyan-300 hover:border-cyan-500/40 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                                        title="Fetch every model this provider exposes via GET {baseUrl}/models"
+                                    >
+                                        {isDiscoveringNew ? 'Discovering…' : '⚡ Discover models'}
+                                    </button>
+                                </div>
                                 {addError && <p className="mt-1 text-xs text-red-300">{addError}</p>}
                             </div>
 
@@ -738,13 +799,24 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                             </button>
                                         </div>
                                     ) : (
-                                        <button
-                                            onClick={() => setShowAddModelInput(true)}
-                                            className="w-full py-2 px-3 rounded-lg border border-dashed border-zinc-800 text-xs font-medium text-zinc-500 hover:text-zinc-300 hover:border-zinc-700 flex items-center gap-1.5 transition-all mt-1"
-                                        >
-                                            <span className="font-bold text-sm">+</span>
-                                            <span>Add model</span>
-                                        </button>
+                                        <div className="flex gap-2 mt-1">
+                                            <button
+                                                onClick={() => setShowAddModelInput(true)}
+                                                className="flex-1 py-2 px-3 rounded-lg border border-dashed border-zinc-800 text-xs font-medium text-zinc-500 hover:text-zinc-300 hover:border-zinc-700 flex items-center gap-1.5 transition-all"
+                                            >
+                                                <span className="font-bold text-sm">+</span>
+                                                <span>Add model</span>
+                                            </button>
+                                            <button
+                                                onClick={handleDiscoverModels}
+                                                disabled={isDiscovering || !(draftUrl || selected.baseUrl).trim() || !(draftKey || selected.apiKey).trim()}
+                                                className="py-2 px-3 rounded-lg border border-dashed border-zinc-800 text-xs font-medium text-zinc-500 hover:text-cyan-300 hover:border-cyan-500/40 flex items-center gap-1.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                                                title="Fetch every model this provider exposes via GET {baseUrl}/models"
+                                            >
+                                                {isDiscovering ? <LoadingIcon className="w-3.5 h-3.5 animate-spin" /> : <span className="text-sm">⚡</span>}
+                                                <span>{isDiscovering ? 'Discovering…' : 'Discover models'}</span>
+                                            </button>
+                                        </div>
                                     )}
                                 </div>
                             </div>
