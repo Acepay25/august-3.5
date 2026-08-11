@@ -200,7 +200,69 @@ export interface HybridDataPacket {
     // Level-anchored price-action events from the last completed candle per
     // timeframe (wick-through-and-reject, or close-beyond breaks).
     liquiditySweeps: LiquiditySweep[];
+
+    // ========== MARKET CONTEXT ==========
+    // The "where are we in the week/month" layer every human trader checks
+    // first: current week/month opens + ranges, previous week/month ranges.
+    marketContext: MarketContext;
+
+    /** Live 1h candle progress — computed at fetch time (klines are not
+     *  carried on the packet, so the injection cannot derive it). */
+    live1h?: { open: number; high: number; low: number; price: number; minutesLeft: number; percentTraveled: number };
 }
+
+/** A price range derived from a kline window. */
+export interface PriceRange {
+    open: number;
+    high: number;
+    low: number;
+}
+
+export interface MarketContext {
+    week: PriceRange | null;       // current UTC week (Mon 00:00 → now)
+    prevWeek: { high: number; low: number } | null;
+    month: PriceRange | null;      // current UTC month (1st 00:00 → now)
+    prevMonth: { high: number; low: number } | null;
+}
+
+/**
+ * Build weekly/monthly market context from 1h klines (UTC boundaries).
+ * The current candle is included (it is the live candle — its open is the
+ * period open when the period started this week/month).
+ */
+export const buildMarketContext = (klines1h: Kline[], now = new Date()): MarketContext => {
+    const dayMs = 86400000;
+    const utcDayStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    const dayOfWeek = (now.getUTCDay() + 6) % 7; // 0 = Monday
+    const weekStart = utcDayStart - dayOfWeek * dayMs;
+    const monthStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
+    const prevMonthStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1);
+
+    const range = (start: number, end: number): PriceRange | null => {
+        const candles = klines1h.filter(k => k.time >= start && k.time < end);
+        if (candles.length === 0) return null;
+        return {
+            open: candles[0].open,
+            high: Math.max(...candles.map(k => k.high)),
+            low: Math.min(...candles.map(k => k.low)),
+        };
+    };
+    const rangeHL = (start: number, end: number): { high: number; low: number } | null => {
+        const candles = klines1h.filter(k => k.time >= start && k.time < end);
+        if (candles.length === 0) return null;
+        return {
+            high: Math.max(...candles.map(k => k.high)),
+            low: Math.min(...candles.map(k => k.low)),
+        };
+    };
+
+    return {
+        week: range(weekStart, now.getTime() + dayMs),
+        prevWeek: rangeHL(weekStart - 7 * dayMs, weekStart),
+        month: range(monthStart, now.getTime() + dayMs),
+        prevMonth: rangeHL(prevMonthStart, monthStart),
+    };
+};
 
 /**
  * Candle history analysis for a single timeframe
@@ -382,6 +444,23 @@ export const fetchHybridData = async (symbol: string): Promise<HybridDataPacket>
     // Liquidity sweeps: did the last completed candle (per timeframe) wick
     // through a key level (24h high/low, recent swing) and reject, or close
     // beyond it? The "liquidity grab" read a human trader makes at a glance.
+    // Weekly/monthly context — the "where are we" layer (UTC week/month
+    // opens + ranges, previous period ranges) from 1h klines.
+    const marketContext = buildMarketContext(snapshot.klines['1h']);
+
+    // Live 1h candle progress (computed here — the packet carries no raw
+    // klines, so the injection uses this snapshot).
+    const live1hCandle = snapshot.klines['1h'][snapshot.klines['1h'].length - 1];
+    const live1h = (() => {
+        if (!live1hCandle) return undefined;
+        const price = snapshot.marketData.currentPrice;
+        const candleEnd = live1hCandle.time + 3600000;
+        const minutesLeft = Math.max(0, Math.round((candleEnd - Date.now()) / 60000));
+        const range = live1hCandle.high - live1hCandle.low;
+        const traveled = range > 0 ? Math.min(100, Math.max(0, ((price - live1hCandle.low) / range) * 100)) : 0;
+        return { open: live1hCandle.open, high: live1hCandle.high, low: live1hCandle.low, price, minutesLeft, percentTraveled: traveled };
+    })();
+
     const liquiditySweeps = detectLiquiditySweeps(
         (['15m', '1h', '4h', '1d'] as const).map(tf => ({
             timeframe: tf,
@@ -474,7 +553,10 @@ export const fetchHybridData = async (symbol: string): Promise<HybridDataPacket>
         // Detected Candle Patterns (pin bar, double top, BOS, …)
         detectedPatterns,
         // Level-anchored liquidity sweep events (last completed candle per TF)
-        liquiditySweeps
+        liquiditySweeps,
+        // Weekly/monthly market context
+        marketContext,
+        live1h
     };
 };
 
@@ -707,7 +789,7 @@ ${regimeEmoji} **MARKET REGIME (ADX-Based):**
 - Scores: A=${data.patternClassification.scores.familyA} | B=${data.patternClassification.scores.familyB} | C=${data.patternClassification.scores.familyC} | Ω=${data.patternClassification.scores.familyOmega}
 
 ${sentimentEmoji} **DERIVATIVES SENTIMENT:**
-- Open Interest: $${(data.derivatives.openInterestValue / 1000000).toFixed(2)}M
+- Open Interest: $${(data.derivatives.openInterestValue / 1000000).toFixed(2)}M${typeof data.derivatives.oiChange24h === 'number' ? ` (24h ${data.derivatives.oiChange24h >= 0 ? '+' : ''}${data.derivatives.oiChange24h.toFixed(2)}% — rising OI + falling price = new shorts, falling OI = liquidation/exit)` : ''}
 - Long/Short Ratio: ${data.derivatives.longShortRatio.ratio.toFixed(2)} (${data.derivatives.longShortRatio.sentiment.replace('_', ' ')})
 - Top Traders: ${data.derivatives.topTraderRatio.ratio.toFixed(2)} (${data.derivatives.topTraderRatio.sentiment.replace('_', ' ')})
 - Taker Buy/Sell: ${data.derivatives.takerBuySell.ratio.toFixed(2)} (${data.derivatives.takerBuySell.pressure.replace('_', ' ')})
@@ -781,6 +863,38 @@ ${formatFibLadder(data.enhancedKeyLevels.fibLevels)}
 
 **Resistance:** ${data.enhancedKeyLevels.resistance.slice(0, 3).map(r => `$${r.price} (${r.source}${r.touchCount > 0 ? `, ${r.touchCount} touch${r.touchCount === 1 ? '' : 'es'}` : ''})`).join(' | ')}
 **Support:** ${data.enhancedKeyLevels.support.slice(0, 3).map(s => `$${s.price} (${s.source}${s.touchCount > 0 ? `, ${s.touchCount} touch${s.touchCount === 1 ? '' : 'es'}` : ''})`).join(' | ')}
+
+${(() => {
+            const mc = data.marketContext;
+            const lines: string[] = [' **WEEKLY / MONTHLY CONTEXT (UTC):**'];
+            if (mc?.week) {
+                lines.push(`- Week: Open $${fmtPx(mc.week.open)} | High $${fmtPx(mc.week.high)} | Low $${fmtPx(mc.week.low)}${mc.prevWeek ? ` (prev week: $${fmtPx(mc.prevWeek.low)} – $${fmtPx(mc.prevWeek.high)})` : ''}`);
+            }
+            if (mc?.month) {
+                lines.push(`- Month: Open $${fmtPx(mc.month.open)} | High $${fmtPx(mc.month.high)} | Low $${fmtPx(mc.month.low)}${mc.prevMonth ? ` (prev month: $${fmtPx(mc.prevMonth.low)} – $${fmtPx(mc.prevMonth.high)})` : ''}`);
+            }
+            // Price position vs the nearest key levels + value area.
+            const price = data.marketData.currentPrice;
+            const nearSupport = data.enhancedKeyLevels.support[0];
+            const nearResistance = data.enhancedKeyLevels.resistance[0];
+            if (price > 0) {
+                const bits: string[] = [];
+                if (nearSupport?.price && price >= nearSupport.price) {
+                    bits.push(`${((price - nearSupport.price) / price * 100).toFixed(2)}% above S1 ($${fmtPx(nearSupport.price)})`);
+                }
+                if (nearResistance?.price && price <= nearResistance.price) {
+                    bits.push(`${((nearResistance.price - price) / price * 100).toFixed(2)}% below R1 ($${fmtPx(nearResistance.price)})`);
+                }
+                if (bits.length > 0) {
+                    lines.push(`- Price $${fmtPx(price)} — ${bits.join(' · ')}${data.advancedVolume.volumeProfile.valueAreaPosition === 'inside' ? ' · inside value area' : ` · ${data.advancedVolume.volumeProfile.valueAreaPosition.toUpperCase()} value area`}`);
+                }
+            }
+            // Live 1h candle progress — the "is it still moving" read.
+            if (data.live1h && price > 0) {
+                lines.push(`- Live 1H candle: open $${fmtPx(data.live1h.open)} → now $${fmtPx(data.live1h.price)} | ${data.live1h.minutesLeft}m left · ${data.live1h.percentTraveled.toFixed(0)}% of range traveled`);
+            }
+            return lines.join('\n');
+        })()}
 
 ${generateSessionSummary(data.session)}
 
