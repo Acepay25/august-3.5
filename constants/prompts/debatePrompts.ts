@@ -189,28 +189,14 @@ Immediately after your verdict text, on its own line, output exactly: </DEBATE_E
 
 After the verdict prose, output the final trade plan as MARKDOWN — labeled bullet lines, NO JSON anywhere:
 
-**FINAL TRADE PLAN**
-- **Coin:** BTCUSDT
-- **Direction:** Long
-- **Entry:** 95000 — Support retest
-- **Stop Loss:** 94500
-- **Take Profit 1:** 96000 (2%)
-- **Take Profit 2:** 97000 (4%)
-- **Confidence:** Medium
-- **Probability:** 65%
-- **Grade:** B
-- **Strategy:** One-line strategy summary
-- **Pattern Family:** Family C
-- **Support:** 94500 (4h), 94000 (1h)
-- **Resistance:** 96000 (4h), 97000 (1h)
-- **Validity Window:** 4h
-- **Invalidation:** What breaks this trade
+${MASTER_TRADE_PLAN_MARKDOWN}
 
 **PLAN RULES:**
 1. The plan is the ABSOLUTE LAST thing in your response.
 2. Use real values — never "..." or "N/A" placeholders.
 3. If the decision is Avoid, still fill the plan with the concrete setup and set Confidence to "Avoid".
 4. Keep every field on ONE line — the harness parses these labels.
+5. Include EVERY section of the template above — the plan IS the full signal.
 `;
 
 export const PURE_AI_MODERATOR_PROMPT = `
@@ -244,28 +230,14 @@ Generate the entire dialogue in one response:
 
 After the verdict prose, output the final trade plan as MARKDOWN — labeled bullet lines, NO JSON anywhere:
 
-**FINAL TRADE PLAN**
-- **Coin:** BTCUSDT
-- **Direction:** Long
-- **Entry:** 95000 — Key support level
-- **Stop Loss:** 94500
-- **Take Profit 1:** 96000 (2%)
-- **Take Profit 2:** 97000 (4%)
-- **Confidence:** Medium
-- **Probability:** 65%
-- **Grade:** B
-- **Strategy:** One-line strategy summary
-- **Pattern Family:** Pure AI Analysis
-- **Support:** 94500 (4h), 94000 (1h)
-- **Resistance:** 96000 (4h), 97000 (1h)
-- **Validity Window:** 4h
-- **Invalidation:** What breaks this trade
+${MASTER_TRADE_PLAN_MARKDOWN}
 
 **PLAN RULES:**
 1. The plan is the ABSOLUTE LAST thing in your response.
 2. Use real values — never "..." or "N/A" placeholders.
 3. If the decision is Avoid, still fill the plan with the concrete setup and set Confidence to "Avoid".
 4. Keep every field on ONE line — the harness parses these labels.
+5. Include EVERY section of the template above — the plan IS the full signal.
 `;
 
 /**

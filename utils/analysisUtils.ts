@@ -8,8 +8,9 @@
  * live there and are covered by tests/tradeAnalysisSchema.test.ts.
  */
 
-import { TradeAnalysis } from '../types';
+import { TradeAnalysis, ConfidenceCalibration } from '../types';
 import { parseTradeAnalysis } from '../schemas/tradeAnalysis';
+import { FAMILY_UI_DATA } from '../constants/models';
 
 // Shared cleaners, re-exported for consumers (autopilot, metrics).
 export { cleanPriceField } from './sanitizers';
@@ -19,6 +20,315 @@ export { cleanPriceField } from './sanitizers';
  * Never throws — total parse failure yields safe defaults.
  */
 export const sanitizeTradeAnalysis = (raw: any): TradeAnalysis => parseTradeAnalysis(raw);
+
+/**
+ * Render an analysis object as an organized markdown trade plan — the
+ * guaranteed fallback when the moderator's own markdown text (strategy)
+ * is missing or came back as a parse error. Mirrors the FINAL TRADE PLAN
+ * section layout (Setup / Levels / Odds / Strategy / Market Conditions /
+ * Patterns / Key Levels / Dual Scenario / Invalidation / Evidence /
+ * Devil's Advocate) so every parsed JSON field still reaches the chat
+ * as organized markdown, never as a card.
+ */
+export const buildAnalysisMarkdown = (analysis: TradeAnalysis): string => {
+    const lines: string[] = [];
+    const push = (s: string) => lines.push(s);
+    // Schema coercion fills missing fields with 'N/A' — skip those.
+    const meaningful = (v?: string): boolean => !!v && v !== 'N/A' && v !== 'Analysis unavailable';
+
+    // ── Setup ──
+    const prob = typeof analysis.probability === 'number' ? ` (${analysis.probability}%)` : '';
+    const setup: string[] = [
+        `Coin: **${analysis.coinName ?? 'Unknown Asset'}** · Direction: **${analysis.direction ?? 'Neutral'}** · Confidence: **${analysis.confidence ?? '—'}${prob}**`,
+    ];
+    if (analysis.grade) setup.push(`Grade: **${analysis.grade}**`);
+    if (analysis.detectedPatternFamily) {
+        const fam = FAMILY_UI_DATA.find(f => f.name === analysis.detectedPatternFamily);
+        setup.push(`Pattern Family: **${analysis.detectedPatternFamily}**${fam?.nickname ? ` — "${fam.nickname}"` : ''}`);
+    }
+    if (analysis.tradeType) setup.push(`Style: **${analysis.tradeType.toUpperCase()}**`);
+    if (typeof analysis.validityDurationMinutes === 'number' && analysis.createdAt) {
+        const expires = new Date(new Date(analysis.createdAt).getTime() + analysis.validityDurationMinutes * 60000);
+        setup.push(`Validity: **${analysis.validityDurationMinutes} min** (until ${expires.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })})`);
+    }
+    push('**Setup**');
+    setup.forEach(s => push(`- ${s}`));
+    push('');
+
+    // ── Levels ──
+    const entry = analysis.entryPoints?.[0]?.price;
+    const sl = analysis.stopLoss;
+    const tps = analysis.takeProfit ?? [];
+    if (entry || sl || tps.length > 0) {
+        push('**Levels**');
+        if (entry) push(`- Entry: **${entry}**`);
+        if (sl) push(`- Stop Loss: **${sl}**${analysis.stopLossPercentage ? ` (${analysis.stopLossPercentage})` : ''}`);
+        tps.forEach((tp, i) => push(`- TP${i + 1}: **${tp.price}**${tp.percentage ? ` (${tp.percentage})` : ''}`));
+        if (typeof analysis.rrRatio === 'number') push(`- Risk/Reward: **${analysis.rrRatio.toFixed(2)}:1**`);
+        push('');
+    }
+
+    // ── Odds ──
+    const odds: string[] = [];
+    if (typeof analysis.levelProbabilities?.slProbability === 'number') {
+        odds.push(`SL hit: **${analysis.levelProbabilities.slProbability}%**`);
+    }
+    (analysis.levelProbabilities?.tpProbabilities ?? []).forEach(p => {
+        odds.push(`TP${p.level ?? '?'}: **${p.probability}%**`);
+    });
+    if (odds.length > 0) {
+        push('**Odds**');
+        odds.forEach(o => push(`- ${o}`));
+        push('');
+    }
+
+    // ── Strategy (the moderator's own markdown when it survived) ──
+    const strategy = analysis.strategy;
+    if (strategy && strategy !== 'Analysis pending...' && !strategy.startsWith('Parsing Error:') && !strategy.startsWith('Connection Error:')) {
+        push('**Strategy**');
+        push(strategy);
+        push('');
+    }
+
+    // ── Market Conditions ──
+    const mc = analysis.marketConditions;
+    if (mc) {
+        const mcBits: string[] = [];
+        if (meaningful(mc.pattern)) mcBits.push(`Pattern: ${mc.pattern}`);
+        if (meaningful(mc.candleBehavior)) mcBits.push(`Candle Behavior: ${mc.candleBehavior}`);
+        if (meaningful(mc.timeframeAlignment)) mcBits.push(`Timeframe Alignment: ${mc.timeframeAlignment}`);
+        if (meaningful(mc.rsi)) mcBits.push(`RSI: ${mc.rsi}`);
+        if (meaningful(mc.macd)) mcBits.push(`MACD: ${mc.macd}`);
+        if (meaningful(mc.sentiment)) mcBits.push(`Sentiment: ${mc.sentiment}`);
+        if (mc.prices) {
+            const priceBits = Object.entries(mc.prices).filter(([, p]) => meaningful(p));
+            if (priceBits.length > 0) mcBits.push(`Prices: ${priceBits.map(([tf, p]) => `${tf} ${p}`).join(' · ')}`);
+        }
+        if (mcBits.length > 0) {
+            push('**Market Conditions**');
+            mcBits.forEach(b => push(`- ${b}`));
+            push('');
+        }
+    }
+
+    // ── Detected Patterns ──
+    if ((analysis.detectedPatterns?.length ?? 0) > 0) {
+        push('**Detected Patterns**');
+        analysis.detectedPatterns!.forEach(p => {
+            const meta = [p.timeframe, p.type, p.confidence].filter(meaningful).join(', ');
+            push(`- **${p.name}**${meta ? ` (${meta})` : ''}${p.description ? ` — ${p.description}` : ''}`);
+        });
+        push('');
+    }
+
+    // ── Key Levels ──
+    if (analysis.keyLevels && (analysis.keyLevels.support?.length || analysis.keyLevels.resistance?.length)) {
+        push('**Key Levels**');
+        if (analysis.keyLevels.support?.length) push(`- Support: ${analysis.keyLevels.support.join(' · ')}`);
+        if (analysis.keyLevels.resistance?.length) push(`- Resistance: ${analysis.keyLevels.resistance.join(' · ')}`);
+        push('');
+    }
+
+    // ── Dual Scenario ──
+    const ds = analysis.dualScenarioAnalysis;
+    if (ds) {
+        push('**Dual Scenario Analysis**');
+        if (ds.bullish?.trigger) {
+            push(`- Bullish trigger: **${ds.bullish.trigger}**${ds.bullish.confirmation ? ` — confirm: ${ds.bullish.confirmation}` : ''}${ds.bullish.target ? ` · target: **${ds.bullish.target}**` : ''}${ds.bullish.invalidation ? ` · invalidation: ${ds.bullish.invalidation}` : ''}`);
+        }
+        if (ds.bearish?.trigger) {
+            push(`- Bearish trigger: **${ds.bearish.trigger}**${ds.bearish.confirmation ? ` — confirm: ${ds.bearish.confirmation}` : ''}${ds.bearish.target ? ` · target: **${ds.bearish.target}**` : ''}${ds.bearish.invalidation ? ` · invalidation: ${ds.bearish.invalidation}` : ''}`);
+        }
+        if (ds.selectedScenario) {
+            push(`- Selected: **${ds.selectedScenario.toUpperCase()}**${typeof ds.confidenceInSelection === 'number' ? ` (${ds.confidenceInSelection}% confident)` : ''}`);
+        }
+        if (ds.selectionReasoning) push(`- Reasoning: ${ds.selectionReasoning}`);
+        push('');
+    }
+
+    // ── Invalidation ──
+    if ((analysis.invalidationCriteria?.length ?? 0) > 0) {
+        push('**Invalidation**');
+        analysis.invalidationCriteria!.forEach(inv => {
+            push(`- ${inv.condition || inv.level || inv.note || ''}${inv.level && inv.condition ? ` (${inv.level})` : ''}${inv.note ? ` — ${inv.note}` : ''}`);
+        });
+        push('');
+    }
+
+    // ── Evidence ──
+    if ((analysis.evidence?.length ?? 0) > 0) {
+        push('**Evidence**');
+        analysis.evidence!.forEach(e => {
+            push(`- ${e.claim}${e.state ? ` — *${e.state}*` : ''}${e.sources?.length ? ` (Sources: ${e.sources.join(', ')})` : ''}`);
+        });
+        push('');
+    }
+
+    // ── Devil's Advocate ──
+    const da = analysis.devilsAdvocate;
+    if (da) {
+        push("**Devil's Advocate**");
+        if (typeof da.riskScore === 'number') push(`- Risk score: **${da.riskScore}/100**`);
+        (da.bearCaseReasons ?? []).forEach(r => push(`- ${r}`));
+        (da.failureScenarios ?? []).forEach(s => push(`- Failure scenario: ${s}`));
+        if (da.crowdedTradeWarning) push(`- ${da.crowdedTradeWarning}`);
+        push('');
+    }
+
+    return lines.join('\n').trim();
+};
+
+/**
+ * Build the harness-side markdown sections that render BELOW the plan:
+ * everything the old card showed that the model's plan text can't carry
+ * (setup quality, calibration, team verdict, validation gate, pattern
+ * memory insight, data freshness). Each section renders only when its
+ * data exists.
+ */
+export const buildSupplementMarkdown = (analysis: TradeAnalysis, calibration?: ConfidenceCalibration): string => {
+    const lines: string[] = [];
+    const push = (s: string) => lines.push(s);
+
+    // ── Setup quality (harness-computed bits around the plan's levels) ──
+    const snap = analysis.marketSnapshot as { regime?: { regime?: string; adx?: number }; confluence?: { score?: number; direction?: string; strength?: string; alignment?: string[]; conflicts?: string[] } } | undefined;
+    const setupBits: string[] = [];
+    if (analysis.tradeType) setupBits.push(`Style: **${analysis.tradeType.toUpperCase()}**`);
+    if (snap?.regime?.regime) {
+        setupBits.push(`Regime: **${snap.regime.regime.replace(/_/g, ' ')}**${typeof snap.regime.adx === 'number' ? ` (ADX ${snap.regime.adx.toFixed(1)})` : ''}`);
+    }
+    const ets = analysis.entryTimingScore;
+    if (ets && typeof ets.score === 'number') {
+        setupBits.push(`Entry timing: **${ets.score}/100**${ets.timingQuality ? ` (${ets.timingQuality})` : ''}${ets.suggestedEntry?.reason ? ` — ${ets.suggestedEntry.reason}` : ''}`);
+    }
+    if (typeof analysis.rrRatio === 'number') setupBits.push(`Risk/Reward: **${analysis.rrRatio.toFixed(2)}:1**`);
+    if (analysis.stopLossPercentage) setupBits.push(`Stop distance: **${analysis.stopLossPercentage}**`);
+    const tp0 = analysis.takeProfit?.[0];
+    if (tp0?.percentage) setupBits.push(`TP1 gain: **${tp0.percentage}**`);
+    // Extended SL (150%) — worst-case loss threshold (SL distance × 1.5).
+    const entryP = parseFloat(analysis.entryPoints?.[0]?.price ?? '');
+    const slP = parseFloat(analysis.stopLoss ?? '');
+    if (Number.isFinite(entryP) && Number.isFinite(slP) && slP !== entryP) {
+        const distance = Math.abs(slP - entryP);
+        const extended = slP > entryP ? entryP + 1.5 * distance : entryP - 1.5 * distance;
+        setupBits.push(`Max loss (extended SL 150%): **$${extended.toFixed(2)}**`);
+    }
+    // Confluence (hybrid snapshot)
+    const confluence = snap?.confluence;
+    if (confluence && typeof confluence.score === 'number') {
+        const aligned = confluence.alignment?.length ?? 0;
+        const total = (confluence.alignment?.length ?? 0) + (confluence.conflicts?.length ?? 0);
+        setupBits.push(`Confluence: **${confluence.score}/100** ${confluence.direction ?? ''}${total > 0 ? ` · ${aligned}/${total} TFs aligned` : ''}${confluence.strength ? ` · ${confluence.strength}` : ''}`);
+    }
+    if (analysis.createdAt) {
+        setupBits.push(`Analyzed: ${new Date(analysis.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`);
+    }
+    if (typeof analysis.validityDurationMinutes === 'number' && analysis.createdAt) {
+        const expires = new Date(new Date(analysis.createdAt).getTime() + analysis.validityDurationMinutes * 60000);
+        const remainMin = Math.max(0, Math.round((expires.getTime() - Date.now()) / 60000));
+        if (remainMin > 0) {
+            const h = Math.floor(remainMin / 60);
+            const m = remainMin % 60;
+            setupBits.push(`Valid for ~${h > 0 ? `${h}h ` : ''}${m}m (until ${expires.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })})`);
+        }
+    }
+    if (setupBits.length > 0) {
+        push('**Setup quality**');
+        setupBits.forEach(b => push(`- ${b}`));
+        push('');
+    }
+
+    // ── Confidence & calibration ──
+    const conf = analysis.confidence;
+    const tierKey = (conf ?? 'Medium').toLowerCase() as 'high' | 'medium' | 'low' | 'avoid';
+    const stats = calibration?.[tierKey];
+    const expected = tierKey === 'high' ? 70 : tierKey === 'medium' ? 55 : 40;
+    const actual = stats && stats.total >= 3 ? (stats.wins / stats.total) * 100 : null;
+    const overconfident = actual !== null && actual < expected - 10;
+    const confBits: string[] = [];
+    if (analysis.originalConfidence && analysis.originalConfidence !== conf) {
+        confBits.push(`Original: ${analysis.originalConfidence} → Adjusted: ${conf}`);
+    }
+    if (overconfident && actual !== null && stats) {
+        const downgrade = tierKey === 'high' ? 'Medium' : tierKey === 'medium' ? 'Low' : 'Avoid';
+        confBits.push(`Calibration downgrade — this confidence tier historically wins ${actual.toFixed(0)}% (n=${stats.total}), shown as **${downgrade}**`);
+    } else if (actual !== null && stats) {
+        confBits.push(`Calibration — tier historically wins ${actual.toFixed(0)}% (n=${stats.total})`);
+    }
+    const rawProbs = (analysis.analystConsensus?.entries ?? [])
+        .map(e => e.probability)
+        .filter((p): p is number => typeof p === 'number');
+    const rawAvg = rawProbs.length > 0 ? rawProbs.reduce((a, b) => a + b, 0) / rawProbs.length : null;
+    if (rawAvg !== null && typeof analysis.probability === 'number' && Math.abs(rawAvg - analysis.probability) >= 8) {
+        confBits.push(`Divergence — raw analysts ${Math.round(rawAvg)}% → adjusted verdict ${Math.round(analysis.probability)}%`);
+    }
+    if (confBits.length > 0) {
+        push('**Confidence & calibration**');
+        confBits.forEach(b => push(`- ${b}`));
+        push('');
+    }
+
+    // ── Team verdict (per-analyst calls vs the verdict) ──
+    const consensusEntries = analysis.analystConsensus?.entries ?? [];
+    if (consensusEntries.length > 0) {
+        push('**Team verdict**');
+        const verdictDir = analysis.direction ?? 'Neutral';
+        const dissents = consensusEntries.filter(e => e.direction && e.direction !== verdictDir).length;
+        consensusEntries.forEach(e => {
+            const dir = e.direction === 'Long' ? '▲ Long' : e.direction === 'Short' ? '▼ Short' : '—';
+            const agrees = e.direction === verdictDir;
+            const call = `${e.displayName ?? e.thoughtsKey ?? e.providerId ?? '?'}: ${dir}${typeof e.probability === 'number' ? ` ${Math.round(e.probability)}%` : e.confidence ? ` ${e.confidence}` : ''} ${agrees ? '✓' : '✗'}`;
+            push(`- ${call}`);
+        });
+        if (dissents > 0) push(`- **${dissents} dissent${dissents > 1 ? 's' : ''}** from the verdict`);
+        push('');
+    }
+
+    // ── Validation gate ──
+    const gate = analysis.gateResult;
+    if (gate) {
+        const penalties: string[] = [];
+        const p = gate.penalties;
+        if (p.dataIntegrity > 0) penalties.push(`Data −${(p.dataIntegrity * 100).toFixed(0)}%`);
+        if (p.patternMemory > 0) penalties.push(`Memory −${(p.patternMemory * 100).toFixed(0)}%`);
+        if (p.htfConflict > 0) penalties.push(`HTF −${(p.htfConflict * 100).toFixed(0)}%`);
+        if (p.volumeContext > 0) penalties.push(`Volume −${(p.volumeContext * 100).toFixed(0)}%`);
+        const biasParts = (['A', 'B', 'C', 'Omega'] as const)
+            .map(f => ({ f, v: gate.familyBias[f] }))
+            .filter(x => x.v !== 0);
+        // The verdict line ALWAYS renders (the card always showed the gate
+        // scan result, even a clean PASS); the rest is conditional.
+        push('**Validation gate**');
+        push(`- Verdict: ${gate.passed ? 'PASS' : 'Adjusted'}${gate.confidenceCap < 1 ? ` — confidence capped at ${(gate.confidenceCap * 100).toFixed(0)}%` : ''}`);
+        if (penalties.length > 0) push(`- Penalties: ${penalties.join(' · ')}`);
+        if (gate.suggestedDirection && gate.suggestedDirection !== 'Neutral') push(`- Pattern memory suggests ${gate.suggestedDirection}`);
+        if (biasParts.length > 0) push(`- Family bias: ${biasParts.map(x => `${x.f === 'Omega' ? 'Ω' : x.f} ${x.v > 0 ? '+' : ''}${(x.v * 100).toFixed(0)}%`).join(' · ')}`);
+        (analysis.validationWarnings ?? []).forEach(w => push(`- ⚠ ${w}`));
+        (gate.warnings ?? []).forEach(w => push(`- ⚠ ${w}`));
+        (gate.insights ?? []).forEach(i => push(`- 💡 ${i}`));
+        if (analysis.riskVeto) push(`- ⛔ **Risk veto:** ${analysis.riskVeto}`);
+        push('');
+    }
+
+    // ── Pattern memory insight ──
+    if (analysis.historicalCorrelation && analysis.historicalCorrelation !== 'N/A') {
+        push('**Pattern memory insight**');
+        push(`> ${analysis.historicalCorrelation}`);
+        push('');
+    }
+
+    // ── Data freshness ──
+    const snapshot = analysis.marketSnapshot as { dataTimestamp?: string } | undefined;
+    if (snapshot?.dataTimestamp) {
+        const ageMin = Math.max(0, Math.round((Date.now() - new Date(snapshot.dataTimestamp).getTime()) / 60000));
+        if (ageMin > 10) {
+            push('**Data freshness**');
+            push(`- Market snapshot ${ageMin}m old — treat confidence as provisional.`);
+            push('');
+        }
+    }
+
+    return lines.join('\n').trim();
+};
 
 /**
  * Render a raw trade-plan JSON object as readable multi-line text.
