@@ -2102,17 +2102,27 @@ Each analyst presents their complete thesis covering ALL sections:
 
 ---
 
+${gateResult ? `
 ### 4. ROUND 3 — GATE SCAN RECONCILIATION (MANDATORY)
 **Moderator:** "The Two-Stage Gate Scan has analyzed this symbol BEFORE this debate. Here are the findings:
-- Confidence Cap: [X]%
-- Penalties Applied: [List any data integrity, pattern memory, HTF conflict, or volume penalties]
-- Family Bias: [Which families are favored/disfavored and why]
-- Warnings: [Any specific warnings from the Gate]
+- Confidence Cap: ${Math.round((gateResult.confidenceCap ?? 1) * 100)}%
+- Penalties Applied: ${[
+                    gateResult.confidencePenalties?.dataIntegrity ? `data integrity ${Math.round(gateResult.confidencePenalties.dataIntegrity * 100)}%` : '',
+                    gateResult.confidencePenalties?.patternMemory ? `pattern memory ${Math.round(gateResult.confidencePenalties.patternMemory * 100)}%` : '',
+                    gateResult.confidencePenalties?.htfConflict ? `HTF conflict ${Math.round(gateResult.confidencePenalties.htfConflict * 100)}%` : '',
+                    gateResult.confidencePenalties?.volumeContext ? `volume ${Math.round(gateResult.confidencePenalties.volumeContext * 100)}%` : '',
+                ].filter(Boolean).join(', ') || 'None'}
+- Family Bias: ${gateResult.familyBias?.reasoning?.join('; ') || 'None'}
+- Warnings: ${gateResult.warnings?.length ? gateResult.warnings.join('; ') : 'None'}
 
 ${analyst1Name}, explain how your thesis aligns with OR addresses these Gate findings."
 **${analyst1Name}:** Responds to Gate findings (max 60 words)
 **${analyst2Name}:** Agrees/disagrees, addresses Gate findings (max 60 words)
 **${analyst3Name}:** Final perspective on Gate alignment (max 60 words)
+` : `
+### 4. ROUND 3 — GATE SCAN (SKIPPED)
+**Moderator:** "No Gate Scan data is available for this run. Do NOT invent gate findings — proceed to the statistical review."
+`}
 **Moderator (if any confidence exceeds Gate cap):** "Your confidence of X% exceeds the Gate's cap of Y%. Justify this NOW with specific evidence, or accept the cap."
 **CRITICAL:** If analysts cannot justify exceeding the Gate's cap, the final verdict MUST respect the cap.
 
