@@ -197,22 +197,37 @@ export const verifyHistoricalOutcome = async (
         const klines1m = await fetchFuturesOHLCVFromTime(symbol, '1m', alignedStartTime);
         const limited1m = klines1m.slice(0, 500);
 
-        // Tier 2: 15-minute candles (medium) - continue where 1m ends
+        // Tier 2: 15-minute candles (medium) - continue where 1m ends.
+        // Start ONE 15m interval EARLIER than the naive "last 1m + 1m":
+        // Binance aligns candles to interval boundaries, so starting at
+        // last1m.time + 1m skips the partial candle covering the gap
+        // (e.g. 1m data ends 20:54 → the next 15m candle opens 21:00 and
+        // 20:54–21:00 is never fetched). A TP/SL touch inside that gap was
+        // invisible to the outcome scan → false STILL_OPEN / missed SL.
         const tier2StartTime = limited1m.length > 0
-            ? limited1m[limited1m.length - 1].time + getIntervalMs('1m')
-            : alignedStartTime + 500 * getIntervalMs('1m');
+            ? limited1m[limited1m.length - 1].time + getIntervalMs('1m') - getIntervalMs('15m')
+            : alignedStartTime + 500 * getIntervalMs('1m') - getIntervalMs('15m');
         const klines15m = await fetchFuturesOHLCVFromTime(symbol, '15m', tier2StartTime);
         const limited15m = klines15m.slice(0, 250);
 
-        // Tier 3: 1-hour candles (extended) - continue where 15m ends
+        // Tier 3: 1-hour candles (extended) - same overlap treatment so the
+        // partial 15m→1h boundary candle is covered.
         const tier3StartTime = limited15m.length > 0
-            ? limited15m[limited15m.length - 1].time + getIntervalMs('15m')
-            : tier2StartTime + 250 * getIntervalMs('15m');
+            ? limited15m[limited15m.length - 1].time + getIntervalMs('15m') - getIntervalMs('1h')
+            : tier2StartTime + 250 * getIntervalMs('15m') - getIntervalMs('1h');
         const klines1h = await fetchFuturesOHLCVFromTime(symbol, '1h', tier3StartTime);
         const limited1h = klines1h.slice(0, 250);
 
-        // Merge all tiers (chronological order) - used for both indicator snapshots and TP/SL detection
-        const klines = [...limited1m, ...limited15m, ...limited1h];
+        // Merge all tiers (chronological order) - used for both indicator
+        // snapshots and TP/SL detection. Dedupe by exact candle time so a
+        // boundary candle that appears in both tiers (same openTime) is
+        // counted once, keeping the finer (1m) copy.
+        const seenTimes = new Set<number>();
+        const klines = [...limited1m, ...limited15m, ...limited1h].filter(k => {
+            if (seenTimes.has(k.time)) return false;
+            seenTimes.add(k.time);
+            return true;
+        });
 
         // Track which candle index marks the boundary between timeframes
         const tier1EndIndex = limited1m.length;
@@ -344,7 +359,10 @@ export const verifyHistoricalOutcome = async (
         }
 
         // === ENTRY CONFIRMED - OUTCOME RESOLUTION (shared engine) ===
-        const entryTimeAfterAnalysis = formatDuration(klines[entryTriggeredAtIndex].time - analysisTime);
+        // Clamp at 0: when the entry triggers inside the analysis candle, the
+        // aligned candle start precedes the exact analysis timestamp and the
+        // raw delta goes negative ("-1h -1m").
+        const entryTimeAfterAnalysis = formatDuration(Math.max(0, klines[entryTriggeredAtIndex].time - analysisTime));
         console.log(`[AutoCapture] Entry triggered at candle #${entryTriggeredAtIndex} (${entryTimeAfterAnalysis} after analysis)`);
 
         // Shared canonical scan — identical semantics to validateTradeOutcome

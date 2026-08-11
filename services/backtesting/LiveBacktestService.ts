@@ -144,6 +144,10 @@ const calculateSimilarity = (
     currentRegime?: MarketRegime
 ): number => {
     let score = 0;
+    // How many INDEPENDENT dimensions matched — same-coin ALONE must not
+    // count as a "similar setup": an opposite-direction trade on the same
+    // coin is not evidence for this setup's win rate.
+    let matchedDimensions = 0;
     const historicalAnalysis = historical.analysis;
 
     if (!historicalAnalysis) return 0;
@@ -152,12 +156,14 @@ const calculateSimilarity = (
     if (current.coinName && historicalAnalysis.coinName) {
         if (current.coinName.toUpperCase() === historicalAnalysis.coinName.toUpperCase()) {
             score += 40;
+            matchedDimensions++;
         } else {
             // Same base asset (e.g., both BTC pairs): +15 points
             const currentBase = current.coinName.replace(/USDT|USD|PERP/gi, '');
             const historicalBase = historicalAnalysis.coinName.replace(/USDT|USD|PERP/gi, '');
             if (currentBase === historicalBase) {
                 score += 15;
+                matchedDimensions++;
             }
         }
     }
@@ -165,6 +171,7 @@ const calculateSimilarity = (
     // Same direction: +30 points
     if (current.direction === historicalAnalysis.direction) {
         score += 30;
+        matchedDimensions++;
     }
 
     // Same pattern family: +20 points
@@ -174,11 +181,13 @@ const calculateSimilarity = (
 
         if (currentFamily === historicalFamily) {
             score += 20;
+            matchedDimensions++;
         } else {
             const cf = familyKey(currentFamily);
             const hf = familyKey(historicalFamily);
             if (cf && cf === hf) {
                 score += 15;
+                matchedDimensions++;
             }
         }
     }
@@ -188,10 +197,13 @@ const calculateSimilarity = (
         const historicalRegime = extractRegime(historical);
         if (normalizeRegime(currentRegime) === normalizeRegime(historicalRegime) && normalizeRegime(currentRegime) !== 'unknown') {
             score += 10;
+            matchedDimensions++;
         }
     }
 
-    return score;
+    // Same-coin-only trades (+40, one dimension) must not pass as "similar"
+    // — require at least two independent matching dimensions.
+    return matchedDimensions >= 2 ? score : 0;
 };
 
 /**

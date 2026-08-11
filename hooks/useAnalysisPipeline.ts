@@ -1155,7 +1155,11 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                         // pipeline computes a capped confidence level for this
                         // setup — never let the analysis exceed it.
                         if (bayesianConfidenceCap) {
-                            const LEVEL_ORDER: Record<string, number> = { low: 0, medium: 1, high: 2 };
+                            // 'Avoid' ranks BELOW 'low' — it is the strongest
+                            // veto the calibration pipeline has and must be
+                            // enforceable (previously missing from the ladder,
+                            // so an Avoid cap was silently never applied).
+                            const LEVEL_ORDER: Record<string, number> = { avoid: -1, low: 0, medium: 1, high: 2 };
                             const cap = LEVEL_ORDER[bayesianConfidenceCap.toLowerCase()];
                             const current = LEVEL_ORDER[finalAnalysis.confidence?.toLowerCase() || 'high'];
                             if (cap !== undefined && current !== undefined && current > cap) {
@@ -2133,37 +2137,43 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     }
 
                     // === PROGRAMMATIC GATE CAP ENFORCEMENT ===
-                    // The Gate produces a confidenceCap based on data integrity, pattern memory,
-                    // HTF/LTF conflict, and volume context. The moderator can emit any probability
-                    // in its JSON, but it must never exceed the gate cap. Enforce in code.
-                    if (capturedGateResult && finalAnalysis.probability != null) {
-                        const gateCap = capturedGateResult.confidenceCap ?? 1.0;
-                        const clampResult = clampProbabilityToGate(
-                            finalAnalysis.probability,
-                            gateCap,
-                            finalAnalysis.rrRatio
-                        );
-                        if (clampResult.wasClamped) {
-                            console.warn(`[Gate Enforcement] Clamped probability ${finalAnalysis.probability}% → ${clampResult.probability}% (${clampResult.reason})`);
-                            finalAnalysis.probability = clampResult.probability;
-                            // Also downgrade the confidence string if probability was clamped below the threshold
-                            if (clampResult.probability < 70 && finalAnalysis.confidence === 'High') {
-                                finalAnalysis.confidence = 'Medium';
-                            } else if (clampResult.probability < 55 && finalAnalysis.confidence === 'Medium') {
-                                finalAnalysis.confidence = 'Low';
-                            }
-                            // Record the clamping in validation warnings
-                            if (!finalAnalysis.validationWarnings) {
-                                finalAnalysis.validationWarnings = [];
-                            }
-                            finalAnalysis.validationWarnings.push(`Gate enforcement: ${clampResult.reason}`);
-                        }
-                    }
+                    // (moved below processNewAnalysis so the R:R-based clamp
+                    // tiers use the recomputed rrRatio)
 
                     // Compute OUTSIDE the state updater: updaters may re-run in
                     // StrictMode (duplicate notifications) and must stay pure
                     // (processNewAnalysis performs synchronous setState calls).
                     const processedAnalysis = processNewAnalysis(finalAnalysis);
+
+                    // === PROGRAMMATIC GATE CAP ENFORCEMENT ===
+                    // Runs AFTER processNewAnalysis so the R:R-based clamp
+                    // tiers use the RECOMPUTED rrRatio — clamping before the
+                    // metrics pass meant a moderator-emitted (or wrong)
+                    // rrRatio disabled the 54%/69% grade clamps entirely.
+                    if (processedAnalysis && capturedGateResult && processedAnalysis.probability != null) {
+                        const gateCap = capturedGateResult.confidenceCap ?? 1.0;
+                        const clampResult = clampProbabilityToGate(
+                            processedAnalysis.probability,
+                            gateCap,
+                            processedAnalysis.rrRatio
+                        );
+                        if (clampResult.wasClamped) {
+                            console.warn(`[Gate Enforcement] Clamped probability ${processedAnalysis.probability}% → ${clampResult.probability}% (${clampResult.reason})`);
+                            processedAnalysis.probability = clampResult.probability;
+                            // Also downgrade the confidence string if probability was clamped below the threshold
+                            if (clampResult.probability < 70 && processedAnalysis.confidence === 'High') {
+                                processedAnalysis.confidence = 'Medium';
+                            } else if (clampResult.probability < 55 && processedAnalysis.confidence === 'Medium') {
+                                processedAnalysis.confidence = 'Low';
+                            }
+                            // Record the clamping in validation warnings
+                            if (!processedAnalysis.validationWarnings) {
+                                processedAnalysis.validationWarnings = [];
+                            }
+                            processedAnalysis.validationWarnings.push(`Gate enforcement: ${clampResult.reason}`);
+                        }
+                    }
+
                     if (freshHybridData && processedAnalysis) {
                         // Inject market snapshot (Algo Mode & Regeneration).
                         processedAnalysis.marketSnapshot = freshHybridData;

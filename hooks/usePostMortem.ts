@@ -386,7 +386,20 @@ Please investigate this discrepancy in your analysis.
                 }
 
                 let fullDebateText = "";
-                const turnRegex = /(?:^|\n)\s*(?:[*_~]*)(Gemini|DeepSeek|Zhipu|Groq|Groq \(Alt\)|Groq \(Alt 2\)|OpenRouter|Claude[^\n:]*|GPT[^\n:]*|Grok[^\n:]*|O1|O3|O4|Puter|Moderator)[^\n:]*?(?:[*_~]*)\s*:\s*([\s\S]*?)(?=(?:^|\n)\s*(?:[*_~]*)(?:Gemini|DeepSeek|Zhipu|Groq|Groq \(Alt\)|Groq \(Alt 2\)|OpenRouter|Claude[^\n:]*|GPT[^\n:]*|Grok[^\n:]*|O1|O3|O4|Puter|Moderator)[^\n:]*?(?:[*_~]*)\s*:|$)/gi;
+                // Speaker regex built from the ACTUAL participating providers
+                // (runtime-configured provider names) plus the established
+                // model aliases — the old hardcoded list silently dropped
+                // every analyst turn from custom providers.
+                const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const resultProviderNames = results.map(r => r.provider).filter(Boolean).map(escapeRegExp);
+                const speakerNames = [...new Set([
+                    ...resultProviderNames,
+                    'Gemini', 'DeepSeek', 'Zhipu', 'Groq', 'Groq \\(Alt\\)', 'Groq \\(Alt 2\\)', 'OpenRouter',
+                    'Moderator', 'Master Strategist', 'Claude[^:]*', 'GPT[^:]*', 'Grok[^:]*', 'Mistral[^:]*',
+                    'Kimi[^:]*', 'Qwen[^:]*', 'LLaMA[^:]*', 'O1[^:]*', 'O3[^:]*', 'O4[^:]*', 'Puter[^:]*'
+                ])].sort((a, b) => b.length - a.length);
+                const speakerPattern = speakerNames.join('|');
+                const turnRegex = new RegExp(`(?:^|\\n)\\s*(?:[*_~]*)(${speakerPattern})[^\\n]*?(?:[*_~]*)\\s*:\\s*([\\s\\S]*?)(?=(?:^|\\n)\\s*(?:[*_~]*)(${speakerPattern})[^\\n]*?(?:[*_~]*)\\s*:|$)`, 'gi');
 
                 for await (const chunk of debateStream) {
                     // P0-2: abort the stream if the user switched accounts
@@ -662,11 +675,18 @@ Please investigate this discrepancy in your analysis.
         let finalValidation = mismatchData.validation;
 
         if (outcome === 'LOSS') {
+            // When price data showed a TP hit first but the user confirms a
+            // LOSS, use the ACTUAL stop-loss level as the exit reference —
+            // previously a made-up `entryPrice * 0.9` (-10%) was injected
+            // into every analyst's prompt as "ground truth".
+            const exitRef = finalValidation.slTouched
+                ? (finalValidation.slTouchPrice ?? finalValidation.stopLoss)
+                : (finalValidation.stopLoss ?? finalValidation.entryPrice * 0.9);
             finalValidation = {
                 ...finalValidation,
                 outcome: 'LOSS',
                 hitTarget: 'SL',
-                exitPrice: finalValidation.slTouched ? (finalValidation.slTouchPrice ?? finalValidation.stopLoss) : (finalValidation.entryPrice * 0.9),
+                exitPrice: exitRef,
                 exitTime: finalValidation.slTouched ? finalValidation.slTouchTime : (finalValidation.exitTime),
                 isMismatch: false,
                 validationSummary: finalValidation.validationSummary + `\n\n═══════════════════════════════════════════════════════════════\n⚠️ **USER CONFIRMED OUTCOME: LOSS**\n═══════════════════════════════════════════════════════════════\nAlthough price data shows a TP hit first, the USER has explicitly CONFIRMED this trade as a LOSS.\n\n**MANDATORY INSTRUCTION FOR ANALYSTS:**\n1. You MUST accept LOSS as the ground truth.\n2. Do NOT argue that it "should have been a win".\n3. Assume the user missed the TP or manually closed in loss.\n4. Analyze the failure based on the SL hit or manual exit.`

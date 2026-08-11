@@ -475,23 +475,26 @@ const DEFAULT_PROBABILITY_REASONING: ProbabilityReasoning = {
 export const normalizeLevelProbabilities = (rawLp: unknown): LevelProbabilities | undefined => {
   if (!rawLp || typeof rawLp !== 'object') return undefined;
   const lp = rawLp as Record<string, any>;
+  // Level probabilities must live on the 0-100 scale — a model emitting
+  // 150 or -5 previously passed through unclamped into the UI/calibration.
+  const clampProb = (n: number): number => (Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : 0);
   const tpProbabilities: LevelProbabilities['tpProbabilities'] = Array.isArray(lp.tpProbabilities)
     ? lp.tpProbabilities.map((p: any) => ({
         level: typeof p.level === 'number' ? p.level : 0,
-        probability: typeof p.probability === 'number' ? p.probability : 0,
+        probability: clampProb(typeof p.probability === 'number' ? p.probability : 0),
         reasoning: p.reasoning || { ...DEFAULT_PROBABILITY_REASONING },
       }))
     : [];
   return {
-    slProbability: typeof lp.slProbability === 'number' ? lp.slProbability : 0,
+    slProbability: clampProb(typeof lp.slProbability === 'number' ? lp.slProbability : 0),
     slReasoning: lp.slReasoning || lp.reasoning?.sl || { ...DEFAULT_PROBABILITY_REASONING },
     tpProbabilities,
     // Legacy fields for backward compatibility
-    tp1Probability: typeof lp.tp1Probability === 'number' ? lp.tp1Probability
+    tp1Probability: typeof lp.tp1Probability === 'number' ? clampProb(lp.tp1Probability)
       : (typeof tpProbabilities[0]?.probability === 'number' ? tpProbabilities[0].probability : undefined),
-    tp2Probability: typeof lp.tp2Probability === 'number' ? lp.tp2Probability
+    tp2Probability: typeof lp.tp2Probability === 'number' ? clampProb(lp.tp2Probability)
       : (typeof tpProbabilities[1]?.probability === 'number' ? tpProbabilities[1].probability : undefined),
-    tp3Probability: typeof lp.tp3Probability === 'number' ? lp.tp3Probability
+    tp3Probability: typeof lp.tp3Probability === 'number' ? clampProb(lp.tp3Probability)
       : (typeof tpProbabilities[2]?.probability === 'number' ? tpProbabilities[2].probability : undefined),
     reasoning: lp.reasoning && typeof lp.reasoning === 'object' ? {
       sl: lp.reasoning.sl || lp.slReasoning || { ...DEFAULT_PROBABILITY_REASONING },
@@ -562,8 +565,16 @@ export const applySemanticFixups = (raw: CoercedTradeAnalysis): TradeAnalysis =>
   if (typeof raw.probability === 'number') {
     probValue = raw.probability;
   } else if (typeof raw.probability === 'string') {
-    const cleanProb = raw.probability.replace(/[^0-9.]/g, '');
-    if (cleanProb.length > 0) probValue = parseFloat(cleanProb);
+    // Ranges ("75-80%") resolve to their MIDPOINT — the naive digit-strip
+    // turned "75-80" into 7580, which clamped to 100% (a range becoming a
+    // max-confidence trade).
+    const rangeMatch = raw.probability.match(/(\d+(?:\.\d+)?)\s*[-–—~]\s*(\d+(?:\.\d+)?)/);
+    if (rangeMatch) {
+      probValue = (parseFloat(rangeMatch[1]) + parseFloat(rangeMatch[2])) / 2;
+    } else {
+      const cleanProb = raw.probability.replace(/[^0-9.]/g, '');
+      if (cleanProb.length > 0) probValue = parseFloat(cleanProb);
+    }
   }
 
   // Treat 0 or negative as missing/invalid to avoid the "always 15%" bug.
