@@ -78,6 +78,13 @@ export interface RunStats {
   durationMs: number;
   /** Gate confidence cap (0-1) applied during the run, if any. */
   gateCap?: number;
+  /**
+   * Fingerprint of the effective prompt layers for this run (registry
+   * overrides + mode + lens state + hybrid toggle). Lets prompt changes be
+   * MEASURED against outcomes later (per-version win/calibration stats) —
+   * without it, editing a prompt globally could never be evaluated.
+   */
+  promptVersion?: string;
   /** First analyst's Monte Carlo win rate (%), if computed. */
   mcWinRate?: number;
   /** First analyst's Monte Carlo expected value (R), if computed. */

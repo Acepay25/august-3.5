@@ -390,6 +390,26 @@ code,
   grid-template-rows: 1fr;
 }
 
+/* Smooth entry for the signal card's Details layer (it mounts/unmounts —
+   the grid collapse below needs mounted content, which is too heavy for the
+   full details grid). */
+@keyframes details-enter {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.details-enter {
+  animation: details-enter 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Right-side panel slide-in (AnalystPanel) */
+@keyframes panel-slide-in {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+.panel-slide-in {
+  animation: panel-slide-in 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
 /* ===== SOLID SURFACES ===== */
 
 /* Solid charcoal surfaces — glassmorphism (translucency + blur) is

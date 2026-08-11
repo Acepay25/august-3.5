@@ -31,6 +31,7 @@ import { sanitizeAIResponse } from '../utils/sanitizers';
 import { buildModelIdToName, isProviderReady } from '../utils/providerUtils';
 import { DEFAULT_LEVERAGE } from '../utils/conversationUtils';
 import { loadLearningRules } from '../services/learning/LearningRulesService';
+import { buildDecisionReflectionContext } from '../services/learning/DecisionReflectionService';
 import { getEnabledStrategiesText } from '../services/infrastructure/StrategyService';
 import { StructuredRule } from '../types';
 import {
@@ -182,6 +183,21 @@ const buildModelsUsedRecord = (analysts: { config: { id: string }; model: string
         }
     }
     return record;
+};
+
+
+/**
+ * Stable fingerprint of the effective prompt layers for a run — lets prompt
+ * edits be measured against outcomes (A/B without an experiment framework:
+ * each run records WHICH prompt version produced it).
+ */
+const computePromptVersion = (parts: Record<string, unknown>): string => {
+    let hash = 5381;
+    const payload = JSON.stringify(parts) || '';
+    for (let i = 0; i < payload.length; i++) {
+        hash = ((hash << 5) + hash + payload.charCodeAt(i)) >>> 0;
+    }
+    return `v${hash.toString(36)}`;
 };
 
 const MAX_INITIAL_ANALYSIS_RETRIES = 1;
@@ -1035,6 +1051,17 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 .map(m => m.replace(/USDT?|PERP/gi, '').toUpperCase())
                 .find(s => s.length >= 2 && s.length <= 10 && !commonWords.includes(s));
             const finalSymbol = detectedSymbol ? `${detectedSymbol}USDT` : null;
+
+            // ========== DECISION REFLECTIONS ==========
+            // Feed the user's closed trades + lessons back into the NEXT run
+            // (TradingAgents/Reflexion loop): the model reasons with actual
+            // outcomes for this ticker, not only generic extracted rules.
+            try {
+                const reflectionBlock = buildDecisionReflectionContext(loggedTrades, finalSymbol);
+                if (reflectionBlock) enhancedPrompt = `${reflectionBlock}
+
+${enhancedPrompt}`;
+            } catch { /* reflection is best-effort */ }
 
             let gateInjection = '';
             let capturedGateResult: GateOutput | null = null; // Local variable to avoid state closure issue

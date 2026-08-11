@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { ProviderConfig } from '../../types';
 import { AnalystLensConfig, AnalystRole } from '../../types';
 import { EnsembleModelSelection } from '../../services/ui/AnalystLensService';
+import GlobalLearningService from '../../services/learning/GlobalLearningService';
 import { ANALYST_ROLE_DEFINITIONS } from '../../services/ui/AnalystLensService';
 import { CloseIcon } from '../shared/Icons';
 
@@ -50,8 +51,21 @@ const TeamModal: React.FC<TeamModalProps> = ({
 
     const setMode = (next: 'normal' | 'lenses') => {
         if (next === 'lenses' && lensConfig.assignments.length === 0) {
-            // Auto-assign: first three ready providers (distinct) fill the roles.
-            const distinct = [...new Map(readyProviders.map(p => [p.id, p])).values()].slice(0, 3);
+            // Auto-assign: prefer the BEST-CALIBRATED ready providers (the
+            // user's own per-provider win rates) — routing reflects what
+            // actually works, not just "first three providers".
+            let providerOrder = [...readyProviders];
+            try {
+                const byProvider = GlobalLearningService.getCalibration()?.granular?.byProvider;
+                if (byProvider) {
+                    providerOrder = [...readyProviders].sort((a, b) => {
+                        const wa = byProvider[a.id]?.total >= 3 ? byProvider[a.id].wins / byProvider[a.id].total : -1;
+                        const wb = byProvider[b.id]?.total >= 3 ? byProvider[b.id].wins / byProvider[b.id].total : -1;
+                        return wb - wa;
+                    });
+                }
+            } catch { /* calibration read is best-effort */ }
+            const distinct = [...new Map(providerOrder.map(p => [p.id, p])).values()].slice(0, 3);
             if (distinct.length > 0) {
                 const assignments = LENS_ROLES.map((r, i) => ({
                     role: r.role,

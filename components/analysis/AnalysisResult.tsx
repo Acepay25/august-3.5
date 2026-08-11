@@ -401,7 +401,28 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
     }, [coinName, safeDirectionString, confidence, probability, entryPoints, stopLoss, takeProfit, rrRatio, hasValidRR, strategy, summarySnapshot]);
 
     return (
-        <div ref={cardRef} className={`analysis-card mt-6 sm:mt-8 w-full ${isDetailsVisible ? 'pb-28 sm:pb-8' : 'pb-2 sm:pb-4'}`}>
+        <div
+            ref={cardRef}
+            tabIndex={0}
+            onKeyDown={(e) => {
+                // Signal-card hotkeys: W = log win, L = log loss, D = toggle
+                // details. Only when the card is focused and the user is not
+                // typing in a field.
+                const target = e.target as HTMLElement;
+                if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)) return;
+                if (e.key === 'd' || e.key === 'D') {
+                    e.preventDefault();
+                    setIsDetailsVisible(v => !v);
+                } else if ((e.key === 'w' || e.key === 'W') && outcome === TradeOutcome.PENDING && !autopilotResolution) {
+                    e.preventDefault();
+                    onLogTrade(messageId, TradeOutcome.WIN);
+                } else if ((e.key === 'l' || e.key === 'L') && outcome === TradeOutcome.PENDING && !autopilotResolution) {
+                    e.preventDefault();
+                    onLogTrade(messageId, TradeOutcome.LOSS);
+                }
+            }}
+            className={`analysis-card mt-6 sm:mt-8 w-full outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40 rounded-2xl ${isDetailsVisible ? 'pb-28 sm:pb-8' : 'pb-2 sm:pb-4'}`}
+        >
 
             {/* Chat-style signal summary — the "Trading workspace" look */}
             <div className="rounded-2xl border border-white/5 bg-zinc-900/80 p-4 sm:p-5 shadow-lg">
@@ -545,10 +566,16 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                         onClick={() => setIsDetailsVisible(v => !v)}
                         className="ml-auto px-3 py-1.5 rounded-lg text-[10px] font-bold bg-zinc-800 border border-white/10 text-zinc-400 uppercase tracking-widest hover:text-zinc-200 transition-colors flex items-center gap-1"
                         aria-expanded={isDetailsVisible}
+                        title="Keyboard: D"
                     >
                         {isDetailsVisible ? 'Hide details' : 'Details'}
                         <ChevronDownIcon className={`w-3 h-3 transition-transform ${isDetailsVisible ? 'rotate-180' : ''}`} />
                     </button>
+                    <span className="text-[9px] text-zinc-600 self-center hidden sm:inline" title="Focus the card, then: W = log win, L = log loss, D = toggle details">
+                        <kbd className="px-1 py-0.5 rounded bg-zinc-800 border border-white/10">W</kbd>
+                        <kbd className="px-1 py-0.5 rounded bg-zinc-800 border border-white/10 ml-1">L</kbd>
+                        <kbd className="px-1 py-0.5 rounded bg-zinc-800 border border-white/10 ml-1">D</kbd>
+                    </span>
                 </div>
             </div>
 
@@ -556,7 +583,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                 the card reads as a normal chat message, revealed via the
                 Details button in the bubble's action row. */}
             {isDetailsVisible && (
-                <div className="mt-4 space-y-4">
+                <div className="mt-4 space-y-4 details-enter">
 
             {/* Consensus explainability — audit the verdict against its analysts */}
             {analysis.analystConsensus && (
