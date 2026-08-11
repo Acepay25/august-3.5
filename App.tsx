@@ -159,6 +159,10 @@ const App: React.FC = () => {
     const [analystPanel, setAnalystPanel] = useState<{ message: Message; activeTab: string } | null>(null);
 
     const handleOpenAnalystPanel = useCallback((msg: Message, activeTab?: string) => {
+        // Both right-side panels sit at z-30 — opening one must close the
+        // other, or the analyst panel paints over the analytics panel with
+        // no way to reach it.
+        setIsAdvancedAnalyticsOpen(false);
         setAnalystPanel(prev => {
             // If clicking the same message, just switch tab
             if (prev?.message.id === msg.id) {
@@ -2436,6 +2440,7 @@ const App: React.FC = () => {
     // keystroke / progress tick even when nothing relevant changed.
     const handleSelectMessageForProbability = useCallback((id: string) => {
         setSelectedProbabilityMessageId(id);
+        setAnalystPanel(null); // z-30 mutual exclusion
         setIsAdvancedAnalyticsOpen(true);
         handleCalculateAIProbabilities(id);
     }, [handleCalculateAIProbabilities]);
