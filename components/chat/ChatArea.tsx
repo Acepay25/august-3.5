@@ -3,6 +3,7 @@ import { Message, ImageMetadata, AccuracySubMode, AnalysisStep, AnalystLensConfi
 import { EnsembleModelSelection } from '../../services/ui/AnalystLensService';
 import { RegimeProviderStatsMap } from '../../services/learning/SetupMemoryService';
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
+import ErrorBoundary from '../shared/ErrorBoundary';
 import MessageItem, { ChatContextProps } from './MessageItem';
 import { ChatInput } from './ChatInput';
 import { QuickActionChips } from './QuickActionChips';
@@ -377,8 +378,18 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 data={processedMessages}
                 context={enhancedContext}
                 computeItemKey={(_, message) => message.id}
-                itemContent={(index, message, context) => <MessageItem message={message} context={context} />}
-                followOutput={prefersReducedMotion ? false : 'smooth'}
+                // Per-message error boundary: one message that fails to render
+                // (e.g. odd analysis data) collapses to an inline fallback
+                // instead of taking the whole app to the black error screen.
+                itemContent={(index, message, context) => (
+                    <ErrorBoundary compact>
+                        <MessageItem message={message} context={context} />
+                    </ErrorBoundary>
+                )}
+                // Follow the streaming output only while the user is at the
+                // bottom — scrolling up mid-generation must stay put so the
+                // user can read older messages while the answer streams.
+                followOutput={prefersReducedMotion ? false : (isAtBottom) => (isAtBottom ? 'smooth' : false)}
                 atBottomStateChange={(atBottom) => setShowScrollDown(!atBottom)}
                 atTopStateChange={(atTop) => setShowScrollUp(!atTop && analysisMessages.length > 0)}
                 style={{ height: '100%', width: '100%' }}

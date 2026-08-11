@@ -5,7 +5,7 @@ import { ChevronDownIcon, LinkIcon, CheckIcon, BrainIcon } from '../shared/Icons
 import MarkdownContent from '../shared/MarkdownContent';
 import LiveMarketDataView from '../market/LiveMarketDataView';
 import EnsembleProgressChat from '../analysis/EnsembleProgressChat';
-import AnalysisResult from '../analysis/AnalysisResult';
+import AnalysisDetails from './AnalysisDetails';
 import AnalystInlineRow from '../analysis/AnalystInlineRow';
 import LiveThinkingAccordion from './LiveThinkingAccordion';
 import ThinkingModal from '../analysis/ThinkingModal';
@@ -242,6 +242,23 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
         .replace(/\n{3,}/g, '\n\n')
         .trim();
 
+    // The FULL plan markdown. Ensemble messages carry a stub text ("The
+    // ensemble has concluded its debate.") — the real **FINAL TRADE PLAN**
+    // block lives in analysis.strategy (the moderator's markdown verdict,
+    // tags stripped). Single-provider runs keep the plan in the message
+    // text, so fall back to displayContent when strategy is absent.
+    const planMarkdown = React.useMemo(() => {
+        const s = message.analysis?.strategy;
+        if (s && !s.startsWith('Parsing Error:') && !s.startsWith('Connection Error:')) return s;
+        return displayContent;
+    }, [message.analysis?.strategy, displayContent]);
+
+    // Accuracy-mode verification note — the stub sentence plus an optional
+    // note ("Plan verified by the accuracy pass."); show only the note.
+    const ensembleNote = displayContent.includes('The ensemble has concluded its debate.')
+        ? displayContent.replace('The ensemble has concluded its debate.', '').trim()
+        : '';
+
     // Determine Bubble Styling - Clean modern design like ChatGPT/Gemini
     const bubbleClass = isUserMessage
         ? '' // user messages render as plain text (Cursor-style, no bubble)
@@ -391,14 +408,14 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 </div>
                             )}
 
-                            {message.role === MessageRole.AI && displayContent.trim() && (
+                            {message.role === MessageRole.AI && (displayContent.trim() || planMarkdown.trim()) && (
                                 <div className="mb-2 flex items-center justify-between gap-2">
                                     <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
                                         Final output
                                     </div>
-                                    {/* Regenerate the latest analysis card with the same
-                                        prompt + chart (appends a fresh card; the old one
-                                        stays for comparison). */}
+                                    {/* Regenerate the latest analysis with the same
+                                        prompt + chart (appends a fresh signal; the
+                                        old one stays for comparison). */}
                                     {message.analysis && context.latestMessageId === message.id && onReRunAnalysis && (
                                         <button
                                             type="button"
@@ -438,8 +455,19 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                         </button>
                                     </div>
                                 </div>
+                            ) : message.analysis && planMarkdown.trim() ? (
+                                // Analysis messages render the FINAL TRADE PLAN
+                                // as properly RENDERED markdown (bold labels,
+                                // sections, lists) — no card look, all the
+                                // JSON data organized in markdown sections.
+                                <div className="min-w-0">
+                                    <MarkdownContent content={planMarkdown} />
+                                    {ensembleNote && (
+                                        <p className="mt-2 text-[11px] text-zinc-500 leading-relaxed">{ensembleNote}</p>
+                                    )}
+                                </div>
                             ) : (
-                                <div className={`prose prose-invert prose-sm max-w-none whitespace-pre-wrap leading-[1.65] overflow-x-auto min-w-0 ${message.isPostMortem ? 'text-zinc-100' : 'text-zinc-200'}`}>
+                                <div className={`prose prose-invert max-w-none whitespace-pre-wrap leading-[1.65] overflow-x-auto min-w-0 ${message.isPostMortem ? 'text-zinc-100' : 'text-zinc-200'}`} style={{ fontSize: '15px' }}>
                                     <SmoothText text={displayContent} animate={message.role === MessageRole.AI && context.latestMessageId === message.id && !message.analysis} />
                                 </div>
                             )}
@@ -620,7 +648,25 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                             )}
 
                             {/* Main Analysis Result */}
-                            {message.analysis && <AnalysisResult analysis={message.analysis} messageId={message.id} onLogTrade={handleInitiateLogTrade} onInitiateSkip={handleInitiateSkipTrade} onViewStrategy={handleViewStrategyDetails} onSaveAnalysis={handleSaveAnalysis} onUpdateTrade={handleInitiateUpdateTrade} onSimulate={handleInitiateSimulator} onReRunAnalysis={onReRunAnalysis} isSaved={savedAnalyses.some(sa => sa.id === message.id)} outcome={message.outcome} activeFrameworks={activeFrameworks} onApplyStrategy={handleApplyStrategy} imageSummaries={message.imageSummaries} isAccuracyMode={message.isAccuracyMode} accuracySubMode={message.accuracySubMode} confidenceCalibration={confidenceCalibration} confluenceData={message.confluenceData} leverage={leverage} isLensMode={message.isLensMode} tradingStyle={message.tradingStyle} onSelectForProbability={onSelectMessageForProbability} autopilotResolution={autopilotResolutions?.[message.id]} onConfirmAutopilot={onConfirmAutopilot} onDismissAutopilot={onDismissAutopilot} onCompare={onCompareAnalysis} onViewReasoning={onViewReasoning} />}
+                            {/* Main Analysis Result — markdown-only: the plan
+                                text above carries the analysis; the bubble
+                                adds the harness-side supplement (gate,
+                                calibration, memory insight), context chips,
+                                team verdict line, and the action row. */}
+                            {message.analysis && (
+                                <AnalysisDetails
+                                    messageId={message.id}
+                                    analysis={message.analysis}
+                                    outcome={message.outcome}
+                                    confidenceCalibration={confidenceCalibration}
+                                    autopilotResolution={autopilotResolutions?.[message.id]}
+                                    onLogTrade={handleInitiateLogTrade}
+                                    onConfirmAutopilot={onConfirmAutopilot}
+                                    onDismissAutopilot={onDismissAutopilot}
+                                    onSelectForProbability={onSelectMessageForProbability}
+                                    onCompare={onCompareAnalysis}
+                                />
+                            )}
 
                             {/* ④ Debate replay — condensed replay of the FINISHED
                                 debate, read from the persisted transcript. */}

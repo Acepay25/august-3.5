@@ -16,7 +16,9 @@ import { ToggleSwitch } from '../shared/ToggleSwitch';
 import { ActivityIcon, AISettingsIcon, BrainIcon, CloseIcon, EditIcon, HistoryIcon, BookmarkIcon, SettingsIcon, UserIcon, ExportIcon, SearchIcon, SwitchUserIcon, CodeIcon } from '../shared/Icons';
 import PromptManager from './PromptManager';
 import StrategiesManager from './StrategiesManager';
-import MemoryFilesManager from './MemoryFilesManager';
+import MemoryBrowser from '../journal/MemoryBrowser';
+import ModelPicker from '../shared/ModelPicker';
+import { Journal } from '../journal/Journal';
 
 export type SettingsTab = 'general' | 'models' | 'journal' | 'lenses' | 'instructions' | 'memory' | 'actions' | 'prompts' | 'strategies';
 
@@ -111,7 +113,30 @@ interface SettingsMenuProps {
     onToggleProviderConfig?: (id: string) => Promise<void>;
     onAddModel?: (providerId: string, modelId: string) => Promise<void>;
     onRemoveModel?: (providerId: string, modelId: string) => Promise<void>;
+    // Journal embedded props
+    onDeleteTrades?: (ids: string[]) => void;
+    onClearAllTrades?: () => void;
+    modelIdToName?: Record<string, string>;
+    onUpdateInsights?: (ids: string[]) => void;
+    isSummarizing?: boolean;
+    currentInsightIds?: string[];
+    onUpdateTradeLeverage?: (id: string, leverage: number) => void;
+    onUpdateOutcome?: (id: string, outcome: any) => void;
+    onUpdatePnL?: (id: string, pnl: { pnlAmount?: number; pnlPercent?: number }) => void;
+    finalSummary?: string | null;
+    individualSummaries?: any[];
+    isInsightGenerating?: boolean;
+    insightProgress?: { done: number; total: number } | null;
+    newlyAddedInsightIds?: Set<string>;
+    onDeleteInsight?: (id: string) => void;
+    onRewriteInsightsWithAI?: (ids?: string[]) => void;
+    familyWinRates?: Record<string, { total: number; wins: number; winRate: number }>;
+    enabledProviders?: AIProvider[];
+    selectedModels?: Record<string, string>;
     onUpdateModel?: (providerId: string, oldModelId: string, newModelId: string) => Promise<void>;
+    // Settings initial tab (set by handleOpenJournal to open Journal tab directly)
+    settingsInitialTab?: string;
+    onSettingsInitialTabConsumed?: () => void;
 }
 
 // ─── Shared UI Helpers ────────────────────────────────────────────────────────
@@ -214,6 +239,10 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
     // card points beginners there anyway). The old default was the most
     // technical tab (provider CRUD).
     const [activeTab, setActiveTab] = useState<SettingsTab>(() => {
+        // If settingsInitialTab is provided (e.g., from handleOpenJournal), use it
+        if (props.settingsInitialTab && props.settingsInitialTab in ['general', 'models', 'journal', 'lenses', 'instructions', 'memory', 'actions', 'prompts', 'strategies']) {
+            return props.settingsInitialTab as SettingsTab;
+        }
         const hasReadyProvider = (providerConfigs ?? []).some(c => c.isEnabled && c.apiKey.trim().length > 0);
         return hasReadyProvider ? 'general' : 'models';
     });
@@ -222,6 +251,14 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
     const [isDirty, setIsDirty] = useState(false);
     const dialogRef = useRef<HTMLDivElement>(null);
     const initialTabResolvedRef = useRef(false);
+
+    // Handle settingsInitialTab prop changes (e.g., when handleOpenJournal sets it)
+    useEffect(() => {
+        if (props.settingsInitialTab && props.settingsInitialTab in ['general', 'models', 'journal', 'lenses', 'instructions', 'memory', 'actions', 'prompts', 'strategies']) {
+            setActiveTab(props.settingsInitialTab as SettingsTab);
+            props.onSettingsInitialTabConsumed?.();
+        }
+    }, [props.settingsInitialTab]);
 
     // Closing with a staged (unsaved) provider draft would silently discard
     // the user's edits — confirm first (Escape, backdrop, and the X all route
@@ -390,9 +427,9 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                         <NavTabButton
                             id="journal"
                             activeTab={activeTab}
-                            onClick={() => { onOpenJournal?.(); onClose(); }}
+                            onClick={() => setActiveTab('journal')}
                             icon={<HistoryIcon className="w-4 h-4" />}
-                            label="Journal & automation"
+                            label="Journal"
                             badge={props.loggedTrades && props.loggedTrades.length > 0 ? `${props.loggedTrades.length}` : undefined}
                         />
                                 <NavTabButton
@@ -400,7 +437,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                     activeTab={activeTab}
                                     onClick={() => setActiveTab('actions')}
                                     icon={<SwitchUserIcon className="w-4 h-4" />}
-                                    label="Workspace & data"
+                                    label="Data"
                                 />
                             </div>
 
@@ -427,11 +464,51 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                         {/* Right Content Workspace */}
                         <div className="flex-1 overflow-y-auto p-6 bg-zinc-950 custom-scrollbar">
                             
-                            {/* TAB 0: (removed) Trading Journal — the
-                                "Journal & automation" nav item opens the
-                                SHARED journal overlay instead of embedding a
-                                second instance here, so the sidebar journal
-                                and the settings journal can never desync. */}
+                            {/* TAB 0: Trading Journal — embedded inside Settings */}
+                            {activeTab === 'journal' && (
+                                <div className="h-full animate-fade-in">
+                                    <Journal
+                                        isVisible={true}
+                                        onClose={() => {}}
+                                        initialTab="log"
+                                        isEmbedded={true}
+                                        username={username}
+                                        trades={props.loggedTrades ?? []}
+                                        onDeleteTrades={props.onDeleteTrades ?? (() => {})}
+                                        onClearAllTrades={props.onClearAllTrades ?? (() => {})}
+                                        modelIdToName={props.modelIdToName ?? {}}
+                                        onUpdateInsights={props.onUpdateInsights ?? (() => {})}
+                                        isSummarizing={props.isSummarizing}
+                                        currentInsightIds={props.currentInsightIds ?? []}
+                                        onUpdateTradeLeverage={props.onUpdateTradeLeverage ?? (() => {})}
+                                        onUpdateOutcome={props.onUpdateOutcome}
+                                        onUpdatePnL={props.onUpdatePnL}
+                                        finalSummary={props.finalSummary ?? null}
+                                        individualSummaries={props.individualSummaries ?? []}
+                                        isLoading={props.isLoading ?? false}
+                                        isInsightGenerating={props.isInsightGenerating}
+                                        insightProgress={props.insightProgress}
+                                        newlyAddedInsightIds={props.newlyAddedInsightIds}
+                                        summarizationProvider={props.summarizationProvider ?? ''}
+                                        summarizationModel={props.summarizationModel ?? ''}
+                                        onSetSummarizationProvider={props.onSetSummarizationProvider ?? (() => {})}
+                                        onSetSummarizationModel={props.onSetSummarizationModel ?? (() => {})}
+                                        providers={props.providerConfigs}
+                                        summaryCharLimit={props.summaryCharLimit ?? 1000}
+                                        onUpdateSummaryCharLimit={props.onUpdateSummaryCharLimit ?? (() => {})}
+                                        onRegenerateSummary={props.onRegenerateSummary ?? (() => {})}
+                                        onDeleteInsight={props.onDeleteInsight}
+                                        useAlgorithmicSummary={props.useAlgorithmicSummary ?? false}
+                                        onToggleAlgorithmicSummary={props.onToggleAlgorithmicSummary ?? (() => {})}
+                                        useAlgorithmicInsights={props.useAlgorithmicInsights}
+                                        onToggleAlgorithmicInsights={props.onToggleAlgorithmicInsights}
+                                        onRewriteInsightsWithAI={props.onRewriteInsightsWithAI}
+                                        familyWinRates={props.familyWinRates ?? {}}
+                                        enabledProviders={props.enabledProviders}
+                                        selectedModels={props.selectedModels}
+                                    />
+                                </div>
+                            )}
 
                             {/* TAB 1: AI Models & Providers */}
                             {activeTab === 'models' && (
@@ -452,15 +529,12 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                                 <div className="text-xs font-bold text-zinc-400 mb-2 uppercase tracking-wider">
                                                     Vision Model
                                                 </div>
-                                                <select
+                                                <ModelPicker
+                                                    providers={providerConfigs ?? []}
                                                     value={visionModel || selectedOcrModel || ''}
-                                                    onChange={(e) => onSetVisionModel?.(e.target.value)}
-                                                    className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 text-sm text-zinc-100 focus:outline-none focus:border-cyan-500/60 focus:ring-1 focus:ring-cyan-500/20 transition-all duration-200 appearance-none cursor-pointer bg-no-repeat bg-[right_0.9rem_center] bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2371717a%22%20stroke-width%3D%222.5%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22/%3E%3C/svg%3E')] text-xs"
-                                                >
-                                                    {readyConfigProviders.flatMap(p => p.models.map(m => (
-                                                        <option key={`${p.id}-${m}`} value={m}>{p.name}: {m}</option>
-                                                    )))}
-                                                </select>
+                                                    onChange={(v) => onSetVisionModel?.(v)}
+                                                    mode="model-only"
+                                                />
                                                 <p className="text-[10px] text-zinc-600 mt-2 leading-relaxed">
                                                     One model for every vision feature — chart OCR, post-trade uploads, and PDF book OCR.
                                                 </p>
@@ -472,51 +546,26 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                             <div className="text-xs font-bold text-cyan-400 mb-2 uppercase tracking-wider">
                                                 Debate Moderator
                                             </div>
-                                            <div className="grid grid-cols-2 gap-2">
-                                                <div>
-                                                    <label className="text-[10px] text-zinc-500 font-bold uppercase mb-1 block">Provider</label>
-                                                    <select
-                                                        value={moderatorProvider || ''}
-                                                        onChange={(e) => {
-                                                            const newProviderId = e.target.value;
-                                                            onSetModeratorProvider?.(newProviderId);
-                                                            const selectedCfg = (providerConfigs ?? []).find(c => c.id === newProviderId);
-                                                            if (selectedCfg && selectedCfg.models.length > 0) {
-                                                                onSetModeratorModel?.(selectedCfg.selectedModel || selectedCfg.models[0]);
-                                                            }
-                                                        }}
-                                                        className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 text-sm text-zinc-100 focus:outline-none focus:border-cyan-500/60 focus:ring-1 focus:ring-cyan-500/20 transition-all duration-200 appearance-none cursor-pointer bg-no-repeat bg-[right_0.9rem_center] bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2371717a%22%20stroke-width%3D%222.5%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22/%3E%3C/svg%3E')] text-xs"
-                                                    >
-                                                        {/* Show the saved state only — the old `|| providers[0]` fake
-                                                            a selection that was never persisted. */}
-                                                        {!moderatorProvider && <option value="" disabled>Select provider</option>}
-                                                        {(providerConfigs ?? []).length > 0 ? (
-                                                            (providerConfigs ?? []).map(c => (
-                                                                <option key={c.id} value={c.id}>{c.name}</option>
-                                                            ))
-                                                        ) : (
-                                                            <option value="" disabled>No providers</option>
-                                                        )}
-                                                    </select>
-                                                </div>
-                                                <div>
-                                                    <label className="text-[10px] text-zinc-500 font-bold uppercase mb-1 block">Model ID</label>
-                                                    <select
-                                                        value={moderatorModel || ''}
-                                                        onChange={(e) => onSetModeratorModel?.(e.target.value)}
-                                                        className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 text-sm text-zinc-100 focus:outline-none focus:border-cyan-500/60 focus:ring-1 focus:ring-cyan-500/20 transition-all duration-200 appearance-none cursor-pointer bg-no-repeat bg-[right_0.9rem_center] bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2371717a%22%20stroke-width%3D%222.5%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22/%3E%3C/svg%3E')] text-xs"
-                                                    >
-                                                        {(() => {
-                                                            const activeProvId = moderatorProvider;
-                                                            const selectedCfg = activeProvId ? (providerConfigs ?? []).find(c => c.id === activeProvId) : undefined;
-                                                            if (selectedCfg && selectedCfg.models.length > 0) {
-                                                                return selectedCfg.models.map(m => <option key={m} value={m}>{m}</option>);
-                                                            }
-                                                            return <option value="" disabled>Select model</option>;
-                                                        })()}
-                                                    </select>
-                                                </div>
-                                            </div>
+                                            <ModelPicker
+                                                providers={providerConfigs ?? []}
+                                                value={moderatorProvider && moderatorModel ? `${moderatorProvider}::${moderatorModel}` : moderatorProvider || ''}
+                                                onChange={(v) => {
+                                                    const separator = v.indexOf('::');
+                                                    if (separator >= 0) {
+                                                        const providerId = v.slice(0, separator);
+                                                        const modelId = v.slice(separator + 2);
+                                                        onSetModeratorProvider?.(providerId);
+                                                        onSetModeratorModel?.(modelId);
+                                                    } else {
+                                                        onSetModeratorProvider?.(v);
+                                                        const selectedCfg = (providerConfigs ?? []).find(c => c.id === v);
+                                                        if (selectedCfg && selectedCfg.models.length > 0) {
+                                                            onSetModeratorModel?.(selectedCfg.selectedModel || selectedCfg.models[0]);
+                                                        }
+                                                    }
+                                                }}
+                                                mode="provider-model"
+                                            />
                                         </div>
                                     </div>
 
@@ -762,87 +811,26 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         memoryConfig={memoryConfig}
                                         onMemoryConfigChange={onMemoryConfigChange}
                                     />
-                                    {/* Trader Notebook — markdown memory files the model reads
-                                        on every analysis (full editor in a fixed-height pane so
-                                        the settings page keeps its scroll). */}
+                                    {/* Memory Browser — ZCode-style drill-down view */}
                                     <div className="border-t border-zinc-800 pt-4">
                                         <div className="h-[440px]">
-                                            <MemoryFilesManager username={username} />
+                                            <MemoryBrowser username={username} isGlobalMemoryEnabled={isGlobalMemoryEnabled} />
                                         </div>
                                     </div>
                                 </div>
                             )}
 
-                            {/* TAB 6: Profile & Quick Actions */}
+                            {/* TAB 6: Data — Backups & Alerts */}
                             {activeTab === 'actions' && (
                                 <div className="space-y-6 max-w-3xl animate-fade-in">
                                     <div className="border-b border-zinc-800 pb-3">
-                                        <h3 className="text-base font-bold text-white">Profile & Data</h3>
-                                        <p className="text-xs text-zinc-500 mt-1">Quick access to saved work, plus backups and price alerts (moved here so they no longer crowd every tab).</p>
-                                    </div>
-
-                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                                        {onOpenSavedAnalyses && (
-                                            <button
-                                                onClick={onOpenSavedAnalyses}
-                                                className="flex flex-col items-center justify-center p-5 rounded-2xl bg-zinc-900 border border-zinc-800 hover:border-cyan-500/40 hover:bg-zinc-900 transition-all text-center group"
-                                            >
-                                                <BookmarkIcon className="w-6 h-6 text-zinc-400 group-hover:text-cyan-400 mb-2 transition-colors" />
-                                                <span className="text-xs font-bold text-zinc-200">Saved Analyses</span>
-                                            </button>
-                                        )}
-                                        {onOpenStrategySearch && (
-                                            <button
-                                                onClick={onOpenStrategySearch}
-                                                className="flex flex-col items-center justify-center p-5 rounded-2xl bg-zinc-900 border border-zinc-800 hover:border-cyan-500/40 hover:bg-zinc-900 transition-all text-center group"
-                                            >
-                                                <SearchIcon className="w-6 h-6 text-zinc-400 group-hover:text-cyan-400 mb-2 transition-colors" />
-                                                <span className="text-xs font-bold text-zinc-200">Strategy Search</span>
-                                            </button>
-                                        )}
-                                        {onOpenPlaybook && (
-                                            <button
-                                                onClick={onOpenPlaybook}
-                                                className="flex flex-col items-center justify-center p-5 rounded-2xl bg-zinc-900 border border-zinc-800 hover:border-cyan-500/40 hover:bg-zinc-900 transition-all text-center group"
-                                            >
-                                                <BookmarkIcon className="w-6 h-6 text-zinc-400 group-hover:text-cyan-400 mb-2 transition-colors" />
-                                                <span className="text-xs font-bold text-zinc-200">Playbook</span>
-                                            </button>
-                                        )}
-                                        {onOpenUserProfile && (
-                                            <button
-                                                onClick={onOpenUserProfile}
-                                                className="flex flex-col items-center justify-center p-5 rounded-2xl bg-zinc-900 border border-zinc-800 hover:border-cyan-500/40 hover:bg-zinc-900 transition-all text-center group"
-                                            >
-                                                <UserIcon className="w-6 h-6 text-zinc-400 group-hover:text-cyan-400 mb-2 transition-colors" />
-                                                <span className="text-xs font-bold text-zinc-200">User Profile</span>
-                                            </button>
-                                        )}
-                                        {onSwitchUser && (
-                                            <button
-                                                onClick={onSwitchUser}
-                                                className="flex flex-col items-center justify-center p-5 rounded-2xl bg-zinc-900 border border-zinc-800 hover:border-cyan-500/40 hover:bg-zinc-900 transition-all text-center group"
-                                            >
-                                                <SwitchUserIcon className="w-6 h-6 text-zinc-400 group-hover:text-cyan-400 mb-2 transition-colors" />
-                                                <span className="text-xs font-bold text-zinc-200">Switch User</span>
-                                            </button>
-                                        )}
-                                        {onExportData && (
-                                            <button
-                                                onClick={onExportData}
-                                                className="flex flex-col items-center justify-center p-5 rounded-2xl bg-zinc-900 border border-zinc-800 hover:border-cyan-500/40 hover:bg-zinc-900 transition-all text-center group"
-                                            >
-                                                <ExportIcon className="w-6 h-6 text-zinc-400 group-hover:text-cyan-400 mb-2 transition-colors" />
-                                                <span className="text-xs font-bold text-zinc-200">Export / Import</span>
-                                            </button>
-                                        )}
+                                        <h3 className="text-base font-bold text-white">Data</h3>
+                                        <p className="text-xs text-zinc-500 mt-1">Backups and price alerts.</p>
                                     </div>
 
                                     {/* Backups — list/export/restore/delete the 30-min auto-backups */}
                                     {username && onProfileRestored && (
-                                        <div className="border-t border-zinc-800 pt-6">
-                                            <BackupManager username={username} onProfileRestored={onProfileRestored} />
-                                        </div>
+                                        <BackupManager username={username} onProfileRestored={onProfileRestored} />
                                     )}
 
                                     {/* Price alerts — list/toggle/delete */}

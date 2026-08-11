@@ -70,6 +70,8 @@ export {
   Cpu as CpuIcon,
   MessageSquare as MessageSquareIcon,
   Circle as CircleIcon,
+  Folder as FolderIcon,
+  FileText as FileTextIcon,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------

@@ -7,6 +7,7 @@ import GlobalLearningService from '../../services/learning/GlobalLearningService
 import { RegimeProviderStatsMap } from '../../services/learning/SetupMemoryService';
 import { ANALYST_ROLE_DEFINITIONS } from '../../services/ui/AnalystLensService';
 import { CloseIcon } from '../shared/Icons';
+import ModelPicker from '../shared/ModelPicker';
 
 interface TeamModalProps {
     isOpen: boolean;
@@ -136,7 +137,7 @@ const TeamModal: React.FC<TeamModalProps> = ({
     const labelCls = 'text-[10px] font-bold uppercase tracking-widest text-zinc-500 block mb-1';
 
     return (
-        <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/70 p-4 animate-fade-in" onClick={onClose}>
+        <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/70 p-4 animate-fade-in pointer-events-auto" onClick={onClose}>
             <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
                 {/* Header */}
                 <div className="flex items-center justify-between px-4 py-3 border-b border-white/5 bg-zinc-900">
@@ -178,10 +179,12 @@ const TeamModal: React.FC<TeamModalProps> = ({
                                         </div>
                                         <span className="text-[9px] text-zinc-600 text-right max-w-[45%]">{r.focus}</span>
                                     </div>
-                                    <select className={selectCls} value={roleValue(r.role)} onChange={e => setRole(r.role, e.target.value)}>
-                                        <option value="">Select model…</option>
-                                        {modelOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                                    </select>
+                                    <ModelPicker
+                                        providers={providers}
+                                        value={roleValue(r.role)}
+                                        onChange={(v) => setRole(r.role, v)}
+                                        mode="provider-model"
+                                    />
                                 </div>
                             ))}
 
@@ -208,10 +211,12 @@ const TeamModal: React.FC<TeamModalProps> = ({
                             {[0, 1, 2].map(slot => (
                                 <div key={slot}>
                                     <span className={labelCls}>Expert {slot + 1}</span>
-                                    <select className={selectCls} value={normalSlotValue(slot)} onChange={e => setNormalSlot(slot, e.target.value)}>
-                                        <option value="">Select model…</option>
-                                        {modelOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                                    </select>
+                                    <ModelPicker
+                                        providers={providers}
+                                        value={normalSlotValue(slot)}
+                                        onChange={(v) => setNormalSlot(slot, v)}
+                                        mode="provider-model"
+                                    />
                                 </div>
                             ))}
                         </div>

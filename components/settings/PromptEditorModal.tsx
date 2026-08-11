@@ -44,7 +44,7 @@ const PromptEditorModal: React.FC<PromptEditorModalProps> = ({
             role="dialog"
             aria-modal="true"
             aria-label={title}
-            className="fixed inset-0 z-[60] flex items-center justify-center bg-zinc-950/80 p-4 animate-fade-in"
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-zinc-950/80 p-4 animate-fade-in pointer-events-auto"
             onClick={onClose}
         >
             <div

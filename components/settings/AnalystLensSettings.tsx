@@ -9,6 +9,7 @@ import React from 'react';
 import { AIProvider, AnalystRole, AnalystRoleAssignment, AnalystLensConfig, TradingStyle } from '../../types';
 import { ProviderConfig } from '../../types/provider';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
+import ModelPicker from '../shared/ModelPicker';
 import {
   ANALYST_ROLE_DEFINITIONS,
   validateLensConfig,
@@ -145,48 +146,27 @@ export const AnalystLensSettings: React.FC<Props> = ({ config, providers, onChan
 
               <p className="role-focus">{def.focus}</p>
 
-              <select
-                className="provider-select"
+              <ModelPicker
+                providers={providers}
                 value={currentAssignment?.assignedProvider || ''}
-                onChange={(e) => handleAssignment(
-                  def.id,
-                  e.target.value ? e.target.value as AIProvider : null
-                )}
-                disabled={!config.enabled}
-              >
-                <option value="">-- Not Assigned --</option>
-                {providers.map(provider => {
-                  const isReady = provider.isEnabled && provider.apiKey.trim().length > 0;
-                  const isAssignedElsewhere = assignedProviders.includes(provider.id);
-                  return (
-                    <option
-                      key={provider.id}
-                      value={provider.id}
-                      disabled={isAssignedElsewhere}
-                    >
-                      {provider.name}
-                      {!isReady ? ' (disabled)' : ''}
-                      {isAssignedElsewhere ? ' (assigned)' : ''}
-                    </option>
-                  );
-                })}
-              </select>
+                onChange={(val) => handleAssignment(def.id, val ? val as AIProvider : null)}
+                mode="provider-only"
+                disabledValues={new Set(assignedProviders)}
+                compact
+                placeholder="-- Not Assigned --"
+              />
 
-              {/* Model dropdown — appears once a provider is chosen, so the
+              {/* Model picker — appears once a provider is chosen, so the
                   settings UI shows the full provider + model assignment. */}
-              {currentAssignment?.assignedProvider && (
-                <select
-                  className="provider-select"
-                  style={{ marginTop: 6 }}
+              {currentAssignment?.assignedProvider && selectedProvider && (
+                <ModelPicker
+                  providers={[selectedProvider]}
                   value={selectedModel}
-                  onChange={(e) => handleModelChange(def.id, e.target.value)}
-                  disabled={!config.enabled}
-                >
-                  <option value="">-- Default model --</option>
-                  {providerModels.map(model => (
-                    <option key={model} value={model}>{model}</option>
-                  ))}
-                </select>
+                  onChange={(val) => handleModelChange(def.id, val)}
+                  mode="model-only"
+                  compact
+                  placeholder="-- Default model --"
+                />
               )}
             </div>
           );

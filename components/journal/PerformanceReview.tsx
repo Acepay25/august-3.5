@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { AIProvider, TradeSummary } from '../../types';
 import { ProviderConfig } from '../../types/provider';
 import { LoadingIcon, EditIcon, ChevronDownIcon, RefreshIcon, TrashIcon } from '../shared/Icons';
+import ModelPicker from '../shared/ModelPicker';
 
 interface PerformanceReviewContentProps {
     finalSummary: string | null;
@@ -79,26 +80,9 @@ const PerformanceReviewContent: React.FC<PerformanceReviewContentProps> = ({
         setLocalLimit(summaryCharLimit);
     }, [summaryCharLimit]);
 
-    const getProviderModels = (provider: AIProvider): { id: string; name: string }[] => {
-        const config = providers.find(p => p.id === provider);
-        if (!config) return [];
-        return config.models.map(m => ({ id: m, name: m }));
-    };
-
-    const handleProviderChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const newProvider = e.target.value as AIProvider;
-        onSetSummarizationProvider(newProvider);
-        const config = providers.find(p => p.id === newProvider);
-        const preferred = config?.selectedModel || config?.models[0];
-        if (preferred) {
-            onSetSummarizationModel(preferred);
-        }
-    };
-
     // Fall back to the first available provider/model until the user picks one
     const effectiveProvider = summarizationProvider || providers[0]?.id || '';
-    const effectiveProviderModels = getProviderModels(effectiveProvider);
-    const effectiveModel = summarizationModel || effectiveProviderModels[0]?.id || '';
+    const effectiveModel = summarizationModel || providers.find(p => p.id === effectiveProvider)?.models[0] || '';
 
     const handleLimitChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setLocalLimit(e.target.value);
@@ -141,32 +125,28 @@ const PerformanceReviewContent: React.FC<PerformanceReviewContentProps> = ({
                         <div className={`collapsible-content ${isModelSettingsVisible ? 'expanded' : ''}`}>
                             <div className="grid grid-cols-1 gap-2 sm:gap-3 mt-3">
                                 <div>
-                                    <select
-                                        id="summarization-provider"
-                                        value={effectiveProvider}
-                                        onChange={handleProviderChange}
-                                        className="w-full bg-zinc-950 border border-white/10 text-zinc-300 text-sm rounded-lg focus:ring-cyan-500/50 focus:border-cyan-500/50 p-2.5 transition-all focus:outline-none"
-                                    >
-                                        {providers.length > 0 ? (
-                                            providers.map(p => (
-                                                <option key={p.id} value={p.id}>{p.name}</option>
-                                            ))
-                                        ) : (
-                                            <option value="" disabled>No providers configured</option>
-                                        )}
-                                    </select>
-                                </div>
-                                <div>
-                                    <select
-                                        id="summarization-model"
-                                        value={effectiveModel}
-                                        onChange={(e) => onSetSummarizationModel(e.target.value)}
-                                        className="w-full bg-zinc-950 border border-white/10 text-zinc-300 text-sm rounded-lg focus:ring-cyan-500/50 focus:border-cyan-500/50 p-2.5 transition-all focus:outline-none"
-                                    >
-                                        {effectiveProviderModels.map(model => (
-                                            <option key={model.id} value={model.id}>{model.name}</option>
-                                        ))}
-                                    </select>
+                                    <ModelPicker
+                                        providers={providers}
+                                        value={effectiveProvider && effectiveModel ? `${effectiveProvider}::${effectiveModel}` : effectiveProvider}
+                                        onChange={(val) => {
+                                            const separator = val.indexOf('::');
+                                            if (separator >= 0) {
+                                                const providerId = val.slice(0, separator);
+                                                const modelId = val.slice(separator + 2);
+                                                onSetSummarizationProvider(providerId as AIProvider);
+                                                onSetSummarizationModel(modelId);
+                                            } else {
+                                                onSetSummarizationProvider(val as AIProvider);
+                                                const config = providers.find(p => p.id === val);
+                                                const preferred = config?.selectedModel || config?.models[0];
+                                                if (preferred) {
+                                                    onSetSummarizationModel(preferred);
+                                                }
+                                            }
+                                        }}
+                                        mode="provider-model"
+                                        className="w-full"
+                                    />
                                 </div>
 
                                 <div className="pt-2 border-t border-white/5">

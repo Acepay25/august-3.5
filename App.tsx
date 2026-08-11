@@ -160,6 +160,9 @@ const App: React.FC = () => {
     // Analyst panel (right-side slide-in for per-analyst detail + debate)
     const [analystPanel, setAnalystPanel] = useState<{ message: Message; activeTab: string } | null>(null);
 
+    // Settings initial tab — set by handleOpenJournal to open Settings → Journal directly
+    const [settingsInitialTab, setSettingsInitialTab] = useState<string | undefined>(undefined);
+
     const handleOpenAnalystPanel = useCallback((msg: Message, activeTab?: string) => {
         // Both right-side panels sit at z-30 — opening one must close the
         // other, or the analyst panel paints over the analytics panel with
@@ -968,7 +971,7 @@ const App: React.FC = () => {
             const target = e.target as HTMLElement | null;
             const isTyping = !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable);
             if (isTyping) return;
-            const anyOverlayOpen = journalState.isOpen || isSettingsMenuVisible || isLiveMarketVisible || isCommandPaletteOpen || isSavedGalleryOpen || isUserModalOpen || isAdvancedAnalyticsOpen || isVisionDataVisible || isStrategySearchVisible || isSavedAnalysesVisible || isVersionHistoryVisible || analystPanel !== null;
+            const anyOverlayOpen = isSettingsMenuVisible || isLiveMarketVisible || isCommandPaletteOpen || isSavedGalleryOpen || isUserModalOpen || isAdvancedAnalyticsOpen || isVisionDataVisible || isStrategySearchVisible || isSavedAnalysesVisible || isVersionHistoryVisible || analystPanel !== null;
             if (anyOverlayOpen) {
                 // Overlays with their own document-level Esc handlers
                 // (SettingsMenu, command palette, Journal, LiveMarket, dialogs)
@@ -993,7 +996,7 @@ const App: React.FC = () => {
         };
         document.addEventListener('keydown', onKeyDown);
         return () => document.removeEventListener('keydown', onKeyDown);
-    }, [isAnalysisInProgress, isPostMortemInProgress, handleCancelAll, toast, journalState.isOpen, isSettingsMenuVisible, isLiveMarketVisible, isCommandPaletteOpen, isSavedGalleryOpen, isUserModalOpen, isAdvancedAnalyticsOpen, isVisionDataVisible, isStrategySearchVisible, isSavedAnalysesVisible, isVersionHistoryVisible, analystPanel]);
+    }, [isAnalysisInProgress, isPostMortemInProgress, handleCancelAll, toast, isSettingsMenuVisible, isLiveMarketVisible, isCommandPaletteOpen, isSavedGalleryOpen, isUserModalOpen, isAdvancedAnalyticsOpen, isVisionDataVisible, isStrategySearchVisible, isSavedAnalysesVisible, isVersionHistoryVisible, analystPanel]);
 
     // ─── Side-by-side compare ──────────────────────────────────────────────
     const [compareState, setCompareState] = useState<{ primaryId: string; secondaryId: string | null } | null>(null);
@@ -2236,8 +2239,14 @@ const App: React.FC = () => {
     }, [typingMessageState]);
 
     const handleCopy = useCallback((message: Message) => {
-        if (message.text) {
-            navigator.clipboard.writeText(message.text);
+        // Ensemble messages carry a stub text — copy the actual plan markdown
+        // (analysis.strategy) when it exists, else the raw message text.
+        const plan = message.analysis?.strategy;
+        const textToCopy = (plan && !plan.startsWith('Parsing Error:') && !plan.startsWith('Connection Error:'))
+            ? plan
+            : message.text;
+        if (textToCopy) {
+            navigator.clipboard.writeText(textToCopy);
             setCopiedMessageId(message.id);
             setTimeout(() => setCopiedMessageId(null), 2000);
         }
@@ -2473,7 +2482,9 @@ const App: React.FC = () => {
     }, []);
 
     const handleOpenJournal = useCallback(() => {
-        setJournalState({ isOpen: true, tab: 'log' });
+        // Open Settings directly to the Journal tab instead of the overlay
+        setIsSettingsMenuVisible(true);
+        setSettingsInitialTab('journal');
     }, []);
 
     const handleOpenLiveMarket = useCallback(() => {
@@ -2813,6 +2824,27 @@ const App: React.FC = () => {
                 onUpdateModel={handleUpdateModel}
                 loggedTrades={loggedTrades}
                 onOpenJournal={handleOpenJournal}
+                settingsInitialTab={settingsInitialTab}
+                onSettingsInitialTabConsumed={() => setSettingsInitialTab(undefined)}
+                onDeleteTrades={handleDeleteTrades}
+                onClearAllTrades={handleClearAllTrades}
+                modelIdToName={modelIdToName}
+                onUpdateInsights={handleManualInsightsUpdate}
+                isSummarizing={isSummaryInProgress}
+                currentInsightIds={currentInsightIds}
+                onUpdateTradeLeverage={handleUpdateTradeLeverage}
+                onUpdateOutcome={handleUpdateTradeOutcome}
+                onUpdatePnL={handleUpdateTradePnL}
+                finalSummary={finalTradeSummary}
+                individualSummaries={tradeSummaries}
+                isInsightGenerating={isInsightGenerating}
+                insightProgress={insightProgress}
+                newlyAddedInsightIds={newlyAddedInsightIds}
+                onDeleteInsight={handleDeleteInsight}
+                onRewriteInsightsWithAI={handleRewriteInsightsWithAI}
+                familyWinRates={familyWinRates}
+                enabledProviders={journalEnabledProviders}
+                selectedModels={journalSelectedModels}
             />
             </React.Suspense>
             <VisionDataViewer isVisible={isVisionDataVisible} onClose={() => setIsVisionDataVisible(false)} visionData={currentVisionData} />
@@ -2859,6 +2891,7 @@ const App: React.FC = () => {
                 isVisible={editorIsOpen}
                 initial={editingAutomation}
                 modelOptions={automationModelOptions}
+                providers={providerConfigs}
                 onClose={() => automations.setEditor(null)}
                 onSave={(config) => {
                     void automations.saveAutomation(config);
@@ -2903,7 +2936,8 @@ const App: React.FC = () => {
                 onCreateAutomation={() => automations.setEditor({ mode: 'create' })}
             />
 
-            <React.Suspense fallback={null}>
+            {/* Journal overlay — REMOVED: now rendered inside Settings → Journal tab */}
+            {/* <React.Suspense fallback={null}>
             <Journal
                 isVisible={journalState.isOpen}
                 onClose={handleCloseJournal}
@@ -2949,7 +2983,7 @@ const App: React.FC = () => {
                 onToggleAlgorithmicInsights={setUseAlgorithmicInsights}
                 onRewriteInsightsWithAI={handleRewriteInsightsWithAI}
             />
-            </React.Suspense>
+            </React.Suspense> */}
 
             <React.Suspense fallback={null}>
             <StrategySearch isVisible={isStrategySearchVisible} onClose={() => { setIsStrategySearchVisible(false); setStrategyToView(null); }} onApplyStrategy={handleApplyStrategy} onRemoveStrategy={handleRemoveStrategy} providerConfig={readyProviders[0] || moderatorConfig} activeFrameworks={activeFrameworks} defaultFrameworks={DEFAULT_FRAMEWORKS} initialViewStrategy={strategyToView} onQuotaExceeded={handleQuotaExceeded} familyWinRates={familyWinRates} />

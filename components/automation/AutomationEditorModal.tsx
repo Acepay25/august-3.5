@@ -1,7 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { AutomationConfig, AutomationInputSource, AutomationMode, AutomationModelPick } from '../../types/automation';
 import { parseCron, nextCronTime, humanizeCron } from '../../services/automation/cronParser';
+import { ProviderConfig } from '../../types/provider';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
+import ModelPicker from '../shared/ModelPicker';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 
 export interface ModelOption {
@@ -118,6 +120,7 @@ interface AutomationEditorModalProps {
     /** The automation being edited; undefined = create new. */
     initial?: AutomationConfig;
     modelOptions: ModelOption[];
+    providers: ProviderConfig[];
     onClose: () => void;
     onSave: (config: AutomationConfig) => void;
     onDelete?: () => void;
@@ -130,7 +133,7 @@ const splitOption = (value: string): { providerId: string; modelId: string } => 
         : { providerId: value, modelId: '' };
 };
 
-const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible, initial, modelOptions, onClose, onSave, onDelete }) => {
+const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible, initial, modelOptions, providers, onClose, onSave, onDelete }) => {
     const [name, setName] = useState(initial?.name ?? '');
     // Schedule = frequency (once per day, or every N minutes/hours) +
     // days-of-week toggles + a time of day (h/m/s for the daily mode).
@@ -230,26 +233,6 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
             runCount: initial?.runCount ?? 0,
         });
     };
-
-    const modelSelect = (label: string, value: string, onChange: (v: string) => void, placeholder: string, disabledOptions: Set<string> | undefined) => (
-        <div>
-            <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] font-medium text-zinc-400">{label}</span>
-            </div>
-            <select
-                value={value}
-                onChange={(e) => onChange(e.target.value)}
-                className="w-full bg-zinc-950 border border-white/10 rounded px-2 py-1.5 text-xs text-zinc-300 focus:outline-none focus:border-cyan-500/50 cursor-pointer"
-            >
-                <option value="">Select provider/model</option>
-                {modelOptions.map(opt => (
-                    <option key={opt.value} value={opt.value} disabled={disabledOptions?.has(opt.value)}>
-                        {opt.label}{disabledOptions?.has(opt.value) ? ' (assigned)' : ''}
-                    </option>
-                ))}
-            </select>
-        </div>
-    );
 
     return (
         <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={onClose}>
@@ -483,9 +466,19 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                                     ? ['Macro & Volatility', 'Technical Analyst', 'Risk & Execution'][i]
                                     : `Model ${i + 1}`;
                                 const others = new Set(filledSelections.filter(s => s !== analystSelections[i]));
-                                return modelSelect(label, analystSelections[i], (v) => {
-                                    setAnalystSelections(prev => prev.map((p, idx) => idx === i ? v : p));
-                                }, 'Select provider/model', others);
+                                return (
+                                    <div key={i}>
+                                        <span className="text-[10px] text-zinc-500 font-bold uppercase mb-1 block">{label}</span>
+                                        <ModelPicker
+                                            providers={providers}
+                                            value={analystSelections[i]}
+                                            onChange={(v) => setAnalystSelections(prev => prev.map((p, idx) => idx === i ? v : p))}
+                                            mode="provider-model"
+                                            disabledValues={others}
+                                            placeholder="Select provider/model"
+                                        />
+                                    </div>
+                                );
                             })}
                         </div>
                     </div>
@@ -511,7 +504,16 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                     )}
 
                     {/* Moderator */}
-                    {modelSelect('Moderator model', moderatorSelection, setModeratorSelection, 'Select provider/model', undefined)}
+                    <div>
+                        <span className="text-[10px] text-zinc-500 font-bold uppercase mb-1 block">Moderator model</span>
+                        <ModelPicker
+                            providers={providers}
+                            value={moderatorSelection}
+                            onChange={setModeratorSelection}
+                            mode="provider-model"
+                            placeholder="Select provider/model"
+                        />
+                    </div>
 
                     {error && (
                         <p className="text-[11px] text-rose-400 bg-rose-500/5 border border-rose-500/20 rounded-lg px-3 py-2">{error}</p>

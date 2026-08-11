@@ -9,6 +9,7 @@ import GlobalLearningService from '../../services/learning/GlobalLearningService
 import { MASTER_ANALYSIS_PROMPT } from '../../constants/prompts';
 import PromptEditorModal from '../settings/PromptEditorModal';
 import TeamModal from './TeamModal';
+import ModelPicker from '../shared/ModelPicker';
 
 import { ProviderConfig } from '../../types/provider';
 
@@ -116,7 +117,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
     // exists, then it docks at the bottom.
     centered = false,
 }) => {
-    const [showAISettings, setShowAISettings] = useState(false);
+    // showAISettings removed — ensemble is now a simple toggle
     const [showLensSettings, setShowLensSettings] = useState(false);
     // Two-step dropdown: 'choose' shows ONLY the mode chooser; the assignment
     // UI ('lenses' = roles, 'normal' = model picker) appears after the user
@@ -127,7 +128,6 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
     React.useEffect(() => {
         const handleEscape = (event: KeyboardEvent) => {
             if (event.key !== 'Escape') return;
-            setShowAISettings(false);
             setShowLensSettings(false);
             setIsLeverageDropdownOpen(false);
         };
@@ -258,7 +258,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
     const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
     // ⑥: the composer team dropdown — quick roster + auto-assign, with the
     // modal one click away for full role editing.
-    const [isTeamDropdownOpen, setIsTeamDropdownOpen] = useState(false);
+    // isTeamDropdownOpen removed — Team button removed from chat input
 
     const openLensPromptEditor = (role: AnalystRole) => {
         const style = (lensConfig.tradingStyle === 'auto' ? 'swing' : lensConfig.tradingStyle) as 'position' | 'swing' | 'scalp';
@@ -327,54 +327,25 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             {/* Casual-chat model dropdown — only when ensemble
                                 is off: pick which model answers casual chat. */}
                             {!isEnsembleEnabled && chatModelOptions.length > 0 && (
-                                <select
+                                <ModelPicker
+                                    providers={providers}
                                     value={effectiveChatModel}
-                                    onChange={(e) => setSelectedChatModel(e.target.value)}
-                                    className="max-w-[150px] sm:max-w-[190px] bg-zinc-800 border border-zinc-700 rounded-lg pl-2 pr-6 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-cyan-500/60 focus:ring-1 focus:ring-cyan-500/20 cursor-pointer appearance-none bg-no-repeat bg-[right_0.4rem_center] bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2371717a%22%20stroke-width%3D%222.5%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22/%3E%3C/svg%3E')]"
-                                    title="Casual chat model (ensemble off)"
-                                    aria-label="Casual chat model"
-                                >
-                                    {chatModelOptions.map(opt => (
-                                        <option key={`${opt.providerName}-${opt.modelId}`} value={opt.modelId}>
-                                            {opt.modelId}
-                                        </option>
-                                    ))}
-                                </select>
+                                    onChange={setSelectedChatModel}
+                                    mode="model-only"
+                                    compact
+                                    className="max-w-[150px] sm:max-w-[190px]"
+                                />
                             )}
 
-                            {/* Ensemble split button: toggle ensemble mode /
-                                configure providers. Clicking the main button
-                                turns ensemble on/off AND opens the provider
-                                list so you can pick which models participate. */}
-                            <div className={`relative flex items-center shadow-sm rounded-full transition-all ${isEnsembleEnabled ? 'bg-cyan-600' : 'bg-zinc-800 hover:bg-zinc-700'}`}>
-                                <button
-                                    onClick={() => {
-                                        setShowAISettings(true);
-                                        setIsEnsembleEnabled(!isEnsembleEnabled);
-                                    }}
-                                    className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 lg:px-4 py-1 sm:py-1.5 lg:py-2 transition-all text-xs sm:text-sm border-r border-black/10 rounded-l-full ${isEnsembleEnabled ? 'text-white shadow-[inset_0_0_10px_rgba(0,0,0,0.1)]' : 'text-zinc-400 hover:text-white'}`}
-                                    title={isEnsembleEnabled ? 'Ensemble on — chart analysis enabled' : 'Enable ensemble mode for chart analysis'}
-                                    aria-pressed={isEnsembleEnabled}
-                                >
-                                    {/* The label must stay visible on mobile — `xs:` is not a
-                                        real breakpoint, so the old class hid the ONLY content
-                                        of this segment below 640px, leaving a blank pill. */}
-                                    <span className="font-medium inline">Ensemble</span>
-                                </button>
-                                <button
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        setShowAISettings(!showAISettings);
-                                    }}
-                                    className={`px-1.5 sm:px-2 py-1 sm:py-1.5 lg:py-2 transition-colors flex items-center justify-center rounded-r-full ${isEnsembleEnabled ? 'text-white hover:bg-cyan-700' : 'text-zinc-400 hover:text-white hover:bg-zinc-700'}`}
-                                    title="Configure providers"
-                                    aria-label="Configure providers"
-                                    aria-expanded={showAISettings}
-                                    aria-haspopup="dialog"
-                                >
-                                    <ChevronDownIcon className={`w-3 h-3 sm:w-3.5 sm:h-3.5 transition-transform duration-200 ${showAISettings ? 'rotate-180' : ''}`} />
-                                </button>
-                            </div>
+                            {/* Ensemble toggle — simple on/off button */}
+                            <button
+                                onClick={() => setIsEnsembleEnabled(!isEnsembleEnabled)}
+                                className={`flex items-center gap-1 sm:gap-1.5 px-3 sm:px-4 py-1 sm:py-1.5 lg:py-2 rounded-full transition-all text-xs sm:text-sm ${isEnsembleEnabled ? 'bg-cyan-600 text-white shadow-[inset_0_0_10px_rgba(0,0,0,0.1)]' : 'bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700'}`}
+                                title={isEnsembleEnabled ? 'Ensemble on — chart analysis enabled' : 'Enable ensemble mode for chart analysis'}
+                                aria-pressed={isEnsembleEnabled}
+                            >
+                                <span className="font-medium">Ensemble</span>
+                            </button>
 
                             {/* Lens Mode Split Button — only meaningful for ensemble analysis. */}
                             {isEnsembleEnabled && <>
@@ -414,7 +385,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                     <div
                                         role="dialog"
                                         aria-label={lensAssignStep === 'lenses' ? 'Assign analysts' : lensAssignStep === 'normal' ? 'Debate models' : 'Debate mode'}
-                                        className="absolute bottom-full left-0 mb-2 w-72 overflow-hidden rounded-2xl border border-cyan-400/20 bg-zinc-950/95 shadow-[0_18px_50px_rgba(0,0,0,0.45)] backdrop-blur-xl animate-fade-in"
+                                        className="absolute bottom-full left-0 mb-2 w-72 rounded-2xl border border-cyan-400/20 bg-zinc-950/95 shadow-[0_18px_50px_rgba(0,0,0,0.45)] backdrop-blur-xl animate-fade-in"
                                     >
                                         {lensAssignStep === 'choose' ? (
                                             <>
@@ -461,14 +432,14 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                                 <span className="text-[10px] font-medium text-zinc-400">Macro & Volatility</span>
                                                 <button type="button" onClick={() => openLensPromptEditor(AnalystRole.MACRO_VOLATILITY)} className="text-[9px] uppercase tracking-wider text-zinc-500 hover:text-zinc-300 transition-colors" title="View / edit this role's prompt">✎ Prompt</button>
                                             </div>
-                                            <select
+                                            <ModelPicker
+                                                providers={providers}
                                                 value={lensAssignmentValue('macro_volatility')}
-                                                onChange={(e) => updateLensAssignment('macro_volatility', e.target.value)}
-                                                className="w-full bg-zinc-950 border border-white/10 rounded px-2 py-0.5 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500/50 cursor-pointer"
-                                            >
-                                                <option value="">Select provider/model</option>
-                                                {lensModelOptionsForRole('macro_volatility').map(option => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}{option.disabled ? ' (assigned)' : ''}</option>)}
-                                            </select>
+                                                onChange={(v) => updateLensAssignment('macro_volatility', v)}
+                                                mode="provider-model"
+                                                disabledValues={new Set(lensModelOptionsForRole('macro_volatility').filter(o => o.disabled).map(o => o.value))}
+                                                compact
+                                            />
                                             {lensAssignmentValue('macro_volatility') === '' && (
                                                 <div className="mt-0.5 text-[9px] italic text-zinc-600">Unassigned — required to start the ensemble.</div>
                                             )}
@@ -480,14 +451,14 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                                 <span className="text-[10px] font-medium text-zinc-400">Technical Analyst</span>
                                                 <button type="button" onClick={() => openLensPromptEditor(AnalystRole.TECHNICAL_ANALYST)} className="text-[9px] uppercase tracking-wider text-zinc-500 hover:text-zinc-300 transition-colors" title="View / edit this role's prompt">✎ Prompt</button>
                                             </div>
-                                            <select
+                                            <ModelPicker
+                                                providers={providers}
                                                 value={lensAssignmentValue('technical_analyst')}
-                                                onChange={(e) => updateLensAssignment('technical_analyst', e.target.value)}
-                                                className="w-full bg-zinc-950 border border-white/10 rounded px-2 py-0.5 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500/50 cursor-pointer"
-                                            >
-                                                <option value="">Select provider/model</option>
-                                                {lensModelOptionsForRole('technical_analyst').map(option => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}{option.disabled ? ' (assigned)' : ''}</option>)}
-                                            </select>
+                                                onChange={(v) => updateLensAssignment('technical_analyst', v)}
+                                                mode="provider-model"
+                                                disabledValues={new Set(lensModelOptionsForRole('technical_analyst').filter(o => o.disabled).map(o => o.value))}
+                                                compact
+                                            />
                                             {lensAssignmentValue('technical_analyst') === '' && (
                                                 <div className="mt-0.5 text-[9px] italic text-zinc-600">Unassigned — required to start the ensemble.</div>
                                             )}
@@ -499,14 +470,14 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                                 <span className="text-[10px] font-medium text-zinc-400">Risk Manager</span>
                                                 <button type="button" onClick={() => openLensPromptEditor(AnalystRole.RISK_EXECUTION)} className="text-[9px] uppercase tracking-wider text-zinc-500 hover:text-zinc-300 transition-colors" title="View / edit this role's prompt">✎ Prompt</button>
                                             </div>
-                                            <select
+                                            <ModelPicker
+                                                providers={providers}
                                                 value={lensAssignmentValue('risk_execution')}
-                                                onChange={(e) => updateLensAssignment('risk_execution', e.target.value)}
-                                                className="w-full bg-zinc-950 border border-white/10 rounded px-2 py-0.5 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500/50 cursor-pointer"
-                                            >
-                                                <option value="">Select provider/model</option>
-                                                {lensModelOptionsForRole('risk_execution').map(option => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}{option.disabled ? ' (assigned)' : ''}</option>)}
-                                            </select>
+                                                onChange={(v) => updateLensAssignment('risk_execution', v)}
+                                                mode="provider-model"
+                                                disabledValues={new Set(lensModelOptionsForRole('risk_execution').filter(o => o.disabled).map(o => o.value))}
+                                                compact
+                                            />
                                             {lensAssignmentValue('risk_execution') === '' && (
                                                 <div className="mt-0.5 text-[9px] italic text-zinc-600">Unassigned — required to start the ensemble.</div>
                                             )}
@@ -538,141 +509,18 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                                 <div className="flex items-center gap-2 mb-0">
                                                     <span className="text-[10px] font-medium text-zinc-400">Model {slot + 1}</span>
                                                 </div>
-                                                <select
+                                                <ModelPicker
+                                                    providers={providers}
                                                     value={ensembleSelectionValue(slot)}
-                                                    onChange={(e) => updateEnsembleSelection(slot, e.target.value)}
-                                                    className="w-full bg-zinc-950 border border-white/10 rounded px-2 py-0.5 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500/50 cursor-pointer"
-                                                >
-                                                    <option value="">Select provider/model</option>
-                                                    {lensModelOptions.map(option => <option key={option.value} value={option.value} disabled={isChosenInOtherSlot(slot, option.value)}>{option.label}{isChosenInOtherSlot(slot, option.value) ? ' (assigned)' : ''}</option>)}
-                                                </select>
+                                                    onChange={(v) => updateEnsembleSelection(slot, v)}
+                                                    mode="provider-model"
+                                                    disabledValues={new Set(lensModelOptions.filter(o => isChosenInOtherSlot(slot, o.value)).map(o => o.value))}
+                                                    compact
+                                                />
                                             </div>
                                         ))}
                                             </>
                                         )}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Team — composer dropdown: quick roster with
-                                regime-matched win rates + auto-assign; full
-                                role editing stays one click away in the modal */}
-                            <div className="relative">
-                                <button
-                                    type="button"
-                                    onClick={() => { setIsTeamDropdownOpen(v => !v); setIsTeamModalOpen(false); }}
-                                    className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 lg:py-2 rounded-full transition-all text-xs sm:text-sm focus-visible:ring-2 focus-visible:ring-cyan-400 ${isTeamDropdownOpen ? 'bg-zinc-700 text-white' : 'bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700'}`}
-                                    title="Team: pick analysts (win rate matched to the current regime), auto-assign, or edit roles"
-                                    aria-expanded={isTeamDropdownOpen}
-                                    aria-haspopup="menu"
-                                >
-                                    <span className="font-medium">Team</span>
-                                    <ChevronDownIcon className={`w-3 h-3 transition-transform ${isTeamDropdownOpen ? 'rotate-180' : ''}`} />
-                                    {!lensConfig.enabled && (
-                                        <span className="text-[9px] font-mono text-zinc-500">{ensembleModelSelection.filter(e => e.providerId).length}</span>
-                                    )}
-                                </button>
-
-                                {isTeamDropdownOpen && (
-                                    <div role="menu" aria-label="Team roster" className="absolute bottom-full left-0 mb-2 w-72 overflow-hidden rounded-2xl border border-white/10 bg-zinc-950/95 shadow-[0_18px_50px_rgba(0,0,0,0.45)] backdrop-blur-xl animate-fade-in">
-                                        <div className="border-b border-white/10 bg-zinc-900 px-3 py-2.5">
-                                            <div className="text-[10px] font-black uppercase tracking-[0.16em] text-cyan-300">Team</div>
-                                            <div className="mt-1 text-[10px] text-zinc-500">
-                                                {lensConfig.enabled ? 'Lenses on — roles drive the roster.' : 'Win rates matched to the current market regime.'}
-                                            </div>
-                                        </div>
-                                        <div className="p-1.5 space-y-0.5 max-h-72 overflow-y-auto custom-scrollbar">
-                                            {providers.filter(p => p.isEnabled && p.apiKey.trim().length > 0).map(provider => {
-                                                const wr = (() => {
-                                                    const s = regimeProviderStats?.get(provider.id);
-                                                    if (s) return { label: `${s.wr.toFixed(0)}% (n=${s.n})`, title: `Win rate in the current regime (${s.n} trades)` };
-                                                    try {
-                                                        const stats = GlobalLearningService.getCalibration()?.granular?.byProvider?.[provider.id];
-                                                        if (stats && stats.total >= 3) {
-                                                            return { label: `${Math.round((stats.wins / stats.total) * 100)}% (n=${stats.total})`, title: 'Overall win rate — no current-regime data yet' };
-                                                        }
-                                                    } catch { /* calibration is best-effort */ }
-                                                    return null;
-                                                })();
-                                                const selected = lensConfig.enabled
-                                                    ? lensConfig.assignments.some(a => a.assignedProvider === provider.id)
-                                                    : ensembleModelSelection.some(e => e.providerId === provider.id);
-                                                return (
-                                                    <button
-                                                        key={provider.id}
-                                                        type="button"
-                                                        disabled={lensConfig.enabled}
-                                                        onClick={() => {
-                                                            const providerConfig = providers.find(p => p.id === provider.id);
-                                                            if (!providerConfig) return;
-                                                            const model = providerConfig.selectedModel || providerConfig.models[0] || '';
-                                                            if (ensembleModelSelection.some(e => e.providerId === provider.id)) {
-                                                                const idx = ensembleModelSelection.findIndex(e => e.providerId === provider.id);
-                                                                const next = [...ensembleModelSelection];
-                                                                if (idx >= 0) { next.splice(idx, 1); next.push({ providerId: '', model: '' }); }
-                                                                setEnsembleModelSelection(next);
-                                                            } else {
-                                                                const next = [...ensembleModelSelection];
-                                                                const empty = next.findIndex(e => !e.providerId);
-                                                                if (empty >= 0) next[empty] = { providerId: provider.id, model };
-                                                                else if (next.length < 3) next.push({ providerId: provider.id, model });
-                                                                setEnsembleModelSelection(next);
-                                                            }
-                                                        }}
-                                                        className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left text-[11px] transition-colors ${
-                                                            selected ? 'bg-zinc-800 text-white' : 'hover:bg-zinc-900 text-zinc-400 hover:text-zinc-200'
-                                                        } ${lensConfig.enabled ? 'cursor-default' : ''}`}
-                                                        title={wr?.title}
-                                                    >
-                                                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${selected ? 'bg-cyan-400' : 'bg-zinc-700'}`} />
-                                                        <span className="truncate font-semibold">{provider.name}</span>
-                                                        <span className="ml-auto shrink-0 font-mono text-[9px] text-zinc-500">{wr?.label ?? 'no stats'}</span>
-                                                    </button>
-                                                );
-                                            })}
-                                        </div>
-                                        {!lensConfig.enabled && (
-                                            <div className="border-t border-white/10 p-1.5">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        const ready = providers.filter(p => p.isEnabled && p.apiKey.trim().length > 0);
-                                                        let ordered = [...ready];
-                                                        if (regimeProviderStats && regimeProviderStats.size > 0) {
-                                                            ordered.sort((a, b) => (regimeProviderStats.get(b.id)?.wr ?? -1) - (regimeProviderStats.get(a.id)?.wr ?? -1));
-                                                        } else {
-                                                            try {
-                                                                const byProvider = GlobalLearningService.getCalibration()?.granular?.byProvider;
-                                                                if (byProvider) {
-                                                                    ordered.sort((a, b) => {
-                                                                        const wa = byProvider[a.id]?.total >= 3 ? byProvider[a.id].wins / byProvider[a.id].total : -1;
-                                                                        const wb = byProvider[b.id]?.total >= 3 ? byProvider[b.id].wins / byProvider[b.id].total : -1;
-                                                                        return wb - wa;
-                                                                    });
-                                                                }
-                                                            } catch { /* best-effort */ }
-                                                        }
-                                                        const top = ordered.slice(0, 3).map(p => ({ providerId: p.id, model: p.selectedModel || p.models[0] || '' }));
-                                                        const next = [...ensembleModelSelection];
-                                                        for (let i = 0; i < 3; i++) next[i] = top[i] ?? { providerId: '', model: '' };
-                                                        setEnsembleModelSelection(next);
-                                                        setIsTeamDropdownOpen(false);
-                                                    }}
-                                                    className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left text-[11px] font-bold text-cyan-400 hover:bg-cyan-500/10 transition-colors"
-                                                >
-                                                    ⚡ Auto-assign by win rate
-                                                </button>
-                                            </div>
-                                        )}
-                                        <div className="border-t border-white/10 p-1.5">
-                                            <button
-                                                type="button"
-                                                onClick={() => { setIsTeamDropdownOpen(false); setIsTeamModalOpen(true); }}
-                                                className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left text-[11px] font-semibold text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200 transition-colors"
-                                            >
-                                                Edit roles & lenses…
-                                            </button>
-                                        </div>
                                     </div>
                                 )}
                             </div>
@@ -735,101 +583,6 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             </button>
                         </div>
                     </div>
-
-                    {/* Ensemble Intelligence Panel - List Style */}
-                    {showAISettings && (
-                        <div role="dialog" aria-label="Provider settings" className="mt-4 bg-zinc-900 rounded-2xl border border-white/10 overflow-hidden animate-fade-in">
-                            {/* AI Providers List — only providers ENABLED in
-                                Settings participate in ensemble; enable/disable
-                                happens in Settings → AI setup. */}
-                            <div className="max-h-[300px] overflow-y-auto">
-                                {providers.filter(p => p.isEnabled).length > 0 ? (
-                                    providers.filter(p => p.isEnabled).map((provider, index) => (
-                                        <div
-                                            key={provider.id}
-                                            className={`w-full flex items-center justify-between px-4 py-3 transition-all bg-cyan-500/10 ${index !== 0 ? 'border-t border-white/5' : ''
-                                                }`}
-                                        >
-                                            <div className="flex items-center gap-3">
-                                                <svg className="w-4 h-4 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                                                    <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-                                                    <line x1="12" y1="22.08" x2="12" y2="12" />
-                                                </svg>
-                                                <div className="text-left">
-                                                    <div className="text-sm font-medium text-white">
-                                                        {provider.name}
-                                                    </div>
-                                                    <div className="mt-2 space-y-1.5">
-                                                        <div className="text-[10px] uppercase tracking-wider text-zinc-500">Ensemble models</div>
-                                                        {provider.models.length > 0 ? provider.models.map(model => {
-                                                            const selectedModels = provider.ensembleModels?.filter(item => provider.models.includes(item))
-                                                                ?? (provider.selectedModel ? [provider.selectedModel] : []);
-                                                            const checked = selectedModels.includes(model);
-                                                            const atLimit = ensembleSelectionCount >= 3;
-                                                            return (
-                                                                <label key={model} className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
-                                                                    <input
-                                                                        type="checkbox"
-                                                                        checked={checked}
-                                                                        disabled={provider.apiKey.trim().length === 0 || (!checked && atLimit)}
-                                                                        onChange={() => {
-                                                                            if (!onUpdateProvider) return;
-                                                                            const next = checked
-                                                                                ? selectedModels.filter(item => item !== model)
-                                                                                : [...selectedModels, model];
-                                                                            if (next.length === 0 || next.length > 3) return;
-                                                                            void onUpdateProvider(provider.id, { ensembleModels: next });
-                                                                        }}
-                                                                        className="h-3.5 w-3.5 accent-cyan-500"
-                                                                        aria-label={`${provider.name} ${model} ensemble model`}
-                                                                    />
-                                                                    <span className="truncate font-mono">{model}</span>
-                                                                </label>
-                                                            );
-                                                        }) : <span className="text-[10px] text-zinc-600">No models configured</span>}
-                                                        {provider.apiKey.trim().length === 0 && <span className="block text-[10px] text-red-400 font-mono">No API key</span>}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))
-                                ) : (
-                                    <div className="px-4 py-6 text-center text-xs text-zinc-500">
-                                        No enabled providers. Enable providers in Settings → AI setup.
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="px-4 py-2 border-t border-white/10 text-[11px] text-zinc-500">
-                                Select up to <span className="text-zinc-300 font-medium">3 models total</span> for the ensemble ({ensembleSelectionCount}/3 selected).
-                            </div>
-
-                            {/* Vision Model Selector */}
-                            <div className="px-4 py-3 border-t border-white/10 bg-zinc-800">
-                                <div className="text-[10px] uppercase font-bold tracking-wider text-zinc-500 mb-2">Vision Model</div>
-                                <select
-                                    value={selectedVisionModel}
-                                    onChange={(e) => setSelectedVisionModel(e.target.value)}
-                                    className="w-full bg-zinc-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-zinc-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus:border-cyan-500/50"
-                                    aria-label="Vision model"
-                                >
-                                    {providers.filter(p => p.isEnabled && p.apiKey.trim().length > 0).flatMap(p => p.models.map(m => ({ providerName: p.name, modelId: m }))).map(item => (
-                                        <option key={`${item.providerName}-${item.modelId}`} value={item.modelId} className="bg-zinc-900">
-                                            {item.providerName}: {item.modelId}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            {/* Warning if no providers ready */}
-                            {providers.filter(p => p.isEnabled && p.apiKey.trim().length > 0).length === 0 && (
-                                <div className="px-4 py-3 text-[11px] text-red-400 bg-red-500/10 border-t border-red-500/20">
-                                     Enable at least one AI provider (with an API key) to send messages
-                                </div>
-                            )}
-                        </div>
-                    )}
                 </div>
             </div>
 
