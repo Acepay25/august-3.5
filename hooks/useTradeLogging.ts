@@ -111,7 +111,20 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             ] as (string | null)[]).filter((p): p is string => p !== null);
 
         providers.forEach(p => {
-            trackTradeOutcome(p, isWin, analysis.detectedPatternFamily || '', trade.marketRegime || 'ranging', analysis.confidence || 'Medium', {
+            // Per-analyst credit assignment: the consensus entries record each
+            // analyst's OWN directional call. Crediting every model with the
+            // moderator's verdict made per-model accuracy and dynamic weights
+            // pure noise (a bearish analyst was rewarded for a winning Long).
+            // Agreeing analysts get the trade outcome; analysts who called the
+            // OPPOSITE direction get the inverse (their call lost).
+            const entry = analysis.analystConsensus?.entries.find(e => e.thoughtsKey === p || e.providerId === p);
+            let creditedWin = isWin;
+            const tradeDirection = trade.analysis?.direction;
+            if (entry?.direction && tradeDirection) {
+                const agreed = String(entry.direction).toLowerCase() === String(tradeDirection).toLowerCase();
+                creditedWin = agreed ? isWin : !isWin;
+            }
+            trackTradeOutcome(p, creditedWin, analysis.detectedPatternFamily || '', trade.marketRegime || 'ranging', analysis.confidence || 'Medium', {
                 direction: analysis.direction,
                 // parsePrice handles commas + annotations; the old digit-strip
                 // regex turned "94500 4h" into 945004 in the RL training signal.
