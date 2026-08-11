@@ -811,6 +811,34 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, conn
                         )}
                     </div>
 
+                    {/* Weekly / Monthly context — where are we in the period */}
+                    {data.marketContext && (data.marketContext.week || data.marketContext.month) && (
+                        <div className="bg-zinc-900/60 rounded-lg p-2 border border-white/5 space-y-1">
+                            <div className="text-[9px] font-bold text-zinc-400 uppercase">Weekly / Monthly</div>
+                            {data.marketContext.week && (
+                                <div className="text-[9px] font-mono text-zinc-300">
+                                    Week O {formatPrice(data.marketContext.week.open)} · H {formatPrice(data.marketContext.week.high)} · L {formatPrice(data.marketContext.week.low)}
+                                    {data.marketContext.prevWeek ? (
+                                        <span className="text-zinc-600"> · prev {formatPrice(data.marketContext.prevWeek.low)}–{formatPrice(data.marketContext.prevWeek.high)}</span>
+                                    ) : null}
+                                </div>
+                            )}
+                            {data.marketContext.month && (
+                                <div className="text-[9px] font-mono text-zinc-300">
+                                    Mo O {formatPrice(data.marketContext.month.open)} · H {formatPrice(data.marketContext.month.high)} · L {formatPrice(data.marketContext.month.low)}
+                                    {data.marketContext.prevMonth ? (
+                                        <span className="text-zinc-600"> · prev {formatPrice(data.marketContext.prevMonth.low)}–{formatPrice(data.marketContext.prevMonth.high)}</span>
+                                    ) : null}
+                                </div>
+                            )}
+                            {data.live1h && (
+                                <div className="text-[9px] font-mono text-cyan-300/80">
+                                    1H candle {formatPrice(data.live1h.open)} → {formatPrice(data.live1h.price)} · {data.live1h.minutesLeft}m left · {data.live1h.percentTraveled.toFixed(0)}% traveled
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     {/* Key Levels */}
                     <div className="grid grid-cols-2 gap-2">
                         <div className="bg-rose-950/30 rounded-lg p-2 border border-rose-500/20">
@@ -834,6 +862,32 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, conn
                             )}
                         </div>
                     </div>
+                    {/* Liquidity sweeps — price-action events at key levels */}
+                    {data.liquiditySweeps && data.liquiditySweeps.length > 0 && (
+                        <div className="bg-zinc-900/60 rounded-lg p-2 border border-white/5 space-y-1">
+                            <div className="text-[9px] font-bold text-zinc-400 uppercase">Liquidity Sweeps</div>
+                            {data.liquiditySweeps.slice(0, 3).map((s, i) => (
+                                <div key={i} className="text-[9px] font-mono leading-snug text-zinc-300">
+                                    <span className={s.direction === 'bullish' ? 'text-emerald-300' : 'text-rose-300'}>
+                                        {s.timeframe} {s.type === 'sweep_reject' ? 'sweep↩' : 'break'}
+                                    </span>{' '}
+                                    <span className="text-zinc-500">{s.levelLabel} ${formatPrice(s.level)}</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Profile shape */}
+                    {data.advancedVolume?.volumeProfile?.shape && (
+                        <div className="bg-zinc-900/60 rounded-lg p-2 border border-white/5">
+                            <div className="text-[9px] font-bold text-zinc-400 uppercase mb-1">Volume Profile</div>
+                            <div className="text-[9px] font-mono text-zinc-300">
+                                {data.advancedVolume.volumeProfile.shape.replace('_', ' ')} · price{' '}
+                                {data.advancedVolume.volumeProfile.valueAreaPosition} value area
+                                <span className="text-zinc-600"> ({formatPrice(data.advancedVolume.volumeProfile.valueAreaLow)}–{formatPrice(data.advancedVolume.volumeProfile.valueAreaHigh)})</span>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Footer */}
