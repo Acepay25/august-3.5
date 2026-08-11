@@ -194,6 +194,12 @@ export interface InvalidationCriterion {
 export interface AnalystConsensusEntry {
   /** ProviderConfig.id — the key used across modelsUsed/calibration. */
   providerId: string;
+  /**
+   * The unique analyst identity (provider::model) when available — two lens
+   * roles may share one provider, so config.id alone collides; the panel
+   * matches on thoughtsKey first, providerId as fallback.
+   */
+  thoughtsKey?: string;
   /** Display name, e.g. "Gemini 2.0 Pro (Technical)". */
   displayName: string;
   direction?: string;

@@ -234,13 +234,26 @@ const App: React.FC = () => {
         useAlgorithmicInsights, setUseAlgorithmicInsights,
     } = useAppSettings();
 
-    // Derive the moderator ProviderConfig from readyProviders
-    const moderatorConfig: ProviderConfig = useMemo(() =>
-        readyProviders.find(p => p.id === moderatorProviderId) || readyProviders[0] || {
+    // Derive the moderator ProviderConfig from readyProviders. When the user
+    // never picked a moderator, prefer a provider that is NOT one of the
+    // analyst providers — the old readyProviders[0] fallback often WAS an
+    // analyst, so the moderator debated itself.
+    const moderatorConfig: ProviderConfig = useMemo(() => {
+        const selected = readyProviders.find(p => p.id === moderatorProviderId);
+        if (selected) return selected;
+        const analystIds = new Set(
+            (lensConfig?.assignments ?? []).map(a => a.assignedProvider).filter(Boolean)
+        );
+        const nonAnalystModerator = readyProviders.find(p => !analystIds.has(p.id));
+        if (nonAnalystModerator) {
+            console.warn('[Moderator] No moderator selected — fell back to', nonAnalystModerator.name);
+            return nonAnalystModerator;
+        }
+        return readyProviders[0] || {
             id: 'none', name: 'None', apiKey: '', baseUrl: '', apiFormat: 'chat_completions' as const,
             isEnabled: false, isBuiltIn: true, models: [], selectedModel: '',
-        },
-    [readyProviders, moderatorProviderId]);
+        };
+    }, [readyProviders, moderatorProviderId, lensConfig]);
 
     // ONE vision model for EVERY vision feature (chart OCR, post-trade
     // uploads, PDF book OCR). Resolution: the globally selected model

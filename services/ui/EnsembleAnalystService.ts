@@ -83,12 +83,15 @@ export const buildEnsembleAnalysts = (
 
     const assignmentForRole = (role: AnalystRole) => assignments.find(item => item.role === role);
 
-    // A role is "missing" when it has no assigned provider, or its resolved
-    // model no longer exists anywhere on that provider.
+    // A role is "missing" when it has no assigned provider, its provider is
+    // NOT ready (disabled / no API key — a role on a disabled provider used
+    // to count as "complete", so the run silently launched 2 analysts), or
+    // its resolved model no longer exists anywhere on that provider.
     const missingAnalystRoles = REQUIRED_ANALYST_ROLES.filter(role => {
         const assignment = assignmentForRole(role);
         const provider = providerConfigs.find(item => item.id === assignment?.assignedProvider);
-        return !assignment?.assignedProvider || resolveAssignedModel(assignment, provider) === null;
+        const providerReady = !!provider && provider.isEnabled && provider.apiKey.trim().length > 0;
+        return !assignment?.assignedProvider || !providerReady || resolveAssignedModel(assignment, provider) === null;
     });
 
     const hasCompleteAnalystAssignments = missingAnalystRoles.length === 0 && (() => {

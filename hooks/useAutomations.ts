@@ -108,7 +108,9 @@ export const buildAutomationOverrides = (
             accuracySubMode,
             lensConfig: {
                 enabled: true,
-                tradingStyle: 'swing',
+                // The run's own trading style — 'swing' was hardcoded here,
+                // so automated lens runs could never use position/scalp/auto.
+                tradingStyle: config.lensTradingStyle ?? 'swing',
                 assignments: [
                     { role: AnalystRole.MACRO_VOLATILITY, assignedProvider: macro.providerId, assignedModel: macro.modelId },
                     { role: AnalystRole.TECHNICAL_ANALYST, assignedProvider: technical.providerId, assignedModel: technical.modelId },

@@ -499,9 +499,13 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 </div>
                             )}
 
-                            {/* Analyst requests appear in chat before the moderator debate starts. */}
+                            {/* Analyst requests appear in chat before the moderator debate starts.
+                                hideSubagents was ALWAYS true here and the floating activity card
+                                it referenced doesn't exist — so during "Analyzing charts" the
+                                user saw zero per-analyst activity. The live cards now stream in
+                                the chat itself. */}
                             {!message.isDebating && !message.analysis && message.ensembleProgress && (
-                                <EnsembleProgressChat progress={message.ensembleProgress} modelIdToName={modelIdToName} isLive hideSubagents onRetryAnalyst={onReRunAnalysis ? () => onReRunAnalysis(message.id) : undefined} />
+                                <EnsembleProgressChat progress={message.ensembleProgress} modelIdToName={modelIdToName} isLive onRetryAnalyst={onReRunAnalysis ? () => onReRunAnalysis(message.id) : undefined} />
                             )}
 
                             {/* Live debate is shown in the right-side panel now. */}
@@ -561,7 +565,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                                 </thead>
                                                 <tbody>
                                                     {message.runStats.analysts.map(a => (
-                                                        <tr key={a.providerId} className="border-t border-white/5 text-zinc-300">
+                                                        <tr key={`${a.providerId}::${a.modelId}`} className="border-t border-white/5 text-zinc-300">
                                                             <td className="px-2 py-1 whitespace-nowrap max-w-[160px] truncate" title={a.displayName}>{a.displayName}</td>
                                                             <td className="px-2 py-1 whitespace-nowrap max-w-[140px] truncate text-zinc-400" title={a.modelId}>{a.modelId}</td>
                                                             <td className="px-2 py-1 whitespace-nowrap">{a.durationMs !== undefined ? `${(a.durationMs / 1000).toFixed(1)}s` : '—'}</td>
@@ -586,7 +590,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                         const roleDisplay = lensConfig ? getRoleDisplayForProvider(key, lensConfig.assignments) : null;
                                         const modelId = message.modelsUsed?.[key];
                                         const ep = message.ensembleProgress;
-                                        const analystProgress = ep?.analysts.find(a => a.providerId === key);
+                                        const analystProgress = ep?.analysts.find(a => a.key === key || a.providerId === key);
                                         return (
                                             <AnalystInlineRow
                                                 key={key}

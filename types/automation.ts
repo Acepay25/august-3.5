@@ -45,6 +45,10 @@ export interface AutomationConfig {
     mode: AutomationMode;
     /** Lens mode: the 3 analyst picks map to the Macro/Technical/Risk roles. */
     useLenses: boolean;
+    /** Trading style for lens-mode runs ('swing' was hardcoded before — the
+     *  manual lens path resolves 'auto' via getEffectiveStyle; automations
+     *  could never use position/scalp/auto). */
+    lensTradingStyle?: 'position' | 'swing' | 'scalp' | 'auto';
     /** Analyst models — exactly 3 when useLenses, 1-3 otherwise. */
     analystModels: AutomationModelPick[];
     /** The debate moderator model. */
