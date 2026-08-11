@@ -552,6 +552,12 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                 </div>
             </div>
 
+            {/* Everything below is the "Details" layer — hidden by default so
+                the card reads as a normal chat message, revealed via the
+                Details button in the bubble's action row. */}
+            {isDetailsVisible && (
+                <div className="mt-4 space-y-4">
+
             {/* Consensus explainability — audit the verdict against its analysts */}
             {analysis.analystConsensus && (
                 <ConsensusPanel consensus={analysis.analystConsensus} verdict={analysis} />
@@ -1582,7 +1588,11 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                     </BacktestPanel>
                 </div>
 
-            </div>
+                </div>
+
+                </div>
+            )}
+
         </div>
     );
 };
