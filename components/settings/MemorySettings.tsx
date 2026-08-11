@@ -12,6 +12,7 @@
 
 import React from 'react';
 import { ProviderConfig } from '../../types/provider';
+import ModelPicker from '../shared/ModelPicker';
 
 export interface MemorySettingsProps {
     /** All available provider configs to choose from. */
@@ -31,34 +32,26 @@ const MemorySettings: React.FC<MemorySettingsProps> = ({ providerConfigs, memory
         </div>
         <p className="text-xs text-zinc-500 mb-3">The AI that manages pattern memory and trade history</p>
         <div className="space-y-2">
-            <select
-                value={memoryConfig?.id ?? ''}
-                onChange={(e) => {
-                    const selected = providerConfigs.find(p => p.id === e.target.value) ?? null;
-                    onMemoryConfigChange?.(selected);
+            <ModelPicker
+                providers={providerConfigs}
+                value={memoryConfig?.id && memoryConfig?.selectedModel ? `${memoryConfig.id}::${memoryConfig.selectedModel}` : memoryConfig?.id ?? ''}
+                onChange={(value) => {
+                    const separator = value.indexOf('::');
+                    if (separator >= 0) {
+                        const providerId = value.slice(0, separator);
+                        const modelId = value.slice(separator + 2);
+                        const selected = providerConfigs.find(p => p.id === providerId) ?? null;
+                        if (selected) {
+                            onMemoryConfigChange?.({ ...selected, selectedModel: modelId });
+                        }
+                    } else {
+                        const selected = providerConfigs.find(p => p.id === value) ?? null;
+                        onMemoryConfigChange?.(selected);
+                    }
                 }}
-                className="w-full bg-zinc-800 border border-white/10 rounded-xl text-sm p-3 text-zinc-300 focus:ring-2 focus:ring-purple-500/50 focus:outline-none"
-            >
-                <option value="">Select a provider</option>
-                {providerConfigs.map(opt => (
-                    <option key={opt.id} value={opt.id}>{opt.name}</option>
-                ))}
-            </select>
-            {/* Model dropdown based on selected provider */}
-            {memoryConfig && memoryConfig.models.length > 0 && (
-                <select
-                    value={memoryConfig.selectedModel || ''}
-                    onChange={(e) => {
-                        const updated: ProviderConfig = { ...memoryConfig, selectedModel: e.target.value };
-                        onMemoryConfigChange?.(updated);
-                    }}
-                    className="w-full bg-zinc-800 border border-white/10 rounded-xl text-sm p-3 text-zinc-300 focus:ring-2 focus:ring-purple-500/50 focus:outline-none"
-                >
-                    {memoryConfig.models.map(m => (
-                        <option key={m} value={m}>{m}</option>
-                    ))}
-                </select>
-            )}
+                mode="provider-model"
+                placeholder="Select provider/model"
+            />
         </div>
     </div>
 );

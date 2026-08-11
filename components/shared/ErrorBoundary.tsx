@@ -2,6 +2,8 @@ import React, { Component, ErrorInfo, ReactNode } from 'react';
 
 interface Props {
     children: ReactNode;
+    /** Compact inline fallback (e.g. per-message) instead of the full-screen one. */
+    compact?: boolean;
 }
 
 interface State {
@@ -53,6 +55,11 @@ class ErrorBoundary extends Component<Props, State> {
         window.location.reload();
     };
 
+    handleReset = (): void => {
+        // Clear error state and re-render the subtree (no page reload).
+        this.setState({ hasError: false, error: null, errorInfo: null });
+    };
+
     handleClearAndReload = (): void => {
         // Clear potentially corrupt session data and reload
         try {
@@ -67,6 +74,21 @@ class ErrorBoundary extends Component<Props, State> {
 
     render(): ReactNode {
         if (this.state.hasError) {
+            if (this.props.compact) {
+                // Inline fallback — one bad message must not take down the app.
+                return (
+                    <div className="status-surface rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300">
+                        <div className="font-bold uppercase tracking-widest text-[9px] mb-1">This message failed to render</div>
+                        <div className="text-rose-300/70 truncate">{this.state.error?.message || 'Unknown error'}</div>
+                        <button
+                            onClick={this.handleReset}
+                            className="mt-2 px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px] font-bold uppercase tracking-widest transition-colors"
+                        >
+                            Retry
+                        </button>
+                    </div>
+                );
+            }
             return (
                 <div className="status-surface fixed inset-0 bg-zinc-900 flex flex-col items-center justify-center p-6 text-white">
                     <div className="max-w-md w-full text-center space-y-6">
