@@ -11,6 +11,7 @@ import LiveThinkingAccordion from './LiveThinkingAccordion';
 import ThinkingModal from '../analysis/ThinkingModal';
 import TodayReassessmentPanel from './TodayReassessmentPanel';
 import { getRoleDisplayForProvider } from '../../services/ui/AnalystLensService';
+import { buildAnalysisMarkdown, buildSupplementMarkdown } from '../../utils/analysisUtils';
 import { getThinkingByTrade, getThinkingTradeId } from '../../services/infrastructure/ThinkingStoreService';
 import { ThinkingRecord } from '../../types/thinking';
 import { AutopilotResolution } from '../../services/ui/OutcomeAutopilotService';
@@ -245,19 +246,31 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
     // The FULL plan markdown. Ensemble messages carry a stub text ("The
     // ensemble has concluded its debate.") — the real **FINAL TRADE PLAN**
     // block lives in analysis.strategy (the moderator's markdown verdict,
-    // tags stripped). Single-provider runs keep the plan in the message
-    // text, so fall back to displayContent when strategy is absent.
+    // tags stripped). When that text is missing or came back as a parse
+    // error (custom prompt overrides can break the parser), the parsed
+    // JSON fields are re-organized into the same markdown layout so the
+    // plan ALWAYS renders.
     const planMarkdown = React.useMemo(() => {
         const s = message.analysis?.strategy;
         if (s && !s.startsWith('Parsing Error:') && !s.startsWith('Connection Error:')) return s;
+        if (message.analysis) {
+            const built = buildAnalysisMarkdown(message.analysis);
+            if (built) return built;
+        }
         return displayContent;
-    }, [message.analysis?.strategy, displayContent]);
+    }, [message.analysis, displayContent]);
 
     // Accuracy-mode verification note — the stub sentence plus an optional
     // note ("Plan verified by the accuracy pass."); show only the note.
     const ensembleNote = displayContent.includes('The ensemble has concluded its debate.')
         ? displayContent.replace('The ensemble has concluded its debate.', '').trim()
         : '';
+
+    // Harness-side data (gate, calibration, team verdict, memory insight,
+    // freshness) — rendered as markdown sections inside the same card.
+    const supplementMarkdown = React.useMemo(() => {
+        return message.analysis ? buildSupplementMarkdown(message.analysis, confidenceCalibration) : '';
+    }, [message.analysis, confidenceCalibration]);
 
     // Determine Bubble Styling - Clean modern design like ChatGPT/Gemini
     const bubbleClass = isUserMessage
@@ -408,24 +421,11 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 </div>
                             )}
 
-                            {message.role === MessageRole.AI && (displayContent.trim() || planMarkdown.trim()) && (
+                            {message.role === MessageRole.AI && !message.analysis && displayContent.trim() && (
                                 <div className="mb-2 flex items-center justify-between gap-2">
                                     <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
                                         Final output
                                     </div>
-                                    {/* Regenerate the latest analysis with the same
-                                        prompt + chart (appends a fresh signal; the
-                                        old one stays for comparison). */}
-                                    {message.analysis && context.latestMessageId === message.id && onReRunAnalysis && (
-                                        <button
-                                            type="button"
-                                            onClick={() => onReRunAnalysis(message.id)}
-                                            className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 hover:text-cyan-400 transition-colors"
-                                            title="Adds a fresh analysis with the same prompt + chart; the old card is kept for comparison"
-                                        >
-                                            ↻ Regenerate
-                                        </button>
-                                    )}
                                 </div>
                             )}
                             {isUserMessage && editingMessageId === message.id ? (
@@ -457,13 +457,38 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 </div>
                             ) : message.analysis && planMarkdown.trim() ? (
                                 // Analysis messages render the FINAL TRADE PLAN
-                                // as properly RENDERED markdown (bold labels,
-                                // sections, lists) — no card look, all the
-                                // JSON data organized in markdown sections.
-                                <div className="min-w-0">
-                                    <MarkdownContent content={planMarkdown} />
+                                // in the Trading-workspace presentation: one
+                                // carded bubble with proper spacing, a label
+                                // row, the plan as RENDERED markdown, and the
+                                // harness-side supplement in the same box.
+                                <div className="rounded-2xl border border-white/5 bg-zinc-900/80 p-4 sm:p-5 shadow-lg">
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                                        <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500">Trading signal</span>
+                                        {/* Regenerate the latest analysis with the same
+                                            prompt + chart (appends a fresh signal; the
+                                            old one stays for comparison). */}
+                                        {context.latestMessageId === message.id && onReRunAnalysis && (
+                                            <button
+                                                type="button"
+                                                onClick={() => onReRunAnalysis(message.id)}
+                                                className="ml-auto text-[10px] font-bold uppercase tracking-widest text-zinc-500 hover:text-cyan-400 transition-colors"
+                                                title="Adds a fresh analysis with the same prompt + chart; the old card is kept for comparison"
+                                            >
+                                                ↻ Regenerate
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div className="prose-sm">
+                                        <MarkdownContent content={planMarkdown} />
+                                        {supplementMarkdown && (
+                                            <div className="mt-4 pt-4 border-t border-white/5">
+                                                <MarkdownContent content={supplementMarkdown} />
+                                            </div>
+                                        )}
+                                    </div>
                                     {ensembleNote && (
-                                        <p className="mt-2 text-[11px] text-zinc-500 leading-relaxed">{ensembleNote}</p>
+                                        <p className="mt-3 pt-3 border-t border-white/5 text-[11px] text-zinc-500 leading-relaxed">{ensembleNote}</p>
                                     )}
                                 </div>
                             ) : (
@@ -658,7 +683,6 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     messageId={message.id}
                                     analysis={message.analysis}
                                     outcome={message.outcome}
-                                    confidenceCalibration={confidenceCalibration}
                                     autopilotResolution={autopilotResolutions?.[message.id]}
                                     onLogTrade={handleInitiateLogTrade}
                                     onConfirmAutopilot={onConfirmAutopilot}

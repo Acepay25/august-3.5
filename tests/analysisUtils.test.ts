@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { recalculateAnalysisMetrics, parseProseTradePlan, parseMarkdownTradePlan, tradePlanToAnalysis, stripPlanTags } from '../utils/analysisUtils';
+import { recalculateAnalysisMetrics, parseProseTradePlan, parseMarkdownTradePlan, tradePlanToAnalysis, stripPlanTags, buildAnalysisMarkdown, buildSupplementMarkdown } from '../utils/analysisUtils';
+import { MASTER_TRADE_PLAN_MARKDOWN } from '../constants/schemas';
 
 describe('analysisUtils', () => {
   describe('parseMarkdownTradePlan (the ONLY moderator output contract — no JSON)', () => {
@@ -197,6 +198,55 @@ Probability: 60%`;
     });
   });
 
+  describe('MASTER_TRADE_PLAN_MARKDOWN ↔ parseMarkdownTradePlan (the moderator contract)', () => {
+    it('parses EVERY section of the full template back out', () => {
+      const plan = parseMarkdownTradePlan(MASTER_TRADE_PLAN_MARKDOWN);
+      expect(plan).not.toBeNull();
+      // Setup
+      expect(plan!.coinName).toBe('BTCUSDT');
+      expect(plan!.direction).toBe('Long');
+      expect(plan!.grade).toBe('B');
+      expect(plan!.patternFamily).toBe('Family C');
+      expect(plan!.validityWindow).toBe('4h');
+      // Levels
+      expect(plan!.entry).toBe('95000');
+      expect(plan!.stopLoss).toBe('94500');
+      expect(plan!.takeProfit).toBe('96000');
+      // Odds
+      expect(plan!.confidence).toBe('Medium');
+      expect(plan!.probability).toBe(65);
+      expect(plan!.slProbability).toBe(25);
+      expect(plan!.tpProbabilities?.length).toBeGreaterThanOrEqual(2);
+      // Strategy
+      expect(plan!.strategy).toContain('Trend continuation');
+      expect(plan!.historicalCorrelation).toBeTruthy();
+      // Market Conditions
+      expect(plan!.marketConditions?.pattern).toBe('Bull Flag');
+      expect(plan!.marketConditions?.rsi).toBeTruthy();
+      expect(plan!.marketConditions?.prices?.['1h']).toBe('95000');
+      // Detected Patterns
+      expect(plan!.detectedPatterns?.[0]?.name).toBe('Bull Flag');
+      expect(plan!.detectedPatterns?.[0]?.timeframe).toBe('1h');
+      // Key Levels
+      expect(plan!.support?.[0]).toContain('94500');
+      expect(plan!.resistance?.[0]).toContain('96000');
+      // Dual Scenario
+      expect(plan!.dualScenario?.bullish?.target).toBe('97000');
+      expect(plan!.dualScenario?.bearish?.trigger).toBe('94000');
+      expect(plan!.dualScenario?.selected).toBe('Bullish');
+      expect(plan!.dualScenario?.reasoning).toBeTruthy();
+      // Invalidation
+      expect(plan!.invalidations?.length).toBeGreaterThanOrEqual(2);
+      // Devil's Advocate
+      expect(plan!.devilsAdvocate?.riskScore).toBe(45);
+      expect(plan!.devilsAdvocate?.bearCaseReasons?.length).toBeGreaterThan(0);
+      // Evidence
+      expect(plan!.evidence?.length).toBeGreaterThanOrEqual(2);
+      expect(plan!.evidence?.[0]?.state).toBe('observed');
+      expect(plan!.evidence?.[0]?.sources?.length).toBeGreaterThan(0);
+    });
+  });
+
   describe('parseProseTradePlan (moderator markdown verdict rescue)', () => {
     it('extracts coin, direction, levels, probability and confidence from verdict prose', () => {
       const prose = `**MODERATOR VERDICT** — SHORT BTCUSDT.
@@ -316,6 +366,77 @@ Confidence: High. The sweep-reclaim pattern aligns across 15m and 1h.`;
 
       recalculateAnalysisMetrics(analysis, 10);
       expect(analysis).toEqual(snapshot);
+    });
+  });
+
+  describe('buildAnalysisMarkdown (guaranteed plan fallback from parsed fields)', () => {
+    it('renders every JSON field as organized markdown sections', () => {
+      const analysis: any = {
+        coinName: 'BTCUSDT',
+        direction: 'Short',
+        confidence: 'Low',
+        probability: 58,
+        grade: 'C',
+        detectedPatternFamily: 'Family B',
+        tradeType: 'swing',
+        validityDurationMinutes: 330,
+        createdAt: '2026-08-12T00:00:00.000Z',
+        entryPoints: [{ price: '75.55', description: '' }],
+        stopLoss: '75.95',
+        stopLossPercentage: '-52.9%',
+        takeProfit: [{ price: '75.00', percentage: '+72.8%' }],
+        rrRatio: 1.37,
+        levelProbabilities: { slProbability: 30, tpProbabilities: [{ level: 1, probability: 55 }] },
+        marketConditions: { pattern: 'Breakdown', rsi: '37.8', macd: 'bearish', candleBehavior: '', timeframeAlignment: '', sentiment: '', prices: { '1h': '75.40' } },
+        detectedPatterns: [{ name: 'Bearish BOS Continuation', timeframe: '1H', confidence: 'low' }],
+        keyLevels: { support: ['75.34'], resistance: ['75.95'] },
+        dualScenarioAnalysis: { bullish: { trigger: '75.95' }, bearish: { trigger: '75.55', target: '74.22' }, selectedScenario: 'bearish', confidenceInSelection: 58 },
+        invalidationCriteria: [{ level: '75.95', condition: '15m close above OB' }],
+        evidence: [{ claim: '1H BOS confirmed', state: 'observed', sources: ['1H structure'] }],
+        devilsAdvocate: { riskScore: 20, bearCaseReasons: ['Liquidity grab'], failureScenarios: ['Stop hunt'], crowdedTradeWarning: '' },
+      };
+      const md = buildAnalysisMarkdown(analysis);
+      expect(md).toContain('**Setup**');
+      expect(md).toContain('**Levels**');
+      expect(md).toContain('Entry: **75.55**');
+      expect(md).toContain('Stop Loss: **75.95** (-52.9%)');
+      expect(md).toContain('TP1: **75.00** (+72.8%)');
+      expect(md).toContain('Risk/Reward: **1.37:1**');
+      expect(md).toContain('**Odds**');
+      expect(md).toContain('SL hit: **30%**');
+      expect(md).toContain('**Market Conditions**');
+      expect(md).toContain('**Detected Patterns**');
+      expect(md).toContain('**Key Levels**');
+      expect(md).toContain('**Dual Scenario Analysis**');
+      expect(md).toContain('**Invalidation**');
+      expect(md).toContain('**Evidence**');
+      expect(md).toContain("**Devil's Advocate**");
+      // No raw JSON anywhere
+      expect(md).not.toContain('{');
+    });
+
+    it('includes the family nickname and always shows the gate verdict', () => {
+      const analysis: any = {
+        coinName: 'BTCUSDT',
+        direction: 'Short',
+        confidence: 'Low',
+        probability: 58,
+        detectedPatternFamily: 'Family B',
+        gateResult: { passed: true, confidenceCap: 1, penalties: { dataIntegrity: 0, patternMemory: 0, htfConflict: 0, volumeContext: 0, rawTotal: 0, effectiveTotal: 0 }, familyBias: { A: 0, B: 0, C: 0, Omega: 0 }, warnings: [], insights: [] },
+      };
+      const md = buildAnalysisMarkdown(analysis);
+      expect(md).toContain('Pattern Family: **Family B** — "Directional Flip Family"');
+      // The gate verdict lives in the supplement builder and always renders.
+      const sup = buildSupplementMarkdown(analysis);
+      expect(sup).toContain('**Validation gate**');
+      expect(sup).toContain('Verdict: PASS');
+    });
+
+    it('omits empty sections', () => {
+      const md = buildAnalysisMarkdown({ direction: 'Neutral', confidence: 'Medium' } as any);
+      expect(md).toContain('**Setup**');
+      expect(md).not.toContain('**Levels**');
+      expect(md).not.toContain('**Odds**');
     });
   });
 });
