@@ -3,6 +3,7 @@ import { Brain, ChevronDown, MessageSquare } from 'lucide-react';
 import { ThinkingRecord } from '../../types/thinking';
 import { TradeOutcome } from '../../types';
 import ThinkingModal from '../analysis/ThinkingModal';
+import { displayThinkingParts } from '../../utils/thinkingSplit';
 
 interface ThinkingRecordCardProps {
   record: ThinkingRecord;
@@ -59,6 +60,7 @@ export const ThinkingRecordCard: React.FC<ThinkingRecordCardProps> = ({ record }
   const colors = getProviderColor(record.provider);
   const isTurn = record.role === 'debate_turn';
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const parts = displayThinkingParts(record);
 
   return (
     <div className={`rounded-lg border ${colors.border} ${colors.bg} p-3`}>
@@ -110,11 +112,11 @@ export const ThinkingRecordCard: React.FC<ThinkingRecordCardProps> = ({ record }
         subtitle={record.modelName || (record.outcome ? `Outcome: ${record.outcome}` : undefined)}
       >
         <div className="space-y-2">
-          {record.reasoning && <Section title={isTurn ? 'Turn Text' : 'Reasoning (CoT)'}>{record.reasoning}</Section>}
-          {record.finalOutput && <Section title="Final Output">{record.finalOutput}</Section>}
-          {record.rawReasoning && <Section title="Raw Chain-of-Thought">{record.rawReasoning}</Section>}
+          {parts.thinking && <Section title="Thinking">{parts.thinking}</Section>}
+          {parts.output && <Section title="Final output" defaultOpen>{parts.output}</Section>}
+          {parts.raw && <Section title="Raw chain-of-thought">{parts.raw}</Section>}
           {record.analysisJson && <Section title="Analysis JSON">{(() => { try { return JSON.stringify(JSON.parse(record.analysisJson), null, 2); } catch { return record.analysisJson; } })()}</Section>}
-          {!record.reasoning && !record.finalOutput && !record.rawReasoning && !record.analysisJson && <p className="text-sm italic text-zinc-600">No detailed thinking was stored for this analyst.</p>}
+          {!parts.thinking && !parts.output && !parts.raw && !record.analysisJson && <p className="text-sm italic text-zinc-600">No detailed thinking was stored for this analyst.</p>}
         </div>
       </ThinkingModal>
     </div>

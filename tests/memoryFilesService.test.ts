@@ -227,6 +227,29 @@ describe('MemoryFilesService', () => {
       const ctx = getMemoryFilesContext();
       expect(ctx).not.toContain('[profile/suggestions.md]');
     });
+
+    it('treats retrieved notes as optional matches, not mandatory citations', () => {
+      const ctx = getMemoryFilesContext();
+      expect(ctx).toMatch(/match this coin/i);
+      expect(ctx).not.toMatch(/MUST cite|MUST reference/i);
+    });
+
+    it('always injects a notebook map so new conversations are not a blank slate', () => {
+      const ctx = getMemoryFilesContext();
+      expect(ctx).toContain('NOTEBOOK MAP');
+      expect(ctx).toContain('market-conditions/ranging-day.md');
+      expect(ctx).toContain('**Graph**');
+      expect(ctx).toContain('ranging');
+      expect(findFile('index.md', 'profile')?.content).toContain('NOTEBOOK MAP');
+    });
+
+    it('keeps the map even when retrieving a specific coin (progressive disclosure)', async () => {
+      await appendDiaryEntry(makeTrade(), 'test-user');
+      const ctx = getMemoryFilesContext({ coin: 'BTCUSDT' });
+      expect(ctx).toContain('NOTEBOOK MAP');
+      expect(ctx).toContain('trader-diary/BTCUSDT.md');
+      expect(ctx).toMatch(/\*\*BTCUSDT\*\*/);
+    });
   });
 
   describe('appendDiaryEntry', () => {
@@ -237,6 +260,14 @@ describe('MemoryFilesService', () => {
       expect(file.content).toContain('# BTCUSDT Trade Diary');
       expect(file.content).toContain('Aug 9 · BTCUSDT · Short · WIN ✅ (+3.2%)');
       expect(file.content).toContain('Lesson: Wait for the 15m reclaim before entering.');
+      expect(file.content).toContain('id: trade-1');
+    });
+
+    it('does not duplicate a diary entry for the same trade id', async () => {
+      await appendDiaryEntry(makeTrade(), 'test-user');
+      await appendDiaryEntry(makeTrade(), 'test-user');
+      const file = findFile('BTCUSDT.md', 'trader-diary')!;
+      expect(file.content.split('id: trade-1').length - 1).toBe(1);
     });
 
     it('skips pending and entry-not-hit trades', async () => {
@@ -340,6 +371,7 @@ describe('MemoryFilesService', () => {
       expect(index).toContain('📁 market-conditions/');
       expect(index).toContain('ranging-day.md');
       expect(index).toContain('Ranging / Low-ADX Day Playbook');
+      expect(index).toContain('**Graph**');
     });
 
     it('reports an empty notebook', async () => {

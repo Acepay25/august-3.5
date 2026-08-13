@@ -30,14 +30,15 @@ interface DebateChatProps {
 const cleanSpeakerPrefix = (text: string, speaker: string): string => {
     const escaped = speaker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     return text
-        .replace(/^\s*(?:\*{0,2})\s*\{\{\s*NAME\s*\}\}\s*(?:\*{0,2})\s*:\s*/i, '')
+        .replace(/^\s*(?:\*{0,2})\s*\{\{\s*NAME\s*\}\}\s*:?\s*(?:\*{0,2})\s*/i, '')
         .replace(new RegExp(`^\\s*(?:\\*\\*)?${escaped}(?:\\*\\*)?:\\s*`, 'i'), '')
+        .replace(/^\s*\*+\s*/, '')
         .trim();
 };
 
 const PHASES = ['Openings', 'Rebuttals', 'Clarification', 'Verdict'] as const;
 
-const getPhaseHeading = (round: number, isVerdictRound = false): string => {
+const getPhaseHeading = (round: number, isVerdictRound = false): (typeof PHASES)[number] => {
     if (isVerdictRound) return 'Verdict';
     if (round === 1) return 'Openings';
     if (round === 2 || round === 3) return 'Rebuttals';

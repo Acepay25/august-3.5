@@ -7,7 +7,7 @@
  */
 
 import { LoggedTrade, MemoryFile } from '../../types';
-import { getMemoryFiles } from './MemoryFilesService';
+import { getMemoryFiles, buildNotebookMapMarkdown } from './MemoryFilesService';
 import { findRelevantTrades } from './PatternMemorySynthesisService';
 import { getRelevantRules, loadLearningRules } from './LearningRulesService';
 import { isSkillFile, parseSkillMarkdown, skillMatchesSetup } from './SkillMemoryService';
@@ -20,11 +20,12 @@ export interface MemoryRetrievalQuery {
     regime?: string;
 }
 
-const MAX_CONTEXT_CHARS = 3500;
+const MAX_CONTEXT_CHARS = 4500;
 const MAX_FILE_CHARS = 900;
 const MAX_DIARY_CHARS = 600;
-const ALWAYS_ON = new Set(['memory.md', 'risk-rules.md']);
-const SKIP_FULL = new Set(['pattern-memory.md', 'suggestions.md']);
+const MAX_MAP_CHARS = 1400;
+const ALWAYS_ON = new Set(['memory.md', 'risk-rules.md', 'recurring-mistakes.md']);
+const SKIP_FULL = new Set(['pattern-memory.md', 'suggestions.md', 'index.md']);
 
 const cap = (text: string, n: number): string =>
     text.length <= n ? text : `${text.slice(0, n).trimEnd()}\n…`;
@@ -51,7 +52,7 @@ const fileScore = (file: MemoryFile, query?: MemoryRetrievalQuery): number => {
     if (folder === 'skills') {
         const meta = parseSkillMarkdown(file.content);
         if (!meta || meta.status === 'retired') return -1;
-        if (!query) return meta.status === 'confirmed' ? 40 : 10;
+        if (!query) return meta.status === 'confirmed' ? 40 : -1;
         if (!skillMatchesSetup(meta, query)) return -1;
         return meta.status === 'confirmed' ? 90 : 70;
     }
@@ -63,13 +64,14 @@ const fileScore = (file: MemoryFile, query?: MemoryRetrievalQuery): number => {
         return -1;
     }
 
-    if (file.name === 'recurring-mistakes.md') return query?.coin ? 50 : 25;
+    if (file.name === 'recurring-mistakes.md') return 80;
 
     const hay = `${file.name}\n${file.content}`.toLowerCase();
     const t = tokens(query);
     if (t.length === 0) {
-        if (folder === 'market-conditions') return 5;
-        return 8;
+        if (folder === 'market-conditions') return 20;
+        if (folder === 'rules') return 25;
+        return folder === 'skills' ? -1 : 8;
     }
     let score = 0;
     for (const tok of t) {
@@ -89,7 +91,13 @@ const diaryExcerpt = (content: string): string => {
 
 const similarTradesBlock = (query: MemoryRetrievalQuery | undefined, trades?: LoggedTrade[]): string => {
     if (!trades || trades.length === 0 || !query) return '';
-    const setup = {
+    const setup: {
+        coin?: string;
+        direction?: 'Long' | 'Short';
+        pattern?: string;
+        family?: string;
+        regime?: 'trending' | 'ranging' | 'volatile' | 'compression';
+    } = {
         coin: query.coin,
         direction: query.direction === 'Long' || query.direction === 'Short' ? query.direction : undefined,
         pattern: query.pattern,
@@ -140,16 +148,31 @@ export const getMemoryFilesContext = (
             return fa - fb;
         });
 
-    if (ranked.length === 0 && !trades?.length) return '';
+    if (ranked.length === 0 && !trades?.length) {
+        const mapOnly = cap(buildNotebookMapMarkdown(), MAX_MAP_CHARS);
+        return mapOnly
+            ? `═══════════════════════════════════════════════════════════════
+📓 HARNESS MEMORY
+═══════════════════════════════════════════════════════════════
+${mapOnly}
+═══════════════════════════════════════════════════════════════`
+            : '';
+    }
 
+    const mapBlock = cap(buildNotebookMapMarkdown(), MAX_MAP_CHARS);
     const blocks: string[] = [];
-    let used = 0;
+    let used = mapBlock.length;
+    let skillsKept = 0;
     for (const { f } of ranked) {
         if (used >= MAX_CONTEXT_CHARS) break;
         const folder = folderOf(f);
+        if (folder === 'skills') {
+            if (skillsKept >= 2) continue;
+            skillsKept += 1;
+        }
         let body = f.content.trim();
         if (folder === 'trader-diary') body = diaryExcerpt(body);
-        else body = cap(body, MAX_FILE_CHARS);
+        else body = cap(body, ALWAYS_ON.has(f.name) ? 1600 : MAX_FILE_CHARS);
         const block = `[${folder}/${f.name}]\n${body}`;
         if (used + block.length > MAX_CONTEXT_CHARS) {
             blocks.push(cap(block, MAX_CONTEXT_CHARS - used));
@@ -168,14 +191,13 @@ export const getMemoryFilesContext = (
         used += Math.min(extra.length, room);
     }
 
-    if (blocks.length === 0) return '';
+    if (blocks.length === 0 && !mapBlock) return '';
 
     return `═══════════════════════════════════════════════════════════════
-📓 HARNESS MEMORY (retrieved for this setup — not the full notebook)
+📓 HARNESS MEMORY (notebook map + retrieved files — not a blank slate)
 ═══════════════════════════════════════════════════════════════
-Use matching skills and similar trades as binding experience. Do not
-contradict confirmed skills without strong new evidence.
+Identity files always apply. Other notes apply when they match this coin, direction, or regime; otherwise ignore them. Do not contradict a matching confirmed skill without strong new evidence.
 
-${blocks.join('\n\n---\n\n')}
+${[mapBlock, ...blocks].filter(Boolean).join('\n\n---\n\n')}
 ═══════════════════════════════════════════════════════════════`;
 };

@@ -209,11 +209,37 @@ describe('OutcomeAutopilotService', () => {
     expect(mockVerify).not.toHaveBeenCalled();
   });
 
-  it('skips analyses without symbol or createdAt', async () => {
-    const id = nextId();
-    OutcomeAutopilotService.register(id, analysis({ createdAt: undefined }), 100);
-    await OutcomeAutopilotService.checkNow();
-    expect(mockVerify).not.toHaveBeenCalled();
-    expect(OutcomeAutopilotService.getResolution(id)).toBeUndefined();
-  });
+    it('skips Avoid / Neutral setups (no trade to watch)', async () => {
+        const id = nextId();
+        OutcomeAutopilotService.register(id, analysis({ direction: 'Neutral', confidence: 'Avoid' }), 100);
+        await OutcomeAutopilotService.checkNow();
+        expect(mockVerify).not.toHaveBeenCalled();
+        expect(OutcomeAutopilotService.getResolution(id)).toBeUndefined();
+    });
+
+    it('verifies immediately on register and accepts missing createdAt', async () => {
+        const id = nextId();
+        mockVerify.mockResolvedValue({
+            verified: true,
+            outcome: 'TP_HIT',
+            hitTarget: 'TP1',
+            priceAtHit: 96000,
+            tpHits: [{ level: 'TP1', price: 96000, candleIndex: 5, candleTime: '', timeAfterAnalysis: '1h' }],
+            verificationDetails: '',
+        } as any);
+        OutcomeAutopilotService.register(id, analysis({ createdAt: undefined }), 100);
+        await vi.waitFor(() => expect(mockVerify).toHaveBeenCalled());
+        expect(OutcomeAutopilotService.getResolution(id)?.outcome).toBe(TradeOutcome.WIN);
+        OutcomeAutopilotService.markProcessed(id);
+    });
+
+    it('skips analyses without a symbol', async () => {
+        const { extractSymbolFromAnalysis } = await import('../services/ui/AutoCaptureService');
+        vi.mocked(extractSymbolFromAnalysis).mockReturnValueOnce('');
+        const id = nextId();
+        OutcomeAutopilotService.register(id, analysis(), 100);
+        await OutcomeAutopilotService.checkNow();
+        expect(OutcomeAutopilotService.getResolution(id)).toBeUndefined();
+        vi.mocked(extractSymbolFromAnalysis).mockReturnValue('BTCUSDT');
+    });
 });

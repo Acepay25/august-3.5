@@ -53,9 +53,11 @@ const AnalystRow: React.FC<{
     const userInteractedRef = useRef(false);
 
     const thinkingContent = analyst.reasoning || analyst.thoughtProcess || '';
-    const isStreamingThinking = analyst.status === 'analyzing' && thinkingContent.length > 0;
+    const finalOutput = analyst.finalOutput || '';
+    const showThinking = thinkingContent.length > 0 && thinkingContent.trim() !== finalOutput.trim();
+    const isStreamingThinking = analyst.status === 'analyzing' && showThinking;
     const expanded = open || (isStreamingThinking && !userInteractedRef.current);
-    const showThinkingBlock = isStreamingThinking || thinkingContent.length > 0;
+    const showThinkingBlock = showThinking;
 
     return (
         <div className="overflow-hidden rounded-xl border border-white/10 bg-zinc-900/40">

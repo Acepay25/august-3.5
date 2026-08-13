@@ -77,6 +77,16 @@ describe('parseTradeAnalysis — probability/confidence coupling', () => {
   it('honors an explicit Avoid from the model', () => {
     const r = parseTradeAnalysis(rawAnalysis({ probability: 20, confidence: 'Avoid' }));
     expect(r.confidence).toBe('Avoid');
+    expect(r.direction).toBe('Neutral');
+  });
+
+  it('never keeps Long or Short when confidence is Avoid', () => {
+    const long = parseTradeAnalysis(rawAnalysis({ direction: 'Long', confidence: 'Avoid', probability: 35 }));
+    const short = parseTradeAnalysis(rawAnalysis({ direction: 'Short', confidence: 'Avoid', probability: 35 }));
+    expect(long.direction).toBe('Neutral');
+    expect(short.direction).toBe('Neutral');
+    expect(long.confidence).toBe('Avoid');
+    expect(short.confidence).toBe('Avoid');
   });
 
   it('falls back to the confidence string when probability is missing/zero', () => {

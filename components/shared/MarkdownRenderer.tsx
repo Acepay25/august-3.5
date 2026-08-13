@@ -45,15 +45,15 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className 
             );
           },
           table: ({ children }) => (
-            <div className="my-2 overflow-x-auto rounded-lg border border-white/10">
-              <table className="w-full text-left text-[11px] border-collapse">{children}</table>
+            <div className="my-3 overflow-x-auto rounded-lg border border-white/10">
+              <table className="w-full text-left text-xs border-collapse tabular-nums">{children}</table>
             </div>
           ),
           th: ({ children }) => (
-            <th className="border-b border-white/15 bg-zinc-800/60 px-2 py-1 text-zinc-200 font-semibold text-left">{children}</th>
+            <th className="border-b border-white/15 bg-zinc-800/80 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-400 text-left">{children}</th>
           ),
           td: ({ children }) => (
-            <td className="border-b border-white/5 px-2 py-1 text-zinc-400 align-top">{children}</td>
+            <td className="border-b border-white/5 px-3 py-1.5 text-[13px] text-zinc-300 align-middle leading-snug">{children}</td>
           ),
           blockquote: ({ children }) => (
             <blockquote className="border-l-2 border-cyan-500/40 pl-3 text-zinc-400">{children}</blockquote>

@@ -154,6 +154,7 @@ export const ensureHarnessFolders = async (username: string): Promise<void> => {
 
 /** Persist the cache for the active user (empty store clears the key). */
 const persist = async (username: string): Promise<void> => {
+    if (persistSilentDepth === 0) upsertNotebookIndexInCache();
     if (memoryCache.folders.length === 0 && memoryCache.files.length === 0) {
         await removePreference(`${MEMORY_KEY_PREFIX}${username}`);
     } else {
@@ -190,6 +191,119 @@ export const withSilentMemoryPersist = async (fn: () => Promise<void>): Promise<
 };
 
 export const SUGGESTIONS_FILE_NAME = 'suggestions.md';
+export const NOTEBOOK_INDEX_FILE = 'index.md';
+
+const SKIP_INDEX_DUMP = new Set(['pattern-memory.md', 'suggestions.md', 'index.md']);
+
+/** First heading or first prose line — keeps the notebook map scannable. */
+export const fileBlurb = (content: string, max = 72): string => {
+    const withoutFm = content.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '');
+    const heading = withoutFm.match(/^#\s+(.+)$/m)?.[1]?.trim();
+    const line = heading
+        || withoutFm.split('\n').map(l => l.trim()).find(l => l.length > 8 && !l.startsWith('>') && !l.startsWith('---'))
+        || '';
+    return line.replace(/\s+/g, ' ').slice(0, max);
+};
+
+const folderNameOf = (file: MemoryFile): string =>
+    memoryCache.folders.find(f => f.id === file.folderId)?.name ?? 'misc';
+
+/**
+ * Compact catalog + wiki-style links. Always injected (progressive disclosure)
+ * so a new conversation still knows the notebook exists.
+ */
+export const buildNotebookMapMarkdown = (): string => {
+    const enabled = memoryCache.files.filter(f =>
+        f.enabled && f.content.trim() && !SKIP_INDEX_DUMP.has(f.name.toLowerCase())
+    );
+    if (enabled.length === 0) return '';
+
+    const rows: string[] = [
+        '**NOTEBOOK MAP** — you already have a trader notebook. This is the index; matching files are quoted below.',
+        '',
+        '| File | About |',
+        '| --- | --- |',
+    ];
+    const sortedFolders = [...memoryCache.folders].sort((a, b) => a.order - b.order);
+    for (const folder of sortedFolders) {
+        const folderFiles = enabled
+            .filter(f => f.folderId === folder.id)
+            .sort((a, b) => a.name.localeCompare(b.name));
+        for (const f of folderFiles) {
+            rows.push(`| ${folder.name}/${f.name} | ${fileBlurb(f.content)} |`);
+        }
+    }
+
+    const links = new Map<string, Set<string>>();
+    const addLink = (node: string, path: string): void => {
+        const key = node.trim();
+        if (!key) return;
+        const set = links.get(key) ?? new Set<string>();
+        set.add(path);
+        links.set(key, set);
+    };
+    for (const f of enabled) {
+        const path = `${folderNameOf(f)}/${f.name}`;
+        const folder = folderNameOf(f);
+        if (folder === 'trader-diary') {
+            addLink(f.name.replace(/\.md$/i, '').toUpperCase(), path);
+        }
+        const coin = f.content.match(/^coin:\s*(.+)$/mi)?.[1]?.trim();
+        const direction = f.content.match(/^direction:\s*(.+)$/mi)?.[1]?.trim();
+        const family = f.content.match(/^family:\s*(.+)$/mi)?.[1]?.trim();
+        const regime = f.content.match(/^regime:\s*(.+)$/mi)?.[1]?.trim();
+        if (coin) addLink(coin.toUpperCase().replace(/USDT?$/, '') + 'USDT', path);
+        if (direction) addLink(direction, path);
+        if (family) addLink(family, path);
+        if (regime) addLink(regime, path);
+        if (/ranging/i.test(f.name)) addLink('ranging', path);
+        if (/sweep|liquidity/i.test(f.name)) addLink('sweep', path);
+    }
+
+    const edgeLines = [...links.entries()]
+        .filter(([, paths]) => paths.size > 0)
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .slice(0, 24)
+        .map(([node, paths]) => `- **${node}** → ${[...paths].join(', ')}`);
+    if (edgeLines.length > 0) {
+        rows.push('', '**Graph** (topic → files):', ...edgeLines);
+    }
+    return rows.join('\n');
+};
+
+const upsertNotebookIndexInCache = (): void => {
+    const profile = memoryCache.folders.find(f => f.name === 'profile');
+    if (!profile) return;
+    const map = buildNotebookMapMarkdown();
+    const existingIdx = memoryCache.files.findIndex(f => f.folderId === profile.id && f.name === NOTEBOOK_INDEX_FILE);
+    if (!map) {
+        if (existingIdx >= 0) memoryCache.files.splice(existingIdx, 1);
+        return;
+    }
+    const body = `# Notebook index
+
+Auto-maintained map of this trader notebook. Readable markdown — every analysis also gets a compact copy so new conversations are not a blank slate.
+
+${map}
+`;
+    const now = Date.now();
+    if (existingIdx >= 0) {
+        const existing = memoryCache.files[existingIdx];
+        if (existing.content === body) return;
+        memoryCache.files[existingIdx] = { ...existing, content: body, autoManaged: true, enabled: true, updatedAt: now };
+        return;
+    }
+    memoryCache.files.push({
+        id: uid(),
+        folderId: profile.id,
+        name: NOTEBOOK_INDEX_FILE,
+        content: body,
+        enabled: true,
+        autoManaged: true,
+        createdAt: now,
+        updatedAt: now,
+    });
+};
 
 // ─── Folder CRUD ────────────────────────────────────────────────────────────
 
@@ -315,6 +429,7 @@ const buildDiaryEntry = (trade: LoggedTrade): string => {
     const date = new Date(trade.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
     const lesson = extractLessonFromPostMortem(trade.postMortem ?? '');
     const lines = [`${date} · ${a.coinName ?? '?'} · ${a.direction ?? '?'} · ${outcomeLabel}${pnl}`];
+    lines.push(`id: ${trade.id}`);
     if (lesson) lines.push(`Lesson: ${lesson}`);
     return lines.join('\n');
 };
@@ -334,6 +449,7 @@ export const appendDiaryEntry = async (trade: LoggedTrade, username: string): Pr
     const header = `# ${coin} Trade Diary (auto-maintained)\n> Keeps the last ${MAX_DIARY_ENTRIES} trades.`;
 
     const existing = memoryCache.files.find(f => f.folderId === folder.id && f.name === safeName);
+    if (existing?.content.includes(`id: ${trade.id}`)) return;
     if (existing) {
         const entries = existing.content.split('\n## ').slice(1).filter(Boolean);
         const updated = [...entries, entry].slice(-MAX_DIARY_ENTRIES);
@@ -704,9 +820,14 @@ export const getMemoryFilesIndex = (): string => {
         if (folderFiles.length === 0) continue;
         lines.push(`📁 ${folder.name}/`);
         for (const f of folderFiles) {
-            const excerpt = f.content.trim().replace(/\s+/g, ' ').slice(0, 400);
-            lines.push(`   📄 ${f.name} (${f.content.length} chars)${excerpt ? ` — ${excerpt}${excerpt.length >= 400 ? '…' : ''}` : ''}`);
+            const excerpt = fileBlurb(f.content, 120);
+            lines.push(`   📄 ${f.name} (${f.content.length} chars)${excerpt ? ` — ${excerpt}` : ''}`);
         }
+    }
+    const map = buildNotebookMapMarkdown();
+    const graph = map.split('**Graph**')[1];
+    if (graph) {
+        lines.push('', '**Graph**' + graph);
     }
     return lines.join('\n');
 };

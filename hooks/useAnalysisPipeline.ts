@@ -27,6 +27,7 @@ import { offlineQueue } from '../services/infrastructure/OfflineQueueService';
 import { notifyAnalysisComplete } from '../services/infrastructure/CompletionNotifications';
 import { ThinkingRecord } from '../types/thinking';
 import { lensFromAnalystRole, lensFromSpeakerName } from '../utils/thinkingLens';
+import { splitThinkingFromOutput, looksLikeTradeOutput } from '../utils/thinkingSplit';
 import { sanitizeAIResponse } from '../utils/sanitizers';
 import { buildModelIdToName, isProviderReady } from '../utils/providerUtils';
 import { DEFAULT_LEVERAGE } from '../utils/conversationUtils';
@@ -61,6 +62,7 @@ import { getMemoryFilesContext, writeModelNote } from '../services/learning/Memo
 import { writeNotebookNoteFromRequest } from '../services/learning/NotebookWriterService';
 import { buildSimilarSetupsContext, buildRegimeWeightingContext } from '../services/learning/SetupMemoryService';
 import { generateMandatoryPatternCheck, generatePatternMemoryEnforcementContext } from '../services/learning/PatternMemorySynthesisService';
+import { applyNotebookSkillsToAnalysis } from '../services/learning/SkillMemoryService';
 import { ANALYST_ROLE_DEFINITIONS, getLensPromptForStyle, getRoleForProvider } from '../services/ui/AnalystLensService';
 import { buildEnsembleAnalysts, buildAnalystFailureReport } from '../services/ui/EnsembleAnalystService';
 import { EnsembleModelSelection } from '../services/ui/AnalystLensService';
@@ -360,12 +362,12 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             // Replay the stored reasoning through onReasoning — a cache hit
             // otherwise left the live reasoning views and the thinking
             // record's rawReasoning empty for this run.
-            if (cached.thoughtProcess) {
+            if (cached.thoughtProcess && !looksLikeTradeOutput(cached.thoughtProcess)) {
                 params.onReasoning?.(cached.thoughtProcess);
             }
             return {
                 thoughtProcess: cached.thoughtProcess,
-                finalOutput: cached.finalOutput || cached.thoughtProcess,
+                finalOutput: cached.finalOutput || '',
                 analysis: cached.analysis,
                 sources: cached.sources,
             };
@@ -1494,6 +1496,7 @@ ${reflectionBlock}`
                     } catch (validationError) {
                         console.error('[ValidationGate] Validation failed:', validationError);
                     }
+                    Object.assign(finalAnalysis, applyNotebookSkillsToAnalysis(finalAnalysis));
                     // ========== END VALIDATION GATE ==========
 
                     return recalculateAnalysisMetrics(finalAnalysis, activeConversation?.leverage || DEFAULT_LEVERAGE);
@@ -1629,7 +1632,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                                  ? {
                                                      ...analyst,
                                                      status: 'complete',
-                                                     finalOutput: result.finalOutput || result.thoughtProcess,
+                                                     finalOutput: result.finalOutput || '',
                                                      thoughtProcess: result.thoughtProcess,
                                                      reasoning: reasoningMapRef.current[provider.thoughtsKey || provider.name],
                                                  }
@@ -1973,7 +1976,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 provider: replacementProvider,
                                 result: {
                                     thoughtProcess: result.thoughtProcess,
-                                    finalOutput: result.finalOutput || result.thoughtProcess,
+                                    finalOutput: result.finalOutput || '',
                                     analysis: result.analysis,
                                 },
                             };
@@ -2537,6 +2540,10 @@ ${accuracyVerificationNote}`
                             const providerKey = provider.thoughtsKey;
                             const analystResult = settled.value;
                             const assignedRole = getRoleForProvider(`${provider.config.id}::${provider.model}`, resolvedAssignments);
+                            const analystSplit = splitThinkingFromOutput(
+                                reasoningMapRef.current[provider.name] || analystResult.thoughtProcess || '',
+                                analystResult.finalOutput || '',
+                            );
                             thinkingRecords.push({
                                 id: buildThinkingRecordId(tradeId, providerKey, 'analyst'),
                                 tradeId,
@@ -2544,15 +2551,9 @@ ${accuracyVerificationNote}`
                                 provider: providerKey,
                                 role: 'analyst',
                                 modelName: provider.model,
-                                reasoning: thoughtMap[providerKey] || '',
-                                // The analyst's final answer (post-reasoning
-                                // output), kept separate from its reasoning.
-                                finalOutput: analystResult.finalOutput || undefined,
-                                // Raw provider-streamed chain of thought
-                                // (reasoning_content / thinking blocks) keyed by
-                                // provider display name in reasoningMapRef.
+                                reasoning: analystSplit.thinking,
+                                finalOutput: analystSplit.output || undefined,
                                 rawReasoning: reasoningMapRef.current[provider.name] || undefined,
-                                // Card linkage: the message id of this prediction.
                                 messageId: debateMessageId,
                                 analysisJson: analystResult.analysis ? JSON.stringify(analystResult.analysis) : undefined,
                                 confidence: analystResult.analysis?.confidence,
@@ -2563,6 +2564,18 @@ ${accuracyVerificationNote}`
                         });
 
                         // Save moderator synthesis (the full debate response)
+                        const cleanedVerdict = fullResponseText
+                                .replace(/<CLARIFICATION_(?:DONE|SATISFIED|UNSATISFIED)>/gi, '')
+                                .replace(/<MODERATOR_RETRY>/gi, '')
+                                .replace(/<MODERATOR_ERROR>[\s\S]*?<\/MODERATOR_ERROR>/gi, '')
+                                .replace(/<\/?DEBATE_END>/gi, '')
+                                .replace(/<JSON_PLAN>[\s\S]*/i, '')
+                                .replace(/<\/?DEBATE_START>/gi, '')
+                                .trim();
+                        const moderatorSplit = splitThinkingFromOutput(
+                            reasoningMapRef.current.moderator || '',
+                            cleanedVerdict,
+                        );
                         thinkingRecords.push({
                             id: buildThinkingRecordId(tradeId, 'moderator', 'moderator'),
                             tradeId,
@@ -2570,20 +2583,8 @@ ${accuracyVerificationNote}`
                             provider: 'moderator',
                             role: 'moderator',
                             modelName: activeModModel,
-                            reasoning: fullResponseText,
-                            // The moderator's verdict prose — the full stream
-                            // cleaned of control markers and the JSON plan (the
-                            // plan itself lives in analysisJson).
-                            finalOutput: fullResponseText
-                                .replace(/<CLARIFICATION_(?:DONE|SATISFIED|UNSATISFIED)>/gi, '')
-                                .replace(/<MODERATOR_RETRY>/gi, '')
-                                .replace(/<MODERATOR_ERROR>[\s\S]*?<\/MODERATOR_ERROR>/gi, '')
-                                .replace(/<\/?DEBATE_END>/gi, '')
-                                .replace(/<JSON_PLAN>[\s\S]*/i, '')
-                                .replace(/<\/?DEBATE_START>/gi, '')
-                                .trim() || undefined,
-                            // Raw streamed chain of thought from the moderator's
-                            // final verdict call.
+                            reasoning: moderatorSplit.thinking,
+                            finalOutput: moderatorSplit.output || undefined,
                             rawReasoning: reasoningMapRef.current.moderator || undefined,
                             messageId: debateMessageId,
                             analysisJson: JSON.stringify(finalAnalysis),
@@ -2613,7 +2614,8 @@ ${accuracyVerificationNote}`
                                 role: 'debate_turn',
                                 debateTurnIndex: idx,
                                 debateTurnSpeaker: turn.speaker,
-                                reasoning: turn.text,
+                                reasoning: (turn.reasoning || '').trim(),
+                                finalOutput: turn.text,
                                 messageId: debateMessageId,
                                 analystLens: lensFromSpeakerName(turn.speaker)
                                     ?? (matchedRole !== undefined ? lensFromAnalystRole(matchedRole, lensEnabled) : 'normal'),
@@ -2719,6 +2721,7 @@ ${accuracyVerificationNote}`
                     try {
                         const username = localStorage.getItem('last_active_user') || 'default';
                         const now = new Date().toISOString();
+                        const soloSplit = splitThinkingFromOutput(soloRawReasoning || result.thoughtProcess || '', result.finalOutput || '');
                         persistThinkingRecords([{
                             id: buildThinkingRecordId(getThinkingTradeId(soloAiMessage.analysis?.createdAt, soloAiMessage.id), provider.thoughtsKey, 'analyst'),
                             tradeId: getThinkingTradeId(soloAiMessage.analysis?.createdAt, soloAiMessage.id),
@@ -2726,8 +2729,8 @@ ${accuracyVerificationNote}`
                             provider: provider.thoughtsKey,
                             role: 'analyst',
                             modelName: provider.model,
-                            reasoning: result.thoughtProcess || '',
-                            finalOutput: result.finalOutput || undefined,
+                            reasoning: soloSplit.thinking,
+                            finalOutput: soloSplit.output || undefined,
                             rawReasoning: soloRawReasoning || undefined,
                             messageId: soloAiMessage.id,
                             analysisJson: result.analysis ? JSON.stringify(result.analysis) : undefined,

@@ -23,6 +23,7 @@ import {
   savePromptOverride,
   resetPromptOverride,
   resetAllPromptOverrides,
+  validatePromptOverride,
 } from '../services/infrastructure/PromptOverrideService';
 
 const FALLBACK = 'You are the built-in default prompt.';
@@ -88,5 +89,18 @@ describe('PromptOverrideService', () => {
     store = { prompt_overrides_v1_alice: { 'analysis.master': '   ' } };
     await initPromptOverrides('alice');
     expect(getPrompt('analysis.master', FALLBACK)).toBe(FALLBACK);
+  });
+});
+
+describe('validatePromptOverride', () => {
+  it('warns on leftover JSON_PLAN and unknown placeholders', () => {
+    const warnings = validatePromptOverride('Output <JSON_PLAN> and {{FOO}} and I am an AI.');
+    expect(warnings.some(w => /JSON_PLAN/i.test(w))).toBe(true);
+    expect(warnings.some(w => /FOO/.test(w))).toBe(true);
+    expect(warnings.some(w => /I am an AI/i.test(w))).toBe(true);
+  });
+
+  it('allows known debate placeholders', () => {
+    expect(validatePromptOverride('You are {{NAME}} in round {{ROUND}} for {{ANALYSTS}}.')).toEqual([]);
   });
 });

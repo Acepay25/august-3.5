@@ -5,7 +5,9 @@ import {
     calculateRegime,
     calculateEnhancedKeyLevels,
     calculateAdvancedVolume,
-    countLevelTouches
+    countLevelTouches,
+    generateTASummary,
+    calculateIndicators
 } from '../services/analysis/TechnicalAnalysisService';
 import {
     formatLiquidationsBlock,
@@ -16,6 +18,7 @@ import {
 import {
     generateNumericChartData,
     formatLastBarsArrows,
+    generateChartPromptInjection,
     ChartBar
 } from '../services/analysis/NumericChartService';
 import { LiquidationData } from '../services/analysis/MarketDataService';
@@ -444,5 +447,28 @@ describe('Fibonacci ladder consistency', () => {
         expect(ladder).toContain('- 0.236:');
         expect(ladder).toContain('- 0.786:');
         expect(ladder).toContain('- 1:');
+    });
+});
+
+describe('Hybrid/chart prompt injection is table-structured', () => {
+    it('TA summary uses markdown tables instead of prose lists', () => {
+        const indicators = calculateIndicators(makeTrend(80, 20));
+        const summary = generateTASummary(indicators, '1H Timeframe');
+        expect(summary).toContain('| RSI6 | RSI12 | RSI14 |');
+        expect(summary).toContain('| EMA20 |');
+        expect(summary).not.toContain('Technical Analysis (Code-Calculated)');
+    });
+
+    it('chart injection is one table per TF plus alignment', () => {
+        const klines = makeTrend(40, 15);
+        const c15 = generateNumericChartData(klines, '15m');
+        const c1h = generateNumericChartData(klines, '1h');
+        const c4h = generateNumericChartData(klines, '4h');
+        const c1d = generateNumericChartData(klines, '1d');
+        const block = generateChartPromptInjection(c15, c1h, c4h, c1d);
+        expect(block).toContain('| TF | Regime | Trend |');
+        expect(block).toContain('| Align | 1D | 4H | 1H | 15m |');
+        expect(block).not.toContain('NUMERIC CHART REPRESENTATION (Feature-based');
+        expect(block).not.toContain('├─');
     });
 });

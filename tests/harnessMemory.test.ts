@@ -11,10 +11,11 @@ vi.mock('../services/infrastructure/PreferencesService', () => ({
   }),
 }));
 
-import { initMemoryFiles, getMemoryFiles, getMemoryFilesContext } from '../services/learning/MemoryFilesService';
+import { initMemoryFiles, getMemoryFiles, getMemoryFilesContext, createMemoryFile } from '../services/learning/MemoryFilesService';
 import {
   maybeUpsertSkill,
   applySkillEvidence,
+  applyNotebookSkillsToAnalysis,
   parseSkillMarkdown,
   MIN_CLUSTER_FOR_SKILL,
 } from '../services/learning/SkillMemoryService';
@@ -81,6 +82,57 @@ describe('Harness memory (skills + retrieval)', () => {
     expect(ctx).toContain('kind: avoid');
     expect(ctx).toContain('[market-conditions/ranging-day.md]');
     expect(ctx).toContain('Similar closed trades');
-    expect(ctx.length).toBeLessThan(8000);
+    expect(ctx).toMatch(/match this coin/i);
+    expect(ctx).not.toMatch(/MUST cite|MUST reference/i);
+    expect(ctx).toContain('NOTEBOOK MAP');
+    expect(ctx.length).toBeLessThan(9000);
+  });
+
+  it('caps High when a matching candidate avoid skill exists', async () => {
+    const trades = Array.from({ length: MIN_CLUSTER_FOR_SKILL }, (_, i) =>
+      makeTrade({ id: `t-${i}` })
+    );
+    await maybeUpsertSkill(trades[2], trades, 'test-user');
+    const next = applyNotebookSkillsToAnalysis({
+      coinName: 'BTCUSDT',
+      direction: 'Short',
+      confidence: 'High',
+      probability: 82,
+      detectedPatternFamily: 'Family A',
+      riskVeto: undefined as string | undefined,
+    });
+    expect(next.confidence).toBe('Low');
+    expect(next.direction).toBe('Short');
+    expect(next.riskVeto).toMatch(/NOTEBOOK SKILL/);
+  });
+
+  it('vetoes Long/Short when a confirmed avoid skill matches', async () => {
+    const folder = getMemoryFiles().folders.find(f => f.name === 'skills')!;
+    await createMemoryFile(folder.id, 'btc-short-avoid.md', `---
+status: confirmed
+kind: avoid
+coin: BTCUSDT
+direction: Short
+family: Family A
+wins: 1
+losses: 6
+tradeIds: a,b,c,d,e,f,g
+---
+
+# Avoid BTCUSDT Short Family A
+
+**Procedure:** Wait for the 15m reclaim.
+`, 'test-user', true);
+    const next = applyNotebookSkillsToAnalysis({
+      coinName: 'BTCUSDT',
+      direction: 'Short',
+      confidence: 'High',
+      probability: 80,
+      detectedPatternFamily: 'Family A',
+      riskVeto: undefined as string | undefined,
+    });
+    expect(next.confidence).toBe('Avoid');
+    expect(next.direction).toBe('Neutral');
+    expect(next.riskVeto).toMatch(/NOTEBOOK SKILL VETO/);
   });
 });

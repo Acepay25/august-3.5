@@ -15,6 +15,7 @@ import { Message, GroundingChunk, TradeAnalysis, GlobalMemory, AccuracySubMode, 
 import { extractAndParseJson, extractLastJson } from '../../utils/jsonUtils';
 import { sanitizeAIResponse, sanitizeAIResponseLight, sanitizeJSONString } from '../../utils/sanitizers';
 import { sanitizeTradeAnalysis, truncateTextToTokens, formatAnalysisForDisplay, parsePrice } from '../../utils/analysisUtils';
+import { splitThinkingFromOutput } from '../../utils/thinkingSplit';
 import { buildTradeInsightBrief, compactInsightForPatternMemory } from '../../utils/tradeInsightBrief';
 import { parseGlobalMemory, parseStrategySearchResults } from '../../schemas/learning';
 import {
@@ -47,25 +48,6 @@ const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reje
 function isSmallContextModel(modelId: string): boolean {
     const m = modelId.toLowerCase();
     return m.includes('kimi') || m.includes('gpt-oss-20b') || m.includes('mistral-7b');
-}
-
-/**
- * Legacy models (or old cached prompts) sometimes wrap their output in
- * header-style labels instead of real XML tags: **THINKING** / **FINAL OUTPUT**.
- * Split the response on those labels so each section survives on its own.
- */
-function splitThinkingHeaders(raw: string): { thinking: string; output: string } {
-    const headerRe = /^\s*(?:\*\*)?(THINKING|FINAL OUTPUT|FINAL_OUTPUT)(?:\*\*)?\s*:?[ \t]*\r?\n?/gim;
-    const matches = [...raw.matchAll(headerRe)];
-    if (matches.length < 2) return { thinking: '', output: '' };
-    const sections: Record<string, string> = {};
-    matches.forEach((match, i) => {
-        const start = (match.index ?? 0) + match[0].length;
-        const end = i + 1 < matches.length ? (matches[i + 1].index ?? raw.length) : raw.length;
-        const key = match[1].toUpperCase().replace(/[ _]/g, '_');
-        sections[key] = raw.slice(start, end).trim();
-    });
-    return { thinking: sections['THINKING'] ?? '', output: sections['FINAL_OUTPUT'] ?? '' };
 }
 
 /**
@@ -568,10 +550,10 @@ export async function analyzeTradingView(
         userPromptText = `${formattedPrompt}${marketDataOverride}\n\n${imageSummaryContext}\n\n${memoryContext}\n\nPresent your readable trade proposal.`;
     } else {
         const patternMemoryContext = finalTradeSummary
-            ? truncateTextToTokens(`\n\n** PATTERN MEMORY (SYNTHESIS) - MANDATORY REFERENCE:**\nThe following is a synthesis of your recent trading performance and patterns. You MUST reference this data for Section 4 (Pattern Matching):\n${finalTradeSummary}\n`, 600)
+            ? truncateTextToTokens(`\n\n**PATTERN MEMORY (SYNTHESIS):**\nUse this only if it matches this coin, direction, or regime:\n${finalTradeSummary}\n`, 600)
             : "\n\n** PATTERN MEMORY:** Use the retrieved harness memory in the user request (skills + similar trades). Do not invent a personal track record.\n";
         const recentInsightsContext = recentInsights
-            ? truncateTextToTokens(`\n\n** RECENT INSIGHTS (INDIVIDUAL) - MANDATORY REFERENCE:**\nThe following are specific recent trades for detailed comparison:\n${recentInsights}\n`, 600)
+            ? truncateTextToTokens(`\n\n**RECENT INSIGHTS:**\nUse matching closed trades only. Ignore unrelated coins/regimes:\n${recentInsights}\n`, 600)
             : "\n\n** RECENT INSIGHTS:** No recent trade insights available.\n";
 
         if (isSmallContextModel(modelName)) {
@@ -620,7 +602,7 @@ export async function analyzeTradingView(
     // Temperature: 0.4 (the 0.7 default samples too randomly for a trading
     // read — pro-trader discipline wants determinism; the three analysts
     // still differ because their PROMPTS differ, not because of dice).
-    const options: ChatRequestOptions = { jsonMode: false, maxTokens: TASK_BUDGETS.analysis, temperature: 0.7, signal, onReasoning };
+    const options: ChatRequestOptions = { jsonMode: false, maxTokens: TASK_BUDGETS.analysis, temperature: 0.35, signal, onReasoning };
     let responseText = '';
     let reasoningAccumulated = '';
     try {
@@ -638,70 +620,42 @@ export async function analyzeTradingView(
         throw error;
     }
     if (!responseText && !reasoningAccumulated) throw new Error("Received an empty response from the AI.");
-    // Reasoning-only streams: some models (DeepSeek/Qwen reasoning modes,
-    // certain gateways) spend the whole turn on chain-of-thought and never
-    // emit content deltas. Salvage the reasoning as the response so the
-    // analyst fulfills with its thinking instead of being dropped from the
-    // debate before it starts.
-    if (!responseText) responseText = reasoningAccumulated;
 
     try {
-        // Legacy XML-style tags (very old prompts asked models to emit these).
-        const taggedThinking = responseText.match(/<THINKING>\s*([\s\S]*?)\s*<\/THINKING>/i);
-        const taggedOutput = responseText.match(/<FINAL_OUTPUT>\s*([\s\S]*?)\s*<\/FINAL_OUTPUT>/i);
-        const hasTaggedSections = Boolean(taggedThinking || taggedOutput);
+        const split = splitThinkingFromOutput(reasoningAccumulated, responseText);
+        let thoughtProcess = sanitizeAIResponseLight(split.thinking);
+        let finalOutput = sanitizeAIResponseLight(split.output);
 
-        // Native provider chain-of-thought (reasoning_content / thinking
-        // deltas streamed via onReasoning) IS the thinking — harness-style.
-        // The prompt never asks the model to narrate its reasoning; the tagged
-        // sections below are parsed purely as a backward-compatible fallback
-        // for legacy cached responses. No reasoning ⇒ no thinking block.
-        let thoughtProcess = sanitizeAIResponseLight(reasoningAccumulated.trim());
-        let finalOutput = '';
-
-        if (hasTaggedSections) {
-            if (!thoughtProcess) thoughtProcess = sanitizeAIResponseLight(taggedThinking?.[1] || '');
-            finalOutput = sanitizeAIResponseLight(taggedOutput?.[1] || '');
-        } else {
-            // Header-style labels (**THINKING** / **FINAL OUTPUT**) are another
-            // legacy variant — split them the same way as the XML tags.
-            const headers = splitThinkingHeaders(responseText);
-            if (headers.thinking || headers.output) {
-                if (!thoughtProcess) thoughtProcess = sanitizeAIResponseLight(headers.thinking);
-                finalOutput = sanitizeAIResponseLight(headers.output);
-            }
-        }
-
-        // Defensive recovery: some models ignore the output format and return
-        // raw JSON (legacy {thoughtProcess, analysis} or a bare trade plan).
-        // Recover it into readable text so the cards never show raw JSON.
-        if (!thoughtProcess || !finalOutput) {
+        const tryFormatJsonPlan = (raw: string): boolean => {
             try {
-                const json = extractAndParseJson(responseText);
-                if (json && typeof json === 'object') {
-                    const jsonThought = typeof json.thoughtProcess === 'string'
-                        ? sanitizeAIResponseLight(json.thoughtProcess)
-                        : '';
-                    const analysisObj = json.analysis && typeof json.analysis === 'object' ? json.analysis : json;
-                    const isTradePlan = typeof analysisObj.coinName === 'string' || typeof analysisObj.direction === 'string';
-                    if (!thoughtProcess) {
-                        thoughtProcess = jsonThought || reasoningAccumulated;
-                    }
-                    if (!finalOutput) {
-                        finalOutput = isTradePlan
-                            ? formatAnalysisForDisplay(analysisObj)
-                            : (jsonThought || reasoningAccumulated || stripTagArtifacts(responseText));
-                    }
+                const json = extractAndParseJson(raw);
+                if (!json || typeof json !== 'object') return false;
+                const jsonThought = typeof json.thoughtProcess === 'string'
+                    ? sanitizeAIResponseLight(json.thoughtProcess)
+                    : '';
+                const analysisObj = json.analysis && typeof json.analysis === 'object' ? json.analysis : json;
+                const isTradePlan = typeof analysisObj.coinName === 'string' || typeof analysisObj.direction === 'string';
+                if (!thoughtProcess && jsonThought) thoughtProcess = jsonThought;
+                if (isTradePlan) {
+                    finalOutput = formatAnalysisForDisplay(analysisObj);
+                    return true;
                 }
             } catch {
-                // Not JSON — fall through to the text fallbacks below.
+                return false;
             }
+            return false;
+        };
+
+        if (!finalOutput || /^\s*\{/.test(finalOutput) || (!thoughtProcess && /^\s*\{/.test(responseText))) {
+            tryFormatJsonPlan(finalOutput || responseText || reasoningAccumulated);
         }
-        if (!finalOutput) {
-            finalOutput = sanitizeAIResponseLight(stripTagArtifacts(responseText));
+        if (!finalOutput && thoughtProcess) {
+            finalOutput = thoughtProcess;
+        } else if (thoughtProcess && finalOutput && thoughtProcess.trim() !== finalOutput.trim()) {
+            const recovered = splitThinkingFromOutput(thoughtProcess, finalOutput);
+            thoughtProcess = recovered.thinking || thoughtProcess;
+            finalOutput = recovered.output || finalOutput;
         }
-        // thoughtProcess stays '' when the provider streamed no native
-        // reasoning — the UI then renders no thinking block (harness-style).
 
         // Analysts deliberately do not produce the structured trade plan as
         // JSON — but their prose is mined for the setup fields so the

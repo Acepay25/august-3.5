@@ -503,7 +503,7 @@ export const applyOutcomeToRules = (trade: LoggedTrade): void => {
         const wins = (rule.wins ?? 0) + (trade.outcome === TradeOutcome.WIN ? 1 : 0);
         const losses = (rule.losses ?? 0) + (trade.outcome === TradeOutcome.LOSS ? 1 : 0);
         const sample = wins + losses;
-        let status = rule.status ?? 'candidate';
+        let status: LearningRule['status'] = rule.status ?? 'candidate';
         if (sample >= 6) {
             const wr = wins / sample;
             if (rule.outcome === 'WIN' && wr < 0.4) status = 'retired';

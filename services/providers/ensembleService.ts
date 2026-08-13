@@ -25,6 +25,7 @@ import {
 import { DUAL_SCENARIO_JSON_SCHEMA, MASTER_TRADE_PLAN_MARKDOWN } from '../../constants/schemas';
 import { parseLiveMarketData } from '../../utils/liveMarketParser';
 import { truncateTextToTokens, parsePrice, parseMarkdownTradePlan } from '../../utils/analysisUtils';
+import { extractDebateLevels, formatDebateLevelsTable } from '../../utils/debateLevels';
 import { generateEnhancedDebateContext, EnhancedDebateContext } from '../ui/EnhancedDebateService';
 import { MarketRegime } from '../analysis/TechnicalAnalysisService';
 import {
@@ -2415,19 +2416,34 @@ const buildDebateTranscript = (
         }
     }
     const full = lines.join('\n\n') || 'The debate produced no transcript.';
+    const levelRows = names.map(name => {
+        let last = '';
+        for (let r = maxRound; r >= 1; r--) {
+            const text = roundTexts[name]?.[r];
+            if (text) { last = text; break; }
+        }
+        return last ? extractDebateLevels(name, last) : null;
+    }).filter((row): row is NonNullable<typeof row> => row !== null);
+    const levelsTable = formatDebateLevelsTable(levelRows);
+    const withLevels = levelsTable
+        ? `${full}\n\n**LEVELS SNAPSHOT (do not invent a parallel tape):**\n${levelsTable}`
+        : full;
     // Tail-first truncation: when the transcript exceeds the budget, drop the
     // OLDEST turns (the earliest rounds are listed first) instead of
     // head-truncating mid-turn — the moderator needs the most recent rounds
     // (especially the latest clarification answers) the most.
     const maxChars = totalTokens * 4;
-    if (full.length <= maxChars) return full;
+    if (withLevels.length <= maxChars) return withLevels;
     let kept = '';
     for (let i = lines.length - 1; i >= 0; i--) {
         const candidate = kept ? `${lines[i]}\n\n${kept}` : lines[i];
         if (candidate.length > maxChars) break;
         kept = candidate;
     }
-    return `...[Earlier debate rounds truncated to fit context memory]...\n\n${kept}`;
+    const truncated = `...[Earlier debate rounds truncated to fit context memory]...\n\n${kept}`;
+    return levelsTable
+        ? `${truncated}\n\n**LEVELS SNAPSHOT (do not invent a parallel tape):**\n${levelsTable}`
+        : truncated;
 };
 
 /**
@@ -2658,8 +2674,13 @@ export const conductRealDebate = async function* (
                 // Snapshot the live price ONCE per round so every analyst in
                 // the parallel batch sees the SAME current price.
                 const livePriceBlock = buildLivePriceRefreshBlock(getLivePrice?.() ?? null, `before Round ${round}`);
+                const snapshotRows = debateRoster
+                    .filter(o => roundTexts[o.provider.name]?.[round - 1])
+                    .map(o => extractDebateLevels(o.provider.name, roundTexts[o.provider.name][round - 1]));
+                const levelsSnap = formatDebateLevelsTable(snapshotRows);
                 const userContent =
                     `**TRADING REQUEST:**\n${truncateTextToTokens(userPrompt, 350)}\n\n` +
+                    (levelsSnap ? `**LEVELS SNAPSHOT:**\n${levelsSnap}\n\n` : '') +
                     `**YOUR POSITION (Round ${round - 1}):**\n${truncateTextToTokens(ownPosition, 225)}\n\n` +
                     `**OTHER ANALYSTS' LATEST POSITIONS:**\n${truncateTextToTokens(others, 600)}\n\n` +
                     `Respond now with your rebuttal for Round ${round}.` +
@@ -2679,7 +2700,7 @@ export const conductRealDebate = async function* (
                         // (the drop path asks the user to pick a replacement).
                     await streamWithTransientRetry(
                         () => streamChatRequest(analyst.provider.config, messages, {
-                            temperature: 0.7,
+                            temperature: 0.35,
                             signal,
                             maxTokens: TASK_BUDGETS.rebuttal,
                             onReasoning: (reasoning: string) => onAnalystReasoning?.(analyst.provider.name, reasoning),

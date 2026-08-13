@@ -56,7 +56,7 @@ interface PersistedState {
 
 type Listener = (messageId: string, resolution: AutopilotResolution) => void;
 
-const CHECK_INTERVAL_MS = 60_000;
+const CHECK_INTERVAL_MS = 20_000;
 
 // How many processed/dismissed message ids to keep. MUST match between the
 // in-memory trim (pruneIdSets) and persist() — if disk kept fewer than
@@ -71,7 +71,7 @@ class OutcomeAutopilotServiceClass {
     private processed = new Set<string>();
     private listeners = new Set<Listener>();
     private timer: ReturnType<typeof setInterval> | null = null;
-    private checking = false;
+    private checkPromise: Promise<void> | null = null;
     private initialized = false;
 
     /** Load persisted state and register native lifecycle handling. */
@@ -96,6 +96,10 @@ class OutcomeAutopilotServiceClass {
     register(messageId: string, analysis: TradeAnalysis, leverage: number): void {
         if (this.processed.has(messageId) || this.dismissed.has(messageId)) return;
         if (this.registrations.has(messageId)) return;
+        if (analysis.confidence === 'Avoid' || analysis.direction === 'Neutral' || analysis.direction === 'Avoid') {
+            return;
+        }
+        if (analysis.direction !== 'Long' && analysis.direction !== 'Short') return;
         this.registrations.set(messageId, {
             messageId,
             analysis,
@@ -103,6 +107,7 @@ class OutcomeAutopilotServiceClass {
             registeredAt: new Date().toISOString(),
         });
         this.ensureLoop();
+        void this.runChecks();
     }
 
     /** Stop tracking (message logged, deleted, or outcome set manually). */
@@ -218,10 +223,9 @@ class OutcomeAutopilotServiceClass {
     }
 
     private async runChecks(): Promise<void> {
-        if (this.checking || this.registrations.size === 0) return;
-        this.checking = true;
-        try {
-            // Sequential to avoid kline-fetch bursts; snapshot ids first.
+        if (this.checkPromise) return this.checkPromise;
+        if (this.registrations.size === 0) return;
+        this.checkPromise = (async () => {
             for (const messageId of [...this.registrations.keys()]) {
                 const reg = this.registrations.get(messageId);
                 if (!reg) continue;
@@ -231,21 +235,22 @@ class OutcomeAutopilotServiceClass {
                     console.warn(`[OutcomeAutopilot] Verification failed for ${messageId}:`, err);
                 }
             }
-        } finally {
-            this.checking = false;
-        }
+        })().finally(() => {
+            this.checkPromise = null;
+        });
+        return this.checkPromise;
     }
 
     private async verifyOne(reg: Registration): Promise<void> {
         const { messageId, analysis } = reg;
         const symbol = extractSymbolFromAnalysis(analysis);
-        const createdAt = analysis.createdAt;
-        if (!symbol || !createdAt) {
+        const createdAt = analysis.createdAt || reg.registeredAt;
+        if (!symbol) {
             this.registrations.delete(messageId);
             return;
         }
 
-        const result = await verifyHistoricalOutcome(analysis, symbol, createdAt);
+        const result = await verifyHistoricalOutcome(analysis, symbol, createdAt, undefined, { excludeFormingCandle: false });
         if (!result.verified && result.outcome === 'INSUFFICIENT_DATA') {
             // Don't watch forever: a permanently dead kline source (delisted
             // symbol, no data yet on a fresh pair) would re-verify every 60s

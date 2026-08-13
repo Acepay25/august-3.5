@@ -560,7 +560,7 @@ export const generateChartPromptInjection = (
     data4h: NumericChartData,
     data1d: NumericChartData
 ): string => {
-    const formatTimeframe = (data: NumericChartData): string => {
+    const formatTimeframe = (data: NumericChartData): string[] => {
         const { state, keyLevels, bars } = data;
 
         // Direction arrows for recent bars — chronological (oldest → newest),
@@ -580,46 +580,44 @@ export const generateChartPromptInjection = (
             ? `${state.recentPattern.direction || ''} ${state.recentPattern.type} (str: ${state.recentPattern.strength.toFixed(1)})`
             : 'none detected';
 
-        return `
-**${data.timeframe.toUpperCase()} CHART:**
-├─ Regime: ${state.marketRegime.toUpperCase()} | Trend: ${state.trend.replace('_', ' ').toUpperCase()} (${state.trendMaturity})
-├─ Momentum: ${state.momentum} | Volatility: ${state.volatility} | Position: ${state.rangePosition.replace('_', ' ')}
-├─ Confidence: ${(state.stateConfidence * 100).toFixed(0)}% | State Shift: ${state.stateShift.replace('_', ' ')}
-├─ Pattern: ${patternStr}
-├─ Last 5 bars: ${barArrows} | Wick bias: ${dominantWick} | Vol trend: ${volumeTrend}${volumeSpikes > 0 ? ` (${volumeSpikes} spikes)` : ''}
-└─ Levels: High $${keyLevels.recentHigh.toLocaleString()} | Low $${keyLevels.recentLow.toLocaleString()}${keyLevels.swingHigh ? ` | SwingH $${keyLevels.swingHigh.toLocaleString()}` : ''}${keyLevels.swingLow ? ` | SwingL $${keyLevels.swingLow.toLocaleString()}` : ''}`;
+        const high = keyLevels.recentHigh.toLocaleString();
+        const low = keyLevels.recentLow.toLocaleString();
+        const swingH = keyLevels.swingHigh ? keyLevels.swingHigh.toLocaleString() : '—';
+        const swingL = keyLevels.swingLow ? keyLevels.swingLow.toLocaleString() : '—';
+        return [
+            data.timeframe.toUpperCase(),
+            state.marketRegime,
+            `${state.trend.replace('_', ' ')} (${state.trendMaturity})`,
+            state.momentum,
+            state.volatility,
+            state.rangePosition.replace('_', ' '),
+            `${(state.stateConfidence * 100).toFixed(0)}%`,
+            state.stateShift.replace('_', ' '),
+            patternStr,
+            barArrows,
+            dominantWick,
+            `${volumeTrend}${volumeSpikes > 0 ? ` (${volumeSpikes} spikes)` : ''}`,
+            `${high} / ${low}`,
+            `${swingH} / ${swingL}`,
+        ];
     };
 
+    const headers = ['TF', 'Regime', 'Trend', 'Mom', 'Vol', 'Pos', 'Conf', 'Shift', 'Pattern', 'Last 5', 'Wick', 'Vol trend', 'Hi/Lo', 'Swing H/L'];
+    const rows = [data1d, data4h, data1h, data15m].map(formatTimeframe);
+    const table = [
+        `| ${headers.join(' | ')} |`,
+        `| ${headers.map(() => '---').join(' | ')} |`,
+        ...rows.map(r => `| ${r.join(' | ')} |`),
+    ].join('\n');
+
     return `
-═══════════════════════════════════════════════════════════════
- NUMERIC CHART REPRESENTATION (Feature-based + State-based)
-═══════════════════════════════════════════════════════════════
-The following provides a structured view of price action across timeframes.
-Use this to understand chart structure without visual images.
-NOTE: this is a structural (state-based) classifier. If it disagrees with the
-ADX-based MARKET REGIME block, the ADX regime is AUTHORITATIVE for direction
-and bias — use this block for trend maturity, momentum and structure context.
+## Chart structure (state classifier — ADX regime above is authoritative for direction)
 
-${formatTimeframe(data1d)}
+${table}
 
-${formatTimeframe(data4h)}
-
-${formatTimeframe(data1h)}
-
-${formatTimeframe(data15m)}
-
-**MULTI-TIMEFRAME ALIGNMENT:**
-- 1D Trend: ${data1d.state.trend.replace('_', ' ')} | 4H Trend: ${data4h.state.trend.replace('_', ' ')} | 1H Trend: ${data1h.state.trend.replace('_', ' ')} | 15M Trend: ${data15m.state.trend.replace('_', ' ')}
-- HTF Alignment: ${data4h.state.trend === data1d.state.trend ? ' 4H-1D aligned' : ' 4H-1D divergence'}
-- LTF Alignment: ${data1h.state.trend === data15m.state.trend ? ' 1H-15M aligned' : ' 1H-15M divergence'}
-
- **USE THIS DATA TO:**
-- Validate entry timing based on trend maturity
-- Check for momentum confirmation across timeframes
-- Identify high-probability setups (aligned trends, breakout regimes)
-- Use 15M data for precise SWING TRADE entry timing
-- Avoid late entries in mature trends
-═══════════════════════════════════════════════════════════════
+| Align | 1D | 4H | 1H | 15m | HTF 4H-1D | LTF 1H-15m |
+| --- | --- | --- | --- | --- | --- | --- |
+| trend | ${data1d.state.trend.replace('_', ' ')} | ${data4h.state.trend.replace('_', ' ')} | ${data1h.state.trend.replace('_', ' ')} | ${data15m.state.trend.replace('_', ' ')} | ${data4h.state.trend === data1d.state.trend ? 'aligned' : 'divergence'} | ${data1h.state.trend === data15m.state.trend ? 'aligned' : 'divergence'} |
 `;
 };
 

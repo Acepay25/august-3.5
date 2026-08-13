@@ -15,6 +15,17 @@ import { FAMILY_UI_DATA } from '../constants/models';
 // Shared cleaners, re-exported for consumers (autopilot, metrics).
 export { cleanPriceField } from './sanitizers';
 
+const mdCell = (value: string): string => value.replace(/\|/g, '\\|').replace(/\r?\n/g, ' ').trim();
+
+/** GFM table. Empty header labels render as a key/value sheet. */
+const mdTable = (headers: string[], rows: string[][]): string => {
+    if (rows.length === 0) return '';
+    const head = `| ${headers.map(mdCell).join(' | ')} |`;
+    const rule = `| ${headers.map(() => '---').join(' | ')} |`;
+    const body = rows.map(row => `| ${headers.map((_, i) => mdCell(row[i] ?? '')).join(' | ')} |`).join('\n');
+    return `${head}\n${rule}\n${body}`;
+};
+
 /**
  * Sanitize and normalize raw AI analysis output into a valid TradeAnalysis.
  * Never throws — total parse failure yields safe defaults.
@@ -191,36 +202,34 @@ export const buildSupplementMarkdown = (analysis: TradeAnalysis, calibration?: C
 
     // ── Setup quality (harness-computed bits around the plan's levels) ──
     const snap = analysis.marketSnapshot as { regime?: { regime?: string; adx?: number }; confluence?: { score?: number; direction?: string; strength?: string; alignment?: string[]; conflicts?: string[] } } | undefined;
-    const setupBits: string[] = [];
-    if (analysis.tradeType) setupBits.push(`Style: **${analysis.tradeType.toUpperCase()}**`);
+    const setupRows: string[][] = [];
+    if (analysis.tradeType) setupRows.push(['Style', analysis.tradeType.toUpperCase()]);
     if (snap?.regime?.regime) {
-        setupBits.push(`Regime: **${snap.regime.regime.replace(/_/g, ' ')}**${typeof snap.regime.adx === 'number' ? ` (ADX ${snap.regime.adx.toFixed(1)})` : ''}`);
+        setupRows.push(['Regime', `${snap.regime.regime.replace(/_/g, ' ')}${typeof snap.regime.adx === 'number' ? ` (ADX ${snap.regime.adx.toFixed(1)})` : ''}`]);
     }
     const ets = analysis.entryTimingScore;
     if (ets && typeof ets.score === 'number') {
-        setupBits.push(`Entry timing: **${ets.score}/100**${ets.timingQuality ? ` (${ets.timingQuality})` : ''}${ets.suggestedEntry?.reason ? ` — ${ets.suggestedEntry.reason}` : ''}`);
+        setupRows.push(['Entry timing', `${ets.score}/100${ets.timingQuality ? ` (${ets.timingQuality})` : ''}${ets.suggestedEntry?.reason ? ` — ${ets.suggestedEntry.reason}` : ''}`]);
     }
-    if (typeof analysis.rrRatio === 'number') setupBits.push(`Risk/Reward: **${analysis.rrRatio.toFixed(2)}:1**`);
-    if (analysis.stopLossPercentage) setupBits.push(`Stop distance: **${analysis.stopLossPercentage}**`);
+    if (typeof analysis.rrRatio === 'number') setupRows.push(['Risk/Reward', `${analysis.rrRatio.toFixed(2)}:1`]);
+    if (analysis.stopLossPercentage) setupRows.push(['Stop distance', analysis.stopLossPercentage]);
     const tp0 = analysis.takeProfit?.[0];
-    if (tp0?.percentage) setupBits.push(`TP1 gain: **${tp0.percentage}**`);
-    // Extended SL (150%) — worst-case loss threshold (SL distance × 1.5).
+    if (tp0?.percentage) setupRows.push(['TP1 gain', tp0.percentage]);
     const entryP = parseFloat(analysis.entryPoints?.[0]?.price ?? '');
     const slP = parseFloat(analysis.stopLoss ?? '');
     if (Number.isFinite(entryP) && Number.isFinite(slP) && slP !== entryP) {
         const distance = Math.abs(slP - entryP);
         const extended = slP > entryP ? entryP + 1.5 * distance : entryP - 1.5 * distance;
-        setupBits.push(`Max loss (extended SL 150%): **$${extended.toFixed(2)}**`);
+        setupRows.push(['Max loss (150% SL)', `$${extended.toFixed(2)}`]);
     }
-    // Confluence (hybrid snapshot)
     const confluence = snap?.confluence;
     if (confluence && typeof confluence.score === 'number') {
         const aligned = confluence.alignment?.length ?? 0;
         const total = (confluence.alignment?.length ?? 0) + (confluence.conflicts?.length ?? 0);
-        setupBits.push(`Confluence: **${confluence.score}/100** ${confluence.direction ?? ''}${total > 0 ? ` · ${aligned}/${total} TFs aligned` : ''}${confluence.strength ? ` · ${confluence.strength}` : ''}`);
+        setupRows.push(['Confluence', `${confluence.score}/100 ${confluence.direction ?? ''}${total > 0 ? ` · ${aligned}/${total} TFs` : ''}${confluence.strength ? ` · ${confluence.strength}` : ''}`.trim()]);
     }
     if (analysis.createdAt) {
-        setupBits.push(`Analyzed: ${new Date(analysis.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`);
+        setupRows.push(['Analyzed', new Date(analysis.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })]);
     }
     if (typeof analysis.validityDurationMinutes === 'number' && analysis.createdAt) {
         const expires = new Date(new Date(analysis.createdAt).getTime() + analysis.validityDurationMinutes * 60000);
@@ -228,12 +237,12 @@ export const buildSupplementMarkdown = (analysis: TradeAnalysis, calibration?: C
         if (remainMin > 0) {
             const h = Math.floor(remainMin / 60);
             const m = remainMin % 60;
-            setupBits.push(`Valid for ~${h > 0 ? `${h}h ` : ''}${m}m (until ${expires.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })})`);
+            setupRows.push(['Valid for', `~${h > 0 ? `${h}h ` : ''}${m}m (until ${expires.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })})`]);
         }
     }
-    if (setupBits.length > 0) {
+    if (setupRows.length > 0) {
         push('**Setup quality**');
-        setupBits.forEach(b => push(`- ${b}`));
+        push(mdTable(['Metric', 'Value'], setupRows));
         push('');
     }
 
@@ -263,23 +272,26 @@ export const buildSupplementMarkdown = (analysis: TradeAnalysis, calibration?: C
     }
     if (confBits.length > 0) {
         push('**Confidence & calibration**');
-        confBits.forEach(b => push(`- ${b}`));
+        push(mdTable(['', 'Detail'], confBits.map(b => {
+            const split = b.split(' — ');
+            return split.length > 1 ? [split[0], split.slice(1).join(' — ')] : ['Note', b];
+        })));
         push('');
     }
 
-    // ── Team verdict (per-analyst calls vs the verdict) ──
     const consensusEntries = analysis.analystConsensus?.entries ?? [];
     if (consensusEntries.length > 0) {
         push('**Team verdict**');
         const verdictDir = analysis.direction ?? 'Neutral';
-        const dissents = consensusEntries.filter(e => e.direction && e.direction !== verdictDir).length;
-        consensusEntries.forEach(e => {
-            const dir = e.direction === 'Long' ? '▲ Long' : e.direction === 'Short' ? '▼ Short' : '—';
-            const agrees = e.direction === verdictDir;
-            const call = `${e.displayName ?? e.thoughtsKey ?? e.providerId ?? '?'}: ${dir}${typeof e.probability === 'number' ? ` ${Math.round(e.probability)}%` : e.confidence ? ` ${e.confidence}` : ''} ${agrees ? '✓' : '✗'}`;
-            push(`- ${call}`);
+        const teamRows = consensusEntries.map(e => {
+            const dir = e.direction === 'Long' ? 'Long' : e.direction === 'Short' ? 'Short' : '—';
+            const conv = typeof e.probability === 'number' ? `${Math.round(e.probability)}%` : (e.confidence || '—');
+            const agrees = e.direction === verdictDir ? 'Agree' : 'Dissent';
+            return [e.displayName ?? e.thoughtsKey ?? e.providerId ?? '?', dir, conv, agrees];
         });
-        if (dissents > 0) push(`- **${dissents} dissent${dissents > 1 ? 's' : ''}** from the verdict`);
+        push(mdTable(['Analyst', 'Call', 'Conv.', 'Vs verdict'], teamRows));
+        const dissents = consensusEntries.filter(e => e.direction && e.direction !== verdictDir).length;
+        if (dissents > 0) push(`\n${dissents} dissent${dissents > 1 ? 's' : ''} from the verdict.`);
         push('');
     }
 
@@ -298,14 +310,20 @@ export const buildSupplementMarkdown = (analysis: TradeAnalysis, calibration?: C
         // The verdict line ALWAYS renders (the card always showed the gate
         // scan result, even a clean PASS); the rest is conditional.
         push('**Validation gate**');
-        push(`- Verdict: ${gate.passed ? 'PASS' : 'Adjusted'}${gate.confidenceCap < 1 ? ` — confidence capped at ${(gate.confidenceCap * 100).toFixed(0)}%` : ''}`);
-        if (penalties.length > 0) push(`- Penalties: ${penalties.join(' · ')}`);
-        if (gate.suggestedDirection && gate.suggestedDirection !== 'Neutral') push(`- Pattern memory suggests ${gate.suggestedDirection}`);
-        if (biasParts.length > 0) push(`- Family bias: ${biasParts.map(x => `${x.f === 'Omega' ? 'Ω' : x.f} ${x.v > 0 ? '+' : ''}${(x.v * 100).toFixed(0)}%`).join(' · ')}`);
-        (analysis.validationWarnings ?? []).forEach(w => push(`- ⚠ ${w}`));
-        (gate.warnings ?? []).forEach(w => push(`- ⚠ ${w}`));
-        (gate.insights ?? []).forEach(i => push(`- 💡 ${i}`));
-        if (analysis.riskVeto) push(`- ⛔ **Risk veto:** ${analysis.riskVeto}`);
+        const gateRows: string[][] = [
+            ['Verdict', `${gate.passed ? 'PASS' : 'Adjusted'}${gate.confidenceCap < 1 ? ` — cap ${(gate.confidenceCap * 100).toFixed(0)}%` : ''}`],
+        ];
+        if (penalties.length > 0) gateRows.push(['Penalties', penalties.join(' · ')]);
+        if (gate.suggestedDirection && gate.suggestedDirection !== 'Neutral') gateRows.push(['Pattern memory', `suggests ${gate.suggestedDirection}`]);
+        if (biasParts.length > 0) gateRows.push(['Family bias', biasParts.map(x => `${x.f === 'Omega' ? 'Ω' : x.f} ${x.v > 0 ? '+' : ''}${(x.v * 100).toFixed(0)}%`).join(' · ')]);
+        push(mdTable(['Field', 'Value'], gateRows));
+        const flags = [
+            ...(analysis.validationWarnings ?? []).map(w => `⚠ ${w}`),
+            ...(gate.warnings ?? []).map(w => `⚠ ${w}`),
+            ...(gate.insights ?? []).map(i => `💡 ${i}`),
+            ...(analysis.riskVeto ? [`⛔ **Risk veto:** ${analysis.riskVeto}`] : []),
+        ];
+        flags.forEach(f => push(`- ${f}`));
         push('');
     }
 
@@ -927,53 +945,145 @@ export const formatInvalidationLine = (analysis: TradeAnalysis): string => {
     return condition || level || (first.note || '').trim();
 };
 
-export const signalDirectionLabel = (direction?: string): string => {
+export const signalDirectionLabel = (direction?: string, confidence?: string): string => {
+    if (confidence === 'Avoid' || direction === 'Neutral' || direction === 'Avoid') return 'No trade';
     if (direction === 'Long') return 'Buy';
     if (direction === 'Short') return 'Sell';
     return direction || 'Neutral';
 };
 
+/** Avoid / Neutral: skip the setup; autopilot does not watch for a win or loss. */
+export const isNoTradeSignal = (direction?: string, confidence?: string): boolean =>
+    confidence === 'Avoid' || direction === 'Neutral' || direction === 'Avoid';
+
+export const explainNoTrade = (analysis: { direction?: string; confidence?: string; riskVeto?: string }): string => {
+    if (analysis.confidence === 'Avoid') {
+        const extra = (analysis.riskVeto || '').trim();
+        return extra
+            ? `Skip this setup. Avoid means do not enter — ${extra}`
+            : 'Skip this setup. Avoid means there is no trade to take; autopilot will not watch for a win or loss.';
+    }
+    return 'Skip this setup. Neutral means no directional edge; autopilot will not watch for a win or loss.';
+};
+
 /**
- * Compact ticket markdown for the trading signal — levels, hit odds,
- * invalidation, optional one-line why. Never the moderator recap, never
- * the full analysis dump (that lives in buildAnalysisMarkdown / supplement).
+ * Why this card is High / Medium / Low / Avoid — assembled from the plan,
+ * gate, and validation fields so the ticket does not just show the label.
+ */
+export const explainSignalConfidence = (analysis: TradeAnalysis): string => {
+    const conf = analysis.confidence || 'Medium';
+    const bits: string[] = [];
+    const p = typeof analysis.probability === 'number' ? Math.round(analysis.probability) : undefined;
+
+    if (analysis.riskVeto) bits.push(analysis.riskVeto);
+    if (analysis.originalConfidence && analysis.originalConfidence !== conf) {
+        bits.push(`downgraded from ${analysis.originalConfidence} after validation`);
+    }
+
+    const gate = analysis.gateResult;
+    if (gate) {
+        if (typeof gate.confidenceCap === 'number' && gate.confidenceCap < 1) {
+            bits.push(`pattern gate capped conviction at ${Math.round(gate.confidenceCap * 100)}%`);
+        }
+        if (!gate.passed) bits.push('validation gate adjusted the plan');
+        const pen = gate.penalties;
+        if (pen) {
+            if (pen.patternMemory > 0) bits.push('similar losing setups in pattern memory');
+            if (pen.htfConflict > 0) bits.push('higher-timeframe conflict');
+            if (pen.dataIntegrity > 0) bits.push('incomplete or conflicting market data');
+            if (pen.volumeContext > 0) bits.push('weak volume context');
+        }
+        const warning = (analysis.validationWarnings ?? gate.warnings ?? []).find(w => w.trim());
+        if (warning && bits.length < 3) bits.push(warning.replace(/^⚠\s*/, '').trim());
+    }
+
+    if (typeof analysis.rrRatio === 'number') {
+        if (analysis.rrRatio < 1.2) {
+            bits.push(`R:R ${analysis.rrRatio.toFixed(2)}:1 is below the 1.2 floor (max 54% / Grade D)`);
+        } else if (analysis.rrRatio < 1.5 && (conf === 'High' || (p !== undefined && p >= 70))) {
+            bits.push(`R:R ${analysis.rrRatio.toFixed(2)}:1 cannot support High (cap 69% / Grade C)`);
+        }
+    }
+
+    if (analysis.direction === 'Neutral') bits.push('no tradeable edge (Neutral / no-trade)');
+
+    if (p !== undefined) {
+        if (conf === 'Avoid' && p >= 55) {
+            bits.push(`${p}% probability but the verdict is still Avoid — treat as a no-trade`);
+        } else if (conf === 'Avoid') {
+            bits.push(`${p}% probability is in the Avoid / no-trade band`);
+        } else if (conf === 'Low') {
+            bits.push(`${p}% probability maps to Low (Grade D)`);
+        } else if (conf === 'Medium') {
+            bits.push(`${p}% probability maps to Medium (Grade C)`);
+        } else if (conf === 'High') {
+            bits.push(`${p}% probability with High conviction`);
+        }
+    } else if (analysis.grade) {
+        bits.push(`setup grade ${analysis.grade}`);
+    }
+
+    const unique = [...new Set(bits)].slice(0, 4);
+    if (unique.length === 0) return `${conf} conviction on this setup.`;
+    return `${conf} because ${unique.join('; ')}.`;
+};
+
+/**
+ * Compact ticket markdown for copy/export — GFM tables so levels and hit %
+ * line up. Never the moderator recap or the full analysis dump.
  */
 export const buildTradingSignalMarkdown = (
     analysis: TradeAnalysis,
     debateTurns?: DebateTurn[],
 ): string => {
-    const dir = signalDirectionLabel(analysis.direction);
+    const dir = signalDirectionLabel(analysis.direction, analysis.confidence);
     const odds = resolveLevelHitOdds(analysis, debateTurns);
     const lines: string[] = [];
-    lines.push(`**Trading signal** · **${dir}** · **${analysis.confidence ?? '—'}**`);
-    if (analysis.coinName) lines.push(`Coin: **${analysis.coinName}**`);
+    const titleBits = [`**${dir}**`, `**${analysis.confidence ?? '—'}**`];
+    if (typeof analysis.probability === 'number') titleBits.push(`${Math.round(analysis.probability)}%`);
+    lines.push(`**Trading signal** · ${titleBits.join(' · ')}`);
     lines.push('');
-    lines.push('**Levels**');
-    lines.push(`- Direction: **${dir}**`);
+
+    const summaryRows: string[][] = [];
+    if (analysis.coinName) summaryRows.push(['Coin', analysis.coinName]);
+    summaryRows.push(['Direction', dir]);
+    summaryRows.push(['Confidence', analysis.confidence ?? '—']);
+    if (typeof analysis.probability === 'number') summaryRows.push(['Probability', `${Math.round(analysis.probability)}%`]);
+    if (analysis.grade) summaryRows.push(['Grade', analysis.grade]);
+    if (typeof analysis.rrRatio === 'number') summaryRows.push(['R:R', `1:${analysis.rrRatio.toFixed(1)}`]);
+    lines.push(mdTable(['Field', 'Value'], summaryRows));
+    lines.push('');
+
+    lines.push('**Confidence**');
+    lines.push(`> ${explainSignalConfidence(analysis)}`);
+    lines.push('');
+
+    const hit = (n?: number): string => (typeof n === 'number' ? `${n}%` : '—');
+    const levelRows: string[][] = [];
     const entry = analysis.entryPoints?.[0]?.price;
-    if (entry) lines.push(`- Entry: **${entry}**`);
-    if (analysis.stopLoss) {
-        const hit = typeof odds.sl === 'number' ? ` · ${odds.sl}% hit` : '';
-        lines.push(`- Stop Loss: **${analysis.stopLoss}**${hit}`);
-    }
+    if (entry) levelRows.push(['Entry', `**${entry}**`, '—']);
+    if (analysis.stopLoss) levelRows.push(['Stop Loss', `**${analysis.stopLoss}**`, hit(odds.sl)]);
     (analysis.takeProfit ?? []).slice(0, 3).forEach((tp, i) => {
-        const hit = typeof odds.tp[i] === 'number' ? ` · ${odds.tp[i]}% hit` : '';
-        lines.push(`- TP${i + 1}: **${tp.price}**${hit}`);
+        levelRows.push([`TP${i + 1}`, `**${tp.price}**`, hit(odds.tp[i])]);
     });
-    if (typeof analysis.rrRatio === 'number') lines.push(`- R:R: **1:${analysis.rrRatio.toFixed(1)}**`);
+    if (levelRows.length > 0) {
+        lines.push('**Levels**');
+        lines.push(mdTable(['Level', 'Price', 'Hit'], levelRows));
+        lines.push('');
+    }
 
     const invalidation = formatInvalidationLine(analysis);
     if (invalidation) {
-        lines.push('');
         lines.push('**Invalidation**');
-        lines.push(`- ${invalidation}`);
+        lines.push(invalidation);
+        lines.push('');
     }
 
     const why = extractSignalStrategyText(analysis, debateTurns);
     if (why) {
-        lines.push('');
         lines.push('**Why**');
         lines.push(why);
+        lines.push('');
     }
 
     return lines.join('\n').trim();
