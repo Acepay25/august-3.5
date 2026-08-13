@@ -6,6 +6,11 @@
 
 const PLAN_RE = /FINAL TRADE PLAN|\b(?:Direction|Stop Loss|Take Profit(?:\s*[123])?|Invalidation)\s*:/i;
 
+const SCRATCHPAD_START_RE = /(?:^|\n)\s*(?:here(?:['’]s| is)\s+(?:my\s+)?(?:a\s+)?)?thinking\s+process\s*:/i;
+const SCRATCHPAD_META_RE = /Analyze User Input\s*:|Deconstruct (?:the )?Context|Current Round\s*:/i;
+const ANSWER_MARK_RE = /(?:^|\n)\s*(?:\*\*)?(?:answer|final(?:\s*output)?|response|conclusion)(?:\*\*)?\s*[:.\-]\s*/i;
+const META_PARA_RE = /^(?:Analyze User Input|Deconstruct|My State|Role\s*:|Current Round\s*:|YOUR TASK|Moderator's question|Here's a thinking)/i;
+
 export const looksLikeTradeOutput = (text: string): boolean => {
     if (!text || text.length < 40) return false;
     const plan = /FINAL TRADE PLAN/i.test(text);
@@ -23,6 +28,52 @@ const stripTags = (text: string): string => text
     .replace(/^\s*(?:\*\*)?(?:THINKING|FINAL OUTPUT|FINAL_OUTPUT)(?:\*\*)?\s*:?\s*$/gim, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+
+export const looksLikeScratchpad = (text: string): boolean => {
+    const raw = (text || '').trim();
+    if (!raw) return false;
+    return SCRATCHPAD_START_RE.test(raw) || SCRATCHPAD_META_RE.test(raw);
+};
+
+/**
+ * Peel "Here's a thinking process / Analyze User Input" dumps out of the
+ * visible floor. If there is no real answer yet, visible is empty.
+ */
+export const stripLeakedScratchpad = (text: string): { visible: string; leaked: string } => {
+    const raw = (text || '').trim();
+    if (!raw) return { visible: '', leaked: '' };
+    if (!looksLikeScratchpad(raw)) return { visible: raw, leaked: '' };
+
+    const start = raw.search(SCRATCHPAD_START_RE);
+    const leakStart = start >= 0 ? start : 0;
+    const before = raw.slice(0, leakStart).trim();
+    const rest = raw.slice(leakStart);
+
+    const answerAt = rest.search(ANSWER_MARK_RE);
+    if (answerAt >= 0) {
+        const after = rest.slice(answerAt).replace(ANSWER_MARK_RE, '').trim();
+        return {
+            visible: [before, after].filter(Boolean).join('\n\n'),
+            leaked: rest.slice(0, answerAt).trim(),
+        };
+    }
+
+    const paras = rest.split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+    const tail = [...paras].reverse().find(p =>
+        !META_PARA_RE.test(p)
+        && !looksLikeScratchpad(p)
+        && p.split(/\s+/).length >= 12
+    );
+    if (tail) {
+        return {
+            visible: [before, tail].filter(Boolean).join('\n\n'),
+            leaked: rest.replace(tail, '').trim(),
+        };
+    }
+
+    if (before) return { visible: before, leaked: rest };
+    return { visible: '', leaked: raw };
+};
 
 export const splitThinkingHeaders = (raw: string): { thinking: string; output: string } => {
     const headerRe = /^\s*(?:\*\*)?(THINKING|FINAL OUTPUT|FINAL_OUTPUT)(?:\*\*)?\s*:?[ \t]*\r?\n?/gim;
@@ -72,6 +123,13 @@ export const splitThinkingFromOutput = (
     }
 
     if (output && eq(thinking, output)) thinking = '';
+
+    const peeled = stripLeakedScratchpad(output);
+    if (peeled.leaked) {
+        thinking = [thinking, peeled.leaked].filter(Boolean).join('\n\n').trim();
+        output = peeled.visible;
+    }
+
     return { thinking: thinking.trim(), output: output.trim() };
 };
 
@@ -95,9 +153,13 @@ export const displayThinkingParts = (record: {
     let raw = (record.rawReasoning || '').trim();
 
     if (record.role === 'debate_turn') {
+        const peeled = stripLeakedScratchpad(output || thinking);
         if (!output) {
-            output = thinking;
-            thinking = '';
+            output = peeled.visible;
+            thinking = peeled.leaked || '';
+        } else if (peeled.leaked) {
+            thinking = [thinking, peeled.leaked].filter(Boolean).join('\n\n').trim();
+            output = peeled.visible;
         }
         if (eq(thinking, output)) thinking = '';
         if (eq(raw, output) || eq(raw, thinking)) raw = '';
@@ -111,7 +173,7 @@ export const displayThinkingParts = (record: {
     if (raw && looksLikeTradeOutput(raw) && !looksLikeTradeOutput(thinking)) {
         raw = '';
     }
-    if (raw && (eq(raw, output) || eq(raw, thinking))) raw = '';
+    if (raw && (eq(raw, output) || eq(raw, thinking)) && !looksLikeScratchpad(raw)) raw = '';
     if (eq(thinking, output)) thinking = '';
 
     return { thinking, output, raw };

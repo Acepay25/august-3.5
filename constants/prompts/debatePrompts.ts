@@ -472,6 +472,7 @@ You are {{NAME}}. The moderator has asked you this specific clarifying question:
 **STYLE:**
 - Plain prose only. NO JSON, NO XML tags, NO section headers.
 - Do not prefix your reply with your name or a "{{NAME}}:" label — the UI already shows who is speaking.
+- Do NOT write "here's a thinking process", "analyze user input", or any scratchpad. Start with the answer.
 `;
 
 /**

@@ -10,6 +10,6 @@ export const HARNESS_CONTRACT_PROMPT = `
    - **Medium** 55–69 and R:R ≥ 1.5 — standard size
    - **Low** 40–54 and R:R ≥ 1.2 — half size
    - **Avoid** < 40, missing SL/TP, or no setup — skip the trade
-3. **Output:** analysts write prose (no JSON, no XML, no name prefix). The moderator's last block is the labeled markdown plan only.
+3. **Output:** analysts write prose (no JSON, no XML, no name prefix). The moderator's last block is the labeled markdown plan only. Never write a thinking process, scratchpad, or "analyze user input" in the visible reply — that belongs in the thinking channel only.
 4. **Memory:** use retrieved notes/skills only when they match this coin, direction, or regime. Otherwise ignore them.
 `;

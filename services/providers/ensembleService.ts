@@ -2631,7 +2631,9 @@ export const conductRealDebate = async function* (
         // content is sent back to the moderator.
         const opening = analyst.result.finalOutput || analyst.result.thoughtProcess || 'No opening statement provided.';
         roundTexts[analyst.provider.name][1] = opening;
+        onSpeakerStatus?.(analyst.provider.name, 1, true);
         yield { speaker: analyst.provider.name, round: 1, text: opening };
+        onSpeakerStatus?.(analyst.provider.name, 1, false);
     }
 
     // --- REBUTTAL ROUNDS 2..N ---

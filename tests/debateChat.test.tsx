@@ -175,7 +175,19 @@ describe('DebateChat', () => {
         const turns = [makeTurn('Analyst A', 'Opening', 1)];
         const activeSpeakers = { 'Analyst A': 2 };
         render(<DebateChat {...baseProps} debateTurns={turns} isDebating={true} activeDebateSpeakers={activeSpeakers} />);
-        expect(screen.getByText(/writing/)).toBeDefined();
+        expect(screen.getByText(/Now speaking/)).toBeDefined();
+        expect(screen.getByText(/Analyst A \(R2\)/)).toBeDefined();
+        expect(screen.getByText('Speaking')).toBeDefined();
+        expect(screen.getByText('Writing')).toBeDefined();
+    });
+
+    it('does not mark an earlier turn as speaking when a later round is live', () => {
+        const turns = [makeTurn('Analyst A', 'Opening', 1)];
+        render(<DebateChat {...baseProps} debateTurns={turns} isDebating={true} activeDebateSpeakers={{ 'Analyst A': 2 }} />);
+        const speakingChips = screen.getAllByText('Speaking');
+        expect(speakingChips).toHaveLength(1);
+        expect(screen.getByText('Opening')).toBeDefined();
+        expect(screen.getByText('Done')).toBeDefined();
     });
 
     it('shows copy transcript button when analysis is provided', () => {
@@ -230,6 +242,19 @@ describe('DebateChat', () => {
         render(<DebateChat {...baseProps} debateTurns={turns} />);
         expect(screen.queryByText(/\{\{NAME\}\}/)).toBeNull();
         expect(screen.getByText('Short from the 4H supply zone')).toBeDefined();
+    });
+
+    it('hides a leaked thinking-process dump from the debate floor', () => {
+        const turns = [makeTurn(
+            'Risk & Execution Specialist',
+            "Here's a thinking process:\n\nAnalyze User Input: I'm in a debate. Current Round: Round 5.",
+            5,
+        )];
+        render(<DebateChat {...baseProps} debateTurns={turns} />);
+        expect(screen.getByText(/No public answer/i)).toBeDefined();
+        expect(screen.queryByText('Final output')).toBeNull();
+        fireEvent.click(screen.getByText('Thinking'));
+        expect(screen.getByText(/Analyze User Input/i)).toBeDefined();
     });
 
     it('jumps to a phase heading when the round tab is clicked', () => {
