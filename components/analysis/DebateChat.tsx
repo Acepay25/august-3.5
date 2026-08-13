@@ -5,6 +5,8 @@ import MarkdownContent from '../shared/MarkdownContent';
 import { getRoleDisplayForProvider } from '../../services/ui/AnalystLensService';
 import { buildTranscriptMarkdown, buildTranscriptJson, buildTranscriptFilename, downloadTextFile } from '../../utils/transcriptExport';
 import DebateSummary from './DebateSummary';
+import { useSmoothStreamText } from '../../hooks/useSmoothStreamText';
+import { stripLeakedScratchpad } from '../../utils/thinkingSplit';
 
 interface DebateChatProps {
     debateTurns: DebateTurn[];
@@ -112,6 +114,40 @@ const TurnThinking: React.FC<{ content: string; streaming?: boolean }> = ({ cont
             </div>
         </details>
     );
+};
+
+const SpeakerAvatar: React.FC<{ name: string; live?: boolean }> = ({ name, live = false }) => (
+    <div
+        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border bg-zinc-800 text-[10px] font-semibold text-zinc-200 ${live ? 'border-cyan-400/50 ring-1 ring-cyan-400/30' : 'border-white/10'}`}
+        aria-hidden="true"
+    >
+        {name.trim().charAt(0).toUpperCase() || '?'}
+    </div>
+);
+
+/**
+ * Live turns stay as plain wrapping text so incomplete markdown does not
+ * jump layout. Finished turns render markdown. Large dumps ease in.
+ */
+const StreamedTurnBody: React.FC<{ text: string; live: boolean }> = ({ text, live }) => {
+    const shown = useSmoothStreamText(text, live);
+    if (!shown.trim() && live) {
+        return (
+            <p className="text-sm italic text-zinc-500">
+                Writing
+                <span className="ml-1 inline-block h-4 w-1.5 animate-pulse bg-cyan-400 align-middle" aria-hidden="true" />
+            </p>
+        );
+    }
+    if (live) {
+        return (
+            <p className="whitespace-pre-wrap text-sm leading-6 text-zinc-200">
+                {shown}
+                <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-cyan-400 align-middle" aria-hidden="true" />
+            </p>
+        );
+    }
+    return <MarkdownContent content={shown} className="text-sm leading-6 text-zinc-200" />;
 };
 
 const DebateChat: React.FC<DebateChatProps> = ({
@@ -331,7 +367,24 @@ const DebateChat: React.FC<DebateChatProps> = ({
 
     // Replay slices the transcript once (P7: the old code re-sliced inside the
     // per-turn map — O(n²) array copies on every replay tick).
-    const displayedTurns = isReplaying ? visibleTurns.slice(0, replayIndex) : visibleTurns;
+    const displayedTurns = useMemo(() => {
+        const base = isReplaying ? visibleTurns.slice(0, replayIndex) : [...visibleTurns];
+        if (!isDebating || isReplaying) return base;
+        const extra: DebateTurn[] = [];
+        for (const [speaker, round] of Object.entries(activeDebateSpeakers)) {
+            const exists = base.some(turn => turn.speaker === speaker && turn.round === round);
+            if (!exists) {
+                extra.push({
+                    speaker: speaker as DebateTurn['speaker'],
+                    round,
+                    text: '',
+                    createdAt: new Date().toISOString(),
+                });
+            }
+        }
+        if (extra.length === 0) return base;
+        return [...base, ...extra].sort((a, b) => (a.round ?? 0) - (b.round ?? 0));
+    }, [visibleTurns, isReplaying, replayIndex, isDebating, activeDebateSpeakers]);
     const isComplete = Boolean(analysis && !isDebating && debateTurns.length > 0);
     const liveRound = Math.max(
         1,
@@ -530,6 +583,13 @@ const DebateChat: React.FC<DebateChatProps> = ({
                 }}
                 className="relative max-h-[520px] overflow-y-auto px-4 py-4 custom-scrollbar"
             >
+                {isDebating && activeSpeakers.length > 0 && (
+                    <div className="mb-3 rounded-lg border border-cyan-400/15 bg-cyan-500/5 px-3 py-2 text-[11px] text-zinc-400">
+                        <span className="font-medium text-cyan-300">Now speaking</span>
+                        <span className="mx-1.5 text-zinc-700">·</span>
+                        {activeSpeakers.map(([speaker, round]) => `${getDisplayName(speaker)} (R${round})`).join(', ')}
+                    </div>
+                )}
                 {displayedTurns.map((turn, index) => {
                     if (turn.speaker === 'System') {
                         return (
@@ -552,8 +612,8 @@ const DebateChat: React.FC<DebateChatProps> = ({
                         ? splitModeratorTurn(turn.text, analystNames, modelNames)
                         : [{ text: turn.text }];
                     const priorFromSpeaker = displayedTurns.slice(0, index).some(item => item.speaker === turn.speaker);
-                    const turnReasoning = (turn.reasoning || (!priorFromSpeaker ? getReasoning(turn.speaker) : '') || '').trim();
-                    const isSpeakerStreaming = isDebating && activeDebateSpeakers[turn.speaker] !== undefined;
+                    const storedReasoning = (turn.reasoning || (!priorFromSpeaker ? getReasoning(turn.speaker) : '') || '').trim();
+                    const isThisTurnStreaming = isDebating && activeDebateSpeakers[turn.speaker] === turn.round;
                     return (
                         <React.Fragment key={`${turn.speaker}-${turn.round ?? 'legacy'}-${index}`}>
                             {showPhase && (
@@ -565,38 +625,54 @@ const DebateChat: React.FC<DebateChatProps> = ({
                                 </div>
                             )}
                             {segments.map((segment, segmentIndex) => {
-                                const body = turn.speaker === 'Moderator'
+                                const rawBody = turn.speaker === 'Moderator'
                                     ? segment.text.replace(/^\s*\*{0,2}\s*moderator\s+verdict\*{0,2}\s*[:—-]?\s*/i, '')
                                     : cleanSpeakerPrefix(segment.text, turn.speaker);
+                                const peeled = stripLeakedScratchpad(rawBody);
+                                const body = peeled.visible;
+                                const turnReasoning = segmentIndex === 0
+                                    ? [storedReasoning, peeled.leaked].filter(Boolean).join('\n\n').trim()
+                                    : '';
                                 return (
                                 <div
                                     key={`${turn.speaker}-${turn.round ?? 'legacy'}-${index}-${segmentIndex}`}
-                                    className={`space-y-3 py-3 ${segmentIndex === 0 && !showPhase ? 'border-t border-white/5' : ''}`}
+                                    className={`space-y-3 rounded-xl px-2 py-3 transition-colors ${
+                                        isThisTurnStreaming
+                                            ? 'border border-cyan-400/20 bg-cyan-500/5'
+                                            : segmentIndex === 0 && !showPhase
+                                                ? 'border-t border-white/5'
+                                                : ''
+                                    }`}
                                 >
-                                    <div className="flex min-w-0 items-baseline gap-2">
-                                        <div className={`truncate text-xs font-medium ${isVerdict ? 'text-zinc-100' : 'text-zinc-300'}`}>
-                                            {displayName}
-                                            {isSpeakerStreaming && (
-                                                <span className="ml-1.5 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400 align-middle" />
-                                            )}
+                                    <div className="mb-3 flex min-w-0 items-center gap-2">
+                                        <SpeakerAvatar name={displayName} live={isThisTurnStreaming} />
+                                        <div className="min-w-0 flex-1">
+                                            <div className={`truncate text-xs font-medium ${isVerdict ? 'text-zinc-100' : 'text-zinc-300'}`}>
+                                                {displayName}
+                                            </div>
+                                            <div className="truncate text-[11px] text-zinc-600">
+                                                {segment.target ? `→ ${segment.target}` : modelName || (typeof turn.round === 'number' ? `Turn · ${phase || `R${turn.round}`}` : '')}
+                                            </div>
                                         </div>
-                                        {segment.target ? (
-                                            <div className="truncate text-[11px] text-zinc-600">→ {segment.target}</div>
-                                        ) : modelName ? (
-                                            <div className="truncate text-[11px] text-zinc-600">{modelName}</div>
+                                        {isThisTurnStreaming ? (
+                                            <span className="shrink-0 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-1.5 py-0.5 text-[10px] text-cyan-300">
+                                                Speaking
+                                            </span>
+                                        ) : (body.trim() || turnReasoning) ? (
+                                            <span className="shrink-0 text-[10px] text-zinc-600">Done</span>
                                         ) : null}
                                     </div>
                                     {segmentIndex === 0 && turnReasoning && (
-                                        <TurnThinking content={turnReasoning} streaming={isSpeakerStreaming} />
+                                        <TurnThinking content={turnReasoning} streaming={isThisTurnStreaming} />
                                     )}
                                     <div className="min-w-0">
-                                        <div className="mb-1 text-[11px] text-zinc-500">Final output</div>
-                                        <MarkdownContent
-                                            content={body}
-                                            className="text-sm leading-6 text-zinc-200"
-                                        />
-                                        {isSpeakerStreaming && (
-                                            <span className="mt-1 inline-block h-4 w-1.5 animate-pulse bg-cyan-400 align-middle" aria-hidden="true" />
+                                        {body.trim() && !isThisTurnStreaming && (
+                                            <div className="mb-1 text-[11px] text-zinc-500">Final output</div>
+                                        )}
+                                        {!body.trim() && !isThisTurnStreaming && turnReasoning ? (
+                                            <p className="text-xs italic text-zinc-600">No public answer — the model only returned a scratchpad.</p>
+                                        ) : (
+                                            <StreamedTurnBody text={body} live={isThisTurnStreaming} />
                                         )}
                                     </div>
                                 </div>
@@ -605,12 +681,6 @@ const DebateChat: React.FC<DebateChatProps> = ({
                         </React.Fragment>
                     );
                 })}
-
-                {isDebating && activeSpeakers.length > 0 && (
-                    <div className="pt-2 text-[11px] text-zinc-500">
-                        {activeSpeakers.map(([speaker]) => getDisplayName(speaker)).join(', ')} writing…
-                    </div>
-                )}
 
                 {isScrolledUp && (
                     <div className="sticky bottom-2 z-10 flex justify-center">

@@ -24,6 +24,21 @@ describe('splitThinkingFromOutput', () => {
         expect(split.thinking).toBe('');
         expect(split.output).toContain('FINAL TRADE PLAN');
     });
+
+    it('moves a leaked thinking-process dump out of the visible answer', () => {
+        const dump = `Here's a thinking process:\n\nAnalyze User Input: I'm in a debate. Role: Risk & Execution Specialist.\n\nDeconstruct the Context: Entry 63694 SL 63420.\n\nAnswer:\nShort. TP2 62980, TP3 62640, R:R 1.8.`;
+        const split = splitThinkingFromOutput('', dump);
+        expect(split.output).toContain('TP2 62980');
+        expect(split.output).not.toMatch(/thinking process/i);
+        expect(split.thinking).toMatch(/Analyze User Input/i);
+    });
+
+    it('hides a scratchpad-only dump until a real answer exists', () => {
+        const dump = `Here's a thinking process:\n\nAnalyze User Input: I'm in a debate/ensemble scenario. Role: Risk & Execution Specialist. Current Round: Round 5.`;
+        const split = splitThinkingFromOutput('', dump);
+        expect(split.output).toBe('');
+        expect(split.thinking).toMatch(/thinking process/i);
+    });
 });
 
 describe('displayThinkingParts', () => {

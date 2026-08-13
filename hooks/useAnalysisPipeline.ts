@@ -27,7 +27,7 @@ import { offlineQueue } from '../services/infrastructure/OfflineQueueService';
 import { notifyAnalysisComplete } from '../services/infrastructure/CompletionNotifications';
 import { ThinkingRecord } from '../types/thinking';
 import { lensFromAnalystRole, lensFromSpeakerName } from '../utils/thinkingLens';
-import { splitThinkingFromOutput, looksLikeTradeOutput } from '../utils/thinkingSplit';
+import { splitThinkingFromOutput, looksLikeTradeOutput, stripLeakedScratchpad } from '../utils/thinkingSplit';
 import { sanitizeAIResponse } from '../utils/sanitizers';
 import { buildModelIdToName, isProviderReady } from '../utils/providerUtils';
 import { DEFAULT_LEVERAGE } from '../utils/conversationUtils';
@@ -2202,14 +2202,16 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                             .replace(/<\/?DEBATE_END>/gi, '')
                                             .trim()
                                         : text.trim();
+                                    const peeled = stripLeakedScratchpad(cleanedText);
                                     return {
                                         speaker,
                                         round: parseInt(k.slice(0, sep), 10) || undefined,
                                         createdAt: turnTimes[k],
-                                        text: sanitizeAIResponse(cleanedText),
+                                        text: sanitizeAIResponse(peeled.visible),
+                                        reasoning: peeled.leaked || undefined,
                                     };
                                 })
-                                .filter(turn => Boolean(turn.text))
+                                .filter(turn => Boolean(turn.text) || Boolean(turn.reasoning))
                                 .sort((a, b) => (a.round ?? 0) - (b.round ?? 0));
 
                             debateTurnsRef.current = currentTurns;
@@ -2242,14 +2244,16 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                                     .replace(/<\/?DEBATE_END>/gi, '')
                                                     .trim()
                                                 : text.trim();
+                                            const peeled = stripLeakedScratchpad(cleanedText);
                                             return {
                                                 speaker,
                                                 round: parseInt(k.slice(0, sep), 10) || undefined,
                                                 createdAt: turnTimes[k],
-                                                text: sanitizeAIResponse(cleanedText),
+                                                text: sanitizeAIResponse(peeled.visible),
+                                                reasoning: peeled.leaked || undefined,
                                             };
                                         })
-                                        .filter(turn => Boolean(turn.text))
+                                        .filter(turn => Boolean(turn.text) || Boolean(turn.reasoning))
                                         .sort((a, b) => (a.round ?? 0) - (b.round ?? 0));
                                     debateTurnsRef.current = finalTurns;
                                     throttledDebateUpdate(requestConversationId, debateMessageId, finalTurns, thoughtMap, reasoningMapRef.current, activeDebateSpeakersRef.current);
