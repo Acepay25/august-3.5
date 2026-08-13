@@ -27,7 +27,6 @@ import {
 
 import {
     calculateIndicators,
-    generateTASummary,
     calculateKeyLevels,
     calculateConfluenceScore,
     TechnicalIndicators,
@@ -61,7 +60,7 @@ import {
 
 import { parsePrice as canonicalParsePrice } from '../../utils/analysisUtils';
 
-import { getSessionContext, generateSessionSummary, SessionContext } from '../infrastructure/SessionService';
+import { getSessionContext, SessionContext } from '../infrastructure/SessionService';
 import { ConfidenceCalibration } from '../../types';
 import {
     generateCalibrationPromptInjection,
@@ -731,297 +730,274 @@ export const formatCandleHistoryInsight = (candleHistory: HybridDataPacket['cand
     return insight;
 };
 
+const mdRow = (cells: Array<string | number>): string => `| ${cells.map(c => String(c)).join(' | ')} |`;
+
+const mdTable = (headers: string[], rows: Array<Array<string | number>>): string => {
+    if (rows.length === 0) return '';
+    return [mdRow(headers), mdRow(headers.map(() => '---')), ...rows.map(mdRow)].join('\n');
+};
+
+const indicatorRow = (tf: HybridTimeframe, ind: TechnicalIndicators | null | undefined): Array<string | number> => {
+    if (!ind) return [tf, '—', '—', '—', '—', '—', '—', '—', '—', '—'];
+    return [
+        tf,
+        fmtPx(ind.currentPrice),
+        ind.rsi.rsi14,
+        ind.rsiTrend,
+        ind.macd.histogram,
+        ind.macd.trend,
+        ind.ema.ema20,
+        ind.ema.ema50,
+        ind.ema.ema200,
+        `${ind.atr} (${ind.atrPercent}%)`,
+        ind.trendStrength.replace(/_/g, ' '),
+    ];
+};
+
 /**
- * Generate AI prompt injection for hybrid data
- * This is the structured data block that gets injected into AI prompts
+ * Generate AI prompt injection for hybrid data.
+ * Compact labeled tables first (scan-friendly), then supporting series.
  */
 export const generateHybridPromptInjection = (data: HybridDataPacket): string => {
     const fundingDisplay = (data.fundingRate * 100).toFixed(4);
-    const confluenceEmoji = data.confluence.direction === 'bullish' ? '' :
-        data.confluence.direction === 'bearish' ? '' : '';
-
-    const sentimentEmoji = data.derivatives.overallSentiment === 'very_bullish' ? '' :
-        data.derivatives.overallSentiment === 'bullish' ? '' :
-            data.derivatives.overallSentiment === 'very_bearish' ? '' :
-                data.derivatives.overallSentiment === 'bearish' ? '' : '';
-
-    const regimeEmoji = data.regime.regime.includes('trend_up') ? '' :
-        data.regime.regime.includes('trend_down') ? '' :
-            data.regime.regime === 'compression' ? '' :
-                data.regime.regime === 'volatile_chop' ? '' : '↔';
-
-    // Staleness: the model should know when the packet is no longer real-time
-    // instead of trusting a blanket "Real-Time" claim.
     const dataAgeMin = Math.max(0, Math.round((Date.now() - new Date(data.dataTimestamp).getTime()) / 60000));
-    const sourceLine = dataAgeMin <= 10
-        ? `**Source:** Binance API (${dataAgeMin}m ago)`
-        : `**Source:** Binance API — DATA IS ${dataAgeMin}m OLD; verify levels against the current price before acting`;
-    const qualityLine = data.dataQuality?.status === 'degraded'
-        ? `**Data quality:** DEGRADED — unavailable: ${data.dataQuality.unavailableSources.join(', ')}. Do not infer unavailable sources as neutral or balanced.`
-        : '**Data quality:** Complete for the requested sources.';
+    const sourceNote = dataAgeMin <= 10
+        ? `Binance · ${dataAgeMin}m ago`
+        : `Binance · STALE ${dataAgeMin}m — verify vs live price`;
+    const qualityNote = data.dataQuality?.status === 'degraded'
+        ? `degraded (missing: ${data.dataQuality.unavailableSources.join(', ')})`
+        : 'complete';
 
-    return `
-═══════════════════════════════════════════════════════════════
- HYBRID INTELLIGENCE V2: ENHANCED MARKET DATA
-═══════════════════════════════════════════════════════════════
-**Symbol:** ${data.symbol}
-**Data Timestamp:** ${data.dataTimestamp}
-${sourceLine}
-${qualityLine}
+    const tfs: HybridTimeframe[] = ['1d', '4h', '1h', '15m'];
+    const mil = (n: number): string => `$${(n / 1_000_000).toFixed(2)}M`;
+    const chg = (n: number): string => `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
 
- **MARKET OVERVIEW:**
-- Current Price: $${data.marketData.currentPrice}
-- 24H High: $${data.marketData.price24hHigh} | Low: $${data.marketData.price24hLow}
-- 24H Change: ${data.marketData.priceChangePercent24h >= 0 ? '+' : ''}${data.marketData.priceChangePercent24h.toFixed(2)}%
-- 24H Volume: $${(data.marketData.volume24h / 1000000).toFixed(2)}M
-- Funding Rate: ${fundingDisplay}% (${data.fundingRateSentiment.toUpperCase()})
+    const pp = data.enhancedKeyLevels.pivotPoints.daily;
+    const fib = data.enhancedKeyLevels.fibLevels;
+    const ichi = data.ichimoku['4h'];
+    const vwap = data.vwap['1h'];
+    const m1 = data.momentum['1h'];
+    const m4 = data.momentum['4h'];
+    const av = data.advancedVolume;
+    const vp = av.volumeProfile;
+    const mc = data.marketContext;
 
-${regimeEmoji} **MARKET REGIME (ADX-Based):**
-- Regime: ${data.regime.regime.replace(/_/g, ' ').toUpperCase()}
-- ADX: ${data.regime.adx} | +DI: ${data.regime.plusDI} | -DI: ${data.regime.minusDI}
-- Trend Direction: ${data.regime.trendDirection.toUpperCase()} (${data.regime.trendStrength})
-- Trading Bias: ${data.regime.tradingBias.replace('_', ' ').toUpperCase()}
--  ${data.regime.recommendation}
+    const fmtOhlc = (v: number): string => {
+        if (!Number.isFinite(v)) return '?';
+        return v >= 1000 ? v.toFixed(0) : v >= 1 ? v.toFixed(2) : v.toFixed(6);
+    };
 
- **PATTERN FAMILY (ML CLASSIFICATION):**
-- Detected: **${data.patternClassification.family.toUpperCase()}** (Confidence: ${(data.patternClassification.confidence * 100).toFixed(0)}%)
-- Reasoning: ${data.patternClassification.reasoning.join('; ')}
-- Scores: A=${data.patternClassification.scores.familyA} | B=${data.patternClassification.scores.familyB} | C=${data.patternClassification.scores.familyC} | Ω=${data.patternClassification.scores.familyOmega}
+    const patternRows: Array<Array<string | number>> = [];
+    for (const tf of tfs) {
+        const scan = data.detectedPatterns?.[tf];
+        if (!scan || scan.windowSize === 0) {
+            patternRows.push([tf, '—', 'insufficient data', '—', '—', '—']);
+            continue;
+        }
+        const top = [...scan.patterns].sort((a, b) => b.strength - a.strength).slice(0, 5);
+        if (top.length === 0) {
+            patternRows.push([tf, 'none', `last ${scan.windowSize}`, '—', '—', `HH=${scan.higherHighs} HL=${scan.higherLows} LH=${scan.lowerHighs} LL=${scan.lowerLows}`]);
+            continue;
+        }
+        for (const p of top) {
+            patternRows.push([
+                tf,
+                p.name,
+                p.direction,
+                `${(p.strength * 100).toFixed(0)}%`,
+                p.priceLevel !== undefined ? `$${fmtOhlc(p.priceLevel)}` : '—',
+                p.note ?? '',
+            ]);
+        }
+    }
 
-${sentimentEmoji} **DERIVATIVES SENTIMENT:**
-- Open Interest: $${(data.derivatives.openInterestValue / 1000000).toFixed(2)}M${typeof data.derivatives.oiChange24h === 'number' ? ` (24h ${data.derivatives.oiChange24h >= 0 ? '+' : ''}${data.derivatives.oiChange24h.toFixed(2)}% — rising OI + falling price = new shorts, falling OI = liquidation/exit)` : ''}
-- Long/Short Ratio: ${data.derivatives.longShortRatio.ratio.toFixed(2)} (${data.derivatives.longShortRatio.sentiment.replace('_', ' ')})
-- Top Traders: ${data.derivatives.topTraderRatio.ratio.toFixed(2)} (${data.derivatives.topTraderRatio.sentiment.replace('_', ' ')})
-- Taker Buy/Sell: ${data.derivatives.takerBuySell.ratio.toFixed(2)} (${data.derivatives.takerBuySell.pressure.replace('_', ' ')})
-- Overall: ${data.derivatives.overallSentiment.replace('_', ' ').toUpperCase()} (Score: ${data.derivatives.sentimentScore})
+    const ohlcBlocks = tfs.map(tf => {
+        const scan = data.detectedPatterns?.[tf];
+        if (!scan?.candles?.length) return `**${tf} OHLC:** insufficient`;
+        const recent = scan.candles.slice(-8);
+        const row = recent.map(c => `${fmtOhlc(c.open)}/${fmtOhlc(c.high)}/${fmtOhlc(c.low)}/${fmtOhlc(c.close)}`).join(' · ');
+        return `**${tf}** (O/H/L/C, oldest→newest, last ${recent.length}): ${row}`;
+    }).join('\n');
 
- **ORDER BOOK DEPTH:**
-- Spread: $${data.orderBook.spread.toFixed(2)} (${data.orderBook.spreadPercent.toFixed(3)}%)
-- Bid Depth (1%): $${(data.orderBook.bidDepth / 1000000).toFixed(2)}M | Ask Depth: $${(data.orderBook.askDepth / 1000000).toFixed(2)}M
-- Depth Imbalance: ${(data.orderBook.depthImbalance * 100).toFixed(1)}% (${data.orderBook.dominantSide.toUpperCase()})
-${data.orderBook.buyWalls.length > 0 ? `- Buy Walls: ${data.orderBook.buyWalls.slice(0, 2).map(w => `$${w.price} ($${(w.usdValue / 1000000).toFixed(2)}M)`).join(' | ')}` : '- Buy Walls: None detected'}
-${data.orderBook.sellWalls.length > 0 ? `- Sell Walls: ${data.orderBook.sellWalls.slice(0, 2).map(w => `$${w.price} ($${(w.usdValue / 1000000).toFixed(2)}M)`).join(' | ')}` : '- Sell Walls: None detected'}
-${data.orderBook.wallDistance.nearestBuyWall ? `- Nearest Buy Wall: $${data.orderBook.wallDistance.nearestBuyWall.price} (${data.orderBook.wallDistance.nearestBuyWall.distance.toFixed(2)}% below)` : ''}
-${data.orderBook.wallDistance.nearestSellWall ? `- Nearest Sell Wall: $${data.orderBook.wallDistance.nearestSellWall.price} (${data.orderBook.wallDistance.nearestSellWall.distance.toFixed(2)}% above)` : ''}
+    const weekMonthRows: Array<Array<string | number>> = [];
+    if (mc?.week) weekMonthRows.push(['week', fmtPx(mc.week.open), fmtPx(mc.week.high), fmtPx(mc.week.low), mc.prevWeek ? `${fmtPx(mc.prevWeek.low)}–${fmtPx(mc.prevWeek.high)}` : '—']);
+    if (mc?.month) weekMonthRows.push(['month', fmtPx(mc.month.open), fmtPx(mc.month.high), fmtPx(mc.month.low), mc.prevMonth ? `${fmtPx(mc.prevMonth.low)}–${fmtPx(mc.prevMonth.high)}` : '—']);
 
- **RECENT LIQUIDATIONS (1H):**
-${formatLiquidationsBlock(data.liquidations)}
+    const adxRule = data.regime.adx >= 40
+        ? `ADX ${data.regime.adx} strong trend — trade with ${data.regime.trendDirection} only; counter-trend = no trade.`
+        : data.regime.adx >= 25
+            ? `ADX ${data.regime.adx} moderate trend — prefer with-trend; counter-trend only at major structure.`
+            : data.regime.adx < 15
+                ? `ADX ${data.regime.adx} ranging — mean-reversion; treat breakouts as low-probability.`
+                : `ADX ${data.regime.adx} weak — require extra confluence.`;
 
- **ADVANCED VOLUME ANALYSIS:**
-- Relative Volume: ${data.advancedVolume.relativeVolume}x (${data.advancedVolume.trend})
-- OBV Trend: ${data.advancedVolume.obvTrend.toUpperCase()} | Divergence: ${data.advancedVolume.obvDivergence.toUpperCase()}
-- CVD: ${data.advancedVolume.cvdTrend.replace('_', ' ').toUpperCase()}
-- Volume POC: $${data.advancedVolume.volumeProfile.poc} (Price ${data.advancedVolume.volumeProfile.priceVsPOC} POC)
-- Profile Shape: ${data.advancedVolume.volumeProfile.shape.replace('_', ' ').toUpperCase()} | Price ${data.advancedVolume.volumeProfile.valueAreaPosition.toUpperCase()} value area ($${data.advancedVolume.volumeProfile.valueAreaLow} - $${data.advancedVolume.volumeProfile.valueAreaHigh}) | 70% area spans ${(data.advancedVolume.volumeProfile.valueAreaSpan * 100).toFixed(0)}% of range
-- Volume Bias: ${data.advancedVolume.volumeWeightedBias.toUpperCase()}
+    const sections: string[] = [
+        `## Hybrid market packet`,
+        mdTable(
+            ['Symbol', 'Price', '24h', 'High', 'Low', 'Vol 24h', 'Funding', 'Age', 'Quality'],
+            [[
+                data.symbol,
+                `$${data.marketData.currentPrice}`,
+                chg(data.marketData.priceChangePercent24h),
+                `$${data.marketData.price24hHigh}`,
+                `$${data.marketData.price24hLow}`,
+                mil(data.marketData.volume24h),
+                `${fundingDisplay}% (${data.fundingRateSentiment})`,
+                sourceNote,
+                qualityNote,
+            ]]
+        ),
+        `### Regime / family / confluence`,
+        mdTable(
+            ['ADX regime', 'ADX', '+DI', '-DI', 'Trend', 'Bias', 'Family', 'Fam conf', 'MTF score', 'MTF dir'],
+            [[
+                data.regime.regime.replace(/_/g, ' '),
+                data.regime.adx,
+                data.regime.plusDI,
+                data.regime.minusDI,
+                `${data.regime.trendDirection} (${data.regime.trendStrength})`,
+                data.regime.tradingBias.replace(/_/g, ' '),
+                data.patternClassification.family,
+                `${(data.patternClassification.confidence * 100).toFixed(0)}%`,
+                `${data.confluence.score}/100`,
+                `${data.confluence.direction} (${data.confluence.strength})`,
+            ]]
+        ),
+        data.regime.recommendation,
+        `Family scores: A=${data.patternClassification.scores.familyA} B=${data.patternClassification.scores.familyB} C=${data.patternClassification.scores.familyC} Ω=${data.patternClassification.scores.familyOmega}`,
+        `Aligned: ${data.confluence.alignment.slice(0, 4).join('; ') || 'none'}`,
+        `Conflicts: ${data.confluence.conflicts.slice(0, 2).join('; ') || 'none'}`,
+        `### Indicators (code-calculated)`,
+        mdTable(
+            ['TF', 'Price', 'RSI14', 'RSI', 'MACD hist', 'MACD', 'EMA20', 'EMA50', 'EMA200', 'ATR', 'Trend'],
+            tfs.map(tf => indicatorRow(tf, data.indicators[tf]))
+        ),
+        `### Key levels`,
+        mdTable(
+            ['R3', 'R2', 'R1', 'PP', 'S1', 'S2', 'S3'],
+            [[pp.r3, pp.r2, pp.r1, pp.pp, pp.s1, pp.s2, pp.s3]]
+        ),
+        `Fib (${fib.trend} trend)`,
+        mdTable(['Ratio', 'Price'], fib.levels.map(l => [l.ratio, `$${l.price}`])),
+        mdTable(
+            ['Side', 'Price', 'Source', 'Touches'],
+            [
+                ...data.enhancedKeyLevels.resistance.slice(0, 3).map(r => ['resist', `$${r.price}`, r.source, r.touchCount]),
+                ...data.enhancedKeyLevels.support.slice(0, 3).map(s => ['support', `$${s.price}`, s.source, s.touchCount]),
+            ]
+        ),
+        weekMonthRows.length > 0 ? `### Week / month (UTC)` : '',
+        weekMonthRows.length > 0 ? mdTable(['Period', 'Open', 'High', 'Low', 'Prev range'], weekMonthRows) : '',
+        data.live1h && data.marketData.currentPrice > 0
+            ? `Live 1H: open $${fmtPx(data.live1h.open)} → $${fmtPx(data.live1h.price)} · ${data.live1h.minutesLeft}m left · ${data.live1h.percentTraveled.toFixed(0)}% of range`
+            : '',
+        `### Derivatives / book / liquidations`,
+        mdTable(
+            ['OI', 'OI 24h', 'L/S', 'Top trader', 'Taker', 'Overall', 'Score'],
+            [[
+                mil(data.derivatives.openInterestValue),
+                typeof data.derivatives.oiChange24h === 'number' ? chg(data.derivatives.oiChange24h) : '—',
+                `${data.derivatives.longShortRatio.ratio.toFixed(2)} (${data.derivatives.longShortRatio.sentiment.replace(/_/g, ' ')})`,
+                `${data.derivatives.topTraderRatio.ratio.toFixed(2)} (${data.derivatives.topTraderRatio.sentiment.replace(/_/g, ' ')})`,
+                `${data.derivatives.takerBuySell.ratio.toFixed(2)} (${data.derivatives.takerBuySell.pressure.replace(/_/g, ' ')})`,
+                data.derivatives.overallSentiment.replace(/_/g, ' '),
+                data.derivatives.sentimentScore,
+            ]]
+        ),
+        mdTable(
+            ['Spread', 'Spread %', 'Bid 1%', 'Ask 1%', 'Imbalance', 'Dominant'],
+            [[
+                `$${data.orderBook.spread.toFixed(2)}`,
+                `${data.orderBook.spreadPercent.toFixed(3)}%`,
+                mil(data.orderBook.bidDepth),
+                mil(data.orderBook.askDepth),
+                `${(data.orderBook.depthImbalance * 100).toFixed(1)}%`,
+                data.orderBook.dominantSide,
+            ]]
+        ),
+        data.orderBook.buyWalls.length > 0
+            ? `Buy walls: ${data.orderBook.buyWalls.slice(0, 2).map(w => `$${w.price} (${mil(w.usdValue)})`).join(' · ')}`
+            : 'Buy walls: none',
+        data.orderBook.sellWalls.length > 0
+            ? `Sell walls: ${data.orderBook.sellWalls.slice(0, 2).map(w => `$${w.price} (${mil(w.usdValue)})`).join(' · ')}`
+            : 'Sell walls: none',
+        `Liquidations (1h)`,
+        formatLiquidationsBlock(data.liquidations),
+        `### Volume / Ichimoku / VWAP / momentum`,
+        mdTable(
+            ['RVOL', 'OBV', 'OBV div', 'CVD', 'POC', 'vs POC', 'VA', 'VA pos', 'Bias'],
+            [[
+                `${av.relativeVolume}x (${av.trend})`,
+                av.obvTrend,
+                av.obvDivergence,
+                av.cvdTrend.replace(/_/g, ' '),
+                `$${vp.poc}`,
+                vp.priceVsPOC,
+                `$${vp.valueAreaLow}–$${vp.valueAreaHigh}`,
+                vp.valueAreaPosition,
+                av.volumeWeightedBias,
+            ]]
+        ),
+        mdTable(
+            ['Ichimoku 4H', 'Cloud', 'Price vs cloud', 'TK', 'Cloud lo–hi'],
+            [[ichi.signal.replace(/_/g, ' '), ichi.cloudColor, ichi.priceVsCloud, ichi.tkCross, `$${ichi.cloudBottom}–$${ichi.cloudTop}`]]
+        ),
+        mdTable(
+            ['VWAP 1H', 'Position', '-2σ', '-1σ', '+1σ', '+2σ'],
+            [[`$${vwap.vwap}`, vwap.pricePosition.replace(/_/g, ' '), `$${vwap.lowerBand2}`, `$${vwap.lowerBand1}`, `$${vwap.upperBand1}`, `$${vwap.upperBand2}`]]
+        ),
+        mdTable(
+            ['TF', 'ROC5', 'ROC10', 'ROC20', 'State', 'Score', 'RSI div', 'MACD div'],
+            [
+                ['1h', `${m1.roc5}%`, `${m1.roc10}%`, `${m1.roc20}%`, m1.momentum.replace(/_/g, ' '), m1.momentumScore, m1.rsiDivergence || 'none', m1.macdDivergence || 'none'],
+                ['4h', `${m4.roc5}%`, `${m4.roc10}%`, '—', m4.momentum.replace(/_/g, ' '), m4.momentumScore, m4.rsiDivergence || 'none', m4.macdDivergence || 'none'],
+            ]
+        ),
+        `### Session`,
+        mdTable(
+            ['Session', 'UTC window', 'Mins in', 'Mins left', 'Kill zone', 'Vol expect', 'Condition', 'Day'],
+            [[
+                data.session.sessionName,
+                `${data.session.sessionStart}–${data.session.sessionEnd}`,
+                data.session.minutesIntoSession,
+                data.session.minutesToSessionEnd,
+                data.session.isKillZone ? `yes (${data.session.killZoneType})` : 'no',
+                data.session.volatilityExpectation,
+                data.session.suggestedAction,
+                `${data.session.dayOfWeek}${data.session.isWeekend ? ' weekend' : ''}`,
+            ]]
+        ),
+        data.session.warnings.length > 0 ? `Warnings: ${data.session.warnings.join('; ')}` : '',
+        `### Sweeps / candles / patterns`,
+        data.liquiditySweeps?.length
+            ? mdTable(['TF', 'Sweep'], data.liquiditySweeps.map(s => [s.timeframe, s.text]))
+            : 'Sweeps: none on last completed candle.',
+        mdTable(
+            ['TF', 'Sequence', 'Summary', 'Dominant'],
+            tfs.map(tf => {
+                const h = data.candleHistory[tf];
+                return [tf, h.sequence.join(''), h.summary, h.dominantTrend];
+            })
+        ),
+        formatCandleHistoryInsight(data.candleHistory),
+        mdTable(['TF', 'Pattern', 'Dir', 'Str', 'Level', 'Note'], patternRows),
+        ohlcBlocks,
+        `### Read rules`,
+        `- Numbers above are code-calculated. Cite a table cell when you name a level.`,
+        `- ADX regime is authoritative vs the chart-structure table. ${adxRule}`,
+        `- 1H ATR for stops: $${data.indicators['1h'].atr}. Volume: ${av.trend}. OBV divergence: ${av.obvDivergence}.`,
+    ].filter(Boolean);
 
- **MULTI-TIMEFRAME CONFLUENCE (MTF):**
-- ${confluenceEmoji} Score: ${data.confluence.score}/100 — ${data.confluence.direction.toUpperCase()} (${data.confluence.strength})
-- Aligned: ${data.confluence.alignment.slice(0, 4).join(', ') || 'None'}
-- Conflicts: ${data.confluence.conflicts.slice(0, 2).join(', ') || 'None'}
-${data.confluence.score >= 70 ? ' STRONG BULLISH CONFLUENCE' :
-            data.confluence.score <= 30 ? ' STRONG BEARISH CONFLUENCE' :
-                ' Mixed signals - Exercise caution'}
+    if (data.chartRepresentation) {
+        sections.push(generateChartPromptInjection(
+            data.chartRepresentation['15m'],
+            data.chartRepresentation['1h'],
+            data.chartRepresentation['4h'],
+            data.chartRepresentation['1d']
+        ));
+    }
 
- **ICHIMOKU CLOUD (4H):**
-- Signal: ${data.ichimoku['4h'].signal.replace('_', ' ').toUpperCase()}
-- Cloud Color: ${data.ichimoku['4h'].cloudColor.toUpperCase()}
-- Price vs Cloud: ${data.ichimoku['4h'].priceVsCloud.toUpperCase()}
-- TK Cross: ${data.ichimoku['4h'].tkCross.toUpperCase()}
-- Cloud: $${data.ichimoku['4h'].cloudBottom} - $${data.ichimoku['4h'].cloudTop}
-
- **VWAP (1H):**
-- VWAP: $${data.vwap['1h'].vwap}
-- Position: ${data.vwap['1h'].pricePosition.replace(/_/g, ' ').toUpperCase()}
-- Bands: $${data.vwap['1h'].lowerBand2} | $${data.vwap['1h'].lowerBand1} | VWAP | $${data.vwap['1h'].upperBand1} | $${data.vwap['1h'].upperBand2}
-
- **MOMENTUM (1H/4H):**
-- 1H ROC: 5p=${data.momentum['1h'].roc5}% | 10p=${data.momentum['1h'].roc10}% | 20p=${data.momentum['1h'].roc20}%
-- 1H State: ${data.momentum['1h'].momentum.replace(/_/g, ' ').toUpperCase()} (Score: ${data.momentum['1h'].momentumScore})
-- 1H Divergence: RSI=${data.momentum['1h'].rsiDivergence?.toUpperCase() || 'NONE'} | MACD=${data.momentum['1h'].macdDivergence?.toUpperCase() || 'NONE'}
-- 4H ROC: 5p=${data.momentum['4h'].roc5}% | 10p=${data.momentum['4h'].roc10}%
-- 4H Divergence: RSI=${data.momentum['4h'].rsiDivergence?.toUpperCase() || 'NONE'} | MACD=${data.momentum['4h'].macdDivergence?.toUpperCase() || 'NONE'}
-
- **TECHNICAL ANALYSIS (CODE-CALCULATED):**
-
-${generateTASummary(data.indicators['1d'], '1D Timeframe')}
-
-${generateTASummary(data.indicators['4h'], '4H Timeframe')}
-
-${generateTASummary(data.indicators['1h'], '1H Timeframe')}
-
-${generateTASummary(data.indicators['15m'], '15M Timeframe')}
-
- **ENHANCED KEY LEVELS:**
-**Pivot Points (4H):**
-- R3: $${data.enhancedKeyLevels.pivotPoints.daily.r3} | R2: $${data.enhancedKeyLevels.pivotPoints.daily.r2} | R1: $${data.enhancedKeyLevels.pivotPoints.daily.r1}
-- PP: $${data.enhancedKeyLevels.pivotPoints.daily.pp}
-- S1: $${data.enhancedKeyLevels.pivotPoints.daily.s1} | S2: $${data.enhancedKeyLevels.pivotPoints.daily.s2} | S3: $${data.enhancedKeyLevels.pivotPoints.daily.s3}
-
-**Fibonacci (${data.enhancedKeyLevels.fibLevels.trend.toUpperCase()} trend, full ladder):**
-${formatFibLadder(data.enhancedKeyLevels.fibLevels)}
-
-**Resistance:** ${data.enhancedKeyLevels.resistance.slice(0, 3).map(r => `$${r.price} (${r.source}${r.touchCount > 0 ? `, ${r.touchCount} touch${r.touchCount === 1 ? '' : 'es'}` : ''})`).join(' | ')}
-**Support:** ${data.enhancedKeyLevels.support.slice(0, 3).map(s => `$${s.price} (${s.source}${s.touchCount > 0 ? `, ${s.touchCount} touch${s.touchCount === 1 ? '' : 'es'}` : ''})`).join(' | ')}
-
-${(() => {
-            const mc = data.marketContext;
-            const lines: string[] = [' **WEEKLY / MONTHLY CONTEXT (UTC):**'];
-            if (mc?.week) {
-                lines.push(`- Week: Open $${fmtPx(mc.week.open)} | High $${fmtPx(mc.week.high)} | Low $${fmtPx(mc.week.low)}${mc.prevWeek ? ` (prev week: $${fmtPx(mc.prevWeek.low)} – $${fmtPx(mc.prevWeek.high)})` : ''}`);
-            }
-            if (mc?.month) {
-                lines.push(`- Month: Open $${fmtPx(mc.month.open)} | High $${fmtPx(mc.month.high)} | Low $${fmtPx(mc.month.low)}${mc.prevMonth ? ` (prev month: $${fmtPx(mc.prevMonth.low)} – $${fmtPx(mc.prevMonth.high)})` : ''}`);
-            }
-            // Price position vs the nearest key levels + value area.
-            const price = data.marketData.currentPrice;
-            const nearSupport = data.enhancedKeyLevels.support[0];
-            const nearResistance = data.enhancedKeyLevels.resistance[0];
-            if (price > 0) {
-                const bits: string[] = [];
-                if (nearSupport?.price && price >= nearSupport.price) {
-                    bits.push(`${((price - nearSupport.price) / price * 100).toFixed(2)}% above S1 ($${fmtPx(nearSupport.price)})`);
-                }
-                if (nearResistance?.price && price <= nearResistance.price) {
-                    bits.push(`${((nearResistance.price - price) / price * 100).toFixed(2)}% below R1 ($${fmtPx(nearResistance.price)})`);
-                }
-                if (bits.length > 0) {
-                    lines.push(`- Price $${fmtPx(price)} — ${bits.join(' · ')}${data.advancedVolume.volumeProfile.valueAreaPosition === 'inside' ? ' · inside value area' : ` · ${data.advancedVolume.volumeProfile.valueAreaPosition.toUpperCase()} value area`}`);
-                }
-            }
-            // Live 1h candle progress — the "is it still moving" read.
-            if (data.live1h && price > 0) {
-                lines.push(`- Live 1H candle: open $${fmtPx(data.live1h.open)} → now $${fmtPx(data.live1h.price)} | ${data.live1h.minutesLeft}m left · ${data.live1h.percentTraveled.toFixed(0)}% of range traveled`);
-            }
-            return lines.join('\n');
-        })()}
-
-${generateSessionSummary(data.session)}
-
- **RECENT LIQUIDITY SWEEPS (last completed candle per TF):**
-${data.liquiditySweeps && data.liquiditySweeps.length > 0
-            ? data.liquiditySweeps.map(s => `- ${s.timeframe}: ${s.text}`).join('\n')
-            : '- None in the last completed candle.'}
-
- **CANDLE HISTORY (Last 30 Completed):**
-- 1d (Macro trend): ${data.candleHistory['1d'].sequence.join('')} (${data.candleHistory['1d'].summary}) ${data.candleHistory['1d'].dominantTrend === 'bullish' ? '' : data.candleHistory['1d'].dominantTrend === 'bearish' ? '' : '↔'}
-- 4h (HTF bias):  ${data.candleHistory['4h'].sequence.join('')} (${data.candleHistory['4h'].summary}) ${data.candleHistory['4h'].dominantTrend === 'bullish' ? '' : data.candleHistory['4h'].dominantTrend === 'bearish' ? '' : '↔'}
-- 1h (Key Levels):  ${data.candleHistory['1h'].sequence.join('')} (${data.candleHistory['1h'].summary}) ${data.candleHistory['1h'].dominantTrend === 'bullish' ? '' : data.candleHistory['1h'].dominantTrend === 'bearish' ? '' : '↔'}
-- 15m (Entry Confirmation): ${data.candleHistory['15m'].sequence.join('')} (${data.candleHistory['15m'].summary}) ${data.candleHistory['15m'].dominantTrend === 'bullish' ? '' : data.candleHistory['15m'].dominantTrend === 'bearish' ? '' : '↔'}
-
-${data.detectedPatterns ? (() => {
-            const formatTfPatterns = (tf: HybridTimeframe, role: string): string => {
-                const scan = data.detectedPatterns[tf];
-                if (!scan || scan.windowSize === 0) {
-                    return `- ${tf} (${role}): Insufficient data for pattern detection.`;
-                }
-                // Show the most recent / highest-strength patterns (top 8 —
-                // the detector now covers the full classical set, so the
-                // model gets the complete "what a human sees" picture).
-                const top = [...scan.patterns]
-                    .sort((a, b) => b.strength - a.strength)
-                    .slice(0, 8);
-                if (top.length === 0) {
-                    return `- ${tf} (${role}): No notable patterns in the last ${scan.windowSize} candles.`;
-                }
-                const lines = top.map(p => {
-                    const dirIcon = p.direction === 'bullish' ? '🟢' : p.direction === 'bearish' ? '🔴' : '⚪';
-                    const level = p.priceLevel !== undefined ? ` @ $${p.priceLevel}` : '';
-                    return `     ${dirIcon} ${p.name} (idx ${p.index}, strength ${(p.strength * 100).toFixed(0)}%)${level} — ${p.note ?? ''}`;
-                });
-                // Add trend structure line
-                const struct = `     Structure: HH=${scan.higherHighs} HL=${scan.higherLows} LH=${scan.lowerHighs} LL=${scan.lowerLows}` +
-                    (scan.recentSwingHigh !== undefined ? ` | swingHi=$${scan.recentSwingHigh}` : '') +
-                    (scan.recentSwingLow !== undefined ? ` swingLo=$${scan.recentSwingLow}` : '');
-                return `- ${tf} (${role}) — last ${scan.windowSize} candles:\n${lines.join('\n')}\n${struct}`;
-            };
-            return ` **DETECTED CANDLE PATTERNS (last 30 candles per timeframe):**
-${formatTfPatterns('1d', 'Macro trend')}
-${formatTfPatterns('4h', 'HTF bias')}
-${formatTfPatterns('1h', 'Key level reactions')}
-${formatTfPatterns('15m', 'Entry timing & structure')}
-`;
-        })() : ''}
-
-${data.detectedPatterns ? (() => {
-            const fmtPrice = (v: number): string => {
-                const n = Number(v);
-                if (!isFinite(n)) return '?';
-                return n >= 1000 ? n.toFixed(0) : n >= 1 ? n.toFixed(2) : n.toFixed(6);
-            };
-            // The RAW candle data (O/H/L/C) — the "see the chart like a
-            // human" layer: wick/body structure, gaps and sweeps are visible
-            // in the numbers, not just the green/red sequence above.
-            const formatCandleRow = (tf: HybridTimeframe, role: string): string => {
-                const scan = data.detectedPatterns![tf];
-                if (!scan || !scan.candles || scan.candles.length === 0) {
-                    return `- ${tf} (${role}): Insufficient candle data.`;
-                }
-                const recent = scan.candles.slice(-15);
-                const row = recent
-                    .map(c => `${fmtPrice(c.open)}/${fmtPrice(c.high)}/${fmtPrice(c.low)}/${fmtPrice(c.close)}`)
-                    .join(' | ');
-                return `- ${tf} (${role}) — last ${recent.length} candles (O/H/L/C, oldest → newest):\n    ${row}`;
-            };
-            return ` **CANDLE DATA (RAW OHLC — read like a chart):**
-${formatCandleRow('1d', 'Macro trend')}
-${formatCandleRow('4h', 'HTF bias')}
-${formatCandleRow('1h', 'Key level reactions')}
-${formatCandleRow('15m', 'Entry timing & structure')}
-`;
-        })() : ''}
-
- **TIMEFRAME PURPOSE GUIDE:**
-- 1D: Macro trend and major support/resistance (the weekly context)
-- 4H & 1H: Key price levels and intraday direction
-- 15m: Market structure (BOS, CHoCH, HH/HL, LH/LL) and entry timing
-
- **Candle History Insight:**
-${formatCandleHistoryInsight(data.candleHistory)}
-
- **CRITICAL INSTRUCTIONS:**
-1. Use EXACT prices and indicator values - they are CODE-CALCULATED.
-2. Consider REGIME (${data.regime.regime}) when choosing strategy: ${data.regime.tradingBias}. NOTE: the NUMERIC CHART REPRESENTATION block below uses a separate state-based classifier and may label the same candles RANGING — when they disagree, THIS ADX REGIME IS AUTHORITATIVE for direction and bias; treat chart-representation as context only (trend maturity, momentum, structure).
-3. Check DERIVATIVES sentiment (${data.derivatives.overallSentiment}) for positioning bias.
-4. OBV Divergence "${data.advancedVolume.obvDivergence}" is a ${data.advancedVolume.obvDivergence !== 'none' ? 'KEY SIGNAL' : 'non-factor'}.
-5. Session is ${data.session.sessionName} - volatility expectation: ${data.session.volatilityExpectation}.
-6. Use Pivot/Fib levels for precise entry, SL, and TP placement.
-7. MTF Confluence Score ${data.confluence.score}/100 indicates ${data.confluence.strength} signal strength.
-8. ** CANDLE HISTORY (MANDATORY CITATION):** You MUST cite the Candle History data above in your analysis:
-   - Cite 1D/4H counts for macro direction (e.g., "1D shows ${data.candleHistory['1d'].summary}")
-   - Cite 1H counts for intraday key-level direction
-   - Cite 15m for structure and entry timing reasoning
-   - If proposing direction AGAINST dominant HTF candle trend, you MUST provide strong justification.
-
- **ACCURACY VALIDATION REQUIREMENTS:**
-8. **R:R MINIMUM:** High confidence = 2:1, Medium = 1.5:1, Low = 1.2:1
-9. **ATR STOP RULE:** Stop loss MUST be >= 1x ATR ($${data.indicators['1h'].atr}) from entry
-10. **VOLUME CHECK:** ${data.advancedVolume.trend === 'low' ? ' LOW VOLUME - Cap confidence at Medium for breakouts' : ' Volume adequate'}
-11. **CONFLUENCE RULE:** ${data.confluence.score >= 65 || data.confluence.score <= 35 ? ' Strong confluence - High confidence possible' : ' Weak/mixed confluence - Cap at Medium confidence'}
-12. **DIVERGENCE CHECK:** ${data.momentum['1h'].rsiDivergence !== 'none' || data.momentum['4h'].rsiDivergence !== 'none' ? ' DIVERGENCE DETECTED - Increases reversal confidence' : 'No major divergence'}
-
- **REGIME TRADING RULES (ADX: ${data.regime.adx}):**
-${data.regime.adx >= 40 ? `- STRONG TREND: Trade WITH the trend only. Counter-trend = AVOID.
-- If ${data.regime.trendDirection === 'bullish' ? 'proposing SHORT' : 'proposing LONG'}: You MUST downgrade confidence to LOW or AVOID.` :
-            data.regime.adx >= 25 ? `- MODERATE TREND (ADX 25-40): Trade WITH the trend, but require extra confirmation. Counter-trend only at major structure levels.` :
-                data.regime.adx < 15 ? `- RANGING MARKET: Use mean-reversion strategy. Breakout trades will likely fail.
-- If proposing breakout trade: Add warning about low ADX range-bound price action.` :
-                    `- WEAK/NO TREND: No directional edge from ADX. Require confluence from other signals before entry.`}
-
- **DEVIL'S ADVOCATE (MANDATORY):**
-Before finalizing, you MUST provide:
-1. Three reasons this trade could FAIL
-2. The specific price action that invalidates the setup
-3. Crowded trade warning if funding rate > 0.01% or L/S ratio extreme
-
-${data.chartRepresentation ? generateChartPromptInjection(
-                    data.chartRepresentation['15m'],
-                    data.chartRepresentation['1h'],
-                    data.chartRepresentation['4h'],
-                    data.chartRepresentation['1d']
-                ) : ''}
-═══════════════════════════════════════════════════════════════
-`;
+    return sections.join('\n\n');
 };
 
 /**

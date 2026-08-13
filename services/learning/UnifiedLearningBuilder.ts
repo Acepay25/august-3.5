@@ -153,8 +153,8 @@ export const buildUnifiedLearningContext = (
 ${parts.join('\n\n')}
 
 ═══════════════════════════════════════════════════════════════
-⚠️ You MUST reference this learning context in your analysis.
-If proposing a setup similar to past LOSSES, provide explicit justification.
+Use this learning context only if it matches this coin, direction, or regime.
+Otherwise ignore it. If a matching past LOSS is similar, justify why this setup differs.
 ═══════════════════════════════════════════════════════════════
 `;
 

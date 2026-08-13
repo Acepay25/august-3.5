@@ -425,41 +425,16 @@ export const generateTASummary = (
     indicators: TechnicalIndicators,
     timeframe: string
 ): string => {
-    return `
-**${timeframe} Technical Analysis (Code-Calculated):**
-
- **Price:** $${indicators.currentPrice}
- **Position:** ${indicators.pricePosition}
- **Trend:** ${indicators.trendStrength.replace('_', ' ').toUpperCase()}
-
-**RSI:**
-- RSI(6): ${indicators.rsi.rsi6} | RSI(12): ${indicators.rsi.rsi12} | RSI(14): ${indicators.rsi.rsi14} | RSI(24): ${indicators.rsi.rsi24}
-- Status: ${indicators.rsiTrend.toUpperCase()}
-
-**MACD:**
-- DIF: ${indicators.macd.dif} | DEA: ${indicators.macd.dea} | Histogram: ${indicators.macd.histogram}
-- Trend: ${indicators.macd.trend.toUpperCase()}
-
-**Moving Averages (MA/SMA):**
-- MA5: $${indicators.sma.ma5} | MA10: $${indicators.sma.ma10} | MA20: $${indicators.sma.ma20}
-- MA30: $${indicators.sma.ma30} | MA60: $${indicators.sma.ma60} | MA200: $${indicators.sma.ma200}
-
-**Exponential Moving Averages (EMA):**
-- EMA5: $${indicators.ema.ema5} | EMA9: $${indicators.ema.ema9} | EMA13: $${indicators.ema.ema13}
-- EMA20: $${indicators.ema.ema20} | EMA50: $${indicators.ema.ema50} | EMA200: $${indicators.ema.ema200}
-
-**Bollinger Bands:**
-- Upper: $${indicators.bollingerBands.upper} | Middle: $${indicators.bollingerBands.middle} | Lower: $${indicators.bollingerBands.lower}
-- Bandwidth: ${indicators.bollingerBands.bandwidth}% | %B: ${indicators.bollingerBands.percentB}%
-
-**Stochastic:**
-- K: ${indicators.stochastic.k} | D: ${indicators.stochastic.d} | J: ${indicators.stochastic.j}
-
-**Volume:**
-- Current: ${indicators.volume.current} | Average: ${indicators.volume.average} | Trend: ${indicators.volume.trend.toUpperCase()}
-
-**ATR(14):** $${indicators.atr} (${indicators.atrPercent}% of price)
-`.trim();
+    const trend = indicators.trendStrength.replace(/_/g, ' ');
+    return [
+        `**${timeframe}** — price $${indicators.currentPrice} · ${indicators.pricePosition} · ${trend}`,
+        '| RSI6 | RSI12 | RSI14 | RSI24 | RSI | MACD DIF | DEA | Hist | MACD | Stoch K/D/J | ATR | ATR% | Vol |',
+        '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+        `| ${indicators.rsi.rsi6} | ${indicators.rsi.rsi12} | ${indicators.rsi.rsi14} | ${indicators.rsi.rsi24} | ${indicators.rsiTrend} | ${indicators.macd.dif} | ${indicators.macd.dea} | ${indicators.macd.histogram} | ${indicators.macd.trend} | ${indicators.stochastic.k}/${indicators.stochastic.d}/${indicators.stochastic.j} | ${indicators.atr} | ${indicators.atrPercent}% | ${indicators.volume.trend} |`,
+        '| EMA5 | EMA9 | EMA20 | EMA50 | EMA200 | SMA20 | SMA50 | SMA200 | BB U/M/L | BW | %B |',
+        '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+        `| ${indicators.ema.ema5} | ${indicators.ema.ema9} | ${indicators.ema.ema20} | ${indicators.ema.ema50} | ${indicators.ema.ema200} | ${indicators.sma.ma20} | ${indicators.sma.ma50} | ${indicators.sma.ma200} | ${indicators.bollingerBands.upper}/${indicators.bollingerBands.middle}/${indicators.bollingerBands.lower} | ${indicators.bollingerBands.bandwidth}% | ${indicators.bollingerBands.percentB}% |`,
+    ].join('\n');
 };
 
 /**

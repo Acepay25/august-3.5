@@ -6,6 +6,7 @@ import {
     savePromptOverride,
     resetPromptOverride,
     resetAllPromptOverrides,
+    validatePromptOverride,
 } from '../../services/infrastructure/PromptOverrideService';
 import { useToastActions } from '../shared/Toast';
 import { useConfirmDialog } from '../shared/ConfirmDialog';
@@ -74,6 +75,7 @@ const PromptManager: React.FC<PromptManagerProps> = ({ username }) => {
     );
     const isModified = selectedId ? overrides[selectedId] !== undefined : false;
     const modifiedCount = Object.keys(overrides).length;
+    const draftWarnings = useMemo(() => validatePromptOverride(draft), [draft]);
 
     // Categories in display order (known groups first, unknown sorted).
     const allGroups = useMemo(() => {
@@ -168,14 +170,18 @@ const PromptManager: React.FC<PromptManagerProps> = ({ username }) => {
             setIsDirty(false);
             // Show the saved result rendered, like re-opening the md file.
             setIsPreview(true);
-            toast.success('Prompt updated', `"${selectedEntry.name}" now applies to new analyses.`);
+            if (draftWarnings.length > 0) {
+                toast.success('Prompt updated', `Saved with ${draftWarnings.length} advisory warning${draftWarnings.length === 1 ? '' : 's'}.`);
+            } else {
+                toast.success('Prompt updated', `"${selectedEntry.name}" now applies to new analyses.`);
+            }
         } catch (e) {
             console.error('[PromptManager] Save failed:', e);
             toast.error('Could not save', e instanceof Error ? e.message : 'Unknown error');
         } finally {
             setIsSaving(false);
         }
-    }, [selectedEntry, draft, activeUser, toast]);
+    }, [selectedEntry, draft, draftWarnings, activeUser, toast]);
 
     const handleResetOne = useCallback(async () => {
         if (!selectedEntry) return;
@@ -270,7 +276,14 @@ const PromptManager: React.FC<PromptManagerProps> = ({ username }) => {
                             )}
                         </div>
                     </div>
-                    <p className="text-sm text-zinc-500 mb-8">{selectedEntry.description}</p>
+                    <p className="text-sm text-zinc-500 mb-4">{selectedEntry.description}</p>
+                    {draftWarnings.length > 0 && (
+                        <ul className="mb-6 list-disc space-y-1 pl-5 text-sm text-zinc-400">
+                            {draftWarnings.map(w => (
+                                <li key={w}>{w}</li>
+                            ))}
+                        </ul>
+                    )}
                     <div className="flex-1 min-h-[320px] rounded-xl border border-zinc-800 bg-zinc-900 overflow-hidden flex flex-col">
                         {isPreview ? (
                             <div className="flex-1 overflow-y-auto custom-scrollbar px-8 py-8 lg:px-10 lg:py-10">

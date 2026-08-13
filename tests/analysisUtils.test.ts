@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { recalculateAnalysisMetrics, parseProseTradePlan, parseMarkdownTradePlan, tradePlanToAnalysis, stripPlanTags, buildAnalysisMarkdown, buildSupplementMarkdown, buildTradingSignalMarkdown, resolveLevelHitOdds, extractSignalStrategyText, looksLikeModeratorVerdictDump } from '../utils/analysisUtils';
+import { recalculateAnalysisMetrics, parseProseTradePlan, parseMarkdownTradePlan, tradePlanToAnalysis, stripPlanTags, buildAnalysisMarkdown, buildSupplementMarkdown, buildTradingSignalMarkdown, resolveLevelHitOdds, extractSignalStrategyText, looksLikeModeratorVerdictDump, explainSignalConfidence, signalDirectionLabel, explainNoTrade } from '../utils/analysisUtils';
 import { MASTER_TRADE_PLAN_MARKDOWN } from '../constants/schemas';
 
 describe('analysisUtils', () => {
@@ -449,7 +449,7 @@ Confidence: High. The sweep-reclaim pattern aligns across 15m and 1h.`;
       // The gate verdict lives in the supplement builder and always renders.
       const sup = buildSupplementMarkdown(analysis);
       expect(sup).toContain('**Validation gate**');
-      expect(sup).toContain('Verdict: PASS');
+      expect(sup).toContain('| Verdict | PASS |');
     });
 
     it('omits empty sections', () => {
@@ -477,8 +477,9 @@ Confidence: High. The sweep-reclaim pattern aligns across 15m and 1h.`;
       expect(md).toContain('**Trading signal**');
       expect(md).toContain('**Sell**');
       expect(md).toContain('**Levels**');
-      expect(md).toContain('Entry: **63710**');
-      expect(md).toContain('Stop Loss: **64200**');
+      expect(md).toContain('| Level | Price | Hit |');
+      expect(md).toContain('| Entry | **63710** |');
+      expect(md).toContain('| Stop Loss | **64200** |');
       expect(md).not.toContain('What exact 1H BOS');
       expect(md).not.toContain('**Setup**');
       expect(md).not.toContain('**Market Conditions**');
@@ -492,7 +493,7 @@ Confidence: High. The sweep-reclaim pattern aligns across 15m and 1h.`;
       expect(md).not.toContain('MODERATOR VERDICT');
       expect(md).not.toContain('Technical Analyst');
       expect(md).toContain('**Levels**');
-      expect(md).toContain('Entry: **63710**');
+      expect(md).toContain('| Entry | **63710** |');
     });
 
     it('keeps a short strategy line without a verdict dump', () => {
@@ -512,6 +513,45 @@ Confidence: High. The sweep-reclaim pattern aligns across 15m and 1h.`;
       });
       expect(md).toContain('**Invalidation**');
       expect(md).toContain('1H close above rejection');
+    });
+
+    it('explains why confidence is Medium / Avoid / High', () => {
+      const medium = buildTradingSignalMarkdown(analysis);
+      expect(medium).toContain('**Confidence**');
+      expect(medium).toContain('Medium because');
+      expect(medium).toContain('62% probability maps to Medium');
+
+      const avoid = buildTradingSignalMarkdown({
+        ...analysis,
+        confidence: 'Avoid',
+        probability: 38,
+        riskVeto: 'Missing stop loss on the final plan',
+      });
+      expect(avoid).toContain('Avoid because');
+      expect(avoid).toContain('Missing stop loss');
+    });
+  });
+
+  describe('explainSignalConfidence', () => {
+    it('cites the gate cap and a confidence downgrade', () => {
+      const text = explainSignalConfidence({
+        direction: 'Short',
+        confidence: 'Low',
+        originalConfidence: 'High',
+        probability: 48,
+        gateResult: {
+          passed: false,
+          confidenceCap: 0.55,
+          penalties: { dataIntegrity: 0, patternMemory: 0.12, htfConflict: 0, volumeContext: 0, rawTotal: 0.12, effectiveTotal: 0.12 },
+          familyBias: { A: 0, B: 0, C: 0, Omega: 0, reasoning: [] },
+          warnings: [],
+          insights: [],
+        },
+      } as any);
+      expect(text).toContain('Low because');
+      expect(text).toContain('downgraded from High');
+      expect(text).toContain('capped conviction at 55%');
+      expect(text).toContain('pattern memory');
     });
   });
 
@@ -551,6 +591,20 @@ Confidence: High. The sweep-reclaim pattern aligns across 15m and 1h.`;
         strategy: '- **SL Probability:** 31%\n- **TP1 Probability:** 68%\n- **TP2 Probability:** 49%\n- **TP3 Probability:** 22%',
       } as any);
       expect(odds).toEqual({ sl: 31, tp: [68, 49, 22] });
+    });
+  });
+
+  describe('signalDirectionLabel', () => {
+    it('maps Long/Short and treats Avoid as no trade', () => {
+      expect(signalDirectionLabel('Long', 'High')).toBe('Buy');
+      expect(signalDirectionLabel('Short', 'Medium')).toBe('Sell');
+      expect(signalDirectionLabel('Short', 'Avoid')).toBe('No trade');
+      expect(signalDirectionLabel('Neutral', 'Medium')).toBe('No trade');
+    });
+
+    it('explains No trade as skip, not a Buy/Sell', () => {
+      expect(explainNoTrade({ confidence: 'Avoid' })).toMatch(/no trade to take/i);
+      expect(explainNoTrade({ direction: 'Neutral', confidence: 'Medium' })).toMatch(/no directional edge/i);
     });
   });
 });

@@ -606,6 +606,11 @@ export const applySemanticFixups = (raw: CoercedTradeAnalysis): TradeAnalysis =>
     analysis.probability = conf === 'High' ? 85 : conf === 'Low' ? 45 : conf === 'Avoid' ? 15 : 65;
   }
 
+  // Avoid is a no-trade grade, never a Long/Short ticket.
+  if (analysis.confidence === 'Avoid') {
+    analysis.direction = 'Neutral';
+  }
+
   // ── Pattern family fallback mined from marketConditions.pattern ──
   if (!analysis.detectedPatternFamily && analysis.marketConditions?.pattern) {
     const pat = analysis.marketConditions.pattern.toUpperCase();

@@ -39,11 +39,14 @@ const DebateSummary: React.FC<DebateSummaryProps> = ({ debateTurns, analysis }) 
 
     if (!summary) return null;
 
-    const directionColor = summary.direction === 'Long'
-        ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
-        : summary.direction === 'Short'
-            ? 'text-rose-400 bg-rose-500/10 border-rose-500/20'
-            : 'text-zinc-400 bg-zinc-500/10 border-zinc-500/20';
+    const isNoTrade = summary.confidence === 'Avoid' || summary.direction === 'Neutral';
+    const directionColor = isNoTrade
+        ? 'text-zinc-400 bg-zinc-500/10 border-zinc-500/20'
+        : summary.direction === 'Long'
+            ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+            : summary.direction === 'Short'
+                ? 'text-rose-400 bg-rose-500/10 border-rose-500/20'
+                : 'text-zinc-400 bg-zinc-500/10 border-zinc-500/20';
 
     const confidenceColor = summary.confidence === 'High'
         ? 'text-emerald-400'
@@ -62,7 +65,7 @@ const DebateSummary: React.FC<DebateSummaryProps> = ({ debateTurns, analysis }) 
                 <div className="flex min-w-0 flex-1 items-center gap-2">
                     <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">TL;DR</span>
                     <span className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[10px] font-bold uppercase ${directionColor}`}>
-                        {signalDirectionLabel(summary.direction)}
+                        {signalDirectionLabel(summary.direction, summary.confidence)}
                     </span>
                     {summary.grade && (
                         <span className="inline-flex items-center rounded border border-white/10 bg-zinc-800 px-1.5 py-0.5 text-[10px] font-bold text-zinc-300">

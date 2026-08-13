@@ -13,6 +13,7 @@ import { trackTradeOutcome, mapRegimeToKey } from '../services/backtesting/Model
 import { trackConfluenceOutcome, calculateConfluenceScore } from '../services/analysis/TimeframeConfluenceService';
 import { SLOptimizationData } from '../services/backtesting/StopLossOptimizerService';
 import { ConfidenceLevel } from '../services/validation/ConfidenceCalibrationService';
+import { syncClosedTradeToNotebook } from '../services/learning/SkillMemoryService';
 
 // Maximum number of trade summaries (Recent Insights) to keep - enforces FIFO when limit reached
 export const MAX_TRADE_SUMMARIES = 100;
@@ -276,6 +277,10 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         setLoggedTrades(prev => prev.some(t => t.id === loggedTrade.id) ? prev : [loggedTrade, ...prev]);
         updateMessages(prev => prev.map(m => m.id === message.id ? { ...m, outcome } : m));
 
+        const notebookUser = localStorage.getItem('last_active_user') || 'default';
+        void syncClosedTradeToNotebook(loggedTrade, [loggedTrade, ...loggedTrades.filter(t => t.id !== loggedTrade.id)], notebookUser)
+            .catch(err => console.warn('[TraderNotebook] Closed-trade sync failed:', err));
+
         // === ThinkingStore: Update outcome for all thinking records of this trade ===
         // This correlates the stored reasoning with the actual outcome (WIN/LOSS),
         // enabling outcome-conditioned training data.
@@ -353,7 +358,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         // Auto-add to Recent Insights with FIFO enforcement
         void autoAddRecentInsight(loggedTrade);
 
-    }, [activeConversationLeverage, moderatorProviderId, moderatorModel, updateMessages, memoryModel, memoryConfig, useAlgorithmicInsights, toast, autoAddRecentInsight]);
+    }, [activeConversationLeverage, moderatorProviderId, moderatorModel, updateMessages, memoryModel, memoryConfig, useAlgorithmicInsights, toast, autoAddRecentInsight, loggedTrades]);
 
     // ─── Data Capture Modal Handlers ──────────────────────────────────────
 

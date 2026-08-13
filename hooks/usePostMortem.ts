@@ -8,8 +8,8 @@ import * as ensembleService from '../services/providers/ensembleService';
 import * as MemoryService from '../services/learning/MemoryService';
 import { jobQueue, JobType } from '../services/infrastructure/JobQueueService';
 import { buildSeverityPostMortemContext } from '../services/learning/InsightExtractionService';
-import { appendDiaryEntry, syncRecurringMistakes, writeModelNote } from '../services/learning/MemoryFilesService';
-import { applySkillEvidence, maybeUpsertSkill, consolidateSkills } from '../services/learning/SkillMemoryService';
+import { writeModelNote } from '../services/learning/MemoryFilesService';
+import { syncClosedTradeToNotebook } from '../services/learning/SkillMemoryService';
 import { applyOutcomeToRules } from '../services/learning/LearningRulesService';
 import { writeNotebookNoteFromPostMortem } from '../services/learning/NotebookWriterService';
 import { MAX_TRADE_SUMMARIES } from './useTradeLogging';
@@ -645,12 +645,8 @@ Please investigate this discrepancy in your analysis.
                 // fail the post-mortem.
                 try {
                     const notebookUser = localStorage.getItem('last_active_user') || 'default';
-                    await appendDiaryEntry({ ...tradeToUpdate, postMortem: finalPostMortemReport }, notebookUser);
-                    await syncRecurringMistakes(loggedTradesRef.current, notebookUser);
                     const closed = { ...tradeToUpdate, postMortem: finalPostMortemReport };
-                    await applySkillEvidence(closed, notebookUser);
-                    await maybeUpsertSkill(closed, loggedTradesRef.current, notebookUser);
-                    await consolidateSkills(notebookUser);
+                    await syncClosedTradeToNotebook(closed, loggedTradesRef.current, notebookUser);
                     applyOutcomeToRules(closed);
                 } catch (notebookError) {
                     console.warn('[TraderNotebook] Memory-file sync failed (non-fatal):', notebookError);

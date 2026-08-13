@@ -175,7 +175,8 @@ export const verifyHistoricalOutcome = async (
     analysis: TradeAnalysis,
     symbol: string,
     analysisTimestamp: string,
-    selectedEntryIndices?: number[]
+    selectedEntryIndices?: number[],
+    options?: { excludeFormingCandle?: boolean }
 ): Promise<HistoricalOutcomeResult> => {
     console.log(`[AutoCapture] Verifying historical outcome for ${symbol} from ${analysisTimestamp}`);
 
@@ -369,7 +370,8 @@ export const verifyHistoricalOutcome = async (
         // and simulateFromAnalysisTime: TP1 arms a breakeven stop (TP2/TP3 are
         // only realized before it), the 150% zone is disarmed after TP1, and
         // the final (still-forming) candle is excluded from live scans.
-        const scan = scanTradeOutcome(klines, entryPrice, stopLoss, [tp1, tp2, tp3], isLong, { startIndex: entryTriggeredAtIndex, excludeFormingCandle: true });
+        const excludeFormingCandle = options?.excludeFormingCandle !== false;
+        const scan = scanTradeOutcome(klines, entryPrice, stopLoss, [tp1, tp2, tp3], isLong, { startIndex: entryTriggeredAtIndex, excludeFormingCandle });
         const resolution = resolveOutcomeFromScan(scan);
 
         const slTouched = scan.slTouched;

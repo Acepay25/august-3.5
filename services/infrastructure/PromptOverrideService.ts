@@ -68,6 +68,29 @@ export const savePromptOverride = async (id: string, text: string, username: str
     }
 };
 
+const ALLOWED_PLACEHOLDERS = new Set([
+    'NAME', 'ROUND', 'COIN', 'COINNAME', 'DIRECTION', 'TIMEFRAME',
+    'ANALYSTS', 'DIALOGUE_INSTRUCTIONS', 'CONTEXT', 'QUESTION',
+]);
+
+/** Advisory checks for user-edited prompts. Does not block save. */
+export const validatePromptOverride = (text: string): string[] => {
+    const warnings: string[] = [];
+    if (/JSON_PLAN/i.test(text)) {
+        warnings.push('Contains leftover JSON_PLAN tags — the harness now uses a labeled markdown plan.');
+    }
+    if (/\bI am an AI\b/i.test(text)) {
+        warnings.push('Contains “I am an AI” hedging — that fights the analyst persona.');
+    }
+    const leftovers = [...text.matchAll(/\{\{([A-Z0-9_]+)\}\}/g)]
+        .map(m => m[1])
+        .filter(name => !ALLOWED_PLACEHOLDERS.has(name));
+    if (leftovers.length > 0) {
+        warnings.push(`Unknown placeholders: ${[...new Set(leftovers)].map(n => `{{${n}}}`).join(', ')}`);
+    }
+    return warnings;
+};
+
 /** Remove a single override (back to the built-in default). */
 export const resetPromptOverride = async (id: string, username: string): Promise<void> => {
     delete overridesCache[id];

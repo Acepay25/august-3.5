@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { DebateTurn, TradeAnalysis } from '../../types';
 import MarkdownContent from '../shared/MarkdownContent';
-import { extractSignalStrategyText, formatInvalidationLine, resolveLevelHitOdds, signalDirectionLabel } from '../../utils/analysisUtils';
+import { explainSignalConfidence, extractSignalStrategyText, formatInvalidationLine, isNoTradeSignal, explainNoTrade, resolveLevelHitOdds, signalDirectionLabel } from '../../utils/analysisUtils';
 
 interface TradingSignalCardProps {
     analysis: TradeAnalysis;
@@ -28,15 +28,41 @@ const directionChip = (direction?: string): string => {
 };
 
 const directionText = (direction?: string): string => {
-    if (direction === 'Long') return 'font-semibold text-emerald-400';
-    if (direction === 'Short') return 'font-semibold text-rose-400';
-    return 'font-semibold text-zinc-50';
+    if (direction === 'Long') return 'text-emerald-400';
+    if (direction === 'Short') return 'text-rose-400';
+    return 'text-zinc-50';
 };
 
 const confidenceColor = (confidence?: string): string => {
     if (confidence === 'High') return 'text-emerald-400';
     if (confidence === 'Medium') return 'text-amber-400';
     return 'text-rose-400';
+};
+
+const Stat: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
+    <div className="min-w-0">
+        <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">{label}</div>
+        <div className="mt-1 truncate text-base font-semibold leading-tight sm:text-lg">{children}</div>
+    </div>
+);
+
+interface LevelRow {
+    label: string;
+    price: string;
+    hit?: number;
+    tone: 'entry' | 'sl' | 'tp';
+}
+
+const priceTone = (tone: LevelRow['tone']): string => {
+    if (tone === 'sl') return 'text-rose-400';
+    if (tone === 'tp') return 'text-emerald-400';
+    return 'text-zinc-100';
+};
+
+const hitTone = (tone: LevelRow['tone']): string => {
+    if (tone === 'sl') return 'text-rose-400';
+    if (tone === 'tp') return 'text-emerald-400';
+    return 'text-zinc-600';
 };
 
 const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
@@ -51,18 +77,37 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
     const sl = analysis.stopLoss;
     const tps = (analysis.takeProfit ?? []).map(tp => tp.price).filter(Boolean);
     const rr = typeof analysis.rrRatio === 'number' ? analysis.rrRatio : undefined;
-    const dirLabel = signalDirectionLabel(analysis.direction);
+    const dirLabel = signalDirectionLabel(analysis.direction, analysis.confidence);
+    const noTrade = isNoTradeSignal(analysis.direction, analysis.confidence);
+    const noTradeWhy = useMemo(
+        () => (noTrade ? explainNoTrade(analysis) : ''),
+        [analysis, noTrade],
+    );
     const odds = useMemo(
         () => resolveLevelHitOdds(analysis, debateTurns),
         [analysis, debateTurns],
     );
-    const slHit = odds.sl;
-    const tpHit = (level: number): number | undefined => odds.tp[level - 1];
     const why = useMemo(
         () => extractSignalStrategyText(analysis, debateTurns),
         [debateTurns, analysis],
     );
     const invalidation = useMemo(() => formatInvalidationLine(analysis), [analysis]);
+    const confidenceWhy = useMemo(() => explainSignalConfidence(analysis), [analysis]);
+
+    const levelRows = useMemo((): LevelRow[] => {
+        const rows: LevelRow[] = [];
+        if (entry) rows.push({ label: 'Entry', price: formatLevel(entry), tone: 'entry' });
+        if (sl) rows.push({ label: 'Stop Loss', price: formatLevel(sl), hit: odds.sl, tone: 'sl' });
+        tps.slice(0, 3).forEach((tp, i) => {
+            rows.push({
+                label: `TP${i + 1}`,
+                price: formatLevel(tp),
+                hit: odds.tp[i],
+                tone: 'tp',
+            });
+        });
+        return rows;
+    }, [entry, sl, tps, odds]);
 
     return (
         <div className="status-surface overflow-hidden rounded-2xl border border-white/5 bg-zinc-900/80 shadow-lg">
@@ -79,6 +124,9 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
                         {analysis.confidence}
                     </span>
                 )}
+                {typeof analysis.probability === 'number' && (
+                    <span className="text-[11px] tabular-nums text-zinc-500">{Math.round(analysis.probability)}%</span>
+                )}
                 {isLatest && onReRun && (
                     <button
                         type="button"
@@ -91,60 +139,65 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
                 )}
             </div>
 
-            <div className="space-y-5 border-t border-white/5 px-4 py-4 sm:px-5">
-                {(entry || sl || tps.length > 0 || rr !== undefined || analysis.direction) && (
-                    <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+            <div className="space-y-4 border-t border-white/5 px-4 py-4 sm:px-5">
+                {(analysis.direction || rr !== undefined) && (
+                    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
                         {analysis.direction && (
-                            <div>
-                                <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Direction</div>
-                                <div className={`mt-1 text-lg font-semibold uppercase tracking-wide ${directionText(analysis.direction)}`}>
-                                    {dirLabel}
-                                </div>
-                            </div>
-                        )}
-                        {entry && (
-                            <div>
-                                <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Entry</div>
-                                <div className="mt-1 text-lg font-semibold tabular-nums text-zinc-100">{formatLevel(entry)}</div>
-                            </div>
-                        )}
-                        {sl && (
-                            <div>
-                                <div className="flex items-baseline justify-between gap-2">
-                                    <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Stop Loss</div>
-                                    {slHit !== undefined && (
-                                        <div className="text-[11px] font-bold tabular-nums text-rose-400">{slHit}% hit</div>
-                                    )}
-                                </div>
-                                <div className="mt-1 text-lg font-semibold tabular-nums text-rose-400">{formatLevel(sl)}</div>
-                            </div>
-                        )}
-                        {tps.length > 0 && (
-                            <div>
-                                <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
-                                    Take Profit{tps.length > 1 ? 's' : ''}
-                                </div>
-                                <div className="mt-1 space-y-1">
-                                    {tps.slice(0, 3).map((tp, i) => (
-                                        <div key={`tp-${i}`} className="flex items-baseline justify-between gap-2">
-                                            <div className="text-lg font-semibold tabular-nums leading-tight text-emerald-400">
-                                                <span className="mr-1.5 text-[10px] font-semibold text-emerald-400/70">TP{i + 1}</span>
-                                                {formatLevel(tp)}
-                                            </div>
-                                            {tpHit(i + 1) !== undefined && (
-                                                <span className="text-[11px] font-bold tabular-nums text-emerald-400">{tpHit(i + 1)}% hit</span>
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
+                            <Stat label="Direction">
+                                <span className={`uppercase tracking-wide ${directionText(analysis.direction)}`}>{dirLabel}</span>
+                            </Stat>
                         )}
                         {rr !== undefined && (
-                            <div>
-                                <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">R:R</div>
-                                <div className="mt-1 text-lg font-semibold tabular-nums text-cyan-400">1:{rr.toFixed(1)}</div>
-                            </div>
+                            <Stat label="R:R">
+                                <span className="tabular-nums text-cyan-400">1:{rr.toFixed(1)}</span>
+                            </Stat>
                         )}
+                        {analysis.grade && (
+                            <Stat label="Grade">
+                                <span className="text-zinc-100">{analysis.grade}</span>
+                            </Stat>
+                        )}
+                    </div>
+                )}
+
+                {levelRows.length > 0 && (
+                    <div className="overflow-hidden rounded-xl border border-white/10">
+                        <table className="w-full border-collapse text-left">
+                            <thead>
+                                <tr className="border-b border-white/10 bg-zinc-800/80">
+                                    <th className="px-3 py-2 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Level</th>
+                                    <th className="px-3 py-2 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Price</th>
+                                    <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Hit</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {levelRows.map(row => (
+                                    <tr key={row.label} className="border-b border-white/5 last:border-b-0">
+                                        <td className="px-3 py-2 text-[11px] font-medium text-zinc-400">{row.label}</td>
+                                        <td className={`px-3 py-2 text-[15px] font-semibold tabular-nums ${priceTone(row.tone)}`}>
+                                            {row.price}
+                                        </td>
+                                        <td className={`px-3 py-2 text-right text-[11px] font-bold tabular-nums ${hitTone(row.tone)}`}>
+                                            {row.hit !== undefined ? `${row.hit}% hit` : '—'}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+
+                {analysis.confidence && (
+                    <div>
+                        <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Confidence</div>
+                        <p className="mt-1 border-l-2 border-white/15 pl-3 text-[13px] leading-relaxed text-zinc-300">{confidenceWhy}</p>
+                    </div>
+                )}
+
+                {noTradeWhy && (
+                    <div>
+                        <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">No trade</div>
+                        <p className="mt-1 text-[13px] leading-relaxed text-zinc-400">{noTradeWhy}</p>
                     </div>
                 )}
 

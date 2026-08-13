@@ -33,7 +33,8 @@ describe('TradingSignalCard', () => {
     it('renders colored levels without a duplicate plan list', () => {
         render(<TradingSignalCard analysis={analysis()} />);
         expect(screen.getByText('Trading signal')).toBeDefined();
-        expect(screen.getAllByText('Sell').length).toBeGreaterThanOrEqual(1);
+        expect(screen.getAllByText('No trade').length).toBeGreaterThanOrEqual(1);
+        expect(screen.getByText(/Skip this setup/)).toBeDefined();
         expect(screen.getByText('63,710')).toBeDefined();
         expect(screen.getByText('64,510')).toBeDefined();
         expect(screen.getByText('63,210')).toBeDefined();
@@ -88,5 +89,26 @@ describe('TradingSignalCard', () => {
         );
         expect(screen.getByText('Invalidation')).toBeDefined();
         expect(screen.getByText(/15m close above the sweep high/)).toBeDefined();
+    });
+
+    it('explains the Avoid / Medium / High label on the card', () => {
+        render(
+            <TradingSignalCard
+                analysis={analysis({
+                    confidence: 'Avoid',
+                    probability: 38,
+                    riskVeto: 'Incomplete take-profit ladder',
+                })}
+            />,
+        );
+        expect(screen.getByText('Confidence')).toBeDefined();
+        expect(screen.getByText(/Avoid because/)).toBeDefined();
+        expect(screen.getAllByText(/Incomplete take-profit ladder/).length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('shows Sell for a Short with Medium confidence', () => {
+        render(<TradingSignalCard analysis={analysis({ confidence: 'Medium' })} />);
+        expect(screen.getAllByText('Sell').length).toBeGreaterThanOrEqual(1);
+        expect(screen.queryByText('No trade')).toBeNull();
     });
 });

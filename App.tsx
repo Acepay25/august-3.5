@@ -2608,9 +2608,10 @@ const App: React.FC = () => {
             const trackable = m.outcome === TradeOutcome.PENDING
                 && !!m.analysis
                 && m.analysis.direction !== 'Neutral'
+                && m.analysis.confidence !== 'Avoid'
+                && (m.analysis.direction === 'Long' || m.analysis.direction === 'Short')
                 && (m.analysis.entryPoints?.length ?? 0) > 0
-                && !!m.analysis.stopLoss
-                && !!m.analysis.createdAt;
+                && !!m.analysis.stopLoss;
             if (trackable) {
                 trackableIds.add(m.id);
                 if (!autopilotRegisteredRef.current.has(m.id)) {

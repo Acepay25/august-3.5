@@ -9,12 +9,14 @@
 
 import { LoggedTrade, MemoryFile, TradeOutcome } from '../../types';
 import {
+    appendDiaryEntry,
     createMemoryFile,
     deleteMemoryFile,
     ensureHarnessFolders,
     extractLessonFromPostMortem,
     getMemoryFiles,
     slugifyName,
+    syncRecurringMistakes,
     updateMemoryFile,
 } from './MemoryFilesService';
 
@@ -282,4 +284,82 @@ export const consolidateSkills = async (username: string): Promise<void> => {
             await deleteMemoryFile(extra.id, username);
         }
     }
+};
+
+/**
+ * Closed-loop write: diary + mistakes + skill scores. Safe to call from
+ * both trade-log and post-mortem (diary entries are de-duplicated by id).
+ */
+export const syncClosedTradeToNotebook = async (
+    trade: LoggedTrade,
+    allTrades: LoggedTrade[],
+    username: string
+): Promise<void> => {
+    await appendDiaryEntry(trade, username);
+    await syncRecurringMistakes(allTrades, username);
+    await applySkillEvidence(trade, username);
+    await maybeUpsertSkill(trade, allTrades, username);
+    await consolidateSkills(username);
+};
+
+/**
+ * Code-side skill enforcement so markdown skills actually move the signal,
+ * not only the prompt. Confirmed avoid skills veto Long/Short; candidate
+ * avoid skills cap High/Medium down to Low.
+ */
+export const applyNotebookSkillsToAnalysis = <T extends {
+    coinName?: string;
+    direction?: string;
+    confidence?: string;
+    probability?: number;
+    detectedPatternFamily?: string;
+    marketConditions?: { pattern?: string };
+    originalConfidence?: string;
+    riskVeto?: string;
+    validationWarnings?: string[];
+}>(analysis: T): T => {
+    const setup = {
+        coin: analysis.coinName,
+        direction: analysis.direction,
+        family: analysis.detectedPatternFamily,
+        pattern: analysis.marketConditions?.pattern,
+    };
+    const matches = getMemoryFiles().files
+        .filter(isSkillFile)
+        .map(f => parseSkillMarkdown(f.content))
+        .filter((m): m is SkillMeta => Boolean(m && skillMatchesSetup(m, setup)));
+    if (matches.length === 0) return analysis;
+
+    const next = { ...analysis };
+    const warn = (note: string): void => {
+        next.validationWarnings = [...(next.validationWarnings ?? []), note];
+        next.riskVeto = [next.riskVeto, note].filter(Boolean).join(' ');
+    };
+
+    const avoidConfirmed = matches.find(m => m.kind === 'avoid' && m.status === 'confirmed');
+    if (avoidConfirmed && (next.direction === 'Long' || next.direction === 'Short')) {
+        next.originalConfidence = next.originalConfidence ?? next.confidence;
+        next.confidence = 'Avoid';
+        next.direction = 'Neutral';
+        if (typeof next.probability === 'number') next.probability = Math.min(next.probability, 15);
+        warn(`NOTEBOOK SKILL VETO: ${titleFromMeta(avoidConfirmed)} — ${avoidConfirmed.body.replace(/\s+/g, ' ').slice(0, 160)}`);
+        return next;
+    }
+
+    const avoidCandidate = matches.find(m => m.kind === 'avoid' && m.status === 'candidate');
+    if (avoidCandidate && (next.direction === 'Long' || next.direction === 'Short')) {
+        next.originalConfidence = next.originalConfidence ?? next.confidence;
+        if (next.confidence === 'High' || next.confidence === 'Medium') next.confidence = 'Low';
+        warn(`NOTEBOOK SKILL: candidate avoid ${titleFromMeta(avoidCandidate)} — size down until the cluster confirms or retires.`);
+        return next;
+    }
+
+    const repeat = matches.find(m => m.kind === 'repeat' && m.status === 'confirmed');
+    if (repeat) {
+        next.validationWarnings = [
+            ...(next.validationWarnings ?? []),
+            `NOTEBOOK SKILL: confirmed repeat ${titleFromMeta(repeat)} — follow the procedure in skills, do not invent a new tape.`,
+        ];
+    }
+    return next;
 };

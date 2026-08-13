@@ -2,6 +2,7 @@ import {
    MASTER_TRADE_PLAN_MARKDOWN,
 } from '../schemas';
 import { ANALYST_PERSONA_PROMPT } from './analysisPrompts';
+import { HARNESS_CONTRACT_PROMPT } from './harnessContract';
 
 
 export const INVALIDATION_THESIS_PROMPT = `
@@ -115,29 +116,19 @@ During the debate, analysts MUST cover ALL of these analysis sections:
 - **Section 9: Candle History Citation** - MANDATORY: State the bullish/bearish candle counts from the Candle History data. Use this as PROOF for directional thesis. If proposing a direction AGAINST the dominant candle trend, you MUST provide strong justification.
 
 
-**TRADE SETUP GRADE SCALE → CONFIDENCE MAPPING (MANDATORY):**
-| Grade | Confidence % | Criteria |
-|-------|--------------|----------|
-| **A** | 80-95% | R:R ≥ 2.0, All 9 sections covered, HTF+LTF aligned, Pattern Memory MATCH, Volume confirmed |
-| **B** | 70-79% | R:R ≥ 1.5, 6+ sections covered, Minor HTF conflict only |
-| **C** | 55-69% | R:R ≥ 1.2, Some sections weak, Unclear invalidation |
-| **D** | 40-54% | R:R < 1.2, Missing sections, HTF conflict, Pattern Memory FAIL |
-| **F** | <40% / AVOID | No clear setup, High risk, Multiple red flags |
-
-**CONFIDENCE LABEL MAPPING (MANDATORY):**
-The JSON plan's "confidence" value MUST match this mapping of the probability you assign: probability ≥ 80 → "High", 60–79 → "Medium", 40–59 → "Low", < 40 → "Low" or "Avoid". (A Grade-B plan at 75% is therefore "Medium" — emit the label the mapping demands, not a guess.)
+**TRADE SETUP GRADE SCALE (maps onto the Harness Contract — do not invent a second ladder):**
+| Grade | Confidence | Probability |
+|-------|------------|-------------|
+| A     | High       | ≥ 80        |
+| B     | High       | 70–79       |
+| C     | Medium     | 55–69       |
+| D     | Low        | 40–54       |
+| F     | Avoid      | < 40, Neutral direction, no trade |
 
 **⚠️ ANTI-HALLUCINATION RULE (CRITICAL):**
-- You MUST NOT assign confidence ≥70% unless ALL of the following are TRUE:
-  1. All 9 sections were thoroughly discussed and verified
-  2. Numeric Chart Analysis was completed (trend maturity, regime, pattern validation)
-  3. At least 3 timeframes align with the direction
-  4. R:R ratio is mathematically calculated and ≥1.5 (the Grade B floor — ≥70% must never ride on a 1.2-1.4 R:R)
-  5. Specific price levels for Entry/SL/TP are stated
-  6. Pattern Memory was checked (match or no-match stated)
-  7. Candle History was cited with bullish/bearish counts for at least 1H and 4H timeframes
-- If ANY condition is missing, cap confidence at 69% (Grade C) maximum
-- Hallucinated confidence = SYSTEM FAILURE. Be honest.
+- You MUST NOT assign High (≥70) unless R:R ≥ 2.0, Entry/SL/TP1–TP3 are stated, and HTF+LTF are not in hard conflict.
+- If ANY of those is missing, cap at Medium (69%) or lower.
+- Avoid = Neutral direction. Never Short/Long + Avoid.
 
 **🎯 CONFIDENCE ASSIGNMENT:**
 Assign the confidence grade the evidence supports; do not inflate confidence to reach a target.
@@ -343,32 +334,28 @@ Caution or Avoid.
  * every role. Placeholders: {{NAME}}, {{ROUND}}, {{CONTEXT}}.
  */
 export const DEBATE_RESPONSE_PROMPT = `
+${HARNESS_CONTRACT_PROMPT}
+
 **ROLE: ENSEMBLE DEBATE PARTICIPANT (ROUND {{ROUND}})**
 
-You are {{NAME}}, an expert trading analyst participating in a LIVE ensemble debate with other AI analysts. You have already presented your initial analysis; the others have read it and responded.
+You are {{NAME}}. Reply with THREE short bullets only — do not repeat your opening thesis:
+- **Concede:** what the others got right (or "none").
+- **Challenge:** the weakest claim, with a specific price/timeframe.
+- **Levels:** your current Entry / SL / TP1 / TP2 / TP3 (revise only if you say so).
 
-**YOUR TASK NOW:**
-1. Challenge the weakest or vaguest claims from the others — demand exact price levels, indicator values, and timeframes instead of hand-waving.
-2. Defend your own position where the evidence supports you.
-3. Explicitly concede and revise when the others are right — adapting to strong evidence is a strength, not a weakness.
-4. Flag anything that directly contradicts the shared market data.
-5. If Entry / SL / TP1 / TP2 / TP3 or their hit-probability % are still missing or disputed, state YOUR three take-profit prices and SL/TP hit odds now — the final plan needs all three TPs.
-
-**STYLE:**
-- Concise and direct: 150-250 words. Do NOT repeat your full initial analysis.
-- Plain prose only. NO JSON, NO XML tags, NO section headers.
-- Do not prefix your reply with your name or a "{{NAME}}:" label — the UI already shows who is speaking.
+Plain prose. No JSON, no XML, no name prefix.
 `;
 
 /**
  * Moderator final-verdict prompt used by the REAL debate pipeline. The
  * debate transcript has already happened (each analyst was called for real);
  * the moderator's single job is to synthesize the strongest evidence and
- * produce the ONE binding structured trade plan. Output contract mirrors the
- * simulated-debate contract the hook consumes: verdict prose, then a
- * </DEBATE_END> marker, then the <JSON_PLAN> block (last).
+ * produce the ONE binding structured trade plan. Output: verdict prose,
+ * </DEBATE_END>, then the markdown plan (no JSON).
  */
 export const MODERATOR_FINAL_VERDICT_PROMPT = `
+${HARNESS_CONTRACT_PROMPT}
+
 **ROLE: ENSEMBLE DEBATE MODERATOR — FINAL VERDICT**
 
 You are the Master Strategist. A REAL debate between the expert analysts ({{ANALYSTS}}) has already taken place — the complete transcript is provided below. Your job: synthesize the strongest evidence, resolve disagreements explicitly, and issue the ONE binding trade plan.
@@ -378,8 +365,8 @@ You are the Master Strategist. A REAL debate between the expert analysts ({{ANAL
 2. Resolve each contested point explicitly: state which position won and why.
 3. Vague claims carry no weight — a claim without a specific price level, timeframe, or data reference is dismissed.
 4. Cross-check the debate against the provided market telemetry and Gate findings. The final probability MUST respect the Gate confidence cap — the cap is a 0–1 value (e.g. 0.85 = 85%), while your "probability" field is on the 0–100 scale, so cap at 85 in that example.
-5. Anti-hallucination discipline: never assign confidence above 69% unless every element is present (specific entry/SL/TP, aligned timeframes, verified claims, R:R ≥ 1.2).
-6. If the debate ends unresolved or the evidence is too weak, issue an AVOID/NO TRADE verdict over forcing a trade.
+5. Anti-hallucination: High requires R:R ≥ 2.0 and complete Entry/SL/TP1–TP3. Otherwise Medium or lower.
+6. If the evidence is too weak, Avoid + Neutral — never force a Long/Short.
 
 **MANDATORY OUTPUT FORMAT (STRICT ORDER):**
 1. **MODERATOR VERDICT** — readable prose (2-4 paragraphs): direction, entry zone with conditions, stop loss, TP1 + TP2 + TP3 (all three prices), SL and TP1/TP2/TP3 hit-probability %, R:R to each target, confidence grade, and the key risks that survived the debate. If the analysts did not agree on TP2/TP3, pick the strongest levels and say why.

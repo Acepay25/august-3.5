@@ -114,7 +114,7 @@ export const ReasoningPanel: React.FC<ReasoningPanelProps> = ({ tradeId, outcome
                       return (
                         <div key={turn.id} className="text-xs">
                           <span className={`font-bold ${colors.text}`}>{turn.debateTurnSpeaker || turn.provider}:</span>{' '}
-                          <span className="text-zinc-500">{turn.reasoning.slice(0, 200)}{turn.reasoning.length > 200 && '...'}</span>
+                          <span className="text-zinc-500">{(turn.finalOutput || turn.reasoning).slice(0, 200)}{(turn.finalOutput || turn.reasoning).length > 200 && '...'}</span>
                         </div>
                       );
                     })}

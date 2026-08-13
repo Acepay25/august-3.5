@@ -52,6 +52,7 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
     const [isDirty, setIsDirty] = useState(false);
     const [isPreview, setIsPreview] = useState(false);
     const [isCreatingFolder, setIsCreatingFolder] = useState(false);
+    const [isCreatingFile, setIsCreatingFile] = useState(false);
     const [newFolderName, setNewFolderName] = useState('');
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [isReviewing, setIsReviewing] = useState(false);
