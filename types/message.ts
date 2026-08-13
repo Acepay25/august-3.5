@@ -200,9 +200,33 @@ export interface Message {
   /** Transient mid-debate analyst-replacement offer (generator suspends until
    *  the user chooses). Cleared when the debate ends or is cancelled. */
   replacementOffer?: ReplacementOffer;
+  /** User pinned this setup to the Watch list (priority UI). Autopilot still
+   *  tracks every PENDING Long/Short the same way. */
+  watched?: boolean;
+  watchedAt?: string;
+  /** NAC-style watch-thread episodes (pin, autopilot, log) — not a new outcome path. */
+  watchEpisodes?: WatchEpisode[];
+  /** Append-only debate run log (model-visible facts for replay). */
+  debateRunLog?: DebateRunEvent[];
   /** "What would I do today?" — fresh forward-looking re-assessment of the
    *  closed trade's setup against the current market price. */
   todayReassessment?: TodayReassessment;
+}
+
+export interface WatchEpisode {
+  at: string;
+  kind: 'watched' | 'unwatched' | 'autopilot' | 'logged';
+  detail: string;
+}
+
+export type DebateRunEventKind = 'round' | 'episode' | 'gate' | 'steer' | 'drop' | 'pre_step' | 'verdict';
+
+export interface DebateRunEvent {
+  at: string;
+  kind: DebateRunEventKind;
+  speaker?: string;
+  round?: number;
+  detail: string;
 }
 
 /** "What would I do today?" — fresh forward-looking re-assessment of a closed

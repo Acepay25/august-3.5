@@ -6,6 +6,7 @@ import {
     ActivityIcon,
     BookmarkIcon,
     CodeIcon,
+    EyeIcon,
     PlusIcon,
     TrashIcon,
 } from './Icons';
@@ -42,6 +43,7 @@ interface SidebarContentProps {
     onOpenLiveMarket: () => void;
     onOpenVisionData: () => void;
     onOpenJournal: () => void;
+    onOpenWatchList?: () => void;
     onOpenSettings: () => void;
     onDeleteConversation: (id: string) => void;
     onDeleteConversations?: (ids: string[]) => Promise<boolean> | boolean;
@@ -69,6 +71,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
     onOpenLiveMarket,
     onOpenVisionData,
     onOpenJournal,
+    onOpenWatchList,
     onOpenSettings,
     onDeleteConversation,
     onDeleteConversations,
@@ -163,6 +166,9 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                         <NavRow collapsed={collapsed} icon={<CodeIcon className="h-4 w-4" />} label="View Vision Data" onClick={act(onOpenVisionData)} />
                     )}
                     <NavRow collapsed={collapsed} icon={<BookmarkIcon className="h-4 w-4" />} label="Trading Journal" onClick={act(onOpenJournal)} />
+                    {onOpenWatchList && (
+                        <NavRow collapsed={collapsed} icon={<EyeIcon className="h-4 w-4" />} label="Watch list" onClick={act(onOpenWatchList)} />
+                    )}
                 </div>
             </nav>
 

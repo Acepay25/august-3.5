@@ -22,6 +22,8 @@ interface AnalysisDetailsProps {
     onDismissAutopilot?: (messageId: string) => void;
     onSelectForProbability?: (messageId: string) => void;
     onCompare?: (messageId: string) => void;
+    watched?: boolean;
+    onToggleWatch?: (messageId: string) => void;
 }
 
 const AnalysisDetails: React.FC<AnalysisDetailsProps> = ({
@@ -34,6 +36,8 @@ const AnalysisDetails: React.FC<AnalysisDetailsProps> = ({
     onDismissAutopilot,
     onSelectForProbability,
     onCompare,
+    watched = false,
+    onToggleWatch,
 }) => {
     const [alertsSet, setAlertsSet] = useState(false);
     const handleSetAlerts = () => {
@@ -143,6 +147,20 @@ const AnalysisDetails: React.FC<AnalysisDetailsProps> = ({
                             Loss
                         </button>
                     </>
+                )}
+                {onToggleWatch && (
+                    <button
+                        type="button"
+                        onClick={() => onToggleWatch(messageId)}
+                        className={`rounded-xl border px-4 py-2 text-xs font-bold uppercase tracking-widest transition-colors ${
+                            watched
+                                ? 'border-cyan-500/40 bg-cyan-500/15 text-cyan-300'
+                                : 'border-white/10 bg-zinc-800 text-zinc-300 hover:border-cyan-400/30 hover:text-cyan-300'
+                        }`}
+                        title="Add this trading signal to the Watch list — autopilot and Win/Loss still work the same"
+                    >
+                        {watched ? 'Watching' : 'Watch'}
+                    </button>
                 )}
                 {onSelectForProbability && (
                     <button

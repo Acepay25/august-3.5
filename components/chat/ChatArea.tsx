@@ -42,6 +42,9 @@ interface ChatAreaProps {
     analysisMessages: Message[];
     loadingMessage: string | null;
     isAnalysisInProgress: boolean;
+    /** Notes queued while a debate is running — shown as chips on the composer. */
+    steeringNotes?: string[];
+    onRemoveSteeringNote?: (index: number) => void;
     isPostMortemInProgress: boolean;
     setIsLivePostMortemVisible: (val: boolean) => void;
     handleCancelAnalysis: () => void;
@@ -141,6 +144,8 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     analysisMessages,
     loadingMessage,
     isAnalysisInProgress,
+    steeringNotes = [],
+    onRemoveSteeringNote,
     isPostMortemInProgress,
     setIsLivePostMortemVisible,
     handleCancelAnalysis,
@@ -323,6 +328,8 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         loadingMessage,
         isSummarizing,
         isAnalysisInProgress,
+        steeringNotes,
+        onRemoveSteeringNote,
         isRateLimited,
         isAnyProviderEnabled,
         providers,
@@ -352,7 +359,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         isLeverageDropdownOpen, handlePresetLeverage, fileInputRef,
         isImageUploadDisabled, handleImageUpload, input, setInput,
         handleSendMessage, handleCancelAnalysis, loadingMessage, isSummarizing,
-        isAnalysisInProgress, isRateLimited, isAnyProviderEnabled, providers,
+        isAnalysisInProgress, steeringNotes, onRemoveSteeringNote, isRateLimited, isAnyProviderEnabled, providers,
         onUpdateProvider, selectedVisionModel, setSelectedVisionModel,
         lensConfig, setLensConfig, ensembleModelSelection,
         setEnsembleModelSelection, customEnsemblePrompt,

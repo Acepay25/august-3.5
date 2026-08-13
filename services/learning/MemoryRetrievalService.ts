@@ -89,6 +89,21 @@ const diaryExcerpt = (content: string): string => {
     return cap(`${header}\n## ${last.join('\n## ')}`, MAX_DIARY_CHARS);
 };
 
+const skillCatalogBlock = (query?: MemoryRetrievalQuery): string => {
+    const { files } = getMemoryFiles();
+    const lines: string[] = [];
+    for (const file of files) {
+        if (!file.enabled || !isSkillFile(file)) continue;
+        const meta = parseSkillMarkdown(file.content);
+        if (!meta || meta.status === 'retired') continue;
+        if (query && !skillMatchesSetup(meta, query) && meta.status !== 'confirmed') continue;
+        const trigger = meta.body.split('\n').find(l => l.trim())?.replace(/^#+\s*/, '').trim().slice(0, 80) || file.name;
+        lines.push(`- ${file.name.replace(/\.md$/i, '')} · ${meta.kind} · ${meta.status} · ${meta.wins}W/${meta.losses}L — ${trigger}`);
+        if (lines.length >= 8) break;
+    }
+    return lines.length ? `**Skill catalog (preload matching skills into workers, not this prompt):**\n${lines.join('\n')}` : '';
+};
+
 const similarTradesBlock = (query: MemoryRetrievalQuery | undefined, trades?: LoggedTrade[]): string => {
     if (!trades || trades.length === 0 || !query) return '';
     const setup: {
@@ -132,10 +147,13 @@ const rulesBlock = (query?: MemoryRetrievalQuery): string => {
 
 /**
  * Capped, setup-aware harness context. Replaces dumping every notebook file.
+ * `audience: 'moderator'` weaves a skill catalog (name, W/L, trigger) instead
+ * of full skill bodies — analysts still get matching skill text.
  */
 export const getMemoryFilesContext = (
     query?: MemoryRetrievalQuery,
-    trades?: LoggedTrade[]
+    trades?: LoggedTrade[],
+    audience: 'analyst' | 'moderator' = 'analyst',
 ): string => {
     const { files } = getMemoryFiles();
     const ranked = files
@@ -167,6 +185,7 @@ ${mapOnly}
         if (used >= MAX_CONTEXT_CHARS) break;
         const folder = folderOf(f);
         if (folder === 'skills') {
+            if (audience === 'moderator') continue;
             if (skillsKept >= 2) continue;
             skillsKept += 1;
         }
@@ -183,7 +202,11 @@ ${mapOnly}
         used += block.length;
     }
 
-    const extras = [similarTradesBlock(query, trades), rulesBlock(query)].filter(Boolean);
+    const extras = [
+        audience === 'moderator' ? skillCatalogBlock(query) : '',
+        similarTradesBlock(query, trades),
+        rulesBlock(query),
+    ].filter(Boolean);
     for (const extra of extras) {
         if (used >= MAX_CONTEXT_CHARS) break;
         const room = MAX_CONTEXT_CHARS - used;
@@ -196,7 +219,7 @@ ${mapOnly}
     return `═══════════════════════════════════════════════════════════════
 📓 HARNESS MEMORY (notebook map + retrieved files — not a blank slate)
 ═══════════════════════════════════════════════════════════════
-Identity files always apply. Other notes apply when they match this coin, direction, or regime; otherwise ignore them. Do not contradict a matching confirmed skill without strong new evidence.
+Identity files always apply. ${audience === 'moderator' ? 'Skills are listed as a catalog only — do not paste full skill bodies here.' : 'Matching skill bodies apply when they match this coin, direction, or regime; otherwise ignore them.'} Do not contradict a matching confirmed skill without strong new evidence.
 
 ${[mapBlock, ...blocks].filter(Boolean).join('\n\n---\n\n')}
 ═══════════════════════════════════════════════════════════════`;

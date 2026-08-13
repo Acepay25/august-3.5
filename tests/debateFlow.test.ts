@@ -291,6 +291,8 @@ describe('conductRealDebate (real inter-model debate)', () => {
     expect(firstRebuttal.system).toContain('ENSEMBLE DEBATE PARTICIPANT');
     expect(firstRebuttal.system).toContain('ROUND 2');
     expect(firstRebuttal.user).toContain('YOUR POSITION (Round 1)');
+    expect(firstRebuttal.user).toContain('(R1 episode)');
+    expect(firstRebuttal.user).not.toContain('**Analyst Two (Round 1):**');
 
     // The moderator verdict round streams the </DEBATE_END> + FINAL TRADE PLAN
     // markdown block contract.

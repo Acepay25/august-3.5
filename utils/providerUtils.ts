@@ -67,3 +67,13 @@ export function resolveModelLabel(modelId: string | undefined, modelIdToName: Re
     if (!modelId) return 'Unknown';
     return modelIdToName[modelId] ?? modelId;
 }
+
+/**
+ * True when a model id is a free-tier listing (OpenRouter `:free`,
+ * `*-free` slugs like `hy3-free`). Avoids matching names like "freedom".
+ */
+export function isFreeModelId(modelId: string): boolean {
+    const id = modelId.trim().toLowerCase();
+    if (!id) return false;
+    return /(^|[/:\-_.])free($|[/:\-_.])/.test(id);
+}

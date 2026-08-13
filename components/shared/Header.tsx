@@ -44,6 +44,7 @@ interface HeaderProps {
     automations?: AutomationConfig[];
     onOpenAutomation?: (id: string | null) => void;
     onCreateAutomation?: () => void;
+    onOpenWatchList?: () => void;
 }
 
 // Memoized: Header re-renders every time App does (typing, progress ticks);
@@ -75,7 +76,8 @@ export const Header: React.FC<HeaderProps> = memo(({
     onLoadConversation,
     automations,
     onOpenAutomation,
-    onCreateAutomation
+    onCreateAutomation,
+    onOpenWatchList,
 }) => {
     const [sessionContext, setSessionContext] = useState<SessionContext | null>(null);
     const [allSessions, setAllSessions] = useState<SessionStatus[]>([]);
@@ -350,6 +352,7 @@ export const Header: React.FC<HeaderProps> = memo(({
                                     onOpenLiveMarket={onOpenLiveMarket}
                                     onOpenVisionData={() => setIsVisionDataVisible(true)}
                                     onOpenJournal={() => setJournalState({ isOpen: true, tab: 'log' })}
+                                    onOpenWatchList={onOpenWatchList}
                                     onOpenSettings={() => setIsSettingsVisible(true)}
                                     automations={automations}
                                     onOpenAutomation={onOpenAutomation}

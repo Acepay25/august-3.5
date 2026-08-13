@@ -56,6 +56,7 @@ export interface ChatContextProps {
     onViewReasoning?: (messageId: string) => void;
     /** F4: re-run the debate for a completed analysis card with the same setup. */
     onReRunAnalysis?: (messageId: string) => void;
+    onToggleWatch?: (messageId: string) => void;
     /** Failed-run retry: rebuild the prompt + charts from the user message. */
     onRetryFailedRun?: (userMessageId: string) => void;
     /** Edit a sent user message's text in place (persisted to history). */
@@ -143,6 +144,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
         onCompareAnalysis,
         onViewReasoning,
         onReRunAnalysis,
+        onToggleWatch,
         onRetryFailedRun,
         onEditUserMessage,
         onReplacementChoice,
@@ -157,6 +159,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
     const isUserMessage = message.role === MessageRole.USER;
     const [isThinkingModalOpen, setIsThinkingModalOpen] = React.useState(false);
     const [isRunLedgerOpen, setIsRunLedgerOpen] = React.useState(false);
+    const [isRunLogOpen, setIsRunLogOpen] = React.useState(false);
     const [isMemoryGateExpanded, setIsMemoryGateExpanded] = React.useState(false);
     // Inline edit of a sent user message (history correction).
     const [editingMessageId, setEditingMessageId] = React.useState<string | null>(null);
@@ -416,6 +419,8 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     onReRun={onReRunAnalysis ? () => onReRunAnalysis(message.id) : undefined}
                                     supplementMarkdown={supplementMarkdown}
                                     ensembleNote={ensembleNote}
+                                    watched={Boolean(message.watched)}
+                                    onToggleWatch={() => onToggleWatch?.(message.id)}
                                 />
                             ) : message.isPostMortem ? (
                                 <div className="overflow-x-auto min-w-0">
@@ -547,6 +552,17 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                                 Similar setups: {message.runStats.btMatches} · {message.runStats.btWinRate !== undefined ? `${message.runStats.btWinRate.toFixed(0)}% WR` : '—'} · {message.runStats.btEV !== undefined ? `${message.runStats.btEV > 0 ? '+' : ''}${message.runStats.btEV}R` : '—'}
                                             </span>
                                         )}
+                                        {message.debateRunLog && message.debateRunLog.length > 0 && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setIsRunLogOpen(o => !o)}
+                                                aria-expanded={isRunLogOpen}
+                                                className="text-zinc-500 hover:text-zinc-300 transition-colors"
+                                                title="Append-only debate run log"
+                                            >
+                                                {isRunLogOpen ? '▾' : '▸'} {message.debateRunLog.length} run events
+                                            </button>
+                                        )}
                                         {message.runStats.analysts && message.runStats.analysts.length > 0 && (
                                             <button
                                                 type="button"
@@ -570,6 +586,18 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                             </button>
                                         )}
                                     </div>
+                                    {isRunLogOpen && message.debateRunLog && message.debateRunLog.length > 0 && (
+                                        <div className="mt-1.5 max-h-40 overflow-y-auto rounded-lg border border-white/10 bg-zinc-900/60 px-2 py-1.5 custom-scrollbar">
+                                            {message.debateRunLog.map((event, i) => (
+                                                <p key={`${event.at}-${i}`} className="text-[10px] leading-5 text-zinc-400">
+                                                    <span className="font-semibold uppercase tracking-widest text-zinc-500">{event.kind}</span>
+                                                    {event.round !== undefined ? ` · r${event.round}` : ''}
+                                                    {event.speaker ? ` · ${event.speaker}` : ''}
+                                                    {' — '}{event.detail}
+                                                </p>
+                                            ))}
+                                        </div>
+                                    )}
                                     {isRunLedgerOpen && message.runStats.analysts && message.runStats.analysts.length > 0 && (
                                         <div className="mt-1.5 overflow-x-auto rounded-lg border border-white/10 bg-zinc-900/60">
                                             <table className="w-full text-left text-[9px] border-collapse">
@@ -614,6 +642,8 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     onDismissAutopilot={onDismissAutopilot}
                                     onSelectForProbability={onSelectMessageForProbability}
                                     onCompare={onCompareAnalysis}
+                                    watched={Boolean(message.watched)}
+                                    onToggleWatch={(id: string) => onToggleWatch?.(id)}
                                 />
                             )}
 

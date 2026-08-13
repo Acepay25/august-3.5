@@ -41,6 +41,7 @@ const Journal = React.lazy(() => import('./components/journal/Journal').then(m =
 const StrategySearch = React.lazy(() => import('./components/shared/StrategySearch'));
 const UserProfileManager = React.lazy(() => import('./components/settings/UserProfileManager'));
 const SavedAnalyses = React.lazy(() => import('./components/journal/SavedAnalyses'));
+const WatchListPanel = React.lazy(() => import('./components/analysis/WatchListPanel'));
 const SettingsMenu = React.lazy(() => import('./components/settings/SettingsMenu'));
 const LiveStreamView = React.lazy(() => import('./components/analysis/LiveStreamView'));
 // (LogTradeModal was removed — the capture flow uses DataCaptureModal.)
@@ -65,6 +66,7 @@ import { DEFAULT_FRAMEWORKS } from './constants/models';
 import { buildModelIdToName, buildProviderNameToId, getFirstReadyProvider } from './utils/providerUtils';
 import { createNewConversation, DEFAULT_LEVERAGE, findReusableEmptyConversation } from './utils/conversationUtils';
 import { recalculateAnalysisMetrics } from './utils/analysisUtils';
+import { collectWatchedSignals, toggleWatchOnMessage } from './utils/watchList';
 import { processImagesForSummarization } from './utils/imageProcessor';
 import { extractLastJson } from './utils/jsonUtils';
 import { parseLevelProbabilities } from './schemas/tradeAnalysis';
@@ -156,6 +158,7 @@ const App: React.FC = () => {
         isEntryNotHitCapturing, setIsEntryNotHitCapturing,
         isRateLimited, setIsRateLimited,
     } = useUIState();
+    const [isWatchListVisible, setIsWatchListVisible] = useState(false);
 
     // Settings initial tab — set by handleOpenJournal to open Settings → Journal directly
     const [settingsInitialTab, setSettingsInitialTab] = useState<string | undefined>(undefined);
@@ -514,6 +517,8 @@ const App: React.FC = () => {
         handleDeleteMessages,
         getActiveCustomInstructions,
         handleReplacementChoice,
+        steeringNotes,
+        handleRemoveSteeringNote,
     } = useAnalysisPipeline({
         messages, messagesRef, updateMessages, activeConversation, activeConversationId,
         providerConfigs: readyProviders,
@@ -983,7 +988,7 @@ const App: React.FC = () => {
             const target = e.target as HTMLElement | null;
             const isTyping = !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable);
             if (isTyping) return;
-            const anyOverlayOpen = isSettingsMenuVisible || isLiveMarketVisible || isCommandPaletteOpen || isSavedGalleryOpen || isUserModalOpen || isAdvancedAnalyticsOpen || isVisionDataVisible || isStrategySearchVisible || isSavedAnalysesVisible || isVersionHistoryVisible;
+            const anyOverlayOpen = isSettingsMenuVisible || isLiveMarketVisible || isCommandPaletteOpen || isSavedGalleryOpen || isUserModalOpen || isAdvancedAnalyticsOpen || isVisionDataVisible || isStrategySearchVisible || isSavedAnalysesVisible || isVersionHistoryVisible || isWatchListVisible;
             if (anyOverlayOpen) {
                 // Overlays with their own document-level Esc handlers
                 // (SettingsMenu, command palette, Journal, LiveMarket, dialogs)
@@ -994,6 +999,7 @@ const App: React.FC = () => {
                 if (isVisionDataVisible) setIsVisionDataVisible(false);
                 if (isStrategySearchVisible) setIsStrategySearchVisible(false);
                 if (isSavedAnalysesVisible) setIsSavedAnalysesVisible(false);
+                if (isWatchListVisible) setIsWatchListVisible(false);
                 if (isVersionHistoryVisible) setIsVersionHistoryVisible(false);
                 return;
             }
@@ -1007,7 +1013,7 @@ const App: React.FC = () => {
         };
         document.addEventListener('keydown', onKeyDown);
         return () => document.removeEventListener('keydown', onKeyDown);
-    }, [isAnalysisInProgress, isPostMortemInProgress, handleCancelAll, toast, isSettingsMenuVisible, isLiveMarketVisible, isCommandPaletteOpen, isSavedGalleryOpen, isUserModalOpen, isAdvancedAnalyticsOpen, isVisionDataVisible, isStrategySearchVisible, isSavedAnalysesVisible, isVersionHistoryVisible]);
+    }, [isAnalysisInProgress, isPostMortemInProgress, handleCancelAll, toast, isSettingsMenuVisible, isLiveMarketVisible, isCommandPaletteOpen, isSavedGalleryOpen, isUserModalOpen, isAdvancedAnalyticsOpen, isVisionDataVisible, isStrategySearchVisible, isSavedAnalysesVisible, isVersionHistoryVisible, isWatchListVisible]);
 
     // ─── Side-by-side compare ──────────────────────────────────────────────
     const [compareState, setCompareState] = useState<{ primaryId: string; secondaryId: string | null } | null>(null);
@@ -2036,13 +2042,41 @@ const App: React.FC = () => {
         return () => document.removeEventListener('keydown', onKey);
     }, [handleNewConversation, isCommandPaletteOpen]);
 
-    const handleLoadConversation = (id: string) => {
+    const handleLoadConversation = useCallback((id: string) => {
         if (id !== activeConversationId) {
             handleCancelAnalysis();
             invalidatePostMortemRuns();
             setActiveConversationId(id);
         }
-    };
+    }, [activeConversationId, handleCancelAnalysis, invalidatePostMortemRuns, setActiveConversationId]);
+
+    const pendingWatchActionRef = useRef<
+        | { type: 'log'; messageId: string; outcome: TradeOutcome.WIN | TradeOutcome.LOSS }
+        | { type: 'autopilot'; messageId: string }
+        | null
+    >(null);
+
+    const handleToggleWatch = useCallback((messageId: string, conversationId?: string | null) => {
+        const convId = conversationId || activeConversationId;
+        if (!convId) return;
+        updateMessages(prev => prev.map(m => {
+            if (m.id !== messageId) return m;
+            const nextWatch = !m.watched;
+            const updated = toggleWatchOnMessage(m, nextWatch);
+            if (updated.watched) {
+                toast.success('Watching', 'This signal is on the Watch list. Win/Loss and autopilot still work the same.');
+            }
+            return updated;
+        }), convId);
+    }, [activeConversationId, toast, updateMessages]);
+
+    const watchedSignals = useMemo(() => collectWatchedSignals(conversationHistory), [conversationHistory]);
+
+    const handleOpenWatchedSignal = useCallback((conversationId: string, messageId: string) => {
+        handleLoadConversation(conversationId);
+        setHighlightedAnalysisId(messageId);
+        setIsWatchListVisible(false);
+    }, [handleLoadConversation]);
 
     const handleDeleteConversations = (ids: string[]) => {
         // Single source of truth: filter from the same list we store, so the
@@ -2206,6 +2240,12 @@ const App: React.FC = () => {
             run: () => handleSetLensConfig({ ...lensConfig, enabled: !lensConfig.enabled }),
         },
         {
+            id: 'watch-list',
+            label: 'Open Watch list',
+            hint: `${watchedSignals.filter(s => !s.outcome || s.outcome === TradeOutcome.PENDING).length} open`,
+            run: () => setIsWatchListVisible(true),
+        },
+        {
             id: 'saved-analyses',
             label: 'Open Saved Analyses',
             hint: `${savedAnalyses.length} saved`,
@@ -2229,7 +2269,7 @@ const App: React.FC = () => {
             hint: 'Messages',
             run: () => { void handleClearChat(); },
         },
-    ], [handleScrollToBottom, input, stableHandleSendMessage, setJournalState, setIsLiveMarketVisible, setIsSettingsMenuVisible, setIsStrategySearchVisible, setIsVersionHistoryVisible, isEnsembleEnabled, handleSetEnsembleEnabled, lensConfig, handleSetLensConfig, savedAnalyses, setIsSavedGalleryOpen, isAccuracyModeEnabled, setShowAccuracyModal, handleClearChat]);
+    ], [handleScrollToBottom, input, stableHandleSendMessage, setJournalState, setIsLiveMarketVisible, setIsSettingsMenuVisible, setIsStrategySearchVisible, setIsVersionHistoryVisible, isEnsembleEnabled, handleSetEnsembleEnabled, lensConfig, handleSetLensConfig, savedAnalyses, setIsSavedGalleryOpen, isAccuracyModeEnabled, setShowAccuracyModal, handleClearChat, watchedSignals]);
 
     const removeImage = (index: number) => {
         setImages(prev => prev.filter((_, i) => i !== index));
@@ -2680,6 +2720,30 @@ const App: React.FC = () => {
         toast.success('Trade logged', `${resolution.outcome} confirmed via autopilot`);
     }, [messages, confirmAutopilotOutcome, confirmAutopilotEntryNotHit, toast]);
 
+    const runWatchListAction = useCallback((
+        conversationId: string,
+        action: { type: 'log'; messageId: string; outcome: TradeOutcome.WIN | TradeOutcome.LOSS } | { type: 'autopilot'; messageId: string },
+    ) => {
+        if (conversationId !== activeConversationId) {
+            pendingWatchActionRef.current = action;
+            handleLoadConversation(conversationId);
+            setIsWatchListVisible(false);
+            return;
+        }
+        if (action.type === 'log') handleInitiateLogTrade(action.messageId, action.outcome);
+        else handleConfirmAutopilot(action.messageId);
+        setIsWatchListVisible(false);
+    }, [activeConversationId, handleConfirmAutopilot, handleInitiateLogTrade, handleLoadConversation]);
+
+    useEffect(() => {
+        const pending = pendingWatchActionRef.current;
+        if (!pending) return;
+        if (!messages.some(m => m.id === pending.messageId)) return;
+        pendingWatchActionRef.current = null;
+        if (pending.type === 'log') handleInitiateLogTrade(pending.messageId, pending.outcome);
+        else handleConfirmAutopilot(pending.messageId);
+    }, [messages, handleInitiateLogTrade, handleConfirmAutopilot]);
+
     const handleDismissAutopilot = useCallback((messageId: string) => {
         OutcomeAutopilotService.dismiss(messageId);
         setAutopilotResolutions(prev => {
@@ -2726,12 +2790,13 @@ const App: React.FC = () => {
         onCompareAnalysis: handleCompareAnalysis,
         onViewReasoning: handleViewReasoning,
         onReRunAnalysis: handleReRunAnalysis,
+        onToggleWatch: (messageId: string) => handleToggleWatch(messageId),
         onReplacementChoice: handleReplacementChoice,
         // Post-mortem "what would I do today?" re-assessment.
         onTodayReassessment: startTodayReassessment,
         todayReassessmentInFlight,
         lensConfig,
-    }), [typingMessageState, highlightedAnalysisId, expandedPostMortems, expandedPostMortemImages, savedAnalyses, activeFrameworks, copiedMessageId, modelIdToName, providerNameToId, handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy, handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, confidenceCalibration, handleRetryPostMortem, chatLeverage, autopilotResolutions, handleConfirmAutopilot, handleDismissAutopilot, handleCompareAnalysis, handleViewReasoning, handleReRunAnalysis, handleReplacementChoice, startTodayReassessment, todayReassessmentInFlight, lensConfig]);
+    }), [typingMessageState, highlightedAnalysisId, expandedPostMortems, expandedPostMortemImages, savedAnalyses, activeFrameworks, copiedMessageId, modelIdToName, providerNameToId, handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy, handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, confidenceCalibration, handleRetryPostMortem, chatLeverage, autopilotResolutions, handleConfirmAutopilot, handleDismissAutopilot, handleCompareAnalysis, handleViewReasoning, handleReRunAnalysis, handleToggleWatch, handleReplacementChoice, startTodayReassessment, todayReassessmentInFlight, lensConfig]);
 
     // ... (Rest of component remains unchanged) ...
     const isAnalysisProgressVisible = Boolean(
@@ -2989,6 +3054,7 @@ const App: React.FC = () => {
                 automations={automations.configs}
                 onOpenAutomation={(id) => automations.openAutomation(id)}
                 onCreateAutomation={() => automations.setEditor({ mode: 'create' })}
+                onOpenWatchList={() => setIsWatchListVisible(true)}
             />
 
             {/* Journal overlay — REMOVED: now rendered inside Settings → Journal tab */}
@@ -3044,6 +3110,19 @@ const App: React.FC = () => {
             <StrategySearch isVisible={isStrategySearchVisible} onClose={() => { setIsStrategySearchVisible(false); setStrategyToView(null); }} onApplyStrategy={handleApplyStrategy} onRemoveStrategy={handleRemoveStrategy} providerConfig={readyProviders[0] || moderatorConfig} activeFrameworks={activeFrameworks} defaultFrameworks={DEFAULT_FRAMEWORKS} initialViewStrategy={strategyToView} onQuotaExceeded={handleQuotaExceeded} familyWinRates={familyWinRates} />
             </React.Suspense>
             <SavedAnalyses analyses={savedAnalyses} isVisible={isSavedAnalysesVisible} onClose={() => setIsSavedAnalysesVisible(false)} onDelete={handleDeleteSavedAnalyses} onClearAll={handleClearAllSavedAnalyses} modelIdToName={modelIdToName} ocrModelIdToName={ocrModelIdToName} />
+            <React.Suspense fallback={null}>
+                <WatchListPanel
+                    isVisible={isWatchListVisible}
+                    onClose={() => setIsWatchListVisible(false)}
+                    signals={watchedSignals}
+                    activeConversationId={activeConversationId}
+                    autopilotResolutions={autopilotResolutions}
+                    onToggleWatch={handleToggleWatch}
+                    onLogTrade={(messageId, outcome, conversationId) => runWatchListAction(conversationId, { type: 'log', messageId, outcome })}
+                    onOpenSignal={handleOpenWatchedSignal}
+                    onConfirmAutopilot={(messageId, conversationId) => runWatchListAction(conversationId, { type: 'autopilot', messageId })}
+                />
+            </React.Suspense>
             {skipCandidate && <SkipTradeModal onClose={() => setSkipCandidate(null)} onConfirm={handleConfirmSkipTrade} skipReason={skipReason} setSkipReason={setSkipReason} correctedEntry={correctedEntry} setCorrectedEntry={setCorrectedEntry} />}
             {showMismatchModal && mismatchData && (
                 <OutcomeMismatchModal
@@ -3109,6 +3188,7 @@ const App: React.FC = () => {
                         onOpenLiveMarket={handleOpenLiveMarket}
                         onOpenVisionData={() => setIsVisionDataVisible(true)}
                         onOpenJournal={handleOpenJournal}
+                        onOpenWatchList={() => setIsWatchListVisible(true)}
                         onOpenSettings={() => setIsSettingsMenuVisible(true)}
                         automations={automations.configs}
                         onOpenAutomation={(id) => automations.openAutomation(id)}
@@ -3157,6 +3237,8 @@ const App: React.FC = () => {
                 analysisMessages={analysisMessages}
                 loadingMessage={loadingMessage}
                 isAnalysisInProgress={isAnalysisInProgress}
+                steeringNotes={steeringNotes}
+                onRemoveSteeringNote={handleRemoveSteeringNote}
                 isPostMortemInProgress={isPostMortemInProgress}
                 setIsLivePostMortemVisible={setIsLivePostMortemVisible}
                 handleCancelAnalysis={handleCancelAll}

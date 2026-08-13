@@ -41,6 +41,8 @@ interface ChatInputProps {
     // when loadingMessage is null) — drives the Send↔Stop toggle so the user
     // can always cancel, even mid-debate.
     isAnalysisInProgress: boolean;
+    steeringNotes?: string[];
+    onRemoveSteeringNote?: (index: number) => void;
     isRateLimited: boolean;
     isAnyProviderEnabled: boolean;
     // Ensemble Intelligence Configuration — dynamic provider list
@@ -104,6 +106,8 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
     loadingMessage,
     isSummarizing,
     isAnalysisInProgress,
+    steeringNotes = [],
+    onRemoveSteeringNote,
     isRateLimited,
     isAnyProviderEnabled,
     providers,
@@ -219,6 +223,29 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                     {/* Image Preview */}
                     <ImagePreview images={images} onRemoveImage={removeImage} />
 
+                    {isAnalysisInProgress && (
+                        <div className="mb-1.5 px-2">
+                            <p className="text-[10px] uppercase tracking-widest text-zinc-500">
+                                {steeringNotes.length > 0 ? `${steeringNotes.length} note${steeringNotes.length === 1 ? '' : 's'} queued for the next debate step` : 'Type a note and send — it queues until the next debate step'}
+                            </p>
+                            {steeringNotes.length > 0 && (
+                                <div className="mt-1 flex flex-wrap gap-1">
+                                    {steeringNotes.map((note, i) => (
+                                        <button
+                                            key={`${i}-${note.slice(0, 12)}`}
+                                            type="button"
+                                            onClick={() => onRemoveSteeringNote?.(i)}
+                                            className="max-w-full truncate rounded-md border border-white/10 bg-zinc-800 px-2 py-0.5 text-[11px] text-zinc-300 hover:border-rose-500/40 hover:text-zinc-100"
+                                            title="Remove queued note"
+                                        >
+                                            {note}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     {/* Main Input Row */}
                     <div className="flex items-end gap-2">
                         <textarea
@@ -228,12 +255,12 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             // Enter sends (Shift+Enter = newline); Ctrl/Cmd+Enter
                             // also sends as an alternative.
                             onKeyDown={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && (!e.shiftKey || e.ctrlKey || e.metaKey) ? (e.preventDefault(), handleSendMessage()) : null}
-                            placeholder={images.length > 0 ? "Analyze charts..." : "Write a message..."}
+                            placeholder={isAnalysisInProgress ? 'Add a note for the next debate step…' : images.length > 0 ? 'Analyze charts...' : 'Write a message...'}
                             className="flex-1 min-w-0 bg-transparent px-2 py-1.5 text-base text-white placeholder-zinc-500 outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 min-h-[36px] max-h-24 resize-none leading-snug"
                             rows={1}
                             // Always typeable — sending (not typing) is what
                             // requires a ready provider.
-                            disabled={!!loadingMessage || isRateLimited}
+                            disabled={isRateLimited}
                             style={{ overflow: 'hidden' }}
                         />
                     </div>

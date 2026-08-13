@@ -8,6 +8,7 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { ProviderConfig } from '../../types/provider';
+import { isFreeModelId } from '../../utils/providerUtils';
 import { ChevronRightIcon, CheckIcon } from './Icons';
 
 /** Viewport rect of the trigger at open time (kept so the flyout can be
@@ -19,28 +20,59 @@ interface AnchorRect {
     right: number;
 }
 
+interface FlyoutPos {
+    top: number;
+    left: number;
+    maxHeight: number;
+}
+
+const VIEWPORT_MARGIN = 8;
+const FLYOUT_GAP = 4;
+const FLYOUT_MAX_H = 360;
+const FLYOUT_MIN_H = 140;
+
 /** Calculate flyout position from the trigger rect + the flyout's ACTUAL
- *  width/height, staying within the viewport. */
-function computeFlyoutPosition(anchor: AnchorRect, flyoutW: number, flyoutH: number): { top: number; left: number } {
+ *  width/height, staying within the viewport. Caps height so long model
+ *  lists scroll instead of clipping off-screen. */
+function computeFlyoutPosition(anchor: AnchorRect, flyoutW: number, flyoutH: number): FlyoutPos {
     const viewportH = window.innerHeight;
     const viewportW = window.innerWidth;
+    const spaceBelow = viewportH - anchor.bottom - FLYOUT_GAP - VIEWPORT_MARGIN;
+    const spaceAbove = anchor.top - FLYOUT_GAP - VIEWPORT_MARGIN;
+    const openBelow = spaceBelow >= spaceAbove;
+    const available = Math.max(FLYOUT_MIN_H, openBelow ? spaceBelow : spaceAbove);
+    const maxHeight = Math.min(FLYOUT_MAX_H, available);
+    const usedH = Math.min(Math.max(flyoutH, FLYOUT_MIN_H), maxHeight);
 
-    // Default: below trigger, aligned to trigger's left edge
-    let top = anchor.bottom + 4;
+    const top = openBelow
+        ? anchor.bottom + FLYOUT_GAP
+        : Math.max(VIEWPORT_MARGIN, anchor.top - FLYOUT_GAP - usedH);
+
     let left = anchor.left;
-
-    // If not enough space below, show above
-    if (top + flyoutH > viewportH - 8) {
-        top = Math.max(8, anchor.top - flyoutH - 4);
+    if (left + flyoutW > viewportW - VIEWPORT_MARGIN) {
+        left = Math.max(VIEWPORT_MARGIN, viewportW - flyoutW - VIEWPORT_MARGIN);
     }
 
-    // If flyout would go off the right edge, align its right edge to viewport
-    if (left + flyoutW > viewportW - 8) {
-        left = Math.max(8, viewportW - flyoutW - 8);
-    }
-
-    return { top, left };
+    return { top, left, maxHeight };
 }
+
+const FREE_ONLY_STORAGE_KEY = 'august_model_picker_free_only_v1';
+
+const readFreeOnlyPref = (): boolean => {
+    try {
+        return localStorage.getItem(FREE_ONLY_STORAGE_KEY) === '1';
+    } catch {
+        return false;
+    }
+};
+
+const writeFreeOnlyPref = (value: boolean): void => {
+    try {
+        localStorage.setItem(FREE_ONLY_STORAGE_KEY, value ? '1' : '0');
+    } catch {
+        // Ignore quota / private-mode failures — the toggle still works in-session.
+    }
+};
 
 export type ModelPickerMode = 'provider-model' | 'model-only' | 'provider-only';
 
@@ -85,9 +117,10 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
     compact = false,
 }) => {
     const [isOpen, setIsOpen] = useState(false);
+    const [freeOnly, setFreeOnly] = useState(readFreeOnlyPref);
     const [hoveredProvider, setHoveredProvider] = useState<string | null>(null);
     const [anchor, setAnchor] = useState<AnchorRect | null>(null);
-    const [flyoutPos, setFlyoutPos] = useState<{ top: number; left: number } | null>(null);
+    const [flyoutPos, setFlyoutPos] = useState<FlyoutPos | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const flyoutRef = useRef<HTMLDivElement>(null);
 
@@ -207,9 +240,14 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
         const h = flyoutRef.current.offsetHeight;
         setFlyoutPos(prev => {
             const next = computeFlyoutPosition(anchor, w, h);
-            return prev && prev.top === next.top && prev.left === next.left ? prev : next;
+            return prev
+                && prev.top === next.top
+                && prev.left === next.left
+                && prev.maxHeight === next.maxHeight
+                ? prev
+                : next;
         });
-    }, [isOpen, anchor]);
+    }, [isOpen, anchor, hoveredProvider, freeOnly]);
 
     const handleSelectProvider = useCallback((providerId: string) => {
         if (mode === 'provider-only') {
@@ -243,6 +281,14 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
     const hoveredModels = hoveredProvider
         ? readyProviders.find(p => p.id === hoveredProvider)?.models ?? []
         : [];
+    const visibleModels = mode !== 'provider-only' && freeOnly
+        ? hoveredModels.filter(isFreeModelId)
+        : hoveredModels;
+
+    const handleFreeOnlyToggle = useCallback((next: boolean) => {
+        setFreeOnly(next);
+        writeFreeOnlyPref(next);
+    }, []);
 
     const handleToggle = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
         if (!isOpen) {
@@ -252,9 +298,10 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
             const a = { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
             setAnchor(a);
             setFlyoutPos(computeFlyoutPosition(a, 320, 360));
+            setHoveredProvider(currentProviderId);
         }
         setIsOpen(!isOpen);
-    }, [isOpen]);
+    }, [isOpen, currentProviderId]);
 
     return (
         <div ref={containerRef} className={`relative inline-block ${className}`}>
@@ -283,11 +330,28 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
                     ref={flyoutRef}
                     onMouseDownCapture={(e) => e.stopPropagation()}
                     onPointerDownCapture={(e) => e.stopPropagation()}
-                    className="fixed z-[100] flex bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl overflow-hidden animate-fade-in min-w-[320px]"
-                    style={flyoutPos}
+                    className="fixed z-[100] flex flex-col bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl overflow-hidden animate-fade-in min-w-[320px]"
+                    style={{ top: flyoutPos.top, left: flyoutPos.left, maxHeight: flyoutPos.maxHeight }}
                 >
+                    {mode !== 'provider-only' && (
+                        <label className="flex shrink-0 cursor-pointer items-center gap-2 border-b border-zinc-800 px-3 py-1.5 text-[11px] text-zinc-400 hover:text-zinc-200">
+                            <input
+                                type="checkbox"
+                                checked={freeOnly}
+                                onChange={(e) => handleFreeOnlyToggle(e.target.checked)}
+                                className="rounded border-zinc-600 bg-zinc-800 text-cyan-500 focus:ring-cyan-500/40"
+                            />
+                            Free models only
+                        </label>
+                    )}
+                    <div
+                        className="flex min-h-0 flex-1 overflow-hidden"
+                        style={{ maxHeight: Math.max(FLYOUT_MIN_H, flyoutPos.maxHeight - (mode !== 'provider-only' ? 34 : 0)) }}
+                    >
                     {/* Provider list */}
-                    <div className="w-48 border-r border-zinc-800 py-1 max-h-[360px] overflow-y-auto custom-scrollbar">
+                    <div
+                        className="w-48 min-h-0 overflow-y-auto border-r border-zinc-800 py-1 custom-scrollbar overscroll-contain"
+                    >
                         {readyProviders.length === 0 ? (
                             <div className="px-3 py-4 text-xs text-zinc-600 italic text-center">
                                 No providers configured
@@ -324,14 +388,18 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
 
                     {/* Model list (shown on hover) */}
                     {mode !== 'provider-only' && (
-                        <div className="w-56 py-1 max-h-[360px] overflow-y-auto custom-scrollbar">
+                        <div
+                            className="w-56 min-h-0 overflow-y-auto py-1 custom-scrollbar overscroll-contain"
+                        >
                             {hoveredProvider ? (
-                                hoveredModels.length === 0 ? (
+                                visibleModels.length === 0 ? (
                                     <div className="px-3 py-4 text-xs text-zinc-600 italic text-center">
-                                        No models available
+                                        {freeOnly && hoveredModels.length > 0
+                                            ? 'No free models in this provider'
+                                            : 'No models available'}
                                     </div>
                                 ) : (
-                                    hoveredModels.map(model => {
+                                    visibleModels.map(model => {
                                         const fullValue = mode === 'provider-model' ? `${hoveredProvider}::${model}` : model;
                                         const isCurrent = mode === 'provider-model'
                                             ? hoveredProvider === currentProviderId && model === currentModelId
@@ -365,6 +433,7 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
                             )}
                         </div>
                     )}
+                    </div>
                 </div>,
                 document.body
             )}

@@ -26,6 +26,9 @@ import { DUAL_SCENARIO_JSON_SCHEMA, MASTER_TRADE_PLAN_MARKDOWN } from '../../con
 import { parseLiveMarketData } from '../../utils/liveMarketParser';
 import { truncateTextToTokens, parsePrice, parseMarkdownTradePlan } from '../../utils/analysisUtils';
 import { extractDebateLevels, formatDebateLevelsTable } from '../../utils/debateLevels';
+import { compactDebateEpisode } from '../../utils/debateEpisodes';
+import { debatePreStep } from '../../utils/debatePreStep';
+import type { DebateRunEvent } from '../../types';
 import { generateEnhancedDebateContext, EnhancedDebateContext } from '../ui/EnhancedDebateService';
 import { MarketRegime } from '../analysis/TechnicalAnalysisService';
 import {
@@ -2393,26 +2396,25 @@ const getAnalystClarificationQuestion = (questionText: string, targetAliases: st
 };
 
 /**
- * Builds a compact transcript of every turn up to (and including) maxRound —
- * moderator turns first, then each analyst, in chronological round order.
- * Used for the clarification questions and the final verdict. Each turn is
- * trimmed to stay within the verdict transcript's per-turn cap; the whole
- * block is capped at `totalTokens`.
+ * Builds a compact transcript of every turn up to (and including) maxRound
+ * as NAC-style episodes (committed handoffs), not raw turns. The live chat
+ * still stores full text; only later model calls receive this weave.
+ * Levels snapshot stays derived from the latest full turn per speaker.
  */
 const buildDebateTranscript = (
     names: string[],
     roundTexts: Record<string, string[]>,
     maxRound: number,
-    perTurnTokens = 100,
+    _perTurnTokens = 100,
     totalTokens = 1500
 ): string => {
     const lines: string[] = [];
     for (let r = 1; r <= maxRound; r++) {
         const moderatorText = roundTexts['Moderator']?.[r]?.replace(CLARIFICATION_MARKERS, '').trim();
-        if (moderatorText) lines.push(`**Moderator (Round ${r}):**\n${truncateTextToTokens(moderatorText, perTurnTokens)}`);
+        if (moderatorText) lines.push(compactDebateEpisode('Moderator', r, moderatorText));
         for (const name of names) {
             const text = roundTexts[name]?.[r];
-            if (text) lines.push(`**${name} (Round ${r}):**\n${truncateTextToTokens(text, perTurnTokens)}`);
+            if (text) lines.push(compactDebateEpisode(name, r, text));
         }
     }
     const full = lines.join('\n\n') || 'The debate produced no transcript.';
@@ -2543,7 +2545,13 @@ export const conductRealDebate = async function* (
      *  unknown — the refresh line is then omitted and the debate runs as
      *  before. Analysts re-anchor on the current price between rounds
      *  instead of arguing over a stale snapshot. */
-    getLivePrice?: () => number | null
+    getLivePrice?: () => number | null,
+    /** Drain queued user notes sent while this debate was running. */
+    getSteeringNotes?: () => string,
+    /** Append-only run log (pipeline persists on the message). */
+    onRunEvent?: (event: DebateRunEvent) => void,
+    /** Pattern-memory gate for the pre-step waterfall. */
+    memoryGate?: { gateResult?: string; reason?: string } | null,
 ): AsyncGenerator<RealDebateTurnEvent, void, unknown> {
 
     if (analysts.length < 2) {
@@ -2554,6 +2562,16 @@ export const conductRealDebate = async function* (
     // stuck analyst can hold a round open for minutes. Deadline bounds the
     // whole debate so the user always gets a verdict.
     const deadline = Date.now() + (timeoutMs ?? DEBATE_DEFAULT_TIMEOUT_MS);
+
+    const emitLog = (kind: DebateRunEvent['kind'], detail: string, round?: number, speaker?: string): void => {
+        onRunEvent?.({ at: new Date().toISOString(), kind, detail, round, speaker });
+    };
+    const takeSteering = (round: number): string => {
+        const note = (getSteeringNotes?.() || '').trim();
+        if (!note) return '';
+        emitLog('steer', note.slice(0, 280), round);
+        return note;
+    };
 
     const names = analysts.map(a => a.provider.name);
     const activeAnalystNames = new Set(names);
@@ -2626,9 +2644,8 @@ export const conductRealDebate = async function* (
 
     // --- ROUND 1: OPENING STATEMENTS (free — each analyst's own final output) ---
     for (const analyst of analysts) {
-        // Keep the complete analyst response in the visible transcript. The
-        // transcript builder still applies its own context budget when this
-        // content is sent back to the moderator.
+        // Keep the complete analyst response in the visible transcript. Later
+        // model calls receive compact episodes, not this raw opening.
         const opening = analyst.result.finalOutput || analyst.result.thoughtProcess || 'No opening statement provided.';
         roundTexts[analyst.provider.name][1] = opening;
         onSpeakerStatus?.(analyst.provider.name, 1, true);
@@ -2638,7 +2655,14 @@ export const conductRealDebate = async function* (
 
     // --- REBUTTAL ROUNDS 2..N ---
     const totalRounds = REAL_DEBATE_RESPONSE_ROUNDS + 1;
+    const pre = debatePreStep(memoryGate);
+    if (pre.inject) {
+        emitLog('pre_step', pre.inject.slice(0, 280), 2);
+        yield { speaker: 'System', round: 2, text: pre.inject };
+    }
+    const skipRebuttals = pre.action === 'skip_to_verdict';
     for (let round = 2; round <= totalRounds; round++) {
+        if (skipRebuttals) break;
         if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
         // Global budget: skip remaining rebuttals and head to the verdict.
@@ -2646,6 +2670,12 @@ export const conductRealDebate = async function* (
             yield { speaker: 'System', round, text: 'Debate time budget reached — skipping remaining rebuttal rounds and proceeding to the verdict.' };
             break;
         }
+
+        const steeringNote = takeSteering(round);
+        if (steeringNote) {
+            yield { speaker: 'System', round, text: `User steering: ${steeringNote}` };
+        }
+        emitLog('round', `Rebuttal round ${round}`, round);
 
         // Context is snapshotted BEFORE the round starts, so every analyst
         // responds to the others' previous round — never to themselves.
@@ -2655,8 +2685,8 @@ export const conductRealDebate = async function* (
                 const ownPosition = roundTexts[analyst.provider.name]?.[round - 1];
                 const others = debateRoster
                     .filter(o => o.provider.name !== analyst.provider.name && roundTexts[o.provider.name]?.[round - 1])
-                    .map(o => `**${o.provider.name} (Round ${round - 1}):**\n${roundTexts[o.provider.name][round - 1]}`)
-                    .join('\n\n') || 'No other analyst has spoken yet.';
+                    .map(o => compactDebateEpisode(o.provider.name, round - 1, roundTexts[o.provider.name][round - 1]))
+                    .join('\n') || 'No other analyst has spoken yet.';
 
                 // The lens persona must survive into the rebuttal rounds —
                 // a generic "expert trading analyst" instruction let
@@ -2683,9 +2713,10 @@ export const conductRealDebate = async function* (
                 const userContent =
                     `**TRADING REQUEST:**\n${truncateTextToTokens(userPrompt, 350)}\n\n` +
                     (levelsSnap ? `**LEVELS SNAPSHOT:**\n${levelsSnap}\n\n` : '') +
-                    `**YOUR POSITION (Round ${round - 1}):**\n${truncateTextToTokens(ownPosition, 225)}\n\n` +
-                    `**OTHER ANALYSTS' LATEST POSITIONS:**\n${truncateTextToTokens(others, 600)}\n\n` +
+                    `**YOUR POSITION (Round ${round - 1}):**\n${compactDebateEpisode(analyst.provider.name, round - 1, ownPosition)}\n\n` +
+                    `**OTHER ANALYSTS' LATEST POSITIONS:**\n${others}\n\n` +
                     `Respond now with your rebuttal for Round ${round}.` +
+                    (steeringNote ? `\n\n**USER STEERING (queued mid-debate — follow this):**\n${steeringNote}` : '') +
                     livePriceBlock;
 
                 const messages: ChatMessage[] = [
@@ -2775,6 +2806,7 @@ export const conductRealDebate = async function* (
         // notices in the debate chat instead of a silent console.warn.
         for (const name of droppedThisRound) {
             yield { speaker: 'System', round, text: `${name} dropped out during Round ${round} (provider stream failed) — the debate continues without them.` };
+            emitLog('drop', `${name} dropped`, round, name);
         }
         // Mid-debate replacement: the debate suspends (bounded by
         // replacementTimeoutMs) while the consumer asks the user for a fresh
@@ -2819,9 +2851,10 @@ export const conductRealDebate = async function* (
     // Round numbering stays dense/dynamic: questions round, answers round,
     // judgment round (when present). The verdict's `finalRound` is computed
     // after the loop so the transcript builder can include all turns.
-    let lastRebuttalRound = totalRounds;
+    let lastRebuttalRound = skipRebuttals ? 1 : totalRounds;
 
     for (let cycle = 1; cycle <= MAX_CLARIFICATION_CYCLES; cycle++) {
+        if (skipRebuttals) break;
         if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
         // Global budget: skip clarification and proceed to the verdict.
@@ -2832,10 +2865,15 @@ export const conductRealDebate = async function* (
 
         // -- MODERATOR QUESTIONS (streamed once, ~100 tokens/turn cap) --
         const questionRound = lastRebuttalRound + 1;
+        const steerQ = takeSteering(questionRound);
+        if (steerQ) {
+            yield { speaker: 'System', round: questionRound, text: `User steering: ${steerQ}` };
+        }
         const priorQATranscript = buildDebateTranscript(names, roundTexts, lastRebuttalRound, 100, 1500);
         const questionSystemPrompt = getPrompt('debate.clarification_questions', MODERATOR_CLARIFICATION_QUESTIONS_PROMPT).replace('{{ANALYSTS}}', names.join(', '));
         const questionUserContent =
             `**THE DEBATE TRANSCRIPT (rounds 1-${lastRebuttalRound}):**\n${priorQATranscript}` +
+            (steerQ ? `\n\n**USER STEERING (queued mid-debate — follow this):**\n${steerQ}` : '') +
             buildLivePriceRefreshBlock(getLivePrice?.() ?? null, 'before the clarification questions');
         onSpeakerStatus?.('Moderator', questionRound, true);
         let questionText = '';
@@ -3053,6 +3091,11 @@ export const conductRealDebate = async function* (
     // The per-turn 100-token cap is unchanged; the total cap is raised so all
     // clarification cycles fit before the verdict.
     const transcriptBlock = buildDebateTranscript(names, roundTexts, lastRebuttalRound, 100, 2400);
+    const steerVerdict = takeSteering(lastRebuttalRound + 1);
+    if (steerVerdict) {
+        yield { speaker: 'System', round: lastRebuttalRound + 1, text: `User steering: ${steerVerdict}` };
+    }
+    emitLog('verdict', 'Moderator verdict', lastRebuttalRound + 1, 'Moderator');
 
     // --- CONTEXT BLOCKS (reused from the simulated-debate machinery) ---
     let mcContext = "No Monte Carlo simulation data available.";
@@ -3114,8 +3157,9 @@ export const conductRealDebate = async function* (
 
     const moderatorPrompt = [
         getPrompt('debate.final_verdict', MODERATOR_FINAL_VERDICT_PROMPT).replace('{{ANALYSTS}}', names.join(', ')),
-        `\n\n**THE DEBATE TRANSCRIPT (COMPLETE):**\n${transcriptBlock}`,
+        `\n\n**THE DEBATE TRANSCRIPT (EPISODES):**\n${transcriptBlock}`,
         `\n\n**TRADING REQUEST:**\n${truncateTextToTokens(userPrompt, 350)}`,
+        steerVerdict ? `\n\n**USER STEERING (queued mid-debate — follow this):**\n${steerVerdict}` : '',
         marketDataOverride,
         generateGateReconciliationContext(gateResult ?? null, []),
         // Live-path divergence + calibration: previously these only existed in
@@ -3141,7 +3185,7 @@ export const conductRealDebate = async function* (
     // so the retry is not blind.
     const compactModeratorPrompt = [
         getPrompt('debate.final_verdict_compact', MODERATOR_FINAL_VERDICT_PROMPT_COMPACT).replace('{{ANALYSTS}}', names.join(', ')),
-        `\n\n**THE DEBATE TRANSCRIPT (COMPACT):**\n${transcriptBlock}`,
+        `\n\n**THE DEBATE TRANSCRIPT (EPISODES):**\n${transcriptBlock}`,
         hybridContext ? `\n\n**HYBRID INTELLIGENCE MARKET DATA (VERIFIED LIVE):**\n${truncateTextToTokens(hybridContext, 1500)}` : '',
     ].join('\n');
 
