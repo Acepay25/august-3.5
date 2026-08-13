@@ -20,7 +20,7 @@ const ListHeader = () => <div className="h-16"></div>;
 // message can always scroll above it instead of being hidden underneath it.
 const ListFooter: React.FC<{ isLoading?: boolean }> = ({ isLoading = false }) => (
     <div
-        className={isLoading ? 'h-[32rem] sm:h-[36rem] lg:h-[40rem]' : 'h-72 sm:h-80 lg:h-96'}
+        className={isLoading ? 'h-52 sm:h-56' : 'h-36 sm:h-40'}
         aria-hidden="true"
     />
 );
@@ -476,7 +476,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
 
             {isRateLimited && <div className="status-surface absolute top-16 left-4 right-4 z-20 bg-red-500/10 border border-red-500/20 text-red-200 p-4 rounded-xl flex items-center justify-between mb-6 animate-fade-in" role="alert"><span><strong>Rate Limit Exceeded:</strong> Please wait a moment.</span><button onClick={() => setIsRateLimited(false)} aria-label="Dismiss rate limit notice" className="text-red-200 hover:text-white ml-4"><CloseIcon /></button></div>}
 
-            <div className="fixed bottom-40 right-6 z-30 flex flex-col gap-2">
+            <div className="fixed bottom-28 right-6 z-30 flex flex-col gap-2">
                 {showScrollUp && !isSelectionMode && (
                     <button
                         onClick={handleCycleAnalysisUp}
@@ -515,7 +515,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 must still be able to cancel mid-debate. */}
             {(loadingMessage || (isAnalysisInProgress && !isPostMortemInProgress)) ? (
                 <>
-                <div className="absolute bottom-[calc(env(safe-area-inset-bottom)+11rem)] sm:bottom-[calc(env(safe-area-inset-bottom)+12rem)] left-0 right-0 p-2 sm:p-4 pointer-events-none z-10 lg:hidden">
+                <div className="absolute bottom-[calc(env(safe-area-inset-bottom)+8rem)] sm:bottom-[calc(env(safe-area-inset-bottom)+8.5rem)] left-0 right-0 p-2 sm:p-4 pointer-events-none z-10 lg:hidden">
                     <div className="max-w-4xl mx-auto pointer-events-auto lg:max-w-none">
                         {analysisSteps && analysisSteps.length > 0 ? (
                             <AnalysisProgress
@@ -600,7 +600,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 <>
                     {/* Quick Action Chips - docked above the input once the
                         session has content */}
-                    <div className="absolute bottom-[140px] lg:bottom-[180px] left-0 right-0 px-3 sm:px-4 lg:px-0 pointer-events-none z-10 lg:w-full lg:max-w-3xl lg:mx-auto">
+                    <div className="absolute bottom-[6.75rem] sm:bottom-[7.25rem] left-0 right-0 px-3 sm:px-4 lg:px-0 pointer-events-none z-10 lg:w-full lg:max-w-3xl lg:mx-auto">
                         <div className="w-full pointer-events-auto">
                             <QuickActionChips
                                 onNewAnalysis={onNewConversation}

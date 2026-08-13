@@ -10,7 +10,7 @@ import {
 import { useToastActions } from '../shared/Toast';
 import { useConfirmDialog } from '../shared/ConfirmDialog';
 import MarkdownRenderer from '../shared/MarkdownRenderer';
-import { SearchIcon, LoadingIcon, CodeIcon, ChevronLeftIcon } from '../shared/Icons';
+import { SearchIcon, LoadingIcon, FileTextIcon, ChevronRightIcon, ChevronLeftIcon, FolderIcon } from '../shared/Icons';
 
 interface PromptManagerProps {
     /** Active user — overrides are stored per-user. */
@@ -35,7 +35,7 @@ const groupLabel = (key: string): string => GROUP_LABELS[key] ?? 'Other';
 
 /**
  * Settings → Prompts: browse every prompt the app sends to models, see where
- * it is used, and edit it. Mirrors the Personal edge (Trader Notebook) layout:
+ * it is used, and edit it. Mirrors the Memory (Trader Notebook) layout:
  * categories on the left, the prompt list on the right, and clicking a prompt
  * opens its rendered markdown (Write switches to the raw editor).
  * Edits are stored per-user in Preferences and applied at call time
@@ -45,7 +45,7 @@ const PromptManager: React.FC<PromptManagerProps> = ({ username }) => {
     const toast = useToastActions();
     const { confirm, ConfirmDialogComponent } = useConfirmDialog();
     const [searchQuery, setSearchQuery] = useState('');
-    const [selectedGroupKey, setSelectedGroupKey] = useState<string>('all');
+    const [selectedGroupKey, setSelectedGroupKey] = useState<string | null>(null);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [draft, setDraft] = useState<string>('');
     const [isDirty, setIsDirty] = useState(false);
@@ -110,15 +110,9 @@ const PromptManager: React.FC<PromptManagerProps> = ({ username }) => {
     // returns matches from every category (a "results" view).
     const visibleEntries = useMemo(() => {
         if (searchFiltered) return searchFiltered;
-        if (selectedGroupKey === 'all') return PROMPT_REGISTRY;
+        if (!selectedGroupKey) return [];
         return PROMPT_REGISTRY.filter(e => groupKeyOf(e.id) === selectedGroupKey);
     }, [searchFiltered, selectedGroupKey]);
-
-    const listTitle = searchFiltered
-        ? `Results (${searchFiltered.length})`
-        : selectedGroupKey === 'all'
-            ? 'All prompts'
-            : groupLabel(selectedGroupKey);
 
     // Guard unsaved edits when leaving the current prompt.
     const ensureNotDirty = useCallback(async (): Promise<boolean> => {
@@ -143,16 +137,26 @@ const PromptManager: React.FC<PromptManagerProps> = ({ username }) => {
         setIsPreview(true);
     }, [selectedId, overrides, ensureNotDirty]);
 
-    const goBackToList = useCallback(async () => {
-        if (!(await ensureNotDirty())) return;
-        setSelectedId(null);
-    }, [ensureNotDirty]);
-
     const selectCategory = useCallback(async (key: string) => {
         if (!(await ensureNotDirty())) return;
         setSelectedGroupKey(key);
-        setSelectedId(null);
         setSearchQuery('');
+        setSelectedId(null);
+        setIsDirty(false);
+    }, [ensureNotDirty]);
+
+    const goBackToList = useCallback(async () => {
+        if (!(await ensureNotDirty())) return;
+        setSelectedId(null);
+        setIsDirty(false);
+    }, [ensureNotDirty]);
+
+    const goBackToCategories = useCallback(async () => {
+        if (!(await ensureNotDirty())) return;
+        setSelectedId(null);
+        setSelectedGroupKey(null);
+        setSearchQuery('');
+        setIsDirty(false);
     }, [ensureNotDirty]);
 
     const handleSave = useCallback(async () => {
@@ -198,223 +202,188 @@ const PromptManager: React.FC<PromptManagerProps> = ({ username }) => {
     }, [activeUser, selectedEntry, confirm, toast]);
 
     return (
-        <div className="flex flex-col h-full min-h-0">
-            {/* Header — what this is + reset-all */}
-            <div className="flex items-center justify-between gap-3 flex-wrap pb-3 border-b border-zinc-800 shrink-0">
+        <div className="flex flex-col h-full min-h-0 px-8 py-8 lg:px-12 lg:py-10">
+            <div className="w-full max-w-4xl mx-auto flex flex-col flex-1 min-h-0">
+            <div className="flex items-start justify-between gap-4 shrink-0 mb-8">
                 <div>
-                    <h4 className="text-sm font-bold text-white">Prompts</h4>
-                    <p className="text-xs text-zinc-500 mt-0.5">
-                        Every prompt the app sends to your AI models. Edit one and it applies to the next analysis instantly.
+                    <h3 className="text-3xl font-semibold text-zinc-100 tracking-tight">Prompts</h3>
+                    <p className="text-sm text-zinc-500 mt-2 leading-relaxed">
+                        Every prompt sent to your models. Edits apply on the next analysis.
                     </p>
                 </div>
                 {modifiedCount > 0 && (
                     <button
                         type="button"
                         onClick={handleResetAll}
-                        className="shrink-0 px-3 py-1.5 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 text-[10px] font-bold uppercase tracking-widest transition-colors"
+                        className="status-surface shrink-0 px-3 py-2 rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 text-xs font-medium transition-colors"
                     >
                         Reset all ({modifiedCount})
                     </button>
                 )}
             </div>
 
-            {/* Body — category sidebar + prompt list / viewer */}
-            <div className="flex-1 min-h-0 flex gap-3 pt-3">
-                {/* Categories (like the notebook's folder sidebar) */}
-                <div className="w-52 shrink-0 flex flex-col min-h-0 border border-zinc-800/80 rounded-xl bg-zinc-900/60 overflow-hidden">
-                    <div className="px-3 py-2 border-b border-zinc-800/80 shrink-0">
-                        <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500">Categories</span>
-                    </div>
-                    <div className="flex-1 overflow-y-auto custom-scrollbar p-1.5 space-y-0.5">
-                        <button
-                            onClick={() => selectCategory('all')}
-                            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-colors ${
-                                selectedGroupKey === 'all' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
-                            }`}
-                        >
-                            <span>All</span>
-                            <span className="text-[9px] font-mono text-zinc-600">{PROMPT_REGISTRY.length}</span>
-                        </button>
-                        {allGroups.map(group => {
-                            const groupModified = group.entries.filter(e => overrides[e.id] !== undefined).length;
-                            const isActive = selectedGroupKey === group.key;
-                            return (
-                                <button
-                                    key={group.key}
-                                    onClick={() => selectCategory(group.key)}
-                                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-colors ${
-                                        isActive ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
-                                    }`}
-                                >
-                                    <span className="truncate">{group.label}</span>
-                                    <span className={`text-[9px] font-mono shrink-0 ml-1 ${groupModified > 0 ? 'text-cyan-500' : 'text-zinc-600'}`}>
-                                        {group.entries.length}{groupModified > 0 ? ` · ${groupModified} mod` : ''}
-                                    </span>
-                                </button>
-                            );
-                        })}
-                    </div>
-                </div>
+            <div className="relative shrink-0 mb-8">
+                <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" />
+                <input
+                    type="search"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search prompts…"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-10 pr-3 py-3 text-sm text-zinc-200 placeholder-zinc-600 outline-none focus:border-zinc-600"
+                    aria-label="Search prompts"
+                />
+            </div>
 
-                {/* Right pane — prompt list, or the opened prompt's markdown */}
-                <div className="flex-1 min-w-0 flex flex-col min-h-0 gap-3">
-                    {selectedEntry ? (
-                        <>
-                            {/* Prompt header — back, name, id, actions */}
-                            <div className="shrink-0 flex items-center gap-2 flex-wrap px-3 py-2 rounded-xl border border-zinc-800/80 bg-zinc-900/60">
+            {selectedEntry ? (
+                <div className="flex-1 min-h-0 flex flex-col">
+                    <button
+                        onClick={() => { void goBackToList(); }}
+                        className="flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-100 transition-colors mb-6 self-start"
+                    >
+                        <ChevronLeftIcon className="w-4 h-4" /> Back
+                    </button>
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                        <h4 className="text-lg font-medium text-zinc-100 tracking-tight font-mono">
+                            {selectedEntry.id.replace(/\./g, '-')}.md
+                        </h4>
+                        <div className="flex items-center gap-2 shrink-0">
+                            <button
+                                onClick={() => setIsPreview(v => !v)}
+                                className="px-3 py-1.5 rounded-lg text-sm text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900 transition-colors"
+                            >
+                                {isPreview ? 'Write' : 'Preview'}
+                            </button>
+                            <button
+                                onClick={handleSave}
+                                disabled={!isDirty || isSaving}
+                                className="px-3 py-1.5 rounded-lg text-sm bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-100 transition-colors"
+                            >
+                                {isSaving ? 'Saving…' : 'Save'}
+                            </button>
+                            {isModified && (
                                 <button
-                                    onClick={goBackToList}
-                                    className="flex items-center gap-0.5 px-1.5 py-1 rounded-lg text-[10px] font-bold text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 transition-colors shrink-0"
-                                    title="Back to the prompt list"
+                                    onClick={handleResetOne}
+                                    className="px-3 py-1.5 rounded-lg text-sm text-zinc-500 hover:text-zinc-200 transition-colors"
                                 >
-                                    <ChevronLeftIcon className="w-3.5 h-3.5" /> List
+                                    Reset
                                 </button>
-                                <span className="text-xs font-bold text-white truncate max-w-[200px]">{selectedEntry.name}</span>
-                                <code className="text-[9px] font-mono text-zinc-600 shrink-0">id: {selectedEntry.id}</code>
-                                {isModified && (
-                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 shrink-0" title="Your edited version is live">Modified</span>
-                                )}
-                                <span className="text-[9px] font-mono text-zinc-600 shrink-0">{draft.length.toLocaleString()} chars</span>
-                                <div className="ml-auto flex items-center gap-2 shrink-0">
-                                    <button
-                                        onClick={() => setIsPreview(v => !v)}
-                                        className="px-2.5 py-1.5 rounded-lg border border-white/10 text-zinc-300 hover:text-white hover:border-white/25 text-[10px] font-bold uppercase tracking-widest transition-colors"
-                                    >
-                                        {isPreview ? 'Write' : 'Preview'}
-                                    </button>
-                                    <button
-                                        onClick={handleSave}
-                                        disabled={!isDirty || isSaving}
-                                        className="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[10px] font-bold uppercase tracking-widest transition-colors"
-                                    >
-                                        {isSaving ? 'Saving…' : 'Save'}
-                                    </button>
-                                    {isModified && (
-                                        <button
-                                            onClick={handleResetOne}
-                                            className="px-2.5 py-1.5 rounded-lg border border-white/10 text-zinc-400 hover:text-zinc-200 hover:border-white/20 text-[10px] font-bold uppercase tracking-widest transition-colors"
-                                        >
-                                            Reset
-                                        </button>
-                                    )}
-                                </div>
+                            )}
+                        </div>
+                    </div>
+                    <p className="text-sm text-zinc-500 mb-8">{selectedEntry.description}</p>
+                    <div className="flex-1 min-h-[320px] rounded-xl border border-zinc-800 bg-zinc-900 overflow-hidden flex flex-col">
+                        {isPreview ? (
+                            <div className="flex-1 overflow-y-auto custom-scrollbar px-8 py-8 lg:px-10 lg:py-10">
+                                <MarkdownRenderer content={draft || '(empty prompt)'} className="text-[15px] leading-8" />
                             </div>
-
-                            {/* Usage chips */}
-                            <div className="shrink-0 flex flex-wrap gap-1">
-                                {selectedEntry.usage.map(u => (
-                                    <span key={u} className="px-1.5 py-0.5 rounded bg-zinc-800 border border-white/5 text-zinc-500 text-[9px]">
-                                        {u}
-                                    </span>
+                        ) : (
+                            <textarea
+                                value={draft}
+                                onChange={e => { setDraft(e.target.value); setIsDirty(true); }}
+                                spellCheck={false}
+                                className="flex-1 w-full resize-none bg-transparent px-8 py-8 lg:px-10 lg:py-10 text-[15px] leading-8 text-zinc-200 font-mono focus:outline-none custom-scrollbar"
+                                placeholder="(empty override — the built-in default is used)"
+                                aria-label={`Edit ${selectedEntry.name}`}
+                            />
+                        )}
+                    </div>
+                    <p className="shrink-0 text-xs text-zinc-600 mt-4">
+                        {isModified
+                            ? 'Your edited version is live. Saving an empty editor removes the override.'
+                            : 'No override yet — the built-in default above is what models currently see.'}
+                    </p>
+                </div>
+            ) : searchQuery.trim() || selectedGroupKey ? (
+                <div className="flex-1 min-h-0 flex flex-col">
+                    {!searchQuery.trim() && (
+                        <button
+                            onClick={() => { void goBackToCategories(); }}
+                            className="flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-100 transition-colors mb-6 self-start"
+                        >
+                            <ChevronLeftIcon className="w-4 h-4" /> Back
+                        </button>
+                    )}
+                    {selectedGroupKey && !searchQuery.trim() && (
+                        <h4 className="text-lg font-medium text-zinc-100 tracking-tight mb-8">
+                            {groupLabel(selectedGroupKey)}
+                        </h4>
+                    )}
+                    <div className="flex-1 min-h-0 rounded-xl border border-zinc-800 bg-zinc-900 overflow-hidden">
+                        {isLoading ? (
+                            <div className="flex justify-center py-16"><LoadingIcon className="w-6 h-6 text-zinc-500" /></div>
+                        ) : visibleEntries.length === 0 ? (
+                            <p className="text-sm text-zinc-500 text-center py-16">
+                                {searchQuery ? `No prompts match "${searchQuery}".` : 'No prompts in this category.'}
+                            </p>
+                        ) : (
+                            <div className="overflow-y-auto custom-scrollbar h-full">
+                                {visibleEntries.map(entry => (
+                                    <button
+                                        key={entry.id}
+                                        type="button"
+                                        onClick={() => { void openEntry(entry); }}
+                                        className="w-full flex items-center gap-3.5 px-4 py-3.5 border-b border-zinc-800 last:border-b-0 hover:bg-zinc-800/80 transition-colors text-left"
+                                    >
+                                        <span className="w-9 h-9 rounded-lg bg-zinc-800 border border-zinc-700/80 flex items-center justify-center shrink-0">
+                                            <FileTextIcon className="w-4 h-4 text-zinc-400" />
+                                        </span>
+                                        <span className="flex-1 min-w-0">
+                                            <span className="block font-mono text-sm text-zinc-100 truncate">
+                                                {entry.id.replace(/\./g, '-')}.md
+                                            </span>
+                                            <span className="block text-xs text-zinc-500 mt-0.5 truncate">
+                                                {entry.description}
+                                            </span>
+                                        </span>
+                                        {overrides[entry.id] !== undefined && (
+                                            <span className="text-[10px] uppercase tracking-widest text-zinc-500 shrink-0">edited</span>
+                                        )}
+                                        <ChevronRightIcon className="w-4 h-4 text-zinc-600 shrink-0" />
+                                    </button>
                                 ))}
                             </div>
-
-                            {/* Description */}
-                            <p className="shrink-0 text-[11px] text-zinc-500 leading-relaxed -mt-2">
-                                {selectedEntry.description}
-                            </p>
-
-                            {/* Editor / preview */}
-                            <div className="flex-1 min-h-0 rounded-xl border border-zinc-800/80 bg-zinc-900/60 overflow-hidden flex flex-col">
-                                {isPreview ? (
-                                    <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
-                                        <MarkdownRenderer content={draft || '(empty prompt)'} />
-                                    </div>
-                                ) : (
-                                    <textarea
-                                        value={draft}
-                                        onChange={e => { setDraft(e.target.value); setIsDirty(true); }}
-                                        spellCheck={false}
-                                        className="flex-1 w-full resize-none bg-transparent p-4 text-[12px] leading-relaxed text-zinc-200 font-mono focus:outline-none custom-scrollbar"
-                                        placeholder="(empty override — the built-in default is used)"
-                                        aria-label={`Edit ${selectedEntry.name}`}
-                                    />
-                                )}
-                            </div>
-
-                            <p className="shrink-0 text-[10px] text-zinc-600">
-                                {isModified
-                                    ? 'Your edited version is live. Saving an empty editor removes the override.'
-                                    : 'No override yet — the built-in default above is what models currently see.'}
-                            </p>
-                        </>
+                        )}
+                    </div>
+                </div>
+            ) : (
+                <div className="flex-1 min-h-0 rounded-xl border border-zinc-800 bg-zinc-900 overflow-hidden">
+                    {isLoading ? (
+                        <div className="flex justify-center py-16"><LoadingIcon className="w-6 h-6 text-zinc-500" /></div>
                     ) : (
-                        <div className="flex-1 min-h-0 border border-zinc-800/80 rounded-xl bg-zinc-900/60 overflow-hidden flex flex-col">
-                            {/* List header — category title + search */}
-                            <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-zinc-800/80 shrink-0">
-                                <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500">{listTitle}</span>
-                                <div className="relative w-48">
-                                    <SearchIcon className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-600" />
-                                    <input
-                                        type="search"
-                                        value={searchQuery}
-                                        onChange={(e) => setSearchQuery(e.target.value)}
-                                        placeholder="Search prompts…"
-                                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-7 pr-2 py-1.5 text-[11px] text-zinc-200 placeholder-zinc-600 outline-none focus:border-cyan-500/40 transition-colors"
-                                        aria-label="Search prompts"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Prompt rows */}
-                            <div className="flex-1 overflow-y-auto custom-scrollbar p-1.5 space-y-0.5">
-                                {isLoading ? (
-                                    <div className="flex justify-center py-10"><LoadingIcon className="w-5 h-5 text-zinc-500" /></div>
-                                ) : visibleEntries.length === 0 ? (
-                                    <p className="text-[11px] text-zinc-600 text-center py-10">
-                                        {searchQuery ? `No prompts match "${searchQuery}".` : 'No prompts in this category.'}
-                                    </p>
-                                ) : searchFiltered ? (
-                                    visibleEntries.map(entry => (
-                                        <PromptRow key={entry.id} entry={entry} isModified={overrides[entry.id] !== undefined} onOpen={openEntry} />
-                                    ))
-                                ) : (
-                                    // Category views (incl. All) render group separators so
-                                    // orientation survives long lists.
-                                    allGroups
-                                        .filter(g => selectedGroupKey === 'all' || g.key === selectedGroupKey)
-                                        .map(group => (
-                                            <div key={group.key}>
-                                                {selectedGroupKey === 'all' && (
-                                                    <div className="flex items-center justify-between px-2.5 py-1">
-                                                        <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500">{group.label}</span>
-                                                        <span className="text-[9px] font-mono text-zinc-600">{group.entries.length}</span>
-                                                    </div>
-                                                )}
-                                                <div className="space-y-0.5">
-                                                    {group.entries.map(entry => (
-                                                        <PromptRow key={entry.id} entry={entry} isModified={overrides[entry.id] !== undefined} onOpen={openEntry} />
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        ))
-                                )}
-                            </div>
+                        <div className="overflow-y-auto custom-scrollbar h-full">
+                            {allGroups.map(group => {
+                                const edited = group.entries.filter(e => overrides[e.id] !== undefined).length;
+                                return (
+                                    <button
+                                        key={group.key}
+                                        type="button"
+                                        onClick={() => { void selectCategory(group.key); }}
+                                        className="w-full flex items-center gap-3.5 px-4 py-3.5 border-b border-zinc-800 last:border-b-0 hover:bg-zinc-800/80 transition-colors text-left"
+                                    >
+                                        <span className="w-9 h-9 rounded-lg bg-zinc-800 border border-zinc-700/80 flex items-center justify-center shrink-0">
+                                            <FolderIcon className="w-4 h-4 text-zinc-400" />
+                                        </span>
+                                        <span className="flex-1 min-w-0">
+                                            <span className="block text-sm font-medium text-zinc-100 truncate">
+                                                {group.label}
+                                            </span>
+                                            <span className="block text-xs text-zinc-500 mt-0.5 truncate">
+                                                {group.entries.length} {group.entries.length === 1 ? 'prompt' : 'prompts'}
+                                                {edited > 0 ? ` · ${edited} edited` : ''}
+                                            </span>
+                                        </span>
+                                        <ChevronRightIcon className="w-4 h-4 text-zinc-600 shrink-0" />
+                                    </button>
+                                );
+                            })}
                         </div>
                     )}
                 </div>
-            </div>
+            )}
             {ConfirmDialogComponent}
+            </div>
         </div>
     );
 };
-
-/** One row in the prompt list — name, id, modified dot. */
-const PromptRow: React.FC<{
-    entry: PromptRegistryEntry;
-    isModified: boolean;
-    onOpen: (entry: PromptRegistryEntry) => void;
-}> = ({ entry, isModified, onOpen }) => (
-    <button
-        onClick={() => onOpen(entry)}
-        className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-colors hover:bg-zinc-900"
-    >
-        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isModified ? 'bg-cyan-400' : 'bg-zinc-700'}`} title={isModified ? 'Modified — custom version is live' : 'Built-in default'} />
-        <span className="flex-1 min-w-0">
-            <span className="block text-[11px] font-semibold text-zinc-200 truncate">{entry.name}</span>
-            <span className="block text-[9px] font-mono text-zinc-600 truncate">{entry.id}</span>
-        </span>
-    </button>
-);
 
 export default React.memo(PromptManager);

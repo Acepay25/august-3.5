@@ -39,8 +39,9 @@ const STATUS_CHIP: Record<EnsembleAnalystProgress['status'], string> = {
 };
 
 /**
- * Zinc run-log row: avatar, name, model, status. Thinking auto-opens while
- * streaming; final output sits below once complete.
+ * Zinc run-log row: avatar, name, model, status. Thinking stays collapsed
+ * until the user opens it; the row still expands while a live stream is
+ * in progress so the Thinking toggle is visible.
  */
 const AnalystRow: React.FC<{
     analyst: EnsembleAnalystProgress;
@@ -91,7 +92,7 @@ const AnalystRow: React.FC<{
                     {showThinkingBlock && (
                         <details
                             className="group rounded-lg border border-white/10 bg-black/20"
-                            open={thinkingOpen || (isStreamingThinking && !userInteractedRef.current)}
+                            open={thinkingOpen}
                             onToggle={(e) => setThinkingOpen((e.target as HTMLDetailsElement).open)}
                         >
                             <summary

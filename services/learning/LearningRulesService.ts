@@ -308,6 +308,10 @@ export const getRelevantRules = (
 
     // Score each rule by relevance
     const scoredRules = storage.rules.map(rule => {
+        if (rule.status === 'retired') {
+            return { rule, score: 0 };
+        }
+
         let score = 0;
 
         // LOSS rules are more important (learn from mistakes)
@@ -470,4 +474,44 @@ export const processPostMortemForLearning = (
     }
 
     return updatedStorage;
+};
+
+/**
+ * After a closed WIN/LOSS, score every matching rule. Retire advice that
+ * later outcomes contradict (repeat-rules that keep losing, avoid-rules
+ * that keep winning).
+ */
+export const applyOutcomeToRules = (trade: LoggedTrade): void => {
+    if (trade.outcome !== TradeOutcome.WIN && trade.outcome !== TradeOutcome.LOSS) return;
+    const storage = loadLearningRules();
+    if (!storage.rules?.length) return;
+    const coin = trade.analysis?.coinName;
+    const pattern = trade.analysis?.detectedPatternFamily;
+    const direction = trade.analysis?.direction === 'Long' || trade.analysis?.direction === 'Short'
+        ? trade.analysis.direction
+        : undefined;
+    let changed = false;
+    const next = storage.rules.map(rule => {
+        if (rule.status === 'retired') return rule;
+        const coinHit = !rule.coin || !coin || coin.toUpperCase().includes(rule.coin.toUpperCase());
+        const patternHit = !rule.pattern || !pattern || pattern.toLowerCase().includes(rule.pattern.toLowerCase());
+        const dirHit = !rule.direction || !direction || rule.direction === direction;
+        if (!(coinHit && patternHit && dirHit)) return rule;
+        // Need at least one actual overlap (not "all fields empty" matching everything)
+        if (!rule.coin && !rule.pattern && !rule.direction) return rule;
+        changed = true;
+        const wins = (rule.wins ?? 0) + (trade.outcome === TradeOutcome.WIN ? 1 : 0);
+        const losses = (rule.losses ?? 0) + (trade.outcome === TradeOutcome.LOSS ? 1 : 0);
+        const sample = wins + losses;
+        let status = rule.status ?? 'candidate';
+        if (sample >= 6) {
+            const wr = wins / sample;
+            if (rule.outcome === 'WIN' && wr < 0.4) status = 'retired';
+            else if (rule.outcome === 'LOSS' && wr > 0.6) status = 'retired';
+            else if (sample >= 5) status = 'confirmed';
+        }
+        return { ...rule, wins, losses, status };
+    });
+    if (!changed) return;
+    saveLearningRules({ ...storage, rules: next, lastUpdated: new Date().toISOString() });
 };

@@ -3,6 +3,7 @@ import { Message, TradeOutcome, LoggedTrade, SavedAnalysis, TradeSummary, Learni
 import { PostMortemCandidate } from '../components/modals/PostTradeUploadModal';
 import { captureForPostMortem } from '../services/ui/AutoCaptureService';
 import * as MemoryService from '../services/learning/MemoryService';
+import { insightTextForTrade } from '../utils/tradeInsightBrief';
 import { ProviderConfig } from '../types/provider';
 import GlobalLearningService from '../services/learning/GlobalLearningService';
 import { storeRule, loadLearningRules, saveLearningRules } from '../services/learning/LearningRulesService';
@@ -179,12 +180,13 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         setIsInsightGenerating(true);
         try {
             // Use the user's preference for Algo vs AI insight generation
-            const summary = await MemoryService.summarizeTrade(
-                loggedTrade,
-                memoryModel,
-                memoryConfig,
-                useAlgorithmicInsights // Pass the toggle state
-            );
+            const summary = insightTextForTrade(loggedTrade)
+                || await MemoryService.summarizeTrade(
+                    loggedTrade,
+                    memoryModel,
+                    memoryConfig,
+                    useAlgorithmicInsights
+                );
             const newSummary = {
                 id: loggedTrade.id,
                 summaryText: summary,
@@ -530,12 +532,13 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             setIsInsightGenerating(true);
             try {
                 // Use the user's preference for Algo vs AI insight generation
-                const summary = await MemoryService.summarizeTrade(
-                    loggedTrade,
-                    memoryModel,
-                    memoryConfig,
-                    useAlgorithmicInsights // Pass the toggle state
-                );
+                const summary = insightTextForTrade(loggedTrade)
+                    || await MemoryService.summarizeTrade(
+                        loggedTrade,
+                        memoryModel,
+                        memoryConfig,
+                        useAlgorithmicInsights
+                    );
                 const newSummary = {
                     id: loggedTrade.id,
                     summaryText: summary,

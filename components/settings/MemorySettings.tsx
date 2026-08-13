@@ -1,13 +1,8 @@
 /**
- * MemorySettings - Memory provider/model configuration card.
+ * MemorySettings - Memory provider/model picker.
  *
- * Extracted from SettingsMenu.tsx (AI Models & Providers view).
  * Lets the user choose which AI provider manages pattern memory
  * and trade history, along with the model to use.
- *
- * Providers are now user-configured `ProviderConfig`s. The parent
- * passes the full list of available provider configs plus the
- * currently selected memory config (or null) and a change callback.
  */
 
 import React from 'react';
@@ -23,37 +18,30 @@ export interface MemorySettingsProps {
     onMemoryConfigChange: (config: ProviderConfig | null) => void;
 }
 
-// Memory Provider
 const MemorySettings: React.FC<MemorySettingsProps> = ({ providerConfigs, memoryConfig, onMemoryConfigChange }) => (
-    <div className="p-4 rounded-2xl bg-zinc-800 border border-purple-500/20">
-        <div className="flex items-center gap-2 mb-3">
-            <span className="text-xl"></span>
-            <span className="text-sm font-bold text-purple-400">Memory Provider</span>
-        </div>
-        <p className="text-xs text-zinc-500 mb-3">The AI that manages pattern memory and trade history</p>
-        <div className="space-y-2">
-            <ModelPicker
-                providers={providerConfigs}
-                value={memoryConfig?.id && memoryConfig?.selectedModel ? `${memoryConfig.id}::${memoryConfig.selectedModel}` : memoryConfig?.id ?? ''}
-                onChange={(value) => {
-                    const separator = value.indexOf('::');
-                    if (separator >= 0) {
-                        const providerId = value.slice(0, separator);
-                        const modelId = value.slice(separator + 2);
-                        const selected = providerConfigs.find(p => p.id === providerId) ?? null;
-                        if (selected) {
-                            onMemoryConfigChange?.({ ...selected, selectedModel: modelId });
-                        }
-                    } else {
-                        const selected = providerConfigs.find(p => p.id === value) ?? null;
-                        onMemoryConfigChange?.(selected);
+    <label className="flex flex-col gap-2 min-w-[220px] flex-1">
+        <span className="text-xs font-medium uppercase tracking-widest text-zinc-500">Memory model</span>
+        <ModelPicker
+            providers={providerConfigs}
+            value={memoryConfig?.id && memoryConfig?.selectedModel ? `${memoryConfig.id}::${memoryConfig.selectedModel}` : memoryConfig?.id ?? ''}
+            onChange={(value) => {
+                const separator = value.indexOf('::');
+                if (separator >= 0) {
+                    const providerId = value.slice(0, separator);
+                    const modelId = value.slice(separator + 2);
+                    const selected = providerConfigs.find(p => p.id === providerId) ?? null;
+                    if (selected) {
+                        onMemoryConfigChange?.({ ...selected, selectedModel: modelId });
                     }
-                }}
-                mode="provider-model"
-                placeholder="Select provider/model"
-            />
-        </div>
-    </div>
+                } else {
+                    const selected = providerConfigs.find(p => p.id === value) ?? null;
+                    onMemoryConfigChange?.(selected);
+                }
+            }}
+            mode="provider-model"
+            placeholder="Select provider/model"
+        />
+    </label>
 );
 
 export default MemorySettings;

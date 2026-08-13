@@ -58,13 +58,13 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className 
           blockquote: ({ children }) => (
             <blockquote className="border-l-2 border-cyan-500/40 pl-3 text-zinc-400">{children}</blockquote>
           ),
-          h1: ({ children }) => <h1 className="mt-3 mb-1.5 text-base font-bold text-zinc-100">{children}</h1>,
-          h2: ({ children }) => <h2 className="mt-3 mb-1.5 text-sm font-bold text-zinc-100">{children}</h2>,
-          h3: ({ children }) => <h3 className="mt-2.5 mb-1 text-sm font-semibold text-zinc-100">{children}</h3>,
-          p: ({ children }) => <p className="my-2.5 leading-7 text-zinc-300">{children}</p>,
-          ul: ({ children }) => <ul className="my-2.5 list-disc space-y-2 pl-4 text-zinc-300">{children}</ul>,
-          ol: ({ children }) => <ol className="my-2.5 list-decimal space-y-2 pl-4 text-zinc-300">{children}</ol>,
-          li: ({ children }) => <li className="leading-7">{children}</li>,
+          h1: ({ children }) => <h1 className="mt-6 mb-3 text-lg font-semibold text-zinc-100">{children}</h1>,
+          h2: ({ children }) => <h2 className="mt-6 mb-3 text-base font-semibold text-zinc-100">{children}</h2>,
+          h3: ({ children }) => <h3 className="mt-5 mb-2 text-sm font-semibold text-zinc-100">{children}</h3>,
+          p: ({ children }) => <p className="my-4 leading-8 text-zinc-300">{children}</p>,
+          ul: ({ children }) => <ul className="my-4 list-disc space-y-2.5 pl-5 text-zinc-300">{children}</ul>,
+          ol: ({ children }) => <ol className="my-4 list-decimal space-y-2.5 pl-5 text-zinc-300">{children}</ol>,
+          li: ({ children }) => <li className="leading-8">{children}</li>,
           em: ({ children }) => <em className="italic text-zinc-200">{children}</em>,
           strong: ({ children }) => <strong className="font-bold text-zinc-50">{children}</strong>,
           a: ({ children, href }) => (

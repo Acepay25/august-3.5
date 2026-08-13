@@ -7,8 +7,10 @@
  * market-conditions notes and personal rules; the harness maintains three
  * things automatically:
  *   - profile/memory.md          — what the harness knows about the user
+ *   - profile/pattern-memory.md  — human-readable synthesis (not dumped into prompts)
  *   - trader-diary/<coin>.md     — one diary entry per closed trade
  *   - rules/recurring-mistakes.md — loss clusters from the trade log
+ *   - skills/*.md                — evidence-gated procedures (trigger + scores)
  *
  * Storage mirrors StrategyService: a synchronous module cache (so prompt
  * assembly at call time never awaits storage) backed by a per-user
@@ -35,7 +37,7 @@ const uid = (): string => `${Date.now().toString(36)}-${Math.random().toString(3
 
 /** Folder/file names are slugified everywhere (UI and AI writer) so the
  *  notebook stays filesystem-safe: lowercase, spaces → dashes, symbols out. */
-const slugifyName = (name: string): string =>
+export const slugifyName = (name: string): string =>
     name.trim()
         .replace(/[^A-Za-z0-9 _-]/g, '')
         .toLowerCase()
@@ -50,6 +52,7 @@ const DEFAULT_FOLDERS: MemoryFolder[] = [
     { id: 'trader-diary', name: 'trader-diary', order: 1 },
     { id: 'market-conditions', name: 'market-conditions', order: 2 },
     { id: 'rules', name: 'rules', order: 3 },
+    { id: 'skills', name: 'skills', order: 4 },
 ];
 
 const SEED_FILES: Omit<MemoryFile, 'id' | 'createdAt' | 'updatedAt'>[] = [
@@ -118,6 +121,7 @@ export const initMemoryFiles = async (username: string): Promise<void> => {
         const stored = await getPreferenceObject<MemoryFilesStore>(`${MEMORY_KEY_PREFIX}${username}`);
         if (stored && Array.isArray(stored.folders) && Array.isArray(stored.files)) {
             memoryCache = stored;
+            await ensureHarnessFolders(username);
             return;
         }
         memoryCache = freshSeed();
@@ -133,6 +137,21 @@ export const initMemoryFiles = async (username: string): Promise<void> => {
 /** Current notebook state (for the Settings UI and prompt injection). */
 export const getMemoryFiles = (): MemoryFilesStore => memoryCache;
 
+/** Add any missing harness folders (skills, …) for notebooks created before they existed. */
+export const ensureHarnessFolders = async (username: string): Promise<void> => {
+    const names = new Set(memoryCache.folders.map(f => f.name));
+    const looksLikeHarness = DEFAULT_FOLDERS.some(d => names.has(d.name));
+    if (!looksLikeHarness) return;
+    let changed = false;
+    for (const def of DEFAULT_FOLDERS) {
+        if (!memoryCache.folders.some(f => f.name === def.name)) {
+            memoryCache.folders.push({ id: def.id, name: def.name, order: memoryCache.folders.length });
+            changed = true;
+        }
+    }
+    if (changed) await persist(username);
+};
+
 /** Persist the cache for the active user (empty store clears the key). */
 const persist = async (username: string): Promise<void> => {
     if (memoryCache.folders.length === 0 && memoryCache.files.length === 0) {
@@ -140,7 +159,37 @@ const persist = async (username: string): Promise<void> => {
     } else {
         await setPreferenceObject(`${MEMORY_KEY_PREFIX}${username}`, memoryCache);
     }
+    if (persistSilentDepth === 0) {
+        memoryChangeListeners.forEach(handler => handler(username));
+    }
 };
+
+let persistSilentDepth = 0;
+const memoryChangeListeners = new Set<(username: string) => void>();
+
+/** Subscribe to notebook writes. Returns unsubscribe. */
+export const subscribeMemoryFilesChanged = (handler: (username: string) => void): (() => void) => {
+    memoryChangeListeners.add(handler);
+    return () => { memoryChangeListeners.delete(handler); };
+};
+
+/** @deprecated use subscribeMemoryFilesChanged */
+export const setOnMemoryFilesChanged = (handler: ((username: string) => void) | null): void => {
+    memoryChangeListeners.clear();
+    if (handler) memoryChangeListeners.add(handler);
+};
+
+/** Persist without notifying listeners (used when writing suggestions.md). */
+export const withSilentMemoryPersist = async (fn: () => Promise<void>): Promise<void> => {
+    persistSilentDepth += 1;
+    try {
+        await fn();
+    } finally {
+        persistSilentDepth -= 1;
+    }
+};
+
+export const SUGGESTIONS_FILE_NAME = 'suggestions.md';
 
 // ─── Folder CRUD ────────────────────────────────────────────────────────────
 
@@ -224,35 +273,8 @@ export const deleteMemoryFile = async (id: string, username: string): Promise<vo
 
 // ─── Prompt injection ───────────────────────────────────────────────────────
 
-/**
- * Full content of every enabled file, grouped with its folder path — the
- * block the analysts, moderator, and post-mortem prompts receive. Profile
- * first (the model learns its user), then folders by order, files by name.
- * Returns '' when nothing is enabled so callers can skip the block entirely.
- */
-export const getMemoryFilesContext = (): string => {
-    const enabled = memoryCache.files.filter(f => f.enabled && f.content.trim());
-    if (enabled.length === 0) return '';
-
-    const folderOrder = (id: string): number => memoryCache.folders.find(f => f.id === id)?.order ?? 99;
-    const folderName = (id: string): string => memoryCache.folders.find(f => f.id === id)?.name ?? 'misc';
-    const sorted = [...enabled].sort((a, b) => {
-        const diff = folderOrder(a.folderId) - folderOrder(b.folderId);
-        return diff !== 0 ? diff : a.name.localeCompare(b.name);
-    });
-
-    const blocks = sorted.map(f => `[${folderName(f.folderId)}/${f.name}]\n${f.content.trim()}`);
-    return `═══════════════════════════════════════════════════════════════
-📓 MEMORY FILES — YOUR TRADER NOTEBOOK (your notes + lessons from real trades)
-═══════════════════════════════════════════════════════════════
-These are the user's personal notes, rules, and lessons from actual logged
-trades. They reflect real experience — internalize them and apply them to
-this analysis wherever they are relevant. Do not contradict them without
-strong evidence.
-
-${blocks.join('\n\n---\n\n')}
-═══════════════════════════════════════════════════════════════`;
-};
+export type { MemoryRetrievalQuery } from './MemoryRetrievalService';
+export { getMemoryFilesContext } from './MemoryRetrievalService';
 
 /** UI stats: how many files are injected and at what total size. */
 export const getMemoryFilesStats = (): { enabledCount: number; charCount: number } => {
@@ -388,6 +410,153 @@ export const syncProfileMemory = async (profile: UserProfile | null, username: s
         await updateMemoryFile(existing.id, { content }, username);
     } else {
         await createMemoryFile(folder.id, 'memory.md', content, username, true);
+    }
+};
+
+const PATTERN_MEMORY_HEADINGS = [
+    'Executive Summary',
+    'Missed Win Analysis',
+    'Extended SL Zone Breach Analysis',
+    'Pattern Family Performance',
+    'Confidence Calibration',
+    'Winning Patterns',
+    'Failure Patterns',
+    'Behavioral Biases',
+    'Statistical Tendencies',
+    'Actionable Rules',
+    'Conclusion',
+];
+
+/** Keep even when short — the rest of the essay can drop empty product sections. */
+const PATTERN_MEMORY_KEEP = new Set([
+    'executive summary',
+    'actionable rules',
+    'conclusion',
+]);
+
+const EMPTY_SECTION = /^(none\.?|n\/a\.?|n\/a|na\.?|not applicable\.?|no data\.?|nothing to report\.?|no missed wins?\.?|no breaches?\.?|-|—|–|\(none\))?\s*$/i;
+
+export interface PatternMemoryStats {
+    closed?: number;
+    wins?: number;
+    losses?: number;
+}
+
+export const patternMemoryStatsFromTrades = (trades: LoggedTrade[]): PatternMemoryStats => {
+    const closed = trades.filter(t => t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS);
+    const wins = closed.filter(t => t.outcome === TradeOutcome.WIN).length;
+    const losses = closed.filter(t => t.outcome === TradeOutcome.LOSS).length;
+    return { closed: closed.length, wins, losses };
+};
+
+const patternMemoryHeader = (stats?: PatternMemoryStats): string => {
+    const dateStr = new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    const lines = [
+        '# Pattern Memory',
+        '> Human synthesis — not injected into analyses. Live loop: `skills/` and `rules/recurring-mistakes.md`.',
+        '',
+    ];
+    if (stats && typeof stats.closed === 'number' && stats.closed > 0) {
+        const wins = stats.wins ?? 0;
+        const losses = stats.losses ?? 0;
+        const wr = Math.round((wins / stats.closed) * 100);
+        lines.push(`- **Closed trades:** ${stats.closed} (${wins} win / ${losses} loss)`);
+        lines.push(`- **Win rate:** ${wr}%`);
+    }
+    lines.push(`- **Updated:** ${dateStr}`);
+    lines.push('');
+    lines.push('See also: `skills/` (procedures with scores) and `rules/recurring-mistakes.md` (loss clusters).');
+    lines.push('');
+    return lines.join('\n');
+};
+
+const stripExistingPatternMemoryChrome = (text: string): string => {
+    let body = text.trim();
+    body = body.replace(/^#\s+pattern memory\b[^\n]*\n+/i, '');
+    body = body.replace(/^(>\s.*\n)+/, '');
+    body = body.replace(/^(-\s+\*\*[^*]+\*\*:.*\n)+/, '');
+    body = body.replace(/^see also:.*\n+/i, '');
+    return body.trim();
+};
+
+const promotePatternMemoryHeadings = (body: string): string => {
+    const headingLookup = PATTERN_MEMORY_HEADINGS.map(h => [h.toLowerCase(), h] as const);
+    return body.split('\n').map(line => {
+        const stripped = line
+            .replace(/^[#\s>*_\-`]+/, '')
+            .replace(/[*_]/g, '')
+            .replace(/^[^\w]+/, '')
+            .trim()
+            .toLowerCase();
+        const hit = headingLookup.find(([key]) =>
+            stripped === key || stripped === `${key}:` || stripped.startsWith(`${key}:`)
+        );
+        if (hit && stripped.length <= hit[0].length + 8) {
+            return `## ${hit[1]}`;
+        }
+        return line;
+    }).join('\n');
+};
+
+/** Drop product sections whose only content is None / N/A / blank. */
+export const collapseEmptyPatternMemorySections = (markdown: string): string => {
+    const lines = markdown.split('\n');
+    const chunks: { heading: string | null; lines: string[] }[] = [{ heading: null, lines: [] }];
+    for (const line of lines) {
+        const h = line.match(/^##\s+(.+)\s*$/);
+        if (h) {
+            chunks.push({ heading: h[1], lines: [] });
+        } else {
+            chunks[chunks.length - 1].lines.push(line);
+        }
+    }
+    const kept: string[] = [];
+    for (const chunk of chunks) {
+        if (!chunk.heading) {
+            const preamble = chunk.lines.join('\n').trim();
+            if (preamble) kept.push(preamble);
+            continue;
+        }
+        const body = chunk.lines.join('\n').trim();
+        const keepAlways = PATTERN_MEMORY_KEEP.has(chunk.heading.toLowerCase());
+        if (!keepAlways && EMPTY_SECTION.test(body)) continue;
+        kept.push(`## ${chunk.heading}\n${chunk.lines.join('\n')}`.trimEnd());
+    }
+    return kept.join('\n\n').trim();
+};
+
+/** Turn a synthesis blob into a markdown document (headings → ##). */
+export const toPatternMemoryMarkdown = (
+    summary: string | null | undefined,
+    stats?: PatternMemoryStats,
+): string => {
+    const header = patternMemoryHeader(stats);
+    const stub = `${header}Log more trades to generate a performance synthesis.\n`;
+    if (!summary || !summary.trim()) return stub;
+
+    const promoted = promotePatternMemoryHeadings(stripExistingPatternMemoryChrome(summary));
+    const collapsed = collapseEmptyPatternMemorySections(promoted);
+    return `${header}${collapsed}\n`;
+};
+
+/**
+ * Write profile/pattern-memory.md from the current synthesis (or a stub when
+ * empty). Harness-managed — the History tab opens this as a document.
+ */
+export const syncPatternMemory = async (
+    summary: string | null | undefined,
+    username: string,
+    trades?: LoggedTrade[],
+): Promise<void> => {
+    const folder = memoryCache.folders.find(f => f.name === 'profile');
+    if (!folder) return;
+    const stats = trades ? patternMemoryStatsFromTrades(trades) : undefined;
+    const content = toPatternMemoryMarkdown(summary, stats);
+    const existing = memoryCache.files.find(f => f.folderId === folder.id && f.name === 'pattern-memory.md');
+    if (existing) {
+        await updateMemoryFile(existing.id, { content }, username);
+    } else {
+        await createMemoryFile(folder.id, 'pattern-memory.md', content, username, true);
     }
 };
 
@@ -554,7 +723,8 @@ export const getMemoryFilesIndex = (): string => {
  * Files are marked "auto" like the other harness-managed ones.
  */
 export const writeModelNote = async (note: ModelNote, username: string): Promise<MemoryFile> => {
-    const cleanFolder = slugifyName(note.folder) || 'lessons';
+    let cleanFolder = slugifyName(note.folder) || 'lessons';
+    if (cleanFolder === 'skills') cleanFolder = 'lessons';
     const baseName = slugifyName(note.fileName.replace(/\.md$/i, '')) || 'note';
     const content = (note.content ?? '').trim();
     if (!content) throw new Error('Note content is empty');

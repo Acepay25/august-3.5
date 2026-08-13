@@ -110,7 +110,7 @@ export const ThinkingRecordCard: React.FC<ThinkingRecordCardProps> = ({ record }
         subtitle={record.modelName || (record.outcome ? `Outcome: ${record.outcome}` : undefined)}
       >
         <div className="space-y-2">
-          {record.reasoning && <Section title={isTurn ? 'Turn Text' : 'Reasoning (CoT)'} defaultOpen={!isTurn}>{record.reasoning}</Section>}
+          {record.reasoning && <Section title={isTurn ? 'Turn Text' : 'Reasoning (CoT)'}>{record.reasoning}</Section>}
           {record.finalOutput && <Section title="Final Output">{record.finalOutput}</Section>}
           {record.rawReasoning && <Section title="Raw Chain-of-Thought">{record.rawReasoning}</Section>}
           {record.analysisJson && <Section title="Analysis JSON">{(() => { try { return JSON.stringify(JSON.parse(record.analysisJson), null, 2); } catch { return record.analysisJson; } })()}</Section>}

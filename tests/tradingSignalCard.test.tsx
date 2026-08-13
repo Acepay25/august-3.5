@@ -30,7 +30,7 @@ const analysis = (overrides: Partial<TradeAnalysis> = {}): TradeAnalysis => ({
 } as TradeAnalysis);
 
 describe('TradingSignalCard', () => {
-    it('renders colored levels and a structured final plan', () => {
+    it('renders colored levels without a duplicate plan list', () => {
         render(<TradingSignalCard analysis={analysis()} />);
         expect(screen.getByText('Trading signal')).toBeDefined();
         expect(screen.getAllByText('Sell').length).toBeGreaterThanOrEqual(1);
@@ -43,9 +43,7 @@ describe('TradingSignalCard', () => {
         expect(screen.getAllByText('62% hit').length).toBeGreaterThanOrEqual(1);
         expect(screen.getAllByText('44% hit').length).toBeGreaterThanOrEqual(1);
         expect(screen.getAllByText('1:0.6').length).toBeGreaterThanOrEqual(1);
-        expect(screen.getByText('Final trade plan')).toBeDefined();
-        expect(screen.getByText('Take Profit 3:')).toBeDefined();
-        expect(screen.getByText('Stop Loss:')).toBeDefined();
+        expect(screen.queryByText('Final trade plan')).toBeNull();
         expect(screen.queryByText(/What SL/)).toBeNull();
     });
 
@@ -64,18 +62,31 @@ describe('TradingSignalCard', () => {
         expect(screen.getAllByText('22% hit').length).toBeGreaterThanOrEqual(1);
     });
 
-    it('shows the last moderator verdict as strategy, not clarification', () => {
+    it('does not dump the moderator verdict recap into strategy', () => {
         render(
             <TradingSignalCard
-                analysis={analysis()}
+                analysis={analysis({
+                    strategy: '**MODERATOR VERDICT** Direction: Long, based on the Technical Analyst’s verified sweep and the Risk & Execution Specialist’s ranging-market read. The Macro & Volatility Analyst failed to provide any short entry.',
+                })}
                 debateTurns={[
-                    { speaker: 'Moderator', round: 4, text: 'Macro: What exact 1H BOS?\nTechnical: Cite 15m?\nRisk: What SL?' },
-                    { speaker: 'Moderator', round: 6, text: 'Short from the 4H rejection.\n\n**FINAL TRADE PLAN**\n- Direction: Short' },
+                    { speaker: 'Moderator', round: 6, text: '**MODERATOR VERDICT** Direction: Long, based on the Technical Analyst’s verified sweep and the Risk & Execution Specialist’s ranging-market read.' },
                 ]}
             />,
         );
-        expect(screen.getByTestId('md').textContent).toContain('Short from the 4H rejection');
-        expect(screen.getByTestId('md').textContent).not.toContain('What exact 1H BOS');
-        expect(screen.getByTestId('md').textContent).not.toContain('FINAL TRADE PLAN');
+        expect(screen.queryByTestId('md')?.textContent ?? '').not.toContain('Technical Analyst');
+        expect(screen.queryByTestId('md')?.textContent ?? '').not.toContain('MODERATOR VERDICT');
+        expect(screen.queryByText('Final trade plan')).toBeNull();
+    });
+
+    it('shows a one-line invalidation from the parsed plan', () => {
+        render(
+            <TradingSignalCard
+                analysis={analysis({
+                    invalidationCriteria: [{ level: '64510', condition: '15m close above the sweep high' }],
+                })}
+            />,
+        );
+        expect(screen.getByText('Invalidation')).toBeDefined();
+        expect(screen.getByText(/15m close above the sweep high/)).toBeDefined();
     });
 });

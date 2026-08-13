@@ -224,7 +224,8 @@ const createTables = async (): Promise<void> => {
             outcome TEXT,
             pnlAmount REAL,
             pnlPercent REAL,
-            createdAt TEXT
+            createdAt TEXT,
+            analystLens TEXT
         );
 
         CREATE INDEX IF NOT EXISTS idx_thinking_trade ON thinking_records(tradeId);
@@ -232,6 +233,7 @@ const createTables = async (): Promise<void> => {
         CREATE INDEX IF NOT EXISTS idx_thinking_outcome ON thinking_records(outcome);
         CREATE INDEX IF NOT EXISTS idx_thinking_username ON thinking_records(username);
         CREATE INDEX IF NOT EXISTS idx_thinking_message ON thinking_records(messageId);
+        CREATE INDEX IF NOT EXISTS idx_thinking_lens ON thinking_records(analystLens);
     `);
 
     // Schema migration tracking — must exist before the gated blocks below.
@@ -324,6 +326,16 @@ const createTables = async (): Promise<void> => {
         await runMigrations(6, [
             { label: 'v6 thinking_records.pnlAmount', sql: 'ALTER TABLE thinking_records ADD COLUMN pnlAmount REAL;' },
             { label: 'v6 thinking_records.pnlPercent', sql: 'ALTER TABLE thinking_records ADD COLUMN pnlPercent REAL;' },
+        ]);
+    }
+
+    // VERSION 7 MIGRATION: Analyst lens bucket (macro / technical / risk /
+    // normal) so the journal Think tab can group every prior chain of thought
+    // by role without inferring from speaker names alone.
+    if (appliedVersion < 7) {
+        await runMigrations(7, [
+            { label: 'v7 thinking_records.analystLens', sql: 'ALTER TABLE thinking_records ADD COLUMN analystLens TEXT;' },
+            { label: 'v7 thinking_records.analystLens index', sql: 'CREATE INDEX IF NOT EXISTS idx_thinking_lens ON thinking_records(analystLens);' },
         ]);
     }
 

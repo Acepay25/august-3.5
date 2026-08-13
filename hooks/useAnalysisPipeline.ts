@@ -26,6 +26,7 @@ import { saveThinkingBatch, buildThinkingRecordId, getThinkingTradeId, getThinki
 import { offlineQueue } from '../services/infrastructure/OfflineQueueService';
 import { notifyAnalysisComplete } from '../services/infrastructure/CompletionNotifications';
 import { ThinkingRecord } from '../types/thinking';
+import { lensFromAnalystRole, lensFromSpeakerName } from '../utils/thinkingLens';
 import { sanitizeAIResponse } from '../utils/sanitizers';
 import { buildModelIdToName, isProviderReady } from '../utils/providerUtils';
 import { DEFAULT_LEVERAGE } from '../utils/conversationUtils';
@@ -81,6 +82,8 @@ export interface UseAnalysisPipelineParams {
     selectedOcrModel: string;
     moderatorConfig: ProviderConfig;
     moderatorModel: string;
+    /** Settings → Memory model — notebook notes, pattern-memory rewrite, reviews. */
+    memoryConfig?: ProviderConfig | null;
 
     // From memory/trade:
     finalTradeSummary: string | null;
@@ -250,6 +253,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         providerConfigs,
         selectedOcrModel,
         moderatorConfig, moderatorModel,
+        memoryConfig,
         finalTradeSummary, loggedTrades, tradeSummaries,
         globalMemory, insightKnowledgeBase, confidenceCalibration,
         currentHybridData, setCurrentHybridData,
@@ -697,7 +701,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         // model reads the current notebook index and decides skip / append /
         // create (see writeNotebookNoteFromRequest).
         if (!isAutomationRun && NOTEBOOK_SAVE_PATTERN.test(effectiveInput)) {
-            const provider = enabledProviders[0]?.config;
+            const provider = memoryConfig || enabledProviders[0]?.config;
             try {
                 setLoadingMessage('Writing to your notebook…');
                 const username = localStorage.getItem('last_active_user') || 'default';
@@ -718,7 +722,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     updateMessages(prev => [...prev, {
                         id: notebookMsgId,
                         role: MessageRole.AI,
-                        text: `📓 **Saved to your Trader Notebook** — \`${note.folder}/${file.name}\` (${note.decision === 'append' ? 'appended a new section to the existing file' : 'new file'}).\n\nThe model will read this on every future analysis. Manage everything in **Settings → Personal edge → Trader Notebook**.`,
+                        text: `📓 **Saved to your Trader Notebook** — \`${note.folder}/${file.name}\` (${note.decision === 'append' ? 'appended a new section to the existing file' : 'new file'}).\n\nThe model will read this on every future analysis. Manage everything in **Settings → Memory**.`,
                         createdAt: new Date().toISOString(),
                         isDebating: false,
                     }], activeConversationId);
@@ -726,7 +730,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     updateMessages(prev => [...prev, {
                         id: notebookMsgId,
                         role: MessageRole.AI,
-                        text: `📓 **Notebook: nothing written** — the model found this already covered (or nothing concrete to save). You can still add it manually in **Settings → Personal edge → Trader Notebook**.`,
+                        text: `📓 **Notebook: nothing written** — the model found this already covered (or nothing concrete to save). You can still add it manually in **Settings → Memory**.`,
                         createdAt: new Date().toISOString(),
                         isDebating: false,
                     }], activeConversationId);
@@ -922,7 +926,17 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
             // These steps describe the ensemble analysis pipeline only. Casual
             // chat must not render analysis/fetching progress at all.
+            // Set loading immediately so the empty-chat hero and progress UI
+            // swap in the same paint — otherwise there is a gap of black
+            // canvas before "Fetching market data" appears.
             if (runEnsembleEnabled) {
+                if (!isAutomationRun) {
+                    setLoadingMessage(
+                        runHybridEnabled && !cachedHybridData && !options?.presetHybridData
+                            ? 'Fetching real-time market data...'
+                            : 'Starting analysis...'
+                    );
+                }
                 initAnalysisSteps([
                     { id: 'market-data', title: 'Fetching market data', status: 'pending' },
                     { id: 'gate-scan', title: 'Running pattern gate scan', status: 'pending' },
@@ -1011,14 +1025,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 })()
                 : '';
 
-            // TRADER NOTEBOOK (Settings → Personal edge → Memory files): the
-            // user's own markdown notes + the harness's trade diary. Full
-            // content of every enabled file, injected into the analyst prompt
-            // AND the moderator bundle (the bundle bypasses the 500-token
-            // learning-context truncation) so the whole ensemble reasons with
-            // the user's accumulated experience.
-            const memoryFilesContext = getMemoryFilesContext();
-
             // Coin detection for learning context: match only uppercase
             // tickers (no /i flag, which would match any word) and exclude
             // common command words, mirroring the GateKeeper commonWords
@@ -1030,6 +1036,16 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             const pendingDirection = effectiveInput.toLowerCase().includes('long') ? 'Long' :
                 effectiveInput.toLowerCase().includes('short') ? 'Short' : 'Neutral';
             const pendingPattern = minePatternFromPrompt(effectiveInput);
+
+            // TRADER NOTEBOOK: retrieve matching files, skills, similar trades
+            // and rules for THIS setup — never dump the whole notebook.
+            const memoryFilesContext = getMemoryFilesContext({
+                coin: detectedLearningCoin,
+                direction: pendingDirection,
+                family: pendingPattern,
+                pattern: pendingPattern,
+                regime: freshHybridData?.regime?.regime,
+            }, loggedTrades);
 
             // JOURNAL-DRIVEN ACCURACY (SetupMemoryService): before the
             // analysts answer, they see their own logged track record on
@@ -1109,12 +1125,12 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 }
             }
 
-            // PATTERN MEMORY: Use finalTradeSummary as the source for synthesized pattern memory
-            const enhancedFinalTradeSummary = finalTradeSummary;
+            // Retrieved harness context already carries similar trades + skills.
+            // Do not also dump the pattern-memory essay or raw insight list.
+            const enhancedFinalTradeSummary = memoryFilesContext ? null : finalTradeSummary;
 
-            // RECENT INSIGHTS: Construct string from individual trade summaries
             let recentInsightsString: string | null = null;
-            if (tradeSummaries && tradeSummaries.length > 0) {
+            if (!memoryFilesContext && tradeSummaries && tradeSummaries.length > 0) {
                 const top10Summaries = tradeSummaries.slice(0, 10);
                 recentInsightsString = top10Summaries.map((s, idx) => `${idx + 1}. [${new Date(s.timestamp).toLocaleDateString()}] ${s.summaryText}`).join('\n\n');
                 devLog('[Recent Insights] Generated from tradeSummaries array, length:', recentInsightsString.length);
@@ -2508,6 +2524,7 @@ ${accuracyVerificationNote}`
                         const username = localStorage.getItem('last_active_user') || 'default';
                         const now = new Date().toISOString();
                         const thinkingRecords: ThinkingRecord[] = [];
+                        const lensEnabled = Boolean(runLensConfig?.enabled && hasCompleteAnalystAssignments);
 
                         // Save each analyst's reasoning + analysis JSON. Aligned
                         // by settled-result index so a failed analyst doesn't shift
@@ -2519,6 +2536,7 @@ ${accuracyVerificationNote}`
                             if (!provider) return;
                             const providerKey = provider.thoughtsKey;
                             const analystResult = settled.value;
+                            const assignedRole = getRoleForProvider(`${provider.config.id}::${provider.model}`, resolvedAssignments);
                             thinkingRecords.push({
                                 id: buildThinkingRecordId(tradeId, providerKey, 'analyst'),
                                 tradeId,
@@ -2539,6 +2557,7 @@ ${accuracyVerificationNote}`
                                 analysisJson: analystResult.analysis ? JSON.stringify(analystResult.analysis) : undefined,
                                 confidence: analystResult.analysis?.confidence,
                                 probability: analystResult.analysis?.probability,
+                                analystLens: lensFromAnalystRole(assignedRole, lensEnabled),
                                 createdAt: now,
                             });
                         });
@@ -2582,6 +2601,10 @@ ${accuracyVerificationNote}`
 
                         debateTurns.forEach((turn, idx) => {
                             const turnProvider = turn.speaker.toLowerCase().includes('moderator') ? 'moderator' : turn.speaker.toLowerCase();
+                            const matchedAnalyst = enabledProviders.find(p => p.name === turn.speaker);
+                            const matchedRole = matchedAnalyst
+                                ? getRoleForProvider(`${matchedAnalyst.config.id}::${matchedAnalyst.model}`, resolvedAssignments)
+                                : undefined;
                             thinkingRecords.push({
                                 id: buildThinkingRecordId(tradeId, turnProvider, 'debate_turn', idx),
                                 tradeId,
@@ -2592,6 +2615,8 @@ ${accuracyVerificationNote}`
                                 debateTurnSpeaker: turn.speaker,
                                 reasoning: turn.text,
                                 messageId: debateMessageId,
+                                analystLens: lensFromSpeakerName(turn.speaker)
+                                    ?? (matchedRole !== undefined ? lensFromAnalystRole(matchedRole, lensEnabled) : 'normal'),
                                 createdAt: now,
                             });
                         });
@@ -2708,6 +2733,7 @@ ${accuracyVerificationNote}`
                             analysisJson: result.analysis ? JSON.stringify(result.analysis) : undefined,
                             confidence: result.analysis?.confidence,
                             probability: result.analysis?.probability,
+                            analystLens: 'normal',
                             createdAt: now,
                         }]);
                     } catch (thinkingError) {
@@ -2868,7 +2894,7 @@ ${accuracyVerificationNote}`
                 analysisInFlightRef.current = false;
             }
         }
-    }, [input, images, loadingMessage, finalTradeSummary, activeFrameworks, isRateLimited, providerConfigs, isDeepAnalysis, selectedOcrModel, updateMessages, moderatorConfig, moderatorModel, activeConversationId, activeConversation, isAnalysisInProgress, globalMemory, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, lensConfig, isHybridIntelligenceEnabled, isEnsembleEnabled, selectedChatModel, loggedTrades, confidenceCalibration, insightKnowledgeBase, currentHybridData, tradeSummaries, customEnsemblePrompt, customLensPrompts, ensembleModelSelection, isStrategiesEnabled, confirmDialog, toast]);
+    }, [input, images, loadingMessage, finalTradeSummary, activeFrameworks, isRateLimited, providerConfigs, isDeepAnalysis, selectedOcrModel, updateMessages, moderatorConfig, moderatorModel, memoryConfig, activeConversationId, activeConversation, isAnalysisInProgress, globalMemory, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, lensConfig, isHybridIntelligenceEnabled, isEnsembleEnabled, selectedChatModel, loggedTrades, confidenceCalibration, insightKnowledgeBase, currentHybridData, tradeSummaries, customEnsemblePrompt, customLensPrompts, ensembleModelSelection, isStrategiesEnabled, confirmDialog, toast]);
 
     // ─── Cancel Analysis ───────────────────────────────────────────────────
     const handleCancelAnalysis = () => {

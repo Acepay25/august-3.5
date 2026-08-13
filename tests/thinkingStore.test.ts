@@ -45,7 +45,7 @@ class FakeSqliteDb {
                 'id', 'tradeId', 'username', 'provider', 'role', 'modelName',
                 'reasoning', 'finalOutput', 'rawReasoning', 'messageId',
                 'analysisJson', 'debateTurnIndex', 'debateTurnSpeaker',
-                'confidence', 'probability', 'outcome', 'pnlAmount', 'pnlPercent', 'createdAt',
+                'confidence', 'probability', 'outcome', 'pnlAmount', 'pnlPercent', 'analystLens', 'createdAt',
             ];
             const row: Record<string, any> = {};
             cols.forEach((c, i) => {
@@ -184,6 +184,7 @@ describe('ThinkingStoreService (SQLite path)', () => {
                 finalOutput: 'Long BTCUSDT targeting 70k with 1:2.5 RR.',
                 rawReasoning: 'streamed chain of thought deltas...',
                 messageId: 'msg-42',
+                analystLens: 'macro',
                 confidence: 'High',
                 probability: 72,
                 analysisJson: JSON.stringify({ direction: 'Neutral', strategy: 'Long BTCUSDT' }),
@@ -210,6 +211,7 @@ describe('ThinkingStoreService (SQLite path)', () => {
         expect(analyst?.finalOutput).toBe('Long BTCUSDT targeting 70k with 1:2.5 RR.');
         expect(analyst?.rawReasoning).toBe('streamed chain of thought deltas...');
         expect(analyst?.messageId).toBe('msg-42');
+        expect(analyst?.analystLens).toBe('macro');
         const moderator = byTrade.find(r => r.id === 'think-m1');
         expect(moderator?.finalOutput).toBe('Final verdict: Long entry 68.5k, SL 67k, TP 70.5k.');
         expect(moderator?.messageId).toBe('msg-42');

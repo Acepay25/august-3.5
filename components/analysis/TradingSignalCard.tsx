@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { DebateTurn, TradeAnalysis } from '../../types';
 import MarkdownContent from '../shared/MarkdownContent';
-import { extractFinalVerdictText, resolveLevelHitOdds } from '../../utils/analysisUtils';
+import { extractSignalStrategyText, formatInvalidationLine, resolveLevelHitOdds, signalDirectionLabel } from '../../utils/analysisUtils';
 
 interface TradingSignalCardProps {
     analysis: TradeAnalysis;
@@ -39,15 +39,6 @@ const confidenceColor = (confidence?: string): string => {
     return 'text-rose-400';
 };
 
-/**
- * Peel a trailing FINAL TRADE PLAN block off verdict prose so the structured
- * levels list can own that section (with colored prices).
- */
-const verdictProseOnly = (verdict: string): string => {
-    const split = verdict.split(/\n\s*(?:\*{0,2}\s*)?FINAL TRADE PLAN(?:\*{0,2})?\s*\n/i);
-    return (split[0] || '').replace(/^\s*\*{0,2}Verdict\*{0,2}\s*\n+/i, '').trim();
-};
-
 const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
     analysis,
     debateTurns,
@@ -60,46 +51,18 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
     const sl = analysis.stopLoss;
     const tps = (analysis.takeProfit ?? []).map(tp => tp.price).filter(Boolean);
     const rr = typeof analysis.rrRatio === 'number' ? analysis.rrRatio : undefined;
+    const dirLabel = signalDirectionLabel(analysis.direction);
     const odds = useMemo(
         () => resolveLevelHitOdds(analysis, debateTurns),
         [analysis, debateTurns],
     );
     const slHit = odds.sl;
     const tpHit = (level: number): number | undefined => odds.tp[level - 1];
-    const hitLabel = (pct?: number): string => (typeof pct === 'number' ? ` · ${pct}% hit` : '');
-
-    const verdict = useMemo(() => {
-        const raw = extractFinalVerdictText(debateTurns, analysis.strategy);
-        return raw ? verdictProseOnly(raw) : '';
-    }, [debateTurns, analysis.strategy]);
-
-    const planRows = useMemo(() => {
-        const rows: { label: string; value: string; tone?: 'sl' | 'tp' | 'dir' | 'rr' | 'long' | 'short' }[] = [];
-        if (analysis.direction) {
-            const extra = analysis.detectedPatternFamily ? ` (${analysis.detectedPatternFamily})` : '';
-            rows.push({
-                label: 'Direction',
-                value: `${analysis.direction.toUpperCase()}${extra}`,
-                tone: analysis.direction === 'Long' ? 'long' : analysis.direction === 'Short' ? 'short' : 'dir',
-            });
-        }
-        if (entry) {
-            const note = analysis.entryPoints?.[0]?.description;
-            rows.push({ label: 'Entry', value: `$${formatLevel(entry)}${note ? ` (${note})` : ''}` });
-        }
-        if (sl) {
-            const move = analysis.stopLossPercentage ? ` (${analysis.stopLossPercentage})` : '';
-            rows.push({ label: 'Stop Loss', value: `$${formatLevel(sl)}${move}${hitLabel(slHit)}`, tone: 'sl' });
-        }
-        tps.slice(0, 3).forEach((tp, i) => {
-            const move = analysis.takeProfit?.[i]?.percentage ? ` (${analysis.takeProfit[i].percentage})` : '';
-            rows.push({ label: `Take Profit ${i + 1}`, value: `$${formatLevel(tp)}${move}${hitLabel(tpHit(i + 1))}`, tone: 'tp' });
-        });
-        if (typeof rr === 'number') {
-            rows.push({ label: 'R:R', value: `1:${rr.toFixed(1)}`, tone: 'rr' });
-        }
-        return rows;
-    }, [analysis, entry, sl, tps, rr, slHit, odds]);
+    const why = useMemo(
+        () => extractSignalStrategyText(analysis, debateTurns),
+        [debateTurns, analysis],
+    );
+    const invalidation = useMemo(() => formatInvalidationLine(analysis), [analysis]);
 
     return (
         <div className="status-surface overflow-hidden rounded-2xl border border-white/5 bg-zinc-900/80 shadow-lg">
@@ -108,7 +71,7 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
                 <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Trading signal</span>
                 {analysis.direction && (
                     <span className={`inline-flex items-center rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${directionChip(analysis.direction)}`}>
-                        {analysis.direction === 'Long' ? 'Buy' : analysis.direction === 'Short' ? 'Sell' : analysis.direction}
+                        {dirLabel}
                     </span>
                 )}
                 {analysis.confidence && (
@@ -135,7 +98,7 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
                             <div>
                                 <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Direction</div>
                                 <div className={`mt-1 text-lg font-semibold uppercase tracking-wide ${directionText(analysis.direction)}`}>
-                                    {analysis.direction === 'Long' ? 'Buy' : analysis.direction === 'Short' ? 'Sell' : analysis.direction}
+                                    {dirLabel}
                                 </div>
                             </div>
                         )}
@@ -185,37 +148,17 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
                     </div>
                 )}
 
-                {verdict && (
+                {invalidation && (
                     <div>
-                        <div className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Strategy</div>
-                        <MarkdownContent content={verdict} className="text-[13px] leading-7 text-zinc-300" />
+                        <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Invalidation</div>
+                        <p className="mt-1 text-[13px] leading-relaxed text-zinc-300">{invalidation}</p>
                     </div>
                 )}
 
-                {planRows.length > 0 && (
+                {why && (
                     <div>
-                        <div className="mb-2.5 text-[13px] font-bold uppercase tracking-wide text-zinc-100">Final trade plan</div>
-                        <ul className="space-y-2.5">
-                            {planRows.map(row => (
-                                <li key={row.label} className="flex gap-2 text-[13px] leading-relaxed text-zinc-300">
-                                    <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-zinc-600" />
-                                    <span>
-                                        <span className="font-semibold text-zinc-100">{row.label}:</span>{' '}
-                                        <span className={
-                                            row.tone === 'sl' ? 'font-medium text-rose-400'
-                                                : row.tone === 'tp' ? 'font-medium text-emerald-400'
-                                                    : row.tone === 'rr' ? 'font-medium text-cyan-400'
-                                                    : row.tone === 'long' ? 'font-semibold text-emerald-400'
-                                                    : row.tone === 'short' ? 'font-semibold text-rose-400'
-                                                    : row.tone === 'dir' ? 'font-semibold text-zinc-50'
-                                                        : 'text-zinc-300'
-                                        }>
-                                            {row.value}
-                                        </span>
-                                    </span>
-                                </li>
-                            ))}
-                        </ul>
+                        <div className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Why</div>
+                        <p className="text-[13px] leading-relaxed text-zinc-400">{why}</p>
                     </div>
                 )}
 

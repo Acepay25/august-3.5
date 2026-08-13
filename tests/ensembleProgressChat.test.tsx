@@ -115,11 +115,12 @@ describe('EnsembleProgressChat', () => {
         expect(screen.getByText('Chain of thought trace').closest('details')?.open).toBe(true);
     });
 
-    it('auto-expands the thinking trace while an analyst is streaming', () => {
+    it('keeps the thinking trace collapsed while an analyst is streaming', () => {
         const progress = makeProgress([
             makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'analyzing', reasoning: 'Live trace in progress' }),
         ]);
         render(<EnsembleProgressChat progress={progress} isLive={true} />);
-        expect(screen.getByText('Live trace in progress')).toBeDefined();
+        const details = screen.getByText('Live trace in progress').closest('details');
+        expect(details?.open).toBe(false);
     });
 });

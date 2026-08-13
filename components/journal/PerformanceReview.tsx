@@ -4,6 +4,7 @@ import { AIProvider, TradeSummary } from '../../types';
 import { ProviderConfig } from '../../types/provider';
 import { LoadingIcon, EditIcon, ChevronDownIcon, RefreshIcon, TrashIcon } from '../shared/Icons';
 import ModelPicker from '../shared/ModelPicker';
+import MarkdownContent from '../shared/MarkdownContent';
 
 interface PerformanceReviewContentProps {
     finalSummary: string | null;
@@ -29,6 +30,10 @@ interface PerformanceReviewContentProps {
     useAlgorithmicInsights: boolean; // NEW
     onToggleAlgorithmicInsights: (use: boolean) => void; // NEW
     onRewriteInsightsWithAI: (ids?: string[]) => void; // NEW
+    /** When false, only Pattern Memory + model settings are shown (History merge). */
+    showRecentInsights?: boolean;
+    /** When false, hide the Pattern Memory chrome (content lives in pattern-memory.md). */
+    showPatternMemory?: boolean;
 }
 
 const PerformanceReviewContent: React.FC<PerformanceReviewContentProps> = ({
@@ -54,6 +59,8 @@ const PerformanceReviewContent: React.FC<PerformanceReviewContentProps> = ({
     useAlgorithmicInsights,
     onToggleAlgorithmicInsights,
     onRewriteInsightsWithAI,
+    showRecentInsights = true,
+    showPatternMemory = true,
 }) => {
     const [localLimit, setLocalLimit] = useState<string | number>(summaryCharLimit);
     const [isPatternMemoryVisible, setIsPatternMemoryVisible] = useState(true);
@@ -109,7 +116,7 @@ const PerformanceReviewContent: React.FC<PerformanceReviewContentProps> = ({
 
     return (
         <div className="flex flex-col h-full bg-transparent">
-            <div className="p-3 sm:p-5 border-b border-white/5 bg-zinc-800 shrink-0">
+            <div className="p-8 shrink-0">
                 <div className="flex flex-col gap-3 sm:gap-4">
                     <div>
                         <button
@@ -224,6 +231,7 @@ const PerformanceReviewContent: React.FC<PerformanceReviewContentProps> = ({
             </div>
 
             <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 sm:p-5 space-y-4 sm:space-y-6 custom-scrollbar" style={{ overflowAnchor: 'none' }}>
+                {showPatternMemory && (
                 <div>
                     <div className="flex items-center justify-between mb-2 sm:mb-3">
                         <button
@@ -261,7 +269,9 @@ const PerformanceReviewContent: React.FC<PerformanceReviewContentProps> = ({
                         </div>
                     </div>
                 </div>
+                )}
 
+                {showRecentInsights && (
                 <div>
                     <div className="flex items-center justify-between mb-2 sm:mb-3 pl-1">
                         <button
@@ -342,7 +352,9 @@ const PerformanceReviewContent: React.FC<PerformanceReviewContentProps> = ({
                                                     New
                                                 </div>
                                             )}
-                                            <p className="text-xs sm:text-sm text-zinc-300 leading-relaxed pl-6 pr-8">{summary.summaryText}</p>
+                                            <div className="text-xs sm:text-sm text-zinc-300 leading-relaxed pl-6 pr-8">
+                                                <MarkdownContent content={summary.summaryText} className="text-zinc-300" />
+                                            </div>
                                             <div className="mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-white/5 flex justify-between items-center pl-6">
                                                 <span className="text-[10px] font-mono text-zinc-500">{new Date(summary.timestamp).toLocaleString()}</span>
                                                 {onDeleteInsight && (
@@ -366,6 +378,7 @@ const PerformanceReviewContent: React.FC<PerformanceReviewContentProps> = ({
                         </div>
                     </div>
                 </div>
+                )}
             </div>
         </div >
     );

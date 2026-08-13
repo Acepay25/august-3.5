@@ -89,13 +89,15 @@ export interface LearningRule {
   createdAt: string;                // ISO timestamp
   useCount: number;                 // Times this rule was injected
   lastUsed?: string;                // Last time rule was used
+  wins?: number;                    // Later outcomes that matched this rule
+  losses?: number;
+  status?: 'candidate' | 'confirmed' | 'retired';
 }
 
 /**
  * A single markdown file in the Trader Notebook (Settings → Personal edge).
- * The harness AND the user write these; every enabled file's full content is
- * injected into analyst, moderator, and post-mortem prompts so the ensemble
- * reasons with the user's accumulated experience (not just extracted rules).
+ * The harness AND the user write these; matching enabled files are retrieved
+ * into analyst, moderator, and post-mortem prompts (not a full dump).
  */
 export interface MemoryFile {
   id: string;

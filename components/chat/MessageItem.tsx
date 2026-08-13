@@ -417,8 +417,12 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     supplementMarkdown={supplementMarkdown}
                                     ensembleNote={ensembleNote}
                                 />
+                            ) : message.isPostMortem ? (
+                                <div className="overflow-x-auto min-w-0">
+                                    <MarkdownContent content={displayContent} className="text-zinc-100" />
+                                </div>
                             ) : (
-                                <div className={`prose prose-invert max-w-none whitespace-pre-wrap leading-[1.65] overflow-x-auto min-w-0 ${message.isPostMortem ? 'text-zinc-100' : 'text-zinc-200'}`} style={{ fontSize: '15px' }}>
+                                <div className="prose prose-invert max-w-none whitespace-pre-wrap leading-[1.65] overflow-x-auto min-w-0 text-zinc-200" style={{ fontSize: '15px' }}>
                                     <SmoothText text={displayContent} animate={message.role === MessageRole.AI && context.latestMessageId === message.id && !message.analysis} />
                                 </div>
                             )}

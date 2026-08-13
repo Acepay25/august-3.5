@@ -7,7 +7,8 @@ import { generateFinalSummary } from './services/providers/GenericAnalysisServic
 import * as dbService from './services/infrastructure/dbService';
 import { initPromptOverrides } from './services/infrastructure/PromptOverrideService';
 import { initStrategyDocs } from './services/infrastructure/StrategyService';
-import { initMemoryFiles, syncProfileMemory, syncRecurringMistakes } from './services/learning/MemoryFilesService';
+import { initMemoryFiles, syncPatternMemory, syncProfileMemory, syncRecurringMistakes, subscribeMemoryFilesChanged } from './services/learning/MemoryFilesService';
+import { runNotebookReview } from './services/learning/MemoryReviewService';
 import { computeRegimeProviderStats } from './services/learning/SetupMemoryService';
 import { ANALYST_ROLE_DEFINITIONS, getRoleForProvider } from './services/ui/AnalystLensService';
 import { AnalystRole } from './types/enums';
@@ -59,7 +60,7 @@ const CompareModal = React.lazy(() => import('./components/analysis/CompareModal
 const SavedAnalysesGallery = React.lazy(() => import('./components/dashboards/SavedAnalysesGallery'));
 const MistakeWarningBanner = React.lazy(() => import('./components/shared/MistakeWarningBanner'));
 import CommandPalette, { PaletteAction } from './components/shared/CommandPalette';
-const AnalysisProgress = React.lazy(() => import('./components/analysis/AnalysisProgress'));
+import AnalysisProgress from './components/analysis/AnalysisProgress';
 import { DEFAULT_FRAMEWORKS } from './constants/models';
 import { buildModelIdToName, buildProviderNameToId, getFirstReadyProvider } from './utils/providerUtils';
 import { createNewConversation, DEFAULT_LEVERAGE, findReusableEmptyConversation } from './utils/conversationUtils';
@@ -85,6 +86,7 @@ import { getPreference, setPreference, removePreference, getPreferenceObject, PR
 // AI Learning Services - Adaptive Learning, Mistake Patterns, Insight Extraction
 import { extractInsightsFromPostMortem, storeInsights, initializeKnowledgeBase } from './services/learning/InsightExtractionService';
 import * as MemoryService from './services/learning/MemoryService';
+import { insightTextForTrade } from './utils/tradeInsightBrief';
 import { ProviderConfig } from './types/provider';
 import { syncFromTradeLog, syncRollingWindowFromTradeLog, initModelPerformanceService } from './services/backtesting/ModelPerformanceService';
 import { saveLensConfig, initAnalystLensService, loadLensConfig, saveEnsembleModelSelection, EnsembleModelSelection, saveCustomEnsemblePrompt, saveCustomLensPrompts } from './services/ui/AnalystLensService';
@@ -272,6 +274,32 @@ const App: React.FC = () => {
             ?? (provider.selectedModel ? [provider.selectedModel] : []);
         return total + selected.length;
     }, 0), [readyProviders]);
+
+    const memoryConfigRef = useRef(memoryConfig);
+    memoryConfigRef.current = memoryConfig;
+    const readyProvidersRef = useRef(readyProviders);
+    readyProvidersRef.current = readyProviders;
+
+    useEffect(() => {
+        let timer: ReturnType<typeof setTimeout> | null = null;
+        const unsubscribe = subscribeMemoryFilesChanged((username) => {
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(() => {
+                const config = memoryConfigRef.current || readyProvidersRef.current[0] || null;
+                void runNotebookReview(username, config).then((wrote) => {
+                    if (wrote) {
+                        toast.success('Memory reviewed', 'Open Suggestions in Settings → Memory.');
+                    }
+                }).catch((err) => {
+                    console.warn('[MemoryReview] Notebook review failed:', err);
+                });
+            }, 4000);
+        });
+        return () => {
+            unsubscribe();
+            if (timer) clearTimeout(timer);
+        };
+    }, [toast]);
     const requiredAnalystRoles = [AnalystRole.MACRO_VOLATILITY, AnalystRole.TECHNICAL_ANALYST, AnalystRole.RISK_EXECUTION];
     const missingAnalystRoles = useMemo(() => requiredAnalystRoles
         .filter(role => {
@@ -491,6 +519,7 @@ const App: React.FC = () => {
         providerConfigs: readyProviders,
         selectedOcrModel,
         moderatorConfig, moderatorModel,
+        memoryConfig,
         finalTradeSummary, loggedTrades, tradeSummaries,
         globalMemory, insightKnowledgeBase, confidenceCalibration,
         currentHybridData, setCurrentHybridData,
@@ -614,6 +643,8 @@ const App: React.FC = () => {
         globalMemory,
         setGlobalMemory,
         memoryConfig,
+        memoryModel,
+        useAlgorithmicInsights,
         tradeSummaries,
         setTradeSummaries,
         setIsPostMortemInProgress,
@@ -1112,6 +1143,7 @@ const App: React.FC = () => {
             // rules/recurring-mistakes.md (loss clusters). Best-effort.
             try {
                 await syncProfileMemory(profile, username);
+                await syncPatternMemory(profile.finalTradeSummary, username, profile.tradeLog || []);
                 await syncRecurringMistakes(profile.tradeLog || [], username);
             } catch (e) {
                 console.warn('[TraderNotebook] Initial sync failed:', e);
@@ -1641,6 +1673,7 @@ const App: React.FC = () => {
         setTradeSummaries(nextSummaries);
         if (nextTrades.length === 0) {
             setFinalTradeSummary(null);
+            void syncPatternMemory(null, activeUsernameRef.current || 'default').catch(() => {});
         } else if (nextTrades.length !== loggedTrades.length) {
             // The AI Review was synthesized from the old trade set — re-run
             // it so Pattern Memory never describes deleted trades.
@@ -1683,7 +1716,7 @@ const App: React.FC = () => {
             setLoggedTrades([]);
             setTradeSummaries([]);
             setFinalTradeSummary(null);
-            // Cascade reasoning records / rules / autopilot watchers only
+            void syncPatternMemory(null, activeUsernameRef.current || 'default').catch(() => {});
             // AFTER the undo grace window — an undo restores the trades, so
             // their artifacts must survive until the delete is final.
             window.setTimeout(() => {
@@ -1718,8 +1751,9 @@ const App: React.FC = () => {
             setInsightProgress({ done: 0, total: newTrades.length });
 
             for (const trade of newTrades) {
-                // Use the user's preference for Algo vs AI insight generation
-                const summary = await MemoryService.summarizeTrade(trade, memoryConfig?.selectedModel || '', memoryConfig || moderatorConfig, useAlgorithmicInsights);
+                const fromPostMortem = insightTextForTrade(trade);
+                const summary = fromPostMortem
+                    || await MemoryService.summarizeTrade(trade, memoryConfig?.selectedModel || '', memoryConfig || moderatorConfig, useAlgorithmicInsights);
                 newSummaries.push({
                     id: trade.id,
                     summaryText: summary,
@@ -1805,11 +1839,11 @@ const App: React.FC = () => {
                 const trade = loggedTrades.find(t => t.id === id);
                 console.log(`[AIRewrite] Looking for trade with id: ${id}, found: ${!!trade}`);
                 if (trade) {
-                    // Find the provider config matching the summarization provider
-                    const summaryConfig = readyProviders.find(p => p.id === summarizationProvider) || readyProviders[0] || moderatorConfig;
-                    console.log(`[AIRewrite] Calling MemoryService.summarizeTrade with provider: ${summaryConfig.name}, model: ${summarizationModel}, useAlgorithmic: false`);
-                    // Force AI mode (false = use AI, not algo)
-                    const summary = await MemoryService.summarizeTrade(trade, summarizationModel, summaryConfig, false);
+                    const summaryConfig = memoryConfig || readyProviders[0] || moderatorConfig;
+                    console.log(`[AIRewrite] Calling MemoryService.summarizeTrade with provider: ${summaryConfig.name}, model: ${summaryConfig.selectedModel}`);
+                    const fromPostMortem = insightTextForTrade(trade);
+                    const summary = fromPostMortem
+                        || await MemoryService.summarizeTrade(trade, summaryConfig.selectedModel || '', summaryConfig, false);
                     console.log(`[AIRewrite] Got summary for ${id}:`, summary?.substring(0, 100));
                     updatedSummaries.push({
                         id: trade.id,
@@ -1904,23 +1938,20 @@ const App: React.FC = () => {
         try {
             if (loggedTrades.length === 0) {
                 setFinalTradeSummary(null);
+                void syncPatternMemory(null, activeUsernameRef.current || 'default').catch(() => {});
                 return;
             }
             let summary = '';
-
-            if (useAlgorithmicSummary) {
-                // Use algorithmic generation (Fast, Free, No tokens)
-                const { generatePatternMemorySynthesis } = await import('./services/ui/AlgorithmicSummaryService');
-                summary = generatePatternMemorySynthesis(loggedTrades);
-            } else {
-                // Use AI generation (Slower, Tokens) via GenericAnalysisService
-                const summaryConfig = readyProviders.find(p => p.id === summarizationProvider) || readyProviders[0];
-                if (summaryConfig) {
-                    summary = await generateFinalSummary(summaryConfig, tradeSummaries, summaryCharLimit);
-                }
+            const summaryConfig = memoryConfig || readyProviders[0];
+            if (summaryConfig) {
+                summary = await generateFinalSummary(summaryConfig, tradeSummaries, summaryCharLimit);
             }
 
             setFinalTradeSummary(summary);
+            const notebookUser = activeUsernameRef.current || 'default';
+            void syncPatternMemory(summary || null, notebookUser, loggedTrades).catch(err => {
+                console.warn('[TraderNotebook] pattern-memory.md sync failed:', err);
+            });
         } catch (e) {
             console.error("Summary regeneration failed", e);
         } finally {
@@ -2110,7 +2141,15 @@ const App: React.FC = () => {
 
 
     const handleScrollToBottom = () => {
-        virtuosoRef.current?.scrollToIndex({ index: messages.length - 1, behavior: 'smooth' });
+        let index = messages.length - 1;
+        for (let i = messages.length - 1; i >= 0; i--) {
+            if (messages[i].role === MessageRole.AI) {
+                index = i;
+                break;
+            }
+        }
+        if (index < 0) return;
+        virtuosoRef.current?.scrollIntoView({ index, align: 'end', behavior: 'smooth' });
         setHighlightedAnalysisId(null);
     };
 
