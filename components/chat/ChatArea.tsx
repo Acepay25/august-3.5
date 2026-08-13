@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { Message, ImageMetadata, AccuracySubMode, AnalysisStep, AnalystLensConfig, LiveThoughts, ProviderConfig } from '../../types';
 import { EnsembleModelSelection } from '../../services/ui/AnalystLensService';
 import { RegimeProviderStatsMap } from '../../services/learning/SetupMemoryService';
@@ -200,6 +200,11 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [viewerImageUrl, setViewerImageUrl] = useState<string | null>(null);
     const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+    // User scrolled away mid-stream: keep followOutput off until they
+    // explicitly return to the bottom (button or scroll-down gesture).
+    const followLockedRef = useRef(false);
+    const lastUserScrollUpRef = useRef(false);
+    const touchYRef = useRef<number | null>(null);
 
     useEffect(() => {
         const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -208,6 +213,30 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         mediaQuery.addEventListener('change', updateMotionPreference);
         return () => mediaQuery.removeEventListener('change', updateMotionPreference);
     }, []);
+
+    const lockFollowIfScrollingUp = useCallback((deltaY: number): void => {
+        if (deltaY < 0) {
+            followLockedRef.current = true;
+            lastUserScrollUpRef.current = true;
+            return;
+        }
+        if (deltaY > 0) lastUserScrollUpRef.current = false;
+    }, []);
+
+    const scrollToLiveBottom = useCallback((): void => {
+        followLockedRef.current = false;
+        lastUserScrollUpRef.current = false;
+        handleScrollToBottom();
+    }, [handleScrollToBottom]);
+
+    const wasAnalysisInProgressRef = useRef(false);
+    useEffect(() => {
+        if (isAnalysisInProgress && !wasAnalysisInProgressRef.current) {
+            followLockedRef.current = false;
+            lastUserScrollUpRef.current = false;
+        }
+        wasAnalysisInProgressRef.current = isAnalysisInProgress;
+    }, [isAnalysisInProgress]);
 
     const handleToggleSelection = useCallback((id: string) => {
         setSelectedIds(prev => {
@@ -373,6 +402,17 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 {loadingMessage || (messages.length > 0 ? `${messages.length} messages in conversation` : 'New conversation')}
             </div>
 
+            <div
+                className="h-full w-full min-h-0"
+                onWheelCapture={(event) => lockFollowIfScrollingUp(event.deltaY)}
+                onTouchStart={(event) => { touchYRef.current = event.touches[0]?.clientY ?? null; }}
+                onTouchMove={(event) => {
+                    const currentY = event.touches[0]?.clientY;
+                    if (touchYRef.current == null || currentY == null) return;
+                    lockFollowIfScrollingUp(touchYRef.current - currentY);
+                    touchYRef.current = currentY;
+                }}
+            >
             <Virtuoso
                 ref={virtuosoRef}
                 data={processedMessages}
@@ -386,11 +426,17 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                         <MessageItem message={message} context={context} />
                     </ErrorBoundary>
                 )}
-                // Follow the streaming output only while the user is at the
-                // bottom — scrolling up mid-generation must stay put so the
-                // user can read older messages while the answer streams.
-                followOutput={prefersReducedMotion ? false : (isAtBottom) => (isAtBottom ? 'smooth' : false)}
-                atBottomStateChange={(atBottom) => setShowScrollDown(!atBottom)}
+                // Follow the stream only while the user is at the bottom.
+                // A scroll-up gesture locks follow until they return (button
+                // or scroll-down) — growing thinking must not yank them back.
+                followOutput={prefersReducedMotion ? false : (isAtBottom) => {
+                    if (followLockedRef.current) return false;
+                    return isAtBottom ? 'auto' : false;
+                }}
+                atBottomStateChange={(atBottom) => {
+                    setShowScrollDown(!atBottom);
+                    if (atBottom && !lastUserScrollUpRef.current) followLockedRef.current = false;
+                }}
                 atTopStateChange={(atTop) => setShowScrollUp(!atTop && analysisMessages.length > 0)}
                 style={{ height: '100%', width: '100%' }}
                 className="scrollbar-hide"
@@ -400,6 +446,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                     Footer: () => <ListFooter isLoading={Boolean(loadingMessage)} />
                 }}
             />
+            </div>
 
             {/* Accuracy Mode Banner Overlay - Positioned Fixed/Absolute at top of chat area */}
             {isAccuracyModeEnabled && !isSelectionMode && (
@@ -427,7 +474,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 )}
                 {showScrollDown && !isSelectionMode && (
                     <button
-                        onClick={handleScrollToBottom}
+                        onClick={scrollToLiveBottom}
                         className="w-9 h-9 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white border border-zinc-700/50 rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-105"
                         aria-label="Scroll to bottom"
                         title="Scroll to bottom"

@@ -1,11 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { DebateTurn, AnalystLensConfig, TradeAnalysis, ReplacementOffer } from '../../types';
-import { BotIcon, ChevronDownIcon } from '../shared/Icons';
+import { BotIcon, ChevronDownIcon, KebabMenuIcon } from '../shared/Icons';
 import MarkdownContent from '../shared/MarkdownContent';
 import { getRoleDisplayForProvider } from '../../services/ui/AnalystLensService';
 import { buildTranscriptMarkdown, buildTranscriptJson, buildTranscriptFilename, downloadTextFile } from '../../utils/transcriptExport';
 import DebateSummary from './DebateSummary';
-import ThinkingModal from './ThinkingModal';
 
 interface DebateChatProps {
     debateTurns: DebateTurn[];
@@ -32,29 +31,30 @@ const cleanSpeakerPrefix = (text: string, speaker: string): string => text
     .replace(new RegExp(`^\\s*(?:\\*\\*)?${speaker.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}(?:\\*\\*)?:\\s*`, 'i'), '')
     .trim();
 
-const SpeakerAvatar: React.FC<{ speaker: string; moderator?: boolean; small?: boolean }> = ({ speaker, moderator = false, small = false }) => {
+const SpeakerAvatar: React.FC<{ speaker: string; moderator?: boolean; small?: boolean; live?: boolean }> = ({ speaker, moderator = false, small = false, live = false }) => {
     if (moderator) {
         return (
-            <div className={`${small ? 'h-6 w-6' : 'h-8 w-8'} flex shrink-0 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-500/10 text-cyan-300`}>
+            <div className={`${small ? 'h-6 w-6' : 'h-8 w-8'} flex shrink-0 items-center justify-center rounded-full border border-cyan-400/30 bg-cyan-500/10 text-cyan-300 ${live ? 'ring-1 ring-cyan-400/40' : ''}`}>
                 <BotIcon />
             </div>
         );
     }
 
     return (
-        <div className={`${small ? 'h-6 w-6 text-[9px]' : 'h-8 w-8 text-xs'} flex shrink-0 items-center justify-center rounded-full border border-white/10 bg-zinc-700 font-semibold text-zinc-100`}>
+        <div className={`${small ? 'h-6 w-6 text-[10px]' : 'h-8 w-8 text-xs'} flex shrink-0 items-center justify-center rounded-full border border-white/10 bg-zinc-800 font-semibold text-zinc-200 ${live ? 'ring-1 ring-cyan-400/40' : ''}`}>
             {speaker.trim().charAt(0).toUpperCase() || '?'}
         </div>
     );
 };
 
+const PHASES = ['Openings', 'Rebuttals', 'Clarification', 'Verdict'] as const;
+
 const getRoundLabel = (round: number, isVerdictRound = false, speaker?: string): string => {
-    if (isVerdictRound) return `Round ${round} · Final Verdict`;
-    if (round === 1) return 'Round 1 · Openings';
-    if (round === 2 || round === 3) return `Round ${round} · Rebuttals`;
-    // Clarification rounds: moderator asks questions, analysts answer
-    if (speaker === 'Moderator') return `Round ${round} · Clarification Questions`;
-    return `Round ${round} · Analyst Responses`;
+    if (isVerdictRound) return 'Final verdict';
+    if (round === 1) return 'Openings';
+    if (round === 2 || round === 3) return 'Rebuttals';
+    if (speaker === 'Moderator') return 'Clarification questions';
+    return 'Analyst responses';
 };
 
 /** Human phase name for the thinking indicator (instead of a raw round number). */
@@ -115,15 +115,15 @@ const TurnThinking: React.FC<{ content: string; autoOpen: boolean }> = ({ conten
         >
             <summary
                 onClick={() => { userInteractedRef.current = true; }}
-                className="cursor-pointer list-none px-3 py-1.5 text-[10px] uppercase tracking-widest text-zinc-500 group-open:text-zinc-300"
+                className="cursor-pointer list-none px-3 py-1.5 text-[11px] text-zinc-500 group-open:text-zinc-300"
             >
                 {autoOpen ? (
                     <span className="inline-flex items-center gap-1.5">
                         <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400"></span>
-                        Thinking<span className="normal-case tracking-normal text-zinc-600">…</span>
+                        Thinking…
                     </span>
                 ) : (
-                    <>Thinking <span className="normal-case tracking-normal text-zinc-600">(expand)</span></>
+                    <>Thinking</>
                 )}
             </summary>
             <div className="border-t border-white/5 px-3 py-2">
@@ -148,8 +148,7 @@ const DebateChat: React.FC<DebateChatProps> = ({
     replacementOffer,
     onReplacementChoice,
 }) => {
-    const [isThinkingOpen, setIsThinkingOpen] = useState(false);
-    const [expandedSpeaker, setExpandedSpeaker] = useState<string | null>(null);
+    const [showTranscript, setShowTranscript] = useState(false);
     const [isScrolledUp, setIsScrolledUp] = useState(false);
     const [isReplaying, setIsReplaying] = useState(false);
     const [replayIndex, setReplayIndex] = useState(0);
@@ -157,8 +156,8 @@ const DebateChat: React.FC<DebateChatProps> = ({
     const [isExportOpen, setIsExportOpen] = useState(false);
     const exportMenuRef = useRef<HTMLSpanElement>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
-    const thinkingControlRef = useRef<HTMLDivElement>(null);
     const userScrolledUpRef = useRef(false);
+    const touchYRef = useRef<number | null>(null);
 
     // Keep the currently streaming turn visible. The typing bubble is an
     // additional activity indicator, not a replacement for the analyst's
@@ -172,8 +171,21 @@ const DebateChat: React.FC<DebateChatProps> = ({
     const analystNames = useMemo(() => [...new Set(debateTurns.filter(turn => turn.speaker !== 'Moderator').map(turn => turn.speaker))], [debateTurns]);
     const modelNames = useMemo(() => Object.entries(modelsUsed).map(([key, modelId]) => modelIdToName[modelId] ?? modelId ?? key), [modelIdToName, modelsUsed]);
 
-    // Auto-scroll only while the reader is at the live bottom — scrolling up
-    // (e.g. to re-read a rebuttal) must not yank them back down every chunk.
+    // Auto-scroll only while the reader is at the live bottom. Wheel/touch-up
+    // locks immediately so a stream chunk cannot reset scrollTop before onScroll.
+    const lockIfScrollingUp = (deltaY: number): void => {
+        if (deltaY < 0) {
+            userScrolledUpRef.current = true;
+            setIsScrolledUp(true);
+            return;
+        }
+        const element = scrollRef.current;
+        if (element && element.scrollHeight - element.scrollTop - element.clientHeight <= 80) {
+            userScrolledUpRef.current = false;
+            setIsScrolledUp(false);
+        }
+    };
+
     useEffect(() => {
         const element = scrollRef.current;
         if (element && !userScrolledUpRef.current) element.scrollTop = element.scrollHeight;
@@ -254,18 +266,6 @@ const DebateChat: React.FC<DebateChatProps> = ({
         return () => document.removeEventListener('pointerdown', handlePointerDown);
     }, [isExportOpen]);
 
-    useEffect(() => {
-        if (!isThinkingOpen) return undefined;
-        const handleBodyPointerDown = (event: PointerEvent): void => {
-            if (!thinkingControlRef.current?.contains(event.target as Node)) {
-                setIsThinkingOpen(false);
-                setExpandedSpeaker(null);
-            }
-        };
-        document.addEventListener('pointerdown', handleBodyPointerDown);
-        return () => document.removeEventListener('pointerdown', handleBodyPointerDown);
-    }, [isThinkingOpen]);
-
     const getProviderId = (speaker: string): string | undefined => providerNameToId[speaker];
     const getModelKey = (speaker: string): string | undefined => {
         const providerId = getProviderId(speaker);
@@ -280,7 +280,7 @@ const DebateChat: React.FC<DebateChatProps> = ({
         return modelId ? (modelIdToName[modelId] ?? modelId) : '';
     };
     const getDisplayName = (speaker: string): string => {
-        if (speaker === 'Moderator') return 'Master Strategist';
+        if (speaker === 'Moderator') return 'Strategist';
         if (lensConfig?.enabled) {
             const providerId = getProviderId(speaker);
             if (providerId) {
@@ -311,14 +311,7 @@ const DebateChat: React.FC<DebateChatProps> = ({
         if (!analysis) return null;
         return (
             <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-zinc-950/80">
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-white/10 bg-zinc-900/80 px-3 py-2 text-[10px]">
-                    <span className="font-black uppercase tracking-widest text-cyan-300">Consensus</span>
-                    <span className={`font-bold ${analysis.direction === 'Long' ? 'text-emerald-400' : analysis.direction === 'Short' ? 'text-rose-400' : 'text-zinc-400'}`}>{analysis.direction}</span>
-                    <span className="text-zinc-500">Entry</span><span className="font-mono text-zinc-200">{analysis.entryPoints?.[0]?.price || '—'}</span>
-                    <span className="text-zinc-500">SL</span><span className="font-mono text-zinc-200">{analysis.stopLoss || '—'}</span>
-                    <span className="text-zinc-500">TP</span><span className="font-mono text-zinc-200">{analysis.takeProfit?.[0]?.price || '—'}</span>
-                    <span className="text-zinc-500">Confidence</span><span className="font-mono text-zinc-200">{analysis.confidence}</span>
-                </div>
+                <DebateSummary debateTurns={[]} analysis={analysis} />
                 <div className="px-3 py-4 text-center text-[11px] text-zinc-600">
                     The debate transcript is unavailable for this analysis.
                 </div>
@@ -329,117 +322,130 @@ const DebateChat: React.FC<DebateChatProps> = ({
     // Replay slices the transcript once (P7: the old code re-sliced inside the
     // per-turn map — O(n²) array copies on every replay tick).
     const displayedTurns = isReplaying ? visibleTurns.slice(0, replayIndex) : visibleTurns;
+    const isComplete = Boolean(analysis && !isDebating && debateTurns.length > 0);
+    const transcriptOpen = isDebating || isReplaying || showTranscript || !analysis;
+    const liveRound = Math.max(
+        1,
+        ...debateTurns.map(turn => turn.round ?? 1),
+        ...Object.values(activeDebateSpeakers),
+    );
+    const liveIsVerdict = !isDebating || (
+        activeDebateSpeakers['Moderator'] !== undefined
+        && activeDebateSpeakers['Moderator'] === latestModeratorRound
+        && latestModeratorRound > 3
+    );
+    const activePhase = getPhaseLabel(liveRound, liveIsVerdict || Boolean(analysis && !isDebating));
+
+    const startReplay = () => {
+        setShowTranscript(true);
+        setIsReplaying(true);
+        setReplayIndex(0);
+        setIsExportOpen(false);
+    };
 
     return (
         <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-zinc-950/80">
-            {/* Pinned consensus strip + copy affordance on completed debates */}
-            {analysis && !isDebating && (
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-white/10 bg-zinc-900/80 px-3 py-2 text-[10px]">
-                    <span className="font-black uppercase tracking-widest text-cyan-300">Consensus</span>
-                    <span className={`font-bold ${analysis.direction === 'Long' ? 'text-emerald-400' : analysis.direction === 'Short' ? 'text-rose-400' : 'text-zinc-400'}`}>{analysis.direction}</span>
-                    <span className="text-zinc-500">Entry</span><span className="font-mono text-zinc-200">{analysis.entryPoints?.[0]?.price || '—'}</span>
-                    <span className="text-zinc-500">SL</span><span className="font-mono text-zinc-200">{analysis.stopLoss || '—'}</span>
-                    <span className="text-zinc-500">TP</span><span className="font-mono text-zinc-200">{analysis.takeProfit?.[0]?.price || '—'}</span>
-                    <span className="text-zinc-500">Confidence</span><span className="font-mono text-zinc-200">{analysis.confidence}</span>
+            <div className="flex flex-wrap items-center gap-2 border-b border-white/10 bg-zinc-900/80 px-3 py-2">
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-zinc-500">
+                    {PHASES.map((phase, index) => (
+                        <React.Fragment key={phase}>
+                            {index > 0 && <span className="text-zinc-700">·</span>}
+                            <span className={phase === activePhase ? 'font-medium text-zinc-200' : ''}>{phase}</span>
+                        </React.Fragment>
+                    ))}
+                </div>
+                {isComplete && (
                     <button
                         type="button"
-                        onClick={copyTranscript}
-                        className="rounded-md border border-white/10 px-2 py-1 text-[9px] uppercase tracking-wider text-zinc-400 transition-colors hover:border-cyan-400/30 hover:text-cyan-300"
-                        title="Copy the full debate transcript"
+                        onClick={() => setShowTranscript(open => !open)}
+                        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200"
+                        aria-expanded={transcriptOpen}
                     >
-                        Copy transcript
+                        {transcriptOpen ? 'Hide debate' : `Show debate (${debateTurns.length} turns)`}
+                        <ChevronDownIcon className={`h-3 w-3 transition-transform ${transcriptOpen ? 'rotate-180' : ''}`} />
                     </button>
+                )}
+                {debateTurns.length > 0 && (
                     <span className="relative" ref={exportMenuRef}>
                         <button
                             type="button"
                             onClick={() => setIsExportOpen(o => !o)}
                             aria-expanded={isExportOpen}
-                            className="rounded-md border border-white/10 px-2 py-1 text-[9px] uppercase tracking-wider text-zinc-400 transition-colors hover:border-cyan-400/30 hover:text-cyan-300"
-                            title="Export the debate transcript to a file"
+                            aria-label="Debate actions"
+                            className="rounded-md p-1 text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-200"
                         >
-                            ⬇ Export
+                            <KebabMenuIcon className="h-4 w-4" />
                         </button>
                         {isExportOpen && (
-                            <span className="absolute right-0 top-full z-10 mt-1 flex flex-col overflow-hidden rounded-lg border border-white/10 bg-zinc-900 shadow-xl">
-                                <button
-                                    type="button"
-                                    onClick={() => exportTranscript('md')}
-                                    className="whitespace-nowrap px-3 py-1.5 text-left text-[10px] text-zinc-300 transition-colors hover:bg-zinc-800"
-                                >
-                                    Markdown (.md)
+                            <span className="absolute right-0 top-full z-10 mt-1 flex min-w-[9rem] flex-col overflow-hidden rounded-lg border border-white/10 bg-zinc-900 shadow-xl">
+                                <button type="button" onClick={() => { copyTranscript(); setIsExportOpen(false); }} className="px-3 py-1.5 text-left text-[11px] text-zinc-300 transition-colors hover:bg-zinc-800">
+                                    Copy
                                 </button>
-                                <button
-                                    type="button"
-                                    onClick={() => exportTranscript('json')}
-                                    className="whitespace-nowrap px-3 py-1.5 text-left text-[10px] text-zinc-300 transition-colors hover:bg-zinc-800"
-                                >
-                                    JSON (.json)
+                                <button type="button" onClick={() => exportTranscript('md')} className="px-3 py-1.5 text-left text-[11px] text-zinc-300 transition-colors hover:bg-zinc-800">
+                                    Markdown
                                 </button>
+                                <button type="button" onClick={() => exportTranscript('json')} className="px-3 py-1.5 text-left text-[11px] text-zinc-300 transition-colors hover:bg-zinc-800">
+                                    JSON
+                                </button>
+                                {isComplete && (
+                                    <button type="button" onClick={startReplay} className="px-3 py-1.5 text-left text-[11px] text-zinc-300 transition-colors hover:bg-zinc-800">
+                                        Replay
+                                    </button>
+                                )}
                             </span>
                         )}
                     </span>
-                    {!isReplaying ? (
-                        <button
-                            type="button"
-                            onClick={() => { setIsReplaying(true); setReplayIndex(0); }}
-                            className="rounded-md border border-white/10 px-2 py-1 text-[9px] uppercase tracking-wider text-zinc-400 transition-colors hover:border-cyan-400/30 hover:text-cyan-300"
-                            title="Replay the debate turn by turn"
-                        >
-                            ▶ Replay
-                        </button>
-                    ) : (
-                        <span className="ml-auto flex items-center gap-1.5">
-                            <button type="button" onClick={() => setIsReplaying(p => !p)} className="rounded-md border border-cyan-400/30 bg-cyan-500/10 px-2 py-1 text-[9px] uppercase tracking-wider text-cyan-300">
-                                {replayIndex >= debateTurns.length ? '↺ Restart' : '⏸ Pause'}
+                )}
+            </div>
+
+            {isReplaying && (
+                <div className="flex flex-wrap items-center gap-1.5 border-b border-white/10 px-3 py-2">
+                    <button type="button" onClick={() => setIsReplaying(p => !p)} className="rounded-md border border-white/10 px-2 py-1 text-[11px] text-zinc-300">
+                        {replayIndex >= debateTurns.length ? 'Restart' : 'Pause'}
+                    </button>
+                    <button type="button" onClick={() => setReplayIndex(i => Math.min(debateTurns.length, i + 1))} className="rounded-md border border-white/10 px-2 py-1 text-[11px] text-zinc-400">Step</button>
+                    <span className="flex items-center gap-0.5 border-l border-white/10 pl-1.5">
+                        {[0.5, 1, 2].map(speed => (
+                            <button
+                                key={speed}
+                                type="button"
+                                onClick={() => setReplaySpeed(speed)}
+                                className={`rounded px-1.5 py-0.5 text-[11px] ${replaySpeed === speed ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'}`}
+                            >
+                                {speed}x
                             </button>
-                            <button type="button" onClick={() => setReplayIndex(i => Math.min(debateTurns.length, i + 1))} className="rounded-md border border-white/10 px-2 py-1 text-[9px] uppercase tracking-wider text-zinc-400">⏭ Step</button>
-                            {/* Speed controls */}
-                            <span className="flex items-center gap-0.5 border-l border-white/10 pl-1.5">
-                                {[0.5, 1, 2].map(speed => (
+                        ))}
+                    </span>
+                    {availableRounds.length > 1 && (
+                        <span className="flex items-center gap-0.5 border-l border-white/10 pl-1.5">
+                            {availableRounds.map(round => {
+                                const startIdx = roundStartIndices.get(round) ?? 0;
+                                const currentRound = debateTurns[replayIndex]?.round;
+                                return (
                                     <button
-                                        key={speed}
+                                        key={round}
                                         type="button"
-                                        onClick={() => setReplaySpeed(speed)}
-                                        className={`rounded px-1.5 py-0.5 text-[9px] font-medium transition-colors ${replaySpeed === speed ? 'bg-cyan-500/15 text-cyan-300' : 'text-zinc-500 hover:text-zinc-300'}`}
+                                        onClick={() => setReplayIndex(startIdx)}
+                                        className={`rounded px-1.5 py-0.5 text-[11px] ${currentRound === round ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'}`}
+                                        title={`Jump to round ${round}`}
                                     >
-                                        {speed}x
+                                        R{round}
                                     </button>
-                                ))}
-                            </span>
-                            {/* Jump to round */}
-                            {availableRounds.length > 1 && (
-                                <span className="flex items-center gap-0.5 border-l border-white/10 pl-1.5">
-                                    {availableRounds.map(round => {
-                                        const startIdx = roundStartIndices.get(round) ?? 0;
-                                        const currentRound = debateTurns[replayIndex]?.round;
-                                        return (
-                                            <button
-                                                key={round}
-                                                type="button"
-                                                onClick={() => setReplayIndex(startIdx)}
-                                                className={`rounded px-1.5 py-0.5 text-[9px] font-medium transition-colors ${currentRound === round ? 'bg-cyan-500/15 text-cyan-300' : 'text-zinc-500 hover:text-zinc-300'}`}
-                                                title={`Jump to round ${round}`}
-                                            >
-                                                R{round}
-                                            </button>
-                                        );
-                                    })}
-                                </span>
-                            )}
-                            <button type="button" onClick={() => setIsReplaying(false)} className="rounded-md border border-white/10 px-2 py-1 text-[9px] uppercase tracking-wider text-zinc-500">Exit</button>
+                                );
+                            })}
                         </span>
                     )}
+                    <button type="button" onClick={() => setIsReplaying(false)} className="rounded-md px-2 py-1 text-[11px] text-zinc-500 hover:text-zinc-300">Exit</button>
                 </div>
             )}
-            {/* Mid-debate analyst replacement banner — an analyst dropped and
-                the debate is paused until the user picks a fresh provider. */}
+
             {replacementOffer && onReplacementChoice && messageId && (
                 <div className="status-surface border-b border-amber-400/20 bg-amber-400/5 px-3 py-2.5">
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                        <span className="text-[11px] font-semibold uppercase tracking-wider text-amber-300">
-                            {replacementOffer.droppedName} dropped out (Round {replacementOffer.round})
+                        <span className="text-[11px] font-medium text-amber-300">
+                            {replacementOffer.droppedName} dropped out (round {replacementOffer.round})
                         </span>
-                        <span className="text-[11px] text-zinc-400">Pick a replacement analyst to continue the debate:</span>
+                        <span className="text-[11px] text-zinc-400">Pick a replacement analyst to continue:</span>
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-1.5">
                         {replacementOffer.candidates.map(candidate => {
@@ -451,7 +457,7 @@ const DebateChat: React.FC<DebateChatProps> = ({
                                     type="button"
                                     disabled={disabled}
                                     onClick={() => onReplacementChoice(messageId, candidate.providerId)}
-                                    className={`rounded-lg border px-2.5 py-1 text-[10px] font-medium transition-colors ${
+                                    className={`rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors ${
                                         chosen
                                             ? 'border-amber-400/40 bg-amber-400/15 text-amber-200'
                                             : disabled
@@ -467,7 +473,7 @@ const DebateChat: React.FC<DebateChatProps> = ({
                             <button
                                 type="button"
                                 onClick={() => onReplacementChoice(messageId, null)}
-                                className="rounded-lg border border-white/10 px-2.5 py-1 text-[10px] font-medium text-zinc-400 transition-colors hover:border-white/25 hover:text-zinc-200"
+                                className="rounded-lg border border-white/10 px-2.5 py-1 text-[11px] font-medium text-zinc-400 transition-colors hover:border-white/25 hover:text-zinc-200"
                             >
                                 Continue without
                             </button>
@@ -475,6 +481,14 @@ const DebateChat: React.FC<DebateChatProps> = ({
                     </div>
                 </div>
             )}
+
+            {isComplete && (
+                <div className="px-3 pt-3">
+                    <DebateSummary debateTurns={debateTurns} analysis={analysis} />
+                </div>
+            )}
+
+            {transcriptOpen && (
             <div
                 ref={scrollRef}
                 onScroll={() => {
@@ -484,14 +498,17 @@ const DebateChat: React.FC<DebateChatProps> = ({
                     userScrolledUpRef.current = away;
                     setIsScrolledUp(away);
                 }}
+                onWheel={(event) => lockIfScrollingUp(event.deltaY)}
+                onTouchStart={(event) => { touchYRef.current = event.touches[0]?.clientY ?? null; }}
+                onTouchMove={(event) => {
+                    const currentY = event.touches[0]?.clientY;
+                    if (touchYRef.current == null || currentY == null) return;
+                    lockIfScrollingUp(touchYRef.current - currentY);
+                    touchYRef.current = currentY;
+                }}
                 className="relative max-h-[520px] space-y-3 overflow-y-auto px-3 py-4 custom-scrollbar"
             >
-                {!isDebating && analysis && debateTurns.length > 0 && (
-                    <DebateSummary debateTurns={debateTurns} analysis={analysis} />
-                )}
                 {displayedTurns.map((turn, index) => {
-                    // 'System' turns carry drop-out / time-budget notices from
-                    // the debate engine — render centered, not as an analyst bubble.
                     if (turn.speaker === 'System') {
                         return (
                             <div key={`${turn.speaker}-${turn.round ?? 'legacy'}-${index}`} className="flex justify-center px-2">
@@ -510,39 +527,37 @@ const DebateChat: React.FC<DebateChatProps> = ({
                     const segments = turn.speaker === 'Moderator'
                         ? splitModeratorTurn(turn.text, analystNames, modelNames)
                         : [{ text: turn.text }];
-                    // Per-turn chain of thought (harness-style). Reasoning is
-                    // keyed/accumulated per speaker; turn.reasoning wins when
-                    // the engine attaches a per-turn slice.
                     const turnReasoning = (turn.reasoning || getReasoning(turn.speaker) || '').trim();
                     const isSpeakerStreaming = isDebating && activeDebateSpeakers[turn.speaker] !== undefined;
                     return (
                         <React.Fragment key={`${turn.speaker}-${turn.round ?? 'legacy'}-${index}`}>
                             {hasRoundSeparator && (
-                                <div className="flex items-center gap-2 py-1 text-[10px] font-medium uppercase tracking-widest text-zinc-600">
+                                <div className="flex items-center gap-2 py-1 text-[11px] text-zinc-600">
                                     <span className="h-px flex-1 bg-white/5" />
                                     <span>{getRoundLabel(turn.round!, isVerdictRound, turn.speaker)}</span>
                                     <span className="h-px flex-1 bg-white/5" />
                                 </div>
                             )}
                             {segments.map((segment, segmentIndex) => (
-                                <div key={`${turn.speaker}-${turn.round ?? 'legacy'}-${index}-${segmentIndex}`} className={`flex items-start gap-2.5 ${turn.speaker === 'Moderator' ? 'justify-end' : ''}`}>
-                                    {turn.speaker !== 'Moderator' && <SpeakerAvatar speaker={turn.speaker} />}
+                                <div key={`${turn.speaker}-${turn.round ?? 'legacy'}-${index}-${segmentIndex}`} className="flex items-start gap-2.5">
+                                    <SpeakerAvatar speaker={turn.speaker} moderator={turn.speaker === 'Moderator'} live={isSpeakerStreaming} />
                                     <div className={`min-w-0 max-w-[92%] rounded-2xl border px-3.5 py-3 ${isVerdict ? 'border-cyan-400/25 bg-cyan-500/10' : 'border-white/5 bg-zinc-800/60'}`}>
                                         <div className="mb-1.5 flex items-center gap-2">
-                                            {turn.speaker === 'Moderator' && <SpeakerAvatar speaker="Moderator" moderator small />}
                                             <div className="min-w-0">
-                                                <div className={`text-xs font-semibold ${isVerdict ? 'text-cyan-300' : 'text-zinc-200'}`}>{displayName}</div>
-                                                {turn.createdAt && <div className="text-[9px] text-zinc-600">{new Date(turn.createdAt).toLocaleTimeString()}</div>}
-                                                {segment.target ? <div className="truncate text-[10px] text-cyan-400/70">To {segment.target}</div> : modelName && <div className="truncate text-[10px] text-zinc-600">{modelName}</div>}
+                                                <div className={`text-xs font-medium ${isVerdict ? 'text-cyan-300' : 'text-zinc-200'}`}>{displayName}</div>
+                                                {turn.createdAt && <div className="text-[11px] text-zinc-600">{new Date(turn.createdAt).toLocaleTimeString()}</div>}
+                                                {segment.target ? <div className="truncate text-[11px] text-zinc-500">To {segment.target}</div> : modelName && <div className="truncate text-[11px] text-zinc-600">{modelName}</div>}
                                             </div>
-                                            {isVerdict && <span className="ml-auto rounded border border-cyan-400/20 bg-cyan-400/10 px-1.5 py-0.5 text-[9px] font-bold tracking-widest text-cyan-300">DECISION</span>}
+                                            {isVerdict && <span className="ml-auto rounded border border-cyan-400/20 bg-cyan-400/10 px-1.5 py-0.5 text-[10px] font-medium text-cyan-300">Verdict</span>}
                                         </div>
                                         <div className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-300">{turn.speaker === 'Moderator' ? segment.text : cleanSpeakerPrefix(segment.text, turn.speaker)}</div>
+                                        {isSpeakerStreaming && (
+                                            <span className="mt-1 inline-block h-4 w-1.5 animate-pulse bg-cyan-400 align-middle" aria-hidden="true" />
+                                        )}
                                         {segmentIndex === 0 && turnReasoning && (
                                             <TurnThinking content={turnReasoning} autoOpen={isSpeakerStreaming} />
                                         )}
                                     </div>
-                                    {turn.speaker === 'Moderator' && <SpeakerAvatar speaker="Moderator" moderator />}
                                 </div>
                             ))}
                         </React.Fragment>
@@ -550,60 +565,29 @@ const DebateChat: React.FC<DebateChatProps> = ({
                 })}
 
                 {isDebating && activeSpeakers.length > 0 && (
-                    <div ref={thinkingControlRef} className="relative flex items-end gap-2 pt-2">
+                    <div className="flex items-center gap-2 pt-1 text-[11px] text-zinc-500">
                         <div className="flex -space-x-2 pl-1">
-                            {activeSpeakers.map(([speaker]) => <SpeakerAvatar key={speaker} speaker={speaker} moderator={speaker === 'Moderator'} small />)}
+                            {activeSpeakers.map(([speaker]) => <SpeakerAvatar key={speaker} speaker={speaker} moderator={speaker === 'Moderator'} small live />)}
                         </div>
-                        <button
-                            type="button"
-                            onClick={() => setIsThinkingOpen(previous => !previous)}
-                            className="group flex items-center gap-2 rounded-2xl rounded-bl-md border border-white/10 bg-zinc-800 px-3 py-2 text-left shadow-lg transition-colors hover:border-cyan-400/30 hover:bg-zinc-700"
-                            aria-expanded={isThinkingOpen}
-                            aria-label="Show analysts who are thinking"
-                        >
-                            <span className="flex gap-1" aria-hidden="true"><i className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-400 [animation-delay:-0.2s]" /><i className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-400 [animation-delay:-0.1s]" /><i className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-400" /></span>
-                            <span className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 group-hover:text-cyan-300">Thinking</span>
-                            <ChevronDownIcon className={`h-3 w-3 text-zinc-500 transition-transform ${isThinkingOpen ? 'rotate-180' : ''}`} />
-                        </button>
-                        {isThinkingOpen && activeSpeakers.length > 0 && (
-                            <div className="absolute bottom-full z-20 mb-2 w-64 rounded-xl border border-white/10 bg-zinc-900 p-2 shadow-xl">
-                                {activeSpeakers.map(([speaker, round]) => {
-                                    const reasoning = getReasoning(speaker);
-        return (
-                                        <div key={speaker} className="rounded-lg p-2 hover:bg-zinc-800">
-                                                <button type="button" onClick={() => { setExpandedSpeaker(speaker); setIsThinkingOpen(false); }} className="flex w-full items-center gap-2 text-left" aria-haspopup="dialog">
-                                                <SpeakerAvatar speaker={speaker} moderator={speaker === 'Moderator'} small />
-                                                <span className="min-w-0 flex-1 truncate text-xs text-zinc-300">{getDisplayName(speaker)}</span>
-                                                <span className="text-[9px] text-zinc-600">{getPhaseLabel(round, speaker === 'Moderator' && round === latestModeratorRound)}</span>
-                                            </button>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        )}
+                        <span>
+                            {activeSpeakers.map(([speaker]) => getDisplayName(speaker)).join(', ')} writing…
+                        </span>
                     </div>
                 )}
 
-                {/* Jump-to-latest affordance when the reader scrolled up */}
                 {isScrolledUp && (
                     <div className="sticky bottom-2 z-10 flex justify-center">
                         <button
                             type="button"
                             onClick={jumpToLatest}
-                            className="flex items-center gap-1.5 rounded-full border border-white/10 bg-zinc-800/95 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-cyan-300 shadow-lg transition-colors hover:border-cyan-400/30 hover:bg-zinc-700"
+                            className="flex items-center gap-1.5 rounded-full border border-white/10 bg-zinc-800/95 px-3 py-1.5 text-[11px] font-medium text-zinc-300 transition-colors hover:border-white/20 hover:bg-zinc-700"
                         >
-                            ↓ Latest
+                            Latest
                         </button>
                     </div>
                 )}
             </div>
-            <ThinkingModal
-                isOpen={Boolean(expandedSpeaker)}
-                onClose={() => setExpandedSpeaker(null)}
-                title={expandedSpeaker ? getDisplayName(expandedSpeaker) : 'Analyst thinking'}
-                subtitle={expandedSpeaker ? `${getModelName(expandedSpeaker) || 'Model unavailable'} · Debate reasoning` : undefined}
-                content={expandedSpeaker ? getReasoning(expandedSpeaker) : undefined}
-            />
+            )}
         </div>
     );
 };

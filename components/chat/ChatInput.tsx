@@ -1,17 +1,22 @@
 
 import React, { useState } from 'react';
 import ImagePreview from '../shared/ImagePreview';
-import { PlusIcon, LoadingIcon, SendIcon, StopIcon, ChevronDownIcon, ChevronUpIcon, BotIcon } from '../shared/Icons';
+import { PlusIcon, LoadingIcon, SendIcon, StopIcon, ChevronDownIcon } from '../shared/Icons';
 import { ImageMetadata, AnalystLensConfig, AnalystRole } from '../../types';
 import { EnsembleModelSelection, ANALYST_ROLE_DEFINITIONS, getLensPromptForRole } from '../../services/ui/AnalystLensService';
 import { RegimeProviderStatsMap } from '../../services/learning/SetupMemoryService';
-import GlobalLearningService from '../../services/learning/GlobalLearningService';
 import { MASTER_ANALYSIS_PROMPT } from '../../constants/prompts';
 import PromptEditorModal from '../settings/PromptEditorModal';
 import TeamModal from './TeamModal';
 import ModelPicker from '../shared/ModelPicker';
 
 import { ProviderConfig } from '../../types/provider';
+
+const LENS_ROSTER_ROLES: AnalystRole[] = [
+    AnalystRole.MACRO_VOLATILITY,
+    AnalystRole.TECHNICAL_ANALYST,
+    AnalystRole.RISK_EXECUTION,
+];
 
 interface ChatInputProps {
     images: ImageMetadata[];
@@ -117,34 +122,16 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
     // exists, then it docks at the bottom.
     centered = false,
 }) => {
-    // showAISettings removed — ensemble is now a simple toggle
-    const [showLensSettings, setShowLensSettings] = useState(false);
-    // Two-step dropdown: 'choose' shows ONLY the mode chooser; the assignment
-    // UI ('lenses' = roles, 'normal' = model picker) appears after the user
-    // picks a mode.
-    const [lensAssignStep, setLensAssignStep] = useState<'choose' | 'lenses' | 'normal'>('choose');
-    const lensMenuRef = React.useRef<HTMLDivElement>(null);
-
+    const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
     React.useEffect(() => {
         const handleEscape = (event: KeyboardEvent) => {
             if (event.key !== 'Escape') return;
-            setShowLensSettings(false);
             setIsLeverageDropdownOpen(false);
+            setIsTeamModalOpen(false);
         };
         document.addEventListener('keydown', handleEscape);
         return () => document.removeEventListener('keydown', handleEscape);
     }, [setIsLeverageDropdownOpen]);
-
-    // Close the lenses dropdown when the user clicks anywhere outside it.
-    React.useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (showLensSettings && lensMenuRef.current && !lensMenuRef.current.contains(event.target as Node)) {
-                setShowLensSettings(false);
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [showLensSettings]);
 
     // Charts can only be analyzed in ensemble mode.
     const uploadDisabled = isImageUploadDisabled || !isEnsembleEnabled;
@@ -157,97 +144,32 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
     const effectiveChatModel = selectedChatModel && chatModelOptions.some(o => o.modelId === selectedChatModel)
         ? selectedChatModel
         : (chatProviders[0]?.selectedModel || chatProviders[0]?.models[0] || '');
-    const ensembleSelectionCount = providers.reduce((total, provider) => {
-        const selected = provider.ensembleModels?.filter(model => provider.models.includes(model))
-            ?? (provider.selectedModel ? [provider.selectedModel] : []);
-        return total + selected.length;
-    }, 0);
-    const selectedModelsForLens = (provider: typeof providers[number]): string[] => {
-        // All of the provider's models, not just ensembleModels — an assigned
-        // model outside ensembleModels used to render the dropdown blank even
-        // though the pipeline still ran it.
-        return isEnsembleEnabled
-            ? (provider.models.length > 0 ? provider.models : (provider.selectedModel ? [provider.selectedModel] : []))
-            : [];
-    };
-    const lensAssignmentValue = (role: string): string => {
-        const assignment = lensConfig.assignments?.find(item => item.role === role);
-        if (!assignment?.assignedProvider) return '';
-        const provider = providers.find(item => item.id === assignment.assignedProvider);
-        // A DISABLED / key-less provider must render as unassigned — the
-        // dropdown options only list ready providers, so a non-empty value
-        // with no matching option rendered a BLANK select while the footer
-        // claimed "All roles assigned — ready to start the ensemble".
-        if (!provider || !(provider.isEnabled && provider.apiKey.trim().length > 0)) return '';
-        const availableModels = provider ? selectedModelsForLens(provider) : [];
-        const model = assignment.assignedModel || provider?.selectedModel || '';
-        return model && availableModels.includes(model) ? `${assignment.assignedProvider}::${model}` : '';
-    };
-    const updateLensAssignment = (role: string, value: string): void => {
-        const separator = value.indexOf('::');
-        const assignedProvider = separator >= 0 ? value.slice(0, separator) : value;
-        const assignedModel = separator >= 0 ? value.slice(separator + 2) : undefined;
-        const provider = providers.find(p => p.id === assignedProvider);
-        // Mirror AnalystLensSettings semantics: a model that doesn't exist on
-        // the chosen provider must not survive the assignment — keeping it
-        // rendered a blank dropdown in the lens editor while the pipeline
-        // still ran the stale model.
-        const modelIsValid = !!assignedModel && !!provider && provider.models.includes(assignedModel);
-        const assignments = [...(lensConfig.assignments || [])];
-        const index = assignments.findIndex(item => item.role === role);
-        const assignment = { assignedProvider: assignedProvider || null, ...(modelIsValid ? { assignedModel } : {}) };
-        if (index >= 0) {
-            assignments[index] = { ...assignments[index], ...assignment };
+    const rosterSlots = React.useMemo(() => {
+        if (lensConfig.enabled) {
+            return LENS_ROSTER_ROLES.map(role => {
+                const def = ANALYST_ROLE_DEFINITIONS[role];
+                const assignment = lensConfig.assignments?.find(item => item.role === role);
+                const provider = chatProviders.find(item => item.id === assignment?.assignedProvider);
+                const model = assignment?.assignedModel || provider?.models[0] || '';
+                return {
+                    initial: def.shortName.charAt(0).toUpperCase(),
+                    label: def.shortName,
+                    model: provider && model ? `${provider.name} · ${model}` : '',
+                };
+            }).filter(slot => slot.model);
         }
-        setLensConfig({ ...lensConfig, assignments });
-    };
-    const lensModelOptions = providers
-        .filter(provider => provider.isEnabled && provider.apiKey.trim().length > 0)
-        .flatMap(provider => selectedModelsForLens(provider).map(model => ({ value: `${provider.id}::${model}`, label: `${provider.name} · ${model}` })));
-    const lensModelOptionsForRole = (role: string) => lensModelOptions.map(option => ({
-        ...option,
-        disabled: lensConfig.assignments?.some(assignment => {
-            if (assignment.role === role || !assignment.assignedProvider) return false;
-            const provider = providers.find(item => item.id === assignment.assignedProvider);
-            const assignedModel = assignment.assignedModel || provider?.selectedModel || provider?.models[0] || '';
-            return `${assignment.assignedProvider}::${assignedModel}` === option.value;
-        }) ?? false,
-    }));
-
-    // --- ORDINARY "DEBATE MODELS" PICKER (Lenses OFF) ---
-    // Mirrors the lens role dropdowns, but without roles: the three selected
-    // models become the debate participants (source of truth for the cards).
-    const ensembleSelectionValue = (slot: number): string => {
-        const entry = ensembleModelSelection?.[slot];
-        if (!entry) return '';
-        const provider = providers.find(p => p.id === entry.providerId);
-        if (!provider || !provider.models.includes(entry.model)) return '';
-        return `${entry.providerId}::${entry.model}`;
-    };
-    const updateEnsembleSelection = (slot: number, value: string): void => {
-        const separator = value.indexOf('::');
-        const providerId = separator >= 0 ? value.slice(0, separator) : value;
-        const model = separator >= 0 ? value.slice(separator + 2) : '';
-        const next = [...(ensembleModelSelection || [])];
-        if (value && providerId && model) {
-            next[slot] = { providerId, model };
-        } else {
-            next.splice(slot, 1);
-        }
-        // A model may only occupy one slot; keep at most 3 picks.
-        const seen = new Set<string>();
-        const deduped = next
-            .filter(e => {
-                const key = `${e.providerId}::${e.model}`;
-                if (seen.has(key)) return false;
-                seen.add(key);
-                return true;
-            })
-            .slice(0, 3);
-        setEnsembleModelSelection(deduped);
-    };
-    const isChosenInOtherSlot = (slot: number, value: string): boolean =>
-        (ensembleModelSelection || []).some((e, i) => i !== slot && `${e.providerId}::${e.model}` === value);
+        return (ensembleModelSelection || [])
+            .filter(entry => entry?.providerId && entry.model)
+            .slice(0, 3)
+            .map((entry, index) => {
+                const provider = chatProviders.find(item => item.id === entry.providerId);
+                return {
+                    initial: (provider?.name || 'E').charAt(0).toUpperCase(),
+                    label: provider?.name || `Expert ${index + 1}`,
+                    model: entry.model,
+                };
+            });
+    }, [chatProviders, ensembleModelSelection, lensConfig]);
 
     // --- PROMPT EDITOR (view / modify each mode's prompt) ---
     type PromptEditorTarget =
@@ -255,10 +177,6 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
         | { kind: 'lens'; role: AnalystRole; defaultPrompt: string }
         | null;
     const [promptEditor, setPromptEditor] = useState<PromptEditorTarget>(null);
-    const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
-    // ⑥: the composer team dropdown — quick roster + auto-assign, with the
-    // modal one click away for full role editing.
-    // isTeamDropdownOpen removed — Team button removed from chat input
 
     const openLensPromptEditor = (role: AnalystRole) => {
         const style = (lensConfig.tradingStyle === 'auto' ? 'swing' : lensConfig.tradingStyle) as 'position' | 'swing' | 'scalp';
@@ -347,184 +265,30 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                 <span className="font-medium">Ensemble</span>
                             </button>
 
-                            {/* Lens Mode Split Button — only meaningful for ensemble analysis. */}
-                            {isEnsembleEnabled && <>
-                            <div ref={lensMenuRef} className={`relative group flex items-center shadow-sm rounded-full transition-all ${lensConfig.enabled ? 'bg-zinc-700' : 'bg-zinc-800 hover:bg-zinc-700'}`}>
-                                {/* Main Toggle — label reflects the current mode */}
+                            {isEnsembleEnabled && (
                                 <button
-                                    onClick={() => {
-                                        setLensConfig({ ...lensConfig, enabled: !lensConfig.enabled });
-                                        setLensAssignStep('choose');
-                                    }}
-                                    className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 lg:py-2 transition-all text-xs sm:text-sm border-r border-black/10 rounded-l-full ${lensConfig.enabled ? 'text-white shadow-[inset_0_0_10px_rgba(0,0,0,0.1)]' : 'text-zinc-400 hover:text-white'}`}
-                                    aria-pressed={lensConfig.enabled}
-                                    title={lensConfig.enabled ? 'Lenses mode — role-based prompts' : 'Normal mode — same prompt for all models'}
-                                >
-                                    
-                                    <span className="font-medium inline">{lensConfig.enabled ? 'Lenses' : 'Normal'}</span>
-                                </button>
-
-                                {/* Dropdown Trigger */}
-                                <button
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (!showLensSettings) setLensAssignStep('choose');
-                                        setShowLensSettings(!showLensSettings);
-                                    }}
-                                    className={`px-1.5 sm:px-2 py-1 sm:py-1.5 lg:py-2 transition-colors flex items-center justify-center rounded-r-full focus-visible:ring-2 focus-visible:ring-cyan-400 ${lensConfig.enabled ? 'text-white hover:bg-zinc-600' : 'text-zinc-400 hover:text-white hover:bg-zinc-700'}`}
-                                    aria-label="Configure ensemble mode"
-                                    aria-expanded={showLensSettings}
+                                    type="button"
+                                    onClick={() => setIsTeamModalOpen(true)}
+                                    className="flex items-center gap-1.5 rounded-full bg-zinc-800 px-2.5 py-1 sm:px-3 sm:py-1.5 text-xs sm:text-sm text-zinc-300 transition-colors hover:bg-zinc-700 hover:text-white"
                                     aria-haspopup="dialog"
+                                    aria-expanded={isTeamModalOpen}
+                                    title="Choose the analyst team"
                                 >
-                                    <ChevronDownIcon className={`w-3 h-3 sm:w-3.5 sm:h-3.5 transition-transform duration-200 ${showLensSettings ? 'rotate-180' : ''}`} />
-                                </button>
-
-                                {/* Two-step dropdown: mode chooser first, then the
-                                    assignment UI for the chosen mode. */}
-                                {showLensSettings && (
-                                    <div
-                                        role="dialog"
-                                        aria-label={lensAssignStep === 'lenses' ? 'Assign analysts' : lensAssignStep === 'normal' ? 'Debate models' : 'Debate mode'}
-                                        className="absolute bottom-full left-0 mb-2 w-72 rounded-2xl border border-cyan-400/20 bg-zinc-950/95 shadow-[0_18px_50px_rgba(0,0,0,0.45)] backdrop-blur-xl animate-fade-in"
-                                    >
-                                        {lensAssignStep === 'choose' ? (
-                                            <>
-                                        <div className="border-b border-white/10 bg-gradient-to-br from-cyan-950/40 via-zinc-900 to-zinc-900 px-4 py-3">
-                                            <div className="text-[10px] font-black uppercase tracking-[0.18em] text-cyan-300">Analysis mode</div>
-                                            <div className="mt-1 text-[11px] leading-relaxed text-zinc-500">Choose how the ensemble frames each analyst.</div>
-                                        </div>
-                                        <div className="space-y-2 p-2.5">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        setLensConfig({ ...lensConfig, enabled: true });
-                                                        setLensAssignStep('lenses');
-                                                    }}
-                                                    aria-pressed={lensConfig.enabled}
-                                                    className={`group w-full rounded-xl border px-3 py-3 text-left transition-all ${lensConfig.enabled ? 'border-cyan-400/40 bg-cyan-500/10 shadow-[0_0_18px_rgba(100,141,198,0.14)]' : 'border-white/10 bg-zinc-950/70 hover:border-cyan-400/25 hover:bg-zinc-800/80'}`}
-                                                >
-                                                    <span className="flex items-center justify-between"><span className={`text-xs font-bold ${lensConfig.enabled ? 'text-cyan-200' : 'text-zinc-300'}`}>Lenses</span><span className={`h-2 w-2 rounded-full ${lensConfig.enabled ? 'bg-cyan-400 shadow-[0_0_8px_rgba(100,141,198,0.8)]' : 'bg-zinc-700 group-hover:bg-zinc-500'}`} /></span>
-                                                    <span className="mt-1 block text-[10px] leading-tight text-zinc-500">Role-based prompts for Macro, Technical, and Risk.</span>
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        setLensConfig({ ...lensConfig, enabled: false });
-                                                        setLensAssignStep('normal');
-                                                    }}
-                                                    aria-pressed={!lensConfig.enabled}
-                                                    className={`group w-full rounded-xl border px-3 py-3 text-left transition-all ${!lensConfig.enabled ? 'border-cyan-400/40 bg-cyan-500/10 shadow-[0_0_18px_rgba(100,141,198,0.14)]' : 'border-white/10 bg-zinc-950/70 hover:border-cyan-400/25 hover:bg-zinc-800/80'}`}
-                                                >
-                                                    <span className="flex items-center justify-between"><span className={`text-xs font-bold ${!lensConfig.enabled ? 'text-cyan-200' : 'text-zinc-300'}`}>Normal</span><span className={`h-2 w-2 rounded-full ${!lensConfig.enabled ? 'bg-cyan-400 shadow-[0_0_8px_rgba(100,141,198,0.8)]' : 'bg-zinc-700 group-hover:bg-zinc-500'}`} /></span>
-                                                    <span className="mt-1 block text-[10px] leading-tight text-zinc-500">Same prompt sent to each selected model.</span>
-                                                </button>
-                                        </div>
-                                            </>
-                                        ) : lensAssignStep === 'lenses' ? (
-                                            <>
-                                        <div className="flex items-center justify-between border-b border-white/10 bg-gradient-to-br from-cyan-950/35 via-zinc-900 to-zinc-900 px-4 py-3">
-                                            <div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-cyan-300">Lenses</div><div className="mt-1 text-[10px] text-zinc-500">Assign one model to each role.</div></div>
-                                            <button type="button" onClick={() => setLensAssignStep('choose')} className="rounded-lg px-2 py-1 text-[10px] text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-200">‹ Mode</button>
-                                        </div>
-                                        {/* Macro Analyst */}
-                                        <div className="px-1.5 py-0.5">
-                                            <div className="flex items-center justify-between mb-0">
-                                                <span className="text-[10px] font-medium text-zinc-400">Macro & Volatility</span>
-                                                <button type="button" onClick={() => openLensPromptEditor(AnalystRole.MACRO_VOLATILITY)} className="text-[9px] uppercase tracking-wider text-zinc-500 hover:text-zinc-300 transition-colors" title="View / edit this role's prompt">✎ Prompt</button>
-                                            </div>
-                                            <ModelPicker
-                                                providers={providers}
-                                                value={lensAssignmentValue('macro_volatility')}
-                                                onChange={(v) => updateLensAssignment('macro_volatility', v)}
-                                                mode="provider-model"
-                                                disabledValues={new Set(lensModelOptionsForRole('macro_volatility').filter(o => o.disabled).map(o => o.value))}
-                                                compact
-                                            />
-                                            {lensAssignmentValue('macro_volatility') === '' && (
-                                                <div className="mt-0.5 text-[9px] italic text-zinc-600">Unassigned — required to start the ensemble.</div>
-                                            )}
-                                        </div>
-
-                                        {/* Technical Analyst */}
-                                        <div className="px-1.5 py-0.5">
-                                            <div className="flex items-center justify-between mb-0">
-                                                <span className="text-[10px] font-medium text-zinc-400">Technical Analyst</span>
-                                                <button type="button" onClick={() => openLensPromptEditor(AnalystRole.TECHNICAL_ANALYST)} className="text-[9px] uppercase tracking-wider text-zinc-500 hover:text-zinc-300 transition-colors" title="View / edit this role's prompt">✎ Prompt</button>
-                                            </div>
-                                            <ModelPicker
-                                                providers={providers}
-                                                value={lensAssignmentValue('technical_analyst')}
-                                                onChange={(v) => updateLensAssignment('technical_analyst', v)}
-                                                mode="provider-model"
-                                                disabledValues={new Set(lensModelOptionsForRole('technical_analyst').filter(o => o.disabled).map(o => o.value))}
-                                                compact
-                                            />
-                                            {lensAssignmentValue('technical_analyst') === '' && (
-                                                <div className="mt-0.5 text-[9px] italic text-zinc-600">Unassigned — required to start the ensemble.</div>
-                                            )}
-                                        </div>
-
-                                        {/* Risk Manager */}
-                                        <div className="px-1.5 py-0.5">
-                                            <div className="flex items-center justify-between mb-0">
-                                                <span className="text-[10px] font-medium text-zinc-400">Risk Manager</span>
-                                                <button type="button" onClick={() => openLensPromptEditor(AnalystRole.RISK_EXECUTION)} className="text-[9px] uppercase tracking-wider text-zinc-500 hover:text-zinc-300 transition-colors" title="View / edit this role's prompt">✎ Prompt</button>
-                                            </div>
-                                            <ModelPicker
-                                                providers={providers}
-                                                value={lensAssignmentValue('risk_execution')}
-                                                onChange={(v) => updateLensAssignment('risk_execution', v)}
-                                                mode="provider-model"
-                                                disabledValues={new Set(lensModelOptionsForRole('risk_execution').filter(o => o.disabled).map(o => o.value))}
-                                                compact
-                                            />
-                                            {lensAssignmentValue('risk_execution') === '' && (
-                                                <div className="mt-0.5 text-[9px] italic text-zinc-600">Unassigned — required to start the ensemble.</div>
-                                            )}
-                                        </div>
-                                        <div className="border-t border-white/10 px-3 py-2">
-                                            <div className="text-[9px] leading-relaxed text-zinc-600">
-                                                {(() => {
-                                                    const missing = [
-                                                        lensAssignmentValue('macro_volatility') ? null : 'Macro',
-                                                        lensAssignmentValue('technical_analyst') ? null : 'Technical',
-                                                        lensAssignmentValue('risk_execution') ? null : 'Risk',
-                                                    ].filter(Boolean) as string[];
-                                                    return missing.length > 0
-                                                        ? `Missing: ${missing.join(', ')} — the ensemble can't start until every role has a model.`
-                                                        : 'All roles assigned — ready to start the ensemble.';
-                                                })()}
-                                            </div>
-                                        </div>
-                                            </>
-                                        ) : (
-                                            <>
-                                        <div className="flex items-center justify-between border-b border-white/10 bg-gradient-to-br from-cyan-950/35 via-zinc-900 to-zinc-900 px-4 py-3">
-                                            <div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-cyan-300">Normal</div><div className="mt-1 text-[10px] text-zinc-500">Pick up to three debate models.</div></div>
-                                            <div className="flex items-center gap-1"><button type="button" onClick={() => setPromptEditor({ kind: 'normal' })} className="rounded-lg px-2 py-1 text-[10px] text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-200" title="View / edit this mode's prompt">✎ Prompt</button><button type="button" onClick={() => setLensAssignStep('choose')} className="rounded-lg px-2 py-1 text-[10px] text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-200">‹ Mode</button></div>
-                                        </div>
-                                        <p className="px-3 py-1.5 text-[10px] text-zinc-500">Pick up to 3 models for the ensemble debate.</p>
-                                        {[0, 1, 2].map(slot => (
-                                            <div key={slot} className="px-1.5 py-0.5">
-                                                <div className="flex items-center gap-2 mb-0">
-                                                    <span className="text-[10px] font-medium text-zinc-400">Model {slot + 1}</span>
-                                                </div>
-                                                <ModelPicker
-                                                    providers={providers}
-                                                    value={ensembleSelectionValue(slot)}
-                                                    onChange={(v) => updateEnsembleSelection(slot, v)}
-                                                    mode="provider-model"
-                                                    disabledValues={new Set(lensModelOptions.filter(o => isChosenInOtherSlot(slot, o.value)).map(o => o.value))}
-                                                    compact
-                                                />
-                                            </div>
+                                    <span className="font-medium">Team</span>
+                                    <span className="flex -space-x-1.5">
+                                        {(rosterSlots.length > 0 ? rosterSlots : [{ initial: '?', label: 'Unassigned', model: '' }]).map((slot, index) => (
+                                            <span
+                                                key={`${slot.label}-${index}`}
+                                                className="flex h-5 w-5 items-center justify-center rounded-full border border-zinc-900 bg-zinc-700 text-[9px] font-semibold text-zinc-200"
+                                                title={slot.model ? `${slot.label} · ${slot.model}` : slot.label}
+                                            >
+                                                {slot.initial}
+                                            </span>
                                         ))}
-                                            </>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                            </>}
+                                    </span>
+                                    <ChevronDownIcon className="h-3 w-3 text-zinc-500" />
+                                </button>
+                            )}
 
                         </div>
 
@@ -583,6 +347,12 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             </button>
                         </div>
                     </div>
+
+                    {isEnsembleEnabled && rosterSlots.length > 0 && (
+                        <p className="mt-2 truncate px-1 text-[11px] text-zinc-500" title={rosterSlots.map(s => `${s.label} · ${s.model}`).join('   ')}>
+                            {rosterSlots.map(slot => `${slot.label} · ${slot.model}`).join('   ')}
+                        </p>
+                    )}
                 </div>
             </div>
 
@@ -623,6 +393,8 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                 ensembleModelSelection={ensembleModelSelection}
                 setEnsembleModelSelection={setEnsembleModelSelection}
                 onClose={() => setIsTeamModalOpen(false)}
+                onEditLensPrompt={openLensPromptEditor}
+                onEditNormalPrompt={() => setPromptEditor({ kind: 'normal' })}
             />
         </div>
     );

@@ -22,7 +22,6 @@ import { OnboardingCard } from './components/shared/OnboardingCard';
 import { Header } from './components/shared/Header';
 import { SidebarContent } from './components/shared/Sidebar';
 import { ChatArea } from './components/chat/ChatArea';
-import { AnalystSubagents } from './components/analysis/EnsembleProgressChat';
 import { useProviderConfigs } from './hooks/useProviderConfigs';
 import { useAppSettings } from './hooks/useAppSettings';
 import { useJournalUI } from './hooks/useJournalUI';
@@ -2691,17 +2690,13 @@ const App: React.FC = () => {
         // Post-mortem "what would I do today?" re-assessment.
         onTodayReassessment: startTodayReassessment,
         todayReassessmentInFlight,
-    }), [typingMessageState, highlightedAnalysisId, expandedPostMortems, expandedPostMortemImages, savedAnalyses, activeFrameworks, copiedMessageId, modelIdToName, providerNameToId, handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy, handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, confidenceCalibration, handleRetryPostMortem, chatLeverage, autopilotResolutions, handleConfirmAutopilot, handleDismissAutopilot, handleCompareAnalysis, handleViewReasoning, handleReRunAnalysis, handleReplacementChoice, startTodayReassessment, todayReassessmentInFlight]);
+        lensConfig,
+    }), [typingMessageState, highlightedAnalysisId, expandedPostMortems, expandedPostMortemImages, savedAnalyses, activeFrameworks, copiedMessageId, modelIdToName, providerNameToId, handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy, handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, confidenceCalibration, handleRetryPostMortem, chatLeverage, autopilotResolutions, handleConfirmAutopilot, handleDismissAutopilot, handleCompareAnalysis, handleViewReasoning, handleReRunAnalysis, handleReplacementChoice, startTodayReassessment, todayReassessmentInFlight, lensConfig]);
 
     // ... (Rest of component remains unchanged) ...
     const isAnalysisProgressVisible = Boolean(
         loadingMessage || (isAnalysisInProgress && !isPostMortemInProgress),
     );
-    const activeEnsembleRun = useMemo(() => {
-        if (!isAnalysisProgressVisible) return null;
-        const message = [...messages].reverse().find(item => item.ensembleProgress);
-        return message?.ensembleProgress ? { messageId: message.id, progress: message.ensembleProgress } : null;
-    }, [isAnalysisProgressVisible, messages]);
 
     return (
         // P1-6: Outer Suspense boundary. fallback={null} so a suspending lazy
@@ -3083,7 +3078,7 @@ const App: React.FC = () => {
                 </aside>
 
                 <main
-                    className={`flex-1 flex flex-col min-h-0 min-w-0 relative transition-[margin,padding] duration-200 ${isAnalysisProgressVisible ? 'lg:mr-[27rem] lg:px-8 xl:px-16' : ''}`}
+                    className={`flex-1 flex flex-col min-h-0 min-w-0 relative transition-[margin,padding] duration-200 ${isAnalysisProgressVisible ? 'lg:mr-[21rem] lg:px-8 xl:px-16' : ''}`}
                 >
                     {/* Mistake Warning Banner - Global Risk Reminder */}
                     {loggedTrades.length > 0 && (
@@ -3184,12 +3179,12 @@ const App: React.FC = () => {
                 {/* Desktop activity card: float progress over the right side so
                     the conversation keeps its full width while the run is live. */}
                 {isAnalysisProgressVisible && (
-                    <div className="pointer-events-none fixed right-4 top-24 z-40 hidden w-[min(26rem,calc(100vw-2rem))] max-h-[calc(100vh-7rem)] lg:block">
+                    <div className="pointer-events-none fixed right-4 top-24 z-40 hidden w-[min(20rem,calc(100vw-2rem))] max-h-[calc(100vh-7rem)] lg:block">
                         <div className="pointer-events-auto h-fit max-h-[calc(100vh-7rem)] overflow-y-auto rounded-3xl border border-white/[0.08] bg-[#2a2a2a] p-3 shadow-2xl custom-scrollbar scrollbar-track-transparent" aria-label="Analysis progress">
                             <div className="flex items-center justify-between px-1 pb-3">
                                 <div>
                                     <h2 className="text-sm font-medium text-zinc-200">Analysis</h2>
-                                    <p className="mt-0.5 text-[11px] text-zinc-500">Live progress</p>
+                                    <p className="mt-0.5 text-[11px] text-zinc-500">Pipeline</p>
                                 </div>
                                 <span className="flex items-center gap-1.5 rounded-full bg-cyan-500/10 px-2 py-1 text-[10px] font-medium text-cyan-300">
                                     <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400" aria-hidden="true" />
@@ -3208,29 +3203,18 @@ const App: React.FC = () => {
                                     onOpenPostMortem={() => setIsLivePostMortemVisible(true)}
                                     />
                             ) : (
-                                <div className="rounded-2xl border border-cyan-500/20 bg-zinc-900/60 p-4">
-                                    <div className="flex items-center gap-2 text-sm text-cyan-300" aria-live="polite">
+                                <div className="rounded-2xl border border-white/10 bg-zinc-900/60 p-4">
+                                    <div className="flex items-center gap-2 text-sm text-zinc-300" aria-live="polite">
                                         <span className="h-2 w-2 animate-pulse rounded-full bg-cyan-400" aria-hidden="true" />
                                         {loadingMessage || 'Analysis in progress'}
                                     </div>
                                     <button
                                         type="button"
                                         onClick={handleCancelAnalysis}
-                                        className="mt-4 w-full rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs font-medium text-rose-300 transition-colors hover:bg-rose-500/20"
+                                        className="status-surface mt-4 w-full rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs font-medium text-rose-300 transition-colors hover:bg-rose-500/20"
                                     >
                                         Stop generating
                                     </button>
-                                </div>
-                            )}
-
-                            {activeEnsembleRun && activeEnsembleRun.progress.analysts.length > 0 && (
-                                <div className="mt-3 border-t border-white/10 pt-3">
-                                    <AnalystSubagents
-                                        progress={activeEnsembleRun.progress}
-                                        modelIdToName={modelIdToName}
-                                        isLive
-                                        onRetryAnalyst={() => handleReRunAnalysis(activeEnsembleRun.messageId)}
-                                    />
                                 </div>
                             )}
                         </div>

@@ -1,17 +1,15 @@
 
 import React from 'react';
-import { Message, MessageRole, TradeOutcome, SavedAnalysis, Conversation, DebateTurn, ConfidenceCalibration } from '../../types';
+import { Message, MessageRole, TradeOutcome, SavedAnalysis, Conversation, ConfidenceCalibration, AnalystLensConfig } from '../../types';
 import { ChevronDownIcon, LinkIcon, CheckIcon, BrainIcon } from '../shared/Icons';
 import MarkdownContent from '../shared/MarkdownContent';
 import LiveMarketDataView from '../market/LiveMarketDataView';
 import EnsembleProgressChat from '../analysis/EnsembleProgressChat';
+import DebateChat from '../analysis/DebateChat';
 import AnalysisDetails from './AnalysisDetails';
-import LiveThinkingAccordion from './LiveThinkingAccordion';
 import ThinkingModal from '../analysis/ThinkingModal';
 import TodayReassessmentPanel from './TodayReassessmentPanel';
 import { buildAnalysisMarkdown, buildSupplementMarkdown } from '../../utils/analysisUtils';
-import { getThinkingByTrade, getThinkingTradeId } from '../../services/infrastructure/ThinkingStoreService';
-import { ThinkingRecord } from '../../types/thinking';
 import { AutopilotResolution } from '../../services/ui/OutcomeAutopilotService';
 
 // Helper to validate URLs (XSS prevention)
@@ -80,6 +78,7 @@ export interface ChatContextProps {
     onConfirmAutopilot?: (messageId: string) => void;
     onDismissAutopilot?: (messageId: string) => void;
     latestMessageId?: string | null;
+    lensConfig?: AnalystLensConfig;
 }
 
 const SmoothText: React.FC<{ text: string; animate: boolean }> = ({ text, animate }) => {
@@ -150,17 +149,13 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
         handleCopy,
         onTodayReassessment,
         todayReassessmentInFlight,
+        lensConfig,
     } = context;
 
     const isHighlighted = highlightedAnalysisId === message.id;
     const isUserMessage = message.role === MessageRole.USER;
     const [isThinkingModalOpen, setIsThinkingModalOpen] = React.useState(false);
     const [isRunLedgerOpen, setIsRunLedgerOpen] = React.useState(false);
-    // ④ Debate replay — the finished debate re-read from the persisted
-    // thinking_records (condensed: thesis → rebuttal → clarification → verdict).
-    const [isReplayOpen, setIsReplayOpen] = React.useState(false);
-    const [replayTurns, setReplayTurns] = React.useState<ThinkingRecord[] | null>(null);
-    const [isReplayLoading, setIsReplayLoading] = React.useState(false);
     const [isMemoryGateExpanded, setIsMemoryGateExpanded] = React.useState(false);
     // Inline edit of a sent user message (history correction).
     const [editingMessageId, setEditingMessageId] = React.useState<string | null>(null);
@@ -171,26 +166,6 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
     }).filter(([, content]) => Boolean(content));
     const isCasualReply = message.role === MessageRole.AI && !message.analysis && !message.isDebating;
 
-    // ④ Debate replay — load the persisted debate_turn records for this run
-    // (keyed by trade id) and expand them as a condensed replay.
-    const handleToggleReplay = React.useCallback(async () => {
-        if (isReplayOpen) { setIsReplayOpen(false); return; }
-        setIsReplayLoading(true);
-        try {
-            const username = localStorage.getItem('last_active_user') || 'default';
-            const tradeId = getThinkingTradeId(message.analysis?.createdAt, message.id);
-            const records = await getThinkingByTrade(tradeId, username);
-            const turns = records
-                .filter(r => r.role === 'debate_turn')
-                .sort((a, b) => (a.debateTurnIndex ?? 0) - (b.debateTurnIndex ?? 0));
-            setReplayTurns(turns);
-        } catch (e) {
-            console.warn('[Replay] Failed to load debate transcript:', e);
-            setReplayTurns([]);
-        }
-        setIsReplayLoading(false);
-        setIsReplayOpen(true);
-    }, [isReplayOpen, message.analysis?.createdAt, message.id]);
     // Ensemble reasoning is presented in the analyst progress/output card.
     // Do not duplicate it in the generic chat-level Thinking disclosure.
     const isEnsembleMessage = Boolean(
@@ -572,20 +547,26 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 </div>
                             )}
 
-                            {/* Analyst requests appear in chat before the moderator debate starts.
-                                hideSubagents was ALWAYS true here and the floating activity card
-                                it referenced doesn't exist — so during "Analyzing charts" the
-                                user saw zero per-analyst activity. The live cards now stream in
-                                the chat itself. */}
+                            {/* Analyst launch (pre-debate) then the live/completed transcript. */}
                             {!message.isDebating && !message.analysis && message.ensembleProgress && (
                                 <EnsembleProgressChat progress={message.ensembleProgress} modelIdToName={modelIdToName} isLive onRetryAnalyst={onReRunAnalysis ? () => onReRunAnalysis(message.id) : undefined} />
                             )}
-
-                            {/* Live debate — compact thinking line + per-analyst
-                                reasoning accordion (expands in place; the full
-                                round-by-round transcript stays in the panel). */}
-                            {message.isDebating && (
-                                <LiveThinkingAccordion message={message} modelIdToName={modelIdToName} />
+                            {(message.isDebating || debateTurns.length > 0) && (
+                                <DebateChat
+                                    debateTurns={debateTurns}
+                                    modelsUsed={message.modelsUsed}
+                                    reasoningProcesses={message.reasoningProcesses}
+                                    thoughtProcesses={message.thoughtProcesses}
+                                    modelIdToName={modelIdToName}
+                                    providerNameToId={providerNameToId}
+                                    lensConfig={lensConfig}
+                                    isDebating={!!message.isDebating}
+                                    activeDebateSpeakers={message.activeDebateSpeakers}
+                                    analysis={message.analysis}
+                                    messageId={message.id}
+                                    replacementOffer={message.replacementOffer}
+                                    onReplacementChoice={onReplacementChoice}
+                                />
                             )}
 
                             {/* Per-run summary — durations, gate cap, Monte Carlo (from runStats) */}
@@ -611,17 +592,6 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                                 title="Per-analyst cost & latency ledger"
                                             >
                                                 {isRunLedgerOpen ? '▾ Run ledger' : '▸ Run ledger'}
-                                            </button>
-                                        )}
-                                        {(message.debateTurns?.length ?? 0) > 0 && (
-                                            <button
-                                                type="button"
-                                                onClick={handleToggleReplay}
-                                                aria-expanded={isReplayOpen}
-                                                className="text-zinc-500 hover:text-zinc-300 transition-colors"
-                                                title="Replay the finished debate from the persisted transcript (thesis → rebuttal → clarification → verdict)"
-                                            >
-                                                {isReplayOpen ? '▾ Replay' : '⤢ Replay'}
                                             </button>
                                         )}
                                         {message.text && (
@@ -681,66 +651,6 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     onSelectForProbability={onSelectMessageForProbability}
                                     onCompare={onCompareAnalysis}
                                 />
-                            )}
-
-                            {/* ④ Debate replay — condensed replay of the FINISHED
-                                debate, read from the persisted transcript. */}
-                            {isReplayOpen && (
-                                <div className="mt-3 rounded-xl border border-white/5 bg-zinc-900/60 overflow-hidden">
-                                    <div className="flex items-center justify-between px-3 py-2 border-b border-white/5">
-                                        <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Debate replay</span>
-                                        <button
-                                            type="button"
-                                            onClick={() => setIsReplayOpen(false)}
-                                            className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 hover:text-zinc-300 transition-colors"
-                                        >
-                                            Close
-                                        </button>
-                                    </div>
-                                    {isReplayLoading ? (
-                                        <p className="p-3 text-[10px] text-zinc-600 italic">Loading transcript…</p>
-                                    ) : !replayTurns || replayTurns.length === 0 ? (
-                                        <p className="p-3 text-[10px] text-zinc-600 italic">No persisted debate transcript for this run.</p>
-                                    ) : (
-                                        <div className="p-3 space-y-2">
-                                            {(() => {
-                                                // Condense: a moderator turn starts a
-                                                // new round; the LAST round is the
-                                                // verdict (with the self-refine step).
-                                                const rounds: { turns: { speaker: string; text: string; isModerator: boolean }[] }[] = [];
-                                                for (const r of replayTurns) {
-                                                    const isMod = (r.debateTurnSpeaker ?? '').toLowerCase().includes('moderator');
-                                                    if (isMod || rounds.length === 0) rounds.push({ turns: [] });
-                                                    rounds[rounds.length - 1].turns.push({
-                                                        speaker: r.debateTurnSpeaker ?? r.provider ?? '?',
-                                                        text: r.reasoning,
-                                                        isModerator: isMod,
-                                                    });
-                                                }
-                                                const labels = ['Thesis', 'Rebuttal', 'Clarification'];
-                                                return rounds.map((round, i) => {
-                                                    const isLast = i === rounds.length - 1;
-                                                    const label = isLast ? 'Verdict' : (labels[i] ?? `Round ${i + 1}`);
-                                                    return (
-                                                        <details key={i} open={isLast} className="rounded-lg border border-white/5 bg-zinc-950/50">
-                                                            <summary className="px-2.5 py-1.5 text-[9px] font-bold uppercase tracking-widest text-zinc-500 cursor-pointer hover:text-zinc-300 flex items-center gap-2">
-                                                                {label} <span className="text-zinc-700">({round.turns.length} turns)</span>
-                                                            </summary>
-                                                            <div className="px-2.5 pb-2.5 space-y-1.5">
-                                                                {round.turns.map((t, j) => (
-                                                                    <div key={j} className="space-y-0.5">
-                                                                        <p className={`text-[9px] font-bold uppercase tracking-widest ${t.isModerator ? 'text-cyan-400/80' : 'text-zinc-600'}`}>{t.speaker}</p>
-                                                                        <p className="text-[10px] text-zinc-400 leading-relaxed whitespace-pre-wrap max-h-32 overflow-y-auto custom-scrollbar">{t.text}</p>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        </details>
-                                                    );
-                                                });
-                                            })()}
-                                        </div>
-                                    )}
-                                </div>
                             )}
 
                             {Array.isArray(message.postMortemImages) && message.postMortemImages.length > 0 && (
