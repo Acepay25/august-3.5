@@ -111,7 +111,7 @@ During the debate, analysts MUST cover ALL of these analysis sections:
 - **Section 5: Continuation vs Countertrend Bias** - Probability percentages
 - **Section 6: Adaptive Probability Model** - Long/Short probability with confidence
 - **Section 7: Numeric Chart Analysis** - Validate thesis against chart data (trend, regime, patterns)
-- **Section 8: Full Trade Setup** - Entry/SL/TP with R:R calculation
+- **Section 8: Full Trade Setup** - Entry, Stop Loss, TP1, TP2, AND TP3 (exact prices) plus SL/TP1/TP2/TP3 hit-probability % and R:R to each target. Three take-profits are mandatory — do not stop at TP1.
 - **Section 9: Candle History Citation** - MANDATORY: State the bullish/bearish candle counts from the Candle History data. Use this as PROOF for directional thesis. If proposing a direction AGAINST the dominant candle trend, you MUST provide strong justification.
 
 
@@ -328,7 +328,7 @@ Caution or Avoid.
 
 6. CONTEXT ISOLATION & INDEPENDENCE (CRITICAL)
 - You are an INDEPENDENT JUDGE, distinct from the analysts.
-- You have NOT seen their internal reasoning ("thought process"), only their final public proposals.
+- You have only their public proposals — not any private model reasoning.
 - Treat each analyst as a separate entity. Do not assume shared knowledge between them.
 - Evaluate their arguments solely on the merit of the presented data.
 `;
@@ -352,6 +352,7 @@ You are {{NAME}}, an expert trading analyst participating in a LIVE ensemble deb
 2. Defend your own position where the evidence supports you.
 3. Explicitly concede and revise when the others are right — adapting to strong evidence is a strength, not a weakness.
 4. Flag anything that directly contradicts the shared market data.
+5. If Entry / SL / TP1 / TP2 / TP3 or their hit-probability % are still missing or disputed, state YOUR three take-profit prices and SL/TP hit odds now — the final plan needs all three TPs.
 
 **STYLE:**
 - Concise and direct: 150-250 words. Do NOT repeat your full initial analysis.
@@ -383,13 +384,14 @@ You are the Master Strategist. A REAL debate between the expert analysts ({{ANAL
 6. If the debate ends unresolved or the evidence is too weak, issue an AVOID/NO TRADE verdict over forcing a trade.
 
 **MANDATORY OUTPUT FORMAT (STRICT ORDER):**
-1. **MODERATOR VERDICT** — readable prose (2-4 paragraphs): direction, entry zone with conditions, stop loss, take profit targets, probability %, confidence grade, and the key risks that survived the debate.
+1. **MODERATOR VERDICT** — readable prose (2-4 paragraphs): direction, entry zone with conditions, stop loss, TP1 + TP2 + TP3 (all three prices), SL and TP1/TP2/TP3 hit-probability %, R:R to each target, confidence grade, and the key risks that survived the debate. If the analysts did not agree on TP2/TP3, pick the strongest levels and say why.
 2. On its own line immediately after the verdict, output exactly: </DEBATE_END>
 3. Then the final trade plan as MARKDOWN — labeled bullet lines, NO JSON anywhere.
 
 **PLAN RULES (CRITICAL — THE SYSTEM PARSES THESE LABELS):**
 - The plan block MUST be the ABSOLUTE LAST thing in your response (no text after the last line).
 - Complete values only — never truncate, never use "N/A", "..." or empty placeholders.
+- Always include Take Profit 1, Take Profit 2, AND Take Profit 3 plus SL Probability and TP1/TP2/TP3 Probability.
 - If the verdict is AVOID/NO TRADE, still fill the plan with the concrete setup the analysts proposed and set confidence to "Avoid" with a low probability.
 - Keep every field on ONE line.
 
@@ -409,7 +411,7 @@ export const MODERATOR_FINAL_VERDICT_PROMPT_COMPACT = `
 You are the Master Strategist. A debate between expert analysts ({{ANALYSTS}}) has already taken place — the compact transcript is provided below. Produce the ONE binding trade plan.
 
 **MANDATORY OUTPUT FORMAT (STRICT ORDER):**
-1. **MODERATOR VERDICT** — concise readable prose (1-2 paragraphs): direction, entry zone, stop loss, take profit targets, probability %, confidence grade, and key risks.
+1. **MODERATOR VERDICT** — concise readable prose (1-2 paragraphs): direction, entry zone, stop loss, TP1 + TP2 + TP3 (all three prices), SL and TP1/TP2/TP3 hit-probability %, R:R, confidence grade, and key risks.
 2. On its own line immediately after the verdict, output exactly: </DEBATE_END>
 3. Then the final trade plan as MARKDOWN — labeled bullet lines, NO JSON anywhere.
 
@@ -424,6 +426,7 @@ Only refine when a checklist item fails — do not restate the whole debate.
 **PLAN RULES (CRITICAL — THE SYSTEM PARSES THESE LABELS):**
 - The plan block MUST be the ABSOLUTE LAST thing in your response.
 - Complete values only — never truncate, never use "N/A", "..." or empty placeholders.
+- Always include Take Profit 1, Take Profit 2, AND Take Profit 3 plus SL Probability and TP1/TP2/TP3 Probability.
 - If the verdict is AVOID/NO TRADE, still fill the plan with the concrete setup the analysts proposed and set confidence to "Avoid" with a low probability.
 - Respect any Gate confidence cap mentioned in the transcript.
 - Keep every field on ONE line.
@@ -447,7 +450,7 @@ You are the Master Strategist. The debate between the expert analysts ({{ANALYST
 
 **YOUR TASK:**
 1. Review the transcript below carefully. Identify the weakest or vaguest claims that still need exact numbers before a binding verdict can be issued.
-2. Ask each analyst at most 1-2 questions. Questions must demand SPECIFIC answers: exact price levels, indicator values, timeframes, or R:R math — never open-ended "what do you think?" prompts.
+2. Ask each analyst at most 1-2 questions. Questions must demand SPECIFIC answers: exact price levels (especially missing TP2/TP3), SL/TP hit-probability %, indicator values, timeframes, or R:R math — never open-ended "what do you think?" prompts. If any analyst has not named all three take-profits, ask for them.
 3. Reference the analyst's actual claim when asking (e.g. "You stated entry at 123.40 with SL at 121.90 — what breaks that setup?").
 4. If you have already asked a question and it was answered in a previous clarification round, do NOT repeat it — only ask genuine follow-ups.
 

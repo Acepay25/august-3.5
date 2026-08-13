@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // expose browser CORS headers can still be used by the desktop app.
     providerChat: (request) => ipcRenderer.invoke('provider:chat', request),
     cancelProviderChat: (requestId) => ipcRenderer.invoke('provider:cancel', requestId),
+    discoverModels: (config) => ipcRenderer.invoke('provider:discover', config),
 
     // Listen for real-time status updates pushed from main process
     onUpdateStatus: (callback) => {

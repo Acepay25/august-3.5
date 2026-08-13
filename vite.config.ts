@@ -30,7 +30,7 @@ function devProviderProxy() {
             throw new Error('Provider URLs cannot include credentials, query parameters, or fragments.');
           }
           parsed.pathname = parsed.pathname.replace(/\/+$/, '');
-          for (const suffix of ['/chat/completions', '/messages', '/responses']) {
+          for (const suffix of ['/chat/completions', '/messages', '/responses', '/models']) {
             if (parsed.pathname.endsWith(suffix)) {
               parsed.pathname = parsed.pathname.slice(0, -suffix.length).replace(/\/+$/, '');
               break;
@@ -38,6 +38,30 @@ function devProviderProxy() {
           }
           const baseUrl = parsed.toString().replace(/\/$/, '');
           const apiKey = String(config.apiKey || '').trim();
+          if (request.discover) {
+            const isGemini = /generativelanguage/i.test(baseUrl);
+            const isAnthropic = config.apiFormat === 'messages' && !isGemini;
+            const discoverUrl = isGemini
+              ? `${baseUrl}/models?key=${encodeURIComponent(apiKey)}`
+              : `${baseUrl}/models`;
+            const discoverHeaders: Record<string, string> = {};
+            if (isAnthropic) {
+              discoverHeaders['x-api-key'] = apiKey;
+              discoverHeaders['anthropic-version'] = '2023-06-01';
+            } else if (!isGemini && apiKey && apiKey !== 'not-needed') {
+              discoverHeaders.Authorization = `Bearer ${apiKey}`;
+            }
+            const upstream = await fetch(discoverUrl, {
+              method: 'GET',
+              headers: discoverHeaders,
+              signal: AbortSignal.timeout(15000),
+            });
+            const text = await upstream.text();
+            res.statusCode = 200;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ ok: upstream.ok, status: upstream.status, body: text }));
+            return;
+          }
           const headers: Record<string, string> = { 'Content-Type': 'application/json' };
           let url = '';
           let body: Record<string, unknown>;

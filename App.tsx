@@ -3136,6 +3136,10 @@ const App: React.FC = () => {
                 setIsEnsembleEnabled={handleSetEnsembleEnabled}
                 selectedChatModel={selectedChatModel}
                 setSelectedChatModel={setSelectedChatModel}
+                moderatorProviderId={moderatorProviderId}
+                moderatorModel={moderatorModel}
+                onSetModeratorProvider={handleSetModeratorProvider}
+                onSetModeratorModel={handleSetModeratorModel}
                 images={images}
                 removeImage={removeImage}
                 leverageRef={leverageRef}

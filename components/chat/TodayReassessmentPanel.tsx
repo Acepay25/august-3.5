@@ -10,6 +10,7 @@
 import React from 'react';
 import { Message, TodayReassessment } from '../../types';
 import { RefreshIcon } from '../shared/Icons';
+import MarkdownContent from '../shared/MarkdownContent';
 
 interface TodayReassessmentPanelProps {
     message: Message;
@@ -67,9 +68,7 @@ const TodayReassessmentPanel: React.FC<TodayReassessmentPanelProps> = ({ message
             <span className={`inline-block px-2 py-0.5 rounded-md border text-[10px] font-bold uppercase tracking-wider mb-2 ${meta.badge}`}>
                 {meta.label}
             </span>
-            <div className="prose prose-invert prose-sm max-w-none whitespace-pre-wrap leading-[1.65] overflow-x-auto min-w-0 text-zinc-200">
-                {reassessment.text}
-            </div>
+            <MarkdownContent content={reassessment.text} className="text-zinc-200" />
         </div>
     );
 };

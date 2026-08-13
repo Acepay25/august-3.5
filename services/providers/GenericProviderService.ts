@@ -31,6 +31,11 @@ interface ElectronProviderBridge {
         jsonMode?: boolean;
     }) => Promise<{ ok: boolean; text?: string; reasoning?: string; status?: number; code?: string; message?: string }>;
     cancelProviderChat?: (requestId: string) => Promise<boolean>;
+    discoverModels?: (config: {
+        baseUrl: string;
+        apiKey: string;
+        apiFormat: ProviderConfig['apiFormat'];
+    }) => Promise<{ ok: boolean; status?: number; body?: string; message?: string }>;
 }
 
 declare global {

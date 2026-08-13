@@ -95,13 +95,54 @@ function normalizeProviderUrl(url) {
         throw new Error('Provider URLs cannot include credentials, query parameters, or fragments.');
     }
     parsed.pathname = parsed.pathname.replace(/\/+$/, '');
-    for (const suffix of ['/chat/completions', '/messages', '/responses']) {
+    for (const suffix of ['/chat/completions', '/messages', '/responses', '/models']) {
         if (parsed.pathname.endsWith(suffix)) {
             parsed.pathname = parsed.pathname.slice(0, -suffix.length).replace(/\/+$/, '');
             break;
         }
     }
     return parsed.toString().replace(/\/$/, '');
+}
+
+function discoverProviderDetails(config) {
+    const baseUrl = normalizeProviderUrl(config?.baseUrl);
+    const apiKey = String(config?.apiKey || '').trim();
+    if (!apiKey) throw new Error('API key is required to discover models.');
+    const isGemini = /generativelanguage/i.test(baseUrl);
+    const isAnthropic = config?.apiFormat === 'messages' && !isGemini;
+    const url = isGemini
+        ? `${baseUrl}/models?key=${encodeURIComponent(apiKey)}`
+        : `${baseUrl}/models`;
+    const headers = {};
+    if (isAnthropic) {
+        headers['x-api-key'] = apiKey;
+        headers['anthropic-version'] = '2023-06-01';
+    } else if (!isGemini && apiKey !== 'not-needed') {
+        headers.Authorization = `Bearer ${apiKey}`;
+    }
+    return { url, headers };
+}
+
+async function sendDiscoverRequest(config) {
+    const { url, headers } = discoverProviderDetails(config);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    try {
+        const response = await net.fetch(url, {
+            method: 'GET',
+            headers,
+            signal: controller.signal,
+        });
+        const body = await response.text();
+        return { ok: response.ok, status: response.status, body };
+    } catch (error) {
+        if (error?.name === 'AbortError') {
+            throw new Error('Model discovery timed out — check the base URL.');
+        }
+        throw new Error('Could not reach the provider — check the base URL and your network.');
+    } finally {
+        clearTimeout(timeout);
+    }
 }
 
 function providerRequestDetails(request) {
@@ -554,6 +595,22 @@ function setupAutoUpdater() {
     ipcMain.handle('update:get-status', () => updateInfo);
 
     ipcMain.handle('app:get-version', () => app.getVersion());
+
+    ipcMain.handle('provider:discover', async (_event, config) => {
+        try {
+            return await sendDiscoverRequest(config || {});
+        } catch (error) {
+            console.error('[main] provider discover failed:', {
+                provider: config?.name || 'Provider',
+                format: config?.apiFormat,
+                message: error instanceof Error ? error.message : String(error),
+            });
+            return {
+                ok: false,
+                message: error instanceof Error ? error.message : 'Model discovery failed.',
+            };
+        }
+    });
 
     ipcMain.handle('provider:chat', async (_event, request) => {
         try {

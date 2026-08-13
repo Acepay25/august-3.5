@@ -18,6 +18,11 @@ interface TeamModalProps {
     setLensConfig: (config: AnalystLensConfig) => void;
     ensembleModelSelection: EnsembleModelSelection;
     setEnsembleModelSelection: (selection: EnsembleModelSelection) => void;
+    /** Debate moderator — same picker shape as each analyst (provider::model). */
+    moderatorProviderId?: string;
+    moderatorModel?: string;
+    onSetModeratorProvider?: (providerId: string) => void;
+    onSetModeratorModel?: (modelId: string) => void;
     /**
      * Regime-matched provider win rates (providerId → {wr, n}) for the
      * CURRENT market regime. Auto-assign prefers these — a blended all-time
@@ -45,6 +50,10 @@ const STYLES = ['auto', 'position', 'swing', 'scalp'] as const;
 const TeamModal: React.FC<TeamModalProps> = ({
     isOpen, providers, setIsEnsembleEnabled,
     lensConfig, setLensConfig, ensembleModelSelection, setEnsembleModelSelection,
+    moderatorProviderId = '',
+    moderatorModel = '',
+    onSetModeratorProvider,
+    onSetModeratorModel,
     regimeProviderStats,
     onClose,
     onEditLensPrompt,
@@ -131,6 +140,22 @@ const TeamModal: React.FC<TeamModalProps> = ({
     const assignedCount = mode === 'lenses'
         ? lensConfig.assignments.filter(a => a.assignedProvider).length
         : ensembleModelSelection.filter(e => e?.providerId).length;
+    const moderatorValue = moderatorProviderId && moderatorModel
+        ? `${moderatorProviderId}::${moderatorModel}`
+        : moderatorProviderId || '';
+    const setModerator = (value: string) => {
+        const sep = value.indexOf('::');
+        if (sep >= 0) {
+            onSetModeratorProvider?.(value.slice(0, sep));
+            onSetModeratorModel?.(value.slice(sep + 2));
+        } else {
+            onSetModeratorProvider?.(value);
+            const selected = readyProviders.find(p => p.id === value);
+            if (selected && selected.models.length > 0) {
+                onSetModeratorModel?.(selected.selectedModel || selected.models[0]);
+            }
+        }
+    };
 
     return (
         <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/70 p-4 animate-fade-in pointer-events-auto" onClick={onClose}>
@@ -238,14 +263,28 @@ const TeamModal: React.FC<TeamModalProps> = ({
                         </div>
                     )}
 
-                    <p className="rounded-xl border border-white/5 bg-zinc-900/40 px-3 py-2.5 text-[11px] leading-relaxed text-zinc-500">
-                        <span className="font-medium text-zinc-400">Moderator</span> is set in Settings → AI setup. When unset, the app picks a provider that is not one of your analysts.
-                    </p>
+                    <div className="rounded-xl border border-cyan-400/15 bg-zinc-900/60 p-3">
+                        <div className="mb-2 flex items-center gap-2">
+                            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-cyan-400/30 bg-cyan-500/10 text-[10px] font-semibold text-cyan-300">
+                                S
+                            </span>
+                            <div className="min-w-0">
+                                <div className="text-xs font-medium text-zinc-200">Moderator</div>
+                                <div className="truncate text-[11px] text-zinc-600">Synthesizes the debate and writes the final verdict</div>
+                            </div>
+                        </div>
+                        <ModelPicker
+                            providers={providers}
+                            value={moderatorValue}
+                            onChange={setModerator}
+                            mode="provider-model"
+                        />
+                    </div>
                 </div>
 
                 <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/5 bg-zinc-900 px-4 py-3">
                     <span className="text-[11px] text-zinc-500">
-                        {assignedCount}/3 {mode === 'lenses' ? 'roles' : 'experts'} assigned
+                        {assignedCount}/3 {mode === 'lenses' ? 'roles' : 'experts'}{moderatorValue ? ' · moderator set' : ' · pick a moderator'}
                     </span>
                     <div className="flex gap-2">
                         <button

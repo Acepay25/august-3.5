@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { recalculateAnalysisMetrics, parseProseTradePlan, parseMarkdownTradePlan, tradePlanToAnalysis, stripPlanTags, buildAnalysisMarkdown, buildSupplementMarkdown } from '../utils/analysisUtils';
+import { recalculateAnalysisMetrics, parseProseTradePlan, parseMarkdownTradePlan, tradePlanToAnalysis, stripPlanTags, buildAnalysisMarkdown, buildSupplementMarkdown, buildTradingSignalMarkdown, resolveLevelHitOdds } from '../utils/analysisUtils';
 import { MASTER_TRADE_PLAN_MARKDOWN } from '../constants/schemas';
 
 describe('analysisUtils', () => {
@@ -52,6 +52,7 @@ describe('analysisUtils', () => {
 - **Stop Loss:** 3150
 - **Take Profit 1:** 3260 (2%)
 - **Take Profit 2:** 3320 (4%)
+- **Take Profit 3:** 3400 (6%)
 
 **Odds**
 - **Confidence:** High
@@ -59,6 +60,7 @@ describe('analysisUtils', () => {
 - **SL Probability:** 22%
 - **TP1 Probability:** 70%
 - **TP2 Probability:** 52%
+- **TP3 Probability:** 34%
 
 **Strategy**
 - **Strategy:** Reversal after sweep
@@ -136,7 +138,16 @@ describe('analysisUtils', () => {
         riskScore: 42,
       });
       expect(plan.slProbability).toBe(22);
-      expect(plan.tpProbabilities).toEqual([{ level: 1, probability: 70 }, { level: 2, probability: 52 }]);
+      expect(plan.takeProfits).toEqual([
+        { price: '3260', percentage: '2%' },
+        { price: '3320', percentage: '4%' },
+        { price: '3400', percentage: '6%' },
+      ]);
+      expect(plan.tpProbabilities).toEqual([
+        { level: 1, probability: 70 },
+        { level: 2, probability: 52 },
+        { level: 3, probability: 34 },
+      ]);
       expect(plan.evidence).toEqual([
         { claim: '1H structure bullish (HH/HL)', state: 'observed', sources: ['1H EMA20/50', 'RSI(14) 58'] },
         { claim: 'Volume confirms breakout', state: 'partial', sources: ['Volume 1.8x'] },
@@ -152,6 +163,8 @@ describe('analysisUtils', () => {
 - **Entry:** 3200
 - **Stop Loss:** 3150
 - **Take Profit 1:** 3260
+- **Take Profit 2:** 3320
+- **Take Profit 3:** 3400
 - **Confidence:** High
 - **Probability:** 72%
 - **Pattern Family:** Family B
@@ -159,6 +172,7 @@ describe('analysisUtils', () => {
 - **Resistance:** 3260 (4h)` )!;
       const a = tradePlanToAnalysis(plan);
       expect(a.validityDurationMinutes).toBe(330);
+      expect((a.takeProfit as { price: string }[]).map(t => t.price)).toEqual(['3260', '3320', '3400']);
       expect(a.detectedPatternFamily).toBe('Family B');
       expect(a.keyLevels).toEqual({ support: ['3150 (4h)', '3100 (1h)'], resistance: ['3260 (4h)'] });
       expect(a.grade).toBe('A');
@@ -212,6 +226,12 @@ Probability: 60%`;
       expect(plan!.entry).toBe('95000');
       expect(plan!.stopLoss).toBe('94500');
       expect(plan!.takeProfit).toBe('96000');
+      expect(plan!.takeProfits?.map(t => t.price)).toEqual(['96000', '97000', '98500']);
+      expect(plan!.tpProbabilities).toEqual([
+        { level: 1, probability: 70 },
+        { level: 2, probability: 55 },
+        { level: 3, probability: 35 },
+      ]);
       // Odds
       expect(plan!.confidence).toBe('Medium');
       expect(plan!.probability).toBe(65);
@@ -437,6 +457,74 @@ Confidence: High. The sweep-reclaim pattern aligns across 15m and 1h.`;
       expect(md).toContain('**Setup**');
       expect(md).not.toContain('**Levels**');
       expect(md).not.toContain('**Odds**');
+    });
+  });
+
+  describe('buildTradingSignalMarkdown (verdict + plan, no clarification dump)', () => {
+    const analysis: any = {
+      coinName: 'BTCUSDT',
+      direction: 'Short',
+      confidence: 'Medium',
+      probability: 62,
+      entryPoints: [{ price: '63710' }],
+      stopLoss: '64200',
+      takeProfit: [{ price: '62800' }],
+      strategy: 'Macro: You cite 1H HH/HL at $64,010 but 4H bearish. What exact 1H BOS/CHoCH price confirms Family B long, and what level invalidates?\n\nTechnical: You claim 15m LH/LL and 4H early uptrend. Cite exact prices?\n\nRisk: You demand exact entry/SL/TP. What are your proposed short levels?',
+    };
+
+    it('ignores clarification-round questions stored on strategy', () => {
+      const md = buildTradingSignalMarkdown(analysis);
+      expect(md).not.toContain('What exact 1H BOS');
+      expect(md).toContain('**Setup**');
+      expect(md).toContain('**Levels**');
+      expect(md).toContain('Entry: **63710**');
+    });
+
+    it('merges the last moderator verdict with the structured plan', () => {
+      const md = buildTradingSignalMarkdown(analysis, [
+        { speaker: 'Moderator', round: 4, text: 'Macro: What exact 1H BOS?\nTechnical: Cite 15m highs?\nRisk: What SL?' },
+        { speaker: 'Moderator', round: 6, text: 'Short BTCUSDT from the 4H rejection. Invalidation is a 1H close above 64200.' },
+      ]);
+      expect(md).toContain('**Verdict**');
+      expect(md).toContain('Short BTCUSDT from the 4H rejection');
+      expect(md).toContain('**Setup**');
+      expect(md).toContain('Entry: **63710**');
+      expect(md).not.toContain('What exact 1H BOS');
+    });
+
+    it('keeps a verdict that already contains the plan block', () => {
+      const md = buildTradingSignalMarkdown(analysis, [
+        { speaker: 'Moderator', round: 6, text: '**FINAL TRADE PLAN**\n- **Coin:** BTCUSDT\n- **Direction:** Short' },
+      ]);
+      expect(md).toContain('**FINAL TRADE PLAN**');
+      expect(md).not.toContain('**Verdict**');
+    });
+  });
+
+  describe('resolveLevelHitOdds', () => {
+    it('reads stored levelProbabilities first', () => {
+      const odds = resolveLevelHitOdds({
+        direction: 'Long',
+        confidence: 'High',
+        levelProbabilities: {
+          slProbability: 22.4,
+          tpProbabilities: [
+            { level: 1, probability: 71 },
+            { level: 2, probability: 50 },
+            { level: 3, probability: 33 },
+          ],
+        },
+      } as any);
+      expect(odds).toEqual({ sl: 22, tp: [71, 50, 33] });
+    });
+
+    it('falls back to labeled plan markdown on strategy', () => {
+      const odds = resolveLevelHitOdds({
+        direction: 'Short',
+        confidence: 'Low',
+        strategy: '- **SL Probability:** 31%\n- **TP1 Probability:** 68%\n- **TP2 Probability:** 49%\n- **TP3 Probability:** 22%',
+      } as any);
+      expect(odds).toEqual({ sl: 31, tp: [68, 49, 22] });
     });
   });
 });

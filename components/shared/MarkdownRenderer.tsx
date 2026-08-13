@@ -58,7 +58,15 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className 
           blockquote: ({ children }) => (
             <blockquote className="border-l-2 border-cyan-500/40 pl-3 text-zinc-400">{children}</blockquote>
           ),
-          strong: ({ children }) => <strong className="text-zinc-100 font-bold">{children}</strong>,
+          h1: ({ children }) => <h1 className="mt-3 mb-1.5 text-base font-bold text-zinc-100">{children}</h1>,
+          h2: ({ children }) => <h2 className="mt-3 mb-1.5 text-sm font-bold text-zinc-100">{children}</h2>,
+          h3: ({ children }) => <h3 className="mt-2.5 mb-1 text-sm font-semibold text-zinc-100">{children}</h3>,
+          p: ({ children }) => <p className="my-2.5 leading-7 text-zinc-300">{children}</p>,
+          ul: ({ children }) => <ul className="my-2.5 list-disc space-y-2 pl-4 text-zinc-300">{children}</ul>,
+          ol: ({ children }) => <ol className="my-2.5 list-decimal space-y-2 pl-4 text-zinc-300">{children}</ol>,
+          li: ({ children }) => <li className="leading-7">{children}</li>,
+          em: ({ children }) => <em className="italic text-zinc-200">{children}</em>,
+          strong: ({ children }) => <strong className="font-bold text-zinc-50">{children}</strong>,
           a: ({ children, href }) => (
             <a href={href} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:text-cyan-300 underline">{children}</a>
           ),
