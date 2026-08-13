@@ -48,6 +48,159 @@ describe('scanCandlePatterns — shape & defaults', () => {
     });
 });
 
+describe('scanCandlePatterns — extended classical set (doji family, multi-candle)', () => {
+  const has = (patterns: { name: string }[], name: string): boolean =>
+    patterns.some(p => p.name === name);
+
+  it('detects gravestone, dragonfly and long-legged doji variants', () => {
+    // Gravestone: doji body, long upper wick, no lower wick (close near low).
+    const grave = scanCandlePatterns(buildSeries([
+      [99, 100, 98, 99.5], [99.5, 100.5, 99, 100],
+      [100, 110, 99.8, 100],        // gravestone doji (most recent completed)
+      [100, 100.5, 99.5, 100.2]     // current incomplete (dropped)
+    ]), 30);
+    expect(has(grave.patterns, 'gravestone_doji')).toBe(true);
+    expect(grave.patterns.find(p => p.name === 'gravestone_doji')!.direction).toBe('bearish');
+
+    // Dragonfly: doji body, long lower wick, no upper wick.
+    const dragon = scanCandlePatterns(buildSeries([
+      [99, 100, 98, 99.5], [99.5, 100.5, 99, 100],
+      [100, 100.2, 90, 100],        // dragonfly doji
+      [100, 100.5, 99.5, 100.2]
+    ]), 30);
+    expect(has(dragon.patterns, 'dragonfly_doji')).toBe(true);
+    expect(dragon.patterns.find(p => p.name === 'dragonfly_doji')!.direction).toBe('bullish');
+
+    // Long-legged: doji body with long wicks both sides.
+    const long = scanCandlePatterns(buildSeries([
+      [99, 100, 98, 99.5], [99.5, 100.5, 99, 100],
+      [100, 108, 92, 100],          // long-legged doji
+      [100, 100.5, 99.5, 100.2]
+    ]), 30);
+    expect(has(long.patterns, 'long_legged_doji')).toBe(true);
+  });
+
+  it('detects a high wave (small body, long wicks both sides)', () => {
+    const scan = scanCandlePatterns(buildSeries([
+      [99, 100, 98, 99.5], [99.5, 100.5, 99, 100],
+      [100, 109, 92, 102],          // body 11.8%, upper 41%, lower 47%
+      [100, 100.5, 99.5, 100.2]
+    ]), 30);
+    expect(has(scan.patterns, 'high_wave')).toBe(true);
+    expect(has(scan.patterns, 'spinning_top')).toBe(false);
+  });
+
+  it('detects a harami cross (doji inside a large body)', () => {
+    const scan = scanCandlePatterns(buildSeries([
+      [99, 100, 98, 99.5], [99.5, 100.5, 99, 100],
+      [110, 111, 99, 100],          // large bearish body
+      [105, 106, 104, 105],         // doji fully inside it
+      [105, 105.5, 104.5, 105.2]    // incomplete (dropped)
+    ]), 30);
+    expect(has(scan.patterns, 'harami_cross')).toBe(true);
+  });
+
+  it('detects a bullish kicking pattern (gap + opposite marubozu)', () => {
+    const scan = scanCandlePatterns(buildSeries([
+      [99, 100, 98, 99.5], [99.5, 100.5, 99, 100],
+      [110, 110.5, 99.5, 100],      // bearish marubozu
+      [112, 122.5, 111.5, 122],     // gapped-up bullish marubozu
+      [122, 122.5, 121.5, 122.2]    // incomplete (dropped)
+    ]), 30);
+    expect(has(scan.patterns, 'kicking_bullish')).toBe(true);
+  });
+
+  it('detects meeting lines (opposite colors, same close)', () => {
+    const scan = scanCandlePatterns(buildSeries([
+      [99, 100, 98, 99.5], [99.5, 100.5, 99, 100],
+      [110, 111, 99, 100],          // bearish close 100
+      [95, 101, 94.5, 100.01],      // bullish close ~100
+      [100, 100.5, 99.5, 100.2]     // incomplete (dropped)
+    ]), 30);
+    expect(has(scan.patterns, 'meeting_lines_bullish')).toBe(true);
+  });
+
+  it('detects a thrusting line (weak piercing below the midpoint)', () => {
+    const scan = scanCandlePatterns(buildSeries([
+      [99, 100, 98, 99.5], [99.5, 100.5, 99, 100],
+      [110, 111, 99, 100],          // bearish, midpoint 105
+      [99, 104, 98.5, 103],         // bull closes into body but below 105
+      [103, 103.5, 102.5, 103.2]    // incomplete (dropped)
+    ]), 30);
+    expect(has(scan.patterns, 'thrusting_line')).toBe(true);
+    expect(has(scan.patterns, 'piercing_line')).toBe(false);
+  });
+
+  it('detects an abandoned baby (gap, doji, gap)', () => {
+    const scan = scanCandlePatterns(buildSeries([
+      [99, 100, 98, 99.5], [99.5, 100.5, 99, 100],
+      [110, 111, 99, 100],          // bearish (low 99)
+      [97, 97.5, 96.5, 97],         // doji gapped below 99
+      [99, 102, 98.2, 102],         // bullish gapped above 97.5
+      [102, 102.5, 101.5, 102.2]    // incomplete (dropped)
+    ]), 30);
+    expect(has(scan.patterns, 'abandoned_baby_bullish')).toBe(true);
+  });
+
+  it('detects a bullish tri-star (three dojis, rising closes)', () => {
+    const scan = scanCandlePatterns(buildSeries([
+      [99, 100, 98, 99.5], [99.5, 100.5, 99, 100],
+      [100, 100.5, 99.5, 100],      // doji
+      [100.45, 101, 100, 100.5],    // doji (close higher)
+      [101, 101.5, 100.5, 101],     // doji (close higher still)
+      [101, 101.5, 100.5, 101.2]    // incomplete (dropped)
+    ]), 30);
+    expect(has(scan.patterns, 'tri_star_bullish')).toBe(true);
+  });
+
+  it('detects a stick sandwich (bull, bear closing at open, bull)', () => {
+    const scan = scanCandlePatterns(buildSeries([
+      [99, 100, 98, 99.5], [99.5, 100.5, 99, 100],
+      [100, 104.5, 99.5, 104],      // bullish
+      [102, 102.5, 99.8, 100],      // bearish closing at first open (100)
+      [100, 105.5, 99.8, 105],      // bullish closing above first close
+      [105, 105.5, 104.5, 105.2]    // incomplete (dropped)
+    ]), 30);
+    expect(has(scan.patterns, 'stick_sandwich')).toBe(true);
+  });
+
+  it('detects an upside gap two crows', () => {
+    const scan = scanCandlePatterns(buildSeries([
+      [99, 100, 98, 99.5], [99.5, 100.5, 99, 100],
+      [100, 106.5, 99.5, 106],      // bullish (high 106.5)
+      [108, 108.5, 107.2, 107],     // bearish gapped up
+      [107.5, 107.8, 106.3, 106.5], // bearish fades, still above 106
+      [106.5, 107, 106, 106.7]      // incomplete (dropped)
+    ]), 30);
+    expect(has(scan.patterns, 'upside_gap_two_crows')).toBe(true);
+  });
+
+  it('detects rising three methods (5 candles)', () => {
+    const scan = scanCandlePatterns(buildSeries([
+      [99, 100, 98, 99.5], [99.5, 100.5, 99, 100],
+      [100, 111, 99, 110],          // first strong bull (range 99-111)
+      [109, 109.5, 106.5, 107],     // small bear inside
+      [108, 108.5, 105.5, 106],     // small bear inside
+      [107, 107.5, 104.5, 105],     // small bear inside
+      [108, 112.5, 107.5, 112],     // final strong bull, closes above 110
+      [112, 112.5, 111.5, 112.2]    // incomplete (dropped)
+    ]), 30);
+    expect(has(scan.patterns, 'rising_three_methods')).toBe(true);
+  });
+
+  it('detects a bullish three-line strike (4 candles)', () => {
+    const scan = scanCandlePatterns(buildSeries([
+      [99, 100, 98, 99.5], [99.5, 100.5, 99, 100],
+      [100, 104.5, 99.5, 104],      // bull 1
+      [104, 108.5, 103.5, 108],     // bull 2 (higher close)
+      [108, 112.5, 107.5, 112],     // bull 3 (higher close)
+      [110, 111, 97.5, 98],         // bearish strike closing below 100
+      [98, 98.5, 97.5, 98.2]        // incomplete (dropped)
+    ]), 30);
+    expect(has(scan.patterns, 'three_line_strike_bullish')).toBe(true);
+  });
+});
+
 describe('scanCandlePatterns — single-candle patterns', () => {
     it('detects a bullish pin bar (long lower wick)', () => {
         // Pin bar: long lower wick, body 10-30% of range, tiny upper wick.
@@ -93,7 +246,9 @@ describe('scanCandlePatterns — single-candle patterns', () => {
             [100.1, 100.3, 100, 100.2] // incomplete — excluded
         ]);
         const scan = scanCandlePatterns(series, 30);
-        const dojis = scan.patterns.filter(p => p.name === 'doji');
+        // The doji FAMILY: a 1% body with long wicks both sides is now
+        // correctly labeled long_legged_doji (still a doji, still neutral).
+        const dojis = scan.patterns.filter(p => p.name.endsWith('doji'));
         expect(dojis.length).toBeGreaterThan(0);
         expect(dojis[0].direction).toBe('neutral');
     });

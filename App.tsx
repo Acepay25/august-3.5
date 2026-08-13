@@ -43,7 +43,6 @@ const UserProfileManager = React.lazy(() => import('./components/settings/UserPr
 const SavedAnalyses = React.lazy(() => import('./components/journal/SavedAnalyses'));
 const SettingsMenu = React.lazy(() => import('./components/settings/SettingsMenu'));
 const LiveStreamView = React.lazy(() => import('./components/analysis/LiveStreamView'));
-const AnalystPanel = React.lazy(() => import('./components/analysis/AnalystPanel'));
 // (LogTradeModal was removed — the capture flow uses DataCaptureModal.)
 const PostTradeUploadModal = React.lazy(() => import('./components/modals/PostTradeUploadModal').then(m => ({ default: m.PostTradeUploadModal })));
 const SkipTradeModal = React.lazy(() => import('./components/modals/SkipTradeModal').then(m => ({ default: m.SkipTradeModal })));
@@ -64,7 +63,7 @@ import CommandPalette, { PaletteAction } from './components/shared/CommandPalett
 const AnalysisProgress = React.lazy(() => import('./components/analysis/AnalysisProgress'));
 import { DEFAULT_FRAMEWORKS } from './constants/models';
 import { buildModelIdToName, buildProviderNameToId, getFirstReadyProvider } from './utils/providerUtils';
-import { createNewConversation, DEFAULT_LEVERAGE } from './utils/conversationUtils';
+import { createNewConversation, DEFAULT_LEVERAGE, findReusableEmptyConversation } from './utils/conversationUtils';
 import { recalculateAnalysisMetrics } from './utils/analysisUtils';
 import { processImagesForSummarization } from './utils/imageProcessor';
 import { extractLastJson } from './utils/jsonUtils';
@@ -157,25 +156,8 @@ const App: React.FC = () => {
         isRateLimited, setIsRateLimited,
     } = useUIState();
 
-    // Analyst panel (right-side slide-in for per-analyst detail + debate)
-    const [analystPanel, setAnalystPanel] = useState<{ message: Message; activeTab: string } | null>(null);
-
     // Settings initial tab — set by handleOpenJournal to open Settings → Journal directly
     const [settingsInitialTab, setSettingsInitialTab] = useState<string | undefined>(undefined);
-
-    const handleOpenAnalystPanel = useCallback((msg: Message, activeTab?: string) => {
-        // Both right-side panels sit at z-30 — opening one must close the
-        // other, or the analyst panel paints over the analytics panel with
-        // no way to reach it.
-        setIsAdvancedAnalyticsOpen(false);
-        setAnalystPanel(prev => {
-            // If clicking the same message, just switch tab
-            if (prev?.message.id === msg.id) {
-                return { ...prev, activeTab: activeTab ?? prev.activeTab };
-            }
-            return { message: msg, activeTab: activeTab ?? '' };
-        });
-    }, []);
 
     // Provider configuration (API keys, base URLs, custom providers)
     const {
@@ -971,7 +953,7 @@ const App: React.FC = () => {
             const target = e.target as HTMLElement | null;
             const isTyping = !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable);
             if (isTyping) return;
-            const anyOverlayOpen = isSettingsMenuVisible || isLiveMarketVisible || isCommandPaletteOpen || isSavedGalleryOpen || isUserModalOpen || isAdvancedAnalyticsOpen || isVisionDataVisible || isStrategySearchVisible || isSavedAnalysesVisible || isVersionHistoryVisible || analystPanel !== null;
+            const anyOverlayOpen = isSettingsMenuVisible || isLiveMarketVisible || isCommandPaletteOpen || isSavedGalleryOpen || isUserModalOpen || isAdvancedAnalyticsOpen || isVisionDataVisible || isStrategySearchVisible || isSavedAnalysesVisible || isVersionHistoryVisible;
             if (anyOverlayOpen) {
                 // Overlays with their own document-level Esc handlers
                 // (SettingsMenu, command palette, Journal, LiveMarket, dialogs)
@@ -983,7 +965,6 @@ const App: React.FC = () => {
                 if (isStrategySearchVisible) setIsStrategySearchVisible(false);
                 if (isSavedAnalysesVisible) setIsSavedAnalysesVisible(false);
                 if (isVersionHistoryVisible) setIsVersionHistoryVisible(false);
-                if (analystPanel) setAnalystPanel(null);
                 return;
             }
             if (isAnalysisInProgress || isPostMortemInProgress) {
@@ -996,7 +977,7 @@ const App: React.FC = () => {
         };
         document.addEventListener('keydown', onKeyDown);
         return () => document.removeEventListener('keydown', onKeyDown);
-    }, [isAnalysisInProgress, isPostMortemInProgress, handleCancelAll, toast, isSettingsMenuVisible, isLiveMarketVisible, isCommandPaletteOpen, isSavedGalleryOpen, isUserModalOpen, isAdvancedAnalyticsOpen, isVisionDataVisible, isStrategySearchVisible, isSavedAnalysesVisible, isVersionHistoryVisible, analystPanel]);
+    }, [isAnalysisInProgress, isPostMortemInProgress, handleCancelAll, toast, isSettingsMenuVisible, isLiveMarketVisible, isCommandPaletteOpen, isSavedGalleryOpen, isUserModalOpen, isAdvancedAnalyticsOpen, isVisionDataVisible, isStrategySearchVisible, isSavedAnalysesVisible, isVersionHistoryVisible]);
 
     // ─── Side-by-side compare ──────────────────────────────────────────────
     const [compareState, setCompareState] = useState<{ primaryId: string; secondaryId: string | null } | null>(null);
@@ -1977,13 +1958,32 @@ const App: React.FC = () => {
     };
 
     // F3: New conversation (Ctrl/Cmd+N shortcut + palette action).
+    // Reuse an existing blank session instead of minting another empty one —
+    // "New" from a filled session should return to the unused blank tab.
     const handleNewConversation = useCallback(() => {
         handleCancelAnalysis();
         invalidatePostMortemRuns();
+        const reusable = findReusableEmptyConversation(conversationHistory, activeConversationId);
+        if (reusable) {
+            if (reusable.id !== activeConversationId) {
+                setConversationHistory(prev => [
+                    { ...reusable, timestamp: Date.now() },
+                    ...prev.filter(c => c.id !== reusable.id),
+                ]);
+                setActiveConversationId(reusable.id);
+            }
+            return;
+        }
         const newConv = createNewConversation();
+        if (activeConversation) {
+            newConv.ocrModel = activeConversation.ocrModel;
+            newConv.moderatorProviderId = activeConversation.moderatorProviderId;
+            newConv.moderatorModel = activeConversation.moderatorModel;
+            newConv.leverage = activeConversation.leverage;
+        }
         setConversationHistory(prev => [newConv, ...prev]);
         setActiveConversationId(newConv.id);
-    }, [handleCancelAnalysis, invalidatePostMortemRuns]);
+    }, [handleCancelAnalysis, invalidatePostMortemRuns, conversationHistory, activeConversationId, activeConversation]);
 
     // F3: Ctrl/Cmd+N = new conversation; "/" focuses the composer (unless
     // already typing or an overlay is open).
@@ -2025,7 +2025,11 @@ const App: React.FC = () => {
             if (remaining.length > 0) {
                 setActiveConversationId(remaining[0].id);
             } else {
-                handleStartNewConversation();
+                // Don't reuse via handleNewConversation — that would see the
+                // pre-delete history and resurrect the session we just removed.
+                const newConv = createNewConversation();
+                setConversationHistory([newConv]);
+                setActiveConversationId(newConv.id);
             }
         }
     };
@@ -2053,19 +2057,7 @@ const App: React.FC = () => {
         return true;
     };
 
-    const handleStartNewConversation = () => {
-        handleCancelAnalysis();
-        invalidatePostMortemRuns();
-        const newConv = createNewConversation();
-        if (activeConversation) {
-            newConv.ocrModel = activeConversation.ocrModel;
-            newConv.moderatorProviderId = activeConversation.moderatorProviderId;
-            newConv.moderatorModel = activeConversation.moderatorModel;
-            newConv.leverage = activeConversation.leverage;
-        }
-        setConversationHistory(prev => [newConv, ...prev]);
-        setActiveConversationId(newConv.id);
-    };
+    const handleStartNewConversation = handleNewConversation;
 
     // Stable handler identities — plain arrow functions here were recreated
     // every render, defeating the chatContext memo and re-rendering every
@@ -2503,7 +2495,6 @@ const App: React.FC = () => {
     // keystroke / progress tick even when nothing relevant changed.
     const handleSelectMessageForProbability = useCallback((id: string) => {
         setSelectedProbabilityMessageId(id);
-        setAnalystPanel(null); // z-30 mutual exclusion
         setIsAdvancedAnalyticsOpen(true);
         handleCalculateAIProbabilities(id);
     }, [handleCalculateAIProbabilities]);
@@ -2689,7 +2680,6 @@ const App: React.FC = () => {
         handleInitiateSimulator, // Scenario Simulator
         confidenceCalibration, // Confidence calibration stats
         onRetryPostMortem: handleRetryPostMortem, // Retry failed post-mortem
-        lensConfig, // Analyst lens configuration for debate visualization
         leverage: chatLeverage, // Leverage for backtest P&L calculations
         autopilotResolutions, // Outcome autopilot detected resolutions
         onConfirmAutopilot: handleConfirmAutopilot,
@@ -2701,8 +2691,7 @@ const App: React.FC = () => {
         // Post-mortem "what would I do today?" re-assessment.
         onTodayReassessment: startTodayReassessment,
         todayReassessmentInFlight,
-        onOpenAnalystPanel: handleOpenAnalystPanel,
-    }), [typingMessageState, highlightedAnalysisId, expandedPostMortems, expandedPostMortemImages, savedAnalyses, activeFrameworks, copiedMessageId, modelIdToName, providerNameToId, handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy, handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, confidenceCalibration, handleRetryPostMortem, lensConfig, chatLeverage, autopilotResolutions, handleConfirmAutopilot, handleDismissAutopilot, handleCompareAnalysis, handleViewReasoning, handleReRunAnalysis, handleReplacementChoice, startTodayReassessment, todayReassessmentInFlight, handleOpenAnalystPanel]);
+    }), [typingMessageState, highlightedAnalysisId, expandedPostMortems, expandedPostMortemImages, savedAnalyses, activeFrameworks, copiedMessageId, modelIdToName, providerNameToId, handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy, handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, confidenceCalibration, handleRetryPostMortem, chatLeverage, autopilotResolutions, handleConfirmAutopilot, handleDismissAutopilot, handleCompareAnalysis, handleViewReasoning, handleReRunAnalysis, handleReplacementChoice, startTodayReassessment, todayReassessmentInFlight]);
 
     // ... (Rest of component remains unchanged) ...
     const isAnalysisProgressVisible = Boolean(
@@ -3059,21 +3048,6 @@ const App: React.FC = () => {
                 isExternallyOpen={isAdvancedAnalyticsOpen}
                 onClose={() => setIsAdvancedAnalyticsOpen(false)}
             />
-
-            {/* Analyst Panel — per-analyst detail + debate in a right-side slide-in */}
-            {analystPanel && (
-                <React.Suspense fallback={null}>
-                    <AnalystPanel
-                        message={analystPanel.message}
-                        activeTab={analystPanel.activeTab}
-                        modelIdToName={modelIdToName}
-                        providerNameToId={providerNameToId}
-                        lensConfig={lensConfig}
-                        onClose={() => setAnalystPanel(null)}
-                        onSelectTab={(tab) => setAnalystPanel(prev => prev ? { ...prev, activeTab: tab } : null)}
-                    />
-                </React.Suspense>
-            )}
 
             {/* Main row: persistent desktop sidebar + chat column */}
             <div className="flex-1 flex flex-row min-h-0">
