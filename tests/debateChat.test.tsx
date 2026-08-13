@@ -8,6 +8,7 @@ import { DebateTurn, TradeAnalysis } from '../types';
 vi.mock('../components/shared/Icons', () => ({
     BotIcon: () => <span data-testid="bot-icon" />,
     ChevronDownIcon: ({ className }: { className?: string }) => <span data-testid="chevron-icon" className={className} />,
+    KebabMenuIcon: ({ className }: { className?: string }) => <span data-testid="kebab-icon" className={className} />,
 }));
 
 // Mock AnalystLensService
@@ -65,8 +66,7 @@ describe('DebateChat', () => {
         render(<DebateChat {...baseProps} debateTurns={turns} />);
         expect(screen.getByText('Macro Analyst')).toBeDefined();
         expect(screen.getByText('Technical Analyst')).toBeDefined();
-        // Moderator is displayed as "Master Strategist"
-        expect(screen.getByText('Master Strategist')).toBeDefined();
+        expect(screen.getByText('Strategist')).toBeDefined();
     });
 
     it('shows round separators', () => {
@@ -76,8 +76,8 @@ describe('DebateChat', () => {
             makeTurn('Analyst A', 'Rebuttal', 2),
         ];
         render(<DebateChat {...baseProps} debateTurns={turns} />);
-        expect(screen.getByText('Round 1 · Openings')).toBeDefined();
-        expect(screen.getByText('Round 2 · Rebuttals')).toBeDefined();
+        expect(screen.getAllByText('Openings').length).toBeGreaterThanOrEqual(1);
+        expect(screen.getAllByText('Rebuttals').length).toBeGreaterThanOrEqual(1);
     });
 
     it('labels clarification rounds with speaker context', () => {
@@ -88,8 +88,8 @@ describe('DebateChat', () => {
             makeTurn('Moderator', 'Verdict: Long', 6),
         ];
         render(<DebateChat {...baseProps} debateTurns={turns} />);
-        expect(screen.getByText('Round 4 · Clarification Questions')).toBeDefined();
-        expect(screen.getByText('Round 5 · Analyst Responses')).toBeDefined();
+        expect(screen.getByText('Clarification questions')).toBeDefined();
+        expect(screen.getByText('Analyst responses')).toBeDefined();
     });
 
     it('shows Final Verdict label for the last moderator round', () => {
@@ -98,7 +98,7 @@ describe('DebateChat', () => {
             makeTurn('Moderator', 'Final verdict: Long', 3),
         ];
         render(<DebateChat {...baseProps} debateTurns={turns} />);
-        expect(screen.getByText('Round 3 · Final Verdict')).toBeDefined();
+        expect(screen.getByText('Final verdict')).toBeDefined();
     });
 
     it('shows TL;DR summary when analysis is provided and debate is complete', () => {
@@ -125,16 +125,18 @@ describe('DebateChat', () => {
         const analysis = makeAnalysis();
         const turns = [makeTurn('Analyst A', 'Opening', 1)];
         render(<DebateChat {...baseProps} debateTurns={turns} analysis={analysis} />);
-        expect(screen.getByText('▶ Replay')).toBeDefined();
+        fireEvent.click(screen.getByLabelText('Debate actions'));
+        expect(screen.getByText('Replay')).toBeDefined();
     });
 
     it('shows replay controls when replaying', () => {
         const analysis = makeAnalysis();
         const turns = [makeTurn('Analyst A', 'Opening', 1)];
         render(<DebateChat {...baseProps} debateTurns={turns} analysis={analysis} />);
-        fireEvent.click(screen.getByText('▶ Replay'));
-        expect(screen.getByText('⏸ Pause')).toBeDefined();
-        expect(screen.getByText('⏭ Step')).toBeDefined();
+        fireEvent.click(screen.getByLabelText('Debate actions'));
+        fireEvent.click(screen.getByText('Replay'));
+        expect(screen.getByText('Pause')).toBeDefined();
+        expect(screen.getByText('Step')).toBeDefined();
         expect(screen.getByText('Exit')).toBeDefined();
     });
 
@@ -142,7 +144,8 @@ describe('DebateChat', () => {
         const analysis = makeAnalysis();
         const turns = [makeTurn('Analyst A', 'Opening', 1)];
         render(<DebateChat {...baseProps} debateTurns={turns} analysis={analysis} />);
-        fireEvent.click(screen.getByText('▶ Replay'));
+        fireEvent.click(screen.getByLabelText('Debate actions'));
+        fireEvent.click(screen.getByText('Replay'));
         expect(screen.getByText('0.5x')).toBeDefined();
         expect(screen.getByText('1x')).toBeDefined();
         expect(screen.getByText('2x')).toBeDefined();
@@ -156,7 +159,8 @@ describe('DebateChat', () => {
             makeTurn('Analyst A', 'Response', 3),
         ];
         render(<DebateChat {...baseProps} debateTurns={turns} analysis={analysis} />);
-        fireEvent.click(screen.getByText('▶ Replay'));
+        fireEvent.click(screen.getByLabelText('Debate actions'));
+        fireEvent.click(screen.getByText('Replay'));
         expect(screen.getByText('R1')).toBeDefined();
         expect(screen.getByText('R2')).toBeDefined();
         expect(screen.getByText('R3')).toBeDefined();
@@ -166,14 +170,15 @@ describe('DebateChat', () => {
         const turns = [makeTurn('Analyst A', 'Opening', 1)];
         const activeSpeakers = { 'Analyst A': 2 };
         render(<DebateChat {...baseProps} debateTurns={turns} isDebating={true} activeDebateSpeakers={activeSpeakers} />);
-        expect(screen.getByText('Thinking')).toBeDefined();
+        expect(screen.getByText(/writing/)).toBeDefined();
     });
 
     it('shows copy transcript button when analysis is provided', () => {
         const analysis = makeAnalysis();
         const turns = [makeTurn('Analyst A', 'Text', 1)];
         render(<DebateChat {...baseProps} debateTurns={turns} analysis={analysis} />);
-        expect(screen.getByText('Copy transcript')).toBeDefined();
+        fireEvent.click(screen.getByLabelText('Debate actions'));
+        expect(screen.getByText('Copy')).toBeDefined();
     });
 
     it('renders verdict turn with DECISION badge', () => {
@@ -182,7 +187,7 @@ describe('DebateChat', () => {
             makeTurn('Moderator', 'Final: Long', 2),
         ];
         render(<DebateChat {...baseProps} debateTurns={turns} />);
-        expect(screen.getByText('DECISION')).toBeDefined();
+        expect(screen.getAllByText('Verdict').length).toBeGreaterThanOrEqual(1);
     });
 
     it('splits moderator turns by analyst labels', () => {

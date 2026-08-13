@@ -6,7 +6,7 @@ import { EnsembleModelSelection } from '../../services/ui/AnalystLensService';
 import GlobalLearningService from '../../services/learning/GlobalLearningService';
 import { RegimeProviderStatsMap } from '../../services/learning/SetupMemoryService';
 import { ANALYST_ROLE_DEFINITIONS } from '../../services/ui/AnalystLensService';
-import { CloseIcon } from '../shared/Icons';
+import { CloseIcon, EditIcon } from '../shared/Icons';
 import ModelPicker from '../shared/ModelPicker';
 
 interface TeamModalProps {
@@ -26,34 +26,33 @@ interface TeamModalProps {
      */
     regimeProviderStats?: RegimeProviderStatsMap;
     onClose: () => void;
+    onEditLensPrompt?: (role: AnalystRole) => void;
+    onEditNormalPrompt?: () => void;
 }
 
-const LENS_ROLES: { role: AnalystRole; label: string; focus: string }[] = [
-    { role: AnalystRole.MACRO_VOLATILITY, label: 'Macro & Volatility', focus: 'HTF trend, volatility regimes, liquidity zones, ATR' },
-    { role: AnalystRole.TECHNICAL_ANALYST, label: 'Technical Analyst', focus: 'Chart patterns, structure, levels, momentum' },
-    { role: AnalystRole.RISK_EXECUTION, label: 'Risk & Execution', focus: 'R:R, position sizing, entry/SL/TP execution risk' },
+const LENS_ROLES: { role: AnalystRole; label: string; focus: string; initial: string }[] = [
+    { role: AnalystRole.MACRO_VOLATILITY, label: 'Macro & Volatility', focus: 'HTF trend, volatility, liquidity, ATR', initial: 'M' },
+    { role: AnalystRole.TECHNICAL_ANALYST, label: 'Technical', focus: 'Patterns, structure, levels, momentum', initial: 'T' },
+    { role: AnalystRole.RISK_EXECUTION, label: 'Risk & Execution', focus: 'R:R, sizing, entry / SL / TP risk', initial: 'R' },
 ];
 
 const STYLES = ['auto', 'position', 'swing', 'scalp'] as const;
 
 /**
- * "Team" launch modal — one canonical place to pick the 3 analysts + lens
- * mode + trading style before sending. Replaces the nested dropdown flow:
- * visible roster, inline validation, auto-assign, save-as-default.
+ * Canonical place to pick the 3 analysts + lens mode + trading style
+ * before sending. Opened from the composer Team chip.
  */
 const TeamModal: React.FC<TeamModalProps> = ({
-    isOpen, providers, isEnsembleEnabled, setIsEnsembleEnabled,
+    isOpen, providers, setIsEnsembleEnabled,
     lensConfig, setLensConfig, ensembleModelSelection, setEnsembleModelSelection,
     regimeProviderStats,
     onClose,
+    onEditLensPrompt,
+    onEditNormalPrompt,
 }) => {
     const readyProviders = useMemo(
         () => providers.filter(p => p.isEnabled && p.apiKey.trim().length > 0),
         [providers]
-    );
-    const modelOptions = useMemo(
-        () => readyProviders.flatMap(p => p.models.map(m => ({ value: `${p.id}::${m}`, label: `${p.name} · ${m}` }))),
-        [readyProviders]
     );
 
     if (!isOpen) return null;
@@ -62,10 +61,6 @@ const TeamModal: React.FC<TeamModalProps> = ({
 
     const setMode = (next: 'normal' | 'lenses') => {
         if (next === 'lenses' && lensConfig.assignments.length === 0) {
-            // Auto-assign: prefer the BEST-CALIBRATED ready providers. When
-            // the current market regime is known, "best" means the providers
-            // that actually WIN in THIS regime (ranging vs trending vs
-            // volatile) — blended all-time numbers defeat the mechanism.
             let providerOrder = [...readyProviders];
             try {
                 if (regimeProviderStats && regimeProviderStats.size > 0) {
@@ -133,51 +128,61 @@ const TeamModal: React.FC<TeamModalProps> = ({
         return `${e.providerId}::${e.model}`;
     };
 
-    const selectCls = 'w-full bg-zinc-900 border border-white/10 rounded-lg px-2.5 py-2 text-xs text-zinc-200 focus:outline-none focus:border-cyan-400/40';
-    const labelCls = 'text-[10px] font-bold uppercase tracking-widest text-zinc-500 block mb-1';
+    const assignedCount = mode === 'lenses'
+        ? lensConfig.assignments.filter(a => a.assignedProvider).length
+        : ensembleModelSelection.filter(e => e?.providerId).length;
 
     return (
         <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/70 p-4 animate-fade-in pointer-events-auto" onClick={onClose}>
-            <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
-                {/* Header */}
-                <div className="flex items-center justify-between px-4 py-3 border-b border-white/5 bg-zinc-900">
+            <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between border-b border-white/5 bg-zinc-900 px-4 py-3">
                     <div>
-                        <p className="text-sm font-bold text-white">Analyst Team</p>
-                        <p className="text-[10px] text-zinc-500">Choose who analyzes your charts before you send.</p>
+                        <p className="text-sm font-medium text-white">Analyst team</p>
+                        <p className="mt-0.5 text-[11px] text-zinc-500">Choose who analyzes your charts before you send.</p>
                     </div>
-                    <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 text-zinc-500 hover:text-zinc-200 transition-colors" aria-label="Close team modal">
-                        <CloseIcon className="w-4 h-4" />
+                    <button onClick={onClose} className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-white/10 hover:text-zinc-200" aria-label="Close team modal">
+                        <CloseIcon className="h-4 w-4" />
                     </button>
                 </div>
 
-                <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto custom-scrollbar">
-                    {/* Mode segmented */}
-                    <div className="flex gap-1.5">
+                <div className="custom-scrollbar max-h-[70vh] space-y-4 overflow-y-auto p-4">
+                    <div className="flex rounded-lg border border-white/10 bg-zinc-900 p-0.5">
                         {(['normal', 'lenses'] as const).map(m => (
                             <button
                                 key={m}
                                 type="button"
                                 onClick={() => setMode(m)}
-                                className={`flex-1 px-3 py-2 rounded-lg border text-[10px] font-bold uppercase tracking-widest transition-all ${mode === m ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-300' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'}`}
+                                className={`flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${mode === m ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'}`}
                             >
-                                {m === 'lenses' ? 'Lenses (personas)' : 'Normal (experts)'}
+                                {m === 'lenses' ? 'Lenses' : 'Normal'}
                             </button>
                         ))}
                     </div>
 
                     {mode === 'lenses' ? (
                         <>
-                            {/* Role cards */}
-                            {LENS_ROLES.map((r, idx) => (
+                            {LENS_ROLES.map(r => (
                                 <div key={r.role} className="rounded-xl border border-white/5 bg-zinc-900/60 p-3">
-                                    <div className="flex items-center justify-between mb-1.5">
-                                        <div className="flex items-center gap-2">
-                                            <span className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black text-zinc-900" style={{ background: ['#8aabd8', '#34d399', '#fb7185'][idx] }}>
-                                                {r.label.charAt(0)}
+                                    <div className="mb-2 flex items-center justify-between gap-2">
+                                        <div className="flex min-w-0 items-center gap-2">
+                                            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-white/10 bg-zinc-800 text-[10px] font-semibold text-zinc-300">
+                                                {r.initial}
                                             </span>
-                                            <span className="text-xs font-bold text-zinc-200">{r.label}</span>
+                                            <div className="min-w-0">
+                                                <div className="text-xs font-medium text-zinc-200">{r.label}</div>
+                                                <div className="truncate text-[11px] text-zinc-600">{r.focus}</div>
+                                            </div>
                                         </div>
-                                        <span className="text-[9px] text-zinc-600 text-right max-w-[45%]">{r.focus}</span>
+                                        {onEditLensPrompt && (
+                                            <button
+                                                type="button"
+                                                onClick={() => onEditLensPrompt(r.role)}
+                                                className="shrink-0 rounded-md p-1 text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-300"
+                                                title={`Edit ${ANALYST_ROLE_DEFINITIONS[r.role].shortName} prompt`}
+                                            >
+                                                <EditIcon className="h-3.5 w-3.5" />
+                                            </button>
+                                        )}
                                     </div>
                                     <ModelPicker
                                         providers={providers}
@@ -188,16 +193,15 @@ const TeamModal: React.FC<TeamModalProps> = ({
                                 </div>
                             ))}
 
-                            {/* Trading style */}
                             <div>
-                                <span className={labelCls}>Trading style</span>
-                                <div className="flex gap-1.5">
+                                <span className="mb-1.5 block text-[11px] text-zinc-500">Trading style</span>
+                                <div className="flex gap-1">
                                     {STYLES.map(s => (
                                         <button
                                             key={s}
                                             type="button"
                                             onClick={() => setLensConfig({ ...lensConfig, enabled: true, tradingStyle: s })}
-                                            className={`flex-1 px-2 py-1.5 rounded-lg border text-[9px] font-bold uppercase tracking-widest transition-all ${(lensConfig.tradingStyle ?? 'swing') === s ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-300' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'}`}
+                                            className={`flex-1 rounded-md px-2 py-1.5 text-[11px] capitalize transition-colors ${(lensConfig.tradingStyle ?? 'swing') === s ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:bg-zinc-900 hover:text-zinc-300'}`}
                                         >
                                             {s}
                                         </button>
@@ -206,11 +210,23 @@ const TeamModal: React.FC<TeamModalProps> = ({
                             </div>
                         </>
                     ) : (
-                        /* Normal mode: 3 expert slots */
-                        <div className="space-y-2">
+                        <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                                <span className="text-[11px] text-zinc-500">Same prompt for every expert</span>
+                                {onEditNormalPrompt && (
+                                    <button
+                                        type="button"
+                                        onClick={onEditNormalPrompt}
+                                        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-300"
+                                    >
+                                        <EditIcon className="h-3 w-3" />
+                                        Prompt
+                                    </button>
+                                )}
+                            </div>
                             {[0, 1, 2].map(slot => (
                                 <div key={slot}>
-                                    <span className={labelCls}>Expert {slot + 1}</span>
+                                    <span className="mb-1 block text-[11px] text-zinc-500">Expert {slot + 1}</span>
                                     <ModelPicker
                                         providers={providers}
                                         value={normalSlotValue(slot)}
@@ -222,31 +238,27 @@ const TeamModal: React.FC<TeamModalProps> = ({
                         </div>
                     )}
 
-                    {/* Moderator note */}
-                    <div className="rounded-xl border border-white/5 bg-zinc-900/40 px-3 py-2.5 text-[10px] text-zinc-500 leading-relaxed">
-                        <span className="text-zinc-400 font-bold uppercase tracking-widest">Moderator</span> — set in <span className="text-cyan-300">Settings → AI setup</span>. When unset, the app picks a provider that is not one of your analysts.
-                    </div>
+                    <p className="rounded-xl border border-white/5 bg-zinc-900/40 px-3 py-2.5 text-[11px] leading-relaxed text-zinc-500">
+                        <span className="font-medium text-zinc-400">Moderator</span> is set in Settings → AI setup. When unset, the app picks a provider that is not one of your analysts.
+                    </p>
                 </div>
 
-                {/* Footer */}
-                <div className="px-4 py-3 border-t border-white/5 bg-zinc-900 flex items-center justify-between gap-2 flex-wrap">
-                    <span className="text-[10px] text-zinc-500">
-                        {mode === 'lenses'
-                            ? `Lenses ${lensConfig.assignments.filter(a => a.assignedProvider).length}/3 roles assigned`
-                            : `${ensembleModelSelection.filter(e => e?.providerId).length}/3 experts picked`}
+                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/5 bg-zinc-900 px-4 py-3">
+                    <span className="text-[11px] text-zinc-500">
+                        {assignedCount}/3 {mode === 'lenses' ? 'roles' : 'experts'} assigned
                     </span>
                     <div className="flex gap-2">
                         <button
                             type="button"
                             onClick={() => setMode('lenses')}
-                            className="px-3 py-1.5 rounded-lg border border-white/10 text-[10px] font-bold uppercase tracking-widest text-zinc-300 hover:bg-zinc-800 transition-colors"
+                            className="rounded-lg border border-white/10 px-3 py-1.5 text-[11px] font-medium text-zinc-300 transition-colors hover:bg-zinc-800"
                         >
                             Auto-assign
                         </button>
                         <button
                             type="button"
                             onClick={onClose}
-                            className="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-[10px] font-bold uppercase tracking-widest text-white transition-colors"
+                            className="rounded-lg bg-cyan-600 px-3 py-1.5 text-[11px] font-medium text-white transition-colors hover:bg-cyan-500"
                         >
                             Done
                         </button>

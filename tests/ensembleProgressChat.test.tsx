@@ -50,7 +50,7 @@ describe('EnsembleProgressChat', () => {
         ]);
         render(<EnsembleProgressChat progress={progress} isLive={true} />);
         // Should show "X is typing" or similar - multiple elements may match
-        const typingElements = screen.getAllByText(/typing|Waiting for|Preparing/);
+        const typingElements = screen.getAllByText(/thinking|Waiting for|Preparing/);
         expect(typingElements.length).toBeGreaterThan(0);
     });
 
@@ -94,8 +94,7 @@ describe('EnsembleProgressChat', () => {
             makeAnalyst({ key: 'a2', displayName: 'Analyst B', status: 'analyzing' }),
         ]);
         render(<EnsembleProgressChat progress={progress} isLive={true} />);
-        const typingText = screen.getByText(/typing/);
-        expect(typingText).toBeDefined();
+        expect(screen.getAllByText(/thinking/).length).toBeGreaterThan(0);
     });
 
     it('shows collapsible thinking + final output on expand (harness style)', () => {

@@ -17,8 +17,7 @@ interface InjectionContextBarProps {
  * "What the model sees" — a compact chip row above the composer showing every
  * context source injected into the next analysis: notebook files (Trader
  * Notebook), uploaded strategy books, hybrid market data + the CURRENT regime,
- * and the active modes. No team chip — the [Team ▾] composer button already
- * shows the roster.
+ * and the active modes. The composer Team chip shows the analyst roster.
  */
 const InjectionContextBar: React.FC<InjectionContextBarProps> = ({
     providers,
