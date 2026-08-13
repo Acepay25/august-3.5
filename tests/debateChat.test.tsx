@@ -16,6 +16,10 @@ vi.mock('../services/ui/AnalystLensService', () => ({
     getRoleDisplayForProvider: () => ({ role: 'Technical', shortName: 'Technical', label: 'Technical Analyst' }),
 }));
 
+vi.mock('../components/shared/MarkdownContent', () => ({
+    default: ({ content }: { content?: string }) => <div>{content}</div>,
+}));
+
 const makeTurn = (speaker: string, text: string, round?: number): DebateTurn => ({
     speaker: speaker as DebateTurn['speaker'],
     text,
@@ -110,7 +114,7 @@ describe('DebateChat', () => {
         render(<DebateChat {...baseProps} debateTurns={turns} analysis={analysis} isDebating={false} />);
         expect(screen.getByText('TL;DR')).toBeDefined();
         // "Long" appears in both consensus strip and TL;DR card
-        expect(screen.getAllByText('Long').length).toBeGreaterThanOrEqual(1);
+        expect(screen.getAllByText('Buy').length).toBeGreaterThanOrEqual(1);
         expect(screen.getAllByText('High').length).toBeGreaterThanOrEqual(1);
     });
 

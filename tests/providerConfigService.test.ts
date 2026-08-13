@@ -140,7 +140,11 @@ describe('ProviderConfigService', () => {
   });
 
   describe('discoverProviderModels (/models endpoint)', () => {
-    const okResponse = (body: unknown) => ({ ok: true, status: 200, json: async () => body } as Response);
+    const okResponse = (body: unknown) => ({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(body),
+    } as Response);
 
     beforeEach(() => {
       vi.restoreAllMocks();
@@ -167,7 +171,11 @@ describe('ProviderConfigService', () => {
     });
 
     it('throws a user-safe error on HTTP failure', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValue({ ok: false, status: 401, json: async () => ({ error: { message: 'Invalid API key' } }) } as Response);
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: false,
+        status: 401,
+        text: async () => JSON.stringify({ error: { message: 'Invalid API key' } }),
+      } as Response);
       await expect(discoverProviderModels({ baseUrl: 'https://x.example/v1', apiKey: 'bad', apiFormat: 'chat_completions' }))
         .rejects.toThrow('Invalid API key');
     });
@@ -176,6 +184,30 @@ describe('ProviderConfigService', () => {
       vi.spyOn(globalThis, 'fetch').mockResolvedValue(okResponse({ data: [] }));
       await expect(discoverProviderModels({ baseUrl: 'https://x.example/v1', apiKey: 'k', apiFormat: 'chat_completions' }))
         .rejects.toThrow('returned no models');
+    });
+
+    it('uses the Electron discover bridge when present', async () => {
+      const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(okResponse({ data: [] }));
+      const previous = (window as unknown as { electronAPI?: unknown }).electronAPI;
+      (window as unknown as { electronAPI: unknown }).electronAPI = {
+        isElectron: true,
+        discoverModels: vi.fn(async () => ({
+          ok: true,
+          status: 200,
+          body: JSON.stringify({ data: [{ id: 'gpt-4o' }] }),
+        })),
+      };
+      try {
+        const models = await discoverProviderModels({
+          baseUrl: 'https://api.openai.com/v1',
+          apiKey: 'sk-test',
+          apiFormat: 'chat_completions',
+        });
+        expect(models).toEqual(['gpt-4o']);
+        expect(fetchMock).not.toHaveBeenCalled();
+      } finally {
+        (window as unknown as { electronAPI?: unknown }).electronAPI = previous;
+      }
     });
   });
 });

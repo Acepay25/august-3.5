@@ -8,7 +8,7 @@
  * live there and are covered by tests/tradeAnalysisSchema.test.ts.
  */
 
-import { TradeAnalysis, ConfidenceCalibration } from '../types';
+import { TradeAnalysis, ConfidenceCalibration, DebateTurn } from '../types';
 import { parseTradeAnalysis } from '../schemas/tradeAnalysis';
 import { FAMILY_UI_DATA } from '../constants/models';
 
@@ -479,6 +479,7 @@ export interface MarkdownTradePlan extends ProseTradePlan {
     devilsAdvocate?: { bearCaseReasons?: string[]; failureScenarios?: string[]; crowdedTradeWarning?: string; riskScore?: number };
     slProbability?: number;
     tpProbabilities?: { level: number; probability: number }[];
+    takeProfits?: { price: string; percentage?: string }[];
     evidence?: { claim: string; state?: string; sources?: string[] }[];
 }
 
@@ -550,8 +551,22 @@ export const parseMarkdownTradePlan = (text: string): MarkdownTradePlan | null =
     if (entry) out.entry = entry;
     const sl = num(field(['Stop Loss', 'Stop-Loss', 'SL']));
     if (sl) out.stopLoss = sl;
-    const tp = num(field(['Take Profit 1', 'Take Profit', 'TP1', 'Target']));
-    if (tp) out.takeProfit = tp;
+    const takeProfits: { price: string; percentage?: string }[] = [];
+    ([
+        ['Take Profit 1', 'Take Profit', 'TP1', 'Target'],
+        ['Take Profit 2', 'TP2'],
+        ['Take Profit 3', 'TP3'],
+    ] as string[][]).forEach(labels => {
+        const raw = field(labels);
+        const price = num(raw);
+        if (!price) return;
+        const pct = raw?.match(/\(([^)]+)\)/)?.[1]?.trim();
+        takeProfits.push({ price, percentage: pct && !/%\s*hit/i.test(pct) ? pct : undefined });
+    });
+    if (takeProfits.length > 0) {
+        out.takeProfits = takeProfits;
+        out.takeProfit = takeProfits[0].price;
+    }
 
     // ── Odds ──
     const prob = field(['Probability', 'Prob']);
@@ -725,7 +740,12 @@ export const tradePlanToAnalysis = (plan: MarkdownTradePlan): Record<string, unk
         validityDurationMinutes: validityMinutes,
         entryPoints: plan.entry ? [{ price: plan.entry }] : undefined,
         stopLoss: plan.stopLoss,
-        takeProfit: plan.takeProfit ? [{ price: plan.takeProfit }] : undefined,
+        takeProfit: (plan.takeProfits?.length
+            ? plan.takeProfits
+            : plan.takeProfit
+                ? [{ price: plan.takeProfit }]
+                : undefined
+        )?.map(t => ({ price: t.price, percentage: t.percentage })),
         marketConditions: plan.marketConditions
             ? {
                 pattern: plan.marketConditions.pattern ?? '',
@@ -775,6 +795,95 @@ export const stripPlanTags = (text: string): string =>
         .replace(/<CLARIFICATION_[A-Z_]+>/gi, '')
         .replace(/<MODERATOR_RETRY>/gi, '')
         .trim();
+
+const CLARIFICATION_LABEL_RE = /\b(?:Macro(?:\s*(?:&?\s*Volatility)?)?|Technical|Risk(?:\s*(?:&?\s*Execution)?)?|Analyst\s+[A-C]|[A-Z][A-Za-z]+ Analyst)\s*:/g;
+
+/** Clarification rounds address each analyst with a question — not a trade plan. */
+export const looksLikeClarificationDump = (text: string): boolean => {
+    if (!text) return false;
+    const labels = text.match(CLARIFICATION_LABEL_RE)?.length ?? 0;
+    const questions = text.match(/\?/g)?.length ?? 0;
+    return labels >= 2 && questions >= 2;
+};
+
+/**
+ * Last moderator turn that is actually a verdict (not a clarification dump).
+ * Falls back to cleaned strategy text when debate turns are missing.
+ */
+export interface LevelHitOdds {
+    sl?: number;
+    tp: [number | undefined, number | undefined, number | undefined];
+}
+
+const clampPct = (n: number): number => Math.min(100, Math.max(0, Math.round(n)));
+
+/**
+ * SL / TP1–TP3 hit odds. Prefers stored levelProbabilities; otherwise mines
+ * the moderator plan markdown so older cards still show %.
+ */
+export const resolveLevelHitOdds = (
+    analysis: TradeAnalysis,
+    debateTurns?: DebateTurn[],
+): LevelHitOdds => {
+    const stored = analysis.levelProbabilities;
+    const slStored = typeof stored?.slProbability === 'number' ? clampPct(stored.slProbability) : undefined;
+    const tpFrom = (level: number): number | undefined => {
+        const fromArr = stored?.tpProbabilities?.find(p => p.level === level)?.probability;
+        if (typeof fromArr === 'number') return clampPct(fromArr);
+        const legacy = level === 1 ? stored?.tp1Probability : level === 2 ? stored?.tp2Probability : stored?.tp3Probability;
+        return typeof legacy === 'number' ? clampPct(legacy) : undefined;
+    };
+    const tpStored: LevelHitOdds['tp'] = [tpFrom(1), tpFrom(2), tpFrom(3)];
+    if (slStored !== undefined || tpStored.some(v => v !== undefined)) {
+        return { sl: slStored, tp: tpStored };
+    }
+
+    const parsed = parseMarkdownTradePlan([
+        extractFinalVerdictText(debateTurns, analysis.strategy),
+        analysis.strategy,
+    ].filter(Boolean).join('\n'));
+    return {
+        sl: typeof parsed?.slProbability === 'number' ? clampPct(parsed.slProbability) : undefined,
+        tp: [1, 2, 3].map(level => {
+            const p = parsed?.tpProbabilities?.find(x => x.level === level)?.probability;
+            return typeof p === 'number' ? clampPct(p) : undefined;
+        }) as LevelHitOdds['tp'],
+    };
+};
+
+export const extractFinalVerdictText = (
+    debateTurns?: DebateTurn[],
+    strategy?: string,
+): string => {
+    const moderatorTurns = (debateTurns ?? []).filter(t => t.speaker === 'Moderator' && t.text?.trim());
+    const last = stripPlanTags(moderatorTurns[moderatorTurns.length - 1]?.text ?? '');
+    if (last && !looksLikeClarificationDump(last)) return last;
+
+    const cleanedStrategy = strategy
+        && !strategy.startsWith('Parsing Error:')
+        && !strategy.startsWith('Connection Error:')
+        ? stripPlanTags(strategy)
+        : '';
+    if (cleanedStrategy && !looksLikeClarificationDump(cleanedStrategy)) return cleanedStrategy;
+    return '';
+};
+
+/**
+ * One markdown card: moderator verdict + structured Setup/Levels plan.
+ * Clarification questions never land here.
+ */
+export const buildTradingSignalMarkdown = (
+    analysis: TradeAnalysis,
+    debateTurns?: DebateTurn[],
+): string => {
+    const verdict = extractFinalVerdictText(debateTurns, analysis.strategy);
+    const alreadyHasPlan = /(?:\*\*(?:Setup|Levels|FINAL TRADE PLAN)\*\*|FINAL TRADE PLAN)/i.test(verdict);
+    if (verdict && alreadyHasPlan) return verdict;
+
+    const plan = buildAnalysisMarkdown({ ...analysis, strategy: '' });
+    if (!verdict) return plan;
+    return `**Verdict**\n\n${verdict}\n\n${plan}`.trim();
+};
 
 export const recalculateAnalysisMetrics = (analysis: TradeAnalysis, leverage: number): TradeAnalysis => {
     if (!analysis) return sanitizeTradeAnalysis(null);

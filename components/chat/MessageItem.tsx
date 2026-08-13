@@ -6,10 +6,11 @@ import MarkdownContent from '../shared/MarkdownContent';
 import LiveMarketDataView from '../market/LiveMarketDataView';
 import EnsembleProgressChat from '../analysis/EnsembleProgressChat';
 import DebateChat from '../analysis/DebateChat';
+import TradingSignalCard from '../analysis/TradingSignalCard';
 import AnalysisDetails from './AnalysisDetails';
 import ThinkingModal from '../analysis/ThinkingModal';
 import TodayReassessmentPanel from './TodayReassessmentPanel';
-import { buildAnalysisMarkdown, buildSupplementMarkdown } from '../../utils/analysisUtils';
+import { buildSupplementMarkdown } from '../../utils/analysisUtils';
 import { AutopilotResolution } from '../../services/ui/OutcomeAutopilotService';
 
 // Helper to validate URLs (XSS prevention)
@@ -209,22 +210,8 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
         .replace(/\n{3,}/g, '\n\n')
         .trim();
 
-    // The FULL plan markdown. Ensemble messages carry a stub text ("The
-    // ensemble has concluded its debate.") — the real **FINAL TRADE PLAN**
-    // block lives in analysis.strategy (the moderator's markdown verdict,
-    // tags stripped). When that text is missing or came back as a parse
-    // error (custom prompt overrides can break the parser), the parsed
-    // JSON fields are re-organized into the same markdown layout so the
-    // plan ALWAYS renders.
-    const planMarkdown = React.useMemo(() => {
-        const s = message.analysis?.strategy;
-        if (s && !s.startsWith('Parsing Error:') && !s.startsWith('Connection Error:')) return s;
-        if (message.analysis) {
-            const built = buildAnalysisMarkdown(message.analysis);
-            if (built) return built;
-        }
-        return displayContent;
-    }, [message.analysis, displayContent]);
+    // Structured Trading signal card (levels grid + verdict + plan).
+    // Fallback to the raw display text only when there is no analysis object.
 
     // Accuracy-mode verification note — the stub sentence plus an optional
     // note ("Plan verified by the accuracy pass."); show only the note.
@@ -421,42 +408,15 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                         </button>
                                     </div>
                                 </div>
-                            ) : message.analysis && planMarkdown.trim() ? (
-                                // Analysis messages render the FINAL TRADE PLAN
-                                // in the Trading-workspace presentation: one
-                                // carded bubble with proper spacing, a label
-                                // row, the plan as RENDERED markdown, and the
-                                // harness-side supplement in the same box.
-                                <div className="rounded-2xl border border-white/5 bg-zinc-900/80 p-4 sm:p-5 shadow-lg">
-                                    <div className="flex items-center gap-2 mb-3">
-                                        <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
-                                        <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500">Trading signal</span>
-                                        {/* Regenerate the latest analysis with the same
-                                            prompt + chart (appends a fresh signal; the
-                                            old one stays for comparison). */}
-                                        {context.latestMessageId === message.id && onReRunAnalysis && (
-                                            <button
-                                                type="button"
-                                                onClick={() => onReRunAnalysis(message.id)}
-                                                className="ml-auto text-[10px] font-bold uppercase tracking-widest text-zinc-500 hover:text-cyan-400 transition-colors"
-                                                title="Adds a fresh analysis with the same prompt + chart; the old card is kept for comparison"
-                                            >
-                                                ↻ Regenerate
-                                            </button>
-                                        )}
-                                    </div>
-                                    <div className="prose-sm">
-                                        <MarkdownContent content={planMarkdown} />
-                                        {supplementMarkdown && (
-                                            <div className="mt-4 pt-4 border-t border-white/5">
-                                                <MarkdownContent content={supplementMarkdown} />
-                                            </div>
-                                        )}
-                                    </div>
-                                    {ensembleNote && (
-                                        <p className="mt-3 pt-3 border-t border-white/5 text-[11px] text-zinc-500 leading-relaxed">{ensembleNote}</p>
-                                    )}
-                                </div>
+                            ) : message.analysis ? (
+                                <TradingSignalCard
+                                    analysis={message.analysis}
+                                    debateTurns={message.debateTurns}
+                                    isLatest={context.latestMessageId === message.id}
+                                    onReRun={onReRunAnalysis ? () => onReRunAnalysis(message.id) : undefined}
+                                    supplementMarkdown={supplementMarkdown}
+                                    ensembleNote={ensembleNote}
+                                />
                             ) : (
                                 <div className={`prose prose-invert max-w-none whitespace-pre-wrap leading-[1.65] overflow-x-auto min-w-0 ${message.isPostMortem ? 'text-zinc-100' : 'text-zinc-200'}`} style={{ fontSize: '15px' }}>
                                     <SmoothText text={displayContent} animate={message.role === MessageRole.AI && context.latestMessageId === message.id && !message.analysis} />

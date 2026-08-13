@@ -69,6 +69,11 @@ interface ChatInputProps {
     // Stored app-wide (Preferences); falls back to the first ready model.
     selectedChatModel: string;
     setSelectedChatModel: (modelId: string) => void;
+    /** Debate moderator — picked in the Team modal alongside the analysts. */
+    moderatorProviderId?: string;
+    moderatorModel?: string;
+    onSetModeratorProvider?: (providerId: string) => void;
+    onSetModeratorModel?: (modelId: string) => void;
     /**
      * Regime-matched provider win rates for the CURRENT market regime —
      * feeds the lens auto-assign so routing prefers who wins in THIS
@@ -118,6 +123,10 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
     selectedChatModel,
     regimeProviderStats,
     setSelectedChatModel,
+    moderatorProviderId,
+    moderatorModel,
+    onSetModeratorProvider,
+    onSetModeratorModel,
     // Fresh-session layout: static centered input until the first message
     // exists, then it docks at the bottom.
     centered = false,
@@ -392,6 +401,10 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                 regimeProviderStats={regimeProviderStats}
                 ensembleModelSelection={ensembleModelSelection}
                 setEnsembleModelSelection={setEnsembleModelSelection}
+                moderatorProviderId={moderatorProviderId}
+                moderatorModel={moderatorModel}
+                onSetModeratorProvider={onSetModeratorProvider}
+                onSetModeratorModel={onSetModeratorModel}
                 onClose={() => setIsTeamModalOpen(false)}
                 onEditLensPrompt={openLensPromptEditor}
                 onEditNormalPrompt={() => setPromptEditor({ kind: 'normal' })}

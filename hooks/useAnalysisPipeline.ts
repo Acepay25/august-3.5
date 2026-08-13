@@ -2251,9 +2251,15 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                         // the parser itself falls back to free-form prose.
                         const moderatorErrorMatch = fullResponseText.match(/<MODERATOR_ERROR>([\s\S]*?)<\/MODERATOR_ERROR>/);
                         const debateEnd = fullResponseText.match(/<\/?DEBATE_END>/i);
+                        // Prefer the last moderator turn (the verdict). Concatenating
+                        // every moderator round glues clarification questions onto
+                        // the Trading signal card.
+                        const lastModeratorTurn = [...debateTurnsRef.current]
+                            .reverse()
+                            .find(t => t.speaker === 'Moderator')?.text ?? '';
                         const candidate = debateEnd && debateEnd.index !== undefined
                             ? fullResponseText.slice(debateEnd.index + debateEnd[0].length)
-                            : fullResponseText;
+                            : (lastModeratorTurn || fullResponseText);
                         try {
                             const plan = parseMarkdownTradePlan(candidate);
                             if (!plan || (!plan.coinName && !plan.direction && !plan.entry && !plan.stopLoss && !plan.takeProfit)) {
@@ -2286,7 +2292,11 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                         // dead "Unknown Asset · Neutral" card. The verdict
                         // prose itself becomes the card's strategy text (tags
                         // stripped — the JSON schema never renders).
-                        const prosePlan = parseProseTradePlan(fullResponseText);
+                        const lastModeratorTurn = [...debateTurnsRef.current]
+                            .reverse()
+                            .find(t => t.speaker === 'Moderator')?.text ?? '';
+                        const rescueSource = lastModeratorTurn || fullResponseText;
+                        const prosePlan = parseProseTradePlan(rescueSource);
                         const fallbackStrategy = isModeratorError
                             ? `Connection Error: ${errorMessage}. Please try again.`
                             : 'Parsing Error: The moderator failed to generate a valid JSON plan. Please review the debate transcript above for the consensus.';
@@ -2299,7 +2309,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                             stopLoss: prosePlan?.stopLoss,
                             takeProfit: prosePlan?.takeProfit ? [{ price: prosePlan.takeProfit }] : undefined,
                             strategy: prosePlan
-                                ? (stripPlanTags(fullResponseText).slice(0, 3000) || fallbackStrategy)
+                                ? (stripPlanTags(rescueSource).slice(0, 3000) || fallbackStrategy)
                                 : fallbackStrategy,
                         });
                     }

@@ -427,7 +427,7 @@ export async function analyzeTradingView(
 
       **SYNTHESIS & OUTPUT (READABLE TEXT ONLY):**
 
-      ${rolePrompt ? '' : `**FORMATTING RULE (MANDATORY):** Your 'thoughtProcess' MUST follow this EXACT structure with separator lines:
+      ${rolePrompt ? '' : `**FORMATTING RULE (MANDATORY):** Structure the analysis using these sections with separator lines:
 
       ────────────────────────────────────────
       SECTION 1 — MULTI-TIMEFRAME STRUCTURE

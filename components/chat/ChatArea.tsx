@@ -92,6 +92,11 @@ interface ChatAreaProps {
     // Casual-chat model (ensemble off)
     selectedChatModel: string;
     setSelectedChatModel: (modelId: string) => void;
+    /** Debate moderator — forwarded to the Team modal. */
+    moderatorProviderId?: string;
+    moderatorModel?: string;
+    onSetModeratorProvider?: (providerId: string) => void;
+    onSetModeratorModel?: (modelId: string) => void;
     // Hybrid Intelligence Props
     hybridData?: any;
     isHybridLoading?: boolean;
@@ -179,6 +184,10 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     selectedChatModel,
     regimeProviderStats,
     setSelectedChatModel,
+    moderatorProviderId,
+    moderatorModel,
+    onSetModeratorProvider,
+    onSetModeratorModel,
     hybridData,
     isHybridLoading,
     hybridConnectionStatus,
@@ -332,6 +341,11 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         setIsEnsembleEnabled,
         selectedChatModel,
         setSelectedChatModel,
+        regimeProviderStats,
+        moderatorProviderId,
+        moderatorModel,
+        onSetModeratorProvider,
+        onSetModeratorModel,
     }), [
         images, removeImage, leverageRef, setIsLeverageDropdownOpen,
         leverageInput, handleLeverageChange, handleLeverageBlur,
@@ -345,6 +359,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         setCustomEnsemblePrompt, customLensPrompts, setCustomLensPrompts,
         isEnsembleEnabled, setIsEnsembleEnabled, selectedChatModel,
         setSelectedChatModel, regimeProviderStats,
+        moderatorProviderId, moderatorModel, onSetModeratorProvider, onSetModeratorModel,
     ]);
 
     return (

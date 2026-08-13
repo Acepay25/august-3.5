@@ -109,7 +109,7 @@ const TurnThinking: React.FC<{ content: string; autoOpen: boolean }> = ({ conten
     const userInteractedRef = useRef(false);
     return (
         <details
-            className="mt-2.5 rounded-lg border border-white/10 bg-black/20 group"
+            className="mb-2.5 rounded-lg border border-white/10 bg-black/20 group"
             open={open || (autoOpen && !userInteractedRef.current)}
             onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}
         >
@@ -550,12 +550,15 @@ const DebateChat: React.FC<DebateChatProps> = ({
                                             </div>
                                             {isVerdict && <span className="ml-auto rounded border border-cyan-400/20 bg-cyan-400/10 px-1.5 py-0.5 text-[10px] font-medium text-cyan-300">Verdict</span>}
                                         </div>
-                                        <div className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-300">{turn.speaker === 'Moderator' ? segment.text : cleanSpeakerPrefix(segment.text, turn.speaker)}</div>
-                                        {isSpeakerStreaming && (
-                                            <span className="mt-1 inline-block h-4 w-1.5 animate-pulse bg-cyan-400 align-middle" aria-hidden="true" />
-                                        )}
                                         {segmentIndex === 0 && turnReasoning && (
                                             <TurnThinking content={turnReasoning} autoOpen={isSpeakerStreaming} />
+                                        )}
+                                        <MarkdownContent
+                                            content={turn.speaker === 'Moderator' ? segment.text : cleanSpeakerPrefix(segment.text, turn.speaker)}
+                                            className="text-sm leading-relaxed text-zinc-300"
+                                        />
+                                        {isSpeakerStreaming && (
+                                            <span className="mt-1 inline-block h-4 w-1.5 animate-pulse bg-cyan-400 align-middle" aria-hidden="true" />
                                         )}
                                     </div>
                                 </div>

@@ -283,62 +283,16 @@ export function getReadyProviders(configs: ProviderConfig[]): ProviderConfig[] {
  * Returns the model ids, deduped and in the provider's order. Throws
  * user-safe errors (network / HTTP status / unparseable / empty).
  */
-export async function discoverProviderModels(config: {
-    baseUrl: string;
-    apiKey: string;
-    apiFormat: ApiFormat;
-}): Promise<string[]> {
-    const base = (config.baseUrl || '').trim().replace(/\/+$/, '');
-    const key = (config.apiKey || '').trim();
-    if (!base) throw new Error('Base URL is required to discover models.');
-    if (!key) throw new Error('API key is required to discover models.');
-
-    const isGemini = /generativelanguage/i.test(base);
-    const isAnthropic = config.apiFormat === 'messages' && !isGemini;
-    const url = isGemini ? `${base}/models?key=${encodeURIComponent(key)}` : `${base}/models`;
-
-    const headers: Record<string, string> = {};
-    if (isAnthropic) {
-        headers['x-api-key'] = key;
-        headers['anthropic-version'] = '2023-06-01';
-    } else if (!isGemini) {
-        headers['Authorization'] = `Bearer ${key}`;
-    }
-
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 15000);
-    let res: Response;
+function parseDiscoverErrorBody(raw: string): string {
     try {
-        res = await fetch(url, { headers, signal: controller.signal });
-    } catch (e) {
-        if ((e as Error)?.name === 'AbortError') {
-            throw new Error('Model discovery timed out — check the base URL.');
-        }
-        throw new Error('Could not reach the provider — check the base URL and your network.');
-    } finally {
-        clearTimeout(timer);
-    }
-
-    if (!res.ok) {
-        let detail = '';
-        try {
-            const body = await res.json();
-            detail = body?.error?.message ?? body?.message ?? '';
-        } catch { /* unreadable body — fall through to the status message */ }
-        throw new Error(
-            detail
-                ? `Discovery failed (HTTP ${res.status}): ${detail}`
-                : `Discovery failed (HTTP ${res.status}) — check the API key and base URL.`
-        );
-    }
-
-    let body: unknown;
-    try {
-        body = await res.json();
+        const parsed = raw ? JSON.parse(raw) as { error?: { message?: string }; message?: string } : {};
+        return (parsed?.error?.message || parsed?.message || '').trim();
     } catch {
-        throw new Error('The provider returned an unreadable response.');
+        return '';
     }
+}
 
+function parseDiscoveredModelIds(body: unknown): string[] {
     const ids: string[] = [];
     const data = (body as { data?: unknown[] })?.data;
     if (Array.isArray(data)) {
@@ -358,9 +312,107 @@ export async function discoverProviderModels(config: {
             }
         }
     }
+    return [...new Set(ids)];
+}
 
+function throwDiscoverHttpError(status: number, rawBody: string): never {
+    const detail = parseDiscoverErrorBody(rawBody);
+    throw new Error(
+        detail
+            ? `Discovery failed (HTTP ${status}): ${detail}`
+            : `Discovery failed (HTTP ${status}) — check the API key and base URL.`
+    );
+}
+
+/**
+ * Fetch GET {baseUrl}/models without CORS. Chat already goes through Electron
+ * IPC / the Vite dev proxy; discovery used to call the provider from the
+ * renderer and failed with a generic "could not reach" on every provider
+ * that doesn't send Access-Control-Allow-Origin.
+ */
+async function fetchDiscoverPayload(config: {
+    baseUrl: string;
+    apiKey: string;
+    apiFormat: ApiFormat;
+}): Promise<{ status: number; body: string }> {
+    const electronAPI = typeof window !== 'undefined' ? window.electronAPI : undefined;
+    if (electronAPI?.isElectron && electronAPI.discoverModels) {
+        const result = await electronAPI.discoverModels(config);
+        if (typeof result?.body === 'string') {
+            return { status: result.status ?? (result.ok ? 200 : 0), body: result.body };
+        }
+        throw new Error(result?.message || 'Could not reach the provider — check the base URL and your network.');
+    }
+
+    const useDevProxy = Boolean(import.meta.env.DEV)
+        && !import.meta.env.VITEST
+        && typeof window !== 'undefined'
+        && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+    if (useDevProxy) {
+        const response = await fetch('/__provider_proxy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ discover: true, config }),
+        });
+        const result = await response.json() as { ok?: boolean; status?: number; body?: string; message?: string };
+        if (typeof result.body === 'string') {
+            return { status: result.status ?? response.status, body: result.body };
+        }
+        throw new Error(result.message || 'Could not reach the provider — check the base URL and your network.');
+    }
+
+    const base = assertValidProviderUrl(config.baseUrl);
+    const key = (config.apiKey || '').trim();
+    const isGemini = /generativelanguage/i.test(base);
+    const isAnthropic = config.apiFormat === 'messages' && !isGemini;
+    const url = isGemini ? `${base}/models?key=${encodeURIComponent(key)}` : `${base}/models`;
+    const headers: Record<string, string> = {};
+    if (isAnthropic) {
+        headers['x-api-key'] = key;
+        headers['anthropic-version'] = '2023-06-01';
+    } else if (!isGemini && key && key !== 'not-needed') {
+        headers.Authorization = `Bearer ${key}`;
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    try {
+        const res = await fetch(url, { headers, signal: controller.signal });
+        const body = await res.text();
+        return { status: res.status, body };
+    } catch (e) {
+        if ((e as Error)?.name === 'AbortError') {
+            throw new Error('Model discovery timed out — check the base URL.');
+        }
+        throw new Error('Could not reach the provider — check the base URL and your network.');
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+export async function discoverProviderModels(config: {
+    baseUrl: string;
+    apiKey: string;
+    apiFormat: ApiFormat;
+}): Promise<string[]> {
+    const key = (config.apiKey || '').trim();
+    if (!(config.baseUrl || '').trim()) throw new Error('Base URL is required to discover models.');
+    if (!key) throw new Error('API key is required to discover models.');
+    assertValidProviderUrl(config.baseUrl);
+
+    const { status, body } = await fetchDiscoverPayload(config);
+    if (status < 200 || status >= 300) throwDiscoverHttpError(status, body);
+
+    let parsed: unknown;
+    try {
+        parsed = body ? JSON.parse(body) : {};
+    } catch {
+        throw new Error('The provider returned an unreadable response.');
+    }
+
+    const ids = parseDiscoveredModelIds(parsed);
     if (ids.length === 0) {
         throw new Error('The provider returned no models — its /models endpoint may be unsupported.');
     }
-    return [...new Set(ids)];
+    return ids;
 }

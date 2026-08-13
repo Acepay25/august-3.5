@@ -123,9 +123,8 @@ Find unique correlations, hidden patterns, or anomalies that standard rules migh
 - If you see a setup, describe it in your own words.
 - If you see risk, explain it naturally.
 
-**MANDATORY THOUGHT PROCESS FORMAT:**
-Your 'thoughtProcess' should be written as a detailed narrative analysis.
-Write it as flowing paragraphs that a professional trader would present. You may use bullet points or numbered lists if helpful for structure, but do not feel forced to use them. Focus on clarity and depth.
+**ANALYSIS STRUCTURE:**
+Write a detailed narrative analysis as flowing paragraphs a professional trader would present. Bullet points or numbered lists are fine if they help structure, but do not force them. Focus on clarity and depth.
 
 Recommended structure (flexible):
 
@@ -182,7 +181,7 @@ Recommended structure (flexible):
     "Crowded Trade Warning: Funding Rate is X% and L/S Ratio is X. [Neutral/Crowded/Extreme warning]."
 
 **OUTPUT REQUIREMENT:**
-While your reasoning is free-form narrative, you **MUST** still present the final actionable trade plan clearly — direction, entry zone, stop loss, take-profit targets, confidence, and risks — as natural prose. No JSON keys, braces, arrays, or XML tags.
+Present the final actionable trade plan clearly — direction, entry zone, stop loss, take-profit targets, confidence, and risks — as natural prose. No JSON keys, braces, arrays, or XML tags.
 `;
 
 
@@ -389,8 +388,9 @@ If setup exists, output:
 - Direction
 - Entry Zone (numeric only)
 - Stop Loss (numeric)
-- TP1 / TP2 / TP3 (numeric)
-- Risk:Reward
+- TP1 / TP2 / TP3 (numeric — all three required)
+- SL hit % and TP1 / TP2 / TP3 hit %
+- Risk:Reward (to TP1; note R:R to TP2 and TP3)
 - Invalidation conditions
 - Re-entry conditions (if applicable)
 
@@ -631,7 +631,6 @@ You are a CRYPTO FUTURES analysis engine.
 
 **OUTPUT FORMAT (JSON ONLY):**
 {
-  "thoughtProcess": "Brief analysis...",
   "analysis": {
     "coinName": "BTCUSDT",
     "direction": "Long|Short",
