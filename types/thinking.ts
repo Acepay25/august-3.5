@@ -11,6 +11,9 @@ import { TradeOutcome } from './enums';
 
 export type ThinkingRole = 'analyst' | 'moderator' | 'debate_turn';
 
+/** Journal Think-tab bucket for an analyst's stored reasoning. */
+export type AnalystLens = 'macro' | 'technical' | 'risk' | 'normal';
+
 export interface ThinkingRecord {
   /** Unique record ID */
   id: string;
@@ -38,6 +41,12 @@ export interface ThinkingRecord {
   debateTurnIndex?: number;
   /** For debate turns: who spoke ('Gemini' | 'DeepSeek' | 'Moderator' | etc.) */
   debateTurnSpeaker?: string;
+  /**
+   * Journal Think-tab bucket. Accuracy + lens runs file Macro / Technical / Risk;
+   * normal-mode ensemble models share `normal`. Omitted on older records —
+   * `resolveAnalystLens` infers from speaker names.
+   */
+  analystLens?: AnalystLens;
   /** Confidence level assigned: 'High' | 'Medium' | 'Low' | 'Avoid' */
   confidence?: string;
   /** Probability assigned (0-100) */
@@ -99,6 +108,7 @@ export interface ThinkingExportRow {
   rawReasoning?: string;
   messageId?: string;
   analysis: unknown;
+  analystLens?: AnalystLens;
   confidence?: string;
   probability?: number;
   outcome?: TradeOutcome;

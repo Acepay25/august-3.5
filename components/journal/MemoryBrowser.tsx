@@ -206,7 +206,7 @@ const MemoryBrowser: React.FC<MemoryBrowserProps> = ({
 
                     {/* Edit note */}
                     <p className="text-[10px] text-zinc-600 text-center">
-                        Editing happens in Settings → Personal edge
+                        Editing happens in Settings → Memory
                     </p>
                 </div>
             </div>

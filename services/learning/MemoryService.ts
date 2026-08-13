@@ -91,7 +91,23 @@ export const summarizeTrade = async (
         console.log('[MemoryService] Algorithmic Summary DISABLED by user. Using AI Model for insight generation.');
     }
 
-    console.log(`[MemoryService] summarizeTrade using provider: ${config.name}`);
+    const selectedModel = (modelName || config?.selectedModel || '').trim();
+    const insightConfig: ProviderConfig = {
+        ...config,
+        selectedModel,
+    };
 
-    return genericSummarizeTrade(config, trade);
+    if (!insightConfig.baseUrl?.trim() || !selectedModel) {
+        console.warn('[MemoryService] Insight provider/model incomplete; using algorithmic summary');
+        return generateAlgorithmicTradeSummary(trade);
+    }
+
+    console.log(`[MemoryService] summarizeTrade using provider: ${insightConfig.name} · ${selectedModel}`);
+
+    try {
+        return await genericSummarizeTrade(insightConfig, trade);
+    } catch (error) {
+        console.error(`[MemoryService] AI insight failed for ${insightConfig.name}, falling back to algorithmic:`, error);
+        return generateAlgorithmicTradeSummary(trade);
+    }
 };

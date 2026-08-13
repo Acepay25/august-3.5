@@ -806,6 +806,56 @@ export const looksLikeClarificationDump = (text: string): boolean => {
     return labels >= 2 && questions >= 2;
 };
 
+const ANALYST_ROLE_MENTION_RE = /\b(?:macro(?:\s*&\s*volatility)?\s+analyst|technical\s+analyst|risk(?:\s*&\s*execution)?(?:\s+specialist)?)\b/gi;
+
+/**
+ * Last-round moderator essays that recap the debate (role-by-role, round
+ * numbers, a "Moderator Verdict" heading). Those belong in DebateChat, not
+ * in the trading-signal Strategy block.
+ */
+export const looksLikeModeratorVerdictDump = (text: string): boolean => {
+    if (!text) return false;
+    if (/\bmoderator\s+verdict\b/i.test(text)) return true;
+    const roleHits = text.match(ANALYST_ROLE_MENTION_RE)?.length ?? 0;
+    if (roleHits >= 2) return true;
+    if (text.length > 600 && /\brounds?\s+\d/i.test(text)) return true;
+    return false;
+};
+
+const cleanStrategyCandidate = (text?: string): string => {
+    if (!text) return '';
+    if (text.startsWith('Parsing Error:') || text.startsWith('Connection Error:')) return '';
+    const cleaned = stripPlanTags(text).replace(/^\s*\*{0,2}\s*moderator\s+verdict\*{0,2}\s*[:—-]?\s*/i, '').trim();
+    if (!cleaned || looksLikeClarificationDump(cleaned) || looksLikeModeratorVerdictDump(cleaned)) return '';
+    return cleaned;
+};
+
+/**
+ * Short plan/strategy copy for the signal card. Never the full moderator
+ * verdict recap — that lives in the debate transcript.
+ */
+export const extractSignalStrategyText = (
+    analysis: TradeAnalysis,
+    debateTurns?: DebateTurn[],
+): string => {
+    const fromAnalysis = cleanStrategyCandidate(analysis.strategy);
+    if (fromAnalysis) {
+        const parsed = parseMarkdownTradePlan(fromAnalysis);
+        if (parsed?.strategy && !looksLikeModeratorVerdictDump(parsed.strategy)) {
+            return parsed.strategy.trim();
+        }
+        const split = fromAnalysis.split(/\n\s*(?:\*{0,2}\s*)?FINAL TRADE PLAN(?:\*{0,2})?\s*\n/i);
+        const prose = (split[0] || '').trim();
+        if (prose && prose.length <= 500 && !looksLikeModeratorVerdictDump(prose)) return prose;
+        return '';
+    }
+    const last = extractFinalVerdictText(debateTurns, analysis.strategy);
+    const split = last.split(/\n\s*(?:\*{0,2}\s*)?FINAL TRADE PLAN(?:\*{0,2})?\s*\n/i);
+    const prose = (split[0] || '').replace(/^\s*\*{0,2}Verdict\*{0,2}\s*\n+/i, '').trim();
+    if (prose && prose.length <= 500 && !looksLikeModeratorVerdictDump(prose)) return prose;
+    return '';
+};
+
 /**
  * Last moderator turn that is actually a verdict (not a clarification dump).
  * Falls back to cleaned strategy text when debate turns are missing.
@@ -868,21 +918,65 @@ export const extractFinalVerdictText = (
     return '';
 };
 
+export const formatInvalidationLine = (analysis: TradeAnalysis): string => {
+    const first = analysis.invalidationCriteria?.[0];
+    if (!first) return '';
+    const condition = (first.condition || '').trim();
+    const level = (first.level || '').trim();
+    if (condition && level && !condition.includes(level)) return `${condition} (${level})`;
+    return condition || level || (first.note || '').trim();
+};
+
+export const signalDirectionLabel = (direction?: string): string => {
+    if (direction === 'Long') return 'Buy';
+    if (direction === 'Short') return 'Sell';
+    return direction || 'Neutral';
+};
+
 /**
- * One markdown card: moderator verdict + structured Setup/Levels plan.
- * Clarification questions never land here.
+ * Compact ticket markdown for the trading signal — levels, hit odds,
+ * invalidation, optional one-line why. Never the moderator recap, never
+ * the full analysis dump (that lives in buildAnalysisMarkdown / supplement).
  */
 export const buildTradingSignalMarkdown = (
     analysis: TradeAnalysis,
     debateTurns?: DebateTurn[],
 ): string => {
-    const verdict = extractFinalVerdictText(debateTurns, analysis.strategy);
-    const alreadyHasPlan = /(?:\*\*(?:Setup|Levels|FINAL TRADE PLAN)\*\*|FINAL TRADE PLAN)/i.test(verdict);
-    if (verdict && alreadyHasPlan) return verdict;
+    const dir = signalDirectionLabel(analysis.direction);
+    const odds = resolveLevelHitOdds(analysis, debateTurns);
+    const lines: string[] = [];
+    lines.push(`**Trading signal** · **${dir}** · **${analysis.confidence ?? '—'}**`);
+    if (analysis.coinName) lines.push(`Coin: **${analysis.coinName}**`);
+    lines.push('');
+    lines.push('**Levels**');
+    lines.push(`- Direction: **${dir}**`);
+    const entry = analysis.entryPoints?.[0]?.price;
+    if (entry) lines.push(`- Entry: **${entry}**`);
+    if (analysis.stopLoss) {
+        const hit = typeof odds.sl === 'number' ? ` · ${odds.sl}% hit` : '';
+        lines.push(`- Stop Loss: **${analysis.stopLoss}**${hit}`);
+    }
+    (analysis.takeProfit ?? []).slice(0, 3).forEach((tp, i) => {
+        const hit = typeof odds.tp[i] === 'number' ? ` · ${odds.tp[i]}% hit` : '';
+        lines.push(`- TP${i + 1}: **${tp.price}**${hit}`);
+    });
+    if (typeof analysis.rrRatio === 'number') lines.push(`- R:R: **1:${analysis.rrRatio.toFixed(1)}**`);
 
-    const plan = buildAnalysisMarkdown({ ...analysis, strategy: '' });
-    if (!verdict) return plan;
-    return `**Verdict**\n\n${verdict}\n\n${plan}`.trim();
+    const invalidation = formatInvalidationLine(analysis);
+    if (invalidation) {
+        lines.push('');
+        lines.push('**Invalidation**');
+        lines.push(`- ${invalidation}`);
+    }
+
+    const why = extractSignalStrategyText(analysis, debateTurns);
+    if (why) {
+        lines.push('');
+        lines.push('**Why**');
+        lines.push(why);
+    }
+
+    return lines.join('\n').trim();
 };
 
 export const recalculateAnalysisMetrics = (analysis: TradeAnalysis, leverage: number): TradeAnalysis => {

@@ -9,11 +9,15 @@ import * as MemoryService from '../services/learning/MemoryService';
 import { jobQueue, JobType } from '../services/infrastructure/JobQueueService';
 import { buildSeverityPostMortemContext } from '../services/learning/InsightExtractionService';
 import { appendDiaryEntry, syncRecurringMistakes, writeModelNote } from '../services/learning/MemoryFilesService';
+import { applySkillEvidence, maybeUpsertSkill, consolidateSkills } from '../services/learning/SkillMemoryService';
+import { applyOutcomeToRules } from '../services/learning/LearningRulesService';
 import { writeNotebookNoteFromPostMortem } from '../services/learning/NotebookWriterService';
 import { MAX_TRADE_SUMMARIES } from './useTradeLogging';
 import { saveThinkingBatch, buildThinkingRecordId, getThinkingTradeId } from '../services/infrastructure/ThinkingStoreService';
+import { lensFromSpeakerName } from '../utils/thinkingLens';
 import { ProviderConfig } from '../types/provider';
-import { conductPostMortem, summarizeTrade, conductTodayReassessment } from '../services/providers/GenericAnalysisService';
+import { conductPostMortem, conductTodayReassessment, writePostMortemMarkdownReport } from '../services/providers/GenericAnalysisService';
+import { extractPostMortemFinalReport } from '../utils/postMortemReport';
 import { fetchMarketData, normalizeSymbol } from '../services/analysis/MarketDataService';
 import { PriceAlertService } from '../services/ui/PriceAlertService';
 
@@ -49,6 +53,8 @@ export interface UsePostMortemParams {
     globalMemory: GlobalMemory | undefined;
     setGlobalMemory: (v: GlobalMemory | undefined) => void;
     memoryConfig: ProviderConfig | null;
+    memoryModel: string;
+    useAlgorithmicInsights: boolean;
     tradeSummaries: TradeSummary[];
     setTradeSummaries: (updater: (prev: TradeSummary[]) => TradeSummary[]) => void;
 
@@ -79,7 +85,7 @@ export const usePostMortem = (params: UsePostMortemParams) => {
         moderatorConfig, moderatorModel,
         finalTradeSummary, loggedTrades, loggedTradesRef, setLoggedTrades,
         globalMemory, setGlobalMemory,
-        memoryConfig,
+        memoryConfig, memoryModel,
         tradeSummaries, setTradeSummaries,
         setIsPostMortemInProgress, setIsLivePostMortemVisible,
         setLoadingMessage, setIsPostMortemTypingComplete,
@@ -148,6 +154,7 @@ export const usePostMortem = (params: UsePostMortemParams) => {
             { id: 'validation', title: 'Validating trade outcome', status: 'pending' },
             { id: 'analysis', title: 'Post-mortem analysis', status: 'pending' },
             { id: 'debate', title: 'Ensemble debate', status: 'pending' },
+            { id: 'report', title: 'Moderator final report', status: 'pending' },
         ]);
         setLoadingMessage("Thinking...");
         startStep('validation');
@@ -453,40 +460,57 @@ Please investigate this discrepancy in your analysis.
                     }
                 }
 
-                // Finalize Report Extraction
-                const reportStart = fullDebateText.match(/<FINAL_REPORT_START>/i);
-                const debateEnd = fullDebateText.match(/<\/DEBATE_END>/i);
-
-                if (reportStart) {
-                    const reportEnd = fullDebateText.match(/<\/FINAL_REPORT_END>/i);
-                    finalPostMortemReport = fullDebateText.slice(reportStart.index! + reportStart[0].length, reportEnd ? reportEnd.index : undefined).trim();
-                } else if (debateEnd) {
-                    const contentAfterDebate = fullDebateText.slice(debateEnd.index! + debateEnd[0].length).trim();
-                    if (!contentAfterDebate) {
-                        const lastPart = fullDebateText.slice(-2000);
-                        const headingMatch = lastPart.match(/(?:^|\n)\s*(?:[*_#]*)\s*FINAL REPORT\s*(?:[*_#]*)/i);
-                        if (headingMatch) {
-                            finalPostMortemReport = lastPart.slice(headingMatch.index! + headingMatch[0].length).trim();
-                        }
-                    } else {
-                        finalPostMortemReport = contentAfterDebate;
-                    }
-                    if (finalPostMortemReport) {
-                        finalPostMortemReport = finalPostMortemReport.replace(/^(?:[-=_*]*\s*)?(?:2\.\s*)?FINAL REPORT(?:[-=_*]*\s*)?/i, '').trim();
-                    }
-                } else {
-                    const headingMatch = fullDebateText.match(/(?:^|\n)\s*(?:[*_#]*)\s*FINAL REPORT\s*(?:[*_#]*)/i);
-                    if (headingMatch) {
-                        finalPostMortemReport = fullDebateText.slice(headingMatch.index! + headingMatch[0].length).trim();
-                    }
-                }
-
-                if (!finalPostMortemReport) {
-                    finalPostMortemReport = "Debate concluded, but final report format was missing. Please review the transcript above for details.";
-                }
+                finalPostMortemReport = extractPostMortemFinalReport(fullDebateText);
 
             } else {
                 finalPostMortemReport = results[0].result;
+            }
+
+            if (isRunStale(myRunId)) return;
+            completeStep('debate');
+            startStep('report');
+            setLoadingMessage('Moderator writing final report...');
+
+            const debateTranscript = (latestDebateTurns && latestDebateTurns.length > 0)
+                ? latestDebateTurns.map(t => `**${t.speaker}:** ${t.text}`).join('\n\n')
+                : '';
+            const analystReports = results
+                .map(r => `### ${r.provider}\n${r.result}`)
+                .join('\n\n');
+            const setupBrief = candidate.message.analysis
+                ? [
+                    `Asset: ${candidate.message.analysis.coinName || 'Unknown'}`,
+                    `Direction: ${candidate.message.analysis.direction}`,
+                    `Confidence: ${candidate.message.analysis.confidence}`,
+                    `Entry: ${(candidate.message.analysis.entryPoints || []).map(e => e.price).join(', ')}`,
+                    `SL: ${candidate.message.analysis.stopLoss}`,
+                    `TP: ${(candidate.message.analysis.takeProfit || []).map(t => t.price).join(', ')}`,
+                    `Strategy: ${candidate.message.analysis.strategy || ''}`,
+                ].join('\n')
+                : (candidate.message.text || '').slice(0, 1500);
+
+            try {
+                const reportConfig: ProviderConfig = {
+                    ...moderatorConfig,
+                    selectedModel: moderatorModel || moderatorConfig.selectedModel,
+                };
+                const markdownReport = await writePostMortemMarkdownReport(reportConfig, {
+                    outcome: String(candidate.outcome),
+                    setupBrief,
+                    analystReports,
+                    debateTranscript: debateTranscript || finalPostMortemReport,
+                    signal: currentAbortController.signal,
+                });
+                if (markdownReport.trim().length > 40) {
+                    finalPostMortemReport = markdownReport.trim();
+                }
+            } catch (reportError) {
+                console.warn('[PostMortem] Moderator markdown report failed; using debate extract:', reportError);
+            }
+
+            if (!finalPostMortemReport.trim()) {
+                finalPostMortemReport = results[0]?.result
+                    || 'Debate concluded, but the moderator report could not be generated.';
             }
 
             // Finalize Message Text
@@ -513,6 +537,7 @@ Please investigate this discrepancy in your analysis.
                         // Card linkage: post-mortem turns belong to the card
                         // the analysis message id resolves to.
                         messageId: candidate.message.id,
+                        analystLens: lensFromSpeakerName(turn.speaker) ?? 'normal',
                         createdAt: now,
                     }));
                     saveThinkingBatch(turnRecords).catch(err => {
@@ -527,7 +552,8 @@ Please investigate this discrepancy in your analysis.
                 ...m,
                 text: finalPostMortemReport,
                 isDebating: false,
-                postMortemDebateTurns: undefined, // Clear from message (now persisted in ThinkingStore)
+                debateTurns: latestDebateTurns ?? m.debateTurns,
+                postMortemDebateTurns: latestDebateTurns ?? m.postMortemDebateTurns,
                 // Keep captured chain of thought on the message — the
                 // moderator's debate reasoning plus each analyst's post-mortem
                 // reasoning (merging so pre-existing analysis reasoning is
@@ -567,26 +593,25 @@ Please investigate this discrepancy in your analysis.
                 // written to the chat + trade log above, so a failure here must
                 // never turn a completed post-mortem into "Post-Mortem Failed".
                 try {
-                    if (memoryConfig) {
-                        const summary = await MemoryService.summarizeTrade({ ...tradeToUpdate, postMortem: finalPostMortemReport }, memoryConfig.selectedModel, memoryConfig);
-                        // Re-check after the await — the user may have switched during summarizeTrade
-                        if (isRunStale(myRunId)) {
-                            console.log('[PostMortem] Discarding summary — user switched during summarizeTrade');
-                            return;
-                        }
-                        setTradeSummaries(prev => {
-                            const newSummary = { id: tradeToUpdate.id, summaryText: summary, timestamp: new Date().toISOString() };
-                            // Replace an existing summary for this trade — the
-                            // autopilot path already dedupes by id; this path
-                            // didn't, so both fired for the same trade and
-                            // Recent Insights showed duplicate cards.
-                            const updated = prev.some(s => s.id === tradeToUpdate.id)
-                                ? prev.map(s => s.id === tradeToUpdate.id ? newSummary : s)
-                                : [...prev, newSummary];
-                            return updated.slice(-MAX_TRADE_SUMMARIES);
-                        });
+                    if (isRunStale(myRunId)) {
+                        console.log('[PostMortem] Discarding summary — user switched during summarizeTrade');
+                        return;
+                    }
+                    setTradeSummaries(prev => {
+                        const newSummary = {
+                            id: tradeToUpdate.id,
+                            summaryText: finalPostMortemReport,
+                            timestamp: new Date().toISOString(),
+                        };
+                        const updated = prev.some(s => s.id === tradeToUpdate.id)
+                            ? prev.map(s => s.id === tradeToUpdate.id ? newSummary : s)
+                            : [...prev, newSummary];
+                        return updated.slice(-MAX_TRADE_SUMMARIES);
+                    });
 
-                        const newMemory = await MemoryService.updateGlobalMemory([{ ...tradeToUpdate, postMortem: finalPostMortemReport }], globalMemory, memoryConfig);
+                    const insightConfig = memoryConfig ?? moderatorConfig;
+                    if (insightConfig) {
+                        const newMemory = await MemoryService.updateGlobalMemory([{ ...tradeToUpdate, postMortem: finalPostMortemReport }], globalMemory, insightConfig);
                         // Re-check after the await
                         if (isRunStale(myRunId)) {
                             console.log('[PostMortem] Discarding global memory update — user switched');
@@ -594,7 +619,7 @@ Please investigate this discrepancy in your analysis.
                         }
                         setGlobalMemory(newMemory);
                     } else {
-                        console.warn('[PostMortem] No memory provider configured — skipping trade summary + global memory update (non-fatal).');
+                        console.warn('[PostMortem] No memory provider configured — skipping global memory update (non-fatal).');
                     }
                 } catch (memoryError) {
                     console.warn('[PostMortem] Memory/learning step failed (non-fatal):', memoryError);
@@ -622,6 +647,11 @@ Please investigate this discrepancy in your analysis.
                     const notebookUser = localStorage.getItem('last_active_user') || 'default';
                     await appendDiaryEntry({ ...tradeToUpdate, postMortem: finalPostMortemReport }, notebookUser);
                     await syncRecurringMistakes(loggedTradesRef.current, notebookUser);
+                    const closed = { ...tradeToUpdate, postMortem: finalPostMortemReport };
+                    await applySkillEvidence(closed, notebookUser);
+                    await maybeUpsertSkill(closed, loggedTradesRef.current, notebookUser);
+                    await consolidateSkills(notebookUser);
+                    applyOutcomeToRules(closed);
                 } catch (notebookError) {
                     console.warn('[TraderNotebook] Memory-file sync failed (non-fatal):', notebookError);
                 }
@@ -680,6 +710,7 @@ Please investigate this discrepancy in your analysis.
                 // if typing-complete never fires (e.g. all analysts failed).
                 setIsLivePostMortemVisible(false);
                 completeStep('debate');
+                completeStep('report');
                 setAnalysisSteps(prev => prev.map(s => s.status === 'running'
                     ? { ...s, status: postMortemSucceeded ? ('complete' as const) : ('error' as const), endTime: Date.now() }
                     : s));

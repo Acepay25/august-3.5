@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { recalculateAnalysisMetrics, parseProseTradePlan, parseMarkdownTradePlan, tradePlanToAnalysis, stripPlanTags, buildAnalysisMarkdown, buildSupplementMarkdown, buildTradingSignalMarkdown, resolveLevelHitOdds } from '../utils/analysisUtils';
+import { recalculateAnalysisMetrics, parseProseTradePlan, parseMarkdownTradePlan, tradePlanToAnalysis, stripPlanTags, buildAnalysisMarkdown, buildSupplementMarkdown, buildTradingSignalMarkdown, resolveLevelHitOdds, extractSignalStrategyText, looksLikeModeratorVerdictDump } from '../utils/analysisUtils';
 import { MASTER_TRADE_PLAN_MARKDOWN } from '../constants/schemas';
 
 describe('analysisUtils', () => {
@@ -472,32 +472,58 @@ Confidence: High. The sweep-reclaim pattern aligns across 15m and 1h.`;
       strategy: 'Macro: You cite 1H HH/HL at $64,010 but 4H bearish. What exact 1H BOS/CHoCH price confirms Family B long, and what level invalidates?\n\nTechnical: You claim 15m LH/LL and 4H early uptrend. Cite exact prices?\n\nRisk: You demand exact entry/SL/TP. What are your proposed short levels?',
     };
 
-    it('ignores clarification-round questions stored on strategy', () => {
+    it('renders a compact ticket: levels, odds, no moderator recap', () => {
       const md = buildTradingSignalMarkdown(analysis);
+      expect(md).toContain('**Trading signal**');
+      expect(md).toContain('**Sell**');
+      expect(md).toContain('**Levels**');
+      expect(md).toContain('Entry: **63710**');
+      expect(md).toContain('Stop Loss: **64200**');
       expect(md).not.toContain('What exact 1H BOS');
-      expect(md).toContain('**Setup**');
+      expect(md).not.toContain('**Setup**');
+      expect(md).not.toContain('**Market Conditions**');
+    });
+
+    it('does not prepend a moderator verdict recap onto the plan', () => {
+      const md = buildTradingSignalMarkdown(analysis, [
+        { speaker: 'Moderator', round: 4, text: 'Macro: What exact 1H BOS?\nTechnical: Cite 15m highs?\nRisk: What SL?' },
+        { speaker: 'Moderator', round: 6, text: '**MODERATOR VERDICT** Direction: Long, based on the Technical Analyst and the Risk & Execution Specialist. The Macro & Volatility Analyst stayed neutral.\n\n**FINAL TRADE PLAN**\n- Direction: Long' },
+      ]);
+      expect(md).not.toContain('MODERATOR VERDICT');
+      expect(md).not.toContain('Technical Analyst');
       expect(md).toContain('**Levels**');
       expect(md).toContain('Entry: **63710**');
     });
 
-    it('merges the last moderator verdict with the structured plan', () => {
-      const md = buildTradingSignalMarkdown(analysis, [
-        { speaker: 'Moderator', round: 4, text: 'Macro: What exact 1H BOS?\nTechnical: Cite 15m highs?\nRisk: What SL?' },
-        { speaker: 'Moderator', round: 6, text: 'Short BTCUSDT from the 4H rejection. Invalidation is a 1H close above 64200.' },
-      ]);
-      expect(md).toContain('**Verdict**');
-      expect(md).toContain('Short BTCUSDT from the 4H rejection');
-      expect(md).toContain('**Setup**');
-      expect(md).toContain('Entry: **63710**');
-      expect(md).not.toContain('What exact 1H BOS');
+    it('keeps a short strategy line without a verdict dump', () => {
+      const md = buildTradingSignalMarkdown({
+        ...analysis,
+        strategy: 'Fade the 4H rejection if 15m stays below 63710.',
+      });
+      expect(md).toContain('Fade the 4H rejection');
+      expect(md).toContain('**Why**');
+      expect(md).toContain('**Levels**');
     });
 
-    it('keeps a verdict that already contains the plan block', () => {
-      const md = buildTradingSignalMarkdown(analysis, [
-        { speaker: 'Moderator', round: 6, text: '**FINAL TRADE PLAN**\n- **Coin:** BTCUSDT\n- **Direction:** Short' },
-      ]);
-      expect(md).toContain('**FINAL TRADE PLAN**');
-      expect(md).not.toContain('**Verdict**');
+    it('includes invalidation when the plan has it', () => {
+      const md = buildTradingSignalMarkdown({
+        ...analysis,
+        invalidationCriteria: [{ level: '64200', condition: '1H close above rejection' }],
+      });
+      expect(md).toContain('**Invalidation**');
+      expect(md).toContain('1H close above rejection');
+    });
+  });
+
+  describe('extractSignalStrategyText', () => {
+    it('drops moderator verdict recaps', () => {
+      const text = extractSignalStrategyText({
+        direction: 'Long',
+        confidence: 'Avoid',
+        strategy: '**MODERATOR VERDICT** Direction: Long, based on the Technical Analyst’s sweep and the Risk & Execution Specialist’s mean-reversion read.',
+      } as any);
+      expect(text).toBe('');
+      expect(looksLikeModeratorVerdictDump('**MODERATOR VERDICT** Long BTC')).toBe(true);
     });
   });
 

@@ -28,6 +28,7 @@ DECIDE:
 - "skip" — when this trade's lesson is already fully covered by an existing file, or nothing new or valuable emerged. Writing junk hurts future analyses.
 - "append" — when an existing file already covers this topic: your content becomes a NEW SECTION appended to that file (own ## heading, --- separated). Never repeat what that file already says.
 - "create" — when the topic is new: a new file. A new folder ONLY when the topic family has no home (market-conditions / rules / lessons are the usual homes). trader-diary is reserved for the automatic diary — never write there.
+- Never write to skills/ — the harness creates skills only after a cluster of similar trades has evidence.
 
 Content rules:
 - Actionable and TIMELESS: what to REPEAT or AVOID next time the same situation appears. No PnL, no dates, no trade ids.
@@ -51,6 +52,7 @@ DECIDE:
 - "skip" — when the request has no concrete, reusable lesson/rule/playbook, or it is already fully covered by an existing file.
 - "append" — when an existing file already covers this topic: your content becomes a NEW SECTION on that file (own ## heading, --- separated). Never repeat what that file already says.
 - "create" — when the topic is new: a new file. A new folder ONLY when the topic family has no home (market-conditions / rules / lessons are the usual homes). trader-diary is reserved for the automatic diary — never write there.
+- Never write to skills/ — the harness creates skills only after a cluster of similar trades has evidence.
 
 Content rules:
 - Actionable and TIMELESS: what to REPEAT or AVOID next time the same situation appears. No PnL, no dates, no trade ids.

@@ -15,6 +15,7 @@ import { Message, GroundingChunk, TradeAnalysis, GlobalMemory, AccuracySubMode, 
 import { extractAndParseJson, extractLastJson } from '../../utils/jsonUtils';
 import { sanitizeAIResponse, sanitizeAIResponseLight, sanitizeJSONString } from '../../utils/sanitizers';
 import { sanitizeTradeAnalysis, truncateTextToTokens, formatAnalysisForDisplay, parsePrice } from '../../utils/analysisUtils';
+import { buildTradeInsightBrief, compactInsightForPatternMemory } from '../../utils/tradeInsightBrief';
 import { parseGlobalMemory, parseStrategySearchResults } from '../../schemas/learning';
 import {
     MASTER_ANALYSIS_PROMPT,
@@ -568,7 +569,7 @@ export async function analyzeTradingView(
     } else {
         const patternMemoryContext = finalTradeSummary
             ? truncateTextToTokens(`\n\n** PATTERN MEMORY (SYNTHESIS) - MANDATORY REFERENCE:**\nThe following is a synthesis of your recent trading performance and patterns. You MUST reference this data for Section 4 (Pattern Matching):\n${finalTradeSummary}\n`, 600)
-            : "\n\n** PATTERN MEMORY:** No synthesis available yet.\n";
+            : "\n\n** PATTERN MEMORY:** Use the retrieved harness memory in the user request (skills + similar trades). Do not invent a personal track record.\n";
         const recentInsightsContext = recentInsights
             ? truncateTextToTokens(`\n\n** RECENT INSIGHTS (INDIVIDUAL) - MANDATORY REFERENCE:**\nThe following are specific recent trades for detailed comparison:\n${recentInsights}\n`, 600)
             : "\n\n** RECENT INSIGHTS:** No recent trade insights available.\n";
@@ -756,18 +757,20 @@ export async function conductPostMortem(
     config: ProviderConfig,
     params: ConductPostMortemParams
 ): Promise<string> {
-    const { previousMessage, outcome, finalTradeSummary, feedback, postTradeImageSummaries, signal, severityContext } = params;
+    const { previousMessage, outcome, feedback, postTradeImageSummaries, signal, severityContext } = params;
     const { correctedEntry, correctedStopLoss, correctedTakeProfit } = feedback ?? {};
     let analysisPrompt: string;
 
     const postTradeContext = postTradeImageSummaries?.length ? `** VERIFIED TRADE OUTCOME DATA (HIGHEST PRIORITY):**\n---\n${postTradeImageSummaries.join('\n\n---\n\n')}\n---\n` : '';
-    const tradeHistoryContext = finalTradeSummary ? `**PATTERN MEMORY LIBRARY (Historical Context):**\n${truncateTextToTokens(finalTradeSummary)}` : "No past trades logged.";
+    const tradeHistoryContext = "Historical context is in the retrieved harness memory block below (similar trades + skills), not a full pattern-memory essay.";
     const severityContextBlock = severityContext ? `\n${severityContext}\n` : '';
-    // TRADER NOTEBOOK (memory files): the user's notes + trade diary are
-    // replayed during the post-mortem too — the report learns from the same
-    // accumulated knowledge the analysis used.
     const memoryFilesBlock = (() => {
-        const ctx = getMemoryFilesContext();
+        const ctx = getMemoryFilesContext({
+            coin: previousMessage.analysis?.coinName,
+            direction: previousMessage.analysis?.direction,
+            family: previousMessage.analysis?.detectedPatternFamily,
+            pattern: previousMessage.analysis?.marketConditions?.pattern,
+        });
         return ctx ? `\n${ctx}\n` : '';
     })();
 
@@ -1304,42 +1307,91 @@ export async function summarizeTrade(
     trade: LoggedTrade,
     signal?: AbortSignal
 ): Promise<string> {
-    const tradeForAnalysis = {
-        ...trade,
-        postMortemImages: trade.postMortemImages ? `[${trade.postMortemImages.length} screenshots available]` : undefined,
-    };
+    const brief = buildTradeInsightBrief(trade);
+    const outcome = String(trade.outcome || 'UNKNOWN');
 
-    const prompt = `You are a trade analysis summarizer. Given the full data of a logged trade, create a concise summary.
+    const prompt = `You are a Master Trading Strategist writing a short post-trade insight — the same forensic standard as a post-mortem debate, in one dense paragraph (not a transcript).
 
-**MANDATORY FIELDS TO INCLUDE:**
-1. **Trade Outcome**: WIN, LOSS, or ENTRY_NOT_HIT
-2. **Missed Win Flag**: If outcome is LOSS but the trade would have hit TP with a wider SL, include "[MISSED WIN - TIGHT SL]"
-3. **Extended SL Zone Status**: If the 150% extended SL zone was breached, include "[150% ZONE BREACH]"
-4. **Direction**: LONG or SHORT
-5. **Confidence Level**: The AI's original confidence rating (High/Medium/Low/Avoid)
-6. **Pattern Family**: Include the detected pattern family if available
-7. **Primary Strategy**: The main strategy used
-8. **Entry/SL/TP**: Entry price, Stop Loss, and final Take Profit
+**Outcome to explain: ${outcome}**
 
-**CRITICAL - POST-MORTEM SUMMARY (MANDATORY):**
-You MUST include a 2-3 sentence summary (67 words MAX) of the post-mortem analysis that captures:
-- What happened and why
-- The key lesson learned
-- **MANDATORY**: One clear IF/THEN rule extracted from the post-mortem (e.g., "IF [condition] THEN [action]")
+Diagnose *why* this trade won, lost, or missed entry. Use only the facts below. Do not invent prices or chart events that are not stated. Prefer crypto % / $ language (never "pips").
 
-**FORMAT:** Dense, data-rich paragraph. No conversational language. Max 200 words total. CRITICAL: You MUST complete all sentences - never cut off mid-sentence or mid-word.
+**Required contents (max ~180 words, complete sentences):**
+1. Header facts: outcome, direction, confidence, family/strategy, entry / SL / TP
+2. Causal diagnosis: the technical or execution reason for the outcome (not luck-speak)
+3. One IF [condition] THEN [action] rule the desk should apply next time
+4. Flags when present: [MISSED WIN - TIGHT SL], [150% ZONE BREACH]
 
-**Example Outputs:**
-"WIN: LONG (High Confidence) | Family A | Momentum Breakout. Entry: 4350, SL: 4320, TP: 4450. Post-mortem: 1H 20 EMA retest confirmed entry perfectly. Pattern played out as predicted with strong follow-through. IF momentum aligns with EMA retest THEN take full position confidently."
+**Trade facts:**
+${brief}
+`;
 
-"LOSS [MISSED WIN - TIGHT SL]: SHORT (Medium Confidence) | Family B | Bearish Engulfing. Entry: 2150, SL: 2160, TP: 2100. Post-mortem: SL hit by 5 pips then price reversed to hit TP. Volatility underestimated during consolidation. IF tight consolidation detected THEN widen SL by 15-20%."
-
-**Trade data to summarize:**
-${JSON.stringify(tradeForAnalysis, null, 2)}
-    `;
-
-    const result = await sendChatRequest(config, [{ role: 'user', content: prompt }], { signal, temperature: 0.25 });
+    const result = await sendChatRequest(
+        config,
+        [{ role: 'user', content: prompt }],
+        { signal, temperature: 0.25, maxTokens: 700 }
+    );
     return sanitizeAIResponse(result || "Summary generation failed.");
+}
+
+/**
+ * Dedicated moderator pass after the post-mortem debate: a markdown report
+ * for the chat + trade journal. Separate from the debate transcript so a
+ * missing FINAL_REPORT tag does not leave the journal empty.
+ */
+export async function writePostMortemMarkdownReport(
+    config: ProviderConfig,
+    params: {
+        outcome: string;
+        setupBrief: string;
+        analystReports: string;
+        debateTranscript: string;
+        signal?: AbortSignal;
+    }
+): Promise<string> {
+    const prompt = `You are the Master Strategist writing the official post-mortem report after an ensemble debate about a **${params.outcome}** trade.
+
+Write Markdown only. Do not continue the debate. Do not wrap the answer in XML tags. Do not invent prices or events that are not in the sources. Use crypto % / $ language (never "pips").
+
+Required headings, in this order:
+
+## Outcome
+One sentence: WIN / LOSS / ENTRY_NOT_HIT and what happened.
+
+## Root cause
+The technical or execution reason this outcome occurred.
+
+## Debate synthesis
+What the analysts agreed on, and the one disagreement that mattered (if any).
+
+## Key lesson
+One actionable lesson.
+
+## Rule
+Exactly one line: IF [condition] THEN [action]
+
+## Conclusion
+- Outcome summary
+- Missed-win / tight-SL flag (YES/NO)
+- Primary driver
+- Pattern-confidence impact: Increase / Maintain / Reduce
+
+**Setup:**
+${truncateTextToTokens(params.setupBrief, 800)}
+
+**Analyst post-mortems:**
+${truncateTextToTokens(params.analystReports, 1800)}
+
+**Debate transcript (for synthesis, not to reprint):**
+${truncateTextToTokens(params.debateTranscript, 2500)}
+`;
+
+    const result = await sendChatRequest(
+        config,
+        [{ role: 'user', content: prompt }],
+        { signal: params.signal, temperature: 0.2, maxTokens: 2500 }
+    );
+    return sanitizeAIResponse(result || '');
 }
 
 export async function generateFinalSummary(
@@ -1348,7 +1400,7 @@ export async function generateFinalSummary(
     charLimit: number = 4000,
     signal?: AbortSignal
 ): Promise<string> {
-    const summariesText = summaries.map(s => `- ${s.summaryText}`).join('\n');
+    const summariesText = summaries.map(s => `- ${compactInsightForPatternMemory(s.summaryText)}`).join('\n');
     const tradeCount = summaries.length;
 
     const prompt = `
@@ -1376,6 +1428,8 @@ Conclusion
 
 RULES:
 - All headings MUST appear exactly as written.
+- If a section has no evidence, write exactly "None." (the notebook will drop empty product sections).
+- Do not copy or restate skills/*.md or rules/recurring-mistakes.md — point at them in Actionable Rules instead.
 - No new headings, no removed headings, no reordering.
 - Output must be ~${charLimit} characters.
 - Output must be ONE continuous text block.

@@ -27,12 +27,15 @@ import {
   deleteMemoryFile,
   appendDiaryEntry,
   syncProfileMemory,
+  syncPatternMemory,
+  toPatternMemoryMarkdown,
   syncRecurringMistakes,
   buildRecurringMistakesContent,
   extractLessonFromPostMortem,
   getMemoryFilesIndex,
   computeTopLessons,
   writeModelNote,
+  SUGGESTIONS_FILE_NAME,
 } from '../services/learning/MemoryFilesService';
 import { LoggedTrade, MemoryFile, TradeOutcome, UserProfile } from '../types';
 
@@ -71,9 +74,9 @@ describe('MemoryFilesService', () => {
   });
 
   describe('initMemoryFiles (seeding)', () => {
-    it('seeds the four default folders on first boot', async () => {
+    it('seeds the five default folders on first boot', async () => {
       const { folders } = getMemoryFiles();
-      expect(folders.map(f => f.name)).toEqual(['profile', 'trader-diary', 'market-conditions', 'rules']);
+      expect(folders.map(f => f.name)).toEqual(['profile', 'trader-diary', 'market-conditions', 'rules', 'skills']);
     });
 
     it('seeds starter templates in market-conditions and rules', async () => {
@@ -84,9 +87,9 @@ describe('MemoryFilesService', () => {
 
     it('persists the seed so a reload does not reseed', async () => {
       await initMemoryFiles('test-user'); // second init
-      expect(getMemoryFiles().folders).toHaveLength(4);
+      expect(getMemoryFiles().folders).toHaveLength(5);
       const stored = store['memory_files_v1_test-user'] as { folders: unknown[] };
-      expect(stored.folders).toHaveLength(4);
+      expect(stored.folders).toHaveLength(5);
     });
 
     it('loads a saved store for the active user', async () => {
@@ -140,17 +143,17 @@ describe('MemoryFilesService', () => {
       const rules = folders.find(f => f.name === 'rules')!;
       await moveMemoryFolder(rules.id, 1, 'test-user');
       const after = getMemoryFiles().folders;
-      expect(after.map(f => f.name)).toEqual(['profile', 'rules', 'trader-diary', 'market-conditions']);
-      expect(after.map(f => f.order)).toEqual([0, 1, 2, 3]);
+      expect(after.map(f => f.name)).toEqual(['profile', 'rules', 'trader-diary', 'market-conditions', 'skills']);
+      expect(after.map(f => f.order)).toEqual([0, 1, 2, 3, 4]);
       // Persists across reload.
       await initMemoryFiles('test-user');
-      expect(getMemoryFiles().folders.map(f => f.name)).toEqual(['profile', 'rules', 'trader-diary', 'market-conditions']);
+      expect(getMemoryFiles().folders.map(f => f.name)).toEqual(['profile', 'rules', 'trader-diary', 'market-conditions', 'skills']);
     });
 
     it('clamps out-of-range move targets', async () => {
       const { folders } = getMemoryFiles();
       await moveMemoryFolder(folders[0].id, 99, 'test-user');
-      expect(getMemoryFiles().folders.map(f => f.name)).toEqual(['trader-diary', 'market-conditions', 'rules', 'profile']);
+      expect(getMemoryFiles().folders.map(f => f.name)).toEqual(['trader-diary', 'market-conditions', 'rules', 'skills', 'profile']);
     });
 
     it('creates files with a forced .md extension', async () => {
@@ -190,28 +193,39 @@ describe('MemoryFilesService', () => {
       expect(getMemoryFilesStats()).toEqual({ enabledCount: 0, charCount: 0 });
     });
 
-    it('includes only enabled files, with folder paths and full content', async () => {
+    it('includes only enabled files, with folder paths and content', async () => {
       const ctx = getMemoryFilesContext();
-      expect(ctx).toContain('[market-conditions/ranging-day.md]');
       expect(ctx).toContain('[rules/risk-rules.md]');
-      expect(ctx).toContain('# Ranging / Low-ADX Day Playbook');
-      // Disabled files are excluded.
+      expect(ctx).toContain('Personal Risk Rules');
       const ranging = findFile('ranging-day.md')!;
       await updateMemoryFile(ranging.id, { enabled: false }, 'test-user');
-      expect(getMemoryFilesContext()).not.toContain('[market-conditions/ranging-day.md]');
+      expect(getMemoryFilesContext({ regime: 'ranging' })).not.toContain('[market-conditions/ranging-day.md]');
     });
 
     it('orders profile files first', async () => {
       await syncProfileMemory(makeProfile(), 'test-user');
       const ctx = getMemoryFilesContext();
-      expect(ctx.indexOf('[profile/memory.md]')).toBeLessThan(ctx.indexOf('[market-conditions/'));
+      expect(ctx.indexOf('[profile/memory.md]')).toBeLessThan(ctx.indexOf('[rules/'));
     });
 
-    it('keeps the diary content intact (newlines preserved)', async () => {
+    it('keeps matching diary content when the coin is in the query', async () => {
       await appendDiaryEntry(makeTrade(), 'test-user');
-      const ctx = getMemoryFilesContext();
+      const ctx = getMemoryFilesContext({ coin: 'BTCUSDT' });
       expect(ctx).toContain('WIN ✅');
       expect(ctx).toContain('Wait for the 15m reclaim before entering.');
+    });
+
+    it('does not dump the pattern-memory essay', async () => {
+      await syncPatternMemory('Executive Summary\nHuge dump of all trades.\n', 'test-user');
+      const ctx = getMemoryFilesContext();
+      expect(ctx).not.toContain('[profile/pattern-memory.md]');
+    });
+
+    it('does not dump suggestions.md', async () => {
+      const folder = getMemoryFiles().folders.find(f => f.name === 'profile')!;
+      await createMemoryFile(folder.id, SUGGESTIONS_FILE_NAME, '# Suggestions\nMerge the two range files.', 'test-user', true);
+      const ctx = getMemoryFilesContext();
+      expect(ctx).not.toContain('[profile/suggestions.md]');
     });
   });
 
@@ -273,6 +287,44 @@ describe('MemoryFilesService', () => {
       await syncProfileMemory(makeProfile(), 'test-user');
       const file = findFile('memory.md', 'profile')!;
       expect(file.content.match(/\*\*Trader:\*\*/g)).toHaveLength(1);
+    });
+  });
+
+  describe('syncPatternMemory', () => {
+    it('writes profile/pattern-memory.md as markdown', async () => {
+      await syncPatternMemory('Executive Summary\nTrades look mixed.\n\nMissed Win Analysis\nNone.\n\nConclusion\nStay selective.', 'test-user');
+      const file = findFile('pattern-memory.md', 'profile')!;
+      expect(file.autoManaged).toBe(true);
+      expect(file.content).toContain('# Pattern Memory');
+      expect(file.content).toContain('## Executive Summary');
+      expect(file.content).toContain('## Conclusion');
+      expect(file.content).toContain('skills/');
+      expect(file.content).not.toContain('## Missed Win Analysis');
+    });
+
+    it('includes closed-trade stats when a log is passed', async () => {
+      await syncPatternMemory('Executive Summary\nOk.\n\nConclusion\nDone.', 'test-user', [
+        makeTrade({ outcome: TradeOutcome.WIN }),
+        makeTrade({ outcome: TradeOutcome.LOSS }),
+      ]);
+      const file = findFile('pattern-memory.md', 'profile')!;
+      expect(file.content).toContain('**Closed trades:** 2 (1 win / 1 loss)');
+      expect(file.content).toContain('**Win rate:** 50%');
+    });
+
+    it('writes a stub when the synthesis is empty', async () => {
+      await syncPatternMemory(null, 'test-user');
+      const file = findFile('pattern-memory.md', 'profile')!;
+      expect(file.content).toContain('Log more trades');
+    });
+  });
+
+  describe('toPatternMemoryMarkdown', () => {
+    it('rebuilds chrome instead of leaving a titled document untouched', () => {
+      const md = toPatternMemoryMarkdown('# Pattern Memory\n\nAlready a file.\n');
+      expect(md).toContain('# Pattern Memory');
+      expect(md).toContain('Already a file.');
+      expect(md).toContain('See also:');
     });
   });
 

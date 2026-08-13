@@ -13,10 +13,10 @@ import { DiagnosticsPanel } from './DiagnosticsPanel';
 import { BackupManager } from './BackupManager';
 import { AlertManager } from './AlertManager';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
-import { ActivityIcon, AISettingsIcon, BrainIcon, CloseIcon, EditIcon, HistoryIcon, BookmarkIcon, SettingsIcon, UserIcon, ExportIcon, SearchIcon, SwitchUserIcon, CodeIcon } from '../shared/Icons';
+import { ActivityIcon, AISettingsIcon, BrainIcon, ChevronLeftIcon, CloseIcon, EditIcon, HistoryIcon, BookmarkIcon, SettingsIcon, UserIcon, ExportIcon, SearchIcon, SwitchUserIcon, CodeIcon } from '../shared/Icons';
 import PromptManager from './PromptManager';
 import StrategiesManager from './StrategiesManager';
-import MemoryBrowser from '../journal/MemoryBrowser';
+import MemoryFilesManager from './MemoryFilesManager';
 import ModelPicker from '../shared/ModelPicker';
 import { Journal } from '../journal/Journal';
 
@@ -153,18 +153,18 @@ const NavTabButton: React.FC<{
     return (
         <button
             onClick={onClick}
-            className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl transition-all font-medium text-xs ${
+            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-colors text-sm ${
                 isActive
-                    ? 'bg-zinc-800 text-white border border-zinc-700/80 shadow-sm font-semibold'
-                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 border border-transparent'
+                    ? 'bg-zinc-800 text-zinc-100'
+                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/80'
             }`}
         >
             <div className="flex items-center gap-3 min-w-0">
-                <span className={`text-base shrink-0 ${isActive ? 'text-cyan-400' : 'text-zinc-500'}`}>{icon}</span>
+                <span className={`shrink-0 ${isActive ? 'text-zinc-100' : 'text-zinc-500'}`}>{icon}</span>
                 <span className="truncate">{label}</span>
             </div>
             {badge && (
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-md bg-zinc-800 text-zinc-400">
                     {badge}
                 </span>
             )}
@@ -332,39 +332,35 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
 
     return (
         <>
-            {/* Backdrop */}
             <div
-                className="fixed inset-0 bg-black/80 z-40 animate-fade-in"
-                onClick={requestClose}
-            />
-
-            {/* Centered Desktop Settings Modal */}
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 pointer-events-none">
-                <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="settings-title" className="pointer-events-auto w-[1150px] max-w-[95vw] h-[750px] max-h-[92vh] bg-zinc-950 border border-zinc-800/90 rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-fade-in">
-                    
-                    {/* Modal Top Header */}
-                    <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800/80 bg-zinc-950 shrink-0">
-                        <div className="flex items-center gap-3">
-                            <div className="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-[0_0_8px_#b0b0b6]" />
-                            <h2 id="settings-title" className="text-lg font-bold text-white tracking-tight">Settings</h2>
-                        </div>
-                        <button
-                            onClick={requestClose}
-                            className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 transition-all"
-                            aria-label="Close settings"
-                        >
-                            <CloseIcon />
-                        </button>
-                    </div>
-
-                    {/* Main Layout: Left Tab Bar + Right Workspace */}
+                ref={dialogRef}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="settings-title"
+                className="fixed inset-0 z-50 bg-zinc-950 flex flex-col animate-fade-in"
+            >
                     <div className="flex-1 flex min-h-0 flex-col md:flex-row">
                         
-                        {/* Left Tab Navigation Sidebar */}
-                        <div className="w-full md:w-64 max-h-[32vh] overflow-y-auto md:max-h-none md:overflow-visible border-b md:border-b-0 md:border-r border-zinc-800/80 bg-zinc-950 p-4 space-y-1 shrink-0 flex flex-col justify-between custom-scrollbar">
+                        <div className="w-full md:w-64 max-h-[32vh] overflow-y-auto md:max-h-none md:overflow-y-auto border-b md:border-b-0 md:border-r border-zinc-800/80 bg-zinc-950 px-4 py-6 space-y-1 shrink-0 flex flex-col justify-between custom-scrollbar">
                             <div className="space-y-1">
-                                {/* Get Started — what a new user needs first */}
-                                <p className="px-3.5 pt-1 pb-0.5 text-[9px] font-bold uppercase tracking-widest text-zinc-600">
+                                <div className="flex items-center justify-between px-2 mb-5">
+                                    <button
+                                        type="button"
+                                        onClick={requestClose}
+                                        className="flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-100 transition-colors"
+                                    >
+                                        <ChevronLeftIcon className="w-4 h-4" /> Back to workspace
+                                    </button>
+                                    <button
+                                        onClick={requestClose}
+                                        className="p-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-zinc-900"
+                                        aria-label="Close settings"
+                                    >
+                                        <CloseIcon />
+                                    </button>
+                                </div>
+                                <h2 id="settings-title" className="sr-only">Settings</h2>
+                                <p className="px-3 pt-1 pb-2 text-[11px] font-medium uppercase tracking-widest text-zinc-500">
                                     Get Started
                                 </p>
                                 <NavTabButton
@@ -375,7 +371,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                     label="AI setup"
                                 />
                                 {/* Analysis — how analyses behave */}
-                                <p className="px-3.5 pt-3 pb-0.5 text-[9px] font-bold uppercase tracking-widest text-zinc-600">
+                                <p className="px-3 pt-6 pb-2 text-[11px] font-medium uppercase tracking-widest text-zinc-500">
                                     Analysis
                                 </p>
                                 <NavTabButton
@@ -418,10 +414,10 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                     activeTab={activeTab}
                                     onClick={() => setActiveTab('memory')}
                                     icon={<ActivityIcon className="w-4 h-4" />}
-                                    label="Personal edge"
+                                    label="Memory"
                                 />
                                 {/* Account & Data — journal, profile, backups */}
-                                <p className="px-3.5 pt-3 pb-0.5 text-[9px] font-bold uppercase tracking-widest text-zinc-600">
+                                <p className="px-3 pt-6 pb-2 text-[11px] font-medium uppercase tracking-widest text-zinc-500">
                                     Account & Data
                                 </p>
                         <NavTabButton
@@ -462,7 +458,9 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                         </div>
 
                         {/* Right Content Workspace */}
-                        <div className="flex-1 overflow-y-auto p-6 bg-zinc-950 custom-scrollbar">
+                        <div className={`flex-1 min-h-0 overflow-y-auto bg-zinc-950 custom-scrollbar ${
+                            activeTab === 'journal' || activeTab === 'prompts' || activeTab === 'memory' ? '' : 'px-8 py-8 lg:px-12 lg:py-10'
+                        }`}>
                             
                             {/* TAB 0: Trading Journal — embedded inside Settings */}
                             {activeTab === 'journal' && (
@@ -784,39 +782,21 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                 </div>
                             )}
 
-                            {/* TAB 6: Memory & Learning */}
                             {activeTab === 'memory' && (
-                                <div className="space-y-4 max-w-3xl animate-fade-in">
-                                    <div className="border-b border-zinc-800 pb-3">
-                                        <h3 className="text-base font-bold text-white">Memory & Learning Layers</h3>
-                                        <p className="text-xs text-zinc-500 mt-1">Configure global trade learning synthesis and historical memory injection.</p>
-                                    </div>
-                                    {setIsGlobalMemoryEnabled && (
-                                        <div className="p-5 rounded-2xl bg-zinc-800 border border-zinc-800 space-y-3">
-                                            <div className="flex items-center justify-between">
-                                                <div>
-                                                    <h4 className="text-sm font-bold text-white">Global Memory</h4>
-                                                    <p className="text-xs text-zinc-400 mt-0.5">
-                                                        {isGlobalMemoryEnabled
-                                                            ? 'On — lessons from all your trades are injected into future analyses. Default: off.'
-                                                            : 'Off — only this chat\'s own context is used. Default: off.'}
-                                                    </p>
-                                                </div>
-                                                <ToggleSwitch checked={!!isGlobalMemoryEnabled} onChange={() => setIsGlobalMemoryEnabled(!isGlobalMemoryEnabled)} label="Toggle Global Memory" />
-                                            </div>
-                                        </div>
-                                    )}
-                                    <MemorySettings
-                                        providerConfigs={providerConfigs ?? []}
-                                        memoryConfig={memoryConfig}
-                                        onMemoryConfigChange={onMemoryConfigChange}
+                                <div className="h-full min-h-0 animate-fade-in">
+                                    <MemoryFilesManager
+                                        username={username}
+                                        isGlobalMemoryEnabled={isGlobalMemoryEnabled}
+                                        setIsGlobalMemoryEnabled={setIsGlobalMemoryEnabled}
+                                        memoryConfig={memoryConfig ?? null}
+                                        memorySettings={
+                                            <MemorySettings
+                                                providerConfigs={providerConfigs ?? []}
+                                                memoryConfig={memoryConfig ?? null}
+                                                onMemoryConfigChange={onMemoryConfigChange}
+                                            />
+                                        }
                                     />
-                                    {/* Memory Browser — ZCode-style drill-down view */}
-                                    <div className="border-t border-zinc-800 pt-4">
-                                        <div className="h-[440px]">
-                                            <MemoryBrowser username={username} isGlobalMemoryEnabled={isGlobalMemoryEnabled} />
-                                        </div>
-                                    </div>
                                 </div>
                             )}
 
@@ -843,7 +823,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                         </div>
                     </div>
                 </div>
-            </div>
             {ConfirmDialogComponent}
         </>
     );

@@ -159,8 +159,8 @@ export const saveThinkingBatch = async (records: ThinkingRecord[]): Promise<void
                             id, tradeId, username, provider, role, modelName,
                             reasoning, finalOutput, rawReasoning, messageId,
                             analysisJson, debateTurnIndex, debateTurnSpeaker,
-                            confidence, probability, outcome, pnlAmount, pnlPercent, createdAt
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            confidence, probability, outcome, pnlAmount, pnlPercent, analystLens, createdAt
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     `, [
                         record.id,
                         record.tradeId,
@@ -180,6 +180,7 @@ export const saveThinkingBatch = async (records: ThinkingRecord[]): Promise<void
                         record.outcome || null,
                         record.pnlAmount ?? null,
                         record.pnlPercent ?? null,
+                        record.analystLens || null,
                         record.createdAt,
                     ]);
                 }
@@ -257,8 +258,8 @@ const saveThinkingRecordSqlite = async (record: ThinkingRecord): Promise<void> =
                 id, tradeId, username, provider, role, modelName,
                 reasoning, finalOutput, rawReasoning, messageId,
                 analysisJson, debateTurnIndex, debateTurnSpeaker,
-                confidence, probability, outcome, createdAt
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                confidence, probability, outcome, analystLens, createdAt
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
             record.id,
             record.tradeId,
@@ -276,6 +277,7 @@ const saveThinkingRecordSqlite = async (record: ThinkingRecord): Promise<void> =
             record.confidence || null,
             record.probability ?? null,
             record.outcome || null,
+            record.analystLens || null,
             record.createdAt,
         ]);
     });
@@ -642,6 +644,7 @@ const rowToRecord = (row: any): ThinkingRecord => ({
     outcome: row.outcome || undefined,
     pnlAmount: row.pnlAmount ?? undefined,
     pnlPercent: row.pnlPercent ?? undefined,
+    analystLens: row.analystLens || undefined,
     createdAt: row.createdAt,
 });
 
@@ -654,6 +657,7 @@ const rowToExportRow = (row: any): ThinkingExportRow => ({
     rawReasoning: row.rawReasoning || undefined,
     messageId: row.messageId || undefined,
     analysis: safeParseAnalysis(row.analysisJson),
+    analystLens: row.analystLens || undefined,
     confidence: row.confidence || undefined,
     probability: row.probability ?? undefined,
     outcome: row.outcome || undefined,
@@ -672,6 +676,7 @@ const recordToExportRow = (r: ThinkingRecord): ThinkingExportRow => ({
     rawReasoning: r.rawReasoning,
     messageId: r.messageId,
     analysis: safeParseAnalysis(r.analysisJson),
+    analystLens: r.analystLens,
     confidence: r.confidence,
     probability: r.probability,
     outcome: r.outcome,

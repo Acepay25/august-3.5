@@ -1,16 +1,18 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Virtuoso } from 'react-virtuoso';
 import { Bookmark } from 'lucide-react';
-import { LoggedTrade, TradeOutcome, AccuracySubMode } from '../../types';
-import { ChevronDownIcon, ChevronLeftIcon, TrashIcon, StarIcon, LoadingIcon, BrainIcon, EditIcon } from '../shared/Icons';
+import { AIProvider, LoggedTrade, TradeOutcome, TradeSummary } from '../../types';
+import { ProviderConfig } from '../../types/provider';
+import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, TrashIcon, StarIcon, LoadingIcon, FileTextIcon, RefreshIcon } from '../shared/Icons';
 import ImageViewerModal from '../modals/ImageViewerModal';
 import { EmptyState } from '../ui/EmptyState';
 import { ReasoningPanel } from './ReasoningPanel';
 import { getThinkingTradeId } from '../../services/infrastructure/ThinkingStoreService';
 import { DEFAULT_LEVERAGE } from '../../utils/conversationUtils';
 import SetupLifecycleCard from '../analysis/SetupLifecycleCard';
-import { summarizeSimilarSetups, SimilarSetupSummary } from '../../services/learning/SetupMemoryService';
+import MarkdownContent from '../shared/MarkdownContent';
+import { getMemoryFiles, toPatternMemoryMarkdown, patternMemoryStatsFromTrades } from '../../services/learning/MemoryFilesService';
 
 interface TradeLogContentProps {
     trades: LoggedTrade[];
@@ -27,14 +29,35 @@ interface TradeLogContentProps {
     onUpdatePnL?: (id: string, pnl: { pnlAmount?: number; pnlPercent?: number }) => void;
     /** Active user — scopes the reasoning-record lookup per trade. */
     username?: string;
+    finalSummary?: string | null;
+    individualSummaries?: TradeSummary[];
+    isReviewLoading?: boolean;
+    isInsightGenerating?: boolean;
+    insightProgress?: { done: number; total: number } | null;
+    newlyAddedInsightIds?: Set<string>;
+    summarizationProvider?: AIProvider;
+    summarizationModel?: string;
+    onSetSummarizationProvider?: (provider: AIProvider) => void;
+    onSetSummarizationModel?: (modelId: string) => void;
+    providers?: ProviderConfig[];
+    summaryCharLimit?: number;
+    onUpdateSummaryCharLimit?: (limit: number) => void;
+    onRegenerateSummary?: () => void;
+    onDeleteInsight?: (id: string) => void;
+    useAlgorithmicSummary?: boolean;
+    onToggleAlgorithmicSummary?: (use: boolean) => void;
+    useAlgorithmicInsights?: boolean;
+    onToggleAlgorithmicInsights?: (use: boolean) => void;
+    onRewriteInsightsWithAI?: (ids?: string[]) => void;
+    onDocumentOpenChange?: (open: boolean) => void;
 }
 
 const OutcomeBadge: React.FC<{ outcome: TradeOutcome }> = ({ outcome }) => {
     const styles: { [key in TradeOutcome]?: string } = {
-        [TradeOutcome.WIN]: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-[0_0_10px_-3px_rgba(176, 176, 182,0.3)]',
-        [TradeOutcome.LOSS]: 'bg-rose-500/10 text-rose-400 border border-rose-500/20 shadow-[0_0_10px_-3px_rgba(107, 107, 115,0.3)]',
-        [TradeOutcome.ENTRY_NOT_HIT]: 'bg-zinc-500/10 text-zinc-400 border border-zinc-500/20',
-        [TradeOutcome.SKIPPED]: 'bg-blue-500/10 text-blue-400 border border-blue-500/20',
+        [TradeOutcome.WIN]: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20',
+        [TradeOutcome.LOSS]: 'bg-rose-500/10 text-rose-400 border border-rose-500/20',
+        [TradeOutcome.ENTRY_NOT_HIT]: 'bg-zinc-800 text-zinc-400 border border-zinc-700',
+        [TradeOutcome.SKIPPED]: 'bg-zinc-800 text-zinc-400 border border-zinc-700',
     };
     const text: { [key in TradeOutcome]?: string } = {
         [TradeOutcome.WIN]: 'WIN',
@@ -44,22 +67,10 @@ const OutcomeBadge: React.FC<{ outcome: TradeOutcome }> = ({ outcome }) => {
     };
     if (!styles[outcome]) return null;
     return (
-        <span className={`px-2 py-0.5 text-[10px] font-black tracking-widest rounded uppercase ${styles[outcome]}`}>
+        <span className={`status-surface px-2.5 py-1 text-[11px] font-semibold tracking-widest rounded-md uppercase ${styles[outcome]}`}>
             {text[outcome]}
         </span>
     );
-};
-
-/**
- * Extract the first IF/THEN learning rule from a post-mortem text so it can
- * be surfaced on the trade card (the learning loop the app already generates).
- */
-const extractIfThenRule = (text: string | undefined): string | null => {
-    if (!text) return null;
-    const match = text.match(/IF\s+([^.]{5,220}?)\s+THEN\s+([^.]{5,220}?)[.\n]/i);
-    if (!match) return null;
-    const rule = `IF ${match[1].trim()} THEN ${match[2].trim()}`;
-    return rule.length > 240 ? rule.slice(0, 240) + '…' : rule;
 };
 
 /**
@@ -79,8 +90,6 @@ const TradeDetailView: React.FC<{
 }> = ({ trade, onBack, modelIdToName, onUpdateLeverage, onUpdateOutcome, onUpdatePnL, username }) => {
     const { analysis, outcome, timestamp, postMortem, postMortemImages, correctedEntry, correctedStopLoss, correctedTakeProfit, pnlAmount, pnlPercent, modelsUsed, geminiModelUsed, deepseekModelUsed, zhipuModelUsed, groqModelUsed, groqNewModelUsed, groqAlt2ModelUsed, openrouterModelUsed, moderatorModel, leverage, isAccuracyMode, accuracySubMode } = trade;
     const { direction, stopLoss, stopLossPercentage, entryPoints, takeProfit, activeStrategies, coinName, invalidationCriteria } = analysis;
-    const [isPostMortemVisible, setIsPostMortemVisible] = useState(false);
-    const [isScreenshotsVisible, setIsScreenshotsVisible] = useState(false);
     const [viewerImageUrl, setViewerImageUrl] = useState<string | null>(null);
     const [localLeverage, setLocalLeverage] = useState<string>(String(leverage || DEFAULT_LEVERAGE));
     // PnL edit state — autopilot-logged trades only carry a percent, so the
@@ -107,14 +116,13 @@ const TradeDetailView: React.FC<{
     };
 
     // --- Dynamic Mode Styling ---
-    let containerClass = "glass-panel border-white/5";
+    let containerClass = "bg-zinc-900/50 border border-zinc-800";
     let modeBadge = null;
 
     if (isAccuracyMode) {
-        // All accuracy modes use cyan dark theme
-        containerClass = "bg-cyan-950/20 border border-cyan-500/30 shadow-[0_0_15px_-5px_rgba(176, 176, 182,0.1)]";
+        containerClass = "bg-zinc-900 border border-zinc-700";
         modeBadge = (
-            <span className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded border border-cyan-500/30 bg-cyan-900/30 text-cyan-300 ml-2 animate-pulse">
+            <span className="text-[10px] font-semibold uppercase tracking-widest px-2 py-0.5 rounded-md border border-zinc-600 bg-zinc-800 text-zinc-300 ml-1">
                 {accuracySubMode === 'pure_ai' ? 'Pure AI' : 'Strict Mode'}
             </span>
         );
@@ -122,58 +130,84 @@ const TradeDetailView: React.FC<{
 
     return (
         <div className="flex flex-col h-full bg-zinc-950">
-            {/* Detail header — Back button returns to the trade list. */}
-            <div className="px-4 py-2.5 border-b border-white/5 bg-zinc-900 shrink-0 flex items-center justify-between gap-3 flex-wrap">
-                <button
-                    onClick={onBack}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 transition-colors"
-                    aria-label="Back to trade list"
-                >
-                    <ChevronLeftIcon className="w-3.5 h-3.5" /> Back
-                </button>
-                <div className="flex items-center gap-2.5 min-w-0">
-                    <OutcomeBadge outcome={outcome} />
-                    <span className={`font-black text-sm tracking-wider uppercase ${safeDirection === 'Long' ? 'text-emerald-400 drop-shadow-[0_0_5px_rgba(228,228,231,0.5)]' : safeDirection === 'Short' ? 'text-rose-400 drop-shadow-[0_0_5px_rgba(161,161,170,0.5)]' : 'text-gray-400'}`}>{safeDirection}</span>
-                    <span className="font-mono text-xs font-bold text-zinc-300 truncate">{coinName}</span>
-                    {modeBadge}
-                    <span className="text-[10px] font-mono text-zinc-500 shrink-0">{new Date(timestamp).toLocaleDateString()}</span>
-                </div>
-            </div>
-
-            {/* Scrollable detail body */}
             <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
-                <div className="p-4 sm:p-5">
-                    <div className={`rounded-xl overflow-hidden animate-fade-in ${containerClass}`}>
-                        <div className="px-4 py-5">
+                <div className="px-8 pt-2 pb-16 w-full max-w-4xl mx-auto">
+                    <button
+                        onClick={onBack}
+                        className="flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-100 transition-colors mb-8"
+                        aria-label="Back to trade list"
+                    >
+                        <ChevronLeftIcon className="w-4 h-4" /> Back
+                    </button>
+
+                    <h2 className="text-2xl font-semibold text-zinc-100 tracking-tight">{coinName}.md</h2>
+                    <p className="text-sm text-zinc-500 mt-2 mb-8">
+                        {safeDirection}
+                        {' · '}
+                        {new Date(timestamp).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                        {modeBadge}
+                    </p>
+
+                    <div className="mb-4">
+                        <OutcomeBadge outcome={outcome} />
+                    </div>
+
+                    <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-8 py-8 lg:px-10 lg:py-10">
+                        {postMortem ? (
+                            <MarkdownContent content={postMortem} className="text-[15px] text-zinc-200 leading-8" />
+                        ) : (
+                            <p className="text-sm text-zinc-500 leading-7">
+                                No post-mortem report yet. Log a WIN or LOSS with ensemble analysis to generate one.
+                            </p>
+                        )}
+                    </div>
+
+                    {Array.isArray(postMortemImages) && postMortemImages.length > 0 && (
+                        <div className="mt-8">
+                            <p className="text-sm text-zinc-500 mb-3">Evidence</p>
+                            <div className="flex gap-3 overflow-x-auto pb-2">
+                                {(postMortemImages || []).map((img, i) => (
+                                    <img key={i} src={img} className="h-24 w-auto rounded-lg border border-zinc-800 cursor-pointer" onClick={() => setViewerImageUrl(img)} alt="" />
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    <details className="mt-10 group">
+                        <summary className="cursor-pointer text-sm text-zinc-400 hover:text-zinc-200 list-none flex items-center gap-2">
+                            <ChevronDownIcon className="w-4 h-4 transition-transform group-open:rotate-180" />
+                            Trade setup
+                        </summary>
+                        <div className={`mt-6 rounded-xl overflow-hidden ${containerClass}`}>
+                        <div className="px-5 py-6 space-y-5">
                             <SetupLifecycleCard analysis={analysis} outcome={outcome} triggeredEntryIndices={trade.triggeredEntryIndices} compact />
-                            <div className="grid grid-cols-2 gap-3 text-xs pt-4 font-mono">
+                            <div className="grid grid-cols-2 gap-4 text-sm pt-2 font-mono">
 
                                 {/* Trade Settings Row */}
-                                <div className="col-span-2 flex items-center justify-between bg-zinc-900 p-2 rounded-lg border border-white/5 mb-1 flex-wrap gap-2">
-                                    <span className="text-[9px] uppercase font-bold text-zinc-500 tracking-widest pl-1">Trade Parameters</span>
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                        <span className="text-[10px] text-zinc-400">Leverage:</span>
-                                        <div className="flex items-center bg-zinc-800 rounded border border-white/10 px-2 py-0.5">
+                                <div className="col-span-2 flex items-center justify-between bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 mb-1 flex-wrap gap-3">
+                                    <span className="text-[11px] uppercase font-semibold text-zinc-500 tracking-widest">Trade Parameters</span>
+                                    <div className="flex items-center gap-2.5 flex-wrap">
+                                        <span className="text-xs text-zinc-400">Leverage:</span>
+                                        <div className="flex items-center bg-zinc-800 rounded-lg border border-zinc-700 px-2.5 py-1">
                                             <input
                                                 type="number"
                                                 value={localLeverage}
                                                 onChange={(e) => setLocalLeverage(e.target.value)}
                                                 onBlur={handleLeverageBlur}
                                                 onKeyDown={(e) => e.key === 'Enter' && handleLeverageBlur()}
-                                                className="w-8 bg-transparent text-center font-mono font-bold text-cyan-300 outline-none text-xs"
+                                                className="w-8 bg-transparent text-center font-mono font-bold text-zinc-200 outline-none text-sm"
                                             />
-                                            <span className="text-zinc-600 text-[10px]">x</span>
+                                            <span className="text-zinc-600 text-xs">x</span>
                                         </div>
 
-                                        {/* Preset Buttons */}
-                                        <div className="flex gap-1 ml-2 pl-2 border-l border-white/10">
+                                        <div className="flex gap-1.5 ml-1 pl-3 border-l border-zinc-800">
                                             {[25, 50, 75, 100].map(val => (
                                                 <button
                                                     key={val}
                                                     onClick={(e) => handlePresetClick(e, val)}
-                                                    className={`text-[9px] px-1.5 py-0.5 rounded border transition-all ${parseInt(localLeverage) === val
-                                                        ? 'bg-cyan-500/20 border-cyan-500/30 text-cyan-300 font-bold shadow-[0_0_10px_-3px_rgba(176, 176, 182,0.3)]'
-                                                        : 'bg-zinc-800 border-white/5 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700'
+                                                    className={`text-[10px] px-2 py-1 rounded-md border transition-all ${parseInt(localLeverage) === val
+                                                        ? 'bg-zinc-700 border-zinc-500 text-zinc-100 font-semibold'
+                                                        : 'bg-zinc-800 border-zinc-700 text-zinc-500 hover:text-zinc-300'
                                                         }`}
                                                 >
                                                     {val}x
@@ -235,7 +269,7 @@ const TradeDetailView: React.FC<{
                                                         pnlAmount: pnlDraftAmount.trim() !== '' ? parseFloat(pnlDraftAmount) : undefined,
                                                         pnlPercent: pnlDraftPercent.trim() !== '' ? parseFloat(pnlDraftPercent) : undefined,
                                                     })}
-                                                    className="px-1.5 py-0.5 rounded bg-cyan-600/80 hover:bg-cyan-600 text-white text-[9px] font-bold uppercase tracking-widest transition-colors"
+                                                    className="px-2 py-1 rounded-md bg-zinc-700 hover:bg-zinc-600 text-zinc-100 text-[10px] font-semibold uppercase tracking-widest transition-colors"
                                                     title="Save PnL"
                                                 >
                                                     Save
@@ -245,19 +279,19 @@ const TradeDetailView: React.FC<{
                                     </div>
                                 </div>
 
-                                <div className="p-2.5 bg-zinc-800 rounded-lg border border-white/5 hover:border-white/10 transition-colors">
-                                    <span className="text-[9px] uppercase font-bold text-zinc-500 block mb-1">Entry Zone</span>
+                                <div className="p-4 bg-zinc-950 rounded-xl border border-zinc-800">
+                                    <span className="text-[11px] uppercase font-semibold text-zinc-500 block mb-1.5">Entry Zone</span>
                                     <span className="text-cyan-200 font-bold text-sm">{(entryPoints || [])[0]?.price || 'N/A'}</span>
                                 </div>
-                                <div className="p-2.5 bg-zinc-800 rounded-lg border border-white/5 hover:border-white/10 transition-colors">
-                                    <span className="text-[9px] uppercase font-bold text-zinc-500 block mb-1">Stop Loss</span>
+                                <div className="p-4 bg-zinc-950 rounded-xl border border-zinc-800">
+                                    <span className="text-[11px] uppercase font-semibold text-zinc-500 block mb-1.5">Stop Loss</span>
                                     <div className="flex items-baseline gap-2">
                                         <span className="text-rose-300 font-bold text-sm">{stopLoss}</span>
                                         {stopLossPercentage && <span className="text-rose-500/60 text-[9px]">{stopLossPercentage}</span>}
                                     </div>
                                 </div>
-                                <div className="col-span-2 p-2.5 bg-zinc-800 rounded-lg border border-white/5 hover:border-white/10 transition-colors">
-                                    <span className="text-[9px] uppercase font-bold text-zinc-500 block mb-1">Take Profit Targets</span>
+                                <div className="col-span-2 p-4 bg-zinc-950 rounded-xl border border-zinc-800">
+                                    <span className="text-[11px] uppercase font-semibold text-zinc-500 block mb-2">Take Profit Targets</span>
                                     <div className="flex flex-wrap gap-2">
                                         {(takeProfit || []).map((tp, i) => (
                                             <div key={i} className="flex items-center gap-1 bg-emerald-900/20 px-2 py-1 rounded border border-emerald-500/10">
@@ -283,40 +317,6 @@ const TradeDetailView: React.FC<{
                                 )}
 
                                 {correctedEntry && <div className="col-span-2 bg-yellow-500/10 p-2 rounded border border-yellow-500/20 text-yellow-200 font-medium">Corrected Entry: {correctedEntry}</div>}
-
-                                {(() => {
-                                    const rule = extractIfThenRule(postMortem);
-                                    return rule ? (
-                                        <div className="col-span-2 bg-zinc-800 border border-zinc-600/40 rounded-lg px-3 py-2">
-                                            <span className="text-[10px] uppercase font-bold tracking-widest text-zinc-400">Rule</span>
-                                            <p className="text-xs text-zinc-200 mt-0.5 leading-relaxed">{rule}</p>
-                                        </div>
-                                    ) : null;
-                                })()}
-
-                                {postMortem && (
-                                    <div className="col-span-2 mt-2">
-                                        <button onClick={() => setIsPostMortemVisible(!isPostMortemVisible)} className="text-purple-400 hover:text-purple-300 text-[10px] uppercase font-bold tracking-widest flex items-center gap-1 mb-2 transition-colors">
-                                            Post-Mortem Analysis <ChevronDownIcon className={`w-3 h-3 transition-transform ${isPostMortemVisible ? 'rotate-180' : ''}`} />
-                                        </button>
-                                        <div className={`collapsible-content ${isPostMortemVisible ? 'expanded' : ''} p-4 bg-purple-900/10 border border-purple-500/20 rounded-lg text-zinc-300 leading-relaxed text-sm font-sans`}>
-                                            {postMortem}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {Array.isArray(postMortemImages) && postMortemImages.length > 0 && (
-                                    <div className="col-span-2 mt-1">
-                                        <button onClick={() => setIsScreenshotsVisible(!isScreenshotsVisible)} className="text-zinc-400 hover:text-white text-[10px] uppercase font-bold tracking-widest flex items-center gap-1 mb-2 transition-colors">
-                                            Evidence ({postMortemImages.length}) <ChevronDownIcon className={`w-3 h-3 transition-transform ${isScreenshotsVisible ? 'rotate-180' : ''}`} />
-                                        </button>
-                                        <div className={`collapsible-content ${isScreenshotsVisible ? 'expanded' : ''} flex gap-2 overflow-x-auto pb-2`}>
-                                            {(postMortemImages || []).map((img, i) => (
-                                                <img key={i} src={img} className="h-20 w-auto rounded-lg border border-white/10 cursor-pointer hover:border-cyan-500 transition-colors" onClick={() => setViewerImageUrl(img)} />
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
 
                                 <div className="col-span-2 text-[9px] text-zinc-600 pt-3 mt-1 border-t border-white/5 flex justify-between uppercase tracking-wider">
                                     <span>Analyst: {(() => {
@@ -357,7 +357,8 @@ const TradeDetailView: React.FC<{
                                 </div>
                             </div>
                         </div>
-                    </div>
+                        </div>
+                    </details>
                 </div>
             </div>
 
@@ -379,157 +380,167 @@ const TradeLogRow: React.FC<{
     onOpenDetail: () => void;
     isSelected: boolean;
     onSelect: (id: string) => void;
-    modelIdToName: Record<string, string>;
     isInsight: boolean;
-    /** Similar-setup stats for this trade, computed once in the parent. */
-    similarSummary?: SimilarSetupSummary | null;
-}> = ({ trade, onOpenDetail, isSelected, onSelect, modelIdToName, isInsight, similarSummary }) => {
-    const [similarOpen, setSimilarOpen] = useState(false);
-    const { analysis, outcome, timestamp, pnlAmount, pnlPercent, modelsUsed, geminiModelUsed, deepseekModelUsed, zhipuModelUsed, groqModelUsed, groqNewModelUsed, groqAlt2ModelUsed, openrouterModelUsed, moderatorModel, isAccuracyMode, accuracySubMode } = trade;
-    const { direction, stopLoss, entryPoints, activeStrategies, coinName } = analysis;
-
-    const safeDirection = direction || 'Neutral';
-
-    // --- Dynamic Mode Styling ---
-    let containerClass = "glass-panel border-white/5 hover:border-white/10"; // Default
-    let modeBadge = null;
-
-    if (isAccuracyMode) {
-        // All accuracy modes use cyan dark theme
-        containerClass = "bg-cyan-950/20 border border-cyan-500/30 hover:border-cyan-500/50 shadow-[0_0_15px_-5px_rgba(176, 176, 182,0.1)]";
-        modeBadge = (
-            <span className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded border border-cyan-500/30 bg-cyan-900/30 text-cyan-300 ml-2 animate-pulse">
-                {accuracySubMode === 'pure_ai' ? 'Pure AI' : 'Strict Mode'}
-            </span>
-        );
-    }
-
-    if (isSelected) {
-        containerClass += " border-cyan-500/50 ring-1 ring-cyan-500/20";
-    }
+}> = ({ trade, onOpenDetail, isSelected, onSelect, isInsight }) => {
+    const { analysis, outcome, timestamp, pnlPercent, pnlAmount } = trade;
+    const coinName = analysis?.coinName || 'Unknown';
+    const direction = analysis?.direction || 'Neutral';
+    const rawStrategy = (analysis?.activeStrategies || [])[0] || analysis?.strategy || '';
+    const strategy = rawStrategy && !/\*\*|FINAL TRADE PLAN|#\s/.test(rawStrategy)
+        ? rawStrategy
+        : (analysis?.detectedPatternFamily || '');
+    const pnlLabel = pnlAmount !== undefined
+        ? `${pnlAmount >= 0 ? '+' : ''}${pnlAmount.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}`
+        : pnlPercent !== undefined
+            ? `${pnlPercent >= 0 ? '+' : ''}${pnlPercent.toLocaleString('en-US', { maximumFractionDigits: 1 })}%`
+            : null;
 
     return (
-        <div className={`rounded-xl mb-3 transition-all duration-300 cursor-pointer ${containerClass}`}>
-            <div className="p-4" onClick={onOpenDetail}>
-                <div className="flex items-start gap-3">
-                    <div className="pt-1" onClick={(e) => e.stopPropagation()}>
-                        <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => onSelect(trade.id)}
-                            className="form-checkbox h-5 w-5 bg-zinc-900 border-zinc-600 text-cyan-500 rounded focus:ring-cyan-500/50 cursor-pointer transition-all"
-                        />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                        {/* Header Row */}
-                        <div className="flex items-center justify-between mb-2.5">
-                            <div className="flex items-center gap-2.5">
-                                <OutcomeBadge outcome={outcome} />
-                                <span className={`font-black text-sm tracking-wider uppercase ${safeDirection === 'Long' ? 'text-emerald-400 drop-shadow-[0_0_5px_rgba(228,228,231,0.5)]' : safeDirection === 'Short' ? 'text-rose-400 drop-shadow-[0_0_5px_rgba(161,161,170,0.5)]' : 'text-gray-400'}`}>{safeDirection}</span>
-                                <span className="font-mono text-xs font-bold text-zinc-300">{coinName}</span>
-                                {modeBadge}
-                                {isInsight && (
-                                    <div className="flex items-center gap-1 px-1.5 py-0.5 bg-cyan-500/20 border border-cyan-500/30 rounded text-[9px] font-bold text-cyan-300 uppercase tracking-widest" title="This trade is currently included in Recent Insights">
-                                        <BrainIcon className="w-3 h-3" /> Memory
-                                    </div>
-                                )}
-                                {/* Trade Type Badge - Scalp vs Swing */}
-                                {(trade.tradeType || trade.analysis.tradeType) && (
-                                    <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest border
-                                        ${(trade.tradeType || trade.analysis.tradeType) === 'scalp'
-                                            ? 'bg-amber-500/20 border-amber-500/30 text-amber-400'
-                                            : 'bg-indigo-500/20 border-indigo-500/30 text-indigo-400'}`}>
-                                        <span>{(trade.tradeType || trade.analysis.tradeType) === 'scalp' ? '◆' : '◇'}</span>
-                                        {(trade.tradeType || trade.analysis.tradeType)?.toUpperCase()}
-                                    </div>
-                                )}
-                            </div>
-                            <span className="text-[10px] font-mono text-zinc-500">{new Date(timestamp).toLocaleDateString()}</span>
-                        </div>
-
-                        {/* Strategy & PnL Row */}
-                        <div className="flex justify-between items-end">
-                            <div className="flex-1 pr-4">
-                                <span className="text-xs text-zinc-300 font-semibold block mb-1 truncate" title={(activeStrategies || []).join(', ')}>
-                                    {(activeStrategies || []).length > 0 ? (activeStrategies || []).join(', ') : 'Discretionary Trade'}
-                                </span>
-                                <div className="flex items-center gap-3 text-[10px] text-zinc-500 font-mono">
-                                    <span>Entry: <span className="text-zinc-300">{(entryPoints || [])[0]?.price || 'N/A'}</span></span>
-                                    <span>SL: <span className="text-rose-300/80">{stopLoss || 'N/A'}</span></span>
-                                </div>
-                            </div>
-
-                            {/* Prominent PnL Display */}
-                            {pnlAmount !== undefined ? (
-                                <div className={`flex flex-col items-end px-3 py-1.5 rounded-lg border min-w-[80px] ${pnlAmount >= 0 ? 'bg-emerald-500/10 border-emerald-500/20 shadow-[0_0_15px_-5px_rgba(176, 176, 182,0.2)]' : 'bg-rose-500/10 border-rose-500/20 shadow-[0_0_15px_-5px_rgba(107, 107, 115,0.2)]'}`}>
-                                    <span className={`font-mono font-black text-lg leading-none ${pnlAmount >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                        {pnlAmount >= 0 ? '+' : ''}{pnlAmount.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}
-                                    </span>
-                                    <span className={`text-[9px] font-bold uppercase tracking-widest opacity-70 ${pnlAmount >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>PnL</span>
-                                </div>
-                            ) : pnlPercent !== undefined ? (
-                                <div className={`flex flex-col items-end px-3 py-1.5 rounded-lg border min-w-[80px] ${pnlPercent >= 0 ? 'bg-emerald-500/10 border-emerald-500/20 shadow-[0_0_15px_-5px_rgba(176, 176, 182,0.2)]' : 'bg-rose-500/10 border-rose-500/20 shadow-[0_0_15px_-5px_rgba(107, 107, 115,0.2)]'}`}>
-                                    <span className={`font-mono font-black text-lg leading-none ${pnlPercent >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                        {pnlPercent >= 0 ? '+' : ''}{pnlPercent.toLocaleString('en-US', { maximumFractionDigits: 1 })}%
-                                    </span>
-                                    <span className={`text-[9px] font-bold uppercase tracking-widest opacity-70 ${pnlPercent >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>PnL</span>
-                                </div>
-                            ) : null}
-                        </div>
-                    </div>
-                </div>
+        <div className={`flex items-center gap-3 px-5 py-5 hover:bg-zinc-800/80 transition-colors ${isSelected ? 'bg-zinc-800' : ''}`}>
+            <div onClick={(e) => e.stopPropagation()}>
+                <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => onSelect(trade.id)}
+                    className="form-checkbox h-4 w-4 bg-zinc-950 border-zinc-600 text-zinc-300 rounded focus:ring-zinc-500 cursor-pointer"
+                />
             </div>
-
-            {/* Similar-setup drill-down — this trade's own track record in
-                the journal (computed in the parent, self excluded). */}
-            {similarSummary && (
-                <div className="px-4 pb-3" onClick={(e) => e.stopPropagation()}>
-                    <button
-                        onClick={() => setSimilarOpen(v => !v)}
-                        className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-zinc-950/60 border border-white/5 text-[10px] font-mono hover:border-cyan-500/30 transition-colors"
-                        aria-expanded={similarOpen}
-                    >
-                        <span className="text-zinc-400">⛓ {similarSummary.total} similar setups in your journal</span>
-                        <span className="flex items-center gap-2 shrink-0">
-                            <span className={similarSummary.winRate >= 55 ? 'text-emerald-400' : similarSummary.winRate >= 40 ? 'text-amber-300' : 'text-rose-400'}>
-                                {similarSummary.winRate.toFixed(0)}% win
-                            </span>
-                            <span className="text-zinc-500">EV {similarSummary.expectedValue >= 0 ? '+' : ''}{similarSummary.expectedValue.toFixed(1)}%</span>
-                            <ChevronDownIcon className={`w-3 h-3 text-zinc-600 transition-transform ${similarOpen ? 'rotate-180' : ''}`} />
-                        </span>
-                    </button>
-                    <div className={`collapsible-content ${similarOpen ? 'expanded' : ''}`}>
-                        <div className="mt-1.5 p-2.5 rounded-lg bg-zinc-950/60 border border-white/5 space-y-1">
-                            {similarSummary.recent.map((r, i) => (
-                                <p key={i} className="text-[10px] font-mono text-zinc-500">
-                                    {r.date} · {r.coin} {r.direction}{' '}
-                                    <span className={r.outcome === 'WIN' ? 'text-emerald-400' : 'text-rose-400'}>{r.outcome}</span>{' '}
-                                    <span className={r.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}>({r.pnl > 0 ? '+' : ''}{r.pnl.toFixed(1)}%)</span>
-                                </p>
-                            ))}
-                            {similarSummary.sameCoinCount > 1 && similarSummary.sameCoinWinRate !== null && (
-                                <p className="text-[10px] font-mono text-zinc-600 pt-1 border-t border-white/5">
-                                    {similarSummary.sameCoinCount} closed trades on this coin overall · {similarSummary.sameCoinWinRate.toFixed(0)}% win
-                                </p>
-                            )}
-                        </div>
+            <button type="button" onClick={onOpenDetail} className="flex-1 min-w-0 flex items-center gap-3 text-left">
+                <FileTextIcon className="w-5 h-5 text-zinc-500 shrink-0" />
+                <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-sm font-medium text-zinc-100 truncate">{coinName}.md</span>
+                        <OutcomeBadge outcome={outcome} />
+                        {isInsight && <span className="text-[10px] uppercase tracking-widest text-zinc-500">memory</span>}
                     </div>
+                    <p className="text-xs text-zinc-500 mt-1 truncate">
+                        {direction}{strategy ? ` · ${strategy}` : ''} · {new Date(timestamp).toLocaleDateString()}
+                        {pnlLabel ? ` · ${pnlLabel}` : ''}
+                    </p>
                 </div>
-            )}
+                <ChevronRightIcon className="w-4 h-4 text-zinc-600 shrink-0" />
+            </button>
         </div>
     );
 };
 
-const TradeLogContent: React.FC<TradeLogContentProps> = ({ trades, onDeleteTrades, onClearAllTrades, modelIdToName, onUpdateInsights, isSummarizing, currentInsightIds, onUpdateTradeLeverage, onUpdateOutcome, onUpdatePnL, username }) => {
+const PatternMemoryDetailView: React.FC<{
+    markdown: string;
+    isLoading: boolean;
+    onBack: () => void;
+    onRegenerate: () => void;
+}> = ({ markdown, isLoading, onBack, onRegenerate }) => (
+    <div className="flex flex-col h-full bg-zinc-950">
+        <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+            <div className="px-8 pt-2 pb-16 w-full max-w-4xl mx-auto">
+                <button
+                    onClick={onBack}
+                    className="flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-100 transition-colors mb-8"
+                    aria-label="Back to trade list"
+                >
+                    <ChevronLeftIcon className="w-4 h-4" /> Back
+                </button>
+
+                <div className="flex items-start justify-between gap-3 mb-2">
+                    <h2 className="text-2xl font-semibold text-zinc-100 tracking-tight">pattern-memory.md</h2>
+                    <button
+                        type="button"
+                        onClick={onRegenerate}
+                        disabled={isLoading}
+                        className="p-2 text-zinc-500 hover:text-zinc-100 rounded-lg hover:bg-zinc-900 transition-colors disabled:opacity-50"
+                        title="Regenerate synthesis"
+                    >
+                        <RefreshIcon className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                    </button>
+                </div>
+                <p className="text-sm text-zinc-500 mt-2 mb-8">Rewritten by the Memory model when the journal updates</p>
+
+                    <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-8 py-8 lg:px-10 lg:py-10">
+                        {isLoading && !markdown.trim() ? (
+                            <div className="flex items-center gap-2 text-sm text-zinc-500">
+                                <LoadingIcon className="w-4 h-4" /> Synthesizing…
+                            </div>
+                        ) : (
+                            <MarkdownContent content={markdown} className="text-[15px] text-zinc-200 leading-8" />
+                        )}
+                </div>
+            </div>
+        </div>
+    </div>
+);
+
+const TradeLogContent: React.FC<TradeLogContentProps> = ({
+    trades, onDeleteTrades, onClearAllTrades, modelIdToName, onUpdateInsights, isSummarizing, currentInsightIds, onUpdateTradeLeverage, onUpdateOutcome, onUpdatePnL, username,
+    finalSummary = null,
+    individualSummaries = [],
+    isReviewLoading = false,
+    isInsightGenerating = false,
+    insightProgress = null,
+    newlyAddedInsightIds,
+    summarizationProvider = '',
+    summarizationModel = '',
+    onSetSummarizationProvider = () => {},
+    onSetSummarizationModel = () => {},
+    providers = [],
+    summaryCharLimit = 1000,
+    onUpdateSummaryCharLimit = () => {},
+    onRegenerateSummary = () => {},
+    onDeleteInsight,
+    useAlgorithmicSummary = false,
+    onToggleAlgorithmicSummary = () => {},
+    useAlgorithmicInsights = false,
+    onToggleAlgorithmicInsights = () => {},
+    onRewriteInsightsWithAI = () => {},
+    onDocumentOpenChange,
+}) => {
     // Drill-down navigation: the trade currently on the full detail screen
     // (null = the list is showing).
     const [detailTradeId, setDetailTradeId] = useState<string | null>(null);
+    const [showPatternMemory, setShowPatternMemory] = useState(false);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [viewerImageUrl, setViewerImageUrl] = useState<string | null>(null);
+    const [tradeTypeFilter, setTradeTypeFilter] = useState<'all' | 'scalp' | 'swing'>('all');
+    const [outcomeFilter, setOutcomeFilter] = useState<'all' | TradeOutcome>('all');
 
     const detailTrade = trades.find(t => t.id === detailTradeId);
 
+    useEffect(() => {
+        onDocumentOpenChange?.(showPatternMemory || !!detailTradeId);
+        return () => onDocumentOpenChange?.(false);
+    }, [showPatternMemory, detailTradeId, onDocumentOpenChange]);
+
+    const filteredTrades = useMemo(() => (trades || []).filter(trade => {
+        if (tradeTypeFilter !== 'all') {
+            const tt = trade.tradeType || trade.analysis.tradeType;
+            if (tradeTypeFilter === 'scalp') return tt === 'scalp';
+            if (tradeTypeFilter === 'swing') return tt === 'swing' || !tt;
+        }
+        if (outcomeFilter !== 'all' && trade.outcome !== outcomeFilter) return false;
+        return true;
+    }), [trades, tradeTypeFilter, outcomeFilter]);
+
+    const patternMemoryMarkdown = useMemo(() => {
+        const store = getMemoryFiles();
+        const folder = store.folders.find(f => f.name === 'profile');
+        const file = store.files.find(f => f.name === 'pattern-memory.md' && (!folder || f.folderId === folder.id));
+        if (file?.content.trim()) return file.content;
+        return toPatternMemoryMarkdown(finalSummary, patternMemoryStatsFromTrades(trades));
+    }, [finalSummary, isReviewLoading, showPatternMemory, trades]);
+
+    if (showPatternMemory) {
+        return (
+            <PatternMemoryDetailView
+                markdown={patternMemoryMarkdown}
+                isLoading={isReviewLoading}
+                onBack={() => setShowPatternMemory(false)}
+                onRegenerate={onRegenerateSummary}
+            />
+        );
+    }
+
     // Full-screen trade detail (Back button returns to the list).
+    // Must sit AFTER every hook — opening a trade used to return here before
+    // filter state, which crashed with "Rendered fewer hooks than expected".
     if (detailTrade) {
         return (
             <TradeDetailView
@@ -571,83 +582,21 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({ trades, onDeleteTrade
     const duplicateCount = selectedIds.filter(id => currentInsightIds.includes(id)).length;
     const newCount = selectedIds.length - duplicateCount;
 
-    // Similar-setup stats per trade, computed ONCE (the virtualized list must
-    // stay cheap). The trade itself is excluded — the drill-down shows what
-    // OTHER journal trades like this one did.
-    const similarByTrade = useMemo(() => {
-        const map = new Map<string, SimilarSetupSummary | null>();
-        for (const t of trades) {
-            map.set(t.id, summarizeSimilarSetups(
-                {
-                    coinName: t.analysis?.coinName,
-                    direction: t.analysis?.direction,
-                    detectedPatternFamily: t.analysis?.detectedPatternFamily,
-                },
-                trades.filter(x => x.id !== t.id),
-                t.marketRegime
-            ));
-        }
-        return map;
-    }, [trades]);
-
-    // Trade type filter
-    const [tradeTypeFilter, setTradeTypeFilter] = useState<'all' | 'scalp' | 'swing'>('all');
-    // Outcome filter + free-text search (coin / strategy / post-mortem)
-    const [outcomeFilter, setOutcomeFilter] = useState<'all' | TradeOutcome>('all');
-    const [searchQuery, setSearchQuery] = useState('');
-
-    const filteredTrades = (trades || []).filter(trade => {
-        if (tradeTypeFilter !== 'all') {
-            const tt = trade.tradeType || trade.analysis.tradeType;
-            if (tradeTypeFilter === 'scalp') return tt === 'scalp';
-            if (tradeTypeFilter === 'swing') return tt === 'swing' || !tt; // Legacy trades default to swing
-        }
-        if (outcomeFilter !== 'all' && trade.outcome !== outcomeFilter) return false;
-        const q = searchQuery.trim().toLowerCase();
-        if (q) {
-            const haystack = [
-                trade.analysis?.coinName,
-                trade.analysis?.direction,
-                (trade.analysis?.activeStrategies || []).join(' '),
-                trade.analysis?.strategy,
-                trade.tradeType || trade.analysis?.tradeType,
-                trade.postMortem,
-            ].filter(Boolean).join(' ').toLowerCase();
-            if (!haystack.includes(q)) return false;
-        }
-        return true;
-    });
-
     const totalTrades = filteredTrades.length;
 
     return (
-        <div className="flex flex-col h-full bg-transparent">
-            {/* Filters: search + trade type + outcome */}
-            <div className="px-4 py-2 border-b border-white/5 bg-zinc-900 shrink-0 space-y-2">
-                <div className="flex items-center gap-2">
-                    <input
-                        type="search"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="Search coin, strategy, post-mortem…"
-                        className="flex-1 min-w-0 bg-zinc-800 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-zinc-200 placeholder-zinc-600 outline-none focus:border-cyan-500/40"
-                        aria-label="Search trades"
-                    />
-                    <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-widest shrink-0">Filter</span>
-                </div>
-                <div className="flex items-center gap-1 flex-wrap">
+        <div className="flex flex-col h-full bg-transparent w-full max-w-4xl mx-auto">
+            {/* Filters: trade type + outcome */}
+            <div className="px-8 pt-2 pb-6 shrink-0 space-y-5">
+                <div className="flex items-center gap-2 flex-wrap">
                     {(['all', 'scalp', 'swing'] as const).map(type => (
                         <button
                             key={type}
                             onClick={() => setTradeTypeFilter(type)}
-                            className={`px-2 py-1 text-[9px] font-bold uppercase tracking-wider rounded transition-all border
-                                ${tradeTypeFilter === type
-                                    ? type === 'scalp'
-                                        ? 'bg-amber-500/20 border-amber-500/30 text-amber-400'
-                                        : type === 'swing'
-                                            ? 'bg-indigo-500/20 border-indigo-500/30 text-indigo-400'
-                                            : 'bg-cyan-500/20 border-cyan-500/30 text-cyan-400'
-                                    : 'bg-zinc-800 border-white/10 text-zinc-500 hover:text-zinc-300'}`}
+                            className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
+                                tradeTypeFilter === type
+                                    ? 'bg-zinc-800 text-zinc-100'
+                                    : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-900'}`}
                         >
                             {type === 'scalp' ? '◆ ' : type === 'swing' ? '◇ ' : ''}{type}
                         </button>
@@ -657,10 +606,10 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({ trades, onDeleteTrade
                         <button
                             key={o}
                             onClick={() => setOutcomeFilter(prev => prev === o ? 'all' : o)}
-                            className={`px-2 py-1 text-[9px] font-bold uppercase tracking-wider rounded transition-all border ${
+                            className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
                                 outcomeFilter === o
-                                    ? 'bg-cyan-500/20 border-cyan-500/30 text-cyan-400'
-                                    : 'bg-zinc-800 border-white/10 text-zinc-500 hover:text-zinc-300'
+                                    ? 'bg-zinc-800 text-zinc-100'
+                                    : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-900'
                             }`}
                         >
                             {o === TradeOutcome.ENTRY_NOT_HIT ? 'NO ENTRY' : o}
@@ -679,37 +628,36 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({ trades, onDeleteTrade
             </div>
 
             {trades.length > 0 && (
-                <div className="px-4 py-1.5 border-b border-white/5 bg-zinc-900/60 shrink-0 flex items-center justify-end">
+                <div className="px-8 pb-3 shrink-0 flex items-center justify-end">
                     <button
                         type="button"
                         onClick={onClearAllTrades}
-                        className="text-[10px] uppercase font-bold tracking-widest text-rose-400/80 hover:text-rose-300 transition-colors flex items-center gap-1.5"
+                        className="text-xs text-zinc-500 hover:text-rose-400 transition-colors"
                         title="Delete all logged trades (with 5s undo)"
                     >
-                        <TrashIcon className="w-3 h-3" /> Clear all trades
+                        Clear all
                     </button>
                 </div>
             )}
 
-            {/* Optional Action Header */}
             {currentInsightIds.length > 0 && (
-                <div className="p-3 border-b border-white/5 bg-zinc-900 shrink-0">
-                    <button onClick={handleSelectActiveInsights} className="w-full flex items-center justify-center gap-2 p-2 rounded-lg bg-cyan-500/10 border border-cyan-500/20 hover:bg-cyan-500/20 text-cyan-400 text-[10px] font-bold uppercase tracking-widest transition-all">
-                        <BrainIcon className="w-3 h-3" /> Select {currentInsightIds.length} Active Memory Trades
+                <div className="px-8 pb-4 shrink-0">
+                    <button onClick={handleSelectActiveInsights} className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors">
+                        Select {currentInsightIds.length} memory trades
                     </button>
                 </div>
             )}
 
             {/* Selected Actions */}
             {selectedIds.length > 0 && (
-                <div className="p-4 border-b border-white/5 bg-cyan-900/10 shrink-0 animate-fade-in">
+                <div className="p-4 border-b border-zinc-800 bg-zinc-900/50 shrink-0 animate-fade-in">
                     <div className="flex flex-col gap-2">
                         <button
                             onClick={handleUpdateInsights}
                             disabled={isSummarizing || newCount === 0}
-                            className={`w-full flex items-center justify-center gap-2 font-bold py-3 px-4 rounded-xl transition-all uppercase text-xs tracking-widest shadow-lg disabled:opacity-50 disabled:cursor-not-allowed ${duplicateCount > 0 && newCount === 0
-                                ? 'bg-zinc-800 border-zinc-700 text-zinc-500'
-                                : 'bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/20 shadow-cyan-900/20'
+                            className={`w-full flex items-center justify-center gap-2 font-semibold py-3 px-4 rounded-xl transition-all uppercase text-xs tracking-widest disabled:opacity-50 disabled:cursor-not-allowed ${duplicateCount > 0 && newCount === 0
+                                ? 'bg-zinc-800 border border-zinc-700 text-zinc-500'
+                                : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-zinc-600'
                                 }`}
                         >
                             {isSummarizing ? <LoadingIcon className="w-4 h-4" /> : <StarIcon className="w-4 h-4" />}
@@ -727,7 +675,7 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({ trades, onDeleteTrade
                                 }
                             </div>
                         )}
-                        <button onClick={handleDeleteSelected} disabled={isSummarizing} className="w-full flex items-center justify-center gap-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 font-bold py-3 px-4 rounded-xl transition-all uppercase text-xs tracking-widest shadow-lg shadow-rose-900/20 disabled:opacity-50">
+                        <button onClick={handleDeleteSelected} disabled={isSummarizing} className="status-surface w-full flex items-center justify-center gap-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 font-semibold py-3 px-4 rounded-xl transition-all uppercase text-xs tracking-widest disabled:opacity-50">
                             <TrashIcon /> Delete Selected ({selectedIds.length})
                         </button>
                     </div>
@@ -735,33 +683,69 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({ trades, onDeleteTrade
             )}
 
             {/* Trade List - Virtualized */}
-            <div className="flex-1 overflow-hidden">
-                {totalTrades === 0 ? (
+            <div className="flex-1 overflow-hidden px-8 pb-8">
+                {totalTrades === 0 && trades.length === 0 ? (
+                    <div className="h-full rounded-xl border border-zinc-800 bg-zinc-900 overflow-hidden flex flex-col">
+                        <button
+                            type="button"
+                            onClick={() => setShowPatternMemory(true)}
+                            className="flex items-center gap-3 px-5 py-5 hover:bg-zinc-800/80 transition-colors border-b border-zinc-800 text-left shrink-0 w-full"
+                        >
+                            <FileTextIcon className="w-5 h-5 text-zinc-500 shrink-0" />
+                            <div className="flex-1 min-w-0">
+                                <span className="text-sm font-medium text-zinc-100">pattern-memory.md</span>
+                                <p className="text-xs text-zinc-500 mt-1 truncate">
+                                    {isReviewLoading ? 'Synthesizing…' : 'Pattern synthesis'}
+                                </p>
+                            </div>
+                            <ChevronRightIcon className="w-4 h-4 text-zinc-600 shrink-0" />
+                        </button>
+                        <EmptyState
+                            icon={<Bookmark className="w-8 h-8" />}
+                            title="No trades logged yet"
+                            description="Run an analysis and log your first trade to start building your journal."
+                            className="flex-1"
+                        />
+                    </div>
+                ) : totalTrades === 0 ? (
                     <EmptyState
                         icon={<Bookmark className="w-8 h-8" />}
-                        title="No trades logged yet"
-                        description="Run an analysis and log your first trade to start building your journal."
+                        title="No matching trades"
+                        description="Nothing matches the current filters."
                         className="h-full"
                     />
                 ) : (
-                    <Virtuoso
-                        style={{ height: '100%' }}
-                        data={filteredTrades}
-                        itemContent={(index, trade) => (
-                            <div className="px-5 py-0.5">
-                                <TradeLogRow
-                                    key={trade.id}
-                                    trade={trade}
-                                    onOpenDetail={() => setDetailTradeId(trade.id)}
-                                    isSelected={selectedIds.includes(trade.id)}
-                                    onSelect={handleSelect}
-                                    modelIdToName={modelIdToName}
-                                    isInsight={currentInsightIds.includes(trade.id)}
-                                    similarSummary={similarByTrade.get(trade.id) ?? null}
-                                />
+                    <div className="h-full rounded-xl border border-zinc-800 bg-zinc-900 overflow-hidden flex flex-col">
+                        <button
+                            type="button"
+                            onClick={() => setShowPatternMemory(true)}
+                            className="flex items-center gap-3 px-5 py-5 hover:bg-zinc-800/80 transition-colors border-b border-zinc-800 text-left shrink-0 w-full"
+                        >
+                            <FileTextIcon className="w-5 h-5 text-zinc-500 shrink-0" />
+                            <div className="flex-1 min-w-0">
+                                <span className="text-sm font-medium text-zinc-100">pattern-memory.md</span>
+                                <p className="text-xs text-zinc-500 mt-1 truncate">
+                                    {isReviewLoading ? 'Synthesizing…' : 'Pattern synthesis'}
+                                </p>
                             </div>
-                        )}
-                    />
+                            <ChevronRightIcon className="w-4 h-4 text-zinc-600 shrink-0" />
+                        </button>
+                        <Virtuoso
+                            style={{ height: '100%' }}
+                            data={filteredTrades}
+                            itemContent={(_index, trade) => (
+                                <div className="border-b border-zinc-800 last:border-b-0">
+                                    <TradeLogRow
+                                        trade={trade}
+                                        onOpenDetail={() => setDetailTradeId(trade.id)}
+                                        isSelected={selectedIds.includes(trade.id)}
+                                        onSelect={handleSelect}
+                                        isInsight={currentInsightIds.includes(trade.id)}
+                                    />
+                                </div>
+                            )}
+                        />
+                    </div>
                 )}
             </div>
 

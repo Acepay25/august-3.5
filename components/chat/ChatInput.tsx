@@ -211,10 +211,10 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
     return (
         <div className={centered
             ? 'w-full status-surface'
-            : 'absolute bottom-0 left-0 right-0 px-3 sm:px-4 lg:px-8 pointer-events-none z-20 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:pb-[calc(env(safe-area-inset-bottom)+1rem)] lg:pb-8 status-surface'}>
+            : 'absolute bottom-0 left-0 right-0 px-3 sm:px-4 lg:px-8 pointer-events-none z-20 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] sm:pb-[calc(env(safe-area-inset-bottom)+0.75rem)] lg:pb-4 status-surface'}>
             <div className={centered ? 'w-full' : 'w-full lg:max-w-3xl lg:mx-auto pointer-events-auto'}>
-                {/* Main Input Container — carded composer surface */}
-                <div className="rounded-2xl border border-white/10 bg-[#202020]/95 shadow-[0_8px_32px_rgba(0,0,0,0.24)] p-2 sm:p-3 lg:p-4 transition-all">
+                {/* Main Input Container — compact composer */}
+                <div className="rounded-2xl border border-white/10 bg-[#202020]/95 shadow-[0_8px_32px_rgba(0,0,0,0.24)] p-2 transition-all">
 
                     {/* Image Preview */}
                     <ImagePreview images={images} onRemoveImage={removeImage} />
@@ -229,7 +229,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             // also sends as an alternative.
                             onKeyDown={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && (!e.shiftKey || e.ctrlKey || e.metaKey) ? (e.preventDefault(), handleSendMessage()) : null}
                             placeholder={images.length > 0 ? "Analyze charts..." : "Write a message..."}
-                            className="flex-1 min-w-0 bg-transparent px-2 py-2 text-base text-white placeholder-zinc-500 outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 transition-all min-h-[44px] lg:min-h-[48px] max-h-32 resize-none leading-relaxed"
+                            className="flex-1 min-w-0 bg-transparent px-2 py-1.5 text-base text-white placeholder-zinc-500 outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 min-h-[36px] max-h-24 resize-none leading-snug"
                             rows={1}
                             // Always typeable — sending (not typing) is what
                             // requires a ready provider.
@@ -240,7 +240,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                     <input type="file" multiple accept="image/*" ref={fileInputRef} onChange={handleImageUpload} className="hidden" disabled={uploadDisabled} />
 
                     {/* Bottom Toolbar — unified control row for all breakpoints */}
-                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 sm:pt-3 mt-2 border-t border-white/5 lg:flex-nowrap lg:border-none lg:mt-3 lg:pt-0">
+                    <div className="flex flex-wrap items-center justify-between gap-1.5 pt-1 mt-1 border-t border-white/5 lg:flex-nowrap">
                         {/* Left Side: upload + action pills */}
                         <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2 flex-wrap">
                             <button
@@ -267,7 +267,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             {/* Ensemble toggle — simple on/off button */}
                             <button
                                 onClick={() => setIsEnsembleEnabled(!isEnsembleEnabled)}
-                                className={`flex items-center gap-1 sm:gap-1.5 px-3 sm:px-4 py-1 sm:py-1.5 lg:py-2 rounded-full transition-all text-xs sm:text-sm ${isEnsembleEnabled ? 'bg-cyan-600 text-white shadow-[inset_0_0_10px_rgba(0,0,0,0.1)]' : 'bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700'}`}
+                                className={`flex items-center gap-1 sm:gap-1.5 px-3 sm:px-4 py-1 rounded-full transition-all text-xs sm:text-sm ${isEnsembleEnabled ? 'bg-cyan-600 text-white shadow-[inset_0_0_10px_rgba(0,0,0,0.1)]' : 'bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700'}`}
                                 title={isEnsembleEnabled ? 'Ensemble on — chart analysis enabled' : 'Enable ensemble mode for chart analysis'}
                                 aria-pressed={isEnsembleEnabled}
                             >
@@ -278,7 +278,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                 <button
                                     type="button"
                                     onClick={() => setIsTeamModalOpen(true)}
-                                    className="flex items-center gap-1.5 rounded-full bg-zinc-800 px-2.5 py-1 sm:px-3 sm:py-1.5 text-xs sm:text-sm text-zinc-300 transition-colors hover:bg-zinc-700 hover:text-white"
+                                    className="flex items-center gap-1.5 rounded-full bg-zinc-800 px-2.5 py-1 text-xs sm:text-sm text-zinc-300 transition-colors hover:bg-zinc-700 hover:text-white"
                                     aria-haspopup="dialog"
                                     aria-expanded={isTeamModalOpen}
                                     title="Choose the analyst team"
@@ -358,7 +358,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                     </div>
 
                     {isEnsembleEnabled && rosterSlots.length > 0 && (
-                        <p className="mt-2 truncate px-1 text-[11px] text-zinc-500" title={rosterSlots.map(s => `${s.label} · ${s.model}`).join('   ')}>
+                        <p className="mt-1 truncate px-1 text-[11px] text-zinc-500" title={rosterSlots.map(s => `${s.label} · ${s.model}`).join('   ')}>
                             {rosterSlots.map(slot => `${slot.label} · ${slot.model}`).join('   ')}
                         </p>
                     )}

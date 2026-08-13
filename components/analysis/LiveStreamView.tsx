@@ -64,9 +64,8 @@ const AnalystPanel: React.FC<{
     }
   }, [isFinished, output, onTypingComplete]);
 
-  // Harness-style: while the model's chain of thought streams (reasoning
-  // deltas) and no final output exists yet, keep the Thinking block
-  // auto-expanded so the user watches it think in real-time.
+  // Harness-style: thinking stays collapsed. The summary pulses while the
+  // model is still streaming so the user can open it if they want to watch.
   const isStreamingThinking = output === null && !!reasoning;
   const showLoadingState = output === null || (output !== null && typedText.length === 0 && !isFinished);
 
@@ -86,7 +85,7 @@ const AnalystPanel: React.FC<{
         {(
           <details
             className="mb-4 rounded-lg border border-white/10 bg-black/20 group"
-            open={thinkingOpen || isStreamingThinking}
+            open={thinkingOpen}
             onToggle={(e) => setThinkingOpen((e.target as HTMLDetailsElement).open)}
           >
             <summary className="cursor-pointer list-none px-3 py-2 text-[10px] uppercase tracking-widest text-zinc-400 group-open:text-zinc-200">

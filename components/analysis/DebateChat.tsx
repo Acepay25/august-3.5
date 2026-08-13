@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { DebateTurn, AnalystLensConfig, TradeAnalysis, ReplacementOffer } from '../../types';
-import { BotIcon, ChevronDownIcon, KebabMenuIcon } from '../shared/Icons';
+import { ChevronDownIcon, KebabMenuIcon } from '../shared/Icons';
 import MarkdownContent from '../shared/MarkdownContent';
 import { getRoleDisplayForProvider } from '../../services/ui/AnalystLensService';
 import { buildTranscriptMarkdown, buildTranscriptJson, buildTranscriptFilename, downloadTextFile } from '../../utils/transcriptExport';
@@ -27,34 +27,21 @@ interface DebateChatProps {
     onReplacementChoice?: (messageId: string, providerId: string | null) => void;
 }
 
-const cleanSpeakerPrefix = (text: string, speaker: string): string => text
-    .replace(new RegExp(`^\\s*(?:\\*\\*)?${speaker.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}(?:\\*\\*)?:\\s*`, 'i'), '')
-    .trim();
-
-const SpeakerAvatar: React.FC<{ speaker: string; moderator?: boolean; small?: boolean; live?: boolean }> = ({ speaker, moderator = false, small = false, live = false }) => {
-    if (moderator) {
-        return (
-            <div className={`${small ? 'h-6 w-6' : 'h-8 w-8'} flex shrink-0 items-center justify-center rounded-full border border-cyan-400/30 bg-cyan-500/10 text-cyan-300 ${live ? 'ring-1 ring-cyan-400/40' : ''}`}>
-                <BotIcon />
-            </div>
-        );
-    }
-
-    return (
-        <div className={`${small ? 'h-6 w-6 text-[10px]' : 'h-8 w-8 text-xs'} flex shrink-0 items-center justify-center rounded-full border border-white/10 bg-zinc-800 font-semibold text-zinc-200 ${live ? 'ring-1 ring-cyan-400/40' : ''}`}>
-            {speaker.trim().charAt(0).toUpperCase() || '?'}
-        </div>
-    );
+const cleanSpeakerPrefix = (text: string, speaker: string): string => {
+    const escaped = speaker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return text
+        .replace(/^\s*(?:\*{0,2})\s*\{\{\s*NAME\s*\}\}\s*(?:\*{0,2})\s*:\s*/i, '')
+        .replace(new RegExp(`^\\s*(?:\\*\\*)?${escaped}(?:\\*\\*)?:\\s*`, 'i'), '')
+        .trim();
 };
 
 const PHASES = ['Openings', 'Rebuttals', 'Clarification', 'Verdict'] as const;
 
-const getRoundLabel = (round: number, isVerdictRound = false, speaker?: string): string => {
-    if (isVerdictRound) return 'Final verdict';
+const getPhaseHeading = (round: number, isVerdictRound = false): string => {
+    if (isVerdictRound) return 'Verdict';
     if (round === 1) return 'Openings';
     if (round === 2 || round === 3) return 'Rebuttals';
-    if (speaker === 'Moderator') return 'Clarification questions';
-    return 'Analyst responses';
+    return 'Clarification';
 };
 
 /** Human phase name for the thinking indicator (instead of a raw round number). */
@@ -72,9 +59,8 @@ interface ModeratorSegment {
 
 /**
  * Clarification prompts can contain one labelled question for each analyst in
- * a single moderator stream. Split those labelled sections for display so the
- * transcript reads like a one-to-one Messenger exchange. Unlabelled verdict
- * prose stays as one Moderator message.
+ * a single moderator stream. Split those labelled sections so each question
+ * sits under its own name row. Unlabelled verdict prose stays as one block.
  */
 const splitModeratorTurn = (
     text: string,
@@ -98,26 +84,20 @@ const splitModeratorTurn = (
 };
 
 /**
- * Harness-style per-turn thinking: the speaker's chain of thought sits in a
- * collapsible block above their final text. Auto-expands while the speaker is
- * actively streaming (live debates), collapses to a one-click toggle after.
+ * Harness-style per-turn thinking: same collapsible block as the analyst
+ * cards (bordered details, markdown body). Stays collapsed unless opened;
+ * a pulse on the summary still signals a live stream.
  */
-const TurnThinking: React.FC<{ content: string; autoOpen: boolean }> = ({ content, autoOpen }) => {
+const TurnThinking: React.FC<{ content: string; streaming?: boolean }> = ({ content, streaming = false }) => {
     const [open, setOpen] = useState(false);
-    // A manual toggle wins over auto-open: once the user collapses the block
-    // mid-stream, autoOpen must not force it back open on the next chunk.
-    const userInteractedRef = useRef(false);
     return (
         <details
-            className="mb-2.5 rounded-lg border border-white/10 bg-black/20 group"
-            open={open || (autoOpen && !userInteractedRef.current)}
+            className="group rounded-lg border border-white/10 bg-black/20"
+            open={open}
             onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}
         >
-            <summary
-                onClick={() => { userInteractedRef.current = true; }}
-                className="cursor-pointer list-none px-3 py-1.5 text-[11px] text-zinc-500 group-open:text-zinc-300"
-            >
-                {autoOpen ? (
+            <summary className="cursor-pointer list-none px-3 py-2 text-[11px] text-zinc-500 group-open:text-zinc-300">
+                {streaming ? (
                     <span className="inline-flex items-center gap-1.5">
                         <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400"></span>
                         Thinking…
@@ -154,8 +134,10 @@ const DebateChat: React.FC<DebateChatProps> = ({
     const [replayIndex, setReplayIndex] = useState(0);
     const [replaySpeed, setReplaySpeed] = useState(1);
     const [isExportOpen, setIsExportOpen] = useState(false);
+    const [pendingPhaseJump, setPendingPhaseJump] = useState<(typeof PHASES)[number] | null>(null);
     const exportMenuRef = useRef<HTMLSpanElement>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
+    const phaseAnchorRefs = useRef<Partial<Record<(typeof PHASES)[number], HTMLDivElement | null>>>({});
     const userScrolledUpRef = useRef(false);
     const touchYRef = useRef<number | null>(null);
 
@@ -237,6 +219,13 @@ const DebateChat: React.FC<DebateChatProps> = ({
         if (element) element.scrollTo({ top: element.scrollHeight, behavior: 'smooth' });
     };
 
+    const jumpToPhase = (phase: (typeof PHASES)[number]): void => {
+        setShowTranscript(true);
+        setPendingPhaseJump(phase);
+        userScrolledUpRef.current = true;
+        setIsScrolledUp(true);
+    };
+
     const copyTranscript = () => {
         const text = debateTurns
             .map(t => `**${t.speaker}**${t.round ? ` (Round ${t.round})` : ''}:\n${t.text}`)
@@ -304,6 +293,26 @@ const DebateChat: React.FC<DebateChatProps> = ({
         return reasoningProcesses[speaker] || thoughtProcesses[speaker] || (providerId ? reasoningProcesses[providerId] || thoughtProcesses[providerId] : '') || '';
     };
 
+    const reachedPhases = useMemo(() => {
+        const phases = new Set<(typeof PHASES)[number]>();
+        debateTurns.forEach(turn => {
+            if (typeof turn.round !== 'number') return;
+            const isVerdictRound = turn.speaker === 'Moderator' && turn.round === latestModeratorRound;
+            phases.add(getPhaseHeading(turn.round, isVerdictRound));
+        });
+        return phases;
+    }, [debateTurns, latestModeratorRound]);
+
+    const transcriptOpen = isDebating || isReplaying || showTranscript || !analysis;
+
+    useEffect(() => {
+        if (!pendingPhaseJump) return;
+        const el = phaseAnchorRefs.current[pendingPhaseJump];
+        if (!el) return;
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        setPendingPhaseJump(null);
+    }, [pendingPhaseJump, debateTurns, transcriptOpen]);
+
     if (!debateTurns.length && !isDebating) {
         // Completed debate with no parsed transcript (e.g. an accuracy-mode
         // stream that yielded zero turns): keep the verdict consensus visible
@@ -323,7 +332,6 @@ const DebateChat: React.FC<DebateChatProps> = ({
     // per-turn map — O(n²) array copies on every replay tick).
     const displayedTurns = isReplaying ? visibleTurns.slice(0, replayIndex) : visibleTurns;
     const isComplete = Boolean(analysis && !isDebating && debateTurns.length > 0);
-    const transcriptOpen = isDebating || isReplaying || showTranscript || !analysis;
     const liveRound = Math.max(
         1,
         ...debateTurns.map(turn => turn.round ?? 1),
@@ -350,7 +358,20 @@ const DebateChat: React.FC<DebateChatProps> = ({
                     {PHASES.map((phase, index) => (
                         <React.Fragment key={phase}>
                             {index > 0 && <span className="text-zinc-700">·</span>}
-                            <span className={phase === activePhase ? 'font-medium text-zinc-200' : ''}>{phase}</span>
+                            <button
+                                type="button"
+                                onClick={() => jumpToPhase(phase)}
+                                disabled={!reachedPhases.has(phase)}
+                                className={`rounded px-1 py-0.5 transition-colors ${
+                                    phase === activePhase
+                                        ? 'font-medium text-zinc-200'
+                                        : reachedPhases.has(phase)
+                                            ? 'text-zinc-500 hover:text-zinc-200'
+                                            : 'cursor-default text-zinc-700'
+                                }`}
+                            >
+                                {phase}
+                            </button>
                         </React.Fragment>
                     ))}
                 </div>
@@ -506,75 +527,87 @@ const DebateChat: React.FC<DebateChatProps> = ({
                     lockIfScrollingUp(touchYRef.current - currentY);
                     touchYRef.current = currentY;
                 }}
-                className="relative max-h-[520px] space-y-3 overflow-y-auto px-3 py-4 custom-scrollbar"
+                className="relative max-h-[520px] overflow-y-auto px-4 py-4 custom-scrollbar"
             >
                 {displayedTurns.map((turn, index) => {
                     if (turn.speaker === 'System') {
                         return (
-                            <div key={`${turn.speaker}-${turn.round ?? 'legacy'}-${index}`} className="flex justify-center px-2">
-                                <div className="rounded-lg border border-white/10 bg-zinc-800/80 px-3 py-1.5 text-center text-[11px] italic leading-relaxed text-zinc-500">
-                                    {turn.text}
-                                </div>
+                            <div key={`${turn.speaker}-${turn.round ?? 'legacy'}-${index}`} className="py-2 text-center text-[11px] italic leading-relaxed text-zinc-600">
+                                {turn.text}
                             </div>
                         );
                     }
-                    const previousRound = displayedTurns[index - 1]?.round;
-                    const hasRoundSeparator = typeof turn.round === 'number' && turn.round !== previousRound;
+                    const previous = displayedTurns[index - 1];
                     const isVerdictRound = turn.speaker === 'Moderator' && turn.round === latestModeratorRound;
                     const isVerdict = isVerdictRound && !isDebating;
+                    const phase = typeof turn.round === 'number' ? getPhaseHeading(turn.round, isVerdictRound) : '';
+                    const previousPhase = previous && typeof previous.round === 'number'
+                        ? getPhaseHeading(previous.round, previous.speaker === 'Moderator' && previous.round === latestModeratorRound)
+                        : '';
+                    const showPhase = Boolean(phase) && phase !== previousPhase;
                     const displayName = getDisplayName(turn.speaker);
                     const modelName = getModelName(turn.speaker);
                     const segments = turn.speaker === 'Moderator'
                         ? splitModeratorTurn(turn.text, analystNames, modelNames)
                         : [{ text: turn.text }];
-                    const turnReasoning = (turn.reasoning || getReasoning(turn.speaker) || '').trim();
+                    const priorFromSpeaker = displayedTurns.slice(0, index).some(item => item.speaker === turn.speaker);
+                    const turnReasoning = (turn.reasoning || (!priorFromSpeaker ? getReasoning(turn.speaker) : '') || '').trim();
                     const isSpeakerStreaming = isDebating && activeDebateSpeakers[turn.speaker] !== undefined;
                     return (
                         <React.Fragment key={`${turn.speaker}-${turn.round ?? 'legacy'}-${index}`}>
-                            {hasRoundSeparator && (
-                                <div className="flex items-center gap-2 py-1 text-[11px] text-zinc-600">
-                                    <span className="h-px flex-1 bg-white/5" />
-                                    <span>{getRoundLabel(turn.round!, isVerdictRound, turn.speaker)}</span>
-                                    <span className="h-px flex-1 bg-white/5" />
+                            {showPhase && (
+                                <div
+                                    ref={el => { phaseAnchorRefs.current[phase as (typeof PHASES)[number]] = el; }}
+                                    className={`text-[10px] font-semibold uppercase tracking-widest text-zinc-600 ${index === 0 ? 'mb-3' : 'mb-3 mt-6'}`}
+                                >
+                                    {phase}
                                 </div>
                             )}
-                            {segments.map((segment, segmentIndex) => (
-                                <div key={`${turn.speaker}-${turn.round ?? 'legacy'}-${index}-${segmentIndex}`} className="flex items-start gap-2.5">
-                                    <SpeakerAvatar speaker={turn.speaker} moderator={turn.speaker === 'Moderator'} live={isSpeakerStreaming} />
-                                    <div className={`min-w-0 max-w-[92%] rounded-2xl border px-3.5 py-3 ${isVerdict ? 'border-cyan-400/25 bg-cyan-500/10' : 'border-white/5 bg-zinc-800/60'}`}>
-                                        <div className="mb-1.5 flex items-center gap-2">
-                                            <div className="min-w-0">
-                                                <div className={`text-xs font-medium ${isVerdict ? 'text-cyan-300' : 'text-zinc-200'}`}>{displayName}</div>
-                                                {turn.createdAt && <div className="text-[11px] text-zinc-600">{new Date(turn.createdAt).toLocaleTimeString()}</div>}
-                                                {segment.target ? <div className="truncate text-[11px] text-zinc-500">To {segment.target}</div> : modelName && <div className="truncate text-[11px] text-zinc-600">{modelName}</div>}
-                                            </div>
-                                            {isVerdict && <span className="ml-auto rounded border border-cyan-400/20 bg-cyan-400/10 px-1.5 py-0.5 text-[10px] font-medium text-cyan-300">Verdict</span>}
+                            {segments.map((segment, segmentIndex) => {
+                                const body = turn.speaker === 'Moderator'
+                                    ? segment.text.replace(/^\s*\*{0,2}\s*moderator\s+verdict\*{0,2}\s*[:—-]?\s*/i, '')
+                                    : cleanSpeakerPrefix(segment.text, turn.speaker);
+                                return (
+                                <div
+                                    key={`${turn.speaker}-${turn.round ?? 'legacy'}-${index}-${segmentIndex}`}
+                                    className={`space-y-3 py-3 ${segmentIndex === 0 && !showPhase ? 'border-t border-white/5' : ''}`}
+                                >
+                                    <div className="flex min-w-0 items-baseline gap-2">
+                                        <div className={`truncate text-xs font-medium ${isVerdict ? 'text-zinc-100' : 'text-zinc-300'}`}>
+                                            {displayName}
+                                            {isSpeakerStreaming && (
+                                                <span className="ml-1.5 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400 align-middle" />
+                                            )}
                                         </div>
-                                        {segmentIndex === 0 && turnReasoning && (
-                                            <TurnThinking content={turnReasoning} autoOpen={isSpeakerStreaming} />
-                                        )}
+                                        {segment.target ? (
+                                            <div className="truncate text-[11px] text-zinc-600">→ {segment.target}</div>
+                                        ) : modelName ? (
+                                            <div className="truncate text-[11px] text-zinc-600">{modelName}</div>
+                                        ) : null}
+                                    </div>
+                                    {segmentIndex === 0 && turnReasoning && (
+                                        <TurnThinking content={turnReasoning} streaming={isSpeakerStreaming} />
+                                    )}
+                                    <div className="min-w-0">
+                                        <div className="mb-1 text-[11px] text-zinc-500">Final output</div>
                                         <MarkdownContent
-                                            content={turn.speaker === 'Moderator' ? segment.text : cleanSpeakerPrefix(segment.text, turn.speaker)}
-                                            className="text-sm leading-relaxed text-zinc-300"
+                                            content={body}
+                                            className="text-sm leading-6 text-zinc-200"
                                         />
                                         {isSpeakerStreaming && (
                                             <span className="mt-1 inline-block h-4 w-1.5 animate-pulse bg-cyan-400 align-middle" aria-hidden="true" />
                                         )}
                                     </div>
                                 </div>
-                            ))}
+                                );
+                            })}
                         </React.Fragment>
                     );
                 })}
 
                 {isDebating && activeSpeakers.length > 0 && (
-                    <div className="flex items-center gap-2 pt-1 text-[11px] text-zinc-500">
-                        <div className="flex -space-x-2 pl-1">
-                            {activeSpeakers.map(([speaker]) => <SpeakerAvatar key={speaker} speaker={speaker} moderator={speaker === 'Moderator'} small live />)}
-                        </div>
-                        <span>
-                            {activeSpeakers.map(([speaker]) => getDisplayName(speaker)).join(', ')} writing…
-                        </span>
+                    <div className="pt-2 text-[11px] text-zinc-500">
+                        {activeSpeakers.map(([speaker]) => getDisplayName(speaker)).join(', ')} writing…
                     </div>
                 )}
 

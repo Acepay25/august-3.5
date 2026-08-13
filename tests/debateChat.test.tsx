@@ -84,7 +84,7 @@ describe('DebateChat', () => {
         expect(screen.getAllByText('Rebuttals').length).toBeGreaterThanOrEqual(1);
     });
 
-    it('labels clarification rounds with speaker context', () => {
+    it('labels clarification as one phase', () => {
         const turns = [
             makeTurn('Analyst A', 'Opening', 1),
             makeTurn('Moderator', 'What about volume?', 4),
@@ -92,17 +92,18 @@ describe('DebateChat', () => {
             makeTurn('Moderator', 'Verdict: Long', 6),
         ];
         render(<DebateChat {...baseProps} debateTurns={turns} />);
-        expect(screen.getByText('Clarification questions')).toBeDefined();
-        expect(screen.getByText('Analyst responses')).toBeDefined();
+        expect(screen.getAllByText('Clarification').length).toBeGreaterThanOrEqual(1);
+        expect(screen.queryByText('Clarification questions')).toBeNull();
+        expect(screen.queryByText('Analyst responses')).toBeNull();
     });
 
-    it('shows Final Verdict label for the last moderator round', () => {
+    it('shows Verdict heading for the last moderator round', () => {
         const turns = [
             makeTurn('Analyst A', 'Opening', 1),
             makeTurn('Moderator', 'Final verdict: Long', 3),
         ];
         render(<DebateChat {...baseProps} debateTurns={turns} />);
-        expect(screen.getByText('Final verdict')).toBeDefined();
+        expect(screen.getAllByText('Verdict').length).toBeGreaterThanOrEqual(1);
     });
 
     it('shows TL;DR summary when analysis is provided and debate is complete', () => {
@@ -202,8 +203,8 @@ describe('DebateChat', () => {
         ];
         render(<DebateChat {...baseProps} debateTurns={turns} />);
         // Both analyst-targeted segments should appear
-        expect(screen.getByText('To Analyst A')).toBeDefined();
-        expect(screen.getByText('To Analyst B')).toBeDefined();
+        expect(screen.getByText('→ Analyst A')).toBeDefined();
+        expect(screen.getByText('→ Analyst B')).toBeDefined();
     });
 
     it('shows collapsible per-turn thinking above the final text (harness style)', () => {
@@ -216,11 +217,31 @@ describe('DebateChat', () => {
         render(<DebateChat {...props} />);
         // Final output is always visible; thinking sits behind its toggle
         // (closed <details> keeps children in the DOM, so assert `open`).
+        expect(screen.getByText('Final output')).toBeDefined();
         expect(screen.getByText('Final verdict text')).toBeDefined();
         const details = screen.getByText('Chain of thought for macro call').closest('details');
         expect(details?.open).toBe(false);
         fireEvent.click(screen.getByText(/Thinking/));
         expect(screen.getByText('Chain of thought for macro call').closest('details')?.open).toBe(true);
+    });
+
+    it('strips leftover {{NAME}}: prompt placeholders from turn text', () => {
+        const turns = [makeTurn('Macro Analyst', '**{{NAME}}:** Short from the 4H supply zone', 1)];
+        render(<DebateChat {...baseProps} debateTurns={turns} />);
+        expect(screen.queryByText(/\{\{NAME\}\}/)).toBeNull();
+        expect(screen.getByText('Short from the 4H supply zone')).toBeDefined();
+    });
+
+    it('jumps to a phase heading when the round tab is clicked', () => {
+        const scrollIntoView = vi.fn();
+        HTMLElement.prototype.scrollIntoView = scrollIntoView;
+        const turns = [
+            makeTurn('Analyst A', 'Opening', 1),
+            makeTurn('Analyst A', 'Rebuttal', 2),
+        ];
+        render(<DebateChat {...baseProps} debateTurns={turns} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Rebuttals' }));
+        expect(scrollIntoView).toHaveBeenCalled();
     });
 
     it('shows moderator thinking keyed to lowercase moderator (post-mortem transcript)', () => {

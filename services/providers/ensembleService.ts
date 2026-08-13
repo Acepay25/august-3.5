@@ -259,6 +259,9 @@ CRITICAL RULES:
 
 You must complete the ENTIRE response including the **FINAL TRADE PLAN** markdown block at the end.`;
 
+const fillPromptPlaceholders = (template: string, vars: Record<string, string>): string =>
+    Object.entries(vars).reduce((acc, [key, value]) => acc.replaceAll(`{{${key}}}`, value), template);
+
 /**
  * Stream the moderator analysis from any configured provider via the generic client.
  * `config` is the moderator provider's ProviderConfig; `model` overrides config.selectedModel
@@ -2648,9 +2651,10 @@ export const conductRealDebate = async function* (
                     )
                     : '';
                 const systemPrompt = (rolePrefix ? `${rolePrefix}\n\n` : '')
-                    + getPrompt('debate.rebuttal', DEBATE_RESPONSE_PROMPT)
-                        .replace('{{NAME}}', analyst.provider.name)
-                        .replace('{{ROUND}}', String(round));
+                    + fillPromptPlaceholders(getPrompt('debate.rebuttal', DEBATE_RESPONSE_PROMPT), {
+                        NAME: analyst.provider.name,
+                        ROUND: String(round),
+                    });
                 // Snapshot the live price ONCE per round so every analyst in
                 // the parallel batch sees the SAME current price.
                 const livePriceBlock = buildLivePriceRefreshBlock(getLivePrice?.() ?? null, `before Round ${round}`);
@@ -2868,9 +2872,13 @@ export const conductRealDebate = async function* (
             1500,
         );
         const answerTasks = liveAnalysts.map((analyst) => {
-            const answerSystemPrompt = getPrompt('debate.clarification_answer', ANALYST_CLARIFICATION_RESPONSE_PROMPT)
-                .replace('{{NAME}}', analyst.provider.name)
-                .replace('{{QUESTION}}', getAnalystClarificationQuestion(questionText, targetAliasesFor(analyst.provider.name), speakerLabels));
+            const answerSystemPrompt = fillPromptPlaceholders(
+                getPrompt('debate.clarification_answer', ANALYST_CLARIFICATION_RESPONSE_PROMPT),
+                {
+                    NAME: analyst.provider.name,
+                    QUESTION: getAnalystClarificationQuestion(questionText, targetAliasesFor(analyst.provider.name), speakerLabels),
+                },
+            );
             const answerUserContent =
                 `**THE DEBATE TRANSCRIPT (with this round's moderator questions):**\n${clarificationTranscript}\n\n` +
                 `Respond now with your answer for Round ${answerRound}.` +

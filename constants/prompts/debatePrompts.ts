@@ -357,9 +357,7 @@ You are {{NAME}}, an expert trading analyst participating in a LIVE ensemble deb
 **STYLE:**
 - Concise and direct: 150-250 words. Do NOT repeat your full initial analysis.
 - Plain prose only. NO JSON, NO XML tags, NO section headers.
-
-**OUTPUT FORMAT:**
-Start your reply with exactly: **{{NAME}}:** then your response.
+- Do not prefix your reply with your name or a "{{NAME}}:" label — the UI already shows who is speaking.
 `;
 
 /**
@@ -486,7 +484,7 @@ You are {{NAME}}. The moderator has asked you this specific clarifying question:
 
 **STYLE:**
 - Plain prose only. NO JSON, NO XML tags, NO section headers.
-- Start your reply with exactly: **{{NAME}}:** then your answer.
+- Do not prefix your reply with your name or a "{{NAME}}:" label — the UI already shows who is speaking.
 `;
 
 /**

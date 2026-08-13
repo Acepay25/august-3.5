@@ -4,6 +4,7 @@ import { getThinkingByTrade } from '../../services/infrastructure/ThinkingStoreS
 import { ThinkingRecord } from '../../types/thinking';
 import { TradeOutcome } from '../../types';
 import { ThinkingRecordCard, getProviderColor } from './ThinkingRecordCard';
+import { ANALYST_LENS_LABEL, ANALYST_LENS_ORDER, resolveAnalystLens } from '../../utils/thinkingLens';
 
 interface ReasoningPanelProps {
   tradeId: string;
@@ -47,11 +48,18 @@ export const ReasoningPanel: React.FC<ReasoningPanelProps> = ({ tradeId, outcome
   const moderator = records.find(r => r.role === 'moderator');
   const debateTurns = records.filter(r => r.role === 'debate_turn');
 
+  const byLens = ANALYST_LENS_ORDER
+    .map(lens => ({
+      lens,
+      items: analysts.filter(r => resolveAnalystLens(r) === lens),
+    }))
+    .filter(group => group.items.length > 0);
+
   return (
-    <div className="border-t border-white/5 mt-2">
+    <div className="border-t border-zinc-800 mt-4 pt-1">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center gap-2 py-2 text-xs font-medium text-zinc-500 hover:text-cyan-400 transition-colors"
+        className="w-full flex items-center gap-2 py-3 text-sm font-medium text-zinc-400 hover:text-zinc-100 transition-colors"
         aria-label={isExpanded ? 'Collapse reasoning' : 'Expand reasoning'}
       >
         <Brain className="w-3.5 h-3.5" />
@@ -77,9 +85,15 @@ export const ReasoningPanel: React.FC<ReasoningPanelProps> = ({ tradeId, outcome
             </p>
           ) : (
             <>
-              {/* Analyst reasoning + final output */}
-              {analysts.map(record => (
-                <ThinkingRecordCard key={record.id} record={record} />
+              {byLens.map(group => (
+                <div key={group.lens} className="space-y-2">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 px-0.5">
+                    {ANALYST_LENS_LABEL[group.lens]}
+                  </p>
+                  {group.items.map(record => (
+                    <ThinkingRecordCard key={record.id} record={record} />
+                  ))}
+                </div>
               ))}
 
               {/* Moderator synthesis */}
