@@ -1,22 +1,18 @@
 
 import React from 'react';
-import { Message, MessageRole, TradeOutcome, SavedAnalysis, Conversation, DebateTurn, ConfidenceCalibration, AnalystLensConfig } from '../../types';
+import { Message, MessageRole, TradeOutcome, SavedAnalysis, Conversation, DebateTurn, ConfidenceCalibration } from '../../types';
 import { ChevronDownIcon, LinkIcon, CheckIcon, BrainIcon } from '../shared/Icons';
 import MarkdownContent from '../shared/MarkdownContent';
 import LiveMarketDataView from '../market/LiveMarketDataView';
 import EnsembleProgressChat from '../analysis/EnsembleProgressChat';
 import AnalysisDetails from './AnalysisDetails';
-import AnalystInlineRow from '../analysis/AnalystInlineRow';
 import LiveThinkingAccordion from './LiveThinkingAccordion';
 import ThinkingModal from '../analysis/ThinkingModal';
 import TodayReassessmentPanel from './TodayReassessmentPanel';
-import { getRoleDisplayForProvider } from '../../services/ui/AnalystLensService';
 import { buildAnalysisMarkdown, buildSupplementMarkdown } from '../../utils/analysisUtils';
 import { getThinkingByTrade, getThinkingTradeId } from '../../services/infrastructure/ThinkingStoreService';
 import { ThinkingRecord } from '../../types/thinking';
 import { AutopilotResolution } from '../../services/ui/OutcomeAutopilotService';
-
-const ACCENT_COLORS = ['#8aabd8', '#34d399', '#fb7185'];
 
 // Helper to validate URLs (XSS prevention)
 const isSafeUrl = (url: string): boolean => {
@@ -75,8 +71,6 @@ export interface ChatContextProps {
     onToggleMessageSelection?: (id: string) => void;
     // Confidence Calibration
     confidenceCalibration?: ConfidenceCalibration;
-    // Analyst Lens Configuration
-    lensConfig?: AnalystLensConfig;
     // Leverage for backtest P&L calculations
     leverage?: number;
     // Image viewer callback (for Android WebView compatibility)
@@ -86,8 +80,6 @@ export interface ChatContextProps {
     onConfirmAutopilot?: (messageId: string) => void;
     onDismissAutopilot?: (messageId: string) => void;
     latestMessageId?: string | null;
-    /** Opens the right-side analyst panel for a given message and optional active tab. */
-    onOpenAnalystPanel?: (message: Message, activeTab?: string) => void;
 }
 
 const SmoothText: React.FC<{ text: string; animate: boolean }> = ({ text, animate }) => {
@@ -145,7 +137,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
         handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy,
         handleSaveAnalysis, handleInitiateUpdateTrade, handleInitiateSimulator,
         isSelectionMode, selectedMessageIds, onToggleMessageSelection,
-        confidenceCalibration, onRetryPostMortem, lensConfig, leverage, onViewImage,
+        confidenceCalibration, onRetryPostMortem, leverage, onViewImage,
         autopilotResolutions, onConfirmAutopilot, onDismissAutopilot,
         onSelectMessageForProbability,
         onCompareAnalysis,
@@ -158,7 +150,6 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
         handleCopy,
         onTodayReassessment,
         todayReassessmentInFlight,
-        onOpenAnalystPanel,
     } = context;
 
     const isHighlighted = highlightedAnalysisId === message.id;
@@ -749,31 +740,6 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                             })()}
                                         </div>
                                     )}
-                                </div>
-                            )}
-
-                            {/* Per-analyst rows — click to open the right-side panel */}
-                            {thinkingEntries.length > 0 && onOpenAnalystPanel && (
-                                <div className="mt-3 space-y-1.5">
-                                    <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600 px-1">Analysts</p>
-                                    {thinkingEntries.map(([key], idx) => {
-                                        const roleDisplay = lensConfig ? getRoleDisplayForProvider(key, lensConfig.assignments) : null;
-                                        const modelId = message.modelsUsed?.[key];
-                                        const ep = message.ensembleProgress;
-                                        const analystProgress = ep?.analysts.find(a => a.key === key || a.providerId === key);
-                                        return (
-                                            <AnalystInlineRow
-                                                key={key}
-                                                index={idx}
-                                                displayName={roleDisplay?.name ?? modelIdToName[key] ?? key}
-                                                modelName={modelIdToName[modelId ?? '']}
-                                                roleEmoji={roleDisplay?.emoji}
-                                                roleColor={ACCENT_COLORS[idx % ACCENT_COLORS.length]}
-                                                status={analystProgress?.status ?? (message.analysis ? 'complete' : 'waiting')}
-                                                onClick={() => onOpenAnalystPanel(message, key)}
-                                            />
-                                        );
-                                    })}
                                 </div>
                             )}
 

@@ -119,22 +119,68 @@ function detectSingleCandlePatterns(
     const upper = upperWickPct(c);
     const lower = lowerWickPct(c);
 
-    // Doji: body is tiny relative to range
+    // Doji family: tiny body. The wick placement decides the subtype —
+    // gravestone (long upper, no lower), dragonfly (long lower, no upper),
+    // long-legged (both), plain doji otherwise. A doji never also fires the
+    // body-based patterns below (hammer, belt hold, marubozu…).
     if (bodyRatio < 10) {
-        out.push({
-            name: 'doji',
-            index: idx,
-            direction: 'neutral',
-            strength: bodyRatio < 5 ? 0.85 : 0.65,
-            priceLevel: c.close,
-            note: 'Indecision candle — body is tiny relative to total range.'
-        });
+        if (upper > 60 && lower < 10) {
+            out.push({
+                name: 'gravestone_doji',
+                index: idx,
+                direction: 'bearish',
+                strength: 0.7,
+                priceLevel: c.close,
+                note: 'Doji with a long upper wick — sellers rejected the high; bearish-leaning indecision.'
+            });
+        } else if (lower > 60 && upper < 10) {
+            out.push({
+                name: 'dragonfly_doji',
+                index: idx,
+                direction: 'bullish',
+                strength: 0.7,
+                priceLevel: c.close,
+                note: 'Doji with a long lower wick — buyers rejected the low; bullish-leaning indecision.'
+            });
+        } else if (upper > 40 && lower > 40) {
+            out.push({
+                name: 'long_legged_doji',
+                index: idx,
+                direction: 'neutral',
+                strength: 0.6,
+                priceLevel: c.close,
+                note: 'Doji with long wicks on both sides — extreme indecision, wide range.'
+            });
+        } else {
+            out.push({
+                name: 'doji',
+                index: idx,
+                direction: 'neutral',
+                strength: bodyRatio < 5 ? 0.85 : 0.65,
+                priceLevel: c.close,
+                note: 'Indecision candle — body is tiny relative to total range.'
+            });
+        }
         return out;
     }
 
+    // High wave: small body with LONG wicks on both sides — volatile
+    // indecision, the stronger cousin of the spinning top.
+    if (bodyRatio < 25 && upper > 40 && lower > 40) {
+        out.push({
+            name: 'high_wave',
+            index: idx,
+            direction: 'neutral',
+            strength: 0.6,
+            priceLevel: c.close,
+            note: 'Small body with long wicks on both sides — volatile indecision.'
+        });
+    }
+
     // Spinning top: small body with wicks on both sides — indecision, but
-    // with a real body (doji already returned above).
-    if (bodyRatio < 25 && lower > 25 && upper > 25) {
+    // with a real body (doji already returned above). Not when the stricter
+    // high wave already fired (both wicks > 40%).
+    if (bodyRatio < 25 && lower > 25 && upper > 25 && !(upper > 40 && lower > 40)) {
         out.push({
             name: 'spinning_top',
             index: idx,
@@ -404,6 +450,92 @@ function detectTwoCandlePatterns(curr: Kline, prev: Kline, idx: number): Detecte
         }
     }
 
+    // Harami cross: a DOJI fully inside the prior large body — the strongest
+    // form of a harami (momentum stalling into pure indecision). Direction
+    // follows the prior trend like the regular harami.
+    if (Math.abs(bodyPct(curr)) < 0.1 && Math.abs(bodyPct(prev)) > 0.5) {
+        const prevTop = Math.max(prev.open, prev.close);
+        const prevBottom = Math.min(prev.open, prev.close);
+        if (curr.high <= prevTop && curr.low >= prevBottom) {
+            out.push({
+                name: 'harami_cross',
+                index: idx,
+                direction: isBearish(prev) ? 'bullish' : 'bearish',
+                strength: 0.7,
+                priceLevel: curr.close,
+                note: isBearish(prev)
+                    ? 'Doji nested inside a large bearish body — selling momentum stalled.'
+                    : 'Doji nested inside a large bullish body — buying momentum stalled.'
+            });
+        }
+    }
+
+    // Kicking: a real gap against the prior move, then a strong opposite
+    // marubozu. Rare on crypto (needs a genuine gap) but a decisive signal.
+    if (Math.abs(bodyPct(prev)) > 0.8 && Math.abs(bodyPct(curr)) > 0.8) {
+        if (isBearish(prev) && isBullish(curr) && curr.low > prev.high) {
+            out.push({
+                name: 'kicking_bullish',
+                index: idx,
+                direction: 'bullish',
+                strength: 0.85,
+                priceLevel: curr.close,
+                note: 'Bearish marubozu gapped up into a bullish marubozu — decisive reversal.'
+            });
+        }
+        if (isBullish(prev) && isBearish(curr) && curr.high < prev.low) {
+            out.push({
+                name: 'kicking_bearish',
+                index: idx,
+                direction: 'bearish',
+                strength: 0.85,
+                priceLevel: curr.close,
+                note: 'Bullish marubozu gapped down into a bearish marubozu — decisive reversal.'
+            });
+        }
+    }
+
+    // Meeting lines: opposite colors closing at the SAME level — the prior
+    // direction was rejected exactly at that price.
+    const closeDelta = Math.abs(curr.close - prev.close) / (prev.close || 1) * 100;
+    if (closeDelta < 0.15) {
+        if (isBearish(prev) && isBullish(curr)) {
+            out.push({
+                name: 'meeting_lines_bullish',
+                index: idx,
+                direction: 'bullish',
+                strength: 0.65,
+                priceLevel: curr.close,
+                note: 'Bullish candle closed at the prior bearish close — support defended at that level.'
+            });
+        } else if (isBullish(prev) && isBearish(curr)) {
+            out.push({
+                name: 'meeting_lines_bearish',
+                index: idx,
+                direction: 'bearish',
+                strength: 0.65,
+                priceLevel: curr.close,
+                note: 'Bearish candle closed at the prior bullish close — resistance defended at that level.'
+            });
+        }
+    }
+
+    // Thrusting line: a WEAK piercing — the bull closes INTO the prior
+    // bearish body but BELOW its midpoint (piercing requires above).
+    if (isBearish(prev) && isBullish(curr)) {
+        const prevMid = (prev.open + prev.close) / 2;
+        if (curr.open < prev.close && curr.close > prev.close && curr.close < prevMid) {
+            out.push({
+                name: 'thrusting_line',
+                index: idx,
+                direction: 'bullish',
+                strength: 0.6,
+                priceLevel: curr.close,
+                note: 'Bullish candle thrust into the prior bearish body but below its midpoint — weak recovery.'
+            });
+        }
+    }
+
     return out;
 }
 
@@ -571,6 +703,206 @@ function detectThreeCandlePatterns(
             priceLevel: (mid.high + prev.low) / 2,
             note: `Unfilled gap zone between ${mid.high} and ${prev.low} — bearish fair value gap.`
         });
+    }
+
+    // Abandoned baby: gap, doji, gap — the market jumped OVER a doji. Rare
+    // (needs two real gaps) but one of the strongest reversal patterns.
+    if (Math.abs(bodyPct(mid)) < 0.1) {
+        if (isBearish(prev) && mid.high < prev.low && isBullish(curr) && curr.low > mid.high) {
+            out.push({
+                name: 'abandoned_baby_bullish',
+                index: idx,
+                direction: 'bullish',
+                strength: 0.9,
+                priceLevel: curr.close,
+                note: 'Gap down, doji, gap up — sellers abandoned the move, buyers took over.'
+            });
+        }
+        if (isBullish(prev) && mid.low > prev.high && isBearish(curr) && curr.high < mid.low) {
+            out.push({
+                name: 'abandoned_baby_bearish',
+                index: idx,
+                direction: 'bearish',
+                strength: 0.9,
+                priceLevel: curr.close,
+                note: 'Gap up, doji, gap down — buyers abandoned the move, sellers took over.'
+            });
+        }
+    }
+
+    // Tri-star: three dojis with drifting closes — extreme indecision
+    // resolving in the direction of the drift.
+    if ([prev, mid, curr].every(c => Math.abs(bodyPct(c)) < 0.1)) {
+        if (curr.close > mid.close && mid.close > prev.close) {
+            out.push({
+                name: 'tri_star_bullish',
+                index: idx,
+                direction: 'bullish',
+                strength: 0.6,
+                priceLevel: curr.close,
+                note: 'Three dojis with rising closes — indecision drifting bullish.'
+            });
+        } else if (curr.close < mid.close && mid.close < prev.close) {
+            out.push({
+                name: 'tri_star_bearish',
+                index: idx,
+                direction: 'bearish',
+                strength: 0.6,
+                priceLevel: curr.close,
+                note: 'Three dojis with falling closes — indecision drifting bearish.'
+            });
+        }
+    }
+
+    // Upside gap two crows: after a strong bull, two bears gap up then fade —
+    // the second closes below the first but still above the original bull's
+    // close. Sellers stepping in right after the gap.
+    if (isBullish(prev) && isBearish(mid) && isBearish(curr)) {
+        const firstCrowTop = Math.max(mid.open, mid.close);
+        const firstCrowBottom = Math.min(mid.open, mid.close);
+        const gapUp = mid.low > prev.high;
+        const secondOpensInside = curr.open >= firstCrowBottom && curr.open <= firstCrowTop;
+        const fadesBelowFirst = curr.close < mid.close;
+        const holdsAboveBull = curr.close > prev.close;
+        if (gapUp && secondOpensInside && fadesBelowFirst && holdsAboveBull) {
+            out.push({
+                name: 'upside_gap_two_crows',
+                index: idx,
+                direction: 'bearish',
+                strength: 0.7,
+                priceLevel: curr.close,
+                note: 'Two bearish candles gapped up after strength and faded into the gap — bearish warning.'
+            });
+        }
+    }
+
+    // Stick sandwich: bull, bear, bull — the middle bear closes AT the first
+    // bull's open, then buyers return and close above again. The dip was bought.
+    if (isBullish(prev) && isBearish(mid) && isBullish(curr)) {
+        const sandwichClose = Math.abs(mid.close - prev.open) / (prev.open || 1) * 100;
+        if (sandwichClose < 0.15 && curr.close > prev.close) {
+            out.push({
+                name: 'stick_sandwich',
+                index: idx,
+                direction: 'bullish',
+                strength: 0.7,
+                priceLevel: curr.close,
+                note: 'Middle bearish candle closed at the first bullish open, then buyers returned — the dip was bought.'
+            });
+        }
+    }
+
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+// FOUR-CANDLE PATTERNS
+// ---------------------------------------------------------------------------
+
+/**
+ * Candles arrive newest-first: c0 is the most recent candle, c3 the oldest
+ * of the four. Patterns "complete" at c0; the reported index is c0's
+ * recent-first index.
+ */
+function detectFourCandlePatterns(
+    c0: Kline,
+    c1: Kline,
+    c2: Kline,
+    c3: Kline,
+    idx: number
+): DetectedCandlePattern[] {
+    const out: DetectedCandlePattern[] = [];
+
+    // Three-line strike: three strong same-direction candles with rising
+    // (bullish) / falling (bearish) closes, then ONE strong opposite candle
+    // that closes BEYOND the first candle's open — the counter-move was
+    // absorbed and the trend resumes. Continuation pattern.
+    if (isBullish(c3) && isBullish(c2) && isBullish(c1) && isBearish(c0)) {
+        const rising = c1.close > c2.close && c2.close > c3.close;
+        const strikeBody = Math.abs(bodyPct(c0)) > 0.5;
+        if (rising && strikeBody && c0.close < c3.open) {
+            out.push({
+                name: 'three_line_strike_bullish',
+                index: idx,
+                direction: 'bullish',
+                strength: 0.75,
+                priceLevel: c0.close,
+                note: 'Three rising bullish candles, then a bearish candle closing below the first open — the pullback was absorbed.'
+            });
+        }
+    }
+    if (isBearish(c3) && isBearish(c2) && isBearish(c1) && isBullish(c0)) {
+        const falling = c1.close < c2.close && c2.close < c3.close;
+        const strikeBody = Math.abs(bodyPct(c0)) > 0.5;
+        if (falling && strikeBody && c0.close > c3.open) {
+            out.push({
+                name: 'three_line_strike_bearish',
+                index: idx,
+                direction: 'bearish',
+                strength: 0.75,
+                priceLevel: c0.close,
+                note: 'Three falling bearish candles, then a bullish candle closing above the first open — the bounce failed.'
+            });
+        }
+    }
+
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+// FIVE-CANDLE PATTERNS
+// ---------------------------------------------------------------------------
+
+/**
+ * Candles arrive newest-first: c0 is the most recent (the final confirming
+ * candle), c4 the oldest (the first candle of the pattern).
+ */
+function detectFiveCandlePatterns(
+    c0: Kline,
+    c1: Kline,
+    c2: Kline,
+    c3: Kline,
+    c4: Kline,
+    idx: number
+): DetectedCandlePattern[] {
+    const out: DetectedCandlePattern[] = [];
+
+    // Rising three methods: strong bull, THREE small bearish candles that
+    // pull back WITHIN the first candle's range, then a strong bull closing
+    // above the first close. The pause was a consolidation — trend resumes.
+    if (isBullish(c4) && isBullish(c0)) {
+        const firstBody = Math.abs(bodyPct(c4));
+        const pullbacks = [c3, c2, c1].every(c => isBearish(c) && Math.abs(bodyPct(c)) < firstBody * 0.6);
+        const pullbacksInside = [c3, c2, c1].every(c => c.high <= c4.high && c.low >= c4.low);
+        const finalBody = Math.abs(bodyPct(c0)) > 0.5;
+        if (firstBody > 0.5 && pullbacks && pullbacksInside && finalBody && c0.close > c4.close) {
+            out.push({
+                name: 'rising_three_methods',
+                index: idx,
+                direction: 'bullish',
+                strength: 0.75,
+                priceLevel: c0.close,
+                note: 'Strong bullish candle, three small bearish pullbacks inside its range, then a strong close above — trend resumed.'
+            });
+        }
+    }
+
+    // Falling three methods: mirror.
+    if (isBearish(c4) && isBearish(c0)) {
+        const firstBody = Math.abs(bodyPct(c4));
+        const pullbacks = [c3, c2, c1].every(c => isBullish(c) && Math.abs(bodyPct(c)) < firstBody * 0.6);
+        const pullbacksInside = [c3, c2, c1].every(c => c.high <= c4.high && c.low >= c4.low);
+        const finalBody = Math.abs(bodyPct(c0)) > 0.5;
+        if (firstBody > 0.5 && pullbacks && pullbacksInside && finalBody && c0.close < c4.close) {
+            out.push({
+                name: 'falling_three_methods',
+                index: idx,
+                direction: 'bearish',
+                strength: 0.75,
+                priceLevel: c0.close,
+                note: 'Strong bearish candle, three small bullish pullbacks inside its range, then a strong close below — downtrend resumed.'
+            });
+        }
     }
 
     return out;
@@ -848,6 +1180,16 @@ export function scanCandlePatterns(
     // Three-candle patterns
     for (let i = 0; i < windowSize - 2; i++) {
         patterns.push(...detectThreeCandlePatterns(recentFirst[i], recentFirst[i + 1], recentFirst[i + 2], i));
+    }
+
+    // Four-candle patterns (three-line strike)
+    for (let i = 0; i < windowSize - 3; i++) {
+        patterns.push(...detectFourCandlePatterns(recentFirst[i], recentFirst[i + 1], recentFirst[i + 2], recentFirst[i + 3], i));
+    }
+
+    // Five-candle patterns (rising / falling three methods)
+    for (let i = 0; i < windowSize - 4; i++) {
+        patterns.push(...detectFiveCandlePatterns(recentFirst[i], recentFirst[i + 1], recentFirst[i + 2], recentFirst[i + 3], recentFirst[i + 4], i));
     }
 
     // Structure patterns need local swings; extraction runs over the same

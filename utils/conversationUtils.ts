@@ -18,3 +18,21 @@ export const createNewConversation = (): Conversation => {
     leverage: DEFAULT_LEVERAGE, // Match the app-wide default (useTradeLogging / schema / UI)
   };
 };
+
+/** A session with no messages — the blank "new conversation" state. */
+export const isEmptyConversation = (conv: Conversation): boolean =>
+  (conv.messages ?? []).length === 0;
+
+/**
+ * Prefer an existing blank session over creating another one.
+ * Returns the active session if it is already blank, otherwise the most
+ * recent other blank session (history is newest-first), otherwise null.
+ */
+export const findReusableEmptyConversation = (
+  conversations: Conversation[],
+  activeId: string | null | undefined,
+): Conversation | null => {
+  const active = conversations.find(c => c.id === activeId);
+  if (active && isEmptyConversation(active)) return active;
+  return conversations.find(c => c.id !== activeId && isEmptyConversation(c)) ?? null;
+};
