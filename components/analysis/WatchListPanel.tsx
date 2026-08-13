@@ -1,0 +1,145 @@
+import React, { useMemo, useState } from 'react';
+import { TradeOutcome } from '../../types';
+import { CloseIcon, EyeIcon } from '../shared/Icons';
+import { AutopilotResolution } from '../../services/ui/OutcomeAutopilotService';
+import { signalDirectionLabel } from '../../utils/analysisUtils';
+import { WatchedSignal } from '../../utils/watchList';
+
+interface WatchListPanelProps {
+    isVisible: boolean;
+    onClose: () => void;
+    signals: WatchedSignal[];
+    activeConversationId: string | null;
+    autopilotResolutions?: Record<string, AutopilotResolution>;
+    onToggleWatch: (messageId: string, conversationId: string) => void;
+    onLogTrade: (messageId: string, outcome: TradeOutcome.WIN | TradeOutcome.LOSS, conversationId: string) => void;
+    onOpenSignal: (conversationId: string, messageId: string) => void;
+    onConfirmAutopilot?: (messageId: string, conversationId: string) => void;
+}
+
+type Filter = 'open' | 'closed' | 'all';
+
+const isOpen = (outcome?: TradeOutcome): boolean =>
+    !outcome || outcome === TradeOutcome.PENDING;
+
+const WatchListPanel: React.FC<WatchListPanelProps> = ({
+    isVisible,
+    onClose,
+    signals,
+    activeConversationId,
+    autopilotResolutions = {},
+    onToggleWatch,
+    onLogTrade,
+    onOpenSignal,
+    onConfirmAutopilot,
+}) => {
+    const [filter, setFilter] = useState<Filter>('open');
+    const visible = useMemo(() => {
+        if (filter === 'all') return signals;
+        if (filter === 'open') return signals.filter(s => isOpen(s.outcome));
+        return signals.filter(s => !isOpen(s.outcome));
+    }, [filter, signals]);
+    const openCount = signals.filter(s => isOpen(s.outcome)).length;
+
+    if (!isVisible) return null;
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-4 pt-16 sm:pt-20" role="dialog" aria-label="Watch list">
+            <div className="flex max-h-[80vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
+                <div className="flex items-center gap-2 border-b border-white/10 px-4 py-3">
+                    <EyeIcon className="h-4 w-4 text-cyan-400" />
+                    <h2 className="text-sm font-semibold text-zinc-100">Watch list</h2>
+                    <span className="text-[11px] text-zinc-500">{openCount} open</span>
+                    <button type="button" onClick={onClose} className="ml-auto rounded-md p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" aria-label="Close watch list">
+                        <CloseIcon className="h-4 w-4" />
+                    </button>
+                </div>
+                <div className="flex gap-1 border-b border-white/10 px-4 py-2">
+                    {(['open', 'closed', 'all'] as const).map(id => (
+                        <button
+                            key={id}
+                            type="button"
+                            onClick={() => setFilter(id)}
+                            className={`rounded-md px-2 py-1 text-[11px] capitalize ${filter === id ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'}`}
+                        >
+                            {id}
+                        </button>
+                    ))}
+                </div>
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2">
+                    {visible.length === 0 ? (
+                        <p className="px-2 py-8 text-center text-[13px] text-zinc-500">
+                            {filter === 'open'
+                                ? 'No watched setups yet. Open a trading signal and tap Watch.'
+                                : 'Nothing in this filter.'}
+                        </p>
+                    ) : visible.map(signal => {
+                        const analysis = signal.analysis;
+                        const dir = signalDirectionLabel(analysis.direction, analysis.confidence);
+                        const pending = isOpen(signal.outcome);
+                        const inThisChat = signal.conversationId === activeConversationId;
+                        const resolution = autopilotResolutions[signal.messageId];
+                        return (
+                            <div key={signal.messageId} className="status-surface rounded-xl border border-white/10 bg-zinc-900/60 p-3">
+                                <div className="flex flex-wrap items-baseline gap-2">
+                                    <span className="text-xs font-semibold text-zinc-100">{analysis.coinName || 'Setup'}</span>
+                                    <span className="text-[11px] font-medium text-zinc-300">{dir}</span>
+                                    <span className="text-[10px] text-zinc-600">{signal.conversationTitle}</span>
+                                    {!pending && (
+                                        <span className="ml-auto text-[10px] font-semibold uppercase tracking-widest text-zinc-400">{signal.outcome}</span>
+                                    )}
+                                </div>
+                                <div className="mt-2 grid grid-cols-3 gap-2 text-[11px] tabular-nums">
+                                    <div>
+                                        <div className="text-[10px] uppercase tracking-widest text-zinc-600">Entry</div>
+                                        <div className="text-zinc-200">{analysis.entryPoints?.[0]?.price || '—'}</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-[10px] uppercase tracking-widest text-zinc-600">SL</div>
+                                        <div className="text-rose-400">{analysis.stopLoss || '—'}</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-[10px] uppercase tracking-widest text-zinc-600">TP1</div>
+                                        <div className="text-emerald-400">{analysis.takeProfit?.[0]?.price || '—'}</div>
+                                    </div>
+                                </div>
+                                {resolution && pending && (
+                                    <p className="mt-2 text-[11px] text-cyan-300">Autopilot: {resolution.detail}</p>
+                                )}
+                                {signal.watchEpisodes && signal.watchEpisodes.length > 0 && (
+                                    <ol className="mt-2 space-y-1 border-t border-white/5 pt-2">
+                                        {signal.watchEpisodes.slice(-6).map((ep, i) => (
+                                            <li key={`${ep.at}-${i}`} className="text-[10px] leading-4 text-zinc-500">
+                                                <span className="font-semibold uppercase tracking-widest text-zinc-600">{ep.kind}</span>
+                                                {' · '}{ep.detail}
+                                            </li>
+                                        ))}
+                                    </ol>
+                                )}
+                                <div className="mt-3 flex flex-wrap gap-1.5">
+                                    {pending && !resolution && (
+                                        <>
+                                            <button type="button" onClick={() => onLogTrade(signal.messageId, TradeOutcome.WIN, signal.conversationId)} className="rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-1 text-[11px] font-semibold text-emerald-300">Win</button>
+                                            <button type="button" onClick={() => onLogTrade(signal.messageId, TradeOutcome.LOSS, signal.conversationId)} className="rounded-lg border border-rose-500/40 bg-rose-500/15 px-2.5 py-1 text-[11px] font-semibold text-rose-300">Loss</button>
+                                        </>
+                                    )}
+                                    {pending && resolution && onConfirmAutopilot && (
+                                        <button type="button" onClick={() => onConfirmAutopilot(signal.messageId, signal.conversationId)} className="rounded-lg border border-cyan-500/40 bg-cyan-500/15 px-2.5 py-1 text-[11px] font-semibold text-cyan-300">Confirm autopilot</button>
+                                    )}
+                                    <button type="button" onClick={() => onOpenSignal(signal.conversationId, signal.messageId)} className="rounded-lg border border-white/10 px-2.5 py-1 text-[11px] text-zinc-300 hover:text-zinc-100">
+                                        {inThisChat ? 'Show in chat' : 'Open chat'}
+                                    </button>
+                                    <button type="button" onClick={() => onToggleWatch(signal.messageId, signal.conversationId)} className="rounded-lg border border-white/10 px-2.5 py-1 text-[11px] text-zinc-500 hover:text-zinc-300">
+                                        Unwatch
+                                    </button>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export default WatchListPanel;

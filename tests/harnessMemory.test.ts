@@ -80,6 +80,15 @@ describe('Harness memory (skills + retrieval)', () => {
     }, trades);
     expect(ctx).toContain('[skills/');
     expect(ctx).toContain('kind: avoid');
+
+    const moderator = getMemoryFilesContext({
+      coin: 'BTCUSDT',
+      direction: 'Short',
+      family: 'Family A',
+      regime: 'ranging',
+    }, trades, 'moderator');
+    expect(moderator).toContain('Skill catalog');
+    expect(moderator).not.toContain('[skills/');
     expect(ctx).toContain('[market-conditions/ranging-day.md]');
     expect(ctx).toContain('Similar closed trades');
     expect(ctx).toMatch(/match this coin/i);

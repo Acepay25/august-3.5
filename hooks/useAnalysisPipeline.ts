@@ -4,7 +4,7 @@ import {
     DebateTurn, Conversation, TradeAnalysis, TradeSummary,
     GlobalMemory, AccuracySubMode, CustomInstructionsMap, CustomInstruction,
     AnalystLensConfig, AnalysisStep, InsightKnowledgeBase, ConfidenceCalibration,
-    ReplacementOffer, PatternMemoryGateView,
+    ReplacementOffer, PatternMemoryGateView, DebateRunEvent,
 } from '../types';
 
 import { ProviderConfig } from '../types/provider';
@@ -434,6 +434,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 thoughtProcesses: thoughtMap,
                 reasoningProcesses: reasoningMap,
                 activeDebateSpeakers: { ...activeSpeakers },
+                debateRunLog: [...debateRunLogRef.current],
             };
             const newMessages = [...prev];
             newMessages[messageIndex] = updatedMessage;
@@ -483,6 +484,9 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     const reasoningMapRef = useRef<Record<string, string>>({});
     const activeDebateSpeakersRef = useRef<Record<string, number>>({});
     const debateTurnsRef = useRef<DebateTurn[]>([]);
+    const debateRunLogRef = useRef<DebateRunEvent[]>([]);
+    const steeringQueueRef = useRef<string[]>([]);
+    const [steeringNotes, setSteeringNotes] = useState<string[]>([]);
     // Mid-debate analyst replacement: the generator suspends and waits on a
     // promise whose resolver lives here; the UI calls handleReplacementChoice
     // (via ChatContext) to settle it with the picked provider id (or null to
@@ -651,7 +655,12 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             // in-flight state itself before firing.
             if (!isAutomationRun) {
                 const draft = typeof customPrompt === 'string' ? customPrompt : input;
-                if (draft.trim()) toast.warning('Analysis in progress', 'Your message will be sent once the current run finishes.');
+                if (draft.trim()) {
+                    steeringQueueRef.current = [...steeringQueueRef.current, draft.trim()];
+                    setSteeringNotes(steeringQueueRef.current);
+                    setInput('');
+                    toast.success?.('Queued for debate', 'Shown under the composer — applied at the next debate step.');
+                }
             }
             return;
         }
@@ -785,6 +794,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         analysisConversationIdRef.current = activeConversationId;
         // Synchronous in-flight marker — see analysisInFlightRef above.
         analysisInFlightRef.current = true;
+        steeringQueueRef.current = [];
+        setSteeringNotes([]);
         // Bind every async message write to the conversation that started the
         // request. This remains correct even if the user switches conversations
         // before a provider response or stream chunk arrives.
@@ -1047,7 +1058,14 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 family: pendingPattern,
                 pattern: pendingPattern,
                 regime: freshHybridData?.regime?.regime,
-            }, loggedTrades);
+            }, loggedTrades, 'analyst');
+            const moderatorMemoryContext = getMemoryFilesContext({
+                coin: detectedLearningCoin,
+                direction: pendingDirection,
+                family: pendingPattern,
+                pattern: pendingPattern,
+                regime: freshHybridData?.regime?.regime,
+            }, loggedTrades, 'moderator');
 
             // JOURNAL-DRIVEN ACCURACY (SetupMemoryService): before the
             // analysts answer, they see their own logged track record on
@@ -1067,7 +1085,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             // One context bundle for every moderator surface (autoplay debate,
             // real debate, accuracy verification, compact retry): the same
             // chart/pattern block the analysts see + the user strategies.
-            const moderatorContextBundle = [memoryFilesContext, similarSetupsContext, regimeWeightingContext, hybridDataInjection, strategiesBlock].filter(Boolean).join('\n\n');
+            const moderatorContextBundle = [moderatorMemoryContext, similarSetupsContext, regimeWeightingContext, hybridDataInjection, strategiesBlock].filter(Boolean).join('\n\n');
 
             // 'auto' trading style was hardcoded to 'swing' at every call
             // site — the market-data detector (ADX/regime/volume/session)
@@ -1517,6 +1535,7 @@ ${reflectionBlock}`
                     reasoningMapRef.current = {};
                     activeDebateSpeakersRef.current = {};
                     debateTurnsRef.current = [];
+                    debateRunLogRef.current = [];
 
                     // Captured before the promise map: ensemblePlaceholder is
                     // non-null for staged ensembles, but closures see the
@@ -2047,6 +2066,16 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                             // live feed's cache — zero extra network calls).
                             // Null symbol / unknown price → graceful no-op.
                             () => (finalSymbol ? PriceAlertService.getCurrentPrice(finalSymbol) ?? null : null),
+                            () => {
+                                const notes = steeringQueueRef.current;
+                                steeringQueueRef.current = [];
+                                setSteeringNotes([]);
+                                return notes.join('\n');
+                            },
+                            (event) => {
+                                debateRunLogRef.current = [...debateRunLogRef.current, event].slice(-100);
+                            },
+                            patternMemoryGate,
                         );
                     }
 
@@ -2470,7 +2499,8 @@ ${accuracyVerificationNote}`
                             } : undefined,
                             isLensMode: runLensConfig?.enabled ?? lensConfig?.enabled ?? false,
                             // Always set tradingStyle regardless of Lens mode
-                            tradingStyle: effectiveTradingStyle
+                            tradingStyle: effectiveTradingStyle,
+                            debateRunLog: [...debateRunLogRef.current],
                         };
 
                         // Per-run execution summary (compare mode + diagnostics).
@@ -2970,5 +3000,10 @@ ${accuracyVerificationNote}`
         // Mid-debate analyst replacement: the user picks a candidate (or
         // passes null to continue without) from the debate banner.
         handleReplacementChoice,
+        steeringNotes,
+        handleRemoveSteeringNote: (index: number) => {
+            steeringQueueRef.current = steeringQueueRef.current.filter((_, i) => i !== index);
+            setSteeringNotes(steeringQueueRef.current);
+        },
     };
 }

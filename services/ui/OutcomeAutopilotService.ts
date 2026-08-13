@@ -96,7 +96,7 @@ class OutcomeAutopilotServiceClass {
     register(messageId: string, analysis: TradeAnalysis, leverage: number): void {
         if (this.processed.has(messageId) || this.dismissed.has(messageId)) return;
         if (this.registrations.has(messageId)) return;
-        if (analysis.confidence === 'Avoid' || analysis.direction === 'Neutral' || analysis.direction === 'Avoid') {
+        if (analysis.confidence === 'Avoid' || analysis.direction === 'Neutral') {
             return;
         }
         if (analysis.direction !== 'Long' && analysis.direction !== 'Short') return;

@@ -14,6 +14,7 @@ import { trackConfluenceOutcome, calculateConfluenceScore } from '../services/an
 import { SLOptimizationData } from '../services/backtesting/StopLossOptimizerService';
 import { ConfidenceLevel } from '../services/validation/ConfidenceCalibrationService';
 import { syncClosedTradeToNotebook } from '../services/learning/SkillMemoryService';
+import { appendWatchEpisode } from '../utils/watchList';
 
 // Maximum number of trade summaries (Recent Insights) to keep - enforces FIFO when limit reached
 export const MAX_TRADE_SUMMARIES = 100;
@@ -275,7 +276,11 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         };
 
         setLoggedTrades(prev => prev.some(t => t.id === loggedTrade.id) ? prev : [loggedTrade, ...prev]);
-        updateMessages(prev => prev.map(m => m.id === message.id ? { ...m, outcome } : m));
+        updateMessages(prev => prev.map(m => {
+            if (m.id !== message.id) return m;
+            const next = { ...m, outcome };
+            return m.watched ? appendWatchEpisode(next, 'logged', outcome) : next;
+        }));
 
         const notebookUser = localStorage.getItem('last_active_user') || 'default';
         void syncClosedTradeToNotebook(loggedTrade, [loggedTrade, ...loggedTrades.filter(t => t.id !== loggedTrade.id)], notebookUser)

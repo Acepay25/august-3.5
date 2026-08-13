@@ -10,6 +10,8 @@ interface TradingSignalCardProps {
     onReRun?: () => void;
     supplementMarkdown?: string;
     ensembleNote?: string;
+    watched?: boolean;
+    onToggleWatch?: () => void;
 }
 
 const formatLevel = (value?: string): string => {
@@ -72,6 +74,8 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
     onReRun,
     supplementMarkdown,
     ensembleNote,
+    watched = false,
+    onToggleWatch,
 }) => {
     const entry = analysis.entryPoints?.[0]?.price;
     const sl = analysis.stopLoss;
@@ -111,7 +115,7 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
 
     return (
         <div className="status-surface overflow-hidden rounded-2xl border border-white/5 bg-zinc-900/80 shadow-lg">
-            <div className="flex items-center gap-2 px-4 py-3 sm:px-5">
+            <div className="flex flex-wrap items-center gap-2 px-4 py-3 sm:px-5">
                 <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
                 <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Trading signal</span>
                 {analysis.direction && (
@@ -127,16 +131,32 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
                 {typeof analysis.probability === 'number' && (
                     <span className="text-[11px] tabular-nums text-zinc-500">{Math.round(analysis.probability)}%</span>
                 )}
-                {isLatest && onReRun && (
-                    <button
-                        type="button"
-                        onClick={onReRun}
-                        className="ml-auto text-[10px] font-bold uppercase tracking-widest text-zinc-500 transition-colors hover:text-cyan-400"
-                        title="Adds a fresh analysis with the same prompt + chart; the old card is kept for comparison"
-                    >
-                        ↻ Regenerate
-                    </button>
-                )}
+                <div className="ml-auto flex shrink-0 items-center gap-2">
+                    {onToggleWatch && (
+                        <button
+                            type="button"
+                            onClick={onToggleWatch}
+                            className={`rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest transition-colors ${
+                                watched
+                                    ? 'border-cyan-500/40 bg-cyan-500/15 text-cyan-300'
+                                    : 'border-white/10 text-zinc-400 hover:border-cyan-400/30 hover:text-cyan-300'
+                            }`}
+                            title={watched ? 'Remove from Watch list' : 'Add this trading signal to the Watch list'}
+                        >
+                            {watched ? 'Watching' : 'Watch'}
+                        </button>
+                    )}
+                    {isLatest && onReRun && (
+                        <button
+                            type="button"
+                            onClick={onReRun}
+                            className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 transition-colors hover:text-cyan-400"
+                            title="Adds a fresh analysis with the same prompt + chart; the old card is kept for comparison"
+                        >
+                            ↻ Regenerate
+                        </button>
+                    )}
+                </div>
             </div>
 
             <div className="space-y-4 border-t border-white/5 px-4 py-4 sm:px-5">

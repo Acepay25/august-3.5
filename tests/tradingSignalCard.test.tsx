@@ -111,4 +111,20 @@ describe('TradingSignalCard', () => {
         expect(screen.getAllByText('Sell').length).toBeGreaterThanOrEqual(1);
         expect(screen.queryByText('No trade')).toBeNull();
     });
+
+    it('shows Watch on every trading signal, including Avoid', () => {
+        const onToggleWatch = vi.fn();
+        const { rerender } = render(
+            <TradingSignalCard analysis={analysis({ confidence: 'Avoid' })} onToggleWatch={onToggleWatch} />,
+        );
+        expect(screen.getByText('Watch')).toBeDefined();
+        rerender(
+            <TradingSignalCard
+                analysis={analysis({ direction: 'Long', confidence: 'Medium' })}
+                watched
+                onToggleWatch={onToggleWatch}
+            />,
+        );
+        expect(screen.getByText('Watching')).toBeDefined();
+    });
 });
