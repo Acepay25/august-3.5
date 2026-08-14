@@ -843,6 +843,28 @@ export const buildAnalystConsensus = (
     };
 };
 
+const noTrade = (direction?: string, confidence?: string): boolean =>
+    confidence === 'Avoid' || direction === 'Neutral' || direction === 'Avoid';
+
+export const attachVerdictCitations = (
+    consensus: AnalystConsensus,
+    verdict: TradeAnalysis,
+): AnalystConsensus => {
+    const citations = consensus.entries.map(entry => {
+        const aligned = noTrade(verdict.direction, verdict.confidence)
+            ? noTrade(entry.direction, entry.confidence)
+            : (entry.direction || '').toLowerCase() === (verdict.direction || '').toLowerCase();
+        return {
+            displayName: entry.displayName,
+            aligned,
+            note: aligned
+                ? `Tracked in verdict (${entry.direction || '—'})`
+                : `Dissented ${entry.direction || '—'} vs ${verdict.direction}`,
+        };
+    });
+    return { ...consensus, citations };
+};
+
 /**
  * Generate a concise divergence summary for the moderator prompt.
  */
@@ -2552,6 +2574,8 @@ export const conductRealDebate = async function* (
     onRunEvent?: (event: DebateRunEvent) => void,
     /** Pattern-memory gate for the pre-step waterfall. */
     memoryGate?: { gateResult?: string; reason?: string } | null,
+    /** Crash-resume: skip completed rounds and seed transcript. */
+    resumeState?: { lastCompletedRound: number; seedRoundTexts?: Record<string, string[]> },
 ): AsyncGenerator<RealDebateTurnEvent, void, unknown> {
 
     if (analysts.length < 2) {
@@ -2620,6 +2644,12 @@ export const conductRealDebate = async function* (
     // Per-speaker text per round (1-based index). Rebuttal deltas accumulate.
     const roundTexts: Record<string, string[]> = { Moderator: [] };
     analysts.forEach(a => { roundTexts[a.provider.name] = []; });
+    if (resumeState?.seedRoundTexts) {
+        for (const [speaker, rounds] of Object.entries(resumeState.seedRoundTexts)) {
+            roundTexts[speaker] = [...(rounds || [])];
+        }
+    }
+    const lastDone = resumeState?.lastCompletedRound ?? 0;
 
     /** Inject a replacement analyst that joins the debate from the next phase.
      *  Its position is seeded at `dropRound` (its fresh analysis, streamed as
@@ -2643,14 +2673,17 @@ export const conductRealDebate = async function* (
      *  analyst into a debate that already moved on). */
 
     // --- ROUND 1: OPENING STATEMENTS (free — each analyst's own final output) ---
-    for (const analyst of analysts) {
-        // Keep the complete analyst response in the visible transcript. Later
-        // model calls receive compact episodes, not this raw opening.
-        const opening = analyst.result.finalOutput || analyst.result.thoughtProcess || 'No opening statement provided.';
-        roundTexts[analyst.provider.name][1] = opening;
-        onSpeakerStatus?.(analyst.provider.name, 1, true);
-        yield { speaker: analyst.provider.name, round: 1, text: opening };
-        onSpeakerStatus?.(analyst.provider.name, 1, false);
+    if (lastDone < 1) {
+        for (const analyst of analysts) {
+            const opening = analyst.result.finalOutput || analyst.result.thoughtProcess || 'No opening statement provided.';
+            roundTexts[analyst.provider.name][1] = opening;
+            onSpeakerStatus?.(analyst.provider.name, 1, true);
+            yield { speaker: analyst.provider.name, round: 1, text: opening };
+            onSpeakerStatus?.(analyst.provider.name, 1, false);
+        }
+    } else {
+        emitLog('resume', `Resuming after round ${lastDone}`, lastDone);
+        yield { speaker: 'System', round: lastDone, text: `Resuming debate after round ${lastDone}.` };
     }
 
     // --- REBUTTAL ROUNDS 2..N ---
@@ -2660,8 +2693,9 @@ export const conductRealDebate = async function* (
         emitLog('pre_step', pre.inject.slice(0, 280), 2);
         yield { speaker: 'System', round: 2, text: pre.inject };
     }
-    const skipRebuttals = pre.action === 'skip_to_verdict';
-    for (let round = 2; round <= totalRounds; round++) {
+    const skipRebuttals = pre.action === 'skip_to_verdict' || lastDone >= totalRounds;
+    const rebuttalStart = Math.max(2, lastDone + 1);
+    for (let round = rebuttalStart; round <= totalRounds; round++) {
         if (skipRebuttals) break;
         if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
@@ -2851,10 +2885,11 @@ export const conductRealDebate = async function* (
     // Round numbering stays dense/dynamic: questions round, answers round,
     // judgment round (when present). The verdict's `finalRound` is computed
     // after the loop so the transcript builder can include all turns.
-    let lastRebuttalRound = skipRebuttals ? 1 : totalRounds;
+    let lastRebuttalRound = skipRebuttals ? Math.max(1, lastDone) : totalRounds;
 
+    const skipClarification = lastDone > totalRounds + 1;
     for (let cycle = 1; cycle <= MAX_CLARIFICATION_CYCLES; cycle++) {
-        if (skipRebuttals) break;
+        if (skipRebuttals || skipClarification) break;
         if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
         // Global budget: skip clarification and proceed to the verdict.

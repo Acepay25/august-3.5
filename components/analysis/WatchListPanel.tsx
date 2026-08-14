@@ -4,6 +4,8 @@ import { CloseIcon, EyeIcon } from '../shared/Icons';
 import { AutopilotResolution } from '../../services/ui/OutcomeAutopilotService';
 import { signalDirectionLabel } from '../../utils/analysisUtils';
 import { WatchedSignal } from '../../utils/watchList';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 interface WatchListPanelProps {
     isVisible: boolean;
@@ -34,6 +36,8 @@ const WatchListPanel: React.FC<WatchListPanelProps> = ({
     onConfirmAutopilot,
 }) => {
     const [filter, setFilter] = useState<Filter>('open');
+    useEscapeClose(isVisible, onClose);
+    const dialogRef = useFocusTrap<HTMLDivElement>(isVisible);
     const visible = useMemo(() => {
         if (filter === 'all') return signals;
         if (filter === 'open') return signals.filter(s => isOpen(s.outcome));
@@ -45,7 +49,7 @@ const WatchListPanel: React.FC<WatchListPanelProps> = ({
 
     return (
         <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-4 pt-16 sm:pt-20" role="dialog" aria-label="Watch list">
-            <div className="flex max-h-[80vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
+            <div ref={dialogRef} className="flex max-h-[80vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
                 <div className="flex items-center gap-2 border-b border-white/10 px-4 py-3">
                     <EyeIcon className="h-4 w-4 text-cyan-400" />
                     <h2 className="text-sm font-semibold text-zinc-100">Watch list</h2>

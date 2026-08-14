@@ -19,6 +19,7 @@ import { PriceAlertService } from '../../services/ui/PriceAlertService';
 import { SetupWatchService, describeWatchTrigger } from '../../services/ui/SetupWatchService';
 import { parsePrice as canonicalParsePrice } from '../../utils/analysisUtils';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 interface SetupWatchControlProps {
     analysis: TradeAnalysis;
@@ -29,6 +30,7 @@ const TRIGGER_TYPES: Array<{ type: SetupWatchTriggerType; label: string; hint: s
     { type: 'PRICE_ABOVE', label: 'Above', hint: 'Re-debate when price breaks above a level' },
     { type: 'PRICE_BELOW', label: 'Below', hint: 'Re-debate when price drops below a level' },
     { type: 'PCT_MOVE', label: '±% Move', hint: 'Re-debate when price moves a % from now' },
+    { type: 'INVALIDATION', label: 'Invalidation', hint: 'Re-debate when the thesis invalidation level is crossed' },
 ];
 
 const fmtPrice = (n: number | undefined): string => {
@@ -52,11 +54,14 @@ const SetupWatchControl: React.FC<SetupWatchControlProps> = ({ analysis, message
     const symbol = PriceAlertService.normalizeSymbol(analysis.coinName || 'UNKNOWN');
     const currentPrice = PriceAlertService.getCurrentPrice(symbol);
 
+    const popoverRef = useFocusTrap<HTMLDivElement>(open);
+
     const openDialog = () => {
         const entry = canonicalParsePrice(analysis.entryPoints?.[0]?.price);
-        const stop = canonicalParsePrice(analysis.stopLoss);
-        setTriggerType('PRICE_ABOVE');
-        setPriceLevel(entry > 0 ? String(entry) : currentPrice ? String(currentPrice) : '');
+        const inv = canonicalParsePrice(analysis.invalidationCriteria?.[0]?.level || '');
+        setTriggerType(inv > 0 ? 'INVALIDATION' : 'PRICE_ABOVE');
+        const seed = inv > 0 ? inv : entry > 0 ? entry : (currentPrice ?? 0);
+        setPriceLevel(seed > 0 ? String(seed) : '');
         setPercent('2');
         setOpen(true);
     };
@@ -75,6 +80,7 @@ const SetupWatchControl: React.FC<SetupWatchControlProps> = ({ analysis, message
             priceLevel: triggerType === 'PCT_MOVE' ? undefined : levelNum,
             percent: triggerType === 'PCT_MOVE' ? pctNum : undefined,
             referencePrice: currentPrice ?? 0,
+            direction: analysis.direction === 'Long' || analysis.direction === 'Short' ? analysis.direction : undefined,
         });
         setOpen(false);
     };
@@ -119,16 +125,16 @@ const SetupWatchControl: React.FC<SetupWatchControlProps> = ({ analysis, message
     return (
         <div className="relative">
             <button
-                onClick={() => setOpen(o => !o)}
-                className="px-3 py-2 rounded-lg border border-white/10 bg-zinc-700/80 text-zinc-300 transition-colors hover:border-amber-400/25 hover:bg-amber-500/10 hover:text-amber-200 flex items-center justify-center gap-1.5"
-                title="Watch this setup — re-run the debate when price hits a level"
+                onClick={() => (open ? setOpen(false) : openDialog())}
+                className="px-3 py-2 rounded-lg border border-white/10 bg-zinc-700/80 text-zinc-300 transition-colors hover:border-white/25 hover:bg-zinc-700 flex items-center justify-center gap-1.5"
+                title="Re-run the debate when price hits a level (separate from the Watch list)"
                 aria-expanded={open}
             >
                 <EyeIcon className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline text-[10px] font-bold uppercase tracking-wider">Watch</span>
+                <span className="hidden sm:inline text-[10px] font-bold uppercase tracking-wider">Re-debate</span>
             </button>
             {open && (
-                <div className="absolute right-0 top-full mt-1 z-40 w-72 rounded-lg border border-white/10 bg-zinc-800 shadow-xl p-3 text-left">
+                <div ref={popoverRef} className="absolute right-0 top-full mt-1 z-40 w-72 rounded-lg border border-white/10 bg-zinc-800 shadow-xl p-3 text-left" role="dialog" aria-label="Arm price-triggered re-debate">
                     <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-2">
                         Re-debate when…
                     </div>
@@ -141,7 +147,7 @@ const SetupWatchControl: React.FC<SetupWatchControlProps> = ({ analysis, message
                                 title={t.hint}
                                 className={`flex-1 px-2 py-1.5 rounded-md border text-[10px] font-bold uppercase tracking-wider transition-colors ${
                                     triggerType === t.type
-                                        ? 'border-amber-400/40 bg-amber-500/15 text-amber-200'
+                                        ? 'border-white/25 bg-zinc-700 text-zinc-100'
                                         : 'border-white/10 bg-zinc-700/60 text-zinc-400 hover:text-zinc-200'
                                 }`}
                             >
@@ -188,7 +194,7 @@ const SetupWatchControl: React.FC<SetupWatchControlProps> = ({ analysis, message
                         <button
                             onClick={handleCreate}
                             disabled={!isLevelValid && !isMoveValid}
-                            className="flex-1 px-3 py-1.5 rounded-md border border-amber-400/40 bg-amber-500/15 text-amber-200 text-[10px] font-bold uppercase tracking-wider hover:bg-amber-500/25 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            className="flex-1 px-3 py-1.5 rounded-md border border-white/20 bg-zinc-700 text-zinc-100 text-[10px] font-bold uppercase tracking-wider hover:bg-zinc-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                         >
                             Start watching
                         </button>

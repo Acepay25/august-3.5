@@ -66,7 +66,9 @@ import { DEFAULT_FRAMEWORKS } from './constants/models';
 import { buildModelIdToName, buildProviderNameToId, getFirstReadyProvider } from './utils/providerUtils';
 import { createNewConversation, DEFAULT_LEVERAGE, findReusableEmptyConversation } from './utils/conversationUtils';
 import { recalculateAnalysisMetrics } from './utils/analysisUtils';
-import { collectWatchedSignals, toggleWatchOnMessage } from './utils/watchList';
+import { parseAppHash, serializeAppHash } from './utils/appHash';
+import { describeWatchTick } from './utils/watchTicks';
+import { appendWatchEpisode, collectWatchedSignals, toggleWatchOnMessage } from './utils/watchList';
 import { processImagesForSummarization } from './utils/imageProcessor';
 import { extractLastJson } from './utils/jsonUtils';
 import { parseLevelProbabilities } from './schemas/tradeAnalysis';
@@ -159,6 +161,7 @@ const App: React.FC = () => {
         isRateLimited, setIsRateLimited,
     } = useUIState();
     const [isWatchListVisible, setIsWatchListVisible] = useState(false);
+    const applyingHashRef = useRef(false);
 
     // Settings initial tab — set by handleOpenJournal to open Settings → Journal directly
     const [settingsInitialTab, setSettingsInitialTab] = useState<string | undefined>(undefined);
@@ -375,6 +378,61 @@ const App: React.FC = () => {
         expandedPostMortems, setExpandedPostMortems,
         postMortemCandidate, setPostMortemCandidate,
     } = useJournalUI();
+
+    useEffect(() => {
+        const apply = (): void => {
+            const route = parseAppHash(window.location.hash);
+            applyingHashRef.current = true;
+            if (route.view === 'journal') {
+                setJournalState({ isOpen: true, tab: route.tab || 'log' });
+                setIsSettingsMenuVisible(false);
+                setIsLiveMarketVisible(false);
+                setIsWatchListVisible(false);
+            } else if (route.view === 'market') {
+                setIsLiveMarketVisible(true);
+                setJournalState(prev => ({ ...prev, isOpen: false }));
+                setIsSettingsMenuVisible(false);
+                setIsWatchListVisible(false);
+            } else if (route.view === 'settings') {
+                setIsSettingsMenuVisible(true);
+                setJournalState(prev => ({ ...prev, isOpen: false }));
+                setIsLiveMarketVisible(false);
+                setIsWatchListVisible(false);
+            } else if (route.view === 'watch') {
+                setIsWatchListVisible(true);
+                setJournalState(prev => ({ ...prev, isOpen: false }));
+                setIsSettingsMenuVisible(false);
+                setIsLiveMarketVisible(false);
+            } else if (window.location.hash) {
+                setJournalState(prev => ({ ...prev, isOpen: false }));
+                setIsSettingsMenuVisible(false);
+                setIsLiveMarketVisible(false);
+                setIsWatchListVisible(false);
+            }
+            queueMicrotask(() => { applyingHashRef.current = false; });
+        };
+        apply();
+        window.addEventListener('hashchange', apply);
+        return () => window.removeEventListener('hashchange', apply);
+    }, [setJournalState, setIsSettingsMenuVisible, setIsLiveMarketVisible, setIsWatchListVisible]);
+
+    useEffect(() => {
+        if (applyingHashRef.current) return;
+        const route = journalState.isOpen
+            ? { view: 'journal' as const, tab: journalState.tab }
+            : isLiveMarketVisible
+                ? { view: 'market' as const }
+                : isSettingsMenuVisible
+                    ? { view: 'settings' as const }
+                    : isWatchListVisible
+                        ? { view: 'watch' as const }
+                        : { view: 'chat' as const };
+        if (route.view === 'chat' && !window.location.hash) return;
+        const next = serializeAppHash(route);
+        if (window.location.hash !== next) {
+            history.replaceState(null, '', next);
+        }
+    }, [journalState, isLiveMarketVisible, isSettingsMenuVisible, isWatchListVisible]);
 
     // Refs for functions defined later but needed by useTradeLogging (breaks circular dependency)
     const handleSendMessageRef = useRef<(...args: any[]) => any>(null!);
@@ -1168,6 +1226,9 @@ const App: React.FC = () => {
                         : msg;
                     if (normalized.analysis) {
                         return { ...normalized, analysis: recalculateAnalysisMetrics(normalized.analysis, leverage) };
+                    }
+                    if (normalized.isDebating) {
+                        return { ...normalized, isDebating: false };
                     }
                     return normalized;
                 });
@@ -2405,6 +2466,57 @@ const App: React.FC = () => {
         stableHandleSendMessage(payload.prompt, payload.images, 'Retrying the failed analysis.');
     }, [buildRerunPayload, stableHandleSendMessage, toast]);
 
+    const handleResumeDebate = useCallback((messageId: string) => {
+        const payload = buildRerunPayload(messageId);
+        if (!payload) {
+            toast.warning('Cannot resume', 'No original prompt found for this debate.');
+            return;
+        }
+        stableHandleSendMessage(payload.prompt, payload.images, 'Resume interrupted debate.', { resumeMessageId: messageId });
+    }, [buildRerunPayload, stableHandleSendMessage, toast]);
+
+    const handleForkDebate = useCallback((messageId: string, round: number) => {
+        const msgs = messagesRef.current;
+        const index = msgs.findIndex(m => m.id === messageId);
+        if (index < 0) return;
+        const ai = msgs[index];
+        let userMsg = msgs.slice(0, index).reverse().find(m => m.role === MessageRole.USER);
+        const turns = (ai.debateTurns || []).filter(t => (t.round || 1) <= round);
+        if (turns.length === 0) {
+            toast.warning('Cannot fork', 'No debate turns up to that round.');
+            return;
+        }
+        const newConv = createNewConversation();
+        if (activeConversation) {
+            newConv.ocrModel = activeConversation.ocrModel;
+            newConv.moderatorProviderId = activeConversation.moderatorProviderId;
+            newConv.moderatorModel = activeConversation.moderatorModel;
+            newConv.leverage = activeConversation.leverage;
+        }
+        const now = Date.now();
+        newConv.messages = [
+            ...(userMsg ? [{ ...userMsg, id: `user-${now}` }] : []),
+            {
+                ...ai,
+                id: `ai-${now}`,
+                analysis: undefined,
+                outcome: undefined,
+                isDebating: false,
+                debateTurns: turns,
+                debateCheckpoint: {
+                    lastCompletedRound: round,
+                    savedAt: new Date().toISOString(),
+                    analystNames: [...new Set(turns.filter(t => t.speaker !== 'System' && t.speaker !== 'Moderator').map(t => t.speaker))],
+                },
+                text: `Forked from round ${round}. Continue debate to resume from here.`,
+            },
+        ];
+        handleCancelAnalysis();
+        setConversationHistory(prev => [newConv, ...prev]);
+        setActiveConversationId(newConv.id);
+        toast.success('Forked debate', `New session from round ${round}.`);
+    }, [activeConversation, handleCancelAnalysis, messagesRef, toast]);
+
     // Edit a sent user message's text in place (persisted to history).
     const handleEditUserMessage = useCallback((messageId: string, text: string) => {
         updateMessages(prev => prev.map(m => m.id === messageId ? { ...m, text } : m));
@@ -2626,8 +2738,24 @@ const App: React.FC = () => {
             setAutopilotResolutions(prev => ({ ...prev, [messageId]: resolution }));
             toast.success('Autopilot: outcome detected', resolution.detail);
         });
-        return unsubscribe;
-    }, [toast]);
+        const unsubscribeTicks = OutcomeAutopilotService.subscribeTicks((messageId, price, previousPrice) => {
+            setConversationHistory(prev => prev.map(conv => {
+                const index = conv.messages.findIndex(m => m.id === messageId);
+                if (index < 0) return conv;
+                const msg = conv.messages[index];
+                if (!msg.watched || !msg.analysis) return conv;
+                const tick = describeWatchTick(msg.analysis, price, previousPrice);
+                if (!tick) return conv;
+                const nextMessages = [...conv.messages];
+                nextMessages[index] = appendWatchEpisode(msg, tick.kind, tick.detail);
+                return { ...conv, messages: nextMessages };
+            }));
+        });
+        return () => {
+            unsubscribe();
+            unsubscribeTicks();
+        };
+    }, [toast, setConversationHistory]);
 
     // P5: diff ids instead of re-registering every message on every stream
     // chunk — register() re-arms the 60s detection loop, so the old effect
@@ -2790,13 +2918,15 @@ const App: React.FC = () => {
         onCompareAnalysis: handleCompareAnalysis,
         onViewReasoning: handleViewReasoning,
         onReRunAnalysis: handleReRunAnalysis,
+        onResumeDebate: handleResumeDebate,
+        onForkDebate: handleForkDebate,
         onToggleWatch: (messageId: string) => handleToggleWatch(messageId),
         onReplacementChoice: handleReplacementChoice,
         // Post-mortem "what would I do today?" re-assessment.
         onTodayReassessment: startTodayReassessment,
         todayReassessmentInFlight,
         lensConfig,
-    }), [typingMessageState, highlightedAnalysisId, expandedPostMortems, expandedPostMortemImages, savedAnalyses, activeFrameworks, copiedMessageId, modelIdToName, providerNameToId, handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy, handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, confidenceCalibration, handleRetryPostMortem, chatLeverage, autopilotResolutions, handleConfirmAutopilot, handleDismissAutopilot, handleCompareAnalysis, handleViewReasoning, handleReRunAnalysis, handleToggleWatch, handleReplacementChoice, startTodayReassessment, todayReassessmentInFlight, lensConfig]);
+    }), [typingMessageState, highlightedAnalysisId, expandedPostMortems, expandedPostMortemImages, savedAnalyses, activeFrameworks, copiedMessageId, modelIdToName, providerNameToId, handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy, handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, confidenceCalibration, handleRetryPostMortem, chatLeverage, autopilotResolutions, handleConfirmAutopilot, handleDismissAutopilot, handleCompareAnalysis, handleViewReasoning, handleReRunAnalysis, handleResumeDebate, handleForkDebate, handleToggleWatch, handleReplacementChoice, startTodayReassessment, todayReassessmentInFlight, lensConfig]);
 
     // ... (Rest of component remains unchanged) ...
     const isAnalysisProgressVisible = Boolean(

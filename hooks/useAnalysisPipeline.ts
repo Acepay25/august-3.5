@@ -63,9 +63,11 @@ import { writeNotebookNoteFromRequest } from '../services/learning/NotebookWrite
 import { buildSimilarSetupsContext, buildRegimeWeightingContext } from '../services/learning/SetupMemoryService';
 import { generateMandatoryPatternCheck, generatePatternMemoryEnforcementContext } from '../services/learning/PatternMemorySynthesisService';
 import { applyNotebookSkillsToAnalysis } from '../services/learning/SkillMemoryService';
-import { ANALYST_ROLE_DEFINITIONS, getLensPromptForStyle, getRoleForProvider } from '../services/ui/AnalystLensService';
+import { ANALYST_ROLE_DEFINITIONS, getLensPromptForStyle, getRoleForProvider, EnsembleModelSelection } from '../services/ui/AnalystLensService';
+import { buildHybridEnvelope, buildOcrEnvelope, envelopeKindForRole } from '../utils/debateEnvelopes';
+import { buildRecommendationContract } from '../utils/recommendationContract';
+import { debateTurnsToRoundTexts, lastCompletedRound, reconstructOpenings } from '../utils/debateResume';
 import { buildEnsembleAnalysts, buildAnalystFailureReport } from '../services/ui/EnsembleAnalystService';
-import { EnsembleModelSelection } from '../services/ui/AnalystLensService';
 import { getEffectiveStyle } from '../services/ui/TradingStyleDetector';
 import GlobalLearningService from '../services/learning/GlobalLearningService';
 
@@ -232,6 +234,11 @@ async function analyzeTradingViewWithTransientRetry(
     for (let attempt = 0; attempt <= MAX_INITIAL_ANALYSIS_RETRIES; attempt++) {
         if (attempt > 0) await new Promise(r => setTimeout(r, 2000));
         try {
+            if (params.signal?.aborted) {
+                const err = new Error('Aborted');
+                err.name = 'AbortError';
+                throw err;
+            }
             return await analyzeTradingView(config, params);
         } catch (e: any) {
             const isAbort = e?.name === 'AbortError' || e?.code === 'ABORT_ERR' || e?.name === 'TimeoutError';
@@ -435,6 +442,11 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 reasoningProcesses: reasoningMap,
                 activeDebateSpeakers: { ...activeSpeakers },
                 debateRunLog: [...debateRunLogRef.current],
+                debateCheckpoint: currentTurns.length > 0 ? {
+                    lastCompletedRound: Math.max(0, ...currentTurns.map(t => t.round || 0)),
+                    savedAt: new Date().toISOString(),
+                    analystNames: [...new Set(currentTurns.filter(t => t.speaker !== 'System' && t.speaker !== 'Moderator').map(t => t.speaker))],
+                } : prev[messageIndex].debateCheckpoint,
             };
             const newMessages = [...prev];
             newMessages[messageIndex] = updatedMessage;
@@ -625,6 +637,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             /** Delivered when the run fails (user-safe message). */
             onError: (error: string) => void;
         };
+        /** Continue an interrupted debate from persisted turns. */
+        resumeMessageId?: string;
     }) => {
         const isAutomationRun = !!options?.automation;
         // Automation runs redirect message writes to a private list and mute
@@ -838,6 +852,11 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
         const ocrModelsUsed = [...new Set(imagesToUse.map(meta => meta.ocrModelUsed).filter(Boolean) as string[])];
 
+        const resumeTarget = options?.resumeMessageId
+            ? (messagesRef.current.find(m => m.id === options.resumeMessageId) || messages.find(m => m.id === options.resumeMessageId))
+            : undefined;
+        const canResume = Boolean(resumeTarget && !resumeTarget.analysis && (resumeTarget.debateTurns?.length || 0) > 0);
+
         const userMessage: Message = {
             id: `user-${Date.now()}`,
             role: MessageRole.USER,
@@ -848,7 +867,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             ocrModelUsed: ocrModelsUsed.join(','),
         };
 
-        const ensembleMessageId = `ensemble-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+        const ensembleMessageId = canResume && resumeTarget ? resumeTarget.id : `ensemble-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
         const ensembleProgress = isStagedEnsemble ? {
             analysts: enabledProviders.map(provider => ({
                 key: provider.thoughtsKey,
@@ -868,20 +887,26 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             id: ensembleMessageId,
             role: MessageRole.AI,
             text: '',
-            createdAt: new Date().toISOString(),
+            createdAt: canResume && resumeTarget ? resumeTarget.createdAt : new Date().toISOString(),
             isDebating: false,
-            debateTurns: [],
+            debateTurns: canResume && resumeTarget ? (resumeTarget.debateTurns || []) : [],
+            debateRunLog: canResume && resumeTarget ? (resumeTarget.debateRunLog || []) : [],
+            debateCheckpoint: canResume && resumeTarget ? resumeTarget.debateCheckpoint : undefined,
             ensembleProgress,
             ocrModelUsed: userMessage.ocrModelUsed,
             imageSummaries: userMessage.imageSummaries,
-            modelsUsed: buildModelsUsedRecord(enabledProviders),
+            modelsUsed: (canResume && resumeTarget?.modelsUsed) || buildModelsUsedRecord(enabledProviders),
             isAccuracyMode: runAccuracyMode,
             isLensMode: runLensConfig?.enabled ?? false,
             accuracySubMode: runAccuracyMode ? runAccuracySubMode : undefined,
             tradingStyle: runLensConfig?.enabled && runLensConfig.tradingStyle !== 'auto' ? (runLensConfig.tradingStyle as any) : undefined,
         } : null;
 
-        updateRequestMessages(prev => ensemblePlaceholder ? [...prev, userMessage, ensemblePlaceholder] : [...prev, userMessage]);
+        if (canResume) {
+            updateRequestMessages(prev => prev.map(m => m.id === ensembleMessageId ? { ...m, isDebating: true } : m));
+        } else {
+            updateRequestMessages(prev => ensemblePlaceholder ? [...prev, userMessage, ensemblePlaceholder] : [...prev, userMessage]);
+        }
         // Automation runs must not clear the composer (the user may be
         // mid-draft while a scheduled run fires).
         if (!isAutomationRun) {
@@ -1085,7 +1110,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             // One context bundle for every moderator surface (autoplay debate,
             // real debate, accuracy verification, compact retry): the same
             // chart/pattern block the analysts see + the user strategies.
-            const moderatorContextBundle = [moderatorMemoryContext, similarSetupsContext, regimeWeightingContext, hybridDataInjection, strategiesBlock].filter(Boolean).join('\n\n');
+            const moderatorHybrid = buildHybridEnvelope(freshHybridData, 'moderator') || hybridDataInjection;
+            const moderatorContextBundle = [moderatorMemoryContext, similarSetupsContext, regimeWeightingContext, moderatorHybrid, strategiesBlock].filter(Boolean).join('\n\n');
 
             // 'auto' trading style was hardcoded to 'swing' at every call
             // site — the market-data detector (ADX/regime/volume/session)
@@ -1158,14 +1184,10 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
             // Enhance prompt with memory files, similar setups, hybrid data AND learning context
             let enhancedPrompt = promptToSend;
-            if (memoryFilesContext || similarSetupsContext || hybridDataInjection || learningInjection) {
+            if (memoryFilesContext || similarSetupsContext || learningInjection) {
                 const contextParts: string[] = [];
-                // The notebook comes first — identity, rules and lessons set
-                // the frame everything else is read against. Then the user's
-                // own track record on THIS kind of setup.
                 if (memoryFilesContext) contextParts.push(memoryFilesContext);
                 if (similarSetupsContext) contextParts.push(similarSetupsContext);
-                if (hybridDataInjection) contextParts.push(hybridDataInjection);
                 if (learningInjection) contextParts.push(learningInjection);
                 enhancedPrompt = `${contextParts.join('\n\n')}\n\n${promptToSend}`;
             }
@@ -1515,6 +1537,7 @@ ${reflectionBlock}`
                         console.error('[ValidationGate] Validation failed:', validationError);
                     }
                     Object.assign(finalAnalysis, applyNotebookSkillsToAnalysis(finalAnalysis));
+                    finalAnalysis.recommendationContract = buildRecommendationContract(finalAnalysis);
                     // ========== END VALIDATION GATE ==========
 
                     return recalculateAnalysisMetrics(finalAnalysis, activeConversation?.leverage || DEFAULT_LEVERAGE);
@@ -1534,8 +1557,15 @@ ${reflectionBlock}`
                     }
                     reasoningMapRef.current = {};
                     activeDebateSpeakersRef.current = {};
-                    debateTurnsRef.current = [];
-                    debateRunLogRef.current = [];
+                    const resumeSeeds = canResume && resumeTarget ? reconstructOpenings(resumeTarget.debateTurns || []) : [];
+                    const useResume = resumeSeeds.filter(s => enabledProviders.some(p => p.name === s.name)).length >= 2;
+                    if (useResume && resumeTarget) {
+                        debateTurnsRef.current = resumeTarget.debateTurns || [];
+                        debateRunLogRef.current = resumeTarget.debateRunLog || [];
+                    } else {
+                        debateTurnsRef.current = [];
+                        debateRunLogRef.current = [];
+                    }
 
                     // Captured before the promise map: ensemblePlaceholder is
                     // non-null for staged ensembles, but closures see the
@@ -1602,6 +1632,17 @@ ${reflectionBlock}`
                          },
                     });
                     const analysisPromises = enabledProviders.map(provider => {
+                        if (useResume) {
+                            const seed = resumeSeeds.find(s => s.name === provider.name);
+                            if (!seed) {
+                                return Promise.reject(new Error('Resume seed missing'));
+                            }
+                            return Promise.resolve({
+                                thoughtProcess: seed.opening,
+                                finalOutput: seed.opening,
+                                analysis: seed.analysis,
+                            });
+                        }
                         if (isStagedEnsemble) {
                             updateEnsembleProgress(progress => ({
                                 ...progress,
@@ -1629,10 +1670,16 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
 > ${ex.reasoning.replace(/\n/g, '\n> ')}`;
                                 }
                             } catch { /* corpus read is best-effort */ }
+                            const assignedRole = getRoleForProvider(`${provider.config.id}::${provider.model}`, resolvedAssignments);
+                            const envelopeKind = envelopeKindForRole(assignedRole);
+                            const envelope = [
+                                buildHybridEnvelope(freshHybridData, envelopeKind),
+                                buildOcrEnvelope(summaries, envelopeKind),
+                            ].filter(Boolean).join('\n\n');
                             return cachedAnalyzeTradingView(
                                 provider.config,
                                 provider.model,
-                                enhancedPrompt + exemplarBlock,
+                                `${envelope ? `${envelope}\n\n` : ''}${enhancedPrompt}${exemplarBlock}`,
                                 imageFiles,
                                 dataURLs,
                                 currentAbortController.signal,
@@ -1788,7 +1835,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 createdAt: new Date().toISOString(),
                         }),
                         isDebating: true,
-                        debateTurns: [],
+                        debateTurns: useResume && resumeTarget ? (resumeTarget.debateTurns || []) : [],
                         // Non-staged runs never carried modelsUsed — the chat's
                         // per-bubble model line was blank for them.
                         modelsUsed: ensemblePlaceholder?.modelsUsed
@@ -2076,6 +2123,10 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 debateRunLogRef.current = [...debateRunLogRef.current, event].slice(-100);
                             },
                             patternMemoryGate,
+                            useResume && resumeTarget ? {
+                                lastCompletedRound: resumeTarget.debateCheckpoint?.lastCompletedRound || lastCompletedRound(resumeTarget.debateTurns || []),
+                                seedRoundTexts: debateTurnsToRoundTexts(resumeTarget.debateTurns || []),
+                            } : undefined,
                         );
                     }
 
@@ -2462,7 +2513,10 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                     // result card can audit the call against its own inputs.
                     if (processedAnalysis) {
                         const consensus = ensembleService.buildAnalystConsensus(allFulfilledAnalysts);
-                        if (consensus) processedAnalysis.analystConsensus = consensus;
+                        if (consensus) {
+                            processedAnalysis.analystConsensus = ensembleService.attachVerdictCitations(consensus, processedAnalysis);
+                        }
+                        processedAnalysis.recommendationContract = buildRecommendationContract(processedAnalysis);
                     }
 
                     updateRequestMessages(prev => {
@@ -2501,6 +2555,7 @@ ${accuracyVerificationNote}`
                             // Always set tradingStyle regardless of Lens mode
                             tradingStyle: effectiveTradingStyle,
                             debateRunLog: [...debateRunLogRef.current],
+                            debateCheckpoint: undefined,
                         };
 
                         // Per-run execution summary (compare mode + diagnostics).
@@ -2679,7 +2734,7 @@ ${accuracyVerificationNote}`
                             const result = await cachedAnalyzeTradingView(
                             provider.config,
                             provider.model,
-                            enhancedPrompt, // Fixed: was promptToSend, now uses enhancedPrompt with Hybrid data
+                            `${buildHybridEnvelope(freshHybridData, 'general') ? `${buildHybridEnvelope(freshHybridData, 'general')}\n\n` : ''}${enhancedPrompt}`,
                             imageFiles,
                             dataURLs,
                             currentAbortController.signal,

@@ -7,6 +7,7 @@ import LiveMarketDataView from '../market/LiveMarketDataView';
 import EnsembleProgressChat from '../analysis/EnsembleProgressChat';
 import DebateChat from '../analysis/DebateChat';
 import TradingSignalCard from '../analysis/TradingSignalCard';
+import DebateRunLog from '../analysis/DebateRunLog';
 import AnalysisDetails from './AnalysisDetails';
 import ThinkingModal from '../analysis/ThinkingModal';
 import TodayReassessmentPanel from './TodayReassessmentPanel';
@@ -59,12 +60,15 @@ export interface ChatContextProps {
     onToggleWatch?: (messageId: string) => void;
     /** Failed-run retry: rebuild the prompt + charts from the user message. */
     onRetryFailedRun?: (userMessageId: string) => void;
+    /** Continue an interrupted debate from the last completed round. */
+    onResumeDebate?: (messageId: string) => void;
     /** Edit a sent user message's text in place (persisted to history). */
     onEditUserMessage?: (messageId: string, text: string) => void;
     /** Mid-debate analyst replacement: pick a candidate (providerId) or pass
      *  null to continue without. Keyed by message id so a stale click from an
      *  earlier run is ignored. */
     onReplacementChoice?: (messageId: string, providerId: string | null) => void;
+    onForkDebate?: (messageId: string, round: number) => void;
     // Selection Mode Props
     isSelectionMode?: boolean;
     selectedMessageIds?: Set<string>;
@@ -146,8 +150,10 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
         onReRunAnalysis,
         onToggleWatch,
         onRetryFailedRun,
+        onResumeDebate,
         onEditUserMessage,
         onReplacementChoice,
+        onForkDebate,
         copiedMessageId,
         handleCopy,
         onTodayReassessment,
@@ -421,6 +427,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     ensembleNote={ensembleNote}
                                     watched={Boolean(message.watched)}
                                     onToggleWatch={() => onToggleWatch?.(message.id)}
+                                    calibration={confidenceCalibration}
                                 />
                             ) : message.isPostMortem ? (
                                 <div className="overflow-x-auto min-w-0">
@@ -449,13 +456,20 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 <button
                                     type="button"
                                     onClick={() => onRetryFailedRun(message.retryOf!.userMessageId)}
-                                    className="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-md text-sm font-medium transition-colors"
+                                    className="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 rounded-md text-sm font-medium transition-colors"
                                     aria-label="Retry the failed analysis with the same chart"
                                 >
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                    </svg>
                                     Retry with same chart
+                                </button>
+                            )}
+
+                            {!message.analysis && !message.isDebating && (message.debateCheckpoint || (message.debateTurns && message.debateTurns.length > 0)) && onResumeDebate && (
+                                <button
+                                    type="button"
+                                    onClick={() => onResumeDebate(message.id)}
+                                    className="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 rounded-md text-sm font-medium transition-colors"
+                                >
+                                    Continue debate
                                 </button>
                             )}
 
@@ -535,6 +549,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     messageId={message.id}
                                     replacementOffer={message.replacementOffer}
                                     onReplacementChoice={onReplacementChoice}
+                                    onForkDebate={onForkDebate}
                                 />
                             )}
 
@@ -587,16 +602,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                         )}
                                     </div>
                                     {isRunLogOpen && message.debateRunLog && message.debateRunLog.length > 0 && (
-                                        <div className="mt-1.5 max-h-40 overflow-y-auto rounded-lg border border-white/10 bg-zinc-900/60 px-2 py-1.5 custom-scrollbar">
-                                            {message.debateRunLog.map((event, i) => (
-                                                <p key={`${event.at}-${i}`} className="text-[10px] leading-5 text-zinc-400">
-                                                    <span className="font-semibold uppercase tracking-widest text-zinc-500">{event.kind}</span>
-                                                    {event.round !== undefined ? ` · r${event.round}` : ''}
-                                                    {event.speaker ? ` · ${event.speaker}` : ''}
-                                                    {' — '}{event.detail}
-                                                </p>
-                                            ))}
-                                        </div>
+                                        <DebateRunLog events={message.debateRunLog} />
                                     )}
                                     {isRunLedgerOpen && message.runStats.analysts && message.runStats.analysts.length > 0 && (
                                         <div className="mt-1.5 overflow-x-auto rounded-lg border border-white/10 bg-zinc-900/60">
@@ -644,6 +650,8 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     onCompare={onCompareAnalysis}
                                     watched={Boolean(message.watched)}
                                     onToggleWatch={(id: string) => onToggleWatch?.(id)}
+                                    message={message}
+                                    tradingStyle={message.tradingStyle}
                                 />
                             )}
 

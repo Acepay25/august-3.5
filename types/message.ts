@@ -208,6 +208,8 @@ export interface Message {
   watchEpisodes?: WatchEpisode[];
   /** Append-only debate run log (model-visible facts for replay). */
   debateRunLog?: DebateRunEvent[];
+  /** Crash-resume: last completed debate round (cleared when a verdict lands). */
+  debateCheckpoint?: DebateCheckpoint;
   /** "What would I do today?" — fresh forward-looking re-assessment of the
    *  closed trade's setup against the current market price. */
   todayReassessment?: TodayReassessment;
@@ -215,11 +217,17 @@ export interface Message {
 
 export interface WatchEpisode {
   at: string;
-  kind: 'watched' | 'unwatched' | 'autopilot' | 'logged';
+  kind: 'watched' | 'unwatched' | 'autopilot' | 'logged' | 'price' | 'invalidation';
   detail: string;
 }
 
-export type DebateRunEventKind = 'round' | 'episode' | 'gate' | 'steer' | 'drop' | 'pre_step' | 'verdict';
+export interface DebateCheckpoint {
+  lastCompletedRound: number;
+  savedAt: string;
+  analystNames: string[];
+}
+
+export type DebateRunEventKind = 'round' | 'episode' | 'gate' | 'steer' | 'drop' | 'pre_step' | 'verdict' | 'resume';
 
 export interface DebateRunEvent {
   at: string;

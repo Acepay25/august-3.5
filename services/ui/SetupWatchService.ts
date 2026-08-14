@@ -28,8 +28,8 @@ export interface CreateSetupWatchParams {
     triggerType: SetupWatch['triggerType'];
     priceLevel?: number;
     percent?: number;
-    /** Current price at watch creation — baseline for PCT_MOVE. */
     referencePrice: number;
+    direction?: SetupWatch['direction'];
 }
 
 /** Human-readable trigger description, e.g. "price breaks above $69,420". */
@@ -43,6 +43,8 @@ export const describeWatchTrigger = (watch: Pick<SetupWatch, 'triggerType' | 'pr
             return `price drops below ${fmt(watch.priceLevel)}`;
         case 'PCT_MOVE':
             return `price moves ±${watch.percent}% from ${fmt(watch.referencePrice)}`;
+        case 'INVALIDATION':
+            return `invalidation ${fmt(watch.priceLevel)}`;
         default:
             return 'price condition';
     }
@@ -90,6 +92,7 @@ class SetupWatchServiceClass {
             priceLevel: params.priceLevel,
             percent: params.percent,
             referencePrice: params.referencePrice,
+            direction: params.direction,
             status: 'ARMED',
             createdAt: new Date().toISOString(),
             triggerCount: 0,
@@ -174,6 +177,8 @@ class SetupWatchServiceClass {
                 return watch.priceLevel != null && watch.priceLevel > 0;
             case 'PCT_MOVE':
                 return watch.percent != null && watch.percent > 0 && watch.referencePrice > 0;
+            case 'INVALIDATION':
+                return watch.priceLevel != null && watch.priceLevel > 0;
             default:
                 return false;
         }
@@ -212,6 +217,10 @@ class SetupWatchServiceClass {
                 if (watch.percent == null || watch.percent <= 0 || watch.referencePrice <= 0) return false;
                 return (Math.abs(price - watch.referencePrice) / watch.referencePrice) * 100 >= watch.percent;
             }
+            case 'INVALIDATION':
+                if (watch.priceLevel == null) return false;
+                if (watch.direction === 'Short') return price >= watch.priceLevel;
+                return price <= watch.priceLevel;
             default:
                 return false;
         }

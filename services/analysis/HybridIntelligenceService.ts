@@ -758,7 +758,12 @@ const indicatorRow = (tf: HybridTimeframe, ind: TechnicalIndicators | null | und
  * Generate AI prompt injection for hybrid data.
  * Compact labeled tables first (scan-friendly), then supporting series.
  */
-export const generateHybridPromptInjection = (data: HybridDataPacket): string => {
+export interface HybridInjectionOptions {
+    timeframes?: HybridTimeframe[];
+    compact?: boolean;
+}
+
+export const generateHybridPromptInjection = (data: HybridDataPacket, options?: HybridInjectionOptions): string => {
     const fundingDisplay = (data.fundingRate * 100).toFixed(4);
     const dataAgeMin = Math.max(0, Math.round((Date.now() - new Date(data.dataTimestamp).getTime()) / 60000));
     const sourceNote = dataAgeMin <= 10
@@ -768,7 +773,7 @@ export const generateHybridPromptInjection = (data: HybridDataPacket): string =>
         ? `degraded (missing: ${data.dataQuality.unavailableSources.join(', ')})`
         : 'complete';
 
-    const tfs: HybridTimeframe[] = ['1d', '4h', '1h', '15m'];
+    const tfs: HybridTimeframe[] = options?.timeframes ?? ['1d', '4h', '1h', '15m'];
     const mil = (n: number): string => `$${(n / 1_000_000).toFixed(2)}M`;
     const chg = (n: number): string => `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
 
@@ -975,20 +980,20 @@ export const generateHybridPromptInjection = (data: HybridDataPacket): string =>
         mdTable(
             ['TF', 'Sequence', 'Summary', 'Dominant'],
             tfs.map(tf => {
-                const h = data.candleHistory[tf];
-                return [tf, h.sequence.join(''), h.summary, h.dominantTrend];
+                const h = data.candleHistory?.[tf];
+                return [tf, h?.sequence?.join('') || '—', h?.summary || '—', h?.dominantTrend || '—'];
             })
         ),
-        formatCandleHistoryInsight(data.candleHistory),
+        options?.compact ? '' : formatCandleHistoryInsight(data.candleHistory),
         mdTable(['TF', 'Pattern', 'Dir', 'Str', 'Level', 'Note'], patternRows),
-        ohlcBlocks,
+        options?.compact ? '' : ohlcBlocks,
         `### Read rules`,
         `- Numbers above are code-calculated. Cite a table cell when you name a level.`,
         `- ADX regime is authoritative vs the chart-structure table. ${adxRule}`,
-        `- 1H ATR for stops: $${data.indicators['1h'].atr}. Volume: ${av.trend}. OBV divergence: ${av.obvDivergence}.`,
+        `- 1H ATR for stops: $${data.indicators['1h']?.atr ?? '—'}. Volume: ${av.trend}. OBV divergence: ${av.obvDivergence}.`,
     ].filter(Boolean);
 
-    if (data.chartRepresentation) {
+    if (!options?.compact && data.chartRepresentation) {
         sections.push(generateChartPromptInjection(
             data.chartRepresentation['15m'],
             data.chartRepresentation['1h'],
