@@ -6,6 +6,8 @@ interface QuickActionChipsProps {
     onOpenJournal: () => void;
     onOpenLiveMarket: () => void;
     onOpenAnalytics: () => void;
+    onOpenWatchList?: () => void;
+    watchOpenCount?: number;
     isDisabled?: boolean;
     // Fresh sessions already ARE a new conversation — no point starting
     // another one from the hero/docked chips.
@@ -20,6 +22,8 @@ export const QuickActionChips: React.FC<QuickActionChipsProps> = ({
     onOpenJournal,
     onOpenLiveMarket,
     onOpenAnalytics,
+    onOpenWatchList,
+    watchOpenCount = 0,
     isDisabled = false,
     disableNewAnalysis = false,
     layout = 'docked'
@@ -27,7 +31,7 @@ export const QuickActionChips: React.FC<QuickActionChipsProps> = ({
     const [isHidden, setIsHidden] = useState(false);
 
     if (layout === 'centered') {
-        const chipClass = "flex items-center gap-2 px-4 py-2 bg-transparent border border-white/10 hover:border-white/25 hover:bg-zinc-800 rounded-full text-sm font-medium text-zinc-300 hover:text-zinc-100 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed";
+        const chipClass = "flex items-center gap-2 px-3 py-1.5 bg-transparent border border-white/10 hover:border-white/25 hover:bg-zinc-800 rounded-lg text-sm font-medium text-zinc-300 hover:text-zinc-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed";
         return (
             <div className="flex items-center justify-center gap-2 flex-wrap">
                 <button
@@ -55,6 +59,11 @@ export const QuickActionChips: React.FC<QuickActionChipsProps> = ({
                             <span className="text-zinc-400"><ActivityIcon className="w-4 h-4" /></span>
                             <span>Live Market</span>
                         </button>
+                        {onOpenWatchList && (
+                            <button onClick={onOpenWatchList} disabled={isDisabled} className={chipClass}>
+                                <span>Watch list{watchOpenCount > 0 ? ` (${watchOpenCount})` : ''}</span>
+                            </button>
+                        )}
                     </>
                 )}
             </div>
@@ -84,39 +93,48 @@ export const QuickActionChips: React.FC<QuickActionChipsProps> = ({
                         : 'max-w-[1000px] opacity-100 lg:max-w-none lg:max-h-[200px] lg:opacity-100'
                     } lg:w-full`}
             >
-                <div className="flex lg:grid lg:grid-cols-4 gap-2 overflow-x-auto lg:overflow-visible scrollbar-hide -mx-1 px-1 lg:mx-0 lg:px-0 lg:w-full">
+                <div className="flex lg:grid lg:grid-cols-5 gap-2 overflow-x-auto lg:overflow-visible scrollbar-hide -mx-1 px-1 lg:mx-0 lg:px-0 lg:w-full">
                     <button
                         onClick={onNewAnalysis}
                         disabled={isDisabled}
-                        className="flex items-center justify-center lg:justify-start gap-2 px-4 py-2.5 lg:py-3 bg-zinc-800 hover:bg-zinc-700 border border-white/10 hover:border-cyan-500/30 rounded-full lg:rounded-xl whitespace-nowrap text-sm font-medium text-zinc-300 hover:text-white transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shrink-0 lg:w-full"
+                        className="flex items-center justify-center lg:justify-start gap-2 px-3 py-2 lg:py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-white/10 hover:border-white/25 rounded-lg whitespace-nowrap text-sm font-medium text-zinc-300 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0 lg:w-full"
                     >
-                        <span className="text-cyan-400"><PlusIcon className="w-4 h-4" /></span>
+                        <span className="text-zinc-400"><PlusIcon className="w-4 h-4" /></span>
                         <span>New Analysis</span>
                     </button>
                     <button
                         onClick={onOpenJournal}
                         disabled={isDisabled}
-                        className="flex items-center justify-center lg:justify-start gap-2 px-4 py-2.5 lg:py-3 bg-zinc-800 hover:bg-zinc-700 border border-white/10 hover:border-violet-500/30 rounded-full lg:rounded-xl whitespace-nowrap text-sm font-medium text-zinc-300 hover:text-white transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shrink-0 lg:w-full"
+                        className="flex items-center justify-center lg:justify-start gap-2 px-3 py-2 lg:py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-white/10 hover:border-white/25 rounded-lg whitespace-nowrap text-sm font-medium text-zinc-300 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0 lg:w-full"
                     >
-                        <span className="text-violet-400"><BookmarkIcon className="w-4 h-4" /></span>
+                        <span className="text-zinc-400"><BookmarkIcon className="w-4 h-4" /></span>
                         <span>Trade Journal</span>
                     </button>
                     <button
                         onClick={onOpenAnalytics}
                         disabled={isDisabled}
-                        className="flex items-center justify-center lg:justify-start gap-2 px-4 py-2.5 lg:py-3 bg-zinc-800 hover:bg-zinc-700 border border-white/10 hover:border-purple-500/30 rounded-full lg:rounded-xl whitespace-nowrap text-sm font-medium text-zinc-300 hover:text-white transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shrink-0 lg:w-full"
+                        className="flex items-center justify-center lg:justify-start gap-2 px-3 py-2 lg:py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-white/10 hover:border-white/25 rounded-lg whitespace-nowrap text-sm font-medium text-zinc-300 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0 lg:w-full"
                     >
-                        <span></span>
+                        <span className="text-zinc-400"><ChartBarIcon className="w-4 h-4" /></span>
                         <span>Analytics</span>
                     </button>
                     <button
                         onClick={onOpenLiveMarket}
                         disabled={isDisabled}
-                        className="flex items-center justify-center lg:justify-start gap-2 px-4 py-2.5 lg:py-3 bg-zinc-800 hover:bg-zinc-700 border border-white/10 hover:border-emerald-500/30 rounded-full lg:rounded-xl whitespace-nowrap text-sm font-medium text-zinc-300 hover:text-white transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shrink-0 lg:w-full"
+                        className="flex items-center justify-center lg:justify-start gap-2 px-3 py-2 lg:py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-white/10 hover:border-white/25 rounded-lg whitespace-nowrap text-sm font-medium text-zinc-300 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0 lg:w-full"
                     >
-                        <span className="text-emerald-400"><ActivityIcon className="w-4 h-4" /></span>
+                        <span className="text-zinc-400"><ActivityIcon className="w-4 h-4" /></span>
                         <span>Live Market</span>
                     </button>
+                    {onOpenWatchList && (
+                        <button
+                            onClick={onOpenWatchList}
+                            disabled={isDisabled}
+                            className="flex items-center justify-center lg:justify-start gap-2 px-3 py-2 lg:py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-white/10 hover:border-white/25 rounded-lg whitespace-nowrap text-sm font-medium text-zinc-300 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0 lg:w-full"
+                        >
+                            <span>Watch list{watchOpenCount > 0 ? ` (${watchOpenCount})` : ''}</span>
+                        </button>
+                    )}
                 </div>
             </div>
         </div>

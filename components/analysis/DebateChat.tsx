@@ -359,7 +359,7 @@ const DebateChat: React.FC<DebateChatProps> = ({
         // instead of silently dropping the whole card.
         if (!analysis) return null;
         return (
-            <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-zinc-950/80">
+            <div className="mt-4 ui-panel">
                 <DebateSummary debateTurns={[]} analysis={analysis} />
                 <div className="px-3 py-4 text-center text-[11px] text-zinc-600">
                     The debate transcript is unavailable for this analysis.
@@ -409,7 +409,7 @@ const DebateChat: React.FC<DebateChatProps> = ({
     };
 
     return (
-        <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-zinc-950/80">
+        <div className="mt-4 ui-panel">
             <div className="flex flex-wrap items-center gap-2 border-b border-white/10 bg-zinc-900/80 px-3 py-2">
                 <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-zinc-500">
                     {PHASES.map((phase, index) => (
@@ -431,21 +431,6 @@ const DebateChat: React.FC<DebateChatProps> = ({
                             </button>
                         </React.Fragment>
                     ))}
-                    {onForkDebate && messageId && !isDebating && availableRounds.length > 0 && (
-                        <span className="flex items-center gap-1 border-l border-white/10 pl-2">
-                            {availableRounds.map(round => (
-                                <button
-                                    key={`fork-${round}`}
-                                    type="button"
-                                    onClick={() => onForkDebate(messageId, round)}
-                                    className="rounded px-1 py-0.5 text-zinc-500 hover:text-zinc-200"
-                                    title={`Fork a new session from round ${round}`}
-                                >
-                                    Fork r{round}
-                                </button>
-                            ))}
-                        </span>
-                    )}
                 </div>
                 {isComplete && (
                     <button
@@ -485,6 +470,16 @@ const DebateChat: React.FC<DebateChatProps> = ({
                                         Replay
                                     </button>
                                 )}
+                                {onForkDebate && messageId && !isDebating && availableRounds.map(round => (
+                                    <button
+                                        key={`fork-${round}`}
+                                        type="button"
+                                        onClick={() => { onForkDebate(messageId, round); setIsExportOpen(false); }}
+                                        className="px-3 py-1.5 text-left text-[11px] text-zinc-300 transition-colors hover:bg-zinc-800"
+                                    >
+                                        Fork round {round}
+                                    </button>
+                                ))}
                             </span>
                         )}
                     </span>

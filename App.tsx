@@ -2125,7 +2125,7 @@ const App: React.FC = () => {
             const nextWatch = !m.watched;
             const updated = toggleWatchOnMessage(m, nextWatch);
             if (updated.watched) {
-                toast.success('Watching', 'This signal is on the Watch list. Win/Loss and autopilot still work the same.');
+                toast.success('Pinned', 'This signal is on the Watch list. Win/Loss and autopilot still work the same.');
             }
             return updated;
         }), convId);
@@ -3185,6 +3185,7 @@ const App: React.FC = () => {
                 onOpenAutomation={(id) => automations.openAutomation(id)}
                 onCreateAutomation={() => automations.setEditor({ mode: 'create' })}
                 onOpenWatchList={() => setIsWatchListVisible(true)}
+                watchOpenCount={watchedSignals.filter(s => !s.outcome || s.outcome === TradeOutcome.PENDING).length}
             />
 
             {/* Journal overlay — REMOVED: now rendered inside Settings → Journal tab */}
@@ -3295,7 +3296,7 @@ const App: React.FC = () => {
 
             {/* Main row: persistent desktop sidebar + chat column */}
             <div className="flex-1 flex flex-row min-h-0">
-                <aside className={`hidden lg:flex flex-col ${isSidebarCollapsed ? 'w-16' : 'w-60'} shrink-0 min-h-0 border-r border-white/5 bg-[#151515] transition-[width] duration-200 relative`}>
+                <aside className={`hidden lg:flex flex-col ${isSidebarCollapsed ? 'w-16' : 'w-60'} shrink-0 min-h-0 border-r border-white/10 bg-zinc-950 transition-[width] duration-200 relative`}>
                     <button
                         type="button"
                         onClick={() => setIsSidebarCollapsed(prev => !prev)}
@@ -3427,6 +3428,8 @@ const App: React.FC = () => {
                 onOpenJournal={handleOpenJournal}
                 onOpenLiveMarket={handleOpenLiveMarket}
                 onOpenAnalytics={handleOpenAnalytics}
+                onOpenWatchList={() => setIsWatchListVisible(true)}
+                watchOpenCount={watchedSignals.filter(s => !s.outcome || s.outcome === TradeOutcome.PENDING).length}
                 homeDashboard={homeDashboard}
                 onInteract={handleInteract}
             />
@@ -3436,7 +3439,7 @@ const App: React.FC = () => {
                     the conversation keeps its full width while the run is live. */}
                 {isAnalysisProgressVisible && (
                     <div className="pointer-events-none fixed right-4 top-24 z-40 hidden w-[min(20rem,calc(100vw-2rem))] max-h-[calc(100vh-7rem)] lg:block">
-                        <div className="pointer-events-auto h-fit max-h-[calc(100vh-7rem)] overflow-y-auto rounded-3xl border border-white/[0.08] bg-[#2a2a2a] p-3 shadow-2xl custom-scrollbar scrollbar-track-transparent" aria-label="Analysis progress">
+                        <div className="pointer-events-auto h-fit max-h-[calc(100vh-7rem)] overflow-y-auto rounded-2xl border border-white/10 bg-zinc-950 p-3 custom-scrollbar" aria-label="Analysis progress">
                             <div className="flex items-center justify-between px-1 pb-3">
                                 <div>
                                     <h2 className="text-sm font-medium text-zinc-200">Analysis</h2>

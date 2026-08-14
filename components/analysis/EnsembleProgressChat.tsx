@@ -17,7 +17,7 @@ interface EnsembleProgressChatProps {
 
 const AnalystAvatar: React.FC<{ name: string; active?: boolean; small?: boolean }> = ({ name, active = false, small = false }) => (
     <div
-        className={`${small ? 'h-7 w-7 text-[10px]' : 'h-8 w-8 text-xs'} flex shrink-0 items-center justify-center rounded-full border border-white/10 bg-zinc-800 font-semibold text-zinc-200 ${active ? 'ring-1 ring-cyan-400/40' : ''}`}
+        className={`${small ? 'h-7 w-7 text-[10px]' : 'h-8 w-8 text-xs'} flex shrink-0 items-center justify-center rounded-lg border border-white/10 bg-zinc-800 font-medium text-zinc-200 ${active ? 'ring-1 ring-cyan-400/50' : ''}`}
         title={name}
     >
         {name.trim().charAt(0).toUpperCase() || '?'}
@@ -60,18 +60,18 @@ const AnalystRow: React.FC<{
     const showThinkingBlock = showThinking;
 
     return (
-        <div className="overflow-hidden rounded-xl border border-white/10 bg-zinc-900/40">
+        <div className="border-b border-white/5 last:border-b-0">
             <div className="flex items-center gap-2">
                 <button
                     type="button"
                     onClick={() => { setOpen(o => !o); userInteractedRef.current = true; }}
-                    className="flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-zinc-800/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+                    className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-zinc-800/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
                     aria-expanded={expanded}
                     aria-label={`${expanded ? 'Collapse' : 'Expand'} ${analyst.displayName} analysis`}
                 >
                     <AnalystAvatar name={analyst.displayName} active={analyst.status === 'analyzing'} small />
                     <div className="min-w-0 flex-1">
-                        <div className="truncate text-xs font-medium text-zinc-200">{analyst.displayName}</div>
+                        <div className="truncate text-[13px] font-medium text-zinc-200">{analyst.displayName}</div>
                         <div className="truncate text-[11px] text-zinc-600">{modelName}</div>
                     </div>
                     <span className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] ${STATUS_CHIP[analyst.status]}`}>
@@ -146,10 +146,10 @@ export const AnalystSubagents: React.FC<{
             : 'Preparing analyst outputs';
 
     return (
-        <div className="space-y-2">
-            <div className="flex items-center gap-2 px-1 text-[11px] text-zinc-500">
-                <span className="font-medium text-zinc-400">Analysts</span>
-                <span className="text-zinc-600">{progress.analysts.length}</span>
+        <div className="ui-panel status-surface">
+            <div className="flex items-center gap-2 border-b border-white/5 px-3 py-2 text-[12px] text-zinc-500">
+                <span className="font-medium text-zinc-300">Analysts</span>
+                <span className="tabular-nums text-zinc-600">{progress.analysts.length}</span>
                 {isLive && (
                     <>
                         <span className="h-1 w-1 rounded-full bg-cyan-400" aria-hidden="true" />
@@ -193,7 +193,7 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({ progress, m
     };
 
     return (
-        <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-zinc-950/80">
+        <div className="ui-panel mt-4">
             <div
                 ref={scrollRef}
                 onScroll={() => {
@@ -213,8 +213,8 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({ progress, m
             >
                 {progress.moderator.status === 'waiting' && (
                     <div className="flex items-start gap-2.5">
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-cyan-400/20 bg-cyan-500/10 text-cyan-300"><BotIcon /></div>
-                        <div className="max-w-[88%] rounded-2xl border border-white/10 bg-zinc-900/60 px-3.5 py-3">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-zinc-800 text-zinc-300"><BotIcon /></div>
+                        <div className="max-w-[88%] rounded-lg border border-white/10 bg-zinc-900 px-3.5 py-3">
                             <div className="mb-1 text-xs font-medium text-zinc-200">Strategist</div>
                             <div className="text-xs text-zinc-500">
                                 {progress.moderator.waitingFor?.length

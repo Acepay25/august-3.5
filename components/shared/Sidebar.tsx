@@ -21,7 +21,7 @@ interface NavRowProps {
 const NavRow: React.FC<NavRowProps> = ({ icon, label, onClick, collapsed = false }) => (
     <button
         onClick={onClick}
-        className={`w-full flex items-center ${collapsed ? 'justify-center px-2' : 'gap-3 px-3'} py-2 rounded-lg text-sm text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#151515]`}
+        className={`w-full flex items-center ${collapsed ? 'justify-center px-2' : 'gap-3 px-3'} py-2 rounded-lg text-sm text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950`}
         title={collapsed ? label : undefined}
         aria-label={collapsed ? label : undefined}
     >
@@ -139,7 +139,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
     };
 
     return (
-        <div className="flex flex-col h-full min-h-0 bg-[#151515]">
+        <div className="flex flex-col h-full min-h-0 bg-zinc-950">
             {/* New Conversation — highlighted row (disabled in a fresh
                 session: nothing exists yet to branch from) */}
             <div className={collapsed ? 'p-2 pb-1' : 'p-3 pb-2'}>
@@ -158,7 +158,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
             {/* Quick actions */}
             <nav className="px-2">
                 {!collapsed && <div className="px-3 pb-1 pt-2">
-                    <span className="text-[10px] font-medium text-zinc-400 uppercase tracking-widest">Quick actions</span>
+                    <span className="ui-kicker">Quick actions</span>
                 </div>}
                 <div className="space-y-0.5">
                     <NavRow collapsed={collapsed} icon={<ActivityIcon className="h-4 w-4" />} label="Live Market" onClick={act(onOpenLiveMarket)} />
@@ -176,7 +176,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
             <div className={collapsed ? 'px-2 pt-3' : 'px-2 pt-4'}>
                 {!collapsed && (
                     <div className="flex items-center justify-between px-3 pb-1">
-                        <span className="text-[10px] font-medium text-zinc-400 uppercase tracking-widest">Automations</span>
+                        <span className="ui-kicker">Automations</span>
                         {onCreateAutomation && (
                             <button
                                 type="button"
@@ -202,7 +202,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                         )
                     ) : automations.length === 0 ? (
                         <p className="px-3 py-1.5 text-[10px] text-zinc-600">
-                            No automations — <button type="button" onClick={act(onCreateAutomation ?? (() => {}))} className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2">create one</button> to schedule analyses.
+                            No automations — <button type="button" onClick={act(onCreateAutomation ?? (() => {}))} className="text-zinc-300 hover:text-zinc-100 underline underline-offset-2">create one</button> to schedule analyses.
                         </p>
                     ) : (
                         automations.map(a => (
@@ -224,7 +224,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
 
             {/* Recent conversations */}
             {!collapsed && <div className="flex items-center justify-between px-5 pb-1 pt-5">
-                <span className="text-[10px] font-medium text-zinc-400 uppercase tracking-widest">Recent</span>
+                <span className="ui-kicker">Recent</span>
                 {onDeleteConversations && (
                     <button
                         type="button"
@@ -246,12 +246,12 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                         onChange={(e) => setSearchQuery(e.target.value)}
                         placeholder="Search conversations…"
                         aria-label="Search conversations"
-                        className="w-full rounded-lg border border-white/10 bg-zinc-900/60 px-2.5 py-1.5 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-cyan-400/40"
+                        className="w-full rounded-lg border border-white/10 bg-zinc-900 px-2.5 py-1.5 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-white/25"
                     />
                 </div>
             )}
             {!collapsed && isSelectionMode && (
-                <div className="mx-3 mb-2 flex items-center justify-between gap-2 rounded-lg border border-cyan-400/20 bg-cyan-500/5 px-2.5 py-2">
+                <div className="mx-3 mb-2 flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-zinc-900 px-2.5 py-2">
                     <span className="text-[11px] text-zinc-400">
                         {selectedConversationIds.size} selected
                     </span>

@@ -118,6 +118,8 @@ interface ChatAreaProps {
     onOpenJournal: () => void;
     onOpenLiveMarket: () => void;
     onOpenAnalytics: () => void;
+    onOpenWatchList?: () => void;
+    watchOpenCount?: number;
     onInteract?: () => void;
     onSelectMessageForProbability?: (id: string) => void;
     /** Returning-user summary shown when the active conversation is empty. */
@@ -204,6 +206,8 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     onOpenJournal,
     onOpenLiveMarket,
     onOpenAnalytics,
+    onOpenWatchList,
+    watchOpenCount = 0,
     onInteract,
     onSelectMessageForProbability,
     homeDashboard,
@@ -227,6 +231,23 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         mediaQuery.addEventListener('change', updateMotionPreference);
         return () => mediaQuery.removeEventListener('change', updateMotionPreference);
     }, []);
+
+    useEffect(() => {
+        if (!highlightedAnalysisId) return;
+        const index = messages.findIndex(m => m.id === highlightedAnalysisId);
+        if (index < 0) return;
+        virtuosoRef.current?.scrollIntoView({ index, align: 'center', behavior: 'smooth' });
+    }, [highlightedAnalysisId, messages, virtuosoRef]);
+
+    const pausedDebate = useMemo(() => {
+        if (isAnalysisInProgress) return null;
+        return messages.find(m =>
+            !m.analysis
+            && !m.isDebating
+            && !m.isPostMortem
+            && (m.debateCheckpoint || (m.debateTurns && m.debateTurns.length > 0))
+        ) ?? null;
+    }, [isAnalysisInProgress, messages]);
 
     const lockFollowIfScrollingUp = useCallback((deltaY: number): void => {
         if (deltaY < 0) {
@@ -481,6 +502,21 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 </div>
             )}
 
+            {pausedDebate && chatContext.onResumeDebate && !isSelectionMode && (
+                <div className="absolute top-10 left-0 right-0 z-20 flex justify-center px-3 pointer-events-none">
+                    <div className="pointer-events-auto flex items-center gap-2 rounded-full border border-white/15 bg-zinc-900 px-3 py-1.5 shadow-lg">
+                        <span className="text-[11px] text-zinc-300">Debate paused</span>
+                        <button
+                            type="button"
+                            onClick={() => chatContext.onResumeDebate?.(pausedDebate.id)}
+                            className="rounded-full bg-zinc-800 px-2.5 py-0.5 text-[11px] font-semibold text-zinc-100 hover:bg-zinc-700"
+                        >
+                            Continue
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {isRateLimited && <div className="status-surface absolute top-16 left-4 right-4 z-20 bg-red-500/10 border border-red-500/20 text-red-200 p-4 rounded-xl flex items-center justify-between mb-6 animate-fade-in" role="alert"><span><strong>Rate Limit Exceeded:</strong> Please wait a moment.</span><button onClick={() => setIsRateLimited(false)} aria-label="Dismiss rate limit notice" className="text-red-200 hover:text-white ml-4"><CloseIcon /></button></div>}
 
             <div className="fixed bottom-28 right-6 z-30 flex flex-col gap-2">
@@ -597,6 +633,8 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                                 onOpenJournal={onOpenJournal}
                                 onOpenLiveMarket={onOpenLiveMarket}
                                 onOpenAnalytics={onOpenAnalytics}
+                                onOpenWatchList={onOpenWatchList}
+                                watchOpenCount={watchOpenCount}
                                 isDisabled={!!loadingMessage}
                                 disableNewAnalysis={messages.length === 0}
                             />
@@ -614,6 +652,8 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                                 onOpenJournal={onOpenJournal}
                                 onOpenLiveMarket={onOpenLiveMarket}
                                 onOpenAnalytics={onOpenAnalytics}
+                                onOpenWatchList={onOpenWatchList}
+                                watchOpenCount={watchOpenCount}
                                 isDisabled={!!loadingMessage}
                                 disableNewAnalysis={messages.length === 0}
                             />

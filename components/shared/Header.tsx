@@ -45,6 +45,7 @@ interface HeaderProps {
     onOpenAutomation?: (id: string | null) => void;
     onCreateAutomation?: () => void;
     onOpenWatchList?: () => void;
+    watchOpenCount?: number;
 }
 
 // Memoized: Header re-renders every time App does (typing, progress ticks);
@@ -78,6 +79,7 @@ export const Header: React.FC<HeaderProps> = memo(({
     onOpenAutomation,
     onCreateAutomation,
     onOpenWatchList,
+    watchOpenCount = 0,
 }) => {
     const [sessionContext, setSessionContext] = useState<SessionContext | null>(null);
     const [allSessions, setAllSessions] = useState<SessionStatus[]>([]);
@@ -165,13 +167,13 @@ export const Header: React.FC<HeaderProps> = memo(({
     };
 
     return (
-        <header className="glass status-surface sticky top-0 z-20 px-4 py-1.5 sm:px-6 sm:py-2 border-b border-transparent shadow-sm flex-shrink-0 pt-[calc(env(safe-area-inset-top,0px)+0.375rem)] sm:pt-[calc(env(safe-area-inset-top,0px)+0.5rem)]">
+        <header className="sticky top-0 z-20 flex-shrink-0 border-b border-white/10 bg-zinc-950 px-4 py-1.5 sm:px-6 sm:py-2 pt-[calc(env(safe-area-inset-top,0px)+0.375rem)] sm:pt-[calc(env(safe-area-inset-top,0px)+0.5rem)]">
             <div className="max-w-7xl mx-auto flex items-center justify-between">
                 <div className="flex-1 min-w-0 flex items-center gap-3 sm:gap-4 relative">
                     {/* Hamburger Menu Button */}
                     <button
                         onClick={() => setIsMobileMenuOpen(prev => !prev)}
-                        className="p-2.5 text-zinc-400 hover:text-cyan-400 rounded-xl hover:bg-zinc-800 transition-colors lg:hidden focus-visible:ring-2 focus-visible:ring-cyan-400"
+                        className="p-2 text-zinc-400 hover:text-zinc-100 rounded-lg hover:bg-zinc-800 transition-colors lg:hidden focus-visible:ring-2 focus-visible:ring-cyan-400"
                         title="Menu"
                         aria-label="Toggle navigation menu"
                         aria-expanded={isMobileMenuOpen}
@@ -182,7 +184,7 @@ export const Header: React.FC<HeaderProps> = memo(({
 
                     <div className="flex flex-col justify-center">
                         <div className="flex items-center gap-3">
-                            <h1 className="text-base sm:text-lg font-bold tracking-tight text-zinc-100 leading-none">August <span className="text-cyan-500">3.5</span></h1>
+                            <h1 className="text-base sm:text-lg font-semibold tracking-tight text-zinc-100 leading-none">August 3.5</h1>
 
                             {/* Session Display */}
                             {sessionContext && (
@@ -283,7 +285,7 @@ export const Header: React.FC<HeaderProps> = memo(({
                     </div>
                 </div>
                 {/* Right Side: Minimal Actions */}
-                <div className="flex items-center gap-2">
+                <div className="status-surface flex items-center gap-2">
                     {saveStatus === 'SAVING' && <LoadingIcon className="h-4 w-4 text-zinc-500" />}
                     {saveStatus === 'SAVED' && <CheckIcon className="h-4 w-4 text-emerald-500" />}
                     {!isOnline && <CloudOffIcon className="h-4 w-4 text-yellow-500" />}
@@ -292,6 +294,23 @@ export const Header: React.FC<HeaderProps> = memo(({
                     <div className="hidden sm:block">
                         <UpdateButton />
                     </div>
+
+                    {onOpenWatchList && (
+                        <button
+                            type="button"
+                            onClick={onOpenWatchList}
+                            className="relative hidden sm:inline-flex items-center gap-1.5 rounded-lg p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 transition-colors"
+                            title="Watch list"
+                            aria-label={`Watch list, ${watchOpenCount} open`}
+                        >
+                            <EyeIcon className="h-5 w-5" />
+                            {watchOpenCount > 0 && (
+                                <span className="absolute -right-0.5 -top-0.5 min-w-[1rem] rounded-full bg-zinc-200 px-1 text-[9px] font-bold leading-4 text-zinc-900">
+                                    {watchOpenCount > 99 ? '99+' : watchOpenCount}
+                                </span>
+                            )}
+                        </button>
+                    )}
 
                     {/* Changelog / Version History Button */}
                     <button
@@ -325,7 +344,7 @@ export const Header: React.FC<HeaderProps> = memo(({
                         />
 
                         {/* Menu Panel */}
-                         <div id="mobile-navigation-menu" ref={mobileMenuRef} className="absolute left-0 top-0 h-full w-72 bg-zinc-900 border-r border-white/10 shadow-2xl animate-slide-in-left flex flex-col pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]" role="dialog" aria-modal="true" aria-label="Navigation menu">
+                         <div id="mobile-navigation-menu" ref={mobileMenuRef} className="absolute left-0 top-0 h-full w-72 bg-zinc-950 border-r border-white/10 shadow-2xl animate-slide-in-left flex flex-col pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]" role="dialog" aria-modal="true" aria-label="Navigation menu">
                             <div className="p-5 border-b border-white/10 flex items-center justify-between">
                                 <div className="flex items-center gap-3">
                                     <div className="w-10 h-10 rounded-full bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">

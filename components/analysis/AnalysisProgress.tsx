@@ -27,13 +27,13 @@ const StepStatusIcon: React.FC<{ status: AnalysisStep['status']; isPostMortem?: 
   status,
   isPostMortem,
 }) => {
-  const accent = isPostMortem ? 'text-purple-400' : 'text-cyan-400';
+  const accent = isPostMortem ? 'text-zinc-300' : 'text-cyan-400';
 
   switch (status) {
     case 'running':
       return <LoadingIcon className={`size-4 ${accent}`} />;
     case 'complete':
-      return <CheckIcon className={`size-4 ${isPostMortem ? 'text-purple-400' : 'text-emerald-400'}`} />;
+      return <CheckIcon className="size-4 text-zinc-400" />;
     case 'error':
       return <CloseIcon className="size-4 text-rose-400" />;
     default:
@@ -58,9 +58,7 @@ const StepTaskBlock: React.FC<{ step: AnalysisStep; isPostMortem?: boolean }> = 
           <span
             className={`text-sm transition-colors ${
               step.status === 'running'
-                ? isPostMortem
-                  ? 'text-purple-300'
-                  : 'text-cyan-300'
+                ? 'text-zinc-100'
                 : step.status === 'complete'
                   ? 'text-zinc-300'
                   : step.status === 'error'
@@ -130,7 +128,7 @@ const CompletionSummaryBar: React.FC<{
     return parts.length > 0 ? parts.join(', ') : 'analysis complete';
   }, [steps]);
 
-  const accent = isPostMortem ? 'border-purple-500/20' : 'border-cyan-500/20';
+  const accent = 'border-white/10';
 
   return (
     <Collapsible defaultOpen={false}>
@@ -185,13 +183,9 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({
   }, [steps]);
 
   const visibleSteps = steps.filter((s) => s.status !== 'pending');
-  const accentBorder = isPostMortem ? 'border-purple-500/20' : 'border-cyan-500/20';
-  const glowColor = isPostMortem
-    ? 'shadow-[0_0_50px_-12px_rgba(161,161,170,0.2)]'
-    : 'shadow-[0_0_50px_-12px_rgba(176, 176, 182,0.2)]';
   const surfaceClass = embedded
     ? 'animate-fade-in'
-    : `glass status-surface rounded-2xl ${glowColor} border-t ${accentBorder} p-4 animate-fade-in`;
+    : 'ui-panel status-surface p-4 animate-fade-in';
 
   const taskBlocks = (
     <div className="space-y-1">
@@ -213,7 +207,7 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({
             {isPostMortemInProgress && onOpenPostMortem && (
               <button
                 onClick={onOpenPostMortem}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-purple-300 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-300 bg-zinc-800 hover:bg-zinc-700 border border-white/10 transition-colors"
               >
                 <EyeIcon className="size-3.5" />
                 View Post-Mortem

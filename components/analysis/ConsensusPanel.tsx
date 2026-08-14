@@ -9,9 +9,9 @@ const ConsensusPanel: React.FC<ConsensusPanelProps> = ({ consensus }) => {
     const { entries, divergence } = consensus;
     if (!entries.length) return null;
     return (
-        <div className="status-surface rounded-xl border border-white/10 bg-zinc-900/50 p-3">
+        <div className="pt-1">
             <div className="flex flex-wrap items-baseline gap-2">
-                <span className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Consensus</span>
+                <span className="ui-kicker">Consensus</span>
                 <span className="text-[11px] text-zinc-400">Divergence {divergence.score}/100</span>
                 {divergence.isEchoChamber && (
                     <span className="text-[10px] font-semibold uppercase tracking-widest text-amber-400">Echo chamber</span>
@@ -20,7 +20,7 @@ const ConsensusPanel: React.FC<ConsensusPanelProps> = ({ consensus }) => {
             <div className="mt-2 overflow-x-auto">
                 <table className="w-full text-left text-[11px] border-collapse">
                     <thead>
-                        <tr className="text-[10px] uppercase tracking-widest text-zinc-600">
+                        <tr className="text-[10px] uppercase tracking-wide text-zinc-600">
                             <th className="py-1 pr-2 font-semibold">Analyst</th>
                             <th className="py-1 pr-2 font-semibold">Dir</th>
                             <th className="py-1 pr-2 font-semibold">P</th>

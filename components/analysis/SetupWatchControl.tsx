@@ -95,13 +95,13 @@ const SetupWatchControl: React.FC<SetupWatchControlProps> = ({ analysis, message
                 >
                     <EyeIcon className="w-3.5 h-3.5" />
                     <span className="hidden sm:inline">{describeWatchTrigger(watch)}</span>
-                    <span className="sm:hidden">Watch on</span>
+                    <span className="sm:hidden">Armed</span>
                 </span>
                 <button
                     onClick={() => SetupWatchService.cancelWatch(watch.id)}
                     className="px-2 py-2 rounded-lg border border-white/10 bg-zinc-700/80 text-zinc-400 hover:text-rose-300 hover:border-rose-400/30 transition-colors"
-                    title="Cancel watch"
-                    aria-label="Cancel watch"
+                    title="Cancel re-debate trigger"
+                    aria-label="Cancel re-debate trigger"
                 >
                     <CloseIcon className="w-3.5 h-3.5" />
                 </button>
@@ -127,7 +127,7 @@ const SetupWatchControl: React.FC<SetupWatchControlProps> = ({ analysis, message
             <button
                 onClick={() => (open ? setOpen(false) : openDialog())}
                 className="px-3 py-2 rounded-lg border border-white/10 bg-zinc-700/80 text-zinc-300 transition-colors hover:border-white/25 hover:bg-zinc-700 flex items-center justify-center gap-1.5"
-                title="Re-run the debate when price hits a level (separate from the Watch list)"
+                title="Arm a price trigger to re-run this debate (separate from pinning to the Watch list)"
                 aria-expanded={open}
             >
                 <EyeIcon className="w-3.5 h-3.5" />
@@ -196,7 +196,7 @@ const SetupWatchControl: React.FC<SetupWatchControlProps> = ({ analysis, message
                             disabled={!isLevelValid && !isMoveValid}
                             className="flex-1 px-3 py-1.5 rounded-md border border-white/20 bg-zinc-700 text-zinc-100 text-[10px] font-bold uppercase tracking-wider hover:bg-zinc-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                         >
-                            Start watching
+                            Arm trigger
                         </button>
                         <button
                             onClick={() => setOpen(false)}

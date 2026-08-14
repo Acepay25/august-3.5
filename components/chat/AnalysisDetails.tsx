@@ -1,18 +1,19 @@
 /**
- * AnalysisDetails — the interactive layer under an analysis message.
+ * AnalysisDetails — next-steps under a finished signal.
  *
- * The plan + harness-side data render as ONE workspace-style markdown card
- * in MessageItem (buildAnalysisMarkdown + buildSupplementMarkdown). This
- * component adds what markdown can't: the outcome autopilot banner and the
- * action row (log win/loss, probabilities, compare, alerts).
+ * Primary: log Win/Loss/Skip, pin to the Watch list, arm a price re-debate.
+ * Secondary (More): probabilities, compare, share, alerts.
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { TradeAnalysis, TradeOutcome, Message, TradingStyle } from '../../types';
 import { AutopilotResolution } from '../../services/ui/OutcomeAutopilotService';
 import { PriceAlertService } from '../../services/ui/PriceAlertService';
 import ShareMenu from '../analysis/ShareMenu';
 import SetupWatchControl from '../analysis/SetupWatchControl';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
+
+const HINT_KEY = 'august_next_steps_hint_dismissed';
 
 interface AnalysisDetailsProps {
     messageId: string;
@@ -20,6 +21,7 @@ interface AnalysisDetailsProps {
     outcome?: TradeOutcome;
     autopilotResolution?: AutopilotResolution;
     onLogTrade: (messageId: string, outcome: TradeOutcome.WIN | TradeOutcome.LOSS) => void;
+    onSkipTrade?: (messageId: string) => void;
     onConfirmAutopilot?: (messageId: string) => void;
     onDismissAutopilot?: (messageId: string) => void;
     onSelectForProbability?: (messageId: string) => void;
@@ -28,6 +30,7 @@ interface AnalysisDetailsProps {
     onToggleWatch?: (messageId: string) => void;
     message?: Pick<Message, 'analysis' | 'debateTurns' | 'debateRunLog'> & { text?: string };
     tradingStyle?: Exclude<TradingStyle, 'auto'>;
+    highlighted?: boolean;
 }
 
 const AnalysisDetails: React.FC<AnalysisDetailsProps> = ({
@@ -36,6 +39,7 @@ const AnalysisDetails: React.FC<AnalysisDetailsProps> = ({
     outcome,
     autopilotResolution,
     onLogTrade,
+    onSkipTrade,
     onConfirmAutopilot,
     onDismissAutopilot,
     onSelectForProbability,
@@ -44,17 +48,43 @@ const AnalysisDetails: React.FC<AnalysisDetailsProps> = ({
     onToggleWatch,
     message,
     tradingStyle,
+    highlighted = false,
 }) => {
     const [alertsSet, setAlertsSet] = useState(false);
-    const handleSetAlerts = () => {
-        if (alertsSet) return; // one alert set per message — avoid duplicate monitoring
-        PriceAlertService.createAlert(messageId, analysis);
-        setAlertsSet(true);
+    const [moreOpen, setMoreOpen] = useState(false);
+    const [showHint, setShowHint] = useState(() => {
+        try {
+            return localStorage.getItem(HINT_KEY) !== 'true';
+        } catch {
+            return false;
+        }
+    });
+    const stripRef = useRef<HTMLDivElement>(null);
+    useEscapeClose(moreOpen, () => setMoreOpen(false));
+
+    useEffect(() => {
+        if (!highlighted) return;
+        stripRef.current?.focus();
+    }, [highlighted]);
+
+    const dismissHint = (): void => {
+        try {
+            localStorage.setItem(HINT_KEY, 'true');
+        } catch { /* ignore */ }
+        setShowHint(false);
     };
 
+    const handleSetAlerts = (): void => {
+        if (alertsSet) return;
+        PriceAlertService.createAlert(messageId, analysis);
+        setAlertsSet(true);
+        dismissHint();
+    };
+
+    const pending = outcome === TradeOutcome.PENDING && !autopilotResolution;
+
     return (
-        <div className="mt-3 space-y-3">
-            {/* Outcome Autopilot — detected SL/TP hit, one-click confirmation */}
+        <div className="mt-0 space-y-3">
             {autopilotResolution && outcome === TradeOutcome.PENDING && (() => {
                 const r = autopilotResolution;
                 const isWin = r.outcome === TradeOutcome.WIN;
@@ -120,87 +150,134 @@ const AnalysisDetails: React.FC<AnalysisDetailsProps> = ({
                 );
             })()}
 
-            {/* Action row — like the workspace buttons */}
+            {showHint && pending && (
+                <div className="flex items-start justify-between gap-3 rounded-xl border border-white/10 bg-zinc-900/80 px-3 py-2">
+                    <p className="text-[11px] leading-relaxed text-zinc-400">
+                        Next: log Win or Loss, Skip if you did not take it, Pin it on the Watch list, or Arm a price re-debate.
+                    </p>
+                    <button
+                        type="button"
+                        onClick={dismissHint}
+                        className="shrink-0 text-[10px] font-bold uppercase tracking-widest text-zinc-500 hover:text-zinc-200"
+                    >
+                        Got it
+                    </button>
+                </div>
+            )}
+
             <div
+                ref={stripRef}
+                id={`signal-next-${messageId}`}
                 className="flex flex-wrap gap-2 outline-none"
                 tabIndex={0}
+                aria-label="Signal next steps"
                 onKeyDown={(e) => {
                     const target = e.target as HTMLElement;
                     if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)) return;
-                    if ((e.key === 'w' || e.key === 'W') && outcome === TradeOutcome.PENDING && !autopilotResolution) {
+                    if (!pending) return;
+                    if (e.key === 'w' || e.key === 'W') {
                         e.preventDefault();
+                        dismissHint();
                         onLogTrade(messageId, TradeOutcome.WIN);
-                    } else if ((e.key === 'l' || e.key === 'L') && outcome === TradeOutcome.PENDING && !autopilotResolution) {
+                    } else if (e.key === 'l' || e.key === 'L') {
                         e.preventDefault();
+                        dismissHint();
                         onLogTrade(messageId, TradeOutcome.LOSS);
+                    } else if ((e.key === 's' || e.key === 'S') && onSkipTrade) {
+                        e.preventDefault();
+                        dismissHint();
+                        onSkipTrade(messageId);
                     }
                 }}
             >
-                {outcome === TradeOutcome.PENDING && !autopilotResolution && (
+                {pending && (
                     <>
                         <button
-                            onClick={() => onLogTrade(messageId, TradeOutcome.WIN)}
-                            className="status-surface rounded-xl bg-emerald-500/15 border border-emerald-500/40 px-4 py-2 text-xs font-bold text-emerald-300 transition-colors hover:bg-emerald-500/25"
+                            onClick={() => { dismissHint(); onLogTrade(messageId, TradeOutcome.WIN); }}
+                            className="status-surface rounded-lg bg-emerald-500/15 border border-emerald-500/40 px-3 py-1.5 text-xs font-semibold text-emerald-300 transition-colors hover:bg-emerald-500/25"
                             title="Log this trade as a win (opens the capture flow)"
                         >
                             Win
                         </button>
                         <button
-                            onClick={() => onLogTrade(messageId, TradeOutcome.LOSS)}
-                            className="status-surface rounded-xl bg-rose-500/15 border border-rose-500/40 px-4 py-2 text-xs font-bold text-rose-300 transition-colors hover:bg-rose-500/25"
+                            onClick={() => { dismissHint(); onLogTrade(messageId, TradeOutcome.LOSS); }}
+                            className="status-surface rounded-lg bg-rose-500/15 border border-rose-500/40 px-3 py-1.5 text-xs font-semibold text-rose-300 transition-colors hover:bg-rose-500/25"
                             title="Log this trade as a loss (opens the capture flow)"
                         >
                             Loss
                         </button>
+                        {onSkipTrade && (
+                            <button
+                                onClick={() => { dismissHint(); onSkipTrade(messageId); }}
+                                className="rounded-lg border border-white/10 bg-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-colors hover:border-white/25 hover:text-zinc-100"
+                                title="Mark as skipped — you did not take this setup"
+                            >
+                                Skip
+                            </button>
+                        )}
                     </>
                 )}
                 {onToggleWatch && (
                     <button
                         type="button"
-                        onClick={() => onToggleWatch(messageId)}
-                        className={`rounded-xl border px-4 py-2 text-xs font-bold uppercase tracking-widest transition-colors ${
+                        onClick={() => { dismissHint(); onToggleWatch(messageId); }}
+                        className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
                             watched
                                 ? 'border-white/25 bg-zinc-800 text-zinc-100'
                                 : 'border-white/10 bg-zinc-800 text-zinc-300 hover:border-white/25 hover:text-zinc-100'
                         }`}
-                        title="Add this trading signal to the Watch list — autopilot and Win/Loss still work the same"
+                        title="Pin this signal to the Watch list. Autopilot and Win/Loss still work. Separate from Arm trigger."
                     >
-                        {watched ? 'Watching' : 'Watch'}
+                        {watched ? 'Pinned' : 'Pin'}
                     </button>
                 )}
                 <SetupWatchControl analysis={analysis} messageId={messageId} />
-                {onSelectForProbability && (
+                <div className="relative">
                     <button
-                        onClick={() => onSelectForProbability(messageId)}
-                        className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-purple-950/80 border border-purple-500/40 text-purple-300 uppercase tracking-widest hover:bg-purple-500/30 transition-colors"
-                        title="View AI Probability estimations in side panel"
+                        type="button"
+                        onClick={() => setMoreOpen(o => !o)}
+                        aria-expanded={moreOpen}
+                        className="rounded-lg border border-white/10 bg-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-400 transition-colors hover:border-white/25 hover:text-zinc-100"
                     >
-                         View Probabilities
+                        More
                     </button>
+                    {moreOpen && (
+                        <div className="absolute left-0 top-full z-30 mt-1 flex min-w-[11rem] flex-col gap-1 rounded-xl border border-white/10 bg-zinc-900 p-2 shadow-xl">
+                            {onSelectForProbability && (
+                                <button
+                                    onClick={() => { setMoreOpen(false); onSelectForProbability(messageId); }}
+                                    className="rounded-lg px-3 py-1.5 text-left text-[11px] text-zinc-300 hover:bg-zinc-800"
+                                >
+                                    View probabilities
+                                </button>
+                            )}
+                            {onCompare && (
+                                <button
+                                    onClick={() => { setMoreOpen(false); onCompare(messageId); }}
+                                    className="rounded-lg px-3 py-1.5 text-left text-[11px] text-zinc-300 hover:bg-zinc-800"
+                                >
+                                    Compare
+                                </button>
+                            )}
+                            <div className="px-1 py-0.5">
+                                <ShareMenu analysis={analysis} outcome={outcome} tradingStyle={tradingStyle} message={message} />
+                            </div>
+                            <button
+                                onClick={() => { handleSetAlerts(); setMoreOpen(false); }}
+                                className="rounded-lg px-3 py-1.5 text-left text-[11px] text-zinc-300 hover:bg-zinc-800"
+                            >
+                                {alertsSet ? 'Alerts set' : 'Set alerts'}
+                            </button>
+                        </div>
+                    )}
+                </div>
+                {pending && (
+                    <span className="text-[9px] text-zinc-600 self-center hidden sm:inline" title="Focus the actions, then: W = win, L = loss, S = skip">
+                        <kbd className="px-1 py-0.5 rounded bg-zinc-800 border border-white/10">W</kbd>
+                        <kbd className="px-1 py-0.5 rounded bg-zinc-800 border border-white/10 ml-1">L</kbd>
+                        {onSkipTrade && <kbd className="px-1 py-0.5 rounded bg-zinc-800 border border-white/10 ml-1">S</kbd>}
+                    </span>
                 )}
-                {onCompare && (
-                    <button
-                        onClick={() => onCompare(messageId)}
-                        className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-zinc-800 border border-white/10 text-zinc-300 uppercase tracking-widest hover:border-cyan-400/30 hover:text-cyan-300 transition-colors"
-                        title="Compare this analysis side-by-side with another"
-                    >
-                        ⧉ Compare
-                    </button>
-                )}
-                <ShareMenu analysis={analysis} outcome={outcome} tradingStyle={tradingStyle} message={message} />
-                <button
-                    onClick={handleSetAlerts}
-                    className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-colors ${alertsSet
-                        ? 'bg-emerald-500/15 border border-emerald-500/40 text-emerald-300'
-                        : 'bg-zinc-800 border border-white/10 text-zinc-300 hover:border-cyan-400/30 hover:text-cyan-300'}`}
-                    title="Create price alerts for this setup's entry, stop loss and take profit levels"
-                >
-                    {alertsSet ? '✓ Alerts set' : '⏰ Set alerts'}
-                </button>
-                <span className="text-[9px] text-zinc-600 self-center hidden sm:inline" title="Focus the actions, then: W = log win, L = log loss">
-                    <kbd className="px-1 py-0.5 rounded bg-zinc-800 border border-white/10">W</kbd>
-                    <kbd className="px-1 py-0.5 rounded bg-zinc-800 border border-white/10 ml-1">L</kbd>
-                </span>
             </div>
         </div>
     );

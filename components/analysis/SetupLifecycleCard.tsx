@@ -8,6 +8,7 @@ interface SetupLifecycleCardProps {
     outcome?: TradeOutcome;
     triggeredEntryIndices?: number[];
     compact?: boolean;
+    embedded?: boolean;
 }
 
 const STEPS: Array<{ stage: SetupLifecycleStage; label: string }> = [
@@ -24,17 +25,17 @@ const isStepComplete = (current: SetupLifecycleStage, step: SetupLifecycleStage)
     return stepIndex >= 0 && currentIndex >= stepIndex;
 };
 
-export const SetupLifecycleCard: React.FC<SetupLifecycleCardProps> = ({ analysis, outcome, triggeredEntryIndices, compact = false }) => {
+export const SetupLifecycleCard: React.FC<SetupLifecycleCardProps> = ({ analysis, outcome, triggeredEntryIndices, compact = false, embedded = false }) => {
     const lifecycle = getSetupLifecycle(analysis, outcome, Date.now(), triggeredEntryIndices);
     const isTerminalException = lifecycle.stage === 'expired' || lifecycle.stage === 'skipped';
 
     return (
-        <section className={`status-surface mb-4 rounded-2xl border ${isTerminalException ? 'border-amber-500/25 bg-amber-950/15' : 'border-white/10 bg-zinc-900/70'} ${compact ? 'px-3 py-3' : 'px-4 py-4'}`} aria-label="Setup lifecycle">
+        <section className={`${embedded ? 'border-t border-white/5' : 'rounded-2xl border'} status-surface ${isTerminalException && !embedded ? 'border-amber-500/25 bg-amber-950/15' : embedded ? '' : 'border-white/10 bg-zinc-900/70'} ${compact ? 'px-4 py-3' : 'mb-4 px-4 py-4'}`} aria-label="Setup lifecycle">
             <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Setup lifecycle</span>
-                        <span className="rounded-full border border-white/10 bg-zinc-800 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-zinc-200">{lifecycle.label}</span>
+                        <span className="ui-kicker">Setup lifecycle</span>
+                        <span className="rounded-md border border-white/10 bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-200">{lifecycle.label}</span>
                     </div>
                     <p className="mt-1 text-xs text-zinc-300">{lifecycle.summary}</p>
                 </div>
