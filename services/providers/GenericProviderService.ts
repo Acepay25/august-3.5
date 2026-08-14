@@ -289,7 +289,7 @@ async function* chatCompletionsStream(
     if (options?.jsonMode) {
         (params as any).response_format = { type: 'json_object' };
     }
-    const stream = await client.chat.completions.create(params, options?.signal ? { signal: options.signal } : undefined);
+    const stream = await client.chat.completions.create(params, { signal: withStreamTimeoutSignal(options?.signal) });
     for await (const chunk of stream) {
         const delta = chunk.choices[0]?.delta as any;
         const reasoning = extractReasoning(delta?.reasoning_content) || extractReasoning(delta?.reasoning);

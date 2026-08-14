@@ -207,6 +207,7 @@ export const TradeAnalysisSchema = z.object({
   marketSnapshot: z.unknown().optional(),
   evidence: z.array(EvidenceClaimSchema).optional(),
   invalidationCriteria: z.array(InvalidationCriterionSchema).optional(),
+  recommendationContract: z.any().optional(),
 });
 
 // =============================================================================
@@ -435,6 +436,7 @@ export const CoercedTradeAnalysisSchema = z.object({
   evidence: z.any().optional(),
   invalidationCriteria: z.any().optional(),
   analystConsensus: z.any().optional(),
+  recommendationContract: z.any().optional(),
 });
 
 export type CoercedTradeAnalysis = z.infer<typeof CoercedTradeAnalysisSchema>;
@@ -710,6 +712,9 @@ export const applySemanticFixups = (raw: CoercedTradeAnalysis): TradeAnalysis =>
   }
   if (raw.analystConsensus && typeof raw.analystConsensus === 'object') {
     analysis.analystConsensus = raw.analystConsensus as TradeAnalysis['analystConsensus'];
+  }
+  if (raw.recommendationContract && typeof raw.recommendationContract === 'object') {
+    analysis.recommendationContract = raw.recommendationContract as TradeAnalysis['recommendationContract'];
   }
 
   return analysis;

@@ -6,6 +6,7 @@ import { computeLearningProfile, PersonalizedLearningProfile } from '../../servi
 import { loadLearningRules } from '../../services/learning/LearningRulesService';
 import { initMemoryFiles, getMemoryFiles, computeTopLessons, TopLesson } from '../../services/learning/MemoryFilesService';
 import { summarizeSimilarSetups, COLD_START_MIN } from '../../services/learning/SetupMemoryService';
+import { computeEvidenceQualityStats } from '../../utils/analysisQuality';
 import { EmptyState } from '../ui/EmptyState';
 
 interface LearningDashboardProps {
@@ -114,6 +115,7 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
 
     const isClosed = (t: LoggedTrade) => t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS;
     const closedWindowed = useMemo(() => windowedTrades.filter(isClosed), [windowedTrades]);
+    const evidenceQuality = useMemo(() => computeEvidenceQualityStats(closedWindowed), [closedWindowed]);
 
     // Pool stats: setups indexed + avg matches per query (sampled for cost)
     // + how many queries hit the cold-start flag.
@@ -378,6 +380,20 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
                     <p className="text-[9px] text-zinc-500 uppercase tracking-wider mb-1">Drawdown</p>
                     <p className="text-xl font-black text-rose-400">{drawdown.open.toFixed(1)}%</p>
                     <p className="text-[9px] text-zinc-600">open · historical max {drawdown.max.toFixed(1)}%</p>
+                </div>
+            </div>
+
+            <div className="bg-zinc-800 rounded-xl border border-white/5 p-3">
+                <p className="text-[9px] text-zinc-500 uppercase tracking-wider mb-2">Evidence coverage vs outcome</p>
+                <p className="text-[10px] text-zinc-600 mb-2">Recorded trend, not causal proof.</p>
+                <div className="grid grid-cols-3 gap-2">
+                    {evidenceQuality.map(bucket => (
+                        <div key={bucket.coverage} className="rounded-lg border border-white/5 bg-zinc-950/50 p-2">
+                            <p className="text-[10px] uppercase tracking-widest text-zinc-500">{bucket.coverage}</p>
+                            <p className="text-sm font-semibold text-zinc-100">{bucket.winRate !== null ? `${bucket.winRate}% WR` : '—'}</p>
+                            <p className="text-[10px] text-zinc-600">n={bucket.n}{bucket.avgProbability !== null ? ` · avg p ${bucket.avgProbability}` : ''}</p>
+                        </div>
+                    ))}
                 </div>
             </div>
 

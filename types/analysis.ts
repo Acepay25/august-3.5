@@ -161,6 +161,11 @@ export interface TradeAnalysis {
    * App-computed (never AI-generated) — attached after sanitization.
    */
   analystConsensus?: AnalystConsensus;
+  /**
+   * First-class recommendation contract derived from the verdict (action,
+   * risk boundary, invalidation, validity). App-computed for journal/watch.
+   */
+  recommendationContract?: RecommendationContract;
 }
 
 /**
@@ -230,6 +235,24 @@ export interface ConsensusDivergence {
 export interface AnalystConsensus {
   entries: AnalystConsensusEntry[];
   divergence: ConsensusDivergence;
+  /** Who the verdict tracked vs who dissented (app-computed). */
+  citations?: ConsensusCitation[];
+}
+
+export interface ConsensusCitation {
+  displayName: string;
+  aligned: boolean;
+  note: string;
+}
+
+/** Scoped action + falsification the journal and watch thread can enforce. */
+export interface RecommendationContract {
+  action: 'long' | 'short' | 'avoid' | 'wait';
+  /** Stop / size boundary in plain language. */
+  riskBoundary: string;
+  invalidation: InvalidationCriterion[];
+  validityMinutes?: number;
+  thesis: string;
 }
 
 /**

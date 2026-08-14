@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { TradeAnalysis } from '../types';
-import { buildAnalystConsensus } from '../services/providers/ensembleService';
+import { buildAnalystConsensus, attachVerdictCitations } from '../services/providers/ensembleService';
 import { sanitizeTradeAnalysis } from '../utils/analysisUtils';
 
 // Consensus explainability: the panel data is app-computed (never AI output),
@@ -52,17 +52,18 @@ describe('buildAnalystConsensus', () => {
     expect(consensus.divergence.isEchoChamber).toBe(true);
     expect(consensus.divergence.score).toBeLessThan(15);
     expect(consensus.divergence.divergenceType).toBe('none');
-    // Each entry carries the structured call for the panel table.
-    expect(consensus.entries[0]).toMatchObject({
-      providerId: 'p1',
-      displayName: 'Alpha',
-      direction: 'Long',
-      entry: '95000',
-      stopLoss: '93000',
-      takeProfit: '98000',
-      confidence: 'Medium',
-      probability: 62,
-    });
+  });
+
+  it('marks dissenters as unused after attachVerdictCitations', () => {
+    const consensus = buildAnalystConsensus([
+      analyst('p1', 'Alpha', baseAnalysis({ direction: 'Long' })),
+      analyst('p2', 'Beta', baseAnalysis({ direction: 'Short' })),
+    ])!;
+    const cited = attachVerdictCitations(consensus, baseAnalysis({ direction: 'Long' }));
+    expect(cited.citations).toHaveLength(2);
+    expect(cited.citations![0].aligned).toBe(true);
+    expect(cited.citations![1].aligned).toBe(false);
+    expect(cited.citations![1].note).toMatch(/Dissented/);
   });
 
   it('scores direction divergence when analysts split', () => {

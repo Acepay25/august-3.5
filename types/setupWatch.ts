@@ -9,7 +9,7 @@
  */
 
 /** What condition on the symbol's price arms the re-debate. */
-export type SetupWatchTriggerType = 'PRICE_ABOVE' | 'PRICE_BELOW' | 'PCT_MOVE';
+export type SetupWatchTriggerType = 'PRICE_ABOVE' | 'PRICE_BELOW' | 'PCT_MOVE' | 'INVALIDATION';
 
 export type SetupWatchStatus = 'ARMED' | 'TRIGGERED' | 'CANCELED';
 
@@ -27,6 +27,8 @@ export interface SetupWatch {
   percent?: number;
   /** Price at watch creation — baseline for PCT_MOVE. */
   referencePrice: number;
+  /** Used by INVALIDATION: Long fires on a break below the level. */
+  direction?: 'Long' | 'Short' | 'Neutral';
   status: SetupWatchStatus;
   createdAt: string;
   triggeredAt?: string;

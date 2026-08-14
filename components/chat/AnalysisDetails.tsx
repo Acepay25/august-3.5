@@ -8,9 +8,11 @@
  */
 
 import React, { useState } from 'react';
-import { TradeAnalysis, TradeOutcome } from '../../types';
+import { TradeAnalysis, TradeOutcome, Message, TradingStyle } from '../../types';
 import { AutopilotResolution } from '../../services/ui/OutcomeAutopilotService';
 import { PriceAlertService } from '../../services/ui/PriceAlertService';
+import ShareMenu from '../analysis/ShareMenu';
+import SetupWatchControl from '../analysis/SetupWatchControl';
 
 interface AnalysisDetailsProps {
     messageId: string;
@@ -24,6 +26,8 @@ interface AnalysisDetailsProps {
     onCompare?: (messageId: string) => void;
     watched?: boolean;
     onToggleWatch?: (messageId: string) => void;
+    message?: Pick<Message, 'analysis' | 'debateTurns' | 'debateRunLog'> & { text?: string };
+    tradingStyle?: Exclude<TradingStyle, 'auto'>;
 }
 
 const AnalysisDetails: React.FC<AnalysisDetailsProps> = ({
@@ -38,6 +42,8 @@ const AnalysisDetails: React.FC<AnalysisDetailsProps> = ({
     onCompare,
     watched = false,
     onToggleWatch,
+    message,
+    tradingStyle,
 }) => {
     const [alertsSet, setAlertsSet] = useState(false);
     const handleSetAlerts = () => {
@@ -154,14 +160,15 @@ const AnalysisDetails: React.FC<AnalysisDetailsProps> = ({
                         onClick={() => onToggleWatch(messageId)}
                         className={`rounded-xl border px-4 py-2 text-xs font-bold uppercase tracking-widest transition-colors ${
                             watched
-                                ? 'border-cyan-500/40 bg-cyan-500/15 text-cyan-300'
-                                : 'border-white/10 bg-zinc-800 text-zinc-300 hover:border-cyan-400/30 hover:text-cyan-300'
+                                ? 'border-white/25 bg-zinc-800 text-zinc-100'
+                                : 'border-white/10 bg-zinc-800 text-zinc-300 hover:border-white/25 hover:text-zinc-100'
                         }`}
                         title="Add this trading signal to the Watch list — autopilot and Win/Loss still work the same"
                     >
                         {watched ? 'Watching' : 'Watch'}
                     </button>
                 )}
+                <SetupWatchControl analysis={analysis} messageId={messageId} />
                 {onSelectForProbability && (
                     <button
                         onClick={() => onSelectForProbability(messageId)}
@@ -180,6 +187,7 @@ const AnalysisDetails: React.FC<AnalysisDetailsProps> = ({
                         ⧉ Compare
                     </button>
                 )}
+                <ShareMenu analysis={analysis} outcome={outcome} tradingStyle={tradingStyle} message={message} />
                 <button
                     onClick={handleSetAlerts}
                     className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-colors ${alertsSet

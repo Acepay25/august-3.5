@@ -104,6 +104,21 @@ describe('SetupWatchService', () => {
       expect(fires[0].price).toBe(50);
     });
 
+    it('fires INVALIDATION below the level on a Long', () => {
+      const fires: Array<{ price: number }> = [];
+      SetupWatchService.subscribe(t => fires.push({ price: t.currentPrice }));
+      SetupWatchService.createWatch(makeParams({
+        triggerType: 'INVALIDATION',
+        priceLevel: 90,
+        direction: 'Long',
+        referencePrice: 100,
+      }));
+      tick('BTCUSDT', 91);
+      expect(fires).toHaveLength(0);
+      tick('BTCUSDT', 90);
+      expect(fires).toHaveLength(1);
+    });
+
     it('fires PCT_MOVE at the exact ±percent boundary', () => {
       const fires: Array<{ price: number }> = [];
       SetupWatchService.subscribe(t => fires.push({ price: t.currentPrice }));

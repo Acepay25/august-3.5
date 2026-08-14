@@ -21,6 +21,7 @@ import { verifyHistoricalOutcome, extractSymbolFromAnalysis } from './AutoCaptur
 import { trackSLOutcome, SLOptimizationData } from '../backtesting/StopLossOptimizerService';
 import { parsePrice } from '../../utils/analysisUtils';
 import { DEFAULT_LEVERAGE } from '../../utils/conversationUtils';
+import { PriceAlertService } from './PriceAlertService';
 
 export interface AutopilotResolution {
     /** Resolved outcome (EXPIRED_OPEN uses expiredOpen flag with WIN/LOSS-neutral handling). */
@@ -47,6 +48,7 @@ interface Registration {
     analysis: TradeAnalysis;
     leverage: number;
     registeredAt: string;
+    lastTickPrice?: number;
 }
 
 interface PersistedState {
@@ -55,6 +57,7 @@ interface PersistedState {
 }
 
 type Listener = (messageId: string, resolution: AutopilotResolution) => void;
+type TickListener = (messageId: string, price: number, previousPrice?: number) => void;
 
 const CHECK_INTERVAL_MS = 20_000;
 
@@ -70,6 +73,7 @@ class OutcomeAutopilotServiceClass {
     private dismissed = new Set<string>();
     private processed = new Set<string>();
     private listeners = new Set<Listener>();
+    private tickListeners = new Set<TickListener>();
     private timer: ReturnType<typeof setInterval> | null = null;
     private checkPromise: Promise<void> | null = null;
     private initialized = false;
@@ -161,6 +165,11 @@ class OutcomeAutopilotServiceClass {
     subscribe(cb: Listener): () => void {
         this.listeners.add(cb);
         return () => this.listeners.delete(cb);
+    }
+
+    subscribeTicks(cb: TickListener): () => void {
+        this.tickListeners.add(cb);
+        return () => this.tickListeners.delete(cb);
     }
 
     /** Run a verification pass immediately (startup catch-up). */
@@ -266,6 +275,16 @@ class OutcomeAutopilotServiceClass {
         }
 
         const expired = this.isExpired(analysis);
+
+        const livePrice = PriceAlertService.getCurrentPrice(symbol);
+        if (livePrice && this.tickListeners.size > 0) {
+            const previous = reg.lastTickPrice;
+            reg.lastTickPrice = livePrice;
+            this.tickListeners.forEach(cb => {
+                try { cb(messageId, livePrice, previous); }
+                catch (err) { console.warn('[OutcomeAutopilot] Tick listener error:', err); }
+            });
+        }
 
         if (result.outcome === 'TP_HIT') {
             this.resolve(messageId, this.buildWinResolution(reg, result));

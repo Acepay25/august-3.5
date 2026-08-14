@@ -27,6 +27,8 @@ interface DebateChatProps {
     replacementOffer?: ReplacementOffer;
     /** Pick a replacement candidate (providerId) or pass null to continue without. */
     onReplacementChoice?: (messageId: string, providerId: string | null) => void;
+    /** Copy this debate into a new session up to `round`. */
+    onForkDebate?: (messageId: string, round: number) => void;
 }
 
 const cleanSpeakerPrefix = (text: string, speaker: string): string => {
@@ -164,6 +166,7 @@ const DebateChat: React.FC<DebateChatProps> = ({
     messageId,
     replacementOffer,
     onReplacementChoice,
+    onForkDebate,
 }) => {
     const [showTranscript, setShowTranscript] = useState(false);
     const [isScrolledUp, setIsScrolledUp] = useState(false);
@@ -428,6 +431,21 @@ const DebateChat: React.FC<DebateChatProps> = ({
                             </button>
                         </React.Fragment>
                     ))}
+                    {onForkDebate && messageId && !isDebating && availableRounds.length > 0 && (
+                        <span className="flex items-center gap-1 border-l border-white/10 pl-2">
+                            {availableRounds.map(round => (
+                                <button
+                                    key={`fork-${round}`}
+                                    type="button"
+                                    onClick={() => onForkDebate(messageId, round)}
+                                    className="rounded px-1 py-0.5 text-zinc-500 hover:text-zinc-200"
+                                    title={`Fork a new session from round ${round}`}
+                                >
+                                    Fork r{round}
+                                </button>
+                            ))}
+                        </span>
+                    )}
                 </div>
                 {isComplete && (
                     <button

@@ -1,7 +1,9 @@
 import React, { useMemo } from 'react';
-import { DebateTurn, TradeAnalysis } from '../../types';
+import { DebateTurn, TradeAnalysis, ConfidenceCalibration } from '../../types';
 import MarkdownContent from '../shared/MarkdownContent';
+import ConsensusPanel from './ConsensusPanel';
 import { explainSignalConfidence, extractSignalStrategyText, formatInvalidationLine, isNoTradeSignal, explainNoTrade, resolveLevelHitOdds, signalDirectionLabel } from '../../utils/analysisUtils';
+import { getCalibrationDrift } from '../../services/validation/ConfidenceCalibrationService';
 
 interface TradingSignalCardProps {
     analysis: TradeAnalysis;
@@ -12,6 +14,7 @@ interface TradingSignalCardProps {
     ensembleNote?: string;
     watched?: boolean;
     onToggleWatch?: () => void;
+    calibration?: ConfidenceCalibration;
 }
 
 const formatLevel = (value?: string): string => {
@@ -76,6 +79,7 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
     ensembleNote,
     watched = false,
     onToggleWatch,
+    calibration,
 }) => {
     const entry = analysis.entryPoints?.[0]?.price;
     const sl = analysis.stopLoss;
@@ -97,6 +101,12 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
     );
     const invalidation = useMemo(() => formatInvalidationLine(analysis), [analysis]);
     const confidenceWhy = useMemo(() => explainSignalConfidence(analysis), [analysis]);
+    const drift = useMemo(
+        () => analysis.confidence === 'Avoid'
+            ? { status: 'insufficient_data' as const, declared: analysis.probability, actual: null, delta: null, sampleSize: 0 }
+            : getCalibrationDrift(calibration, analysis.confidence, analysis.probability),
+        [calibration, analysis.confidence, analysis.probability],
+    );
 
     const levelRows = useMemo((): LevelRow[] => {
         const rows: LevelRow[] = [];
@@ -211,6 +221,13 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
                     <div>
                         <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Confidence</div>
                         <p className="mt-1 border-l-2 border-white/15 pl-3 text-[13px] leading-relaxed text-zinc-300">{confidenceWhy}</p>
+                        {drift.status !== 'insufficient_data' && drift.actual !== null && (
+                            <p className="mt-1 text-[11px] text-zinc-500">
+                                {drift.status === 'overconfident' && `Declared ${Math.round(drift.declared)}% vs ${Math.round(drift.actual)}% realized (n=${drift.sampleSize}) — running hot`}
+                                {drift.status === 'underconfident' && `Declared ${Math.round(drift.declared)}% vs ${Math.round(drift.actual)}% realized (n=${drift.sampleSize}) — running cold`}
+                                {drift.status === 'accurate' && `In line with history: ${Math.round(drift.actual)}% at this confidence (n=${drift.sampleSize})`}
+                            </p>
+                        )}
                     </div>
                 )}
 
@@ -233,6 +250,22 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
                         <div className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Why</div>
                         <p className="text-[13px] leading-relaxed text-zinc-400">{why}</p>
                     </div>
+                )}
+
+                {analysis.recommendationContract && (
+                    <div>
+                        <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Contract</div>
+                        <p className="mt-1 text-[13px] leading-relaxed text-zinc-300">
+                            {analysis.recommendationContract.action.toUpperCase()} · {analysis.recommendationContract.riskBoundary}
+                            {analysis.recommendationContract.validityMinutes
+                                ? ` · valid ${analysis.recommendationContract.validityMinutes}m`
+                                : ''}
+                        </p>
+                    </div>
+                )}
+
+                {analysis.analystConsensus && analysis.analystConsensus.entries.length > 0 && (
+                    <ConsensusPanel consensus={analysis.analystConsensus} />
                 )}
 
                 {supplementMarkdown && (

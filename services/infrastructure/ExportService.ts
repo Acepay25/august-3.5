@@ -28,6 +28,16 @@ const isNativePlatform = (): boolean => {
  * @param filename - The filename (without path)
  * @returns Promise resolving to success status
  */
+export const exportTextAsFile = async (
+    content: string,
+    filename: string
+): Promise<{ success: boolean; error?: string }> => {
+    if (isNativePlatform()) {
+        return exportNative(content, filename);
+    }
+    return exportWeb(content, filename);
+};
+
 export const exportDataAsFile = async (
     data: any,
     filename: string
