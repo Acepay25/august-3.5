@@ -48,10 +48,11 @@ const WatchListPanel: React.FC<WatchListPanelProps> = ({
     if (!isVisible) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-4 pt-16 sm:pt-20" role="dialog" aria-label="Watch list">
-            <div ref={dialogRef} className="flex max-h-[80vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-end justify-end bg-black/50 sm:items-stretch" role="dialog" aria-label="Watch list">
+            <button type="button" className="absolute inset-0 cursor-default" aria-label="Close watch list overlay" onClick={onClose} />
+            <div ref={dialogRef} className="relative flex h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl border border-white/10 bg-zinc-950 shadow-2xl sm:h-full sm:rounded-none sm:border-l sm:border-t-0 sm:border-b-0">
                 <div className="flex items-center gap-2 border-b border-white/10 px-4 py-3">
-                    <EyeIcon className="h-4 w-4 text-cyan-400" />
+                    <EyeIcon className="h-4 w-4 text-zinc-300" />
                     <h2 className="text-sm font-semibold text-zinc-100">Watch list</h2>
                     <span className="text-[11px] text-zinc-500">{openCount} open</span>
                     <button type="button" onClick={onClose} className="ml-auto rounded-md p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" aria-label="Close watch list">
@@ -74,7 +75,7 @@ const WatchListPanel: React.FC<WatchListPanelProps> = ({
                     {visible.length === 0 ? (
                         <p className="px-2 py-8 text-center text-[13px] text-zinc-500">
                             {filter === 'open'
-                                ? 'No watched setups yet. Open a trading signal and tap Watch.'
+                                ? 'No pinned setups yet. Open a trading signal and tap Pin.'
                                 : 'Nothing in this filter.'}
                         </p>
                     ) : visible.map(signal => {
@@ -134,7 +135,7 @@ const WatchListPanel: React.FC<WatchListPanelProps> = ({
                                         {inThisChat ? 'Show in chat' : 'Open chat'}
                                     </button>
                                     <button type="button" onClick={() => onToggleWatch(signal.messageId, signal.conversationId)} className="rounded-lg border border-white/10 px-2.5 py-1 text-[11px] text-zinc-500 hover:text-zinc-300">
-                                        Unwatch
+                                        Unpin
                                     </button>
                                 </div>
                             </div>

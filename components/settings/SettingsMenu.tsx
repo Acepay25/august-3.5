@@ -153,10 +153,10 @@ const NavTabButton: React.FC<{
     return (
         <button
             onClick={onClick}
-            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-colors text-sm ${
+            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg transition-colors text-sm ${
                 isActive
                     ? 'bg-zinc-800 text-zinc-100'
-                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/80'
+                    : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800'
             }`}
         >
             <div className="flex items-center gap-3 min-w-0">
@@ -341,7 +341,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
             >
                     <div className="flex-1 flex min-h-0 flex-col md:flex-row">
                         
-                        <div className="w-full md:w-64 max-h-[32vh] overflow-y-auto md:max-h-none md:overflow-y-auto border-b md:border-b-0 md:border-r border-zinc-800/80 bg-zinc-950 px-4 py-6 space-y-1 shrink-0 flex flex-col justify-between custom-scrollbar">
+                        <div className="w-full md:w-60 max-h-[32vh] overflow-y-auto md:max-h-none md:overflow-y-auto border-b md:border-b-0 md:border-r border-white/10 bg-zinc-950 px-3 py-5 space-y-1 shrink-0 flex flex-col justify-between custom-scrollbar">
                             <div className="space-y-1">
                                 <div className="flex items-center justify-between px-2 mb-5">
                                     <button
@@ -360,7 +360,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                     </button>
                                 </div>
                                 <h2 id="settings-title" className="sr-only">Settings</h2>
-                                <p className="px-3 pt-1 pb-2 text-[11px] font-medium uppercase tracking-widest text-zinc-500">
+                                <p className="ui-kicker px-3 pt-1 pb-2">
                                     Get Started
                                 </p>
                                 <NavTabButton
@@ -371,7 +371,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                     label="AI setup"
                                 />
                                 {/* Analysis — how analyses behave */}
-                                <p className="px-3 pt-6 pb-2 text-[11px] font-medium uppercase tracking-widest text-zinc-500">
+                                <p className="ui-kicker px-3 pt-5 pb-2">
                                     Analysis
                                 </p>
                                 <NavTabButton
@@ -417,7 +417,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                     label="Memory"
                                 />
                                 {/* Account & Data — journal, profile, backups */}
-                                <p className="px-3 pt-6 pb-2 text-[11px] font-medium uppercase tracking-widest text-zinc-500">
+                                <p className="ui-kicker px-3 pt-5 pb-2">
                                     Account & Data
                                 </p>
                         <NavTabButton
@@ -459,7 +459,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
 
                         {/* Right Content Workspace */}
                         <div className={`flex-1 min-h-0 overflow-y-auto bg-zinc-950 custom-scrollbar ${
-                            activeTab === 'journal' || activeTab === 'prompts' || activeTab === 'memory' ? '' : 'px-8 py-8 lg:px-12 lg:py-10'
+                            activeTab === 'journal' || activeTab === 'prompts' || activeTab === 'memory' ? '' : 'px-6 py-8 lg:px-10 [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-3xl'
                         }`}>
                             
                             {/* TAB 0: Trading Journal — embedded inside Settings */}

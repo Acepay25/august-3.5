@@ -9,6 +9,7 @@ import DebateChat from '../analysis/DebateChat';
 import TradingSignalCard from '../analysis/TradingSignalCard';
 import DebateRunLog from '../analysis/DebateRunLog';
 import AnalysisDetails from './AnalysisDetails';
+import SetupLifecycleCard from '../analysis/SetupLifecycleCard';
 import ThinkingModal from '../analysis/ThinkingModal';
 import TodayReassessmentPanel from './TodayReassessmentPanel';
 import { buildSupplementMarkdown } from '../../utils/analysisUtils';
@@ -418,6 +419,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     </div>
                                 </div>
                             ) : message.analysis ? (
+                                <div className="ui-panel">
                                 <TradingSignalCard
                                     analysis={message.analysis}
                                     debateTurns={message.debateTurns}
@@ -425,10 +427,35 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     onReRun={onReRunAnalysis ? () => onReRunAnalysis(message.id) : undefined}
                                     supplementMarkdown={supplementMarkdown}
                                     ensembleNote={ensembleNote}
-                                    watched={Boolean(message.watched)}
-                                    onToggleWatch={() => onToggleWatch?.(message.id)}
                                     calibration={confidenceCalibration}
+                                    bare
                                 />
+                                <SetupLifecycleCard
+                                    analysis={message.analysis}
+                                    outcome={message.outcome}
+                                    compact
+                                    embedded
+                                />
+                                <div className="border-t border-white/5 px-4 pb-4">
+                                <AnalysisDetails
+                                    messageId={message.id}
+                                    analysis={message.analysis}
+                                    outcome={message.outcome}
+                                    autopilotResolution={autopilotResolutions?.[message.id]}
+                                    onLogTrade={handleInitiateLogTrade}
+                                    onSkipTrade={handleInitiateSkipTrade}
+                                    onConfirmAutopilot={onConfirmAutopilot}
+                                    onDismissAutopilot={onDismissAutopilot}
+                                    onSelectForProbability={onSelectMessageForProbability}
+                                    onCompare={onCompareAnalysis}
+                                    watched={Boolean(message.watched)}
+                                    onToggleWatch={(id: string) => onToggleWatch?.(id)}
+                                    message={message}
+                                    tradingStyle={message.tradingStyle}
+                                    highlighted={isHighlighted}
+                                />
+                                </div>
+                                </div>
                             ) : message.isPostMortem ? (
                                 <div className="overflow-x-auto min-w-0">
                                     <MarkdownContent content={displayContent} className="text-zinc-100" />
@@ -637,23 +664,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 adds the harness-side supplement (gate,
                                 calibration, memory insight), context chips,
                                 team verdict line, and the action row. */}
-                            {message.analysis && (
-                                <AnalysisDetails
-                                    messageId={message.id}
-                                    analysis={message.analysis}
-                                    outcome={message.outcome}
-                                    autopilotResolution={autopilotResolutions?.[message.id]}
-                                    onLogTrade={handleInitiateLogTrade}
-                                    onConfirmAutopilot={onConfirmAutopilot}
-                                    onDismissAutopilot={onDismissAutopilot}
-                                    onSelectForProbability={onSelectMessageForProbability}
-                                    onCompare={onCompareAnalysis}
-                                    watched={Boolean(message.watched)}
-                                    onToggleWatch={(id: string) => onToggleWatch?.(id)}
-                                    message={message}
-                                    tradingStyle={message.tradingStyle}
-                                />
-                            )}
+                            {/* Main Analysis Result lives in the signal panel above. */}
 
                             {Array.isArray(message.postMortemImages) && message.postMortemImages.length > 0 && (
                                 <div className="mt-4 sm:mt-6 pt-3 sm:pt-5 border-t border-white/10">

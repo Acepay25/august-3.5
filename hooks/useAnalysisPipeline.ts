@@ -2596,6 +2596,9 @@ ${accuracyVerificationNote}`
                         'Analysis complete',
                         `${processedAnalysis?.direction ?? finalAnalysis.direction} ${finalAnalysis.coinName || ''} — ${finalAnalysis.confidence} confidence`
                     );
+                    if (!isAutomationRun) {
+                        setHighlightedAnalysisId(debateMessageId);
+                    }
 
                     // Automation run: deliver the completed card to the caller
                     // (the main conversation was never touched).

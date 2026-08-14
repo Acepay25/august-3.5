@@ -12,9 +12,8 @@ interface TradingSignalCardProps {
     onReRun?: () => void;
     supplementMarkdown?: string;
     ensembleNote?: string;
-    watched?: boolean;
-    onToggleWatch?: () => void;
     calibration?: ConfidenceCalibration;
+    bare?: boolean;
 }
 
 const formatLevel = (value?: string): string => {
@@ -77,9 +76,8 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
     onReRun,
     supplementMarkdown,
     ensembleNote,
-    watched = false,
-    onToggleWatch,
     calibration,
+    bare = false,
 }) => {
     const entry = analysis.entryPoints?.[0]?.price;
     const sl = analysis.stopLoss;
@@ -124,10 +122,10 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
     }, [entry, sl, tps, odds]);
 
     return (
-        <div className="status-surface overflow-hidden rounded-2xl border border-white/5 bg-zinc-900/80 shadow-lg">
+        <div className={bare ? 'status-surface' : 'status-surface overflow-hidden rounded-2xl border border-white/10 bg-zinc-950/80'}>
             <div className="flex flex-wrap items-center gap-2 px-4 py-3 sm:px-5">
                 <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
-                <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Trading signal</span>
+                <span className="ui-kicker">Trading signal</span>
                 {analysis.direction && (
                     <span className={`inline-flex items-center rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${directionChip(analysis.direction)}`}>
                         {dirLabel}
@@ -142,25 +140,11 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
                     <span className="text-[11px] tabular-nums text-zinc-500">{Math.round(analysis.probability)}%</span>
                 )}
                 <div className="ml-auto flex shrink-0 items-center gap-2">
-                    {onToggleWatch && (
-                        <button
-                            type="button"
-                            onClick={onToggleWatch}
-                            className={`rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest transition-colors ${
-                                watched
-                                    ? 'border-cyan-500/40 bg-cyan-500/15 text-cyan-300'
-                                    : 'border-white/10 text-zinc-400 hover:border-cyan-400/30 hover:text-cyan-300'
-                            }`}
-                            title={watched ? 'Remove from Watch list' : 'Add this trading signal to the Watch list'}
-                        >
-                            {watched ? 'Watching' : 'Watch'}
-                        </button>
-                    )}
                     {isLatest && onReRun && (
                         <button
                             type="button"
                             onClick={onReRun}
-                            className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 transition-colors hover:text-cyan-400"
+                            className="text-[11px] font-medium text-zinc-500 transition-colors hover:text-zinc-200"
                             title="Adds a fresh analysis with the same prompt + chart; the old card is kept for comparison"
                         >
                             ↻ Regenerate
@@ -195,9 +179,9 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
                         <table className="w-full border-collapse text-left">
                             <thead>
                                 <tr className="border-b border-white/10 bg-zinc-800/80">
-                                    <th className="px-3 py-2 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Level</th>
-                                    <th className="px-3 py-2 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Price</th>
-                                    <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Hit</th>
+                                    <th className="px-3 py-2 text-[10px] font-medium uppercase tracking-wide text-zinc-500">Level</th>
+                                    <th className="px-3 py-2 text-[10px] font-medium uppercase tracking-wide text-zinc-500">Price</th>
+                                    <th className="px-3 py-2 text-right text-[10px] font-medium uppercase tracking-wide text-zinc-500">Hit</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -219,7 +203,7 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
 
                 {analysis.confidence && (
                     <div>
-                        <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Confidence</div>
+                        <div className="ui-kicker">Confidence</div>
                         <p className="mt-1 border-l-2 border-white/15 pl-3 text-[13px] leading-relaxed text-zinc-300">{confidenceWhy}</p>
                         {drift.status !== 'insufficient_data' && drift.actual !== null && (
                             <p className="mt-1 text-[11px] text-zinc-500">
@@ -233,28 +217,28 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
 
                 {noTradeWhy && (
                     <div>
-                        <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">No trade</div>
+                        <div className="ui-kicker">No trade</div>
                         <p className="mt-1 text-[13px] leading-relaxed text-zinc-400">{noTradeWhy}</p>
                     </div>
                 )}
 
                 {invalidation && (
                     <div>
-                        <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Invalidation</div>
+                        <div className="ui-kicker">Invalidation</div>
                         <p className="mt-1 text-[13px] leading-relaxed text-zinc-300">{invalidation}</p>
                     </div>
                 )}
 
                 {why && (
                     <div>
-                        <div className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Why</div>
+                        <div className="mb-1 ui-kicker">Why</div>
                         <p className="text-[13px] leading-relaxed text-zinc-400">{why}</p>
                     </div>
                 )}
 
                 {analysis.recommendationContract && (
                     <div>
-                        <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Contract</div>
+                        <div className="ui-kicker">Contract</div>
                         <p className="mt-1 text-[13px] leading-relaxed text-zinc-300">
                             {analysis.recommendationContract.action.toUpperCase()} · {analysis.recommendationContract.riskBoundary}
                             {analysis.recommendationContract.validityMinutes

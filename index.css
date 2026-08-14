@@ -198,6 +198,30 @@ body {
   /* Prevents pull-to-refresh on mobile */
 }
 
+/* Shared chrome: one kicker, one panel, one control radius. */
+.ui-kicker {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8a8a92;
+}
+.ui-panel {
+  overflow: hidden;
+  border-radius: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(12, 12, 14, 0.85);
+}
+.ui-row {
+  border-radius: 0.5rem;
+}
+.ui-control {
+  border-radius: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #202024;
+  color: #d2d2d6;
+}
+
 /* Quiet workspace grid for the empty chat canvas. It echoes the reference
    workspace treatment without competing with the composer or chat content. */
 .chat-hero-grid {
