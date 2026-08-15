@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { DebateTurn, TradeAnalysis, ConfidenceCalibration } from '../../types';
 import MarkdownContent from '../shared/MarkdownContent';
 import ConsensusPanel from './ConsensusPanel';
-import { explainSignalConfidence, extractSignalStrategyText, formatInvalidationLine, isNoTradeSignal, explainNoTrade, resolveLevelHitOdds, signalDirectionLabel } from '../../utils/analysisUtils';
+import { explainSignalConfidence, extractSignalStrategyText, formatInvalidationLine, isNoTradeSignal, explainNoTrade, resolveLevelHitOdds, signalDirectionLabel, leveragedMovePercent } from '../../utils/analysisUtils';
 import { getCalibrationDrift } from '../../services/validation/ConfidenceCalibrationService';
 import { citeLevel } from '../../utils/levelEvidence';
 import { computeContractSize } from '../../utils/ticketSize';
@@ -58,24 +58,11 @@ const directionChip = (direction?: string): string => {
     return 'border-white/10 bg-zinc-800 text-zinc-300';
 };
 
-const directionText = (direction?: string): string => {
-    if (direction === 'Long') return 'text-emerald-400';
-    if (direction === 'Short') return 'text-rose-400';
-    return 'text-zinc-50';
-};
-
 const confidenceColor = (confidence?: string): string => {
     if (confidence === 'High') return 'text-emerald-400';
     if (confidence === 'Medium') return 'text-amber-400';
     return 'text-rose-400';
 };
-
-const Stat: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
-    <div className="min-w-0">
-        <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">{label}</div>
-        <div className="mt-1 truncate text-base font-semibold leading-tight sm:text-lg">{children}</div>
-    </div>
-);
 
 const SignalMarkdown: React.FC<{ content: string }> = ({ content }) => (
     <MarkdownContent
@@ -87,6 +74,7 @@ const SignalMarkdown: React.FC<{ content: string }> = ({ content }) => (
 interface LevelRow {
     label: string;
     price: string;
+    move?: string;
     hit?: number;
     tone: 'entry' | 'sl' | 'tp';
     cite: string;
@@ -104,6 +92,13 @@ const hitTone = (tone: LevelRow['tone']): string => {
     return 'text-zinc-600';
 };
 
+const moveTone = (move?: string): string => {
+    if (!move) return 'text-zinc-500';
+    if (move.trim().startsWith('-')) return 'text-rose-400';
+    if (move.trim().startsWith('+')) return 'text-emerald-400';
+    return 'text-zinc-500';
+};
+
 const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
     analysis,
     debateTurns,
@@ -114,7 +109,6 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
     calibration,
     bare = false,
     priorAnalysis,
-    promptLane,
     leverage,
     onFollowUp,
 }) => {
@@ -124,6 +118,7 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
     const rr = resolveRr(analysis);
     const dirLabel = signalDirectionLabel(analysis.direction, analysis.confidence);
     const noTrade = isNoTradeSignal(analysis.direction, analysis.confidence);
+    const lev = leverage && leverage > 0 ? leverage : 1;
     const noTradeWhy = useMemo(
         () => (noTrade ? explainNoTrade(analysis) : ''),
         [analysis, noTrade],
@@ -137,6 +132,10 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
         [debateTurns, analysis],
     );
     const invalidation = useMemo(() => formatInvalidationLine(analysis), [analysis]);
+    const invalidationMove = useMemo(() => {
+        const level = analysis.invalidationCriteria?.[0]?.level;
+        return leveragedMovePercent(entry, level, lev, 'loss');
+    }, [analysis.invalidationCriteria, entry, lev]);
     const confidenceWhy = useMemo(() => explainSignalConfidence(analysis), [analysis]);
     const drift = useMemo(
         () => analysis.confidence === 'Avoid'
@@ -148,18 +147,28 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
     const levelRows = useMemo((): LevelRow[] => {
         const rows: LevelRow[] = [];
         if (entry) rows.push({ label: 'Entry', price: formatLevel(entry), tone: 'entry', cite: citeLevel('Entry', entry, analysis.evidence, analysis.levelCitations).source });
-        if (sl) rows.push({ label: 'Stop Loss', price: formatLevel(sl), hit: odds.sl, tone: 'sl', cite: citeLevel('Stop Loss', sl, analysis.evidence, analysis.levelCitations).source });
+        if (sl) {
+            rows.push({
+                label: 'SL',
+                price: formatLevel(sl),
+                move: leveragedMovePercent(entry, sl, lev, 'loss') || analysis.stopLossPercentage,
+                hit: odds.sl,
+                tone: 'sl',
+                cite: citeLevel('Stop Loss', sl, analysis.evidence, analysis.levelCitations).source,
+            });
+        }
         tps.slice(0, 3).forEach((tp, i) => {
             rows.push({
                 label: `TP${i + 1}`,
                 price: formatLevel(tp),
+                move: leveragedMovePercent(entry, tp, lev, 'gain') || analysis.takeProfit?.[i]?.percentage,
                 hit: odds.tp[i],
                 tone: 'tp',
                 cite: citeLevel(`TP${i + 1}`, tp, analysis.evidence, analysis.levelCitations).source,
             });
         });
         return rows;
-    }, [entry, sl, tps, odds, analysis.evidence]);
+    }, [entry, sl, tps, odds, analysis.evidence, analysis.stopLossPercentage, analysis.takeProfit, lev]);
 
     const gateLine = useMemo(() => {
         const bits: string[] = [];
@@ -210,9 +219,10 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
 
     return (
         <div className={bare ? 'status-surface' : 'status-surface overflow-hidden rounded-2xl border border-white/10 bg-zinc-950/80'}>
-            <div className="flex flex-wrap items-center gap-2 px-4 py-3 sm:px-5">
-                <span className="h-1.5 w-1.5 rounded-full bg-zinc-400" />
-                <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">Trading signal</span>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-4 py-3 sm:px-5">
+                {analysis.coinName && (
+                    <span className="text-[13px] font-medium text-zinc-200">{analysis.coinName}</span>
+                )}
                 {analysis.direction && (
                     <span className={`inline-flex items-center rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${directionChip(analysis.direction)}`}>
                         {dirLabel}
@@ -229,14 +239,8 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
                 {rr !== undefined && (
                     <span className="text-xs tabular-nums text-zinc-300">R:R 1:{rr.toFixed(1)}</span>
                 )}
-                <span className="text-xs text-zinc-400">Size {analysis.positionSize?.line || size.line}</span>
-                {promptLane && (
-                    <span className="text-xs uppercase tracking-widest text-zinc-500">{promptLane}</span>
-                )}
-                {validityLine && <span className="text-sm text-zinc-400">{validityLine}</span>}
-                {gateLine && (
-                    <span className="w-full text-sm leading-6 text-zinc-400">{gateLine}</span>
-                )}
+                {validityLine && <span className="text-xs text-zinc-500">{validityLine}</span>}
+                {gateLine && <span className="text-xs text-zinc-500">{gateLine}</span>}
                 <div className="ml-auto flex shrink-0 items-center gap-2">
                     <button
                         type="button"
@@ -244,176 +248,142 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
                             const sheet = buildTicketSheet(analysis);
                             void navigator.clipboard?.writeText(sheet);
                         }}
-                        className="text-sm font-medium text-zinc-400 transition-colors hover:text-zinc-200"
-                        title="Copy a one-page ticket"
+                        className="text-xs font-medium text-zinc-500 hover:text-zinc-200"
                     >
-                        Copy ticket
+                        Copy
                     </button>
                     {isLatest && onReRun && (
                         <button
                             type="button"
                             onClick={onReRun}
-                            className="text-sm font-medium text-zinc-400 transition-colors hover:text-zinc-200"
-                            title="Adds a fresh analysis with the same prompt + chart; the old card is kept for comparison"
+                            className="text-xs font-medium text-zinc-500 hover:text-zinc-200"
                         >
-                            ↻ Regenerate
+                            Regenerate
                         </button>
                     )}
                 </div>
             </div>
 
-            <div className="space-y-4 border-t border-white/5 px-4 py-4 sm:px-5">
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                    {analysis.direction && (
-                        <Stat label="Direction">
-                            <span className={`uppercase tracking-wide ${directionText(analysis.direction)}`}>{dirLabel}</span>
-                        </Stat>
-                    )}
-                    <Stat label="R:R">
-                        <span className="tabular-nums text-zinc-100">{rr !== undefined ? `1:${rr.toFixed(1)}` : '—'}</span>
-                    </Stat>
-                    {analysis.grade && (
-                        <Stat label="Grade">
-                            <span className="text-zinc-100">{analysis.grade}</span>
-                        </Stat>
-                    )}
-                    <Stat label="Size">
-                        <span className="text-zinc-100">{analysis.positionSize?.line || size.line}</span>
-                    </Stat>
-                </div>
-                {priorLine && (
-                    <p className="text-sm leading-6 text-zinc-500">vs last tape: {priorLine}</p>
-                )}
-                {analysis.dualScenarioAnalysis && (
-                    <div>
-                        <div className="text-xs font-medium uppercase tracking-wider text-zinc-500">Other side</div>
-                        <p className="mt-1 text-sm leading-6 text-zinc-300">
-                            {analysis.dualScenarioAnalysis.selectedScenario === 'bearish' ? 'Kept short' : analysis.dualScenarioAnalysis.selectedScenario === 'bullish' ? 'Kept long' : 'Neutral'}
-                            {' · '}
-                            Long: {analysis.dualScenarioAnalysis.bullish.target} / inv {analysis.dualScenarioAnalysis.bullish.invalidation}
-                            {' · '}
-                            Short: {analysis.dualScenarioAnalysis.bearish.target} / inv {analysis.dualScenarioAnalysis.bearish.invalidation}
-                        </p>
-                    </div>
-                )}
-
+            <div className="space-y-3 border-t border-white/5 px-4 py-3 sm:px-5">
                 {levelRows.length > 0 && (
-                    <div className="overflow-hidden rounded-xl border border-white/10">
-                        <table className="w-full border-collapse text-left">
-                            <thead>
-                                <tr className="border-b border-white/10 bg-zinc-800/80">
-                                    <th className="px-3 py-2.5 text-xs font-medium uppercase tracking-wide text-zinc-500">Level</th>
-                                    <th className="px-3 py-2.5 text-xs font-medium uppercase tracking-wide text-zinc-500">Price</th>
-                                    <th className="px-3 py-2.5 text-xs font-medium uppercase tracking-wide text-zinc-500">Cite</th>
-                                    <th className="px-3 py-2.5 text-right text-xs font-medium uppercase tracking-wide text-zinc-500">Hit</th>
+                    <table className="w-full border-collapse text-left">
+                        <thead>
+                            <tr className="text-[10px] font-medium uppercase tracking-widest text-zinc-500">
+                                <th className="pb-1.5 font-medium">Level</th>
+                                <th className="pb-1.5 font-medium">Price</th>
+                                <th className="pb-1.5 font-medium">Move</th>
+                                <th className="pb-1.5 text-right font-medium">Hit</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {levelRows.map(row => (
+                                <tr key={row.label} className="border-t border-white/5">
+                                    <td className="py-1.5 text-sm text-zinc-400">{row.label}</td>
+                                    <td className={`py-1.5 text-sm font-semibold tabular-nums ${priceTone(row.tone)}`} title={row.cite}>
+                                        {row.price}
+                                    </td>
+                                    <td className={`py-1.5 text-sm font-medium tabular-nums ${moveTone(row.move)}`}>
+                                        {row.move || '—'}
+                                    </td>
+                                    <td className={`py-1.5 text-right text-sm tabular-nums ${hitTone(row.tone)}`}>
+                                        {row.hit !== undefined ? `${row.hit}%` : '—'}
+                                    </td>
                                 </tr>
-                            </thead>
-                            <tbody>
-                                {levelRows.map(row => (
-                                    <tr key={row.label} className="border-b border-white/5 last:border-b-0">
-                                        <td className="px-3 py-2.5 text-sm font-medium text-zinc-300">{row.label}</td>
-                                        <td className={`px-3 py-2.5 text-sm font-semibold tabular-nums ${priceTone(row.tone)}`}>
-                                            {row.price}
-                                        </td>
-                                        <td className="max-w-[10rem] truncate px-3 py-2.5 text-sm text-zinc-500" title={row.cite}>
-                                            {row.cite}
-                                        </td>
-                                        <td className={`px-3 py-2.5 text-right text-sm font-bold tabular-nums ${hitTone(row.tone)}`}>
-                                            {row.hit !== undefined ? `${row.hit}% hit` : '—'}
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+                            ))}
+                        </tbody>
+                    </table>
                 )}
 
-                {analysis.confidence && (
-                    <div>
-                        <div className="text-xs font-medium uppercase tracking-wider text-zinc-500">Confidence</div>
-                        <div className="mt-1 border-l-2 border-white/15 pl-3">
-                            <SignalMarkdown content={confidenceWhy} />
-                        </div>
-                        {drift.status !== 'insufficient_data' && drift.actual !== null && (
-                            <p className="mt-1 text-sm leading-6 text-zinc-500">
-                                {drift.status === 'overconfident' && `Declared ${Math.round(drift.declared)}% vs ${Math.round(drift.actual)}% realized (n=${drift.sampleSize}) — running hot`}
-                                {drift.status === 'underconfident' && `Declared ${Math.round(drift.declared)}% vs ${Math.round(drift.actual)}% realized (n=${drift.sampleSize}) — running cold`}
-                                {drift.status === 'accurate' && `In line with history: ${Math.round(drift.actual)}% at this confidence (n=${drift.sampleSize})`}
-                            </p>
-                        )}
-                    </div>
-                )}
+                <p className="text-xs text-zinc-500">
+                    {size.line}
+                    {size.notionalUsd > 0 ? ` · $${Math.round(size.notionalUsd).toLocaleString()} notional` : ''}
+                    {` · ${lev}x`}
+                </p>
 
                 {noTradeWhy && (
-                    <div>
-                        <div className="text-xs font-medium uppercase tracking-wider text-zinc-500">No trade</div>
-                        <div className="mt-1">
-                            <SignalMarkdown content={noTradeWhy} />
-                        </div>
-                    </div>
+                    <p className="text-sm leading-6 text-zinc-400">{noTradeWhy.replace(/^#+\s*/gm, '').slice(0, 220)}</p>
                 )}
 
                 {invalidation && (
-                    <div>
-                        <div className="text-xs font-medium uppercase tracking-wider text-zinc-500">Invalidation</div>
-                        <div className="mt-1">
-                            <SignalMarkdown content={invalidation} />
+                    <p className="text-sm leading-6 text-zinc-400">
+                        <span className="text-[10px] font-medium uppercase tracking-widest text-zinc-500">Invalidation </span>
+                        {invalidation}
+                        {invalidationMove && (
+                            <span className={`ml-2 tabular-nums ${moveTone(invalidationMove)}`}>{invalidationMove}</span>
+                        )}
+                    </p>
+                )}
+
+                {priorLine && (
+                    <p className="text-xs text-zinc-600">vs last · {priorLine}</p>
+                )}
+
+                {(why || confidenceWhy || analysis.analystConsensus || analysis.dualScenarioAnalysis || analysis.recommendationContract || supplementMarkdown || ensembleNote || onFollowUp) && (
+                    <details className="border-t border-white/5 pt-2">
+                        <summary className="cursor-pointer list-none text-[11px] uppercase tracking-widest text-zinc-500">
+                            More
+                        </summary>
+                        <div className="mt-3 space-y-3">
+                            {confidenceWhy && (
+                                <div>
+                                    <div className="text-[10px] font-medium uppercase tracking-widest text-zinc-500">Confidence</div>
+                                    <SignalMarkdown content={confidenceWhy} />
+                                </div>
+                            )}
+                            {drift.status !== 'insufficient_data' && drift.actual !== null && (
+                                <p className="text-xs leading-5 text-zinc-500">
+                                    {drift.status === 'overconfident' && `Declared ${Math.round(drift.declared)}% vs ${Math.round(drift.actual)}% realized (n=${drift.sampleSize})`}
+                                    {drift.status === 'underconfident' && `Declared ${Math.round(drift.declared)}% vs ${Math.round(drift.actual)}% realized (n=${drift.sampleSize})`}
+                                    {drift.status === 'accurate' && `In line: ${Math.round(drift.actual)}% at this confidence (n=${drift.sampleSize})`}
+                                </p>
+                            )}
+                            {why && (
+                                <div>
+                                    <div className="text-[10px] font-medium uppercase tracking-widest text-zinc-500">Why</div>
+                                    <SignalMarkdown content={why} />
+                                </div>
+                            )}
+                            {analysis.dualScenarioAnalysis && (
+                                <p className="text-sm leading-6 text-zinc-400">
+                                    {analysis.dualScenarioAnalysis.selectedScenario === 'bearish' ? 'Kept short' : analysis.dualScenarioAnalysis.selectedScenario === 'bullish' ? 'Kept long' : 'Neutral'}
+                                    {' · '}
+                                    Long {analysis.dualScenarioAnalysis.bullish.target}
+                                    {' · '}
+                                    Short {analysis.dualScenarioAnalysis.bearish.target}
+                                </p>
+                            )}
+                            {analysis.recommendationContract && (
+                                <p className="text-sm leading-6 text-zinc-400">
+                                    {analysis.recommendationContract.action.toUpperCase()} · {analysis.recommendationContract.riskBoundary}
+                                </p>
+                            )}
+                            {analysis.analystConsensus && analysis.analystConsensus.entries.length > 0 && (
+                                <ConsensusPanel consensus={analysis.analystConsensus} />
+                            )}
+                            {supplementMarkdown && <SignalMarkdown content={supplementMarkdown} />}
+                            {ensembleNote && <p className="text-sm leading-6 text-zinc-500">{ensembleNote}</p>}
+                            {onFollowUp && (
+                                <form
+                                    onSubmit={e => {
+                                        e.preventDefault();
+                                        const text = followUp.trim();
+                                        if (!text) return;
+                                        onFollowUp(text);
+                                        setFollowUp('');
+                                    }}
+                                >
+                                    <label className="ui-kicker" htmlFor="signal-follow-up">Ask this ticket</label>
+                                    <input
+                                        id="signal-follow-up"
+                                        value={followUp}
+                                        onChange={e => setFollowUp(e.target.value)}
+                                        placeholder="@Risk why this SL?"
+                                        className="mt-1 w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-1.5 text-[13px] text-zinc-200 placeholder:text-zinc-600"
+                                    />
+                                </form>
+                            )}
                         </div>
-                    </div>
-                )}
-
-                {why && (
-                    <div>
-                        <div className="mb-1 text-xs font-medium uppercase tracking-wider text-zinc-500">Why</div>
-                        <SignalMarkdown content={why} />
-                    </div>
-                )}
-
-                {analysis.recommendationContract && (
-                    <div>
-                        <div className="text-xs font-medium uppercase tracking-wider text-zinc-500">Contract</div>
-                        <p className="mt-1 text-sm leading-6 text-zinc-200">
-                            {analysis.recommendationContract.action.toUpperCase()} · {analysis.recommendationContract.riskBoundary}
-                            {analysis.recommendationContract.validityMinutes
-                                ? ` · valid ${analysis.recommendationContract.validityMinutes}m`
-                                : ''}
-                        </p>
-                    </div>
-                )}
-
-                {analysis.analystConsensus && analysis.analystConsensus.entries.length > 0 && (
-                    <ConsensusPanel consensus={analysis.analystConsensus} />
-                )}
-
-                {supplementMarkdown && (
-                    <div className="border-t border-white/5 pt-4">
-                        <SignalMarkdown content={supplementMarkdown} />
-                    </div>
-                )}
-
-                {ensembleNote && (
-                    <p className="border-t border-white/5 pt-3 text-sm leading-6 text-zinc-400">{ensembleNote}</p>
-                )}
-                {onFollowUp && (
-                    <form
-                        className="border-t border-white/5 pt-3"
-                        onSubmit={e => {
-                            e.preventDefault();
-                            const text = followUp.trim();
-                            if (!text) return;
-                            onFollowUp(text);
-                            setFollowUp('');
-                        }}
-                    >
-                        <label className="ui-kicker" htmlFor="signal-follow-up">Ask this ticket</label>
-                        <input
-                            id="signal-follow-up"
-                            value={followUp}
-                            onChange={e => setFollowUp(e.target.value)}
-                            placeholder="@Risk why this SL?"
-                            className="mt-1 w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-1.5 text-[13px] text-zinc-200 placeholder:text-zinc-600"
-                        />
-                    </form>
+                    </details>
                 )}
             </div>
         </div>

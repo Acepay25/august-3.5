@@ -220,4 +220,27 @@ describe('EnsembleProgressChat', () => {
         expect(screen.getByText(/Weigh size before asking about entry/).closest('details')).toBeDefined();
         expect(screen.getByText('What is the entry?').closest('details')).toBeNull();
     });
+
+    it('keeps the live round open and collapses earlier rounds', () => {
+        const progress = makeProgress([
+            makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'analyzing', finalOutput: 'Opening call' }),
+        ]);
+        render(
+            <EnsembleProgressChat
+                progress={progress}
+                isLive
+                activeDebateSpeakers={{ 'Analyst A': 2 }}
+                debateTurns={[{
+                    speaker: 'Analyst A',
+                    text: 'I still fade the wick.',
+                    round: 2,
+                }]}
+            />,
+        );
+        expect(screen.getByText('I still fade the wick.')).toBeDefined();
+        expect(screen.getByText('I still fade the wick.').closest('details')).toBeNull();
+        expect(screen.getByText('Opening call').closest('details')?.open).toBe(false);
+        fireEvent.click(screen.getByText(/Openings ·/));
+        expect(screen.getByText('Opening call').closest('details')?.open).toBe(true);
+    });
 });

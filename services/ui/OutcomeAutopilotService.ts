@@ -19,7 +19,7 @@ import { TradeOutcome } from '../../types';
 import { getPreferenceObject, setPreferenceObject, PREF_KEYS } from '../infrastructure/PreferencesService';
 import { verifyHistoricalOutcome, extractSymbolFromAnalysis } from './AutoCaptureService';
 import { trackSLOutcome, SLOptimizationData } from '../backtesting/StopLossOptimizerService';
-import { parsePrice } from '../../utils/analysisUtils';
+import { parsePrice, leveragedMovePercent } from '../../utils/analysisUtils';
 import { DEFAULT_LEVERAGE } from '../../utils/conversationUtils';
 import { PriceAlertService } from './PriceAlertService';
 
@@ -338,8 +338,9 @@ class OutcomeAutopilotServiceClass {
     ): number | undefined {
         const entry = parsePrice(reg.analysis.entryPoints?.[0]?.price || '');
         if (isNaN(entry) || entry <= 0 || isNaN(exitPrice) || exitPrice <= 0) return undefined;
-        const rawMove = Math.abs(exitPrice - entry) / entry;
-        const leveraged = rawMove * reg.leverage * 100 * scaleOutFactor;
+        const pct = leveragedMovePercent(reg.analysis.entryPoints?.[0]?.price, String(exitPrice), reg.leverage, 'gain');
+        if (!pct) return undefined;
+        const leveraged = Math.abs(parseFloat(pct)) * scaleOutFactor;
         return Math.round(leveraged * 10) / 10;
     }
 

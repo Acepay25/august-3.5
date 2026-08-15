@@ -28,6 +28,8 @@ import { useAppSettings } from './hooks/useAppSettings';
 import { useJournalUI } from './hooks/useJournalUI';
 import { useAutomations } from './hooks/useAutomations';
 import { useCompareRuns } from './hooks/useCompareRuns';
+import { useConversationLeverage } from './hooks/useConversationLeverage';
+import { useCatalogReconcile } from './hooks/useCatalogReconcile';
 import AutomationView from './components/automation/AutomationView';
 import AutomationEditorModal, { ModelOption } from './components/automation/AutomationEditorModal';
 import { PostMortemCandidate } from './components/modals/PostTradeUploadModal';
@@ -537,6 +539,12 @@ const App: React.FC = () => {
     });
 
     const [leverageInput, setLeverageInput] = useState<string>(String(DEFAULT_LEVERAGE));
+    const { handleLeverageChange, handleLeverageBlur, handlePresetLeverage } = useConversationLeverage({
+        leverageInput,
+        setLeverageInput,
+        updateActiveConversation,
+        setIsLeverageDropdownOpen,
+    });
     // (i/n) progress for the manual insight-generation loops (App only shows
     // a boolean spinner otherwise; a 50-trade rewrite runs for minutes).
     const [insightProgress, setInsightProgress] = useState<{ done: number; total: number } | null>(null);
@@ -1698,41 +1706,14 @@ const App: React.FC = () => {
         saveCustomLensPrompts(prompts);
     }, [setCustomLensPrompts]);
 
-    // Reconcile stale lens assignments when providers/models change: drop a
-    // role whose provider was removed or whose assigned model no longer
-    // exists, so the lens dropdowns never render a blank value for a dead
-    // assignment (the pipeline used to run a model the UI could not show).
-    useEffect(() => {
-        if (!providerConfigsLoaded || providerConfigs.length === 0) return;
-        if (!lensConfig || !lensConfig.assignments) return;
-        const providersById = new Map(providerConfigs.map(c => [c.id, c]));
-        let changed = false;
-        const assignments = lensConfig.assignments.map(a => {
-            if (!a.assignedProvider) return a;
-            const provider = providersById.get(a.assignedProvider);
-            if (!provider) {
-                changed = true;
-                return { ...a, assignedProvider: null, assignedModel: undefined };
-            }
-            return a;
-        });
-        if (changed) {
-            handleSetLensConfig({ ...lensConfig, assignments });
-        }
-    }, [providerConfigsLoaded, providerConfigs, lensConfig, handleSetLensConfig]);
-
-    // Reconcile stale ordinary ensemble selections: drop entries whose
-    // provider was removed. Wait until configs are loaded so an empty list
-    // cannot wipe the last pick on refresh.
-    useEffect(() => {
-        if (!providerConfigsLoaded || providerConfigs.length === 0) return;
-        if (!ensembleModelSelection || ensembleModelSelection.length === 0) return;
-        const providersById = new Map(providerConfigs.map(c => [c.id, c]));
-        const cleaned = retainEnsembleSelection(ensembleModelSelection, providersById.keys());
-        if (cleaned.length !== ensembleModelSelection.length) {
-            handleSetEnsembleModelSelection(cleaned);
-        }
-    }, [providerConfigsLoaded, providerConfigs, ensembleModelSelection, handleSetEnsembleModelSelection]);
+    useCatalogReconcile({
+        providerConfigsLoaded,
+        providerConfigs,
+        lensConfig,
+        handleSetLensConfig,
+        ensembleModelSelection,
+        handleSetEnsembleModelSelection,
+    });
 
     // Quota flagging UI never materialized (the old quotaExceededModels state
     // was set but never read by any component) — keep the callback for the
@@ -2392,43 +2373,6 @@ const App: React.FC = () => {
 
     const removeImage = (index: number) => {
         setImages(prev => prev.filter((_, i) => i !== index));
-    };
-
-    const handleLeverageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setLeverageInput(e.target.value);
-    };
-
-    const handleLeverageBlur = () => {
-        let val = parseInt(leverageInput, 10);
-        if (isNaN(val) || val < 1) val = 1;
-        if (val > 125) val = 125;
-        setLeverageInput(String(val));
-
-        updateActiveConversation(c => {
-            const updatedMessages = c.messages.map(m => {
-                if (m.analysis) {
-                    return { ...m, analysis: recalculateAnalysisMetrics(m.analysis, val) };
-                }
-                return m;
-            });
-            return { ...c, leverage: val, messages: updatedMessages };
-        });
-    };
-
-    const handlePresetLeverage = (val: number) => {
-        setLeverageInput(String(val));
-
-        updateActiveConversation(c => {
-            const updatedMessages = c.messages.map(m => {
-                if (m.analysis) {
-                    return { ...m, analysis: recalculateAnalysisMetrics(m.analysis, val) };
-                }
-                return m;
-            });
-            return { ...c, leverage: val, messages: updatedMessages };
-        });
-
-        setIsLeverageDropdownOpen(false);
     };
 
     const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {

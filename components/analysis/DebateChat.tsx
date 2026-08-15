@@ -6,7 +6,7 @@ import { getRoleDisplayForProvider } from '../../services/ui/AnalystLensService'
 import { buildTranscriptMarkdown, buildTranscriptJson, buildTranscriptFilename, downloadTextFile } from '../../utils/transcriptExport';
 import DebateSummary from './DebateSummary';
 import { useSmoothStreamText } from '../../hooks/useSmoothStreamText';
-import { stripLeakedScratchpad } from '../../utils/thinkingSplit';
+import { splitThinkingFromOutput } from '../../utils/thinkingSplit';
 
 interface DebateChatProps {
     debateTurns: DebateTurn[];
@@ -630,11 +630,12 @@ const DebateChat: React.FC<DebateChatProps> = ({
                                 const rawBody = turn.speaker === 'Moderator'
                                     ? segment.text.replace(/^\s*\*{0,2}\s*moderator\s+verdict\*{0,2}\s*[:—-]?\s*/i, '')
                                     : cleanSpeakerPrefix(segment.text, turn.speaker);
-                                const peeled = stripLeakedScratchpad(rawBody);
-                                const body = peeled.visible;
-                                const turnReasoning = segmentIndex === 0
-                                    ? [storedReasoning, peeled.leaked].filter(Boolean).join('\n\n').trim()
-                                    : '';
+                                const peeled = splitThinkingFromOutput(
+                                    segmentIndex === 0 ? storedReasoning : '',
+                                    rawBody,
+                                );
+                                const body = peeled.output;
+                                const turnReasoning = segmentIndex === 0 ? peeled.thinking : '';
                                 return (
                                 <div
                                     key={`${turn.speaker}-${turn.round ?? 'legacy'}-${index}-${segmentIndex}`}

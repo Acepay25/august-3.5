@@ -53,6 +53,41 @@ describe('splitThinkingFromOutput', () => {
         expect(split.output).not.toMatch(/<\/?think>/i);
     });
 
+    it('splits DeepSeek-style </think> without an opener', () => {
+        const split = splitThinkingFromOutput(
+            '',
+            'Weigh HTF vs LTF and fade the failed sweep.\n</think>\nShort. SL above the wick.',
+        );
+        expect(split.thinking).toContain('Weigh HTF vs LTF');
+        expect(split.output).toBe('Short. SL above the wick.');
+        expect(split.output).not.toMatch(/think/i);
+    });
+
+    it('hides an unclosed <think> dump until the answer starts', () => {
+        const split = splitThinkingFromOutput('', '<think>\nStill weighing the sweep.');
+        expect(split.output).toBe('');
+        expect(split.thinking).toContain('Still weighing the sweep');
+    });
+
+    it('peels Seed thought / solution tokens', () => {
+        const split = splitThinkingFromOutput(
+            '',
+            '<|begin_of_thought|>Fade the wick.<|end_of_thought|><|begin_of_solution|>Short the failed sweep.<|end_of_solution|>',
+        );
+        expect(split.thinking).toContain('Fade the wick');
+        expect(split.output).toBe('Short the failed sweep.');
+    });
+
+    it('peels Reasoning / Answer markdown headers', () => {
+        const split = splitThinkingFromOutput(
+            '',
+            '**Reasoning:**\nHTF is offered.\n\n**Answer:**\nShort from the sweep high.',
+        );
+        expect(split.thinking).toContain('HTF is offered');
+        expect(split.output).toContain('Short from the sweep high');
+        expect(split.output).not.toMatch(/Reasoning/i);
+    });
+
     it('hides a scratchpad-only dump until a real answer exists', () => {
         const dump = `Here's a thinking process:\n\nAnalyze User Input: I'm in a debate/ensemble scenario. Role: Risk & Execution Specialist. Current Round: Round 5.`;
         const split = splitThinkingFromOutput('', dump);

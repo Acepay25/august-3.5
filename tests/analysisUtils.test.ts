@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { recalculateAnalysisMetrics, parseProseTradePlan, parseMarkdownTradePlan, tradePlanToAnalysis, stripPlanTags, buildAnalysisMarkdown, buildSupplementMarkdown, buildTradingSignalMarkdown, resolveLevelHitOdds, extractSignalStrategyText, looksLikeModeratorVerdictDump, explainSignalConfidence, signalDirectionLabel, explainNoTrade } from '../utils/analysisUtils';
+import { recalculateAnalysisMetrics, leveragedMovePercent, parseProseTradePlan, parseMarkdownTradePlan, tradePlanToAnalysis, stripPlanTags, buildAnalysisMarkdown, buildSupplementMarkdown, buildTradingSignalMarkdown, resolveLevelHitOdds, extractSignalStrategyText, looksLikeModeratorVerdictDump, explainSignalConfidence, signalDirectionLabel, explainNoTrade } from '../utils/analysisUtils';
 import { MASTER_TRADE_PLAN_MARKDOWN } from '../constants/schemas';
 
 describe('analysisUtils', () => {
@@ -360,6 +360,12 @@ Confidence: High. The sweep-reclaim pattern aligns across 15m and 1h.`;
       expect(result.takeProfit[0].percentage).toBe('+200.0%');
       // R:R = reward(20) / risk(10) = 2
       expect(result.rrRatio).toBe(2);
+    });
+
+    it('computes a leveraged move percent from prices', () => {
+      expect(leveragedMovePercent('100', '90', 10, 'loss')).toBe('-100.0%');
+      expect(leveragedMovePercent('100', '120', 10, 'gain')).toBe('+200.0%');
+      expect(leveragedMovePercent('100', '90', 1, 'loss')).toBe('-10.0%');
     });
 
     it('scales percentages with the leverage parameter', () => {

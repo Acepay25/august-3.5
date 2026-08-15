@@ -1089,6 +1089,21 @@ export const buildTradingSignalMarkdown = (
     return lines.join('\n').trim();
 };
 
+/** Account % at `leverage` for the move from entry to a level. */
+export const leveragedMovePercent = (
+    entryPrice: string | undefined,
+    levelPrice: string | undefined,
+    leverage: number,
+    kind: 'loss' | 'gain',
+): string => {
+    const entry = parsePrice(entryPrice || '');
+    const level = parsePrice(levelPrice || '');
+    if (!Number.isFinite(entry) || !Number.isFinite(level) || entry <= 0 || !(leverage > 0)) return '';
+    const pct = (Math.abs(entry - level) / entry) * leverage * 100;
+    const body = `${pct.toFixed(1)}%`;
+    return kind === 'loss' ? `-${body}` : `+${body}`;
+};
+
 export const recalculateAnalysisMetrics = (analysis: TradeAnalysis, leverage: number): TradeAnalysis => {
     if (!analysis) return sanitizeTradeAnalysis(null);
 
@@ -1117,9 +1132,8 @@ export const recalculateAnalysisMetrics = (analysis: TradeAnalysis, leverage: nu
             if (!slOnCorrectSide) {
                 newAnalysis.rrRatio = 0;
             }
-            const rawMove = Math.abs(entryPrice - slPrice) / entryPrice;
-            const leveragedLoss = rawMove * leverage * 100;
-            newAnalysis.stopLossPercentage = `-${leveragedLoss.toFixed(1)}%`;
+            const slPct = leveragedMovePercent(entryPriceStr, slPriceStr, leverage, 'loss');
+            if (slPct) newAnalysis.stopLossPercentage = slPct;
         } else if (newAnalysis.originalStopLossPercentage) {
             const numericSL = parseFloat(newAnalysis.originalStopLossPercentage);
             if (!isNaN(numericSL)) {
@@ -1138,9 +1152,8 @@ export const recalculateAnalysisMetrics = (analysis: TradeAnalysis, leverage: nu
 
                 if (!isNaN(tpPrice)) {
                     validTakeProfits.push(tpPrice);
-                    const rawMove = Math.abs(tpPrice - entryPrice) / entryPrice;
-                    const leveragedProfit = rawMove * leverage * 100;
-                    newTp.percentage = `+${leveragedProfit.toFixed(1)}%`;
+                    const tpPct = leveragedMovePercent(entryPriceStr, newTp.price, leverage, 'gain');
+                    if (tpPct) newTp.percentage = tpPct;
                 } else {
                     const originalTP = newTp.originalPercentage || newTp.percentage;
                     if (originalTP) {

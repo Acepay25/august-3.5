@@ -338,20 +338,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
         setActiveTab(readyConfigProviders.length > 0 ? 'general' : 'models');
     }, [isVisible, providerConfigsLoaded, readyConfigProviders.length]);
 
-    // Heal only when a saved id disappeared. Never copy the provider-list
-    // "active" model into Vision / OCR — clicking another provider used to
-    // rewrite those pickers via firstReady.selectedModel.
-    useEffect(() => {
-        if (readyConfigProviders.length === 0) return;
-        const known = (id: string): boolean => readyConfigProviders.some(p => p.models.includes(id));
-        if (visionModel && !known(visionModel)) {
-            onSetVisionModel?.('');
-        }
-        if (selectedOcrModel && !known(selectedOcrModel)) {
-            onSetOcrModel?.('');
-        }
-    }, [readyConfigProviders, selectedOcrModel, visionModel, onSetOcrModel, onSetVisionModel]);
-
     if (!isVisible) return null;
 
     return (
