@@ -20,6 +20,7 @@ import StrategiesManager from './StrategiesManager';
 import MemoryFilesManager from './MemoryFilesManager';
 import ModelPicker from '../shared/ModelPicker';
 import { Journal } from '../journal/Journal';
+import { getHarnessSettings, saveHarnessSettings } from '../../utils/harnessSettings';
 
 export type SettingsTab = 'general' | 'models' | 'journal' | 'lenses' | 'instructions' | 'memory' | 'actions' | 'prompts' | 'strategies';
 
@@ -273,6 +274,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
         return hasReadyProvider ? 'general' : 'models';
     });
     const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
+    const [deskToolsEnabled, setDeskToolsEnabled] = useState(() => getHarnessSettings().deskToolsEnabled);
     const [activeInstructionTab, setActiveInstructionTab] = useState<InstructionTab>('general');
     const [isDirty, setIsDirty] = useState(false);
     const dialogRef = useRef<HTMLDivElement>(null);
@@ -643,6 +645,23 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                                 if (onToggleHybridIntelligence) onToggleHybridIntelligence();
                                                 else if (props.setIsHybridIntelligenceEnabled) props.setIsHybridIntelligenceEnabled(!isHybridIntelligenceEnabled);
                                             }} label="Toggle Hybrid Intelligence" />
+                                        </div>
+
+                                        {/* Desk Tools */}
+                                        <div className="p-5 rounded-2xl bg-zinc-800 border border-zinc-800 flex items-center justify-between">
+                                            <div>
+                                                <h4 className="text-sm font-bold text-white">Desk Tools</h4>
+                                                <p className="text-xs text-zinc-400 mt-0.5">Lets analysts and the moderator call live tools anytime — opening, rebuttal, clarification, or verdict: web search, funding/OI, order book, liquidations, BTC context, session timing. Default: on.</p>
+                                            </div>
+                                            <ToggleSwitch
+                                                checked={deskToolsEnabled}
+                                                onChange={() => {
+                                                    const next = !deskToolsEnabled;
+                                                    setDeskToolsEnabled(next);
+                                                    saveHarnessSettings({ deskToolsEnabled: next });
+                                                }}
+                                                label="Toggle Desk Tools"
+                                            />
                                         </div>
                                     </div>
 

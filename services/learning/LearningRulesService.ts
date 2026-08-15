@@ -13,6 +13,7 @@
 
 import { LoggedTrade, TradeOutcome, LearningRule, StructuredRule } from '../../types';
 import { storageService, StorageKey } from '../infrastructure/StorageService';
+import { tradeAdmitsTechnicalStrategyRule } from '../../utils/rootCause';
 
 /**
  * Core Confidence Validation Configuration
@@ -456,6 +457,10 @@ export const processPostMortemForLearning = (
     trade: LoggedTrade
 ): LearningRulesStorage => {
     if (!trade.postMortem) return storage;
+    if (!tradeAdmitsTechnicalStrategyRule(trade)) {
+        console.log(`[LearningRules] Skip technical rules for ${trade.id} (${trade.rootCauseClass || 'classified'})`);
+        return storage;
+    }
 
     const extractedRules = extractIfThenRules(trade.postMortem, trade);
 

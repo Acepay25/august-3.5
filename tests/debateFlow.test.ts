@@ -14,6 +14,12 @@ const { streamMock, sendMock } = vi.hoisted(() => ({
 vi.mock('../services/providers/GenericProviderService', () => ({
   streamChatRequest: ((...args: any[]) => streamMock(...args)) as any,
   sendChatRequest: ((...args: any[]) => sendMock(...args)) as any,
+  sendChatTurn: (async () => ({
+    text: '',
+    reasoning: '',
+    toolCalls: [],
+    assistantMessage: { role: 'assistant', content: '' },
+  })) as any,
 }));
 
 import {
@@ -211,6 +217,12 @@ describe('ensemble debate generators (mocked transport)', () => {
 // REAL inter-model debate (each analyst is re-invoked between rounds)
 // =============================================================================
 
+const isFloorSeat = (system: string, name: string): boolean =>
+  system.includes(`**FLOOR SEAT:** ${name}`);
+
+const floorSeatName = (system: string, names: string[]): string =>
+  names.find(n => isFloorSeat(system, n)) ?? 'unknown';
+
 describe('conductRealDebate (real inter-model debate)', () => {
   beforeEach(() => {
     streamMock.mockReset();
@@ -246,7 +258,7 @@ describe('conductRealDebate (real inter-model debate)', () => {
       const user = messages[1].content;
       calls.push({ system, user });
       if (system.includes('CLARIFICATION ANSWER')) {
-        yield `**${system.includes('Analyst One') ? 'Analyst One' : 'Analyst Two'}:** exact clarification answer`;
+        yield `**${floorSeatName(system, ['Analyst One', 'Analyst Two'])}:** exact clarification answer`;
       } else if (user.includes('CLARIFICATION JUDGMENT')) {
         yield '<CLARIFICATION_SATISFIED>';
       } else if (user.includes('CLARIFICATION ROUND')) {
@@ -256,7 +268,7 @@ describe('conductRealDebate (real inter-model debate)', () => {
         yield '</DEBATE_END>\n';
         yield MARKDOWN_PLAN('Long', 'Medium', 60);
       } else {
-        yield `rebuttal-${system.includes('One') ? 'one' : 'two'}`;
+        yield `rebuttal-${isFloorSeat(system, 'Analyst One') ? 'one' : 'two'}`;
       }
     });
     return calls;
@@ -290,6 +302,11 @@ describe('conductRealDebate (real inter-model debate)', () => {
     const firstRebuttal = calls.find(c => !c.system.includes('debate moderator'))!;
     expect(firstRebuttal.system).toContain('ENSEMBLE DEBATE PARTICIPANT');
     expect(firstRebuttal.system).toContain('ROUND 2');
+    expect(firstRebuttal.system).toContain('not answering a new user question');
+    expect(firstRebuttal.system).toContain('**FLOOR SEAT:**');
+    expect(firstRebuttal.system).toContain('**OTHER SEATS:**');
+    expect(firstRebuttal.user).toContain('FLOOR ORIENTATION');
+    expect(firstRebuttal.user).toContain('TRADER REQUEST (Round 1 context only');
     expect(firstRebuttal.user).toContain('YOUR LEVELS');
     expect(firstRebuttal.user).toContain('Respond now with your rebuttal for Round 2');
     expect(firstRebuttal.user).toContain('LEVELS SNAPSHOT');
@@ -328,7 +345,7 @@ describe('conductRealDebate (real inter-model debate)', () => {
         yield '</DEBATE_END>\n' + MARKDOWN_PLAN('Short', 'Low', 45);
         return;
       }
-      if (system.includes('Analyst Two')) {
+      if (isFloorSeat(system, 'Analyst Two')) {
         analystTwoCalls++;
         if (analystTwoCalls === 1) {
           throw new Error('Analyst Two provider exploded');
@@ -507,8 +524,8 @@ describe('conductRealDebate (real inter-model debate)', () => {
         return;
       }
       if (system.includes('CLARIFICATION ANSWER')) {
-        if (options.failAnswer && system.includes(options.failAnswer)) throw new Error('answer provider unavailable');
-        yield system.includes('Analyst One') ? '**Analyst One:** 123.40 confirms.' : '**Analyst Two:** 121.90 invalidates.';
+        if (options.failAnswer && isFloorSeat(system, options.failAnswer)) throw new Error('answer provider unavailable');
+        yield isFloorSeat(system, 'Analyst One') ? '**Analyst One:** 123.40 confirms.' : '**Analyst Two:** 121.90 invalidates.';
         return;
       }
       if (system.includes('debate moderator')) {
@@ -530,6 +547,27 @@ describe('conductRealDebate (real inter-model debate)', () => {
     expect(events.some(event => event.round === 4 && event.speaker === 'Moderator')).toBe(true);
     expect(events.some(event => event.round === 5 && event.speaker === 'Analyst One')).toBe(true);
     expect(events.some(event => event.round === 6 && event.speaker === 'Moderator')).toBe(true);
+  });
+
+  it('tells each analyst they are answering the Moderator, not a new trader request', async () => {
+    const calls = scriptedClarificationStreams(['<CLARIFICATION_SATISFIED>']);
+    await collectEvents(conductRealDebate(clarificationAnalysts(), 'Analyze BTCUSDT', null, config, 'model-a'));
+
+    const one = calls.find(c => c.system.includes('CLARIFICATION ANSWER') && isFloorSeat(c.system, 'Analyst One'))!;
+    const two = calls.find(c => c.system.includes('CLARIFICATION ANSWER') && isFloorSeat(c.system, 'Analyst Two'))!;
+    expect(one.system).toContain('Moderator');
+    expect(one.system).toContain('not the trader');
+    expect(one.system).toContain('Which exact level confirms the breakout?');
+    expect(one.system).not.toContain('Which exact level invalidates the breakout?');
+    expect(one.system).toContain('Analyst Two');
+    expect(one.user).toContain('FLOOR ORIENTATION');
+    expect(one.user).toContain('MODERATOR → Analyst One');
+    expect(one.user).toContain('Which exact level confirms the breakout?');
+    expect(two.user).toContain('MODERATOR → Analyst Two');
+    expect(two.user).toContain('Which exact level invalidates the breakout?');
+    expect(two.system).toContain('Analyst One');
+    expect(two.system).toContain('Which exact level invalidates the breakout?');
+    expect(two.system).not.toContain('Which exact level confirms the breakout?');
   });
 
   it('injects the live price refresh into rebuttal, clarification answer and verdict prompts', async () => {
@@ -625,7 +663,7 @@ describe('conductRealDebate (real inter-model debate)', () => {
 
     expect(events.some(event => event.speaker === 'Analyst One' && event.round === 5)).toBe(true);
     expect(events.some(event => event.speaker === 'Analyst Two' && event.round === 5)).toBe(false);
-    expect(calls.filter(call => call.system.includes('CLARIFICATION ANSWER') && call.system.includes('Analyst Two')).length).toBe(1);
+    expect(calls.filter(call => call.system.includes('CLARIFICATION ANSWER') && isFloorSeat(call.system, 'Analyst Two')).length).toBe(1);
     expect(events.some(event => event.speaker === 'Moderator' && event.text.includes('Moderator verdict'))).toBe(true);
   });
 
@@ -695,7 +733,7 @@ describe('conductRealDebate (real inter-model debate)', () => {
         yield 'Verdict for three.\n</DEBATE_END>\n';
         yield verdictJson;
       } else {
-        const name = ['Analyst One', 'Analyst Two', 'Analyst Three'].find(n => system.includes(n)) ?? 'unknown';
+        const name = floorSeatName(system, ['Analyst One', 'Analyst Two', 'Analyst Three']);
         yield `rebuttal-${name}`;
       }
     });
@@ -729,7 +767,7 @@ describe('conductRealDebate (real inter-model debate)', () => {
       const system = messages[0].content;
       const user = messages[1].content;
       if (system.includes('CLARIFICATION ANSWER')) {
-        const name = ['Analyst One', 'Analyst Two', 'Analyst Three'].find(n => system.includes(n)) ?? 'unknown';
+        const name = floorSeatName(system, ['Analyst One', 'Analyst Two', 'Analyst Three']);
         yield `**${name}:** exact clarification answer`;
       } else if (user.includes('CLARIFICATION JUDGMENT')) {
         yield '<CLARIFICATION_SATISFIED>';
@@ -768,7 +806,7 @@ describe('conductRealDebate (real inter-model debate)', () => {
         yield verdictJson;
         return;
       }
-      if (system.includes('Analyst Three')) {
+      if (isFloorSeat(system, 'Analyst Three')) {
         analystThreeCalls++;
         if (analystThreeCalls === 1) throw new Error('Analyst Three provider exploded');
       }
@@ -812,7 +850,7 @@ describe('conductRealDebate (real inter-model debate)', () => {
         yield verdictJson;
         return;
       }
-      if (system.includes(dropAnalyst)) {
+      if (isFloorSeat(system, dropAnalyst)) {
         droppedCalls++;
         if (droppedCalls === 1) throw new Error(`${dropAnalyst} provider exploded`);
       }
@@ -1010,7 +1048,7 @@ describe('conductRealDebate — transient-failure retry (streamWithTransientRetr
       const system = messages[0].content;
       const user = messages[1].content;
       if (system.includes('CLARIFICATION ANSWER')) {
-        yield `**${system.includes('Analyst One') ? 'Analyst One' : 'Analyst Two'}:** exact clarification answer`;
+        yield `**${floorSeatName(system, ['Analyst One', 'Analyst Two'])}:** exact clarification answer`;
       } else if (user.includes('CLARIFICATION JUDGMENT')) {
         yield '<CLARIFICATION_SATISFIED>';
       } else if (user.includes('CLARIFICATION ROUND')) {
@@ -1027,7 +1065,7 @@ describe('conductRealDebate — transient-failure retry (streamWithTransientRetr
           err.status = 429;
           throw err;
         }
-        yield `rebuttal-${system.includes('One') ? 'one' : 'two'}-round-${user.includes('ROUND 3') ? '3' : '2'}`;
+        yield `rebuttal-${isFloorSeat(system, 'Analyst One') ? 'one' : 'two'}-round-${user.includes('ROUND 3') ? '3' : '2'}`;
       }
     });
 
@@ -1059,7 +1097,7 @@ describe('conductRealDebate — transient-failure retry (streamWithTransientRetr
       const system = messages[0].content;
       const user = messages[1].content;
       if (system.includes('CLARIFICATION ANSWER')) {
-        yield `**${system.includes('Analyst One') ? 'Analyst One' : 'Analyst Two'}:** exact clarification answer`;
+        yield `**${floorSeatName(system, ['Analyst One', 'Analyst Two'])}:** exact clarification answer`;
       } else if (user.includes('CLARIFICATION JUDGMENT')) {
         yield '<CLARIFICATION_SATISFIED>';
       } else if (user.includes('CLARIFICATION ROUND')) {
@@ -1075,7 +1113,7 @@ describe('conductRealDebate — transient-failure retry (streamWithTransientRetr
           yield 'partial rebuttal text';
           throw new Error('NetworkError: failed to fetch');
         }
-        yield `rebuttal-${system.includes('One') ? 'one' : 'two'}`;
+        yield `rebuttal-${isFloorSeat(system, 'Analyst One') ? 'one' : 'two'}`;
       }
     });
 

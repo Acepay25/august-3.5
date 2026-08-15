@@ -24,6 +24,7 @@ import { maybePinWinningPromptLane } from '../../utils/promptVersionStats';
 import { CraftedSkill } from '../../schemas/learning';
 import { formatCraftedSkillBody } from './SkillCraftService';
 import { listSkillDrafts } from '../../utils/skillDrafts';
+import { tradeAdmitsTechnicalStrategyRule } from '../../utils/rootCause';
 
 export type SkillStatus = 'candidate' | 'confirmed' | 'retired';
 export type SkillKind = 'repeat' | 'avoid';
@@ -190,6 +191,7 @@ const clusterKey = (trade: LoggedTrade): string => {
  */
 export const applySkillEvidence = async (trade: LoggedTrade, username: string): Promise<void> => {
     if (trade.outcome !== TradeOutcome.WIN && trade.outcome !== TradeOutcome.LOSS) return;
+    if (!tradeAdmitsTechnicalStrategyRule(trade)) return;
     await ensureHarnessFolders(username);
     const setup = {
         coin: trade.analysis?.coinName,
@@ -223,6 +225,7 @@ export const maybeUpsertSkill = async (
     username: string
 ): Promise<MemoryFile | null> => {
     if (trade.outcome !== TradeOutcome.WIN && trade.outcome !== TradeOutcome.LOSS) return null;
+    if (!tradeAdmitsTechnicalStrategyRule(trade)) return null;
     await ensureHarnessFolders(username);
     const key = clusterKey(trade);
     const cluster = allTrades.filter(t =>
@@ -287,6 +290,7 @@ export const ingestCraftedSkill = async (
     username: string,
 ): Promise<void> => {
     if (trade.outcome !== TradeOutcome.WIN && trade.outcome !== TradeOutcome.LOSS) return;
+    if (!tradeAdmitsTechnicalStrategyRule(trade)) return;
     await ensureHarnessFolders(username);
     const folder = getMemoryFiles().folders.find(f => f.name === 'skills');
     if (!folder) return;
@@ -338,6 +342,7 @@ export const ingestCraftedSkill = async (
 
 export const ingestIfThenFromTrade = async (trade: LoggedTrade, username: string): Promise<void> => {
     if (trade.outcome !== TradeOutcome.WIN && trade.outcome !== TradeOutcome.LOSS) return;
+    if (!tradeAdmitsTechnicalStrategyRule(trade)) return;
     if (listSkillDrafts().some(d => d.tradeId === trade.id)) return;
     const clauses = parseIfThenClauses(trade.postMortem ?? '');
     if (clauses.length === 0) return;

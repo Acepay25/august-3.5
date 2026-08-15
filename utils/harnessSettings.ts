@@ -2,9 +2,12 @@ export type PromptAbRate = 0 | 0.1 | 0.5;
 
 export interface HarnessSettings {
     equityUsd: number;
+    riskPercent: number;
     promptAbRate: PromptAbRate;
     debateCostCapUsd: number;
     pinnedPromptLane?: 'live' | 'control';
+    /** Analysts may call live desk tools (search, derivatives, session) before the brief. Default on. */
+    deskToolsEnabled: boolean;
 }
 
 const KEY = 'harness_settings_v1';
@@ -25,6 +28,9 @@ export const getHarnessSettings = (): HarnessSettings => {
     const rate = stored.promptAbRate;
     return {
         equityUsd: typeof stored.equityUsd === 'number' && stored.equityUsd > 0 ? stored.equityUsd : 10_000,
+        riskPercent: typeof stored.riskPercent === 'number' && stored.riskPercent > 0
+            ? Math.min(10, Math.max(0.1, stored.riskPercent))
+            : 1,
         promptAbRate: rate === 0 || rate === 0.1 || rate === 0.5 ? rate : 0.1,
         debateCostCapUsd: typeof stored.debateCostCapUsd === 'number' && stored.debateCostCapUsd >= 0
             ? stored.debateCostCapUsd
@@ -32,6 +38,7 @@ export const getHarnessSettings = (): HarnessSettings => {
         pinnedPromptLane: stored.pinnedPromptLane === 'live' || stored.pinnedPromptLane === 'control'
             ? stored.pinnedPromptLane
             : undefined,
+        deskToolsEnabled: stored.deskToolsEnabled !== false,
     };
 };
 

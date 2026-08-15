@@ -9,6 +9,7 @@ import { LoggedTrade, TradeAnalysis, AIProvider } from '../../types';
 import { ProviderConfig } from '../../types/provider';
 import { getPreferenceObject, setPreferenceObject, PREF_KEYS } from '../infrastructure/PreferencesService';
 import { extractRulesWithLLM } from '../learning/LLMRuleExtractionService';
+import { tradeAdmitsTechnicalStrategyRule } from '../../utils/rootCause';
 
 // ========================= INTERFACES =========================
 
@@ -250,6 +251,7 @@ export async function addRulesFromPostMortem(
     sourceProvider?: AIProvider | string,
     providerConfig?: ProviderConfig
 ): Promise<InvalidationRule[]> {
+    if (!tradeAdmitsTechnicalStrategyRule(trade)) return [];
     // 1. Regex Extraction (Fast)
     const regexRules = extractRulesFromPostMortem(postMortemText, trade, sourceProvider);
 

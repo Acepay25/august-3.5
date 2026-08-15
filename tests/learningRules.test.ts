@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { storeRule, LearningRulesStorage } from '../services/learning/LearningRulesService';
+import { storeRule, processPostMortemForLearning, LearningRulesStorage } from '../services/learning/LearningRulesService';
 import { LearningRule } from '../types/learning';
+import { LoggedTrade, TradeOutcome } from '../types';
 
 // StorageService delegates profile reads to dbService (IndexedDB) — mock the
 // delegation so the test focuses on the raw last_active_user read.
@@ -108,5 +109,36 @@ describe('storageService — per-user learning rules', () => {
     localStorage.setItem('last_active_user', 'zed');
     const logs = await storageService.getTradeLogs();
     expect(Array.isArray(logs)).toBe(true);
+  });
+});
+
+const pmTrade = (postMortem: string, rootCauseClass?: LoggedTrade['rootCauseClass']): LoggedTrade => ({
+  id: 't-pm',
+  timestamp: new Date().toISOString(),
+  outcome: TradeOutcome.LOSS,
+  analysis: { coinName: 'BTCUSDT', direction: 'Long' } as LoggedTrade['analysis'],
+  postMortem,
+  rootCauseClass,
+});
+
+describe('processPostMortemForLearning — root-cause gate', () => {
+  it('stores an IF/THEN from an unlabeled setup lesson', () => {
+    const next = processPostMortemForLearning(
+      emptyStorage(),
+      pmTrade('IF 4H close loses the sweep high THEN stand down and wait for a reclaim.'),
+    );
+    expect(next.rules).toHaveLength(1);
+    expect(next.rules[0].ifCondition).toMatch(/4H close/i);
+  });
+
+  it('does not store a technical rule from an execution-error post-mortem', () => {
+    const next = processPostMortemForLearning(
+      emptyStorage(),
+      pmTrade(
+        'EXECUTION_ERROR\nBlame Assessment - Setup 10% | Execution 80% | Market 10%\nIF I chase the wick THEN skip the trade.',
+        'EXECUTION_ERROR',
+      ),
+    );
+    expect(next.rules).toHaveLength(0);
   });
 });

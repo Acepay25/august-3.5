@@ -20,6 +20,7 @@ import { lensFromSpeakerName } from '../utils/thinkingLens';
 import { ProviderConfig } from '../types/provider';
 import { conductPostMortem, conductTodayReassessment, writePostMortemMarkdownReport } from '../services/providers/GenericAnalysisService';
 import { extractPostMortemFinalReport } from '../utils/postMortemReport';
+import { classifyRootCause } from '../utils/rootCause';
 import { fetchMarketData, normalizeSymbol } from '../services/analysis/MarketDataService';
 import { PriceAlertService } from '../services/ui/PriceAlertService';
 
@@ -581,7 +582,8 @@ Please investigate this discrepancy in your analysis.
                 postMortem: finalPostMortemReport,
                 postMortemCreatedAt: new Date().toISOString(),
                 postMortemImages: imageUrls,
-                postMortemByProvider: postMortemContributions
+                postMortemByProvider: postMortemContributions,
+                rootCauseClass: classifyRootCause(finalPostMortemReport, t.outcome),
             } : t));
 
             // The trade was logged in the same tick that started this
@@ -632,7 +634,8 @@ Please investigate this discrepancy in your analysis.
                     const tradeWithPM = {
                         ...tradeToUpdate,
                         postMortem: finalPostMortemReport,
-                        postMortemByProvider: postMortemContributions
+                        postMortemByProvider: postMortemContributions,
+                        rootCauseClass: classifyRootCause(finalPostMortemReport, tradeToUpdate.outcome),
                     };
                     jobQueue.addJob(JobType.EXTRACT_INSIGHTS, tradeWithPM);
                     jobQueue.addJob(JobType.EXTRACT_RULES, tradeWithPM);
@@ -647,7 +650,11 @@ Please investigate this discrepancy in your analysis.
                 // fail the post-mortem.
                 try {
                     const notebookUser = localStorage.getItem('last_active_user') || 'default';
-                    const closed = { ...tradeToUpdate, postMortem: finalPostMortemReport };
+                    const closed = {
+                        ...tradeToUpdate,
+                        postMortem: finalPostMortemReport,
+                        rootCauseClass: classifyRootCause(finalPostMortemReport, tradeToUpdate.outcome),
+                    };
                     const craftConfig = memoryConfig ?? enabledProviders[0]?.config;
                     if (craftConfig) {
                         const crafted = await craftSkillFromPostMortem(closed, craftConfig);

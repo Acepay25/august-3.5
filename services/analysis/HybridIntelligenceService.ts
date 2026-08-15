@@ -785,7 +785,7 @@ export const generateHybridPromptInjection = (data: HybridDataPacket, options?: 
     const m4 = data.momentum['4h'];
     const av = data.advancedVolume;
     const vp = av.volumeProfile;
-    const mc = data.marketContext;
+            const mc = data.marketContext;
 
     const fmtOhlc = (v: number): string => {
         if (!Number.isFinite(v)) return '?';
@@ -795,12 +795,12 @@ export const generateHybridPromptInjection = (data: HybridDataPacket, options?: 
     const patternRows: Array<Array<string | number>> = [];
     for (const tf of tfs) {
         const scan = data.detectedPatterns?.[tf];
-        if (!scan || scan.windowSize === 0) {
+                if (!scan || scan.windowSize === 0) {
             patternRows.push([tf, '—', 'insufficient data', '—', '—', '—']);
             continue;
         }
         const top = [...scan.patterns].sort((a, b) => b.strength - a.strength).slice(0, 5);
-        if (top.length === 0) {
+                if (top.length === 0) {
             patternRows.push([tf, 'none', `last ${scan.windowSize}`, '—', '—', `HH=${scan.higherHighs} HL=${scan.higherLows} LH=${scan.lowerHighs} LL=${scan.lowerLows}`]);
             continue;
         }
@@ -995,10 +995,10 @@ export const generateHybridPromptInjection = (data: HybridDataPacket, options?: 
 
     if (!options?.compact && data.chartRepresentation) {
         sections.push(generateChartPromptInjection(
-            data.chartRepresentation['15m'],
-            data.chartRepresentation['1h'],
-            data.chartRepresentation['4h'],
-            data.chartRepresentation['1d']
+                    data.chartRepresentation['15m'],
+                    data.chartRepresentation['1h'],
+                    data.chartRepresentation['4h'],
+                    data.chartRepresentation['1d']
         ));
     }
 

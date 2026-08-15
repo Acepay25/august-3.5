@@ -7,12 +7,32 @@ import { extractStructuredPlanFromProse } from '../services/providers/GenericAna
  * panel, pre-debate divergence, Bayesian calibration, the Gate's
  * confidence-conflict challenge — all key on
  * analysis.entryPoints/stopLoss/takeProfit/probability. This parser mines
- * those fields out of the prose. These tests pin the parser against the
- * output shapes the prompts mandate (master-prompt Section 8, the lens role
- * tables, and the machine-readable TRADE PLAN BLOCK).
+ * those fields out of the prose. These tests pin the parser against desk-trader
+ * write-ups (labeled lines in sentences) and still accept a TRADE PLAN BLOCK
+ * if a model emits one.
  */
 describe('extractStructuredPlanFromProse', () => {
-    it('extracts the master-prompt Section 8 labeled fields', () => {
+    it('extracts a desk-trader brief without a TRADE PLAN BLOCK or section template', () => {
+        const plan = extractStructuredPlanFromProse(`
+Long from the 1h FVG. Structure is HH/HL after the BOS.
+
+Direction: Long
+Entry: 93,800 - 94,200
+Stop Loss: 93,400
+Take Profit 1: 96,500
+Take Profit 2: 97,800
+Probability: 68%
+Confidence: Medium
+`);
+        expect(plan.direction).toBe('Long');
+        expect(plan.entryPoints).toEqual(['93,800 - 94,200']);
+        expect(plan.stopLoss).toBe('93,400');
+        expect(plan.takeProfit).toEqual(['96,500', '97,800']);
+        expect(plan.probability).toBe(68);
+        expect(plan.confidence).toBe('Medium');
+    });
+
+    it('still extracts labeled Section 8 fields if a model emits them', () => {
         const plan = extractStructuredPlanFromProse(`
 The 1h structure is bullish with a clean break of the last swing high.
 
@@ -58,9 +78,8 @@ Probability: 55%
     });
 
     it('sees through markdown-bolded labels and Bullish/Bearish verdicts', () => {
-        // The lens prompts mandate **MACRO VERDICT:** / **TECHNICAL BIAS:**
-        // — the parser must see past the asterisks, and "Bullish"/"Bearish"
-        // verdicts map to Long/Short.
+        // The parser still sees **MACRO VERDICT:** / **TECHNICAL BIAS:**
+        // if a model uses those labels, and "Bullish"/"Bearish" map to Long/Short.
         expect(extractStructuredPlanFromProse('**MACRO VERDICT:** Bullish').direction).toBe('Long');
         expect(extractStructuredPlanFromProse('**MACRO VERDICT:** Bearish').direction).toBe('Short');
         expect(extractStructuredPlanFromProse('**TECHNICAL BIAS:**\nLONG').direction).toBe('Long');

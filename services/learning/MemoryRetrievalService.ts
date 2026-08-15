@@ -1,84 +1,39 @@
 /**
  * Setup-aware retrieval for the trader notebook.
  *
- * Analysts and the moderator get a capped pack: always-on identity/rules,
- * matching skills, matching notes, similar closed trades, and scored IF/THEN
- * rules. The full notebook and pattern-memory essay are not dumped.
+ * Walks the typed memory graph (setup → dimensions → skills/notes/trades)
+ * instead of dumping every file that shares a keyword. Identity files are
+ * always on. The full notebook and pattern-memory essay are not dumped.
  */
 
-import { LoggedTrade, MemoryFile } from '../../types';
+import { LoggedTrade } from '../../types';
 import { getMemoryFiles, buildNotebookMapMarkdown } from './MemoryFilesService';
 import { findRelevantTrades } from './PatternMemorySynthesisService';
-import { getRelevantRules, loadLearningRules } from './LearningRulesService';
 import { isSkillFile, parseSkillMarkdown, skillMatchesSetup } from './SkillMemoryService';
+import {
+    buildMemoryGraph,
+    matchingLearningRules,
+    walkMemoryNeighbors,
+    type MemoryRetrievalQuery,
+    type WalkedMemoryHit,
+} from './MemoryGraph';
 
-export interface MemoryRetrievalQuery {
-    coin?: string;
-    direction?: string;
-    family?: string;
-    pattern?: string;
-    regime?: string;
-}
+export type { MemoryRetrievalQuery };
 
 const MAX_CONTEXT_CHARS = 4500;
 const MAX_FILE_CHARS = 900;
 const MAX_DIARY_CHARS = 600;
 const MAX_MAP_CHARS = 1400;
 const ALWAYS_ON = new Set(['memory.md', 'risk-rules.md', 'recurring-mistakes.md']);
-const SKIP_FULL = new Set(['pattern-memory.md', 'suggestions.md', 'index.md']);
 
 const cap = (text: string, n: number): string =>
     text.length <= n ? text : `${text.slice(0, n).trimEnd()}\n…`;
 
-const folderOf = (file: MemoryFile): string =>
-    getMemoryFiles().folders.find(f => f.id === file.folderId)?.name ?? 'misc';
-
-const tokens = (query?: MemoryRetrievalQuery): string[] => {
-    if (!query) return [];
-    return [query.coin, query.direction, query.family, query.pattern, query.regime]
-        .filter(Boolean)
-        .map(s => String(s).toLowerCase());
-};
-
-const fileScore = (file: MemoryFile, query?: MemoryRetrievalQuery): number => {
-    if (!file.enabled || !file.content.trim()) return -1;
-    const name = file.name.toLowerCase();
-    if (SKIP_FULL.has(name)) return -1;
-
-    const folder = folderOf(file);
-    if (file.name === 'memory.md') return 110;
-    if (ALWAYS_ON.has(file.name)) return 100;
-
-    if (folder === 'skills') {
-        const meta = parseSkillMarkdown(file.content);
-        if (!meta || meta.status === 'retired') return -1;
-        if (!query) return meta.status === 'confirmed' ? 40 : -1;
-        if (!skillMatchesSetup(meta, query)) return -1;
-        return meta.status === 'confirmed' ? 90 : 70;
-    }
-
-    if (folder === 'trader-diary') {
-        const coin = query?.coin?.toUpperCase().replace(/USDT?$/, '') || '';
-        const fileCoin = file.name.replace(/\.md$/i, '').toUpperCase().replace(/USDT?$/, '');
-        if (coin && fileCoin === coin) return 60;
-        return -1;
-    }
-
-    if (file.name === 'recurring-mistakes.md') return 80;
-
-    const hay = `${file.name}\n${file.content}`.toLowerCase();
-    const t = tokens(query);
-    if (t.length === 0) {
-        if (folder === 'market-conditions') return 20;
-        if (folder === 'rules') return 25;
-        return folder === 'skills' ? -1 : 8;
-    }
-    let score = 0;
-    for (const tok of t) {
-        if (tok.length < 3) continue;
-        if (hay.includes(tok)) score += 15;
-    }
-    return score > 0 ? score : -1;
+const folderOf = (fileId: string): string => {
+    const { files, folders } = getMemoryFiles();
+    const file = files.find(f => f.id === fileId);
+    if (!file) return 'misc';
+    return folders.find(f => f.id === file.folderId)?.name ?? 'misc';
 };
 
 const diaryExcerpt = (content: string): string => {
@@ -106,20 +61,13 @@ const skillCatalogBlock = (query?: MemoryRetrievalQuery): string => {
 
 const similarTradesBlock = (query: MemoryRetrievalQuery | undefined, trades?: LoggedTrade[]): string => {
     if (!trades || trades.length === 0 || !query) return '';
-    const setup: {
-        coin?: string;
-        direction?: 'Long' | 'Short';
-        pattern?: string;
-        family?: string;
-        regime?: 'trending' | 'ranging' | 'volatile' | 'compression';
-    } = {
+    const relevant = findRelevantTrades({
         coin: query.coin,
         direction: query.direction === 'Long' || query.direction === 'Short' ? query.direction : undefined,
         pattern: query.pattern,
         family: query.family,
         regime: query.regime as 'trending' | 'ranging' | 'volatile' | 'compression' | undefined,
-    };
-    const relevant = findRelevantTrades(setup, trades).slice(0, 5);
+    }, trades).slice(0, 5);
     if (relevant.length === 0) return '';
     const lines = relevant.map(t =>
         `- ${t.coin} ${t.direction} ${t.outcome} (${t.similarity}% similar)${t.keyLesson ? ` — ${t.keyLesson}` : ''}`
@@ -128,21 +76,15 @@ const similarTradesBlock = (query: MemoryRetrievalQuery | undefined, trades?: Lo
 };
 
 const rulesBlock = (query?: MemoryRetrievalQuery): string => {
-    const rules = getRelevantRules(loadLearningRules(), {
-        coin: query?.coin,
-        pattern: query?.family || query?.pattern,
-        direction: query?.direction === 'Long' || query?.direction === 'Short' ? query.direction : undefined,
-    }, 4);
+    const rules = matchingLearningRules(query, 4);
     if (rules.length === 0) return '';
     const lines = rules.map(r => {
-        const retired = (r as { status?: string }).status === 'retired';
-        if (retired) return '';
         const ev = typeof r.wins === 'number' || typeof r.losses === 'number'
             ? ` [${r.wins ?? 0}W/${r.losses ?? 0}L]`
             : '';
         return `- IF ${r.ifCondition} THEN ${r.thenAction}${ev}`;
-    }).filter(Boolean);
-    return lines.length ? `**Matching rules**\n${lines.join('\n')}` : '';
+    });
+    return `**Matching rules**\n${lines.join('\n')}`;
 };
 
 export interface RetrievedMemorySource {
@@ -150,34 +92,40 @@ export interface RetrievedMemorySource {
     kind: 'identity' | 'skill' | 'playbook' | 'diary' | 'rules' | 'similar';
 }
 
+const kindForHit = (hit: WalkedMemoryHit): RetrievedMemorySource['kind'] => {
+    if (hit.node.kind === 'identity') return 'identity';
+    if (hit.node.kind === 'skill') return 'skill';
+    if (hit.node.path?.startsWith('trader-diary/')) return 'diary';
+    if (hit.node.kind === 'rule' || hit.node.path?.startsWith('rules/')) return 'rules';
+    return 'playbook';
+};
+
+const fileHits = (query?: MemoryRetrievalQuery, audience: 'analyst' | 'moderator' = 'analyst'): WalkedMemoryHit[] => {
+    const graph = buildMemoryGraph(query, []);
+    const walked = walkMemoryNeighbors(graph, query, audience);
+    let skillsKept = 0;
+    const out: WalkedMemoryHit[] = [];
+    for (const hit of walked) {
+        if (!hit.node.fileId) continue;
+        if (hit.node.kind === 'skill') {
+            if (audience === 'moderator') continue;
+            if (skillsKept >= 2) continue;
+            skillsKept += 1;
+        }
+        out.push(hit);
+    }
+    return out;
+};
+
 export const listRetrievedMemorySources = (
     query?: MemoryRetrievalQuery,
     trades?: LoggedTrade[],
     audience: 'analyst' | 'moderator' = 'analyst',
 ): RetrievedMemorySource[] => {
-    const { files } = getMemoryFiles();
-    const ranked = files
-        .map(f => ({ f, score: fileScore(f, query) }))
-        .filter(x => x.score >= 0)
-        .sort((a, b) => b.score - a.score);
-    const out: RetrievedMemorySource[] = [];
-    let skillsKept = 0;
-    for (const { f } of ranked.slice(0, 12)) {
-        const folder = folderOf(f);
-        if (folder === 'skills') {
-            if (audience === 'moderator') continue;
-            if (skillsKept >= 2) continue;
-            skillsKept += 1;
-            out.push({ path: `${folder}/${f.name}`, kind: 'skill' });
-            continue;
-        }
-        const kind: RetrievedMemorySource['kind'] =
-            ALWAYS_ON.has(f.name) ? 'identity'
-                : folder === 'trader-diary' ? 'diary'
-                    : folder === 'rules' ? 'rules'
-                        : 'playbook';
-        out.push({ path: `${folder}/${f.name}`, kind });
-    }
+    const out: RetrievedMemorySource[] = fileHits(query, audience).map(hit => ({
+        path: hit.node.path || hit.node.label,
+        kind: kindForHit(hit),
+    }));
     if (audience === 'moderator' && skillCatalogBlock(query)) {
         out.push({ path: 'skills/catalog', kind: 'skill' });
     }
@@ -201,17 +149,9 @@ export const getMemoryFilesContext = (
     audience: 'analyst' | 'moderator' = 'analyst',
 ): string => {
     const { files } = getMemoryFiles();
-    const ranked = files
-        .map(f => ({ f, score: fileScore(f, query) }))
-        .filter(x => x.score >= 0)
-        .sort((a, b) => {
-            if (b.score !== a.score) return b.score - a.score;
-            const fa = getMemoryFiles().folders.find(x => x.id === a.f.folderId)?.order ?? 99;
-            const fb = getMemoryFiles().folders.find(x => x.id === b.f.folderId)?.order ?? 99;
-            return fa - fb;
-        });
+    const hits = fileHits(query, audience);
 
-    if (ranked.length === 0 && !trades?.length) {
+    if (hits.length === 0 && !trades?.length) {
         const mapOnly = cap(buildNotebookMapMarkdown(), MAX_MAP_CHARS);
         return mapOnly
             ? `═══════════════════════════════════════════════════════════════
@@ -225,19 +165,15 @@ ${mapOnly}
     const mapBlock = cap(buildNotebookMapMarkdown(), MAX_MAP_CHARS);
     const blocks: string[] = [];
     let used = mapBlock.length;
-    let skillsKept = 0;
-    for (const { f } of ranked) {
+    for (const hit of hits) {
         if (used >= MAX_CONTEXT_CHARS) break;
-        const folder = folderOf(f);
-        if (folder === 'skills') {
-            if (audience === 'moderator') continue;
-            if (skillsKept >= 2) continue;
-            skillsKept += 1;
-        }
-        let body = f.content.trim();
+        const file = files.find(f => f.id === hit.node.fileId);
+        if (!file) continue;
+        const folder = folderOf(file.id);
+        let body = file.content.trim();
         if (folder === 'trader-diary') body = diaryExcerpt(body);
-        else body = cap(body, ALWAYS_ON.has(f.name) ? 1600 : MAX_FILE_CHARS);
-        const block = `[${folder}/${f.name}]\n${body}`;
+        else body = cap(body, ALWAYS_ON.has(file.name) ? 1600 : MAX_FILE_CHARS);
+        const block = `[${folder}/${file.name}]\n${body}`;
         if (used + block.length > MAX_CONTEXT_CHARS) {
             blocks.push(cap(block, MAX_CONTEXT_CHARS - used));
             used = MAX_CONTEXT_CHARS;
@@ -262,7 +198,7 @@ ${mapOnly}
     if (blocks.length === 0 && !mapBlock) return '';
 
     return `═══════════════════════════════════════════════════════════════
-📓 HARNESS MEMORY (notebook map + retrieved files — not a blank slate)
+📓 HARNESS MEMORY (notebook map + graph neighbors — not a blank slate)
 ═══════════════════════════════════════════════════════════════
 Identity files always apply. ${audience === 'moderator' ? 'Skills are listed as a catalog only — do not paste full skill bodies here.' : 'Matching skill bodies apply when they match this coin, direction, or regime; otherwise ignore them.'} Do not contradict a matching confirmed skill without strong new evidence.
 

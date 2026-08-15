@@ -1,9 +1,8 @@
 /**
  * MemoryFilesService — the Trader Notebook (Settings → Personal edge).
  *
- * Markdown files in folders that the model can actually READ: every enabled
- * file's full content is injected into analyst prompts, the moderator bundle,
- * and post-mortem prompts (see `getMemoryFilesContext`). The user writes
+ * Matching enabled files are retrieved by walking the memory graph
+ * (see `getMemoryFilesContext`). The user writes
  * market-conditions notes and personal rules; the harness maintains three
  * things automatically:
  *   - profile/memory.md          — what the harness knows about the user

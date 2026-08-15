@@ -3,6 +3,7 @@
 import { AccuracySubMode, TradeOutcome } from './enums';
 import { TradeAnalysis } from './analysis';
 import { Message, DebateTurn, PatternMemoryGateView } from './message';
+import { RootCauseClass } from './learning';
 
 export interface LoggedTrade {
   id: string;
@@ -26,6 +27,11 @@ export interface LoggedTrade {
    * (by-provider quality tracking in the Knowledge Base card).
    */
   postMortemByProvider?: Record<string, string>;
+  /**
+   * Forensic class from the post-mortem blame split. Execution and macro
+   * shocks must not become technical playbook rules.
+   */
+  rootCauseClass?: RootCauseClass;
   correctedEntry?: string;
   correctedStopLoss?: string;
   correctedTakeProfit?: string;

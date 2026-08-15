@@ -145,6 +145,18 @@ const HarnessControls: React.FC = () => {
                 />
             </label>
             <label className="block text-[11px] text-zinc-400">
+                Risk per ticket (%)
+                <input
+                    type="number"
+                    min={0.1}
+                    max={10}
+                    step={0.1}
+                    value={settings.riskPercent}
+                    onChange={e => persist({ riskPercent: Math.min(10, Math.max(0.1, Number(e.target.value) || 1)) })}
+                    className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-100"
+                />
+            </label>
+            <label className="block text-[11px] text-zinc-400">
                 Prompt A/B (control lane)
                 <select
                     value={String(settings.promptAbRate)}
