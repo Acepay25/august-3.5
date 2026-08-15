@@ -85,8 +85,9 @@ test('journal and live market are reachable as labelled dialogs', async ({ page 
     await seedWorkspace(page, 'Navigation Workspace');
 
     await page.getByRole('button', { name: 'Trading Journal', exact: true }).first().click();
-    await expect(page.getByRole('dialog', { name: 'Trading Journal' })).toBeVisible({ timeout: 10_000 });
-    await page.getByRole('button', { name: 'Close journal' }).click();
+    await expect(page.getByRole('dialog', { name: 'Settings' })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('heading', { name: 'Journal' })).toBeVisible();
+    await page.getByRole('button', { name: 'Close settings' }).click();
 
     await page.getByRole('button', { name: 'Live Market', exact: true }).first().click();
     await expect(page.getByRole('dialog', { name: 'Live Market' })).toBeVisible({ timeout: 10_000 });
