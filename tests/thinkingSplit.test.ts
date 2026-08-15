@@ -18,6 +18,16 @@ describe('splitThinkingFromOutput', () => {
         expect(split.output).toBe('');
     });
 
+    it('keeps native streamed CoT and drops tagged THINKING from content', () => {
+        const split = splitThinkingFromOutput(
+            'Native chain-of-thought from the provider.',
+            '<THINKING>Tagged fallback reasoning.</THINKING><FINAL_OUTPUT>Proposal text.</FINAL_OUTPUT>',
+        );
+        expect(split.thinking).toContain('Native chain-of-thought');
+        expect(split.thinking).not.toContain('Tagged fallback');
+        expect(split.output).toContain('Proposal text');
+    });
+
     it('moves a trade plan out of the thinking channel', () => {
         const plan = '**FINAL TRADE PLAN**\n- Direction: Short\n- Entry: 63748\n- Stop Loss: 63971\n- Take Profit 1: 63251';
         const split = splitThinkingFromOutput(plan, plan);

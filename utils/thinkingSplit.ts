@@ -210,7 +210,7 @@ export const splitThinkingFromOutput = (
         thinking = streamed || headers.thinking;
         output = taggedOutput || headers.output;
     } else if (inlineThink.leaked) {
-        thinking = [streamed, inlineThink.leaked].filter(Boolean).join('\n\n');
+        thinking = streamed || inlineThink.leaked;
         output = taggedOutput || inlineThink.visible;
     }
 
