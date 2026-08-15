@@ -36,6 +36,7 @@ export interface PeriodUsageSummary {
     completionTokens: number;
     tokensEst: number;
     costUsd: number;
+    tokensExact: boolean;
 }
 
 export const summarizeUsagePeriod = (entries: SessionUsageEntry[], sinceMs: number): PeriodUsageSummary => {
@@ -47,5 +48,6 @@ export const summarizeUsagePeriod = (entries: SessionUsageEntry[], sinceMs: numb
         completionTokens: acc.completionTokens + e.completionTokens,
         tokensEst: acc.tokensEst + e.tokensEst,
         costUsd: acc.costUsd + (e.costUsd ?? 0),
-    }), { runs: 0, durationMs: 0, promptTokens: 0, completionTokens: 0, tokensEst: 0, costUsd: 0 });
+        tokensExact: acc.tokensExact || (e.promptTokens + e.completionTokens) > 0,
+    }), { runs: 0, durationMs: 0, promptTokens: 0, completionTokens: 0, tokensEst: 0, costUsd: 0, tokensExact: false });
 };

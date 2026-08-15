@@ -167,10 +167,12 @@ const AnalysisDetails: React.FC<AnalysisDetailsProps> = ({
 
             {message?.memoryRetrieved && message.memoryRetrieved.length > 0 && (
                 <div className="rounded-xl border border-white/10 bg-zinc-900/60 px-3 py-2">
-                    <p className="text-[10px] uppercase tracking-wider text-zinc-500">Retrieved memory</p>
+                    <p className="text-[10px] uppercase tracking-wider text-zinc-500">Used these notes</p>
                     <p className="mt-1 flex flex-wrap gap-1.5">
                         {message.memoryRetrieved.map(source => (
-                            <span key={source.path} className="rounded-md border border-white/10 bg-zinc-950 px-1.5 py-0.5 text-[11px] text-zinc-400" title={source.kind}>
+                            <span key={source.path} className="rounded-md border border-white/10 bg-zinc-950 px-1.5 py-0.5 text-[11px] text-zinc-400">
+                                <span className="text-zinc-600">{source.kind}</span>
+                                {' · '}
                                 {source.path}
                             </span>
                         ))}

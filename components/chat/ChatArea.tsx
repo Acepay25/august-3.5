@@ -311,9 +311,20 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     // not its id, so enhancedContext (and every memoized MessageItem) stays
     // stable and only the streaming card re-renders.
     const latestMessageId = messages[messages.length - 1]?.id ?? null;
+    const priorAnalysisById = useMemo(() => {
+        const map: Record<string, NonNullable<typeof messages[number]['analysis']>> = {};
+        let prev: (typeof messages)[number]['analysis'];
+        for (const m of messages) {
+            if (!m.analysis) continue;
+            if (prev) map[m.id] = prev;
+            prev = m.analysis;
+        }
+        return map;
+    }, [messages]);
     const enhancedContext = useMemo(() => ({
         ...chatContext,
         latestMessageId,
+        priorAnalysisById,
         isSelectionMode,
         selectedMessageIds: selectedIds,
         onToggleMessageSelection: handleToggleSelection,
@@ -321,7 +332,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         onSelectMessageForProbability,
         onRetryFailedRun,
         onEditUserMessage,
-    }), [chatContext, latestMessageId, isSelectionMode, selectedIds, handleToggleSelection, onSelectMessageForProbability, onRetryFailedRun, onEditUserMessage]);
+    }), [chatContext, latestMessageId, priorAnalysisById, isSelectionMode, selectedIds, handleToggleSelection, onSelectMessageForProbability, onRetryFailedRun, onEditUserMessage]);
 
     // Fresh sessions start with zero messages (no hardcoded intro bubble),
     // so no intro-text substitution is needed — messages pass through as-is.
@@ -406,9 +417,9 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                     <div className="flex items-center gap-3">
                         <button
                             onClick={handleSelectAll}
-                            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-colors ${selectedIds.size > 0 && selectedIds.size === messages.length ? 'bg-cyan-600/20 border-cyan-500/50 text-cyan-300' : 'bg-zinc-800 border-white/10 text-zinc-400 hover:text-white'}`}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-colors ${selectedIds.size > 0 && selectedIds.size === messages.length ? 'bg-zinc-700/40 border-white/20 text-zinc-200' : 'bg-zinc-800 border-white/10 text-zinc-400 hover:text-white'}`}
                         >
-                            <div className={`w-4 h-4 rounded border flex items-center justify-center ${selectedIds.size > 0 && selectedIds.size === messages.length ? 'bg-cyan-500 border-cyan-500' : 'border-zinc-500'}`}>
+                            <div className={`w-4 h-4 rounded border flex items-center justify-center ${selectedIds.size > 0 && selectedIds.size === messages.length ? 'bg-zinc-200 border-zinc-200' : 'border-zinc-500'}`}>
                                 {selectedIds.size > 0 && selectedIds.size === messages.length && <CheckIcon className="w-3 h-3 text-white" />}
                             </div>
                             <span className="text-xs font-bold uppercase tracking-wider">Select All</span>
@@ -426,7 +437,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                         </button>
                         <button
                             onClick={handleCancelSelection}
-                            className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-cyan-400"
+                            className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-zinc-500"
                             aria-label="Close message selection"
                         >
                             <CloseIcon className="w-5 h-5" />
@@ -437,7 +448,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 messages.length > 0 && (
                     <button
                         onClick={() => setIsSelectionMode(true)}
-                        className="absolute top-4 right-6 z-30 p-2 bg-zinc-800 text-zinc-400 border border-white/10 rounded-xl shadow-lg hover:bg-zinc-700 hover:text-cyan-400 hover:scale-105 transition-all"
+                        className="absolute top-4 right-6 z-30 p-2 bg-zinc-800 text-zinc-400 border border-white/10 rounded-xl shadow-lg hover:bg-zinc-700 hover:text-zinc-200 hover:scale-105 transition-all"
                         title="Manage Messages"
                     >
                         <EditIcon className="w-4 h-4" />
@@ -498,8 +509,8 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
             {/* Accuracy Mode Banner Overlay - Positioned Fixed/Absolute at top of chat area */}
             {isAccuracyModeEnabled && !isSelectionMode && (
                 <div className="absolute top-0 left-0 right-0 pointer-events-none flex justify-center pt-2 z-20">
-                    <div className="border px-4 py-1 rounded-full shadow-lg bg-cyan-900 border-cyan-500/30">
-                        <span className="text-[10px] font-bold uppercase tracking-widest animate-pulse text-cyan-300">
+                    <div className="border px-4 py-1 rounded-full shadow-lg bg-zinc-800 border-white/15">
+                        <span className="text-[10px] font-bold uppercase tracking-widest animate-pulse text-zinc-300">
                             {accuracySubMode === 'pure_ai' ? 'Accuracy Mode: Pure AI Reasoning' : 'Accuracy Mode: Strict Protocol'}
                         </span>
                     </div>
@@ -575,19 +586,19 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                             />
                         ) : (
                             /* Fallback: original spinner overlay when no step data */
-                                <div className="flex flex-col items-center justify-center p-6 glass rounded-2xl shadow-[0_0_50px_-12px_rgba(176, 176, 182,0.2)] animate-fade-in border-t border-cyan-500/20">
+                                <div className="flex flex-col items-center justify-center p-6 glass rounded-2xl shadow-[0_0_50px_-12px_rgba(176, 176, 182,0.2)] animate-fade-in border-t border-white/10">
                                     <div className="relative">
-                                        <div className="absolute inset-0 blur-xl opacity-20 animate-pulse bg-cyan-500"></div>
-                                        <LoadingIcon className="h-8 w-8 relative z-10 text-cyan-400" />
+                                        <div className="absolute inset-0 blur-xl opacity-20 animate-pulse bg-zinc-400"></div>
+                                        <LoadingIcon className="h-8 w-8 relative z-10 text-zinc-300" />
                                     </div>
-                                <div className="mt-3 flex items-center gap-2 text-cyan-300" aria-live="polite">
+                                <div className="mt-3 flex items-center gap-2 text-zinc-300" aria-live="polite">
                                     <BrainIcon className="h-4 w-4" />
                                     <span className="text-sm font-medium">Thinking</span>
-                                    <span className="flex gap-1" aria-hidden="true"><i className="h-1.5 w-1.5 rounded-full bg-cyan-300 animate-bounce [animation-delay:-0.2s]" /><i className="h-1.5 w-1.5 rounded-full bg-cyan-300 animate-bounce [animation-delay:-0.1s]" /><i className="h-1.5 w-1.5 rounded-full bg-cyan-300 animate-bounce" /></span>
+                                    <span className="flex gap-1" aria-hidden="true"><i className="h-1.5 w-1.5 rounded-full bg-zinc-400 animate-bounce [animation-delay:-0.2s]" /><i className="h-1.5 w-1.5 rounded-full bg-zinc-400 animate-bounce [animation-delay:-0.1s]" /><i className="h-1.5 w-1.5 rounded-full bg-zinc-400 animate-bounce" /></span>
                                 </div>
                                 <p className="mt-1 text-xs text-zinc-500">{loadingMessage}</p>
                                 <div className="flex items-center gap-4 mt-4">
-                                    {isPostMortemInProgress && <button onClick={() => setIsLivePostMortemVisible(true)} className="flex items-center gap-2 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 font-medium py-1.5 px-4 rounded-full text-xs transition-all uppercase tracking-wide"><EyeIcon />View Post-Mortem</button>}
+                                    {isPostMortemInProgress && <button onClick={() => setIsLivePostMortemVisible(true)} className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 border border-white/15 text-zinc-300 font-medium py-1.5 px-4 rounded-full text-xs transition-all uppercase tracking-wide"><EyeIcon />View Post-Mortem</button>}
                                     <button onClick={handleCancelAnalysis} className="status-surface bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 font-medium py-1.5 px-4 rounded-full text-xs transition-all uppercase tracking-wide">Stop generating</button>
                                 </div>
                             </div>

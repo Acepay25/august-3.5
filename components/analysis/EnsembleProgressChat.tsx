@@ -156,9 +156,9 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
     if (hideSubagents || progress.analysts.length === 0) return null;
 
     return (
-        <div className={`ui-panel ${compact ? 'mt-3' : 'mt-4'}`} aria-label="Analyst timeline">
+        <div className={`ui-panel ${compact ? 'mt-0 mb-4' : 'mt-4'}`} aria-label="Floor">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-white/5 px-3 py-2 text-[11px] text-zinc-500">
-                <span className="font-medium text-zinc-300">{isLive ? 'Live' : 'Analysts'}</span>
+                <span className="font-medium text-zinc-300">{isLive ? 'Floor' : 'Seats'}</span>
                 {PHASES.map((p, i) => (
                     <React.Fragment key={p}>
                         {i > 0 && <span className="text-zinc-700">·</span>}
@@ -168,7 +168,7 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
                     </React.Fragment>
                 ))}
                 {isLive && (
-                    <span className="ml-auto text-zinc-600">{progress.analysts.length} analysts</span>
+                    <span className="ml-auto text-zinc-600">{progress.analysts.length} seats</span>
                 )}
             </div>
 

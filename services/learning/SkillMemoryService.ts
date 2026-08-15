@@ -19,6 +19,11 @@ import {
     syncRecurringMistakes,
     updateMemoryFile,
 } from './MemoryFilesService';
+import { formatSkillProcedure, parseIfThenClauses, skillHitRate } from '../../utils/ifThenSkill';
+import { maybePinWinningPromptLane } from '../../utils/promptVersionStats';
+import { CraftedSkill } from '../../schemas/learning';
+import { formatCraftedSkillBody } from './SkillCraftService';
+import { listSkillDrafts } from '../../utils/skillDrafts';
 
 export type SkillStatus = 'candidate' | 'confirmed' | 'retired';
 export type SkillKind = 'repeat' | 'avoid';
@@ -33,6 +38,8 @@ export interface SkillMeta {
     wins: number;
     losses: number;
     tradeIds: string[];
+    ifCondition?: string;
+    thenAction?: string;
     body: string;
 }
 
@@ -45,6 +52,9 @@ const folderName = (folderId: string): string =>
 
 export const isSkillFile = (file: MemoryFile): boolean =>
     folderName(file.folderId) === 'skills' && file.name.endsWith('.md');
+
+export const listSkillSlugs = (): string[] =>
+    getMemoryFiles().files.filter(isSkillFile).map(f => f.name.replace(/\.md$/i, ''));
 
 export const parseSkillMarkdown = (content: string): SkillMeta | null => {
     const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
@@ -74,6 +84,8 @@ export const parseSkillMarkdown = (content: string): SkillMeta | null => {
         wins: num('wins'),
         losses: num('losses'),
         tradeIds,
+        ifCondition: pick('ifCondition'),
+        thenAction: pick('thenAction'),
         body,
     };
 };
@@ -108,6 +120,8 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
         `wins: ${meta.wins}`,
         `losses: ${meta.losses}`,
         `sample: ${meta.wins + meta.losses}`,
+        ...(meta.ifCondition ? [`ifCondition: ${meta.ifCondition.replace(/\n/g, ' ')}`] : []),
+        ...(meta.thenAction ? [`thenAction: ${meta.thenAction.replace(/\n/g, ' ')}`] : []),
         `tradeIds: ${meta.tradeIds.slice(-20).join(',')}`,
         '---',
         '',
@@ -150,7 +164,7 @@ const deriveStatus = (meta: SkillMeta): SkillStatus => {
     return 'candidate';
 };
 
-const titleFromMeta = (meta: SkillMeta): string => {
+export const titleFromMeta = (meta: SkillMeta): string => {
     const bits = [meta.kind === 'avoid' ? 'Avoid' : 'Repeat', meta.coin, meta.direction, meta.family]
         .filter(Boolean);
     return bits.join(' ') || 'Skill';
@@ -232,10 +246,13 @@ export const maybeUpsertSkill = async (
     const wins = cluster.filter(t => t.outcome === TradeOutcome.WIN).length;
     const losses = cluster.filter(t => t.outcome === TradeOutcome.LOSS).length;
     const kind: SkillKind = losses >= wins ? 'avoid' : 'repeat';
-    const lesson = extractLessonFromPostMortem(trade.postMortem ?? '')
-        || (kind === 'avoid'
-            ? 'Do not repeat this setup until structure and invalidation are clearer.'
-            : 'Repeat this setup only when the same confluence is present.');
+    const clause = parseIfThenClauses(trade.postMortem ?? '')[0];
+    const lesson = clause
+        ? formatSkillProcedure(clause)
+        : extractLessonFromPostMortem(trade.postMortem ?? '')
+            || (kind === 'avoid'
+                ? 'Do not repeat this setup until structure and invalidation are clearer.'
+                : 'Repeat this setup only when the same confluence is present.');
     const meta: SkillMeta = {
         status: 'candidate',
         kind,
@@ -246,11 +263,15 @@ export const maybeUpsertSkill = async (
         wins,
         losses,
         tradeIds: cluster.map(t => t.id),
-        body: [
-            `**Trigger:** ${[setup.coin, setup.direction, setup.family].filter(Boolean).join(' · ') || 'matching setup'}`,
-            `**Procedure:** ${lesson}`,
-            `**Invalidates:** thesis break or a different regime than ${setup.regime || 'the one that produced this cluster'}.`,
-        ].join('\n'),
+        ifCondition: clause?.ifCondition,
+        thenAction: clause?.thenAction,
+        body: clause
+            ? lesson
+            : [
+                `**Trigger:** ${[setup.coin, setup.direction, setup.family].filter(Boolean).join(' · ') || 'matching setup'}`,
+                `**Procedure:** ${lesson}`,
+                `**Invalidates:** thesis break or a different regime than ${setup.regime || 'the one that produced this cluster'}.`,
+            ].join('\n'),
     };
     meta.status = deriveStatus(meta);
 
@@ -258,6 +279,116 @@ export const maybeUpsertSkill = async (
     if (!folder) return null;
     const content = serializeSkill(meta, titleFromMeta(meta));
     return createMemoryFile(folder.id, fileNameFromMeta(meta), content, username, true);
+};
+
+export const ingestCraftedSkill = async (
+    trade: LoggedTrade,
+    crafted: CraftedSkill,
+    username: string,
+): Promise<void> => {
+    if (trade.outcome !== TradeOutcome.WIN && trade.outcome !== TradeOutcome.LOSS) return;
+    await ensureHarnessFolders(username);
+    const folder = getMemoryFiles().folders.find(f => f.name === 'skills');
+    if (!folder) return;
+    const setupDir = trade.analysis?.direction === 'Long' || trade.analysis?.direction === 'Short'
+        ? trade.analysis.direction
+        : undefined;
+    const existing = getMemoryFiles().files.filter(isSkillFile).find(f => {
+        const meta = parseSkillMarkdown(f.content);
+        return meta?.ifCondition?.toLowerCase() === crafted.ifCondition.toLowerCase();
+    });
+    const kind = crafted.kind;
+    if (existing) {
+        const meta = parseSkillMarkdown(existing.content);
+        if (!meta) return;
+        if (!meta.tradeIds.includes(trade.id)) {
+            if (trade.outcome === TradeOutcome.WIN) meta.wins += 1;
+            else meta.losses += 1;
+            meta.tradeIds = [...meta.tradeIds, trade.id];
+        }
+        meta.kind = kind;
+        meta.ifCondition = crafted.ifCondition;
+        meta.thenAction = crafted.thenAction;
+        meta.body = formatCraftedSkillBody(crafted);
+        meta.status = deriveStatus(meta);
+        await updateMemoryFile(existing.id, {
+            content: serializeSkill(meta, crafted.name || titleFromMeta(meta)),
+            enabled: meta.status !== 'retired',
+        }, username);
+        return;
+    }
+    const meta: SkillMeta = {
+        status: 'candidate',
+        kind,
+        coin: trade.analysis?.coinName,
+        direction: setupDir,
+        family: trade.analysis?.detectedPatternFamily,
+        regime: trade.marketRegime,
+        wins: trade.outcome === TradeOutcome.WIN ? 1 : 0,
+        losses: trade.outcome === TradeOutcome.LOSS ? 1 : 0,
+        tradeIds: [trade.id],
+        ifCondition: crafted.ifCondition,
+        thenAction: crafted.thenAction,
+        body: formatCraftedSkillBody(crafted),
+    };
+    meta.status = deriveStatus(meta);
+    const slug = slugifyName(crafted.name) || slugifyName([trade.analysis?.coinName, kind].filter(Boolean).join(' ')) || 'skill';
+    await createMemoryFile(folder.id, `${slug}.md`, serializeSkill(meta, crafted.name || titleFromMeta(meta)), username, true);
+};
+
+export const ingestIfThenFromTrade = async (trade: LoggedTrade, username: string): Promise<void> => {
+    if (trade.outcome !== TradeOutcome.WIN && trade.outcome !== TradeOutcome.LOSS) return;
+    if (listSkillDrafts().some(d => d.tradeId === trade.id)) return;
+    const clauses = parseIfThenClauses(trade.postMortem ?? '');
+    if (clauses.length === 0) return;
+    await ensureHarnessFolders(username);
+    const folder = getMemoryFiles().folders.find(f => f.name === 'skills');
+    if (!folder) return;
+    const kind: SkillKind = trade.outcome === TradeOutcome.LOSS ? 'avoid' : 'repeat';
+    const setupDir = trade.analysis?.direction === 'Long' || trade.analysis?.direction === 'Short'
+        ? trade.analysis.direction
+        : undefined;
+    for (const clause of clauses) {
+        const existing = getMemoryFiles().files.filter(isSkillFile).find(f => {
+            const meta = parseSkillMarkdown(f.content);
+            return meta?.ifCondition?.toLowerCase() === clause.ifCondition.toLowerCase();
+        });
+        if (existing) {
+            const meta = parseSkillMarkdown(existing.content);
+            if (!meta) continue;
+            if (!meta.tradeIds.includes(trade.id)) {
+                if (trade.outcome === TradeOutcome.WIN) meta.wins += 1;
+                else meta.losses += 1;
+                meta.tradeIds = [...meta.tradeIds, trade.id];
+            }
+            meta.thenAction = clause.thenAction;
+            meta.body = formatSkillProcedure(clause);
+            meta.status = deriveStatus(meta);
+            await updateMemoryFile(existing.id, {
+                content: serializeSkill(meta, titleFromMeta(meta)),
+                enabled: meta.status !== 'retired',
+            }, username);
+            continue;
+        }
+        const meta: SkillMeta = {
+            status: 'candidate',
+            kind,
+            coin: trade.analysis?.coinName,
+            direction: setupDir,
+            family: trade.analysis?.detectedPatternFamily,
+            regime: trade.marketRegime,
+            wins: trade.outcome === TradeOutcome.WIN ? 1 : 0,
+            losses: trade.outcome === TradeOutcome.LOSS ? 1 : 0,
+            tradeIds: [trade.id],
+            ifCondition: clause.ifCondition,
+            thenAction: clause.thenAction,
+            body: formatSkillProcedure(clause),
+        };
+        meta.status = deriveStatus(meta);
+        const slug = slugifyName([trade.analysis?.coinName, kind, clause.ifCondition.slice(0, 40)].filter(Boolean).join(' '))
+            || 'if-then';
+        await createMemoryFile(folder.id, `${slug}.md`, serializeSkill(meta, titleFromMeta(meta)), username, true);
+    }
 };
 
 /**
@@ -316,8 +447,10 @@ export const syncClosedTradeToNotebook = async (
     await appendDiaryEntry(trade, username);
     await syncRecurringMistakes(allTrades, username);
     await applySkillEvidence(trade, username);
+    await ingestIfThenFromTrade(trade, username);
     await maybeUpsertSkill(trade, allTrades, username);
     await consolidateSkills(username);
+    maybePinWinningPromptLane(allTrades);
 };
 
 /**
@@ -360,7 +493,7 @@ export const applyNotebookSkillsToAnalysis = <T extends {
         next.confidence = 'Avoid';
         next.direction = 'Neutral';
         if (typeof next.probability === 'number') next.probability = Math.min(next.probability, 15);
-        warn(`NOTEBOOK SKILL VETO: ${titleFromMeta(avoidConfirmed)} — ${avoidConfirmed.body.replace(/\s+/g, ' ').slice(0, 160)}`);
+        warn(`NOTEBOOK SKILL VETO: ${titleFromMeta(avoidConfirmed)} — IF ${avoidConfirmed.ifCondition || avoidConfirmed.body.replace(/\s+/g, ' ').slice(0, 120)}`);
         return next;
     }
 
@@ -380,4 +513,38 @@ export const applyNotebookSkillsToAnalysis = <T extends {
         ];
     }
     return next;
+};
+
+export const listAppliedSkills = (
+    analysis: { coinName?: string; direction?: string; detectedPatternFamily?: string; marketConditions?: { pattern?: string } },
+): Array<{ title: string; kind: SkillKind; status: SkillStatus; wins: number; losses: number; hitRate: number | null; procedure?: string }> => {
+    const setup = {
+        coin: analysis.coinName,
+        direction: analysis.direction,
+        family: analysis.detectedPatternFamily,
+        pattern: analysis.marketConditions?.pattern,
+    };
+    return getMemoryFiles().files
+        .filter(isSkillFile)
+        .map(f => parseSkillMarkdown(f.content))
+        .filter((m): m is SkillMeta => Boolean(m && skillMatchesSetup(m, setup)))
+        .map(m => ({
+            title: titleFromMeta(m),
+            kind: m.kind,
+            status: m.status,
+            wins: m.wins,
+            losses: m.losses,
+            hitRate: skillHitRate(m.wins, m.losses),
+            procedure: m.thenAction || m.ifCondition,
+        }));
+};
+
+export const confirmedAvoidForSetup = (
+    setup: { coin?: string; direction?: string; family?: string; pattern?: string },
+): SkillMeta | null => {
+    const matches = getMemoryFiles().files
+        .filter(isSkillFile)
+        .map(f => parseSkillMarkdown(f.content))
+        .filter((m): m is SkillMeta => Boolean(m && skillMatchesSetup(m, setup)));
+    return matches.find(m => m.kind === 'avoid' && m.status === 'confirmed') ?? null;
 };

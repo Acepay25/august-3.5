@@ -26,6 +26,7 @@ import { DUAL_SCENARIO_JSON_SCHEMA, MASTER_TRADE_PLAN_MARKDOWN } from '../../con
 import { parseLiveMarketData } from '../../utils/liveMarketParser';
 import { truncateTextToTokens, parsePrice, parseMarkdownTradePlan } from '../../utils/analysisUtils';
 import { extractDebateLevels, formatDebateLevelsTable } from '../../utils/debateLevels';
+import { buildRebuttalDiffPacket } from '../../utils/debateDiff';
 import { compactDebateEpisode } from '../../utils/debateEpisodes';
 import { debatePreStep } from '../../utils/debatePreStep';
 import type { DebateRunEvent } from '../../types';
@@ -863,6 +864,31 @@ export const attachVerdictCitations = (
         };
     });
     return { ...consensus, citations };
+};
+
+/** If nobody aligned with a directional call, the merge is an average — force Neutral. */
+export const enforceCitedVerdict = <T extends { direction?: string; confidence?: string; originalConfidence?: string; validationWarnings?: string[] }>(
+    verdict: T,
+    consensus?: AnalystConsensus | null,
+    keptName?: string | null,
+): T => {
+    if (noTrade(verdict.direction, verdict.confidence)) return verdict;
+    const named = (keptName || '').trim().toLowerCase();
+    if (named) {
+        const cited = consensus?.citations?.some(c => c.aligned && c.displayName.toLowerCase() === named);
+        if (cited || !consensus?.citations?.length) return verdict;
+    }
+    if (consensus?.citations?.some(c => c.aligned)) return verdict;
+    return {
+        ...verdict,
+        originalConfidence: verdict.originalConfidence ?? verdict.confidence,
+        direction: 'Neutral',
+        confidence: 'Avoid',
+        validationWarnings: [
+            ...(verdict.validationWarnings ?? []),
+            'Verdict had no cited analyst — forced Neutral (moderator must quote, not average).',
+        ],
+    };
 };
 
 /**
@@ -2573,9 +2599,11 @@ export const conductRealDebate = async function* (
     /** Append-only run log (pipeline persists on the message). */
     onRunEvent?: (event: DebateRunEvent) => void,
     /** Pattern-memory gate for the pre-step waterfall. */
-    memoryGate?: { gateResult?: string; reason?: string } | null,
+    memoryGate?: { gateResult?: string; reason?: string; skillVeto?: string } | null,
     /** Crash-resume: skip completed rounds and seed transcript. */
-    resumeState?: { lastCompletedRound: number; seedRoundTexts?: Record<string, string[]> },
+    resumeState?: { lastCompletedRound: number; seedRoundTexts?: Record<string, string[]>; laneDrafts?: Record<string, { round: number; text: string }> },
+    /** When true, skip remaining rebuttals (USD budget). */
+    shouldSkipRemaining?: () => boolean,
 ): AsyncGenerator<RealDebateTurnEvent, void, unknown> {
 
     if (analysts.length < 2) {
@@ -2649,6 +2677,12 @@ export const conductRealDebate = async function* (
             roundTexts[speaker] = [...(rounds || [])];
         }
     }
+    if (resumeState?.laneDrafts) {
+        for (const [speaker, draft] of Object.entries(resumeState.laneDrafts)) {
+            if (!roundTexts[speaker]) roundTexts[speaker] = [];
+            if (draft.text) roundTexts[speaker][draft.round] = draft.text;
+        }
+    }
     const lastDone = resumeState?.lastCompletedRound ?? 0;
 
     /** Inject a replacement analyst that joins the debate from the next phase.
@@ -2704,6 +2738,11 @@ export const conductRealDebate = async function* (
             yield { speaker: 'System', round, text: 'Debate time budget reached — skipping remaining rebuttal rounds and proceeding to the verdict.' };
             break;
         }
+        if (shouldSkipRemaining?.()) {
+            emitLog('budget', 'USD cost cap reached — skipping remaining rebuttals.', round);
+            yield { speaker: 'System', round, text: 'Debate cost cap reached — skipping remaining rebuttal rounds and proceeding to the verdict.' };
+            break;
+        }
 
         const steeringNote = takeSteering(round);
         if (steeringNote) {
@@ -2714,13 +2753,15 @@ export const conductRealDebate = async function* (
         // Context is snapshotted BEFORE the round starts, so every analyst
         // responds to the others' previous round — never to themselves.
         const tasks = debateRoster
-            .filter(a => activeAnalystNames.has(a.provider.name) && roundTexts[a.provider.name]?.[round - 1])
+            .filter(a => activeAnalystNames.has(a.provider.name) && roundTexts[a.provider.name]?.[round - 1] && !roundTexts[a.provider.name]?.[round])
             .map((analyst) => {
                 const ownPosition = roundTexts[analyst.provider.name]?.[round - 1];
-                const others = debateRoster
+                const otherOpenings = debateRoster
                     .filter(o => o.provider.name !== analyst.provider.name && roundTexts[o.provider.name]?.[round - 1])
-                    .map(o => compactDebateEpisode(o.provider.name, round - 1, roundTexts[o.provider.name][round - 1]))
-                    .join('\n') || 'No other analyst has spoken yet.';
+                    .map(o => ({ name: o.provider.name, text: roundTexts[o.provider.name][round - 1] }));
+                const others = otherOpenings.length > 0
+                    ? buildRebuttalDiffPacket(analyst.provider.name, ownPosition, otherOpenings)
+                    : 'No other analyst has spoken yet.';
 
                 // The lens persona must survive into the rebuttal rounds —
                 // a generic "expert trading analyst" instruction let
@@ -2745,10 +2786,9 @@ export const conductRealDebate = async function* (
                     .map(o => extractDebateLevels(o.provider.name, roundTexts[o.provider.name][round - 1]));
                 const levelsSnap = formatDebateLevelsTable(snapshotRows);
                 const userContent =
-                    `**TRADING REQUEST:**\n${truncateTextToTokens(userPrompt, 350)}\n\n` +
+                    `**TRADING REQUEST (trim):**\n${truncateTextToTokens(userPrompt, 120)}\n\n` +
                     (levelsSnap ? `**LEVELS SNAPSHOT:**\n${levelsSnap}\n\n` : '') +
-                    `**YOUR POSITION (Round ${round - 1}):**\n${compactDebateEpisode(analyst.provider.name, round - 1, ownPosition)}\n\n` +
-                    `**OTHER ANALYSTS' LATEST POSITIONS:**\n${others}\n\n` +
+                    `${others}\n\n` +
                     `Respond now with your rebuttal for Round ${round}.` +
                     (steeringNote ? `\n\n**USER STEERING (queued mid-debate — follow this):**\n${steeringNote}` : '') +
                     livePriceBlock;

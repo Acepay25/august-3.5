@@ -206,6 +206,11 @@ export const TradeAnalysisSchema = z.object({
   levelProbabilities: LevelProbabilitiesSchema.optional(),
   marketSnapshot: z.unknown().optional(),
   evidence: z.array(EvidenceClaimSchema).optional(),
+  levelCitations: z.array(z.object({
+    label: z.string(),
+    price: z.string(),
+    sourceId: z.string(),
+  })).optional(),
   invalidationCriteria: z.array(InvalidationCriterionSchema).optional(),
   recommendationContract: z.any().optional(),
 });
@@ -434,6 +439,7 @@ export const CoercedTradeAnalysisSchema = z.object({
   levelProbabilities: z.any().optional(),
   marketSnapshot: z.any().optional(),
   evidence: z.any().optional(),
+  levelCitations: z.any().optional(),
   invalidationCriteria: z.any().optional(),
   analystConsensus: z.any().optional(),
   recommendationContract: z.any().optional(),
@@ -560,6 +566,7 @@ export const applySemanticFixups = (raw: CoercedTradeAnalysis): TradeAnalysis =>
     validationWarnings: raw.validationWarnings,
     originalConfidence: raw.originalConfidence,
     validityDurationMinutes: raw.validityDurationMinutes,
+    levelCitations: Array.isArray(raw.levelCitations) ? raw.levelCitations : undefined,
   };
 
   // ── Probability normalization + confidence derivation (coupled) ──

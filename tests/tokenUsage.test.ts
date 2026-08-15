@@ -38,6 +38,7 @@ describe('summarizeUsagePeriod', () => {
         expect(summary.runs).toBe(1);
         expect(summary.promptTokens).toBe(10);
         expect(summary.completionTokens).toBe(20);
+        expect(summary.tokensExact).toBe(true);
     });
 });
 

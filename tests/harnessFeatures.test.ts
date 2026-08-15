@@ -1,13 +1,26 @@
 import { describe, expect, it } from 'vitest';
-import { AnalystRole } from '../types';
+import { AnalystRole, MessageRole, TradeOutcome } from '../types';
 import { buildOcrEnvelope, envelopeKindForRole } from '../utils/debateEnvelopes';
 import { buildRecommendationContract } from '../utils/recommendationContract';
-import { debateTurnsToRoundTexts, lastCompletedRound, reconstructOpenings } from '../utils/debateResume';
+import { debateTurnsToRoundTexts, lastCompletedRound, laneDraftsFromTurns, reconstructOpenings } from '../utils/debateResume';
+import { citeLevel } from '../utils/levelEvidence';
+import { buildRebuttalDiffPacket } from '../utils/debateDiff';
+import { summarizePromptVersions } from '../utils/promptVersionStats';
+import { parseKeptAnalyst } from '../utils/keptAnalyst';
+import { computeTicketSize } from '../utils/ticketSize';
+import { enforceUngroundedLevels } from '../utils/ungroundedGate';
+import { describeOpenBookRisk, paperPnlR } from '../utils/paperPnl';
+import { enforceCitedVerdict } from '../services/providers/ensembleService';
 import { computeEvidenceQualityStats } from '../utils/analysisQuality';
 import { buildAnalysisReportMarkdown } from '../utils/analysisReport';
 import { describeWatchTick } from '../utils/watchTicks';
 import { buildAnalystGantt, lastThoughtSnippet, laneFillForStatus } from '../utils/runGantt';
-import { TradeOutcome } from '../types';
+import { parseComposerIntent, formatComposerSteer } from '../utils/composerMentions';
+import { collectApprovalItems, autoJournalPolicyFor, setAutoJournalRule } from '../utils/approvalInbox';
+import { parseIfThenClauses } from '../utils/ifThenSkill';
+import { applyHybridChartDrift } from '../utils/hybridChartDrift';
+import { parseCraftedSkill } from '../schemas/learning';
+import { formatCraftedSkillBody } from '../services/learning/SkillCraftService';
 
 describe('harness envelopes', () => {
     it('maps lens roles to isolated kinds', () => {
@@ -56,8 +69,114 @@ describe('debate resume', () => {
         const texts = debateTurnsToRoundTexts(turns);
         expect(texts.Macro[1]).toBe('open A');
         expect(texts.Macro[2]).toBe('rebut');
-        expect(lastCompletedRound(turns)).toBe(2);
+        expect(lastCompletedRound(turns)).toBe(1);
+        expect(lastCompletedRound(turns, ['Macro', 'Tech'])).toBe(1);
         expect(reconstructOpenings(turns).map(s => s.name)).toEqual(['Macro', 'Tech']);
+        expect(laneDraftsFromTurns(turns, 1)).toEqual({ Macro: { round: 2, text: 'rebut' } });
+    });
+});
+
+describe('level evidence', () => {
+    it('cites a matching claim and marks missing prices ungrounded', () => {
+        const evidence = [{ claim: 'Entry 64000 from hybrid HTF', sources: ['hybrid:1h'], state: 'observed' as const }];
+        expect(citeLevel('Entry', '64000', evidence).source).toBe('hybrid:1h');
+        expect(citeLevel('Stop Loss', '62000', evidence).source).toBe('ungrounded');
+        expect(citeLevel('Entry', '64000', [], [{ label: 'Entry', price: '64000', sourceId: 'hybrid:4h' }]).source).toBe('hybrid:4h');
+    });
+});
+
+describe('rebuttal diff', () => {
+    it('sends disagreements not full openings', () => {
+        const packet = buildRebuttalDiffPacket(
+            'Macro',
+            '- **Direction:** Long\n- **Entry:** 100\n- **Stop Loss:** 90\n- **Take Profit 1:** 120',
+            [{ name: 'Tech', text: '- **Direction:** Short\n- **Entry:** 99\n- **Stop Loss:** 110\n- **Take Profit 1:** 80' }],
+        );
+        expect(packet).toContain('disagrees');
+        expect(packet).not.toContain('restated');
+        expect(packet.length).toBeLessThan(800);
+    });
+});
+
+describe('moderator citation gate', () => {
+    it('forces Neutral when nobody aligned', () => {
+        const next = enforceCitedVerdict(
+            { direction: 'Long', confidence: 'High' },
+            { citations: [{ name: 'Macro', aligned: false }] } as any,
+        );
+        expect(next.direction).toBe('Neutral');
+        expect(next.confidence).toBe('Avoid');
+    });
+
+    it('keeps a directional call when KEPT names an aligned analyst', () => {
+        const next = enforceCitedVerdict(
+            { direction: 'Long', confidence: 'High' },
+            { citations: [{ displayName: 'Macro', aligned: true }] } as any,
+            'Macro',
+        );
+        expect(next.direction).toBe('Long');
+    });
+});
+
+describe('kept analyst', () => {
+    it('parses KEPT lines', () => {
+        expect(parseKeptAnalyst('KEPT: Macro\n</DEBATE_END>')).toBe('Macro');
+        expect(parseKeptAnalyst('KEPT: none')).toBeNull();
+    });
+});
+
+describe('ungrounded gate', () => {
+    it('forces Neutral when Entry has no cite', () => {
+        const next = enforceUngroundedLevels({
+            direction: 'Long',
+            confidence: 'High',
+            entryPoints: [{ price: '100' }],
+            stopLoss: '90',
+            evidence: [],
+        } as any);
+        expect(next.confidence).toBe('Avoid');
+        expect(next.direction).toBe('Neutral');
+    });
+});
+
+describe('ticket size', () => {
+    it('zeros Avoid and halves a tight gate cap', () => {
+        expect(computeTicketSize({ confidence: 'Avoid', direction: 'Long' } as any).label).toBe('none');
+        expect(computeTicketSize({
+            confidence: 'Medium', direction: 'Long',
+            gateResult: { confidenceCap: 0.55 },
+        } as any).label).toBe('half');
+    });
+});
+
+describe('paper book', () => {
+    it('reports +1R when price travels the stop distance in favor', () => {
+        const p = paperPnlR({
+            direction: 'Long', confidence: 'High',
+            entryPoints: [{ price: '100' }], stopLoss: '90',
+        } as any, 110);
+        expect(p?.r).toBe(1);
+    });
+    it('flags two open Long alts', () => {
+        const row = (coin: string) => ({
+            analysis: { coinName: coin, direction: 'Long', confidence: 'High' },
+            outcome: TradeOutcome.PENDING,
+        });
+        expect(describeOpenBookRisk([row('ETHUSDT'), row('SOLUSDT')] as any)).toMatch(/Long alts/);
+    });
+});
+
+describe('prompt version stats', () => {
+    it('rolls win rate per stamped version', () => {
+        const stats = summarizePromptVersions([
+            { id: '1', timestamp: 't', outcome: TradeOutcome.WIN, promptVersion: 'pv-a', analysis: {} as any },
+            { id: '2', timestamp: 't', outcome: TradeOutcome.LOSS, promptVersion: 'pv-a', analysis: {} as any },
+            { id: '3', timestamp: 't', outcome: TradeOutcome.WIN, analysis: {} as any },
+        ]);
+        expect(stats).toEqual([{
+            version: 'pv-a', trades: 2, wins: 1, losses: 1, winRate: 50,
+            avgDeclared: null, avgRealized: 50,
+        }]);
     });
 });
 
@@ -125,5 +244,80 @@ describe('run gantt', () => {
         });
         expect(lanes.map(l => l.label)).toEqual(['Macro', 'Moderator']);
         expect(lanes[0].live).toBe(true);
+    });
+});
+
+describe('composer mentions', () => {
+    it('parses @lanes and /skills then formats a steer line', () => {
+        const intent = parseComposerIntent('@Macro /fade-wick BTC 4h');
+        expect(intent.lanes).toEqual(['Macro']);
+        expect(intent.skills).toEqual(['fade-wick']);
+        expect(intent.rest).toBe('BTC 4h');
+        expect(formatComposerSteer(intent)).toMatch(/Address Macro only/);
+        expect(formatComposerSteer(intent)).toMatch(/fade-wick/);
+    });
+});
+
+describe('approval inbox', () => {
+    it('collects autopilot and ungrounded items', () => {
+        const items = collectApprovalItems(
+            [{
+                id: 'm1',
+                text: '',
+                role: MessageRole.AI,
+                createdAt: '',
+                outcome: TradeOutcome.PENDING,
+                analysis: { coinName: 'BTC', validationWarnings: ['Ungrounded Entry'] } as any,
+            }],
+            { m1: { detail: 'TP1 hit', outcome: TradeOutcome.WIN, expiredOpen: false, detectedAt: '' } },
+        );
+        expect(items.some(i => i.kind === 'autopilot')).toBe(true);
+        expect(items.some(i => i.kind === 'ungrounded')).toBe(true);
+    });
+
+    it('stores always/deny coin rules', () => {
+        setAutoJournalRule('eth', 'always');
+        expect(autoJournalPolicyFor('ETH')).toBe('always');
+        setAutoJournalRule('eth', 'ask');
+        expect(autoJournalPolicyFor('ETH')).toBe('ask');
+    });
+});
+
+describe('if/then skills', () => {
+    it('parses IF THEN into a procedure', () => {
+        const clauses = parseIfThenClauses('IF 4h close loses 64000 THEN stand aside until a 15m reclaim.');
+        expect(clauses[0]?.ifCondition).toMatch(/64000/);
+        expect(clauses[0]?.thenAction).toMatch(/stand aside/);
+    });
+});
+
+describe('hybrid chart drift', () => {
+    it('caps High when spot is far from entry', () => {
+        const next = applyHybridChartDrift(
+            { direction: 'Long', confidence: 'High', entryPoints: [{ price: '100' }] } as any,
+            { marketData: { currentPrice: 108 } } as any,
+        );
+        expect(next.confidence).toBe('Low');
+        expect(next.validationWarnings?.[0]).toMatch(/drift/);
+    });
+});
+
+describe('skill craft', () => {
+    it('accepts a Grok-style skill JSON object', () => {
+        const skill = parseCraftedSkill({
+            name: 'VWAP reclaim short',
+            kind: 'avoid',
+            when: '15m close reclaims VWAP after a failed breakdown',
+            inputs: ['BTC', 'Short', '15m'],
+            steps: ['Wait for close', 'Require retest', 'Only then short'],
+            validate: 'VWAP still above the reclaim candle',
+            output: 'Avoid market shorts until retest',
+            approval: 'Human confirms size if leverage > 20x',
+            ifCondition: '15m close reclaims VWAP with rising volume',
+            thenAction: 'wait for a retest before shorting',
+        });
+        expect(skill?.steps).toHaveLength(3);
+        expect(formatCraftedSkillBody(skill!)).toMatch(/\*\*When:\*\*/);
+        expect(formatCraftedSkillBody(skill!)).toMatch(/\*\*Steps:\*\*/);
     });
 });

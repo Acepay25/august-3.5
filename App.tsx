@@ -27,6 +27,7 @@ import { useProviderConfigs } from './hooks/useProviderConfigs';
 import { useAppSettings } from './hooks/useAppSettings';
 import { useJournalUI } from './hooks/useJournalUI';
 import { useAutomations } from './hooks/useAutomations';
+import { useCompareRuns } from './hooks/useCompareRuns';
 import AutomationView from './components/automation/AutomationView';
 import AutomationEditorModal, { ModelOption } from './components/automation/AutomationEditorModal';
 import { PostMortemCandidate } from './components/modals/PostTradeUploadModal';
@@ -42,6 +43,7 @@ const StrategySearch = React.lazy(() => import('./components/shared/StrategySear
 const UserProfileManager = React.lazy(() => import('./components/settings/UserProfileManager'));
 const SavedAnalyses = React.lazy(() => import('./components/journal/SavedAnalyses'));
 const WatchListPanel = React.lazy(() => import('./components/analysis/WatchListPanel'));
+const ApprovalInbox = React.lazy(() => import('./components/analysis/ApprovalInbox'));
 const SettingsMenu = React.lazy(() => import('./components/settings/SettingsMenu'));
 const LiveStreamView = React.lazy(() => import('./components/analysis/LiveStreamView'));
 // (LogTradeModal was removed — the capture flow uses DataCaptureModal.)
@@ -67,8 +69,12 @@ import { buildModelIdToName, buildProviderNameToId, getFirstReadyProvider } from
 import { createNewConversation, DEFAULT_LEVERAGE, findReusableEmptyConversation } from './utils/conversationUtils';
 import { recalculateAnalysisMetrics } from './utils/analysisUtils';
 import { parseAppHash, serializeAppHash } from './utils/appHash';
-import { describeWatchTick } from './utils/watchTicks';
 import { appendWatchEpisode, collectWatchedSignals, toggleWatchOnMessage } from './utils/watchList';
+import { collectApprovalItems, setAutoJournalRule } from './utils/approvalInbox';
+import { takeSkillDraft } from './utils/skillDrafts';
+import { ingestCraftedSkill } from './services/learning/SkillMemoryService';
+import { buildRiskBook, formatRiskBookBadge } from './utils/riskBook';
+import { reconstructOpenings } from './utils/debateResume';
 import { processImagesForSummarization } from './utils/imageProcessor';
 import { extractLastJson } from './utils/jsonUtils';
 import { parseLevelProbabilities } from './schemas/tradeAnalysis';
@@ -102,6 +108,7 @@ import { initInvalidationRuleService, loadInvalidationRules } from './services/v
 import { PriceAlertService } from './services/ui/PriceAlertService';
 import { SetupWatchService, describeWatchTrigger } from './services/ui/SetupWatchService';
 import { OutcomeAutopilotService, AutopilotResolution } from './services/ui/OutcomeAutopilotService';
+import { useWatchSideEffects } from './hooks/useWatchSideEffects';
 import { getThinkingTradeId, updateThinkingOutcome, deleteThinkingByTrade } from './services/infrastructure/ThinkingStoreService';
 import { removeRulesForTrades } from './services/learning/LearningRulesService';
 import { clearAllCaches } from './services/infrastructure/responseCache';
@@ -161,6 +168,7 @@ const App: React.FC = () => {
         isRateLimited, setIsRateLimited,
     } = useUIState();
     const [isWatchListVisible, setIsWatchListVisible] = useState(false);
+    const [isApprovalInboxVisible, setIsApprovalInboxVisible] = useState(false);
     const applyingHashRef = useRef(false);
 
     // Settings initial tab — set by handleOpenJournal to open Settings → Journal directly
@@ -424,7 +432,7 @@ const App: React.FC = () => {
                 ? { view: 'market' as const }
                 : isSettingsMenuVisible
                     ? { view: 'settings' as const }
-                    : isWatchListVisible
+                    : isWatchListVisible || isApprovalInboxVisible
                         ? { view: 'watch' as const }
                         : { view: 'chat' as const };
         if (route.view === 'chat' && !window.location.hash) return;
@@ -1046,7 +1054,7 @@ const App: React.FC = () => {
             const target = e.target as HTMLElement | null;
             const isTyping = !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable);
             if (isTyping) return;
-            const anyOverlayOpen = isSettingsMenuVisible || isLiveMarketVisible || isCommandPaletteOpen || isSavedGalleryOpen || isUserModalOpen || isAdvancedAnalyticsOpen || isVisionDataVisible || isStrategySearchVisible || isSavedAnalysesVisible || isVersionHistoryVisible || isWatchListVisible;
+            const anyOverlayOpen = isSettingsMenuVisible || isLiveMarketVisible || isCommandPaletteOpen || isSavedGalleryOpen || isUserModalOpen || isAdvancedAnalyticsOpen || isVisionDataVisible || isStrategySearchVisible || isSavedAnalysesVisible || isVersionHistoryVisible || isWatchListVisible || isApprovalInboxVisible;
             if (anyOverlayOpen) {
                 // Overlays with their own document-level Esc handlers
                 // (SettingsMenu, command palette, Journal, LiveMarket, dialogs)
@@ -1058,6 +1066,7 @@ const App: React.FC = () => {
                 if (isStrategySearchVisible) setIsStrategySearchVisible(false);
                 if (isSavedAnalysesVisible) setIsSavedAnalysesVisible(false);
                 if (isWatchListVisible) setIsWatchListVisible(false);
+                if (isApprovalInboxVisible) setIsApprovalInboxVisible(false);
                 if (isVersionHistoryVisible) setIsVersionHistoryVisible(false);
                 return;
             }
@@ -1071,21 +1080,15 @@ const App: React.FC = () => {
         };
         document.addEventListener('keydown', onKeyDown);
         return () => document.removeEventListener('keydown', onKeyDown);
-    }, [isAnalysisInProgress, isPostMortemInProgress, handleCancelAll, toast, isSettingsMenuVisible, isLiveMarketVisible, isCommandPaletteOpen, isSavedGalleryOpen, isUserModalOpen, isAdvancedAnalyticsOpen, isVisionDataVisible, isStrategySearchVisible, isSavedAnalysesVisible, isVersionHistoryVisible, isWatchListVisible]);
+    }, [isAnalysisInProgress, isPostMortemInProgress, handleCancelAll, toast, isSettingsMenuVisible, isLiveMarketVisible, isCommandPaletteOpen, isSavedGalleryOpen, isUserModalOpen, isAdvancedAnalyticsOpen, isVisionDataVisible, isStrategySearchVisible, isSavedAnalysesVisible, isVersionHistoryVisible, isWatchListVisible, isApprovalInboxVisible]);
 
-    // ─── Side-by-side compare ──────────────────────────────────────────────
-    const [compareState, setCompareState] = useState<{ primaryId: string; secondaryId: string | null } | null>(null);
-    const handleCompareAnalysis = useCallback((messageId: string) => {
-        const analyses = messages.filter(m => m.analysis);
-        const idx = analyses.findIndex(m => m.id === messageId);
-        const previous = idx > 0 ? analyses[idx - 1] : analyses.find(m => m.id !== messageId);
-        setCompareState({ primaryId: messageId, secondaryId: previous?.id ?? null });
-    }, [messages]);
-    const handlePickSecondary = useCallback((messageId: string) => {
-        setCompareState(prev => prev ? { ...prev, secondaryId: messageId } : prev);
-    }, []);
-    const comparePrimary = compareState ? messages.find(m => m.id === compareState.primaryId) ?? null : null;
-    const compareSecondary = compareState?.secondaryId ? messages.find(m => m.id === compareState.secondaryId) ?? null : null;
+    const {
+        comparePrimary,
+        compareSecondary,
+        handleCompareAnalysis,
+        handlePickSecondary,
+        closeCompare,
+    } = useCompareRuns(messages);
 
     // ─── View model reasoning (Think tab deep link) ────────────────────────
     // Opens the Trading Journal's Think tab focused on the reasoning records
@@ -2135,6 +2138,23 @@ const App: React.FC = () => {
     }, [activeConversationId, toast, updateMessages]);
 
     const watchedSignals = useMemo(() => collectWatchedSignals(conversationHistory), [conversationHistory]);
+    const watchOpenR = useMemo(() => {
+        const book = buildRiskBook(watchedSignals, loggedTrades, (symbol) => PriceAlertService.getCurrentPrice(symbol));
+        return formatRiskBookBadge(book);
+    }, [watchedSignals, loggedTrades]);
+
+    const handleFollowUpTicket = useCallback((messageId: string, text: string) => {
+        const msg = messagesRef.current.find(m => m.id === messageId);
+        const analysis = msg?.analysis;
+        const ocr = (msg?.ocrCache?.texts || []).join('\n').slice(0, 800);
+        const openings = reconstructOpenings(msg?.debateTurns || [])
+            .map(s => `${s.name}: ${s.opening.slice(0, 280)}`)
+            .join('\n');
+        const hidden = analysis
+            ? `Follow-up on ${analysis.coinName || 'setup'} ${analysis.direction} SL ${analysis.stopLoss || '—'}. Do not re-open the tape; answer the user only.\n${openings ? `Prior openings:\n${openings}\n` : ''}${ocr ? `OCR:\n${ocr}` : ''}`
+            : 'Follow-up on the latest ticket.';
+        stableHandleSendMessage(text, [], hidden, { followUpFromMessageId: messageId });
+    }, [stableHandleSendMessage]);
 
     const handleOpenWatchedSignal = useCallback((conversationId: string, messageId: string) => {
         handleLoadConversation(conversationId);
@@ -2510,7 +2530,9 @@ const App: React.FC = () => {
                     lastCompletedRound: round,
                     savedAt: new Date().toISOString(),
                     analystNames: [...new Set(turns.filter(t => t.speaker !== 'System' && t.speaker !== 'Moderator').map(t => t.speaker))],
+                    laneDrafts: {},
                 },
+                ocrCache: ai.ocrCache,
                 text: `Forked from round ${round}. Continue debate to resume from here.`,
             },
         ];
@@ -2735,30 +2757,25 @@ const App: React.FC = () => {
     // Register PENDING analyses for automatic SL/TP detection; resolutions
     // surface in the chat via chatContext for inline one-click confirmation.
     const [autopilotResolutions, setAutopilotResolutions] = useState<Record<string, AutopilotResolution>>({});
-
+    const confirmAutopilotRef = useRef<(messageId: string) => void>(() => {});
+    const [skillDraftNonce, setSkillDraftNonce] = useState(0);
     useEffect(() => {
-        const unsubscribe = OutcomeAutopilotService.subscribe((messageId, resolution) => {
-            setAutopilotResolutions(prev => ({ ...prev, [messageId]: resolution }));
-            toast.success('Autopilot: outcome detected', resolution.detail);
-        });
-        const unsubscribeTicks = OutcomeAutopilotService.subscribeTicks((messageId, price, previousPrice) => {
-            setConversationHistory(prev => prev.map(conv => {
-                const index = conv.messages.findIndex(m => m.id === messageId);
-                if (index < 0) return conv;
-                const msg = conv.messages[index];
-                if (!msg.watched || !msg.analysis) return conv;
-                const tick = describeWatchTick(msg.analysis, price, previousPrice);
-                if (!tick) return conv;
-                const nextMessages = [...conv.messages];
-                nextMessages[index] = appendWatchEpisode(msg, tick.kind, tick.detail);
-                return { ...conv, messages: nextMessages };
-            }));
-        });
-        return () => {
-            unsubscribe();
-            unsubscribeTicks();
-        };
-    }, [toast, setConversationHistory]);
+        const bump = (): void => setSkillDraftNonce(n => n + 1);
+        window.addEventListener('august-skill-drafts', bump);
+        return () => window.removeEventListener('august-skill-drafts', bump);
+    }, []);
+    const approvalItems = useMemo(
+        () => collectApprovalItems(messages, autopilotResolutions),
+        [messages, autopilotResolutions, skillDraftNonce],
+    );
+
+    useWatchSideEffects({
+        messagesRef,
+        setConversationHistory,
+        setAutopilotResolutions,
+        toast,
+        confirmAutopilot: confirmAutopilotRef,
+    });
 
     // P5: diff ids instead of re-registering every message on every stream
     // chunk — register() re-arms the 60s detection loop, so the old effect
@@ -2850,6 +2867,7 @@ const App: React.FC = () => {
         });
         toast.success('Trade logged', `${resolution.outcome} confirmed via autopilot`);
     }, [messages, confirmAutopilotOutcome, confirmAutopilotEntryNotHit, toast]);
+    confirmAutopilotRef.current = handleConfirmAutopilot;
 
     const runWatchListAction = useCallback((
         conversationId: string,
@@ -2922,6 +2940,7 @@ const App: React.FC = () => {
         onViewReasoning: handleViewReasoning,
         onReRunAnalysis: handleReRunAnalysis,
         onResumeDebate: handleResumeDebate,
+        onFollowUpTicket: handleFollowUpTicket,
         onForkDebate: handleForkDebate,
         onToggleWatch: (messageId: string) => handleToggleWatch(messageId),
         onReplacementChoice: handleReplacementChoice,
@@ -2929,7 +2948,7 @@ const App: React.FC = () => {
         onTodayReassessment: startTodayReassessment,
         todayReassessmentInFlight,
         lensConfig,
-    }), [typingMessageState, highlightedAnalysisId, expandedPostMortems, expandedPostMortemImages, savedAnalyses, activeFrameworks, copiedMessageId, modelIdToName, providerNameToId, handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy, handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, confidenceCalibration, handleRetryPostMortem, chatLeverage, autopilotResolutions, handleConfirmAutopilot, handleDismissAutopilot, handleCompareAnalysis, handleViewReasoning, handleReRunAnalysis, handleResumeDebate, handleForkDebate, handleToggleWatch, handleReplacementChoice, startTodayReassessment, todayReassessmentInFlight, lensConfig]);
+    }), [typingMessageState, highlightedAnalysisId, expandedPostMortems, expandedPostMortemImages, savedAnalyses, activeFrameworks, copiedMessageId, modelIdToName, providerNameToId, handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy, handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, confidenceCalibration, handleRetryPostMortem, chatLeverage, autopilotResolutions, handleConfirmAutopilot, handleDismissAutopilot, handleCompareAnalysis, handleViewReasoning, handleReRunAnalysis, handleResumeDebate, handleFollowUpTicket, handleForkDebate, handleToggleWatch, handleReplacementChoice, startTodayReassessment, todayReassessmentInFlight, lensConfig]);
 
     // ... (Rest of component remains unchanged) ...
     const isAnalysisProgressVisible = Boolean(
@@ -3125,6 +3144,7 @@ const App: React.FC = () => {
                             }}
                             onRunNow={() => automations.runNow(config)}
                             onToggleEnabled={() => void automations.toggleAutomationEnabled(config.id)}
+                            onPauseUntil={(until) => void automations.pauseAutomationUntil(config.id, until)}
                             onRefresh={() => automations.refreshRuns(config.id)}
                             modelIdToName={modelIdToName}
                             onConfirmOutcome={(run, outcome) => {
@@ -3189,6 +3209,9 @@ const App: React.FC = () => {
                 onCreateAutomation={() => automations.setEditor({ mode: 'create' })}
                 onOpenWatchList={() => setIsWatchListVisible(true)}
                 watchOpenCount={watchedSignals.filter(s => !s.outcome || s.outcome === TradeOutcome.PENDING).length}
+                watchOpenR={watchOpenR}
+                onOpenApprovals={() => setIsApprovalInboxVisible(true)}
+                approvalCount={approvalItems.length}
             />
 
             {/* Journal overlay — REMOVED: now rendered inside Settings → Journal tab */}
@@ -3257,7 +3280,44 @@ const App: React.FC = () => {
                     onConfirmAutopilot={(messageId, conversationId) => runWatchListAction(conversationId, { type: 'autopilot', messageId })}
                 />
             </React.Suspense>
-            {skipCandidate && <SkipTradeModal onClose={() => setSkipCandidate(null)} onConfirm={handleConfirmSkipTrade} skipReason={skipReason} setSkipReason={setSkipReason} correctedEntry={correctedEntry} setCorrectedEntry={setCorrectedEntry} />}
+            <React.Suspense fallback={null}>
+                <ApprovalInbox
+                    isVisible={isApprovalInboxVisible}
+                    onClose={() => setIsApprovalInboxVisible(false)}
+                    items={approvalItems}
+                    onAllow={(item) => {
+                        if (item.kind === 'skill') {
+                            const draft = takeSkillDraft(item.id);
+                            const trade = loggedTrades.find(t => t.id === item.messageId);
+                            if (draft && trade) {
+                                void ingestCraftedSkill(trade, draft.crafted, activeUsername || 'default');
+                                toast.success('Skill saved', draft.crafted.name);
+                            }
+                            return;
+                        }
+                        handleConfirmAutopilot(item.messageId);
+                    }}
+                    onDeny={(item) => {
+                        if (item.kind === 'skill') {
+                            takeSkillDraft(item.id);
+                            return;
+                        }
+                        handleDismissAutopilot(item.messageId);
+                    }}
+                    onAlways={(item) => {
+                        if (item.coin) setAutoJournalRule(item.coin, 'always');
+                        handleConfirmAutopilot(item.messageId);
+                    }}
+                    onNever={(item) => {
+                        if (item.coin) setAutoJournalRule(item.coin, 'deny');
+                        handleDismissAutopilot(item.messageId);
+                    }}
+                    onOpen={(item) => {
+                        setHighlightedAnalysisId(item.messageId);
+                        setIsApprovalInboxVisible(false);
+                    }}
+                />
+            </React.Suspense>
             {showMismatchModal && mismatchData && (
                 <OutcomeMismatchModal
                     isVisible={showMismatchModal}
@@ -3515,7 +3575,7 @@ const App: React.FC = () => {
                         analysisMessages={messages.filter(m => m.analysis)}
                         modelIdToName={modelIdToName}
                         onPickSecondary={handlePickSecondary}
-                        onClose={() => setCompareState(null)}
+                        onClose={closeCompare}
                     />
                 </React.Suspense>
             )}

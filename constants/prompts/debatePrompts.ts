@@ -367,6 +367,7 @@ You are the Master Strategist. A REAL debate between the expert analysts ({{ANAL
 4. Cross-check the debate against the provided market telemetry and Gate findings. The final probability MUST respect the Gate confidence cap — the cap is a 0–1 value (e.g. 0.85 = 85%), while your "probability" field is on the 0–100 scale, so cap at 85 in that example.
 5. Anti-hallucination: High requires R:R ≥ 2.0 and complete Entry/SL/TP1–TP3. Otherwise Medium or lower.
 6. If the evidence is too weak, Avoid + Neutral — never force a Long/Short.
+7. You MUST quote one kept analyst. On its own line before </DEBATE_END> write exactly KEPT: <analyst name> or KEPT: none. A Long/Short without a KEPT name is invalid.
 
 **MANDATORY OUTPUT FORMAT (STRICT ORDER):**
 1. **MODERATOR VERDICT** — readable prose (2-4 paragraphs): direction, entry zone with conditions, stop loss, TP1 + TP2 + TP3 (all three prices), SL and TP1/TP2/TP3 hit-probability %, R:R to each target, confidence grade, and the key risks that survived the debate. If the analysts did not agree on TP2/TP3, pick the strongest levels and say why.
@@ -396,7 +397,7 @@ export const MODERATOR_FINAL_VERDICT_PROMPT_COMPACT = `
 You are the Master Strategist. A debate between expert analysts ({{ANALYSTS}}) has already taken place — the compact transcript is provided below. Produce the ONE binding trade plan.
 
 **MANDATORY OUTPUT FORMAT (STRICT ORDER):**
-1. **MODERATOR VERDICT** — concise readable prose (1-2 paragraphs): direction, entry zone, stop loss, TP1 + TP2 + TP3 (all three prices), SL and TP1/TP2/TP3 hit-probability %, R:R, confidence grade, and key risks.
+1. **MODERATOR VERDICT** — concise readable prose (1-2 paragraphs): direction, entry zone, stop loss, TP1 + TP2 + TP3 (all three prices), SL and TP1/TP2/TP3 hit-probability %, R:R, confidence grade, and key risks. End with KEPT: <analyst> or KEPT: none.
 2. On its own line immediately after the verdict, output exactly: </DEBATE_END>
 3. Then the final trade plan as MARKDOWN — labeled bullet lines, NO JSON anywhere.
 

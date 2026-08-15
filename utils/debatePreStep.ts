@@ -6,6 +6,7 @@
 export interface DebatePreStepInput {
     gateResult?: 'PASS' | 'WARNING' | 'HALT' | 'REDUCE_SIZE' | string;
     reason?: string;
+    skillVeto?: string;
 }
 
 export interface DebatePreStepDecision {
@@ -14,6 +15,12 @@ export interface DebatePreStepDecision {
 }
 
 export const debatePreStep = (gate?: DebatePreStepInput | null): DebatePreStepDecision => {
+    if (gate?.skillVeto) {
+        return {
+            action: 'skip_to_verdict',
+            inject: `**PRE-STEP SKILL VETO:** ${gate.skillVeto} Skip remaining rebuttals. Verdict must stay Avoid/Neutral unless the skill is retired.`,
+        };
+    }
     const result = gate?.gateResult;
     if (result === 'HALT') {
         return {

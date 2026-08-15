@@ -1,9 +1,14 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { DebateTurn, TradeAnalysis, ConfidenceCalibration } from '../../types';
 import MarkdownContent from '../shared/MarkdownContent';
 import ConsensusPanel from './ConsensusPanel';
 import { explainSignalConfidence, extractSignalStrategyText, formatInvalidationLine, isNoTradeSignal, explainNoTrade, resolveLevelHitOdds, signalDirectionLabel } from '../../utils/analysisUtils';
 import { getCalibrationDrift } from '../../services/validation/ConfidenceCalibrationService';
+import { citeLevel } from '../../utils/levelEvidence';
+import { computeContractSize } from '../../utils/ticketSize';
+import { getHarnessSettings } from '../../utils/harnessSettings';
+import { ticketExpiryLine } from '../../utils/paperPnl';
+import { buildTicketSheet } from '../../utils/analysisReport';
 
 interface TradingSignalCardProps {
     analysis: TradeAnalysis;
@@ -14,6 +19,10 @@ interface TradingSignalCardProps {
     ensembleNote?: string;
     calibration?: ConfidenceCalibration;
     bare?: boolean;
+    priorAnalysis?: TradeAnalysis | null;
+    promptLane?: 'live' | 'control';
+    leverage?: number;
+    onFollowUp?: (text: string) => void;
 }
 
 const parsePrice = (value?: string): number | undefined => {
@@ -73,6 +82,7 @@ interface LevelRow {
     price: string;
     hit?: number;
     tone: 'entry' | 'sl' | 'tp';
+    cite: string;
 }
 
 const priceTone = (tone: LevelRow['tone']): string => {
@@ -96,6 +106,10 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
     ensembleNote,
     calibration,
     bare = false,
+    priorAnalysis,
+    promptLane,
+    leverage,
+    onFollowUp,
 }) => {
     const entry = analysis.entryPoints?.[0]?.price;
     const sl = analysis.stopLoss;
@@ -126,18 +140,66 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
 
     const levelRows = useMemo((): LevelRow[] => {
         const rows: LevelRow[] = [];
-        if (entry) rows.push({ label: 'Entry', price: formatLevel(entry), tone: 'entry' });
-        if (sl) rows.push({ label: 'Stop Loss', price: formatLevel(sl), hit: odds.sl, tone: 'sl' });
+        if (entry) rows.push({ label: 'Entry', price: formatLevel(entry), tone: 'entry', cite: citeLevel('Entry', entry, analysis.evidence, analysis.levelCitations).source });
+        if (sl) rows.push({ label: 'Stop Loss', price: formatLevel(sl), hit: odds.sl, tone: 'sl', cite: citeLevel('Stop Loss', sl, analysis.evidence, analysis.levelCitations).source });
         tps.slice(0, 3).forEach((tp, i) => {
             rows.push({
                 label: `TP${i + 1}`,
                 price: formatLevel(tp),
                 hit: odds.tp[i],
                 tone: 'tp',
+                cite: citeLevel(`TP${i + 1}`, tp, analysis.evidence, analysis.levelCitations).source,
             });
         });
         return rows;
-    }, [entry, sl, tps, odds]);
+    }, [entry, sl, tps, odds, analysis.evidence]);
+
+    const gateLine = useMemo(() => {
+        const bits: string[] = [];
+        const cap = analysis.gateResult?.confidenceCap;
+        if (typeof analysis.probability === 'number') {
+            if (cap !== undefined && cap < 1) {
+                bits.push(`${Math.round(analysis.probability)}% (capped · gate ${Math.round(cap * 100)}%)`);
+            }
+        }
+        if (analysis.originalConfidence && analysis.originalConfidence !== analysis.confidence) {
+            bits.push(`${analysis.originalConfidence} → ${analysis.confidence}`);
+        }
+        if (analysis.rrRatio === 0) bits.push('inverted SL · R:R 0');
+        const skill = (analysis.validationWarnings ?? []).find(w => /NOTEBOOK SKILL/i.test(w));
+        if (skill) bits.push(skill.replace(/^NOTEBOOK SKILL[^:]*:\s*/i, 'skill: ').slice(0, 80));
+        return bits.join(' · ');
+    }, [analysis]);
+
+    const size = useMemo(
+        () => computeContractSize(analysis, getHarnessSettings().equityUsd, leverage || 1),
+        [analysis, leverage],
+    );
+    const [nowMs, setNowMs] = useState(() => Date.now());
+    const [followUp, setFollowUp] = useState('');
+    useEffect(() => {
+        if (!analysis.createdAt || !analysis.validityDurationMinutes) return undefined;
+        const id = window.setInterval(() => setNowMs(Date.now()), 30_000);
+        return () => window.clearInterval(id);
+    }, [analysis.createdAt, analysis.validityDurationMinutes]);
+    const validityLine = ticketExpiryLine(analysis, nowMs)?.line || '';
+    const priorLine = useMemo(() => {
+        if (!priorAnalysis) return '';
+        const bits: string[] = [];
+        const prevEntry = priorAnalysis.entryPoints?.[0]?.price;
+        const curEntry = analysis.entryPoints?.[0]?.price;
+        if (prevEntry && curEntry && prevEntry !== curEntry) bits.push(`Entry ${formatLevel(prevEntry)} → ${formatLevel(curEntry)}`);
+        if (priorAnalysis.stopLoss && analysis.stopLoss && priorAnalysis.stopLoss !== analysis.stopLoss) {
+            bits.push(`SL ${formatLevel(priorAnalysis.stopLoss)} → ${formatLevel(analysis.stopLoss)}`);
+        }
+        const prevTp = priorAnalysis.takeProfit?.[0]?.price;
+        const curTp = analysis.takeProfit?.[0]?.price;
+        if (prevTp && curTp && prevTp !== curTp) bits.push(`TP1 ${formatLevel(prevTp)} → ${formatLevel(curTp)}`);
+        if (priorAnalysis.direction && priorAnalysis.direction !== analysis.direction) {
+            bits.push(`${priorAnalysis.direction} → ${analysis.direction}`);
+        }
+        return bits.join(' · ');
+    }, [priorAnalysis, analysis]);
 
     return (
         <div className={bare ? 'status-surface' : 'status-surface overflow-hidden rounded-2xl border border-white/10 bg-zinc-950/80'}>
@@ -160,7 +222,26 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
                 {rr !== undefined && (
                     <span className="text-[11px] tabular-nums text-zinc-400">R:R 1:{rr.toFixed(1)}</span>
                 )}
+                <span className="text-[11px] text-zinc-500">Size {analysis.positionSize?.line || size.line}</span>
+                {promptLane && (
+                    <span className="text-[10px] uppercase tracking-widest text-zinc-600">{promptLane}</span>
+                )}
+                {validityLine && <span className="text-[11px] text-zinc-500">{validityLine}</span>}
+                {gateLine && (
+                    <span className="w-full text-[11px] text-zinc-500">{gateLine}</span>
+                )}
                 <div className="ml-auto flex shrink-0 items-center gap-2">
+                    <button
+                        type="button"
+                        onClick={() => {
+                            const sheet = buildTicketSheet(analysis);
+                            void navigator.clipboard?.writeText(sheet);
+                        }}
+                        className="text-[11px] font-medium text-zinc-500 transition-colors hover:text-zinc-200"
+                        title="Copy a one-page ticket"
+                    >
+                        Copy ticket
+                    </button>
                     {isLatest && onReRun && (
                         <button
                             type="button"
@@ -189,7 +270,25 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
                             <span className="text-zinc-100">{analysis.grade}</span>
                         </Stat>
                     )}
+                    <Stat label="Size">
+                        <span className="text-zinc-100">{analysis.positionSize?.line || size.line}</span>
+                    </Stat>
                 </div>
+                {priorLine && (
+                    <p className="text-[11px] leading-relaxed text-zinc-600">vs last tape: {priorLine}</p>
+                )}
+                {analysis.dualScenarioAnalysis && (
+                    <div>
+                        <div className="ui-kicker">Other side</div>
+                        <p className="mt-1 text-[12px] leading-relaxed text-zinc-400">
+                            {analysis.dualScenarioAnalysis.selectedScenario === 'bearish' ? 'Kept short' : analysis.dualScenarioAnalysis.selectedScenario === 'bullish' ? 'Kept long' : 'Neutral'}
+                            {' · '}
+                            Long: {analysis.dualScenarioAnalysis.bullish.target} / inv {analysis.dualScenarioAnalysis.bullish.invalidation}
+                            {' · '}
+                            Short: {analysis.dualScenarioAnalysis.bearish.target} / inv {analysis.dualScenarioAnalysis.bearish.invalidation}
+                        </p>
+                    </div>
+                )}
 
                 {levelRows.length > 0 && (
                     <div className="overflow-hidden rounded-xl border border-white/10">
@@ -198,6 +297,7 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
                                 <tr className="border-b border-white/10 bg-zinc-800/80">
                                     <th className="px-3 py-2 text-[10px] font-medium uppercase tracking-wide text-zinc-500">Level</th>
                                     <th className="px-3 py-2 text-[10px] font-medium uppercase tracking-wide text-zinc-500">Price</th>
+                                    <th className="px-3 py-2 text-[10px] font-medium uppercase tracking-wide text-zinc-500">Cite</th>
                                     <th className="px-3 py-2 text-right text-[10px] font-medium uppercase tracking-wide text-zinc-500">Hit</th>
                                 </tr>
                             </thead>
@@ -207,6 +307,9 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
                                         <td className="px-3 py-2 text-[11px] font-medium text-zinc-400">{row.label}</td>
                                         <td className={`px-3 py-2 text-[15px] font-semibold tabular-nums ${priceTone(row.tone)}`}>
                                             {row.price}
+                                        </td>
+                                        <td className="max-w-[8rem] truncate px-3 py-2 text-[10px] text-zinc-600" title={row.cite}>
+                                            {row.cite}
                                         </td>
                                         <td className={`px-3 py-2 text-right text-[11px] font-bold tabular-nums ${hitTone(row.tone)}`}>
                                             {row.hit !== undefined ? `${row.hit}% hit` : '—'}
@@ -277,6 +380,27 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
 
                 {ensembleNote && (
                     <p className="border-t border-white/5 pt-3 text-[11px] leading-relaxed text-zinc-500">{ensembleNote}</p>
+                )}
+                {onFollowUp && (
+                    <form
+                        className="border-t border-white/5 pt-3"
+                        onSubmit={e => {
+                            e.preventDefault();
+                            const text = followUp.trim();
+                            if (!text) return;
+                            onFollowUp(text);
+                            setFollowUp('');
+                        }}
+                    >
+                        <label className="ui-kicker" htmlFor="signal-follow-up">Ask this ticket</label>
+                        <input
+                            id="signal-follow-up"
+                            value={followUp}
+                            onChange={e => setFollowUp(e.target.value)}
+                            placeholder="@Risk why this SL?"
+                            className="mt-1 w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-1.5 text-[13px] text-zinc-200 placeholder:text-zinc-600"
+                        />
+                    </form>
                 )}
             </div>
         </div>

@@ -94,7 +94,10 @@ export const saveAutomationLastSeen = async (username: string, at: number): Prom
 
 /** Next fire time after `from`, or null when the cron is invalid/no match. */
 export const getNextRunAt = (config: AutomationConfig, from: Date = new Date()): number | null => {
-    const next = nextCronTime(config.schedule.cron, from);
+    const start = config.pauseUntil && config.pauseUntil > from.getTime()
+        ? new Date(config.pauseUntil)
+        : from;
+    const next = nextCronTime(config.schedule.cron, start);
     return next ? next.getTime() : null;
 };
 

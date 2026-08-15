@@ -53,6 +53,7 @@ export interface AutomationConfig {
     analystModels: AutomationModelPick[];
     /** The debate moderator model. */
     moderatorModel: AutomationModelPick;
+    pauseUntil?: number;
     createdAt: number;
     updatedAt: number;
     /** Last completed run (epoch ms). */

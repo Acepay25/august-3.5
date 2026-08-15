@@ -86,7 +86,9 @@ npm run e2e              # npx playwright install chromium first
 
 ## Releases
 
-`.github/workflows/release.yml` runs on a **`v*` tag push** (not on every main push): typecheck, `typecheck:scripts`, tests, lint, Playwright, Vite build, then `electron-builder --win --publish always`.
+`.github/workflows/ci.yml` is the gate on every `main` push/PR (typecheck, scripts typecheck, tests, lint, Vite build).
+
+`.github/workflows/release.yml` runs on a **`v*` tag push**. It assumes CI already passed: validate tag === `package.json` version, Vite build, Playwright smoke, then `electron-builder --win --publish always`. Do not retag to “fix CI” — fix `main` first.
 
 The tag **must** equal `v` + `package.json` `version` (and `constants/version.ts` `APP_VERSION`). Example:
 
@@ -107,7 +109,7 @@ git tag v1.0.11 && git push origin main v1.0.11
 │   ├── market/                  # Live market
 │   ├── settings/                # Providers, models, memory files, session usage
 │   └── shared/                  # Header, ModelPicker, chrome
-├── hooks/                       # useAnalysisPipeline, trade logging, …
+├── hooks/                       # useAnalysisPipeline, useCompareRuns, trade logging, …
 ├── services/
 │   ├── providers/               # GenericProviderService + GenericAnalysisService only
 │   ├── analysis/                # Hybrid data, TA, Monte Carlo worker

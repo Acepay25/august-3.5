@@ -47,8 +47,8 @@ export const useToastActions = () => {
     // include `toast` in their own useCallback deps without re-creating
     // handlers on every render.
     return useMemo(() => ({
-        success: (title: string, message?: string) =>
-            addToast({ type: 'success', title, message }),
+        success: (title: string, message?: string, action?: Toast['action']) =>
+            addToast({ type: 'success', title, message, action, duration: action ? 15_000 : undefined }),
         error: (title: string, message?: string, action?: Toast['action']) =>
             addToast({ type: 'error', title, message, action, duration: 8000 }),
         warning: (title: string, message?: string) =>

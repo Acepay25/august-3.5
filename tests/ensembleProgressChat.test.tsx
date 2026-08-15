@@ -129,7 +129,7 @@ describe('EnsembleProgressChat', () => {
             makeAnalyst({ key: 'a1', displayName: 'Macro', status: 'analyzing' }),
         ]);
         render(<EnsembleProgressChat progress={progress} isLive />);
-        expect(screen.getByLabelText('Analyst timeline')).toBeDefined();
+        expect(screen.getByLabelText('Floor')).toBeDefined();
         expect(screen.getAllByText('Macro').length).toBeGreaterThan(0);
         expect(screen.getByText('Moderator')).toBeDefined();
     });

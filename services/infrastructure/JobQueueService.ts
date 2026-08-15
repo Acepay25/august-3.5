@@ -18,6 +18,7 @@ import {
     loadLearningRules,
     saveLearningRules
 } from '../learning/LearningRulesService';
+import { ingestIfThenFromTrade } from '../learning/SkillMemoryService';
 import { addRulesFromPostMortem } from '../validation/InvalidationRuleService';
 
 export enum JobType {
@@ -205,6 +206,9 @@ class JobQueueService {
             saveLearningRules(updatedStorage);
             console.log(`[JobQueue] Saved new learning rules.`);
         }
+
+        const notebookUser = (typeof localStorage !== 'undefined' && localStorage.getItem('last_active_user')) || 'default';
+        await ingestIfThenFromTrade(trade, notebookUser);
 
         // Invalidation rules: previously the LLM extraction path
         // (addRulesFromPostMortem) was never called in production, so

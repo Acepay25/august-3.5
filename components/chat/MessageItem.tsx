@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Message, MessageRole, TradeOutcome, SavedAnalysis, Conversation, ConfidenceCalibration, AnalystLensConfig } from '../../types';
+import { Message, MessageRole, TradeOutcome, SavedAnalysis, Conversation, ConfidenceCalibration, AnalystLensConfig, TradeAnalysis } from '../../types';
 import { ChevronDownIcon, LinkIcon, CheckIcon, BrainIcon } from '../shared/Icons';
 import MarkdownContent from '../shared/MarkdownContent';
 import LiveMarketDataView from '../market/LiveMarketDataView';
@@ -64,6 +64,7 @@ export interface ChatContextProps {
     onRetryFailedRun?: (userMessageId: string) => void;
     /** Continue an interrupted debate from the last completed round. */
     onResumeDebate?: (messageId: string) => void;
+    onFollowUpTicket?: (messageId: string, text: string) => void;
     /** Edit a sent user message's text in place (persisted to history). */
     onEditUserMessage?: (messageId: string, text: string) => void;
     /** Mid-debate analyst replacement: pick a candidate (providerId) or pass
@@ -87,6 +88,7 @@ export interface ChatContextProps {
     onDismissAutopilot?: (messageId: string) => void;
     latestMessageId?: string | null;
     lensConfig?: AnalystLensConfig;
+    priorAnalysisById?: Record<string, TradeAnalysis>;
 }
 
 const SmoothText: React.FC<{ text: string; animate: boolean }> = ({ text, animate }) => {
@@ -153,6 +155,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
         onToggleWatch,
         onRetryFailedRun,
         onResumeDebate,
+        onFollowUpTicket,
         onEditUserMessage,
         onReplacementChoice,
         onForkDebate,
@@ -259,7 +262,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
     return (
         <div
             id={`message-${message.id}`}
-            className={`status-surface flex items-start gap-2 sm:gap-4 my-2 sm:my-4 px-2 sm:px-4 transition-all duration-200 lg:max-w-4xl lg:mx-auto
+            className={`status-surface flex items-start gap-2 sm:gap-4 my-2 sm:my-4 px-2 sm:px-4 transition-all duration-200 ${isUserMessage ? 'lg:max-w-4xl' : 'lg:max-w-5xl'} lg:mx-auto
             ${message.role === MessageRole.USER ? 'justify-end' : message.role === MessageRole.SYSTEM ? 'justify-center' : ''} 
             ${isHighlighted ? 'rounded-2xl' : ''}
             ${isSelectionMode ? 'cursor-pointer hover:bg-zinc-800 rounded-xl py-2' : ''}
@@ -274,7 +277,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                             event.stopPropagation();
                             handleSelectionClick(event);
                         }}
-                        className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all focus-visible:ring-2 focus-visible:ring-cyan-400 ${isSelected ? 'bg-cyan-500 border-cyan-500' : 'border-zinc-500 bg-transparent'}`}
+                        className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all focus-visible:ring-2 focus-visible:ring-zinc-500 ${isSelected ? 'bg-zinc-200 border-zinc-200' : 'border-zinc-500 bg-transparent'}`}
                         aria-label={`${isSelected ? 'Deselect' : 'Select'} message`}
                         aria-pressed={isSelected}
                     >
@@ -285,7 +288,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
 
             <div className={`${isUserMessage
                 ? 'py-1 pl-1 pr-6 max-w-[85%] sm:max-w-3xl break-words relative group text-zinc-100'
-                : 'w-full max-w-3xl break-words relative group'
+                : 'w-full max-w-5xl break-words relative group'
                 } ${isUserMessage ? '' : bubbleClass}`}>
 
                 <>
@@ -296,7 +299,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     if (isSelectionMode) return;
                                     setExpandedPostMortems(prev => ({ ...prev, [message.id]: !prev[message.id] }))
                                 }}
-                                className="flex items-center justify-between w-full mb-3 group select-none border-b border-purple-500/20 pb-2 focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+                                className="flex items-center justify-between w-full mb-3 group select-none border-b border-purple-500/20 pb-2 focus-visible:ring-2 focus-visible:ring-zinc-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
                                 aria-expanded={!!expandedPostMortems[message.id]}
                                 aria-controls={`post-mortem-content-${message.id}`}
                             >
@@ -334,6 +337,18 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                             )}
 
                             {/* Live Market Data Component */}
+                            {!message.analysis && message.ensembleProgress && (
+                                <EnsembleProgressChat
+                                    progress={message.ensembleProgress}
+                                    modelIdToName={modelIdToName}
+                                    isLive={!!message.isDebating || !message.analysis}
+                                    compact={!!message.isDebating}
+                                    onRetryAnalyst={onReRunAnalysis ? () => onReRunAnalysis(message.id) : undefined}
+                                    debateTurns={debateTurns}
+                                    activeDebateSpeakers={message.activeDebateSpeakers}
+                                />
+                            )}
+
                             {liveMarketJson && (
                                 <div className="mb-4 sm:mb-6">
                                     <LiveMarketDataView jsonString={liveMarketJson} />
@@ -384,7 +399,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 </div>
                             )}
 
-                            {message.role === MessageRole.AI && !message.analysis && displayContent.trim() && (
+                            {message.role === MessageRole.AI && !message.analysis && displayContent.trim() && !message.isDebating && !message.ensembleProgress && (
                                 <div className="mb-2 flex items-center justify-between gap-2">
                                     <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
                                         Final output
@@ -398,14 +413,14 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                         onChange={(e) => setEditDraft(e.target.value)}
                                         autoFocus
                                         rows={Math.min(8, Math.max(2, editDraft.split('\n').length))}
-                                        className="w-full bg-zinc-950 border border-cyan-500/40 rounded-lg p-2.5 text-sm text-zinc-100 outline-none focus:border-cyan-500 resize-y font-mono"
+                                        className="w-full bg-zinc-950 border border-white/20 rounded-lg p-2.5 text-sm text-zinc-100 outline-none focus:border-white/30 resize-y font-mono"
                                         aria-label="Edit message"
                                     />
                                     <div className="flex items-center gap-2">
                                         <button
                                             type="button"
                                             onClick={() => { onEditUserMessage?.(message.id, editDraft); setEditingMessageId(null); }}
-                                            className="px-3 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white text-[10px] font-bold uppercase tracking-widest transition-colors"
+                                            className="px-3 py-1 rounded-lg bg-zinc-200 hover:bg-zinc-100 text-zinc-950 text-[10px] font-bold uppercase tracking-widest transition-colors"
                                         >
                                             Save
                                         </button>
@@ -420,7 +435,10 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 </div>
                             ) : message.analysis ? (
                                 <div className="ui-panel">
-                                <div className="grid md:grid-cols-[minmax(0,1.4fr)_minmax(200px,280px)]">
+                                <div className="grid md:grid-cols-[minmax(220px,280px)_minmax(0,1fr)]">
+                                <div className="border-b border-white/5 md:border-b-0 md:border-r">
+                                    <DebateSummary debateTurns={debateTurns} analysis={message.analysis} />
+                                </div>
                                 <TradingSignalCard
                                     analysis={message.analysis}
                                     debateTurns={message.debateTurns}
@@ -429,13 +447,11 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     supplementMarkdown={supplementMarkdown}
                                     ensembleNote={ensembleNote}
                                     calibration={confidenceCalibration}
+                                    priorAnalysis={context.priorAnalysisById?.[message.id]}
+                                    promptLane={message.runStats?.promptLane}
+                                    onFollowUp={context.onFollowUpTicket ? (text) => context.onFollowUpTicket!(message.id, text) : undefined}
                                     bare
                                 />
-                                {debateTurns.length > 0 && (
-                                    <div className="border-t border-white/5 md:border-l md:border-t-0">
-                                        <DebateSummary debateTurns={debateTurns} analysis={message.analysis} />
-                                    </div>
-                                )}
                                 </div>
                                 <SetupLifecycleCard
                                     analysis={message.analysis}
@@ -470,7 +486,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 <div className="overflow-x-auto min-w-0">
                                     <MarkdownContent content={displayContent} className="text-zinc-100" />
                                 </div>
-                            ) : (
+                            ) : (message.isDebating || message.ensembleProgress) ? null : (
                                 <div className="prose prose-invert max-w-none whitespace-pre-wrap leading-[1.65] overflow-x-auto min-w-0 text-zinc-200" style={{ fontSize: '15px' }}>
                                     <SmoothText text={displayContent} animate={message.role === MessageRole.AI && context.latestMessageId === message.id && !message.analysis} />
                                 </div>
@@ -525,7 +541,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                             {message.postMortemFailedCandidate && onRetryPostMortem && (
                                 <button
                                     onClick={() => onRetryPostMortem(message.id)}
-                                    className="mt-3 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-md text-sm font-medium transition-colors flex items-center gap-2"
+                                    className="mt-3 px-4 py-2 bg-zinc-200 hover:bg-zinc-100 text-zinc-950 rounded-md text-sm font-medium transition-colors flex items-center gap-2"
                                 >
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -541,7 +557,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                             <button
                                                  type="button"
                                                  key={`${message.id}-img-${i}`}
-                                                 className="group relative aspect-video rounded-xl sm:rounded-2xl overflow-hidden border border-white/10 shadow-md bg-zinc-900 cursor-zoom-in focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+                                                 className="group relative aspect-video rounded-xl sm:rounded-2xl overflow-hidden border border-white/10 shadow-md bg-zinc-900 cursor-zoom-in focus-visible:ring-2 focus-visible:ring-zinc-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
                                                  onClick={() => {
                                                      if (isSelectionMode) return;
                                                      if (onViewImage) onViewImage(img);
@@ -567,18 +583,6 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 </div>
                             )}
 
-                            {/* Analyst launch (pre-debate) then the live/completed transcript. */}
-                            {!message.analysis && message.ensembleProgress && (
-                                <EnsembleProgressChat
-                                    progress={message.ensembleProgress}
-                                    modelIdToName={modelIdToName}
-                                    isLive={!!message.isDebating || !message.analysis}
-                                    compact={!!message.isDebating}
-                                    onRetryAnalyst={onReRunAnalysis ? () => onReRunAnalysis(message.id) : undefined}
-                                    debateTurns={debateTurns}
-                                    activeDebateSpeakers={message.activeDebateSpeakers}
-                                />
-                            )}
                             {(message.isDebating || debateTurns.length > 0) && (
                                 <DebateChat
                                     debateTurns={debateTurns}
@@ -683,7 +687,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                                     <button
                                                          type="button"
                                                          key={`${message.id}-pm-img-${i}`}
-                                                         className="group aspect-video rounded-xl overflow-hidden border border-white/10 bg-zinc-900 cursor-zoom-in focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+                                                         className="group aspect-video rounded-xl overflow-hidden border border-white/10 bg-zinc-900 cursor-zoom-in focus-visible:ring-2 focus-visible:ring-zinc-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
                                                          onClick={() => {
                                                              if (isSelectionMode) return;
                                                              if (onViewImage) onViewImage(img);
@@ -701,7 +705,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                             )}
 
 
-                            {Array.isArray(message.sources) && message.sources.length > 0 && <div className="mt-4 sm:mt-6 pt-4 border-t border-white/10"><h4 className="text-xs uppercase font-bold text-zinc-500 mb-2 sm:mb-3 tracking-widest">Reference Sources</h4><ul className="text-xs sm:text-sm space-y-2 sm:space-y-3">{message.sources.map((source, index) => (<li key={`${message.id}-src-${index}`}>{isSafeUrl(source.web.uri) ? (<a href={source.web.uri} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:text-cyan-300 hover:underline break-all flex items-center gap-2"><LinkIcon /> {source.web.title}</a>) : (<span className="text-cyan-400 break-all flex items-center gap-2"><LinkIcon /> {source.web.title}</span>)}</li>))}</ul></div>}
+                            {Array.isArray(message.sources) && message.sources.length > 0 && <div className="mt-4 sm:mt-6 pt-4 border-t border-white/10"><h4 className="text-xs uppercase font-bold text-zinc-500 mb-2 sm:mb-3 tracking-widest">Reference Sources</h4><ul className="text-xs sm:text-sm space-y-2 sm:space-y-3">{message.sources.map((source, index) => (<li key={`${message.id}-src-${index}`}>{isSafeUrl(source.web.uri) ? (<a href={source.web.uri} target="_blank" rel="noopener noreferrer" className="text-zinc-300 hover:text-zinc-100 hover:underline break-all flex items-center gap-2"><LinkIcon /> {source.web.title}</a>) : (<span className="text-zinc-300 break-all flex items-center gap-2"><LinkIcon /> {source.web.title}</span>)}</li>))}</ul></div>}
 
                         </div>
                 </>

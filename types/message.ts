@@ -85,6 +85,8 @@ export interface RunStats {
    * without it, editing a prompt globally could never be evaluated.
    */
   promptVersion?: string;
+  /** live = registry overrides; control = built-in prompts (A/B). */
+  promptLane?: 'live' | 'control';
   /** First analyst's Monte Carlo win rate (%), if computed. */
   mcWinRate?: number;
   /** First analyst's Monte Carlo expected value (R), if computed. */
@@ -149,6 +151,8 @@ export interface Message {
   createdAt: string; // ISO string timestamp for when the message was created
   images?: string[];
   imageSummaries?: string[];
+  /** Chart OCR text from the first vision pass — reuse instead of re-sending images. */
+  ocrCache?: { texts: string[] };
   analysis?: TradeAnalysis;
   sources?: GroundingChunk[];
   postMortem?: string;
@@ -224,7 +228,7 @@ export interface Message {
 
 export interface WatchEpisode {
   at: string;
-  kind: 'watched' | 'unwatched' | 'autopilot' | 'logged' | 'price' | 'invalidation';
+  kind: 'watched' | 'unwatched' | 'autopilot' | 'logged' | 'price' | 'invalidation' | 'expired';
   detail: string;
 }
 
@@ -232,9 +236,11 @@ export interface DebateCheckpoint {
   lastCompletedRound: number;
   savedAt: string;
   analystNames: string[];
+  /** In-flight lane text for the next incomplete round (resume mid-rebuttal). */
+  laneDrafts?: Record<string, { round: number; text: string }>;
 }
 
-export type DebateRunEventKind = 'round' | 'episode' | 'gate' | 'steer' | 'drop' | 'pre_step' | 'verdict' | 'resume';
+export type DebateRunEventKind = 'round' | 'episode' | 'gate' | 'steer' | 'drop' | 'pre_step' | 'verdict' | 'resume' | 'budget';
 
 export interface DebateRunEvent {
   at: string;

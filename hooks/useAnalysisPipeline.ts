@@ -65,11 +65,19 @@ import { listRetrievedMemorySources } from '../services/learning/MemoryRetrieval
 import { writeNotebookNoteFromRequest } from '../services/learning/NotebookWriterService';
 import { buildSimilarSetupsContext, buildRegimeWeightingContext } from '../services/learning/SetupMemoryService';
 import { generateMandatoryPatternCheck, generatePatternMemoryEnforcementContext } from '../services/learning/PatternMemorySynthesisService';
-import { applyNotebookSkillsToAnalysis } from '../services/learning/SkillMemoryService';
+import { applyNotebookSkillsToAnalysis, confirmedAvoidForSetup, titleFromMeta } from '../services/learning/SkillMemoryService';
 import { ANALYST_ROLE_DEFINITIONS, getLensPromptForStyle, getRoleForProvider, EnsembleModelSelection } from '../services/ui/AnalystLensService';
 import { buildHybridEnvelope, buildOcrEnvelope, envelopeKindForRole } from '../utils/debateEnvelopes';
 import { buildRecommendationContract } from '../utils/recommendationContract';
-import { debateTurnsToRoundTexts, lastCompletedRound, reconstructOpenings } from '../utils/debateResume';
+import { debateTurnsToRoundTexts, lastCompletedRound, laneDraftsFromTurns, reconstructOpenings } from '../utils/debateResume';
+import { parseComposerIntent, formatComposerSteer } from '../utils/composerMentions';
+import { parseKeptAnalyst } from '../utils/keptAnalyst';
+import { buildLevelCitations } from '../utils/levelEvidence';
+import { enforceUngroundedLevels } from '../utils/ungroundedGate';
+import { applyHybridChartDrift } from '../utils/hybridChartDrift';
+import { computeContractSize } from '../utils/ticketSize';
+import { getHarnessSettings } from '../utils/harnessSettings';
+import { beginPromptLane, endPromptLane } from '../services/infrastructure/PromptOverrideService';
 import { buildEnsembleAnalysts, buildAnalystFailureReport } from '../services/ui/EnsembleAnalystService';
 import { getEffectiveStyle } from '../services/ui/TradingStyleDetector';
 import GlobalLearningService from '../services/learning/GlobalLearningService';
@@ -385,7 +393,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
         const result = await analyzeTradingViewWithTransientRetry(config, {
             prompt,
-            images: imageFiles,
+            images: (params.imageSummaries?.length ?? 0) > 0 ? [] : imageFiles,
             imageSummaries: params.imageSummaries ?? [],
             chatHistory: params.chatHistory ?? [],
             finalTradeSummary: params.finalTradeSummary ?? null,
@@ -445,11 +453,16 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 reasoningProcesses: reasoningMap,
                 activeDebateSpeakers: { ...activeSpeakers },
                 debateRunLog: [...debateRunLogRef.current],
-                debateCheckpoint: currentTurns.length > 0 ? {
-                    lastCompletedRound: Math.max(0, ...currentTurns.map(t => t.round || 0)),
-                    savedAt: new Date().toISOString(),
-                    analystNames: [...new Set(currentTurns.filter(t => t.speaker !== 'System' && t.speaker !== 'Moderator').map(t => t.speaker))],
-                } : prev[messageIndex].debateCheckpoint,
+                debateCheckpoint: currentTurns.length > 0 ? (() => {
+                    const analystNames = [...new Set(currentTurns.filter(t => t.speaker !== 'System' && t.speaker !== 'Moderator').map(t => t.speaker))];
+                    const completed = lastCompletedRound(currentTurns, analystNames);
+                    return {
+                        lastCompletedRound: completed,
+                        savedAt: new Date().toISOString(),
+                        analystNames,
+                        laneDrafts: laneDraftsFromTurns(currentTurns, completed),
+                    };
+                })() : prev[messageIndex].debateCheckpoint,
             };
             const newMessages = [...prev];
             newMessages[messageIndex] = updatedMessage;
@@ -642,6 +655,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         };
         /** Continue an interrupted debate from persisted turns. */
         resumeMessageId?: string;
+        /** Same-thread ticket follow-up: reuse OCR, skip leftover composer charts. */
+        followUpFromMessageId?: string;
     }) => {
         const isAutomationRun = !!options?.automation;
         let stopTokenUsage: (() => void) | undefined;
@@ -675,7 +690,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             if (!isAutomationRun) {
                 const draft = typeof customPrompt === 'string' ? customPrompt : input;
                 if (draft.trim()) {
-                    steeringQueueRef.current = [...steeringQueueRef.current, draft.trim()];
+                    const intent = parseComposerIntent(draft.trim());
+                    steeringQueueRef.current = [...steeringQueueRef.current, formatComposerSteer(intent) || draft.trim()];
                     setSteeringNotes(steeringQueueRef.current);
                     setInput('');
                     toast.success?.('Queued for debate', 'Shown under the composer — applied at the next debate step.');
@@ -709,9 +725,18 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         } else if (typeof input === 'string') {
             effectiveInput = input;
         }
+        if (effectiveInput.trim()) {
+            const intent = parseComposerIntent(effectiveInput);
+            const steered = formatComposerSteer(intent);
+            if (steered) effectiveInput = steered;
+        }
 
         // Determine images source (state or override)
-        const imagesToUse = customImages || images;
+        const followSource = options?.followUpFromMessageId
+            ? (messagesRef.current.find(m => m.id === options.followUpFromMessageId)
+                || messages.find(m => m.id === options.followUpFromMessageId))
+            : undefined;
+        const imagesToUse = followSource ? [] : (customImages || images);
 
         if (loadingMessage || isSummarizing || (!effectiveInput.trim() && imagesToUse.length === 0) || isRateLimited) return;
 
@@ -870,6 +895,15 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             images: dataURLs,
             imageSummaries: imagesToUse.map(meta => meta.summary).filter(Boolean) as string[],
             ocrModelUsed: ocrModelsUsed.join(','),
+            ocrCache: (() => {
+                const texts = [
+                    ...imagesToUse.map(meta => meta.fullAnalysisText).filter((t): t is string => Boolean(t)),
+                    ...(resumeTarget?.ocrCache?.texts ?? []),
+                    ...(followSource?.ocrCache?.texts ?? []),
+                ];
+                const unique = [...new Set(texts)];
+                return unique.length > 0 ? { texts: unique } : undefined;
+            })(),
         };
 
         const ensembleMessageId = canResume && resumeTarget ? resumeTarget.id : `ensemble-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
@@ -900,6 +934,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             ensembleProgress,
             ocrModelUsed: userMessage.ocrModelUsed,
             imageSummaries: userMessage.imageSummaries,
+            ocrCache: userMessage.ocrCache,
             modelsUsed: (canResume && resumeTarget?.modelsUsed) || buildModelsUsedRecord(enabledProviders),
             isAccuracyMode: runAccuracyMode,
             isLensMode: runLensConfig?.enabled ?? false,
@@ -957,7 +992,9 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             setIsHybridLoading(false);
         }
 
+        let promptLane: 'live' | 'control' = 'live';
         try {
+            promptLane = beginPromptLane();
             const currentMessages = isAutomationRun
                 ? [...(options?.automation?.conversation.messages ?? []), userMessage]
                 : [...messagesRef.current, userMessage];
@@ -1290,7 +1327,10 @@ ${reflectionBlock}`
             // Chart analysis only runs in ensemble mode; otherwise the
             // message is handled as casual chat with the selected model.
             if (isChartAnalysisRequested && runEnsembleEnabled) {
-                const summaries = imagesToUse.map(meta => meta.fullAnalysisText).filter(Boolean) as string[];
+                const summaries = [
+                    ...imagesToUse.map(meta => meta.fullAnalysisText).filter((t): t is string => Boolean(t)),
+                    ...(userMessage.ocrCache?.texts ?? []),
+                ].filter((t, i, arr) => arr.indexOf(t) === i);
                 const processNewAnalysis = (analysis: TradeAnalysis): TradeAnalysis => {
                     const finalAnalysis = sanitizeTradeAnalysis(analysis);
                     finalAnalysis.originalStopLossPercentage = finalAnalysis.stopLossPercentage;
@@ -1538,6 +1578,20 @@ ${reflectionBlock}`
                         console.error('[ValidationGate] Validation failed:', validationError);
                     }
                     Object.assign(finalAnalysis, applyNotebookSkillsToAnalysis(finalAnalysis));
+                    finalAnalysis.levelCitations = buildLevelCitations(finalAnalysis);
+                    Object.assign(finalAnalysis, enforceUngroundedLevels(finalAnalysis));
+                    Object.assign(finalAnalysis, applyHybridChartDrift(finalAnalysis, freshHybridData || currentHybridData));
+                    const sized = computeContractSize(
+                        finalAnalysis,
+                        getHarnessSettings().equityUsd,
+                        activeConversation?.leverage || DEFAULT_LEVERAGE,
+                    );
+                    finalAnalysis.positionSize = {
+                        line: sized.line,
+                        riskUsd: sized.riskUsd,
+                        fraction: sized.fraction,
+                        label: sized.label,
+                    };
                     finalAnalysis.recommendationContract = buildRecommendationContract(finalAnalysis);
                     // ========== END VALIDATION GATE ==========
 
@@ -1925,6 +1979,14 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                         }
                     }
 
+                    const skillVetoMeta = confirmedAvoidForSetup({
+                        coin: fulfilledAnalysts[0]?.result?.analysis?.coinName || finalSymbol,
+                        direction: fulfilledAnalysts[0]?.result?.analysis?.direction,
+                        family: fulfilledAnalysts[0]?.result?.analysis?.detectedPatternFamily,
+                        pattern: fulfilledAnalysts[0]?.result?.analysis?.marketConditions?.pattern,
+                    });
+                    const skillVeto = skillVetoMeta ? titleFromMeta(skillVetoMeta) : undefined;
+
                     if (runAccuracyMode) {
                         // ACCURACY MODE — the moderator autoplays the whole
                         // simulated transcript. Guard: with zero fulfilled
@@ -2130,11 +2192,28 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                             (event) => {
                                 debateRunLogRef.current = [...debateRunLogRef.current, event].slice(-100);
                             },
-                            patternMemoryGate,
+                            patternMemoryGate || skillVeto
+                                ? { ...(patternMemoryGate ?? {}), skillVeto }
+                                : null,
                             useResume && resumeTarget ? {
-                                lastCompletedRound: resumeTarget.debateCheckpoint?.lastCompletedRound || lastCompletedRound(resumeTarget.debateTurns || []),
+                                lastCompletedRound: resumeTarget.debateCheckpoint?.lastCompletedRound
+                                    || lastCompletedRound(resumeTarget.debateTurns || [], resumeTarget.debateCheckpoint?.analystNames),
                                 seedRoundTexts: debateTurnsToRoundTexts(resumeTarget.debateTurns || []),
+                                laneDrafts: resumeTarget.debateCheckpoint?.laneDrafts,
                             } : undefined,
+                            () => {
+                                const cap = getHarnessSettings().debateCostCapUsd;
+                                if (cap <= 0) return false;
+                                let spent = 0;
+                                for (const [id, usage] of tokenByProvider) {
+                                    const cfg = providerConfigs.find(p => p.id === id);
+                                    spent += estimateCostUsd(usage, {
+                                        inputUsdPer1k: cfg?.inputUsdPer1k,
+                                        outputUsdPer1k: cfg?.outputUsdPer1k,
+                                    }) ?? 0;
+                                }
+                                return spent >= cap;
+                            },
                         );
                     }
 
@@ -2523,6 +2602,11 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                         const consensus = ensembleService.buildAnalystConsensus(allFulfilledAnalysts);
                         if (consensus) {
                             processedAnalysis.analystConsensus = ensembleService.attachVerdictCitations(consensus, processedAnalysis);
+                            Object.assign(processedAnalysis, ensembleService.enforceCitedVerdict(
+                                processedAnalysis,
+                                processedAnalysis.analystConsensus,
+                                parseKeptAnalyst(fullResponseText),
+                            ));
                         }
                         processedAnalysis.recommendationContract = buildRecommendationContract(processedAnalysis);
                     }
@@ -2572,6 +2656,18 @@ ${accuracyVerificationNote}`
                             startedAt: new Date(runStartedAt).toISOString(),
                             finishedAt: new Date().toISOString(),
                             durationMs: Date.now() - runStartedAt,
+                            promptVersion: computePromptVersion({
+                                accuracy: runAccuracyMode,
+                                ensemble: runEnsembleEnabled,
+                                hybrid: isHybridIntelligenceEnabled,
+                                lens: Boolean(runLensConfig?.enabled ?? lensConfig?.enabled),
+                                playbook: isPlaybookEnabledInPureAI,
+                                families: isFamiliesEnabledInPureAI,
+                                memory: isMemoryEnabledInPureAI,
+                                customEnsemble: Boolean(customEnsemblePrompt),
+                                promptLane,
+                            }),
+                            promptLane,
                             gateCap: capturedGateResult?.confidenceCap,
                             mcWinRate: perAIMC[0]?.result?.winRate,
                             mcEV: perAIMC[0]?.result?.expectedValue,
@@ -3010,6 +3106,7 @@ ${accuracyVerificationNote}`
                 options?.automation?.onError?.(safeMessage || 'Automation run failed.');
             }
         } finally {
+            endPromptLane();
             stopTokenUsage?.();
             automationSilentRef.current = false;
             if (analysisAbortController.current === currentAbortController) {

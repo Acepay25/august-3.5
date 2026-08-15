@@ -4,6 +4,7 @@ import { ChevronLeftIcon, TrashIcon, EditIcon, LoadingIcon, RefreshIcon } from '
 import { EmptyState } from '../ui/EmptyState';
 import AutomationRunCard, { RunOutcomeConfirm } from './AutomationRunCard';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
+import { getNextRunAt } from '../../services/automation/AutomationService';
 import { humanizeCron } from '../../services/automation/cronParser';
 import { Bookmark, Play } from 'lucide-react';
 
@@ -23,10 +24,11 @@ const AutomationView: React.FC<{
     onDelete: () => void;
     onRunNow: () => void;
     onToggleEnabled: () => void;
+    onPauseUntil?: (untilMs: number) => void;
     onRefresh: () => void;
     modelIdToName: Record<string, string>;
     onConfirmOutcome?: (run: AutomationRun, outcome: RunOutcomeConfirm) => void;
-}> = ({ config, runs, isLoadingRuns, isRunning, onBack, onEdit, onDelete, onRunNow, onToggleEnabled, onRefresh, modelIdToName, onConfirmOutcome }) => {
+}> = ({ config, runs, isLoadingRuns, isRunning, onBack, onEdit, onDelete, onRunNow, onToggleEnabled, onPauseUntil, onRefresh, modelIdToName, onConfirmOutcome }) => {
     return (
         <div className="flex flex-col h-full bg-zinc-950">
             {/* Header — Back returns to the sidebar view */}
@@ -42,6 +44,16 @@ const AutomationView: React.FC<{
                     <span className="w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_6px_#22d3ee66]" />
                     <h3 className="text-sm font-bold text-white truncate">{config.name}</h3>
                     <span className="text-[10px] font-mono text-zinc-500 hidden sm:inline">{humanizeCron(config.schedule.cron)}</span>
+                    {config.enabled && (() => {
+                        const next = getNextRunAt(config);
+                        const paused = config.pauseUntil && config.pauseUntil > Date.now();
+                        return next ? (
+                            <span className="text-[10px] text-zinc-500">
+                                {paused ? 'Paused until ' : 'Next '}
+                                {new Date(paused ? config.pauseUntil! : next).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                        ) : null;
+                    })()}
                     <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest border ${config.enabled ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-zinc-800 border-white/10 text-zinc-500'}`}>
                         {config.enabled ? 'On' : 'Off'}
                     </span>
@@ -69,6 +81,15 @@ const AutomationView: React.FC<{
                         {isRunning ? <LoadingIcon className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
                         {isRunning ? 'Running…' : 'Run now'}
                     </button>
+                    {onPauseUntil && (
+                        <button
+                            type="button"
+                            onClick={() => onPauseUntil(Date.now() + 8 * 60 * 60 * 1000)}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-white/10 text-zinc-300 hover:text-white hover:border-white/25 text-[10px] font-bold uppercase tracking-widest transition-colors"
+                        >
+                            Pause 8h
+                        </button>
+                    )}
                     <button
                         onClick={onRefresh}
                         className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-white/10 text-zinc-300 hover:text-white hover:border-white/25 text-[10px] font-bold uppercase tracking-widest transition-colors"

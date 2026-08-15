@@ -1,11 +1,11 @@
 import { test, expect } from '@playwright/test';
 
-const seedWorkspace = async (page: import('@playwright/test').Page, name = 'Smoke Workspace'): Promise<void> => {
+const seedWorkspace = async (page: import('@playwright/test').Page, name = 'Smoke Workspace', withAnalysis = false): Promise<void> => {
     // Seed the web profile store before React boots. This keeps navigation
     // tests independent from the slow, asynchronous first-run initialization
     // path while the dedicated boot test still covers the profile picker.
     await page.goto('/favicon.ico');
-    await page.evaluate(async (username) => {
+    await page.evaluate(async ({ username, withAnalysis }) => {
         localStorage.clear();
         sessionStorage.clear();
         sessionStorage.setItem('activeUsername', username);
@@ -19,10 +19,38 @@ const seedWorkspace = async (page: import('@playwright/test').Page, name = 'Smok
             request.onsuccess = () => resolve(request.result);
             request.onerror = () => reject(request.error);
         });
+        const messages = withAnalysis ? [{
+            id: 'e2e-ai',
+            role: 'ai',
+            text: 'Setup',
+            createdAt: new Date().toISOString(),
+            outcome: 'PENDING',
+                    analysis: {
+                        coinName: 'BTCUSDT',
+                        direction: 'Long',
+                        confidence: 'Medium',
+                        probability: 60,
+                        strategy: 'e2e',
+                        activeStrategies: [],
+                        historicalCorrelation: '',
+                        marketConditions: { pattern: '', candleBehavior: '', timeframeAlignment: '', rsi: '', macd: '', sentiment: '' },
+                        entryPoints: [{ price: '100', description: 'e' }],
+                        stopLoss: '90',
+                        takeProfit: [{ price: '120' }],
+                    },
+        }] : [];
         const transaction = db.transaction('userProfiles', 'readwrite');
         transaction.objectStore('userProfiles').put({
             username,
-            conversations: [{ id: 'e2e-conversation', timestamp: Date.now(), messages: [], ocrModel: '', moderatorProviderId: '', moderatorModel: '', leverage: 100 }],
+            conversations: [{
+                id: 'e2e-conversation',
+                timestamp: Date.now(),
+                messages,
+                ocrModel: '',
+                moderatorProviderId: '',
+                moderatorModel: '',
+                leverage: 100,
+            }],
             tradeLog: [],
             savedAnalyses: [],
             tradeSummaries: [],
@@ -35,7 +63,7 @@ const seedWorkspace = async (page: import('@playwright/test').Page, name = 'Smok
             transaction.onerror = () => reject(transaction.error);
         });
         db.close();
-    }, name);
+    }, { username: name, withAnalysis });
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
     await expect(page.locator('#splash')).toHaveCount(0, { timeout: 15_000 });
@@ -79,6 +107,16 @@ test('first-run chat shows the onboarding card when no providers are configured'
     await page.getByRole('button', { name: 'Add API Key', exact: true }).click();
     await expect(page.getByRole('dialog', { name: 'Settings' })).toBeVisible({ timeout: 10_000 });
     await expect(page.getByRole('button', { name: 'AI setup', exact: true })).toBeVisible({ timeout: 10_000 });
+});
+
+test('seeded analysis can log a WIN through the capture dialog', async ({ page }) => {
+    await seedWorkspace(page, 'Journal Workspace', true);
+    await expect(page.getByText('Trading signal')).toBeVisible({ timeout: 15_000 });
+    await page.getByRole('button', { name: 'Win', exact: true }).click();
+    await expect(page.getByRole('dialog', { name: 'Capture trade data' })).toBeVisible({ timeout: 10_000 });
+    await page.locator('#pnl-amount').fill('25');
+    await page.getByRole('button', { name: /Log without data capture/i }).click();
+    await expect(page.getByRole('dialog', { name: 'Capture trade data' })).toHaveCount(0, { timeout: 10_000 });
 });
 
 test('journal and live market are reachable as labelled dialogs', async ({ page }) => {
