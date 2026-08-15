@@ -1,107 +1,147 @@
 # August 3.5
 
-Advanced AI-powered cryptocurrency trading analysis terminal. August 3.5 orchestrates multiple AI providers in ensemble debates to deliver high-confidence trade setups, post-trade forensics, and a persistent learning system that improves over time.
+React + TypeScript trading analysis app. Users attach chart screenshots (and optional notes); configured AI models produce a structured trade ticket. In **Team** mode, up to three analysts debate on a visible floor and a moderator writes the verdict.
 
-## Features
+There is **no `src/` directory** — application code lives at the repo root. Current app version is in `package.json` and `constants/version.ts` (keep those in sync).
 
-- **Multi-AI Ensemble Analysis** — Any number of configured AI providers (Gemini, DeepSeek, Zhipu, Groq, OpenRouter, OpenAI, Grok, custom OpenAI-compatible endpoints) analyze charts simultaneously, then a moderator synthesizes a final verdict via a streamed debate with challenge rounds.
-- **Accuracy Mode** — Locked model configurations for higher-accuracy analysis with sub-modes (original / pure AI).
-- **Analyst Lens System** — Assign specialized roles (Macro, Technical, Risk) to ensemble members.
-- **Hybrid Intelligence** — Real-time Binance market data + technical indicators injected into AI prompts.
-- **Monte Carlo Validation** — 1000-path GBM simulations stress-test every trade setup (runs in a Web Worker, non-blocking).
-- **Trade Journal** — Full lifecycle tracking: analysis → entry → outcome → post-mortem → insight extraction, with outcome autopilot (automatic TP/SL detection) and CSV / printable HTML report export.
-- **Learning System** — Multi-layered memory: pattern recognition, confidence calibration, mistake detection, IF/THEN rule extraction, and cross-session learning.
-- **Live Market** — Real-time Binance candlestick chart (TradingView), pattern detection, and price alerts.
-- **Multi-Platform** — Web (PWA), Desktop (Electron), Mobile (Capacitor/Android).
+## What it does
 
-## Tech Stack
+- **Team analysis (ensemble debate)** — Up to three models open, rebut, and answer clarification. A moderator chairs the floor (not a fourth Gantt row). Live UI: phase dots, moderator rail (`asking` / `posed` / `verdict`), three analyst lanes with latest thought. Finished card: **signal | board** (levels + each analyst Long/Neutral/Short + merge line), then a briefing with tabs `Openings | Rebuttals | Clarification | Verdict | All`. Trajectory / run log starts collapsed.
+- **Casual chat** — Single-model chat when Team is off (`Settings` or the command palette).
+- **Trading signal card** — Direction, confidence, **R:R** (from `rrRatio` or computed from entry / SL / first TP), levels table with hit odds, invalidation, contract. Semantic colors only inside `.status-surface` / `.analysis-card`.
+- **Accuracy mode** — Locked routing with sub-modes (`original` / `pure_ai`). Pure AI can optionally keep playbook, families, and memory.
+- **Analyst lenses** — Optional Macro / Technical / Risk roles on ensemble seats (`Settings → Roles`).
+- **Hybrid intelligence** — Live Binance OHLCV + indicators on `15m / 1h / 4h / 1d` injected as tables (not a `5m` lane anymore).
+- **Monte Carlo** — GBM paths in a Web Worker (`services/analysis/monteCarlo.worker.ts`) with a sync fallback.
+- **Watch list** — Pin open setups; ticks and optional re-debate when price moves.
+- **Compare runs** — Side-by-side stats (grade, gate, MC, tokens, estimated cost) vs the previous analysis in the thread.
+- **Journal** — Analysis → log → outcome → post-mortem. Outcome autopilot can detect TP/SL hits. CSV / HTML export.
+- **Learning / memory** — Pattern memory, confidence calibration, IF/THEN skills, notebook files (`Settings → Memory`), retrieval shown on the card (`memoryRetrieved`).
+- **Playbooks & prompt registry** — Uploaded strategy books and editable prompt layers (`Settings → Playbooks` / `Registry`).
+- **Session usage** — Token / cost estimates for the session (`Settings`, `utils/sessionUsage.ts`). Optional per-model USD/1k on the provider.
+- **Live market** — Binance chart, pattern scan, price alerts.
+- **Desktop / web / Android** — Electron (encrypted keys via `safeStorage`), Vite PWA, Capacitor.
+
+## How analysis is wired (for other developers)
+
+1. UI (`App.tsx`, `hooks/useAnalysisPipeline.ts`) builds the run: images, hybrid packet, memory retrieval, ensemble roster.
+2. **All AI I/O** goes through `services/providers/GenericProviderService.ts` (formats: `chat_completions` / `messages` / `responses`; retry + 120s timeout) and `services/providers/GenericAnalysisService.ts`.
+3. There are **no hardcoded provider clients**. Legacy per-provider services were removed. `AIProvider` ids are leftovers for old rows only.
+4. Users add providers in **Settings → Providers**. Config is `provider_configs_v1` via `ProviderConfigService`. Resolve models with `utils/providerUtils.ts` (`getFirstReadyProvider`, `sortModelsFreeFirst`, `mergeDiscoveredModels`).
+5. Analysis JSON is coerced in `schemas/tradeAnalysis.ts`, then sanitized (`sanitizeTradeAnalysis`). Persist `modelsUsed: Record<providerId, modelId>` — do not add new `geminiModelUsed`-style fields.
+6. Debate turns stream into `message.debateTurns` / `ensembleProgress` / `activeDebateSpeakers`. The live strip is `EnsembleProgressChat`; the briefing is `DebateChat`; the ticket is `TradingSignalCard` + `DebateSummary` (board).
+
+### Providers at runtime
+
+| Piece | Where |
+|--------|--------|
+| CRUD + encrypt/decrypt | `services/infrastructure/ProviderConfigService.ts` |
+| Electron `safeStorage` | `electron/preload.cjs` → main process |
+| Dev CORS proxy + SSE usage | `vite.config.ts` (`stream_options.include_usage` on streams) |
+| Vision / moderator / memory seats | Settings → Models (changing the provider list must **not** overwrite vision/moderator unless the user edits those seats) |
+
+API keys are **not** read from `.env` at runtime. Desktop encrypts keys at rest; web/Capacitor store plaintext in Preferences.
+
+## UI conventions
+
+- Tailwind v4 monochrome zinc. Color tokens in `index.css` `@theme` are remapped to gray.
+- **Exception:** `.status-surface` and `.analysis-card` restore real semantic colors (emerald WIN, rose LOSS, amber warning). Use that scope only when status meaning would be lost.
+- Do not put cyan/blue rings on the trade signal. Jump-to-analysis must not paint a blue edge.
+
+## Tech stack
 
 | Layer | Technology |
 |-------|-----------|
-| UI | React 19, TypeScript, Tailwind CSS v4 (monochrome zinc theme) |
+| UI | React 19, TypeScript (`strict`), Tailwind CSS v4 |
 | Charts | TradingView widget, lightweight-charts, recharts |
-| AI | OpenAI-compatible chat completions / Anthropic messages / Responses API via a single generic client |
-| Market Data | Binance REST/WebSocket |
-| Storage | SQLite (native via Capacitor), IndexedDB (web), Preferences (encrypted API keys on desktop via Electron safeStorage) |
-| Build | Vite 7 |
-| Desktop | Electron |
+| AI | Generic client (OpenAI-compatible, Anthropic messages, Responses) |
+| Market data | Binance REST / WebSocket |
+| Storage | SQLite (Capacitor native), IndexedDB (web), Preferences |
+| Build | Vite 7, Node **22+** (`engines.node`) |
+| Desktop | Electron (`electron/main.cjs`, auto-update) |
 | Mobile | Capacitor (Android) |
+| Tests | Vitest (jsdom), Playwright (`e2e/`) |
 
-## Getting Started
-
-### Prerequisites
-
-- Node.js 18+
-- API keys for at least one AI provider (configured in-app — no env vars needed)
-
-### Setup
+## Getting started
 
 ```bash
 npm install
-npm run dev        # Web on http://localhost:3000
+npm run dev              # http://localhost:3000
 ```
 
-Then open **Settings → Providers**, add a provider (name, base URL, API key, model IDs) and enable it. The first-ready provider becomes the default for vision, moderation and memory.
+Open **Settings → Providers**, add a base URL + key + model ids, enable the provider. Discover models hits `/models` (free ids sort first). Assign vision, moderator, and memory on **Settings → Models**.
 
-> Note: there are no required environment variables. API keys are stored in-app (encrypted on the Electron desktop build). A `.env.local` file is not needed.
-
-### Development
+No required env vars. Optional: `PORT` for `electron:dev` (default 3000).
 
 ```bash
-npm run dev             # Web (port 3000)
-npm run electron:dev    # Desktop (Electron + Vite)
-npm run test            # Vitest suite
-npm run typecheck       # tsc --noEmit
-npm run lint            # ESLint (errors only)
+npm run electron:dev     # Vite + Electron window
+npm run typecheck        # tsc --noEmit
+npm run typecheck:scripts
+npm run test             # vitest run
+npm run lint             # errors only; warnings are OK
+npm run build            # tsc --noEmit && vite build
+npm run preview
+npm run e2e              # npx playwright install chromium first
 ```
 
-### Production Builds
+## Releases
+
+`.github/workflows/release.yml` runs on a **`v*` tag push** (not on every main push): typecheck, `typecheck:scripts`, tests, lint, Playwright, Vite build, then `electron-builder --win --publish always`.
+
+The tag **must** equal `v` + `package.json` `version` (and `constants/version.ts` `APP_VERSION`). Example:
 
 ```bash
-npm run build                 # Web build (dist/)
-npm run preview               # Preview production build locally
-npm run electron:build        # Desktop installer (Windows NSIS)
-npm run e2e                   # Playwright smoke tests (npx playwright install chromium first)
-npx cap sync android && npx cap open android   # Android (via Capacitor)
+# after bumping package.json, package-lock.json, and constants/version.ts
+git tag v1.0.11 && git push origin main v1.0.11
 ```
 
-### Releases
-
-Tagging a `v*` tag and pushing triggers `.github/workflows/release.yml`: typecheck → tests → build → `electron-builder --publish always` (Windows installer published to a GitHub Release).
-
-```bash
-git tag v1.0.7 && git push origin main v1.0.7
-```
-
-## Project Structure
+## Project structure
 
 ```
-├── App.tsx                    # Main application component
-├── index.tsx                  # Entry point
-├── index.html                 # HTML shell
-├── index.css                  # Tailwind v4 + monochrome @theme tokens
-├── components/
-│   ├── analysis/              # Analysis results, debate view, live streams
-│   ├── chat/                  # Chat input, messages, conversation history
-│   ├── dashboards/            # Analytics, win rate, model performance, learning
-│   ├── journal/               # Trade log, performance review, saved analyses
-│   ├── market/                # Live market, charts, probability widgets
-│   ├── modals/                # Scenario simulator, data capture, trade modals
-│   ├── settings/              # Settings menu, provider manager, lens config
-│   └── shared/                # Header, icons, toast, error boundary
+├── App.tsx                      # Shell: conversations, settings, pipeline wiring (large)
+├── components/                  # One folder per domain
+│   ├── analysis/                # Signal card, debate floor, live strip, compare, watch
+│   ├── chat/                    # ChatArea, MessageItem, input, team modal
+│   ├── dashboards/              # Win rate, model performance, learning
+│   ├── journal/                 # Trade log, saved analyses
+│   ├── market/                  # Live market
+│   ├── settings/                # Providers, models, memory files, session usage
+│   └── shared/                  # Header, ModelPicker, chrome
+├── hooks/                       # useAnalysisPipeline, trade logging, …
 ├── services/
-│   ├── providers/             # GenericProviderService + GenericAnalysisService (single AI client)
-│   ├── analysis/              # Market data, TA, Monte Carlo (+ web worker), confluence
-│   ├── backtesting/           # Backtesting, model performance, SL optimizer
-│   ├── learning/              # Memory, insights, rules, reinforcement
-│   ├── ui/                    # Outcome autopilot, price alerts, trade sharing, lens
-│   ├── validation/            # Gate keeper, calibration, data integrity
-│   └── infrastructure/        # SQLite, Preferences, ProviderConfigService, backups
-├── hooks/                     # Custom React hooks
-├── constants/                 # Frameworks, family data, prompts
-├── schemas/                   # zod boundary schemas (AI response validation)
-├── utils/                     # JSON repair, sanitizers, provider utils, report export
-├── tests/                     # Vitest suites
-├── e2e/                       # Playwright smoke tests
-└── electron/                  # Electron main + preload (safeStorage, auto-update)
+│   ├── providers/               # GenericProviderService + GenericAnalysisService only
+│   ├── analysis/                # Hybrid data, TA, Monte Carlo worker
+│   ├── backtesting/             # Backtests, scenario simulator
+│   ├── learning/                # Skills, notebooks, retrieval
+│   ├── ui/                      # Autopilot, alerts, share image, lenses
+│   ├── validation/              # Gate, calibration
+│   └── infrastructure/          # SQLite, Preferences, ProviderConfig, backups
+├── constants/                   # Prompts, version
+├── schemas/                     # zod at the AI boundary
+├── types/                       # analysis, message, provider, trade, …
+├── utils/                       # sanitizers, providerUtils, runUsage, runGantt
+├── tests/                       # debate, schema, financial math, provider config
+├── scripts/                     # Manual / CI scripts (must typecheck: HybridTimeframe is 15m/1h/4h/1d)
+├── e2e/                         # Playwright
+└── electron/                    # main.cjs, preload.cjs
 ```
+
+## Tests worth knowing
+
+| Suite | Why |
+|-------|-----|
+| `tests/debateFlow.test.ts` | Ensemble generators with a mocked transport |
+| `tests/debateChat.test.tsx` / `ensembleProgressChat.test.tsx` | Floor + live strip |
+| `tests/tradingSignalCard.test.tsx` | Ticket, R:R, hit odds |
+| `tests/tradeAnalysisSchema.test.ts` | AI JSON coercion |
+| `tests/financialMath.test.ts` | Leverage / probability clamps |
+| `tests/providerConfigService.test.ts` | Provider CRUD (mocked Preferences) |
+| `tests/outcomeAutopilot.test.ts` | TP/SL auto-detect |
+
+When you change a feature, extend the matching suite, then `npm run typecheck && npm run test && npm run build`.
+
+## Agent / contributor notes
+
+Coding conventions for agents live in [`AGENTS.md`](./AGENTS.md). Prompt layers are documented in [`PROMPTS.md`](./PROMPTS.md).
+
+Do not commit API keys. Do not reintroduce per-provider service files. Do not surface raw provider error bodies — map them in `toFriendlyProviderError`.

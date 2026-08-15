@@ -2483,7 +2483,7 @@ const App: React.FC = () => {
         const index = msgs.findIndex(m => m.id === messageId);
         if (index < 0) return;
         const ai = msgs[index];
-        let userMsg = msgs.slice(0, index).reverse().find(m => m.role === MessageRole.USER);
+        const userMsg = msgs.slice(0, index).reverse().find(m => m.role === MessageRole.USER);
         const turns = (ai.debateTurns || []).filter(t => (t.round || 1) <= round);
         if (turns.length === 0) {
             toast.warning('Cannot fork', 'No debate turns up to that round.');

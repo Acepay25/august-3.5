@@ -382,9 +382,9 @@ async function fetchDiscoverPayload(config: {
         return { status: res.status, body };
     } catch (e) {
         if ((e as Error)?.name === 'AbortError') {
-            throw new Error('Model discovery timed out — check the base URL.');
+            throw new Error('Model discovery timed out — check the base URL.', { cause: e });
         }
-        throw new Error('Could not reach the provider — check the base URL and your network.');
+        throw new Error('Could not reach the provider — check the base URL and your network.', { cause: e });
     } finally {
         clearTimeout(timer);
     }

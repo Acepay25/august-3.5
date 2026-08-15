@@ -7,7 +7,7 @@
   },
   "type": "module",
   "main": "electron/main.cjs",
-  "description": "Advanced AI-powered cryptocurrency trading analysis terminal",
+  "description": "Team-debate trading analysis desktop app: runtime AI providers, hybrid market data, journal, and learning memory",
   "author": "August 3.5",
   "repository": {
     "type": "git",
