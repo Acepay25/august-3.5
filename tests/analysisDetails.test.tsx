@@ -44,6 +44,8 @@ describe('AnalysisDetails next steps', () => {
         expect(onPin).toHaveBeenCalledWith('m1');
         expect(screen.getByText('Re-debate')).toBeDefined();
         expect(screen.getByText('More')).toBeDefined();
+        fireEvent.click(screen.getByText('More'));
+        expect(screen.getByText('Set alerts')).toBeDefined();
         expect(screen.queryByText('View Probabilities')).toBeNull();
     });
 

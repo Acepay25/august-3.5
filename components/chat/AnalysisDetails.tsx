@@ -247,7 +247,7 @@ const AnalysisDetails: React.FC<AnalysisDetailsProps> = ({
                     </button>
                 )}
                 <SetupWatchControl analysis={analysis} messageId={messageId} />
-                <div className="relative">
+                <div className="contents">
                     <button
                         type="button"
                         onClick={() => setMoreOpen(o => !o)}
@@ -257,11 +257,11 @@ const AnalysisDetails: React.FC<AnalysisDetailsProps> = ({
                         More
                     </button>
                     {moreOpen && (
-                        <div className="absolute left-0 top-full z-30 mt-1 flex min-w-[11rem] flex-col gap-1 rounded-xl border border-white/10 bg-zinc-900 p-2 shadow-xl">
+                        <div className="basis-full w-full max-h-72 overflow-y-auto overscroll-contain rounded-xl border border-white/10 bg-zinc-900 p-2 shadow-xl">
                             {onSelectForProbability && (
                                 <button
                                     onClick={() => { setMoreOpen(false); onSelectForProbability(messageId); }}
-                                    className="rounded-lg px-3 py-1.5 text-left text-[11px] text-zinc-300 hover:bg-zinc-800"
+                                    className="w-full rounded-lg px-3 py-1.5 text-left text-[11px] text-zinc-300 hover:bg-zinc-800"
                                 >
                                     View probabilities
                                 </button>
@@ -269,7 +269,7 @@ const AnalysisDetails: React.FC<AnalysisDetailsProps> = ({
                             {onCompare && (
                                 <button
                                     onClick={() => { setMoreOpen(false); onCompare(messageId); }}
-                                    className="rounded-lg px-3 py-1.5 text-left text-[11px] text-zinc-300 hover:bg-zinc-800"
+                                    className="w-full rounded-lg px-3 py-1.5 text-left text-[11px] text-zinc-300 hover:bg-zinc-800"
                                 >
                                     Compare
                                 </button>
@@ -279,7 +279,7 @@ const AnalysisDetails: React.FC<AnalysisDetailsProps> = ({
                             </div>
                             <button
                                 onClick={() => { handleSetAlerts(); setMoreOpen(false); }}
-                                className="rounded-lg px-3 py-1.5 text-left text-[11px] text-zinc-300 hover:bg-zinc-800"
+                                className="w-full rounded-lg px-3 py-1.5 text-left text-[11px] text-zinc-300 hover:bg-zinc-800"
                             >
                                 {alertsSet ? 'Alerts set' : 'Set alerts'}
                             </button>

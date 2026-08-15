@@ -236,7 +236,7 @@ body {
 /* Shared column for messages + composer so they share one width. */
 .chat-column {
   width: 100%;
-  max-width: 42rem;
+  max-width: 48rem;
   margin-left: auto;
   margin-right: auto;
 }
