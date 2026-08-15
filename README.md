@@ -94,7 +94,7 @@ The tag **must** equal `v` + `package.json` `version` (and `constants/version.ts
 
 ```bash
 # after bumping package.json, package-lock.json, and constants/version.ts
-git tag v1.0.14 && git push origin main v1.0.14
+git tag v1.0.15 && git push origin main v1.0.15
 ```
 
 ## Project structure
