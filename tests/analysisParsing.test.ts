@@ -124,13 +124,13 @@ describe('analyzeTradingView response parsing', () => {
 
   it('salvages a reasoning-only stream instead of rejecting with "empty response"', async () => {
     // Reasoning-mode models sometimes emit chain-of-thought but never content
-    // deltas. The analyst must fulfill with its thinking, not be dropped from
-    // the debate before it starts.
+    // deltas. Keep the seat (no throw) but do not copy CoT into the answer.
     scriptStream([], ['Weighing 1h momentum against 4h structure... ', 'Entry zone 95000-95150 confirmed by wick rejection.']);
 
     const result = await analyzeTradingView(config, baseParams);
     expect(result.thoughtProcess).toContain('Weighing 1h momentum');
-    expect(result.finalOutput).toContain('Entry zone 95000-95150');
+    expect(result.thoughtProcess).toContain('Entry zone 95000-95150');
+    expect(result.finalOutput).toBe('');
   });
 
   it('rejects with an empty-response error when the stream yields nothing at all', async () => {
