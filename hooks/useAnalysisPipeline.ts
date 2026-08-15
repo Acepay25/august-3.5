@@ -21,7 +21,7 @@ import { getGateAnalysis, GateOutput } from '../services/validation/GateKeeperSe
 
 // Utils
 import { isQuotaError } from '../utils/errorUtils';
-import { recalculateAnalysisMetrics, sanitizeTradeAnalysis, clampProbabilityToGate, parsePrice, parseProseTradePlan, parseMarkdownTradePlan, tradePlanToAnalysis, stripPlanTags } from '../utils/analysisUtils';
+import { recalculateAnalysisMetrics, sanitizeTradeAnalysis, clampProbabilityToGate, parsePrice, parseProseTradePlan, parseMarkdownTradePlan, tradePlanToAnalysis, stripPlanTags, isBindingMarkdownPlan } from '../utils/analysisUtils';
 import { subscribeTokenUsage, mergeTokenUsage, emptyTokenUsage, estimateCostUsd, TokenUsage } from '../utils/tokenUsage';
 import { appendSessionUsage } from '../utils/sessionUsage';
 import { saveThinkingBatch, buildThinkingRecordId, getThinkingTradeId, getThinkingExemplars } from '../services/infrastructure/ThinkingStoreService';
@@ -29,8 +29,8 @@ import { offlineQueue } from '../services/infrastructure/OfflineQueueService';
 import { notifyAnalysisComplete } from '../services/infrastructure/CompletionNotifications';
 import { ThinkingRecord } from '../types/thinking';
 import { lensFromAnalystRole, lensFromSpeakerName } from '../utils/thinkingLens';
-import { splitThinkingFromOutput, looksLikeTradeOutput, stripLeakedScratchpad } from '../utils/thinkingSplit';
-import { sanitizeAIResponse } from '../utils/sanitizers';
+import { splitThinkingFromOutput, looksLikeTradeOutput } from '../utils/thinkingSplit';
+import { sanitizeAIResponseLight } from '../utils/sanitizers';
 import { buildModelIdToName, isProviderReady } from '../utils/providerUtils';
 import { DEFAULT_LEVERAGE } from '../utils/conversationUtils';
 import { loadLearningRules } from '../services/learning/LearningRulesService';
@@ -510,6 +510,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     const [loadingMessage, setLoadingMessage] = useState<string | null>(null);
     const [analysisSteps, setAnalysisSteps] = useState<AnalysisStep[]>([]);
     const reasoningMapRef = useRef<Record<string, string>>({});
+    const turnReasoningRef = useRef<Record<string, string>>({});
     const activeDebateSpeakersRef = useRef<Record<string, number>>({});
     const debateTurnsRef = useRef<DebateTurn[]>([]);
     const debateRunLogRef = useRef<DebateRunEvent[]>([]);
@@ -1611,6 +1612,7 @@ ${reflectionBlock}`
                         setLatestBacktestResult(null);
                     }
                     reasoningMapRef.current = {};
+                    turnReasoningRef.current = {};
                     activeDebateSpeakersRef.current = {};
                     const resumeSeeds = canResume && resumeTarget ? reconstructOpenings(resumeTarget.debateTurns || []) : [];
                     const useResume = resumeSeeds.filter(s => enabledProviders.some(p => p.name === s.name)).length >= 2;
@@ -2154,12 +2156,29 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                     reasoningMapRef.current.moderator = (reasoningMapRef.current.moderator || '') + reasoning;
                                     thoughtMap.moderator = reasoningMapRef.current.moderator;
                             },
-                            (speaker: string, reasoning: string) => {
+                            (speaker: string, reasoning: string, round?: number) => {
                                 // Rebuttal and clarification reasoning is keyed by speaker
                                 // so the debate chat can show it live. Deltas ACCUMULATE
                                 // (same as the analyst/moderator callbacks) — replacing
                                 // wiped everything but the last delta of the last round.
                                 reasoningMapRef.current[speaker] = (reasoningMapRef.current[speaker] || '') + reasoning;
+                                if (round && round > 0) {
+                                    const key = `${round}::${speaker}`;
+                                    turnReasoningRef.current[key] = (turnReasoningRef.current[key] || '') + reasoning;
+                                    debateTurnsRef.current = debateTurnsRef.current.map(turn =>
+                                        turn.speaker === speaker && turn.round === round
+                                            ? { ...turn, reasoning: turnReasoningRef.current[key] }
+                                            : turn
+                                    );
+                                }
+                                throttledDebateUpdate(
+                                    requestConversationId,
+                                    debateMessageId,
+                                    debateTurnsRef.current,
+                                    thoughtMap,
+                                    reasoningMapRef.current,
+                                    activeDebateSpeakersRef.current,
+                                );
                             },
                             (speaker: string, round: number, active: boolean) => {
                                 if (active) {
@@ -2292,7 +2311,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 currentTurns.push({
                                     speaker: speaker as DebateTurn['speaker'],
                                     round: autoplayRound > 0 ? autoplayRound : undefined,
-                                    text: sanitizeAIResponse(m[2].trim()),
+                                    text: sanitizeAIResponseLight(m[2].trim()),
                                 });
                             }
 
@@ -2312,7 +2331,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 const cleanSynthesis = synthesisContent.replace(/^(?:[*_~]*)(Moderator|Master Strategist)[^:\n]*?:\s*/i, '');
                                 const lastTurn = currentTurns[currentTurns.length - 1];
                                 if (cleanSynthesis && (!lastTurn || lastTurn.text !== cleanSynthesis)) {
-                                    currentTurns.push({ speaker: 'Moderator', round: autoplayRound + 1, text: sanitizeAIResponse(cleanSynthesis) });
+                                    currentTurns.push({ speaker: 'Moderator', round: autoplayRound + 1, text: sanitizeAIResponseLight(cleanSynthesis) });
                                 }
                             }
 
@@ -2327,6 +2346,17 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                         const turnTexts: Record<string, string> = {}; // `${round}::${speaker}` → accumulated text
                         const turnTimes: Record<string, string> = {};   // first-delta timestamp per turn (replay)
                         let moderatorRound = 0;
+
+                        const peelDebateTurn = (speaker: string, raw: string, key: string): { text: string; reasoning?: string } => {
+                            const split = splitThinkingFromOutput(
+                                turnReasoningRef.current[key] || reasoningMapRef.current[speaker] || '',
+                                raw,
+                            );
+                            return {
+                                text: sanitizeAIResponseLight(split.output),
+                                reasoning: split.thinking || undefined,
+                            };
+                        };
 
                         for await (const event of debateStream as AsyncGenerator<ensembleService.RealDebateTurnEvent, void, unknown>) {
                             if (!isCurrentRequest()) assertCurrentRequest();
@@ -2373,13 +2403,13 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                             .replace(/<\/?DEBATE_END>/gi, '')
                                             .trim()
                                         : text.trim();
-                                    const peeled = stripLeakedScratchpad(cleanedText);
+                                    const peeled = peelDebateTurn(speaker, cleanedText, k);
                                     return {
                                         speaker,
                                         round: parseInt(k.slice(0, sep), 10) || undefined,
                                         createdAt: turnTimes[k],
-                                        text: sanitizeAIResponse(peeled.visible),
-                                        reasoning: peeled.leaked || undefined,
+                                        text: peeled.text,
+                                        reasoning: peeled.reasoning,
                                     };
                                 })
                                 .filter(turn => Boolean(turn.text) || Boolean(turn.reasoning))
@@ -2415,13 +2445,13 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                                     .replace(/<\/?DEBATE_END>/gi, '')
                                                     .trim()
                                                 : text.trim();
-                                            const peeled = stripLeakedScratchpad(cleanedText);
+                                            const peeled = peelDebateTurn(speaker, cleanedText, k);
                                             return {
                                                 speaker,
                                                 round: parseInt(k.slice(0, sep), 10) || undefined,
                                                 createdAt: turnTimes[k],
-                                                text: sanitizeAIResponse(peeled.visible),
-                                                reasoning: peeled.leaked || undefined,
+                                                text: peeled.text,
+                                                reasoning: peeled.reasoning,
                                             };
                                         })
                                         .filter(turn => Boolean(turn.text) || Boolean(turn.reasoning))
@@ -2456,7 +2486,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                             : (lastModeratorTurn || fullResponseText);
                         try {
                             const plan = parseMarkdownTradePlan(candidate);
-                            if (!plan || (!plan.coinName && !plan.direction && !plan.entry && !plan.stopLoss && !plan.takeProfit)) {
+                            if (!plan || !isBindingMarkdownPlan(plan)) {
                                 throw new Error('No markdown trade plan found in the moderator response');
                             }
                             finalAnalysis = sanitizeTradeAnalysis({
@@ -2491,18 +2521,26 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                             .find(t => t.speaker === 'Moderator')?.text ?? '';
                         const rescueSource = lastModeratorTurn || fullResponseText;
                         const prosePlan = parseProseTradePlan(rescueSource);
+                        const rescuePlan = prosePlan ? { ...prosePlan } : null;
+                        const canRescue = Boolean(
+                            rescuePlan?.direction
+                            && rescuePlan.entry
+                            && rescuePlan.stopLoss
+                            && rescuePlan.takeProfit
+                            && !((rescuePlan.direction === 'Long' || rescuePlan.direction === 'Short') && /avoid/i.test(rescuePlan.confidence || '')),
+                        );
                         const fallbackStrategy = isModeratorError
                             ? `Connection Error: ${errorMessage}. Please try again.`
-                            : 'Parsing Error: The moderator failed to generate a valid JSON plan. Please review the debate transcript above for the consensus.';
+                            : 'Plan incomplete — the moderator markdown could not be parsed. Open the Floor for the debate.';
                         finalAnalysis = sanitizeTradeAnalysis({
-                            coinName: prosePlan?.coinName ?? finalSymbol ?? undefined,
-                            direction: prosePlan?.direction ?? pendingDirection ?? 'Neutral',
-                            confidence: prosePlan?.confidence ?? 'Low',
-                            probability: prosePlan?.probability,
-                            entryPoints: prosePlan?.entry ? [{ price: prosePlan.entry }] : undefined,
-                            stopLoss: prosePlan?.stopLoss,
-                            takeProfit: prosePlan?.takeProfit ? [{ price: prosePlan.takeProfit }] : undefined,
-                            strategy: prosePlan
+                            coinName: canRescue ? (prosePlan?.coinName ?? finalSymbol ?? undefined) : (finalSymbol ?? undefined),
+                            direction: canRescue ? (prosePlan?.direction ?? 'Neutral') : 'Neutral',
+                            confidence: canRescue ? (prosePlan?.confidence ?? 'Low') : 'Avoid',
+                            probability: canRescue ? prosePlan?.probability : undefined,
+                            entryPoints: canRescue && prosePlan?.entry ? [{ price: prosePlan.entry }] : undefined,
+                            stopLoss: canRescue ? prosePlan?.stopLoss : undefined,
+                            takeProfit: canRescue && prosePlan?.takeProfit ? [{ price: prosePlan.takeProfit }] : undefined,
+                            strategy: canRescue
                                 ? (stripPlanTags(rescueSource).slice(0, 3000) || fallbackStrategy)
                                 : fallbackStrategy,
                         });

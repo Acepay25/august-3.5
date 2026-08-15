@@ -3,7 +3,8 @@ import { DebateTurn, EnsembleAnalystProgress, EnsembleProgress, RunStats } from 
 import MarkdownContent from '../shared/MarkdownContent';
 import { formatModelDisplayName, formatSeatLabel } from '../../utils/providerUtils';
 import { buildAnalystGantt, lastThoughtSnippet } from '../../utils/runGantt';
-import { splitThinkingFromOutput } from '../../utils/thinkingSplit';
+import { splitThinkingFromOutput, visibleReplyFromThinking, looksLikePublicAnswer, looksLikeScratchpad, looksLikeTradeOutput } from '../../utils/thinkingSplit';
+import { DebateBotAvatar } from './DebateBotAvatar';
 
 interface EnsembleProgressChatProps {
     progress: EnsembleProgress;
@@ -28,7 +29,8 @@ const STATUS_TEXT: Record<EnsembleAnalystProgress['status'], string> = {
 const PHASES = ['Openings', 'Rebuttals', 'Verdict'] as const;
 
 const laneStatusText = (analyst: EnsembleAnalystProgress, answering: boolean): string => {
-    if (analyst.status === 'analyzing') return answering ? 'answering' : 'thinking';
+    if (answering) return 'speaking';
+    if (analyst.status === 'analyzing') return 'thinking';
     return STATUS_TEXT[analyst.status];
 };
 
@@ -78,15 +80,23 @@ const FadeStream: React.FC<{ text: string; live?: boolean; className?: string }>
     </div>
 );
 
-const ReplyBlock: React.FC<{ block: SeatBlock }> = ({ block }) => {
-    if (!block.text.trim()) {
+const ReplyBlock: React.FC<{ block: SeatBlock; fallbackThinking?: string }> = ({ block, fallbackThinking }) => {
+    const thinking = block.thinking || fallbackThinking || '';
+    const text = visibleReplyFromThinking(thinking, block.text || '');
+    const hideLiveScratch = Boolean(
+        block.live
+        && looksLikeScratchpad(text)
+        && !looksLikePublicAnswer(text)
+        && !looksLikeTradeOutput(text),
+    );
+    if (!text.trim() || hideLiveScratch) {
         if (!block.live) return null;
         return (
             <p className="px-3 py-1 text-xs italic text-zinc-600">Writing</p>
         );
     }
     return (
-        <div className="mx-2 rounded-lg border border-white/10 bg-zinc-950/50 px-3 py-2">
+        <div className="debate-speech mx-2 rounded-lg border border-white/10 bg-zinc-950/50 px-3 py-2">
             {block.replyTo && (
                 <p className="mb-1 text-[10px] font-medium uppercase tracking-widest text-zinc-500">
                     reply to {block.replyTo}
@@ -95,7 +105,28 @@ const ReplyBlock: React.FC<{ block: SeatBlock }> = ({ block }) => {
             {!block.live && (
                 <p className="mb-1 text-[11px] text-zinc-500">Final output</p>
             )}
-            <FadeStream text={block.text} live={block.live} className="text-sm leading-6 text-zinc-200" />
+            <FadeStream text={text} live={block.live} className="text-sm leading-6 text-zinc-200" />
+        </div>
+    );
+};
+
+const ThoughtCloud: React.FC<{ text: string; live?: boolean; inline?: boolean }> = ({ text, live, inline }) => {
+    const snippet = lastThoughtSnippet(text, 56);
+    if (!snippet) return null;
+    return (
+        <div className={`debate-thought ${live ? 'debate-thought-live' : ''} ${inline ? 'debate-thought-inline' : ''}`} aria-hidden="true">
+            <span className="debate-thought-puff debate-thought-puff-1" />
+            <span className="debate-thought-puff debate-thought-puff-2" />
+            <div className="debate-thought-cloud">
+                {live && (
+                    <span className="debate-thought-dots">
+                        <span />
+                        <span />
+                        <span />
+                    </span>
+                )}
+                <span className="debate-thought-text" data-thought={snippet} />
+            </div>
         </div>
     );
 };
@@ -119,6 +150,7 @@ const SeatChat: React.FC<{
     modelName: string;
     status: string;
     live: boolean;
+    speaking?: boolean;
     thinking: string;
     blocks: SeatBlock[];
     defaultOpen: boolean;
@@ -126,7 +158,8 @@ const SeatChat: React.FC<{
     usage?: string;
     onRetry?: () => void;
     error?: string;
-}> = ({ title, modelName, status, live, thinking, blocks, defaultOpen, expandLabel, usage, onRetry, error }) => {
+    floorLive?: boolean;
+}> = ({ title, modelName, status, live, speaking = false, thinking, blocks, defaultOpen, expandLabel, usage, onRetry, error, floorLive = false }) => {
     const [open, setOpen] = useState(defaultOpen);
     const snippet = lastThoughtSnippet(blocks[blocks.length - 1]?.text || thinking, 72);
     const rounds = useMemo(() => {
@@ -155,9 +188,13 @@ const SeatChat: React.FC<{
     const currentRound = rounds[rounds.length - 1];
     const pastRounds = rounds.slice(0, -1);
     const leftoverThinking = thinking && rounds.every(r => !r.thinking) ? thinking : '';
+    const headThinking = currentRound?.thinking || leftoverThinking || thinking;
+    const thinkingNow = live && !speaking;
+    const showThoughtCloud = thinkingNow && Boolean(headThinking.trim());
+    const displayStatus = floorLive && !live && status !== 'unavailable' ? 'waiting their turn' : status;
 
     return (
-        <div className="border-t border-white/5">
+        <div className={`border-t border-white/5 ${live ? 'debate-seat-live' : floorLive ? 'debate-seat-wait' : ''}`}>
             <div className="flex items-start gap-1">
                 <button
                     type="button"
@@ -166,11 +203,15 @@ const SeatChat: React.FC<{
                     aria-expanded={open}
                     aria-label={`${open ? 'Collapse' : 'Expand'} ${expandLabel}`}
                 >
-                    <span className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${
-                        live ? 'animate-pulse bg-zinc-200' :
-                        status === 'unavailable' ? 'bg-zinc-600' :
-                        status === 'Completed' ? 'bg-zinc-400' : 'bg-zinc-700'
-                    }`} />
+                    <span className="relative mt-0.5 shrink-0">
+                        <DebateBotAvatar
+                            name={title}
+                            live={live}
+                            thinking={thinkingNow}
+                            speaking={speaking}
+                            size={36}
+                        />
+                    </span>
                     <span className="min-w-0 flex-1">
                         <span className="flex items-baseline gap-2">
                             <span className="min-w-0 truncate text-[13px] text-zinc-200">{title}</span>
@@ -179,7 +220,7 @@ const SeatChat: React.FC<{
                             )}
                         </span>
                         <span className="mt-0.5 block truncate text-[11px] text-zinc-500">
-                            {status}{usage ? ` · ${usage}` : ''}{!open && snippet ? ` · ${snippet}` : ''}
+                            {displayStatus}{usage ? ` · ${usage}` : ''}{!open && snippet ? ` · ${snippet}` : ''}
                         </span>
                     </span>
                 </button>
@@ -196,23 +237,39 @@ const SeatChat: React.FC<{
 
             {open && (
                 <div className="mx-3 mb-3 overflow-hidden rounded-xl border border-white/10 bg-zinc-900/70">
-                    <div className="flex items-center gap-2 border-b border-white/5 px-3 py-2">
-                        <button
-                            type="button"
-                            onClick={() => setOpen(false)}
-                            className="min-w-0 flex-1 truncate text-left text-[13px] text-zinc-200 hover:text-zinc-50"
-                            aria-label={`Collapse ${expandLabel}`}
-                        >
-                            {title}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setOpen(false)}
-                            className="shrink-0 text-[11px] text-zinc-500 hover:text-zinc-200"
-                            aria-label={`Close ${expandLabel}`}
-                        >
-                            Close
-                        </button>
+                    <div className="flex items-start gap-2 border-b border-white/5 px-3 py-2">
+                        <span className="relative mt-0.5 shrink-0">
+                            <DebateBotAvatar
+                                name={title}
+                                live={live}
+                                thinking={thinkingNow}
+                                speaking={speaking}
+                                size={44}
+                            />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                            <div className="flex items-start gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setOpen(false)}
+                                    className="min-w-0 flex-1 truncate pt-1 text-left text-[13px] text-zinc-200 hover:text-zinc-50"
+                                    aria-label={`Collapse ${expandLabel}`}
+                                >
+                                    {title}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setOpen(false)}
+                                    className="shrink-0 text-[11px] text-zinc-500 hover:text-zinc-200"
+                                    aria-label={`Close ${expandLabel}`}
+                                >
+                                    Close
+                                </button>
+                            </div>
+                            {showThoughtCloud && (
+                                <ThoughtCloud text={headThinking} live={live} inline />
+                            )}
+                        </div>
                     </div>
                     {leftoverThinking && <ThinkingDetails text={leftoverThinking} live={live} />}
                     <div className="flex max-h-[22rem] flex-col gap-2 overflow-y-auto py-2">
@@ -225,7 +282,13 @@ const SeatChat: React.FC<{
                                 )}
                                 <ThinkingDetails text={currentRound.thinking} live={currentRound.live || live} />
                                 <div className="flex flex-col gap-2">
-                                    {currentRound.blocks.map(block => <ReplyBlock key={block.id} block={block} />)}
+                                    {currentRound.blocks.map(block => (
+                                        <ReplyBlock
+                                            key={block.id}
+                                            block={block}
+                                            fallbackThinking={currentRound.thinking || leftoverThinking}
+                                        />
+                                    ))}
                                 </div>
                             </div>
                         )}
@@ -237,7 +300,9 @@ const SeatChat: React.FC<{
                                 </summary>
                                 <div className="mt-2 flex flex-col gap-2">
                                     <ThinkingDetails text={group.thinking} />
-                                    {group.blocks.map(block => <ReplyBlock key={block.id} block={block} />)}
+                                    {group.blocks.map(block => (
+                                        <ReplyBlock key={block.id} block={block} fallbackThinking={group.thinking} />
+                                    ))}
                                 </div>
                             </details>
                         ))}
@@ -320,6 +385,25 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
     }, [analystNames, debateTurns, modLive, reasoningProcesses.moderator]);
 
     const [floorOpen, setFloorOpen] = useState(true);
+    const floorLive = isLive && (anyAnalystLive || modLive);
+    const liveAnalyst = progress.analysts.find(a =>
+        a.status === 'analyzing' || Boolean(activeDebateSpeakers[a.displayName] || activeDebateSpeakers[a.providerName])
+    );
+    const liveAnalystSpeaking = Boolean(
+        liveAnalyst && (activeDebateSpeakers[liveAnalyst.displayName] || activeDebateSpeakers[liveAnalyst.providerName])
+    );
+    const modSpeaking = verdictLive || (modLive && moderatorBlocks.some(b => b.live && Boolean(b.text.trim())));
+    const turnCaption = !isLive
+        ? ''
+        : verdictLive
+            ? 'Moderator is delivering the verdict'
+            : modLive
+                ? (modSpeaking ? 'Moderator is speaking' : 'Moderator is thinking')
+                : liveAnalystSpeaking && liveAnalyst
+                    ? `${formatSeatLabel(liveAnalyst.displayName)} is speaking`
+                    : liveAnalyst
+                        ? `${formatSeatLabel(liveAnalyst.displayName)} is thinking`
+                        : 'Waiting for the next turn';
 
     if (hideSubagents || progress.analysts.length === 0) return null;
 
@@ -349,11 +433,50 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
 
             {floorOpen && (
                 <div>
+                    {isLive && (
+                        <>
+                            <div className="debate-roster" aria-hidden="true">
+                                <div className={`debate-roster-seat ${modLive ? 'is-live' : ''}`}>
+                                    <DebateBotAvatar
+                                        name="Moderator"
+                                        live={modLive}
+                                        thinking={modLive && !modSpeaking}
+                                        speaking={modSpeaking}
+                                        size={32}
+                                    />
+                                    <span className="debate-roster-name" data-name="Moderator" />
+                                </div>
+                                {progress.analysts.map(analyst => {
+                                    const answering = Boolean(activeDebateSpeakers[analyst.displayName] || activeDebateSpeakers[analyst.providerName]);
+                                    const live = analyst.status === 'analyzing' || answering;
+                                    const label = formatSeatLabel(analyst.displayName);
+                                    return (
+                                        <div key={analyst.key} className={`debate-roster-seat ${live ? 'is-live' : ''}`}>
+                                            <DebateBotAvatar
+                                                name={label}
+                                                live={live}
+                                                thinking={live && !answering}
+                                                speaking={answering && live}
+                                                size={32}
+                                            />
+                                            <span className="debate-roster-name" data-name={label} />
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                            {turnCaption && (
+                                <p className="border-b border-white/5 px-3 py-1.5 text-[11px] text-zinc-400" aria-live="polite">
+                                    {turnCaption}
+                                </p>
+                            )}
+                        </>
+                    )}
                     <SeatChat
                         title="Moderator"
                         modelName="Floor"
                         status={verdictLive ? 'verdict' : modLive ? 'asking' : moderatorBlocks.length > 0 ? 'posed' : 'Waiting'}
                         live={modLive}
+                        speaking={modSpeaking}
                         thinking={moderatorThinking}
                         blocks={moderatorBlocks}
                         defaultOpen={modLive || moderatorBlocks.length > 0}
@@ -361,10 +484,11 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
                         usage={runStats?.promptTokens || runStats?.completionTokens
                             ? `${((runStats.promptTokens ?? 0) + (runStats.completionTokens ?? 0)).toLocaleString()} tok`
                             : undefined}
+                        floorLive={floorLive}
                     />
                     {progress.analysts.map((analyst) => {
                         const answering = Boolean(activeDebateSpeakers[analyst.displayName] || activeDebateSpeakers[analyst.providerName]);
-                        const live = analyst.status === 'analyzing';
+                        const live = analyst.status === 'analyzing' || answering;
                         const speakerTurns = debateTurns.filter(t => t.speaker !== 'Moderator' && matchesSpeaker(t.speaker, analyst));
                         const lastTurn = speakerTurns[speakerTurns.length - 1];
                         const openingRaw = analyst.finalOutput && analyst.finalOutput !== lastTurn?.text ? analyst.finalOutput : '';
@@ -378,7 +502,7 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
                         const openingSplit = splitThinkingFromOutput(streamedCot, openingRaw);
                         const turnSplits = speakerTurns.map((turn, index) => {
                             const streamed = turn.reasoning
-                                || (index === 0 ? streamedCot : '');
+                                || (index === 0 || index === speakerTurns.length - 1 ? streamedCot : '');
                             const split = splitThinkingFromOutput(streamed, turn.text || '');
                             return {
                                 id: `${analyst.key}-${index}`,
@@ -417,6 +541,7 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
                                 modelName={prettyModel && title.includes(prettyModel) ? analyst.providerName : prettyModel}
                                 status={laneStatusText(analyst, answering && live)}
                                 live={live}
+                                speaking={answering && live}
                                 thinking={thinking}
                                 blocks={blocks}
                                 defaultOpen={live || analyst.status === 'complete'}
@@ -424,6 +549,7 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
                                 usage={usage}
                                 onRetry={analyst.status === 'error' && onRetryAnalyst ? () => onRetryAnalyst(analyst.key) : undefined}
                                 error={analyst.error}
+                                floorLive={floorLive}
                             />
                         );
                     })}

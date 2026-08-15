@@ -11,9 +11,11 @@ const PLAN_RE = /FINAL TRADE PLAN|\b(?:Direction|Stop Loss|Take Profit(?:\s*[123
 const SCRATCHPAD_START_RE = /(?:^|\n)\s*(?:here(?:['’]s| is)\s+(?:my\s+)?(?:a\s+)?)?thinking\s+process\s*:/i;
 const SCRATCHPAD_META_RE = /Analyze User Input\s*:|Deconstruct (?:the )?Context|Current Round\s*:|YOUR TASK\b|The user (?:is asking|wants|asked)\b/i;
 const THINK_TAG_RE = /<(?:think|thinking|thought|reasoning|REASONING_SCRATCHPAD)|<\|begin_of_thought\||\[(?:THINKING|REASONING)\]|◁think▷/i;
-const LET_ME_THINK_RE = /(?:^|\n)\s*(?:let me think|let's think|thinking out loud|internal monologue|chain of thought|wait,\s+i\b)\b/i;
+const LET_ME_THINK_RE = /(?:^|\n)\s*(?:okay[,.]?\s+)?(?:so[,.]?\s+)?(?:let me think|let's think|thinking out loud|internal monologue|chain of thought|wait,\s+i\b)\b/i;
 const ANSWER_MARK_RE = /(?:^|\n)\s*(?:\*\*)?(?:answer|final(?:\s*output)?|response|conclusion|verdict|solution)(?:\*\*)?\s*[:.-]\s*/i;
-const META_PARA_RE = /^(?:Analyze User Input|Deconstruct|My State|Role\s*:|Current Round\s*:|YOUR TASK|Moderator's question|Here's a thinking|Let me think|The user (?:is asking|wants)|I need to (?:analyze|weigh|consider))/i;
+const META_PARA_RE = /^(?:Analyze User Input|Deconstruct|My State|Role\s*:|Current Round\s*:|YOUR TASK|Moderator's question|Here's a thinking|Let me think|The user (?:is asking|wants)|I need to (?:analyze|weigh|consider|answer|give|correct|state))/i;
+/** Prompt-echo / agent-scratchpad tells. Models trained on traces restate these instead of answering. */
+const PROMPT_ECHO_RE = /Analyze User Input\s*:|Deconstruct (?:the )?Context|YOUR TASK\b|Current Round\s*:|Moderator's question\s*:|thinking process\s*:|I(?:['’]m| am) in a debate|ensemble scenario|60-?100 words|plain prose(?: only)?|no JSON\s*\/?\s*XML|I need to (?:answer|give|correct|state)|I must (?:correct|answer)/i;
 
 export const looksLikeTradeOutput = (text: string): boolean => {
     if (!text || text.length < 40) return false;
@@ -112,15 +114,84 @@ const stripTags = (text: string): string => extractAndStripThinkBlocks(text).vis
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 
+export const looksLikePromptEcho = (text: string): boolean => PROMPT_ECHO_RE.test(text || '');
+
 export const looksLikeScratchpad = (text: string): boolean => {
     const raw = (text || '').trim();
     if (!raw) return false;
-    return SCRATCHPAD_START_RE.test(raw) || SCRATCHPAD_META_RE.test(raw) || THINK_TAG_RE.test(raw) || LET_ME_THINK_RE.test(raw);
+    return SCRATCHPAD_START_RE.test(raw)
+        || SCRATCHPAD_META_RE.test(raw)
+        || THINK_TAG_RE.test(raw)
+        || LET_ME_THINK_RE.test(raw)
+        || looksLikePromptEcho(raw);
+};
+
+/** A public debate/trade reply — not a restated prompt or planning paragraph. */
+export const looksLikePublicAnswer = (text: string): boolean => {
+    const raw = (text || '').trim();
+    if (!raw || looksLikePromptEcho(raw)) return false;
+    if (looksLikeTradeOutput(raw)) return true;
+    const words = raw.split(/\s+/).length;
+    if (words < 6 || META_PARA_RE.test(raw)) return false;
+    const hasCall = /\b(Long|Short|Neutral|Avoid|Buy|Sell)\b/i.test(raw);
+    const hasLevel = /\b(?:Entry|SL|TP\s*[123]|Stop\s*Loss|Take\s*Profit|R\s*[:/]\s*R)\b/i.test(raw);
+    return hasCall && hasLevel;
+};
+
+const stripNormalizedPrefix = (output: string, prefix: string): string => {
+    let i = 0;
+    let j = 0;
+    while (i < prefix.length && j < output.length) {
+        if (/\s/.test(prefix[i])) { i += 1; continue; }
+        if (/\s/.test(output[j])) { j += 1; continue; }
+        if (prefix[i] !== output[j]) return output;
+        i += 1;
+        j += 1;
+    }
+    if (i < prefix.length) return output;
+    return output.slice(j).trim();
+};
+
+const dropParagraphsAlreadyInThinking = (output: string, thinking: string): string => {
+    const thinkNorm = thinking.replace(/\s+/g, ' ');
+    if (!thinkNorm || !output.trim()) return output;
+    const paras = output.split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+    if (paras.length === 0) return output;
+    const kept = paras.filter(p => {
+        const n = p.replace(/\s+/g, ' ').trim();
+        if (n.length < 32) return true;
+        return !thinkNorm.includes(n.slice(0, Math.min(160, n.length)));
+    });
+    if (kept.length === 0) {
+        return looksLikePublicAnswer(output) || looksLikeTradeOutput(output) ? output : '';
+    }
+    return kept.join('\n\n');
+};
+
+/**
+ * What the Final output bubble may show. Thinking already on screen must
+ * never be copied into the reply — native CoT often repeats in the markdown
+ * content stream after the thinking channel has already filled.
+ */
+export const visibleReplyFromThinking = (thinking: string, output: string): string => {
+    const split = splitThinkingFromOutput(thinking || '', output || '');
+    let visible = split.output;
+    if (!visible) return '';
+    if (thinking) {
+        visible = stripNormalizedPrefix(visible, thinking);
+        visible = dropParagraphsAlreadyInThinking(visible, thinking);
+    }
+    if (visible && thinking && eq(visible, thinking)) return '';
+    if (visible && looksLikeScratchpad(visible) && !looksLikePublicAnswer(visible) && !looksLikeTradeOutput(visible)) {
+        return '';
+    }
+    return visible.trim();
 };
 
 /**
  * Peel "Here's a thinking process / Analyze User Input" dumps out of the
  * visible floor. If there is no real answer yet, visible is empty.
+ * Never promote a leftover planning paragraph just because it is long.
  */
 export const stripLeakedScratchpad = (text: string): { visible: string; leaked: string } => {
     const raw = (text || '').trim();
@@ -135,18 +206,16 @@ export const stripLeakedScratchpad = (text: string): { visible: string; leaked: 
     const answerAt = rest.search(ANSWER_MARK_RE);
     if (answerAt >= 0) {
         const after = rest.slice(answerAt).replace(ANSWER_MARK_RE, '').trim();
-        return {
-            visible: [before, after].filter(Boolean).join('\n\n'),
-            leaked: rest.slice(0, answerAt).trim(),
-        };
+        if (!after || looksLikePublicAnswer(after) || looksLikeTradeOutput(after) || !looksLikePromptEcho(after)) {
+            return {
+                visible: [before, after].filter(Boolean).join('\n\n'),
+                leaked: rest.slice(0, answerAt).trim(),
+            };
+        }
     }
 
     const paras = rest.split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
-    const tail = [...paras].reverse().find(p =>
-        !META_PARA_RE.test(p)
-        && !looksLikeScratchpad(p)
-        && p.split(/\s+/).length >= 12
-    );
+    const tail = [...paras].reverse().find(p => looksLikePublicAnswer(p));
     if (tail) {
         return {
             visible: [before, tail].filter(Boolean).join('\n\n'),
@@ -154,8 +223,8 @@ export const stripLeakedScratchpad = (text: string): { visible: string; leaked: 
         };
     }
 
-    if (before) return { visible: before, leaked: rest };
-    if (looksLikeTradeOutput(raw)) return { visible: raw, leaked: '' };
+    if (before && looksLikePublicAnswer(before)) return { visible: before, leaked: rest };
+    if (looksLikeTradeOutput(raw) && !looksLikePromptEcho(raw)) return { visible: raw, leaked: '' };
     return { visible: '', leaked: raw };
 };
 
@@ -225,10 +294,16 @@ export const splitThinkingFromOutput = (
         thinking = streamed;
         output = output.slice(streamed.length).trim();
     } else if (streamed && output) {
-        const idx = output.indexOf(streamed);
-        if (idx >= 0 && idx < 80) {
+        const stripped = stripNormalizedPrefix(output, streamed);
+        if (stripped !== output) {
             thinking = streamed;
-            output = (output.slice(0, idx) + output.slice(idx + streamed.length)).trim();
+            output = stripped;
+        } else {
+            const idx = output.indexOf(streamed);
+            if (idx >= 0 && idx < 80) {
+                thinking = streamed;
+                output = (output.slice(0, idx) + output.slice(idx + streamed.length)).trim();
+            }
         }
     }
 
@@ -255,9 +330,93 @@ export const splitThinkingFromOutput = (
         output = '';
     }
 
+    if (output && looksLikePromptEcho(output) && !looksLikePublicAnswer(output) && !looksLikeTradeOutput(output)) {
+        thinking = [thinking, output].filter(Boolean).join('\n\n').trim();
+        output = '';
+    }
+
     const next = { thinking: thinking.trim(), output: output.trim() };
     if (stillLooksLikeLeakedThinking(next.output)) noteThinkingLeak(next.output);
     return next;
+};
+
+const THINK_OPEN_CLOSE: Array<{ open: RegExp; close: RegExp }> = [
+    { open: /<(think|thinking|thought|reasoning|REASONING_SCRATCHPAD|redacted_thinking)\b[^>]*>/i, close: /<\/(?:think|thinking|thought|reasoning|REASONING_SCRATCHPAD|redacted_thinking)>/i },
+    { open: /<\|begin_of_thought\|>/i, close: /<\|end_of_thought\|>/i },
+    { open: /\[(?:THINKING|THINK|REASONING)\]/i, close: /\[\/(?:THINKING|THINK|REASONING)\]/i },
+    { open: /◁think▷/i, close: /◁\/think▷/i },
+];
+
+const holdIncompleteTag = (buf: string): string => {
+    const lt = buf.lastIndexOf('<');
+    const br = buf.lastIndexOf('[');
+    const start = Math.max(lt, br);
+    if (start < 0) return '';
+    const tail = buf.slice(start);
+    if (/^<\/?[a-zA-Z|/]*$/.test(tail) || /^\[[A-Za-z/]*$/.test(tail) || /^<\|[a-z_]*$/.test(tail)) return tail;
+    return '';
+};
+
+/**
+ * Live content gate: route think-tag bodies to the reasoning channel and
+ * only yield the public answer. Incomplete tags stay buffered across chunks.
+ */
+export const createThinkingStreamGate = (): {
+    push: (chunk: string) => { visible: string; thinking: string };
+    flush: () => { visible: string; thinking: string };
+} => {
+    let buf = '';
+    let closeRe: RegExp | null = null;
+    return {
+        push(chunk: string): { visible: string; thinking: string } {
+            if (!chunk) return { visible: '', thinking: '' };
+            buf += chunk;
+            let visible = '';
+            let thinking = '';
+            for (;;) {
+                if (closeRe) {
+                    const match = buf.match(closeRe);
+                    if (!match || match.index === undefined) {
+                        const hold = holdIncompleteTag(buf);
+                        thinking += buf.slice(0, buf.length - hold.length);
+                        buf = hold;
+                        break;
+                    }
+                    thinking += buf.slice(0, match.index);
+                    buf = buf.slice(match.index + match[0].length);
+                    closeRe = null;
+                    continue;
+                }
+                let found: { index: number; len: number; close: RegExp } | null = null;
+                for (const pair of THINK_OPEN_CLOSE) {
+                    pair.open.lastIndex = 0;
+                    const match = pair.open.exec(buf);
+                    if (match && match.index !== undefined && (!found || match.index < found.index)) {
+                        found = { index: match.index, len: match[0].length, close: pair.close };
+                    }
+                }
+                if (!found) {
+                    const hold = holdIncompleteTag(buf);
+                    visible += buf.slice(0, buf.length - hold.length);
+                    buf = hold;
+                    break;
+                }
+                visible += buf.slice(0, found.index);
+                buf = buf.slice(found.index + found.len);
+                closeRe = found.close;
+            }
+            return { visible, thinking };
+        },
+        flush(): { visible: string; thinking: string } {
+            const leftover = buf;
+            buf = '';
+            if (closeRe) {
+                closeRe = null;
+                return { visible: '', thinking: leftover };
+            }
+            return { visible: leftover, thinking: '' };
+        },
+    };
 };
 
 export interface ThinkingDisplayParts {

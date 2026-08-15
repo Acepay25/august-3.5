@@ -259,4 +259,74 @@ describe('EnsembleProgressChat', () => {
         fireEvent.click(screen.getByText(/Openings ·/));
         expect(screen.getByText('Opening call').closest('details')?.open).toBe(true);
     });
+
+    it('does not paint Thinking into the Final output bubble', () => {
+        const cot = 'Weigh HTF vs LTF and fade the failed sweep.';
+        const progress = makeProgress([
+            makeAnalyst({
+                key: 'a1',
+                displayName: 'Analyst A',
+                status: 'complete',
+                reasoning: cot,
+                finalOutput: `${cot}\n\n**Direction:** Short\n**Entry:** 63748\n**Stop Loss:** 63971\n**Take Profit 1:** 63251`,
+            }),
+        ]);
+        render(<EnsembleProgressChat progress={progress} />);
+        expect(screen.getByText('Final output')).toBeDefined();
+        expect(screen.getByText(/Weigh HTF vs LTF/).closest('details')).toBeDefined();
+        expect(screen.getByText(/Weigh HTF vs LTF/).closest('.mx-2')).toBeNull();
+        expect(screen.getByText(/Direction/).closest('.mx-2')).toBeDefined();
+    });
+
+    it('does not label a live debate reply as Final output', () => {
+        const progress = makeProgress([
+            makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'complete', finalOutput: 'Opening call' }),
+        ]);
+        render(
+            <EnsembleProgressChat
+                progress={progress}
+                isLive
+                activeDebateSpeakers={{ 'Analyst A': 2 }}
+                debateTurns={[{
+                    speaker: 'Analyst A',
+                    text: 'I still fade the wick.',
+                    round: 2,
+                }]}
+            />,
+        );
+        expect(screen.getByText('Opening call').closest('.mx-2')?.textContent).toMatch(/Final output/);
+        expect(screen.getByText('I still fade the wick.').closest('.mx-2')?.textContent).not.toMatch(/Final output/);
+    });
+
+    it('parks a prompt-echo clarification dump in Thinking, not Final output', () => {
+        const dump = `Here's a thinking process:
+
+Analyze User Input: I'm in a debate/ensemble scenario. Role: Risk & Execution Specialist. Current Round: Round 5. Moderator's question: "State TP2 and TP3." There's a LIVE PRICE REFRESH note. I need to answer directly, 60-100 words max.
+
+Deconstruct the Context: Entry 63694 SL 63420.`;
+        const progress = makeProgress([
+            makeAnalyst({ key: 'a1', displayName: 'Risk & Execution Specialist', status: 'complete', finalOutput: '' }),
+        ]);
+        render(
+            <EnsembleProgressChat
+                progress={progress}
+                debateTurns={[{ speaker: 'Risk & Execution Specialist', text: dump, round: 5 }]}
+            />,
+        );
+        expect(screen.getByText('Thinking')).toBeDefined();
+        expect(screen.getByText(/Analyze User Input/i).closest('details')).toBeDefined();
+        expect(screen.queryByText('Final output')).toBeNull();
+        expect(screen.getByText(/Analyze User Input/i).closest('.mx-2')).toBeNull();
+    });
+
+    it('renders Grok-like bot avatars and a live turn caption', () => {
+        const progress = makeProgress([
+            makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'analyzing', reasoning: 'Weigh the sweep.' }),
+        ]);
+        const { container } = render(<EnsembleProgressChat progress={progress} isLive />);
+        expect(container.querySelectorAll('.debate-bot').length).toBeGreaterThan(1);
+        expect(screen.getByText('Analyst A is thinking')).toBeDefined();
+        expect(screen.getByText(/Weigh the sweep/).closest('details')).toBeDefined();
+        expect(screen.getByText(/Weigh the sweep/).closest('.mx-2')).toBeNull();
+    });
 });

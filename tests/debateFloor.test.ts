@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { debateFloorProgress } from '../utils/debateFloor';
-import { loadThinkingLeakBin, noteThinkingLeak, stillLooksLikeLeakedThinking } from '../utils/thinkingLeakBin';
+import { loadThinkingLeakBin, noteThinkingLeak, stillLooksLikeLeakedThinking, clearThinkingLeakBin } from '../utils/thinkingLeakBin';
 import { splitThinkingFromOutput } from '../utils/thinkingSplit';
 
 describe('debateFloorProgress', () => {
@@ -45,6 +45,13 @@ describe('thinking leak bin', () => {
         expect(stillLooksLikeLeakedThinking('<think>still here')).toBe(true);
         noteThinkingLeak('<think>still here in the visible answer after peel');
         expect(loadThinkingLeakBin()[0].snippet).toContain('still here');
+    });
+
+    it('can clear the leak bin', () => {
+        noteThinkingLeak('<think>still here in the visible answer after peel');
+        expect(loadThinkingLeakBin()).toHaveLength(1);
+        clearThinkingLeakBin();
+        expect(loadThinkingLeakBin()).toHaveLength(0);
     });
 
     it('notes a leak when the splitter cannot hide remaining think tags', () => {

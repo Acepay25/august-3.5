@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { clearThinkingLeakBin, loadThinkingLeakBin, ThinkingLeakEntry } from '../../utils/thinkingLeakBin';
 
 interface ErrorLog {
     timestamp: string;
@@ -18,6 +19,7 @@ export const DiagnosticsPanel: React.FC = () => {
     const [promiseError, setPromiseError] = useState<ErrorLog | null>(null);
     const [globalError, setGlobalError] = useState<ErrorLog | null>(null);
     const [showStack, setShowStack] = useState<string | null>(null);
+    const [leaks, setLeaks] = useState<ThinkingLeakEntry[]>([]);
 
     useEffect(() => {
         try {
@@ -28,6 +30,7 @@ export const DiagnosticsPanel: React.FC = () => {
         } catch {
             // Ignore parse errors
         }
+        setLeaks(loadThinkingLeakBin());
     }, []);
 
     const clearErrors = (): void => {
@@ -93,6 +96,36 @@ export const DiagnosticsPanel: React.FC = () => {
                 </div>
             ) : (
                 <p className="text-xs text-zinc-500">No runtime errors recorded. ✓</p>
+            )}
+
+            <div className="flex items-center justify-between pt-2">
+                <h4 className="text-xs font-semibold text-zinc-400">Thinking leak bin</h4>
+                {leaks.length > 0 && (
+                    <button
+                        type="button"
+                        onClick={() => {
+                            clearThinkingLeakBin();
+                            setLeaks([]);
+                        }}
+                        className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
+                    >
+                        Clear leaks
+                    </button>
+                )}
+            </div>
+            {leaks.length > 0 ? (
+                <ul className="space-y-2">
+                    {leaks.map((entry, index) => (
+                        <li key={`${entry.at}-${index}`} className="rounded-xl border border-white/10 bg-zinc-950/50 p-3">
+                            <p className="text-[10px] text-zinc-600">
+                                {entry.at ? new Date(entry.at).toLocaleString() : 'Unknown time'}
+                            </p>
+                            <p className="mt-1 text-xs text-zinc-400 break-words">{entry.snippet}</p>
+                        </li>
+                    ))}
+                </ul>
+            ) : (
+                <p className="text-xs text-zinc-500">No thinking leaks recorded. The splitter logs leftovers here when CoT still appears in Final output.</p>
             )}
         </div>
     );

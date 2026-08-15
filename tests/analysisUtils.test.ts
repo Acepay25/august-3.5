@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { recalculateAnalysisMetrics, leveragedMovePercent, parseProseTradePlan, parseMarkdownTradePlan, tradePlanToAnalysis, stripPlanTags, buildAnalysisMarkdown, buildSupplementMarkdown, buildTradingSignalMarkdown, resolveLevelHitOdds, extractSignalStrategyText, looksLikeModeratorVerdictDump, explainSignalConfidence, signalDirectionLabel, explainNoTrade } from '../utils/analysisUtils';
+import { recalculateAnalysisMetrics, leveragedMovePercent, parseProseTradePlan, parseMarkdownTradePlan, tradePlanToAnalysis, stripPlanTags, buildAnalysisMarkdown, buildSupplementMarkdown, buildTradingSignalMarkdown, resolveLevelHitOdds, extractSignalStrategyText, looksLikeModeratorVerdictDump, explainSignalConfidence, signalDirectionLabel, explainNoTrade, isBindingMarkdownPlan } from '../utils/analysisUtils';
 import { MASTER_TRADE_PLAN_MARKDOWN } from '../constants/schemas';
 
 describe('analysisUtils', () => {
@@ -35,6 +35,36 @@ describe('analysisUtils', () => {
       expect(plan!.validityWindow).toBe('4h');
       expect(plan!.support).toEqual(['64577 (pivot)', '64261 (fib)']);
       expect(plan!.resistance).toEqual(['65316 (pivot)', '65474 (swing)']);
+    });
+
+    it('is binding only when Long/Short has entry, stop, and a take-profit', () => {
+      expect(isBindingMarkdownPlan({
+        direction: 'Short',
+        entry: '64500',
+        stopLoss: '65100',
+        takeProfit: '63800',
+      })).toBe(true);
+      expect(isBindingMarkdownPlan({
+        direction: 'Long',
+        entry: '64500',
+        stopLoss: '65100',
+      })).toBe(false);
+      expect(isBindingMarkdownPlan({
+        direction: 'Long',
+        confidence: 'Avoid',
+        entry: '64500',
+        stopLoss: '65100',
+        takeProfit: '63800',
+      })).toBe(false);
+    });
+
+    it('treats Avoid as binding without levels, and rejects mixed Long+Avoid', () => {
+      expect(isBindingMarkdownPlan({ confidence: 'Avoid' })).toBe(true);
+      expect(isBindingMarkdownPlan({ direction: 'Long' })).toBe(false);
+      expect(isBindingMarkdownPlan(null)).toBe(false);
+      expect(isBindingMarkdownPlan(parseMarkdownTradePlan(
+        '- **Direction:** Neutral\n- **Confidence:** Avoid',
+      ))).toBe(true);
     });
 
     it('extracts the FULL organized field set (the old JSON schema, in markdown)', () => {
