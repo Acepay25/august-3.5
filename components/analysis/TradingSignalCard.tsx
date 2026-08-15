@@ -77,6 +77,13 @@ const Stat: React.FC<{ label: string; children: React.ReactNode }> = ({ label, c
     </div>
 );
 
+const SignalMarkdown: React.FC<{ content: string }> = ({ content }) => (
+    <MarkdownContent
+        content={content}
+        className="!text-sm leading-6 text-zinc-200 [&_p]:my-1.5 [&_p]:text-sm [&_p]:leading-6 [&_li]:text-sm [&_li]:leading-6 [&_h1]:mb-2 [&_h1]:text-base [&_h2]:mb-1.5 [&_h2]:text-sm [&_h3]:mb-1 [&_h3]:text-sm [&_ul]:my-1.5 [&_ol]:my-1.5"
+    />
+);
+
 interface LevelRow {
     label: string;
     price: string;
@@ -205,30 +212,30 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
         <div className={bare ? 'status-surface' : 'status-surface overflow-hidden rounded-2xl border border-white/10 bg-zinc-950/80'}>
             <div className="flex flex-wrap items-center gap-2 px-4 py-3 sm:px-5">
                 <span className="h-1.5 w-1.5 rounded-full bg-zinc-400" />
-                <span className="ui-kicker">Trading signal</span>
+                <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">Trading signal</span>
                 {analysis.direction && (
                     <span className={`inline-flex items-center rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${directionChip(analysis.direction)}`}>
                         {dirLabel}
                     </span>
                 )}
                 {analysis.confidence && (
-                    <span className={`text-[11px] font-semibold ${confidenceColor(analysis.confidence)}`}>
+                    <span className={`text-xs font-semibold ${confidenceColor(analysis.confidence)}`}>
                         {analysis.confidence}
                     </span>
                 )}
                 {typeof analysis.probability === 'number' && (
-                    <span className="text-[11px] tabular-nums text-zinc-500">{Math.round(analysis.probability)}%</span>
+                    <span className="text-xs tabular-nums text-zinc-400">{Math.round(analysis.probability)}%</span>
                 )}
                 {rr !== undefined && (
-                    <span className="text-[11px] tabular-nums text-zinc-400">R:R 1:{rr.toFixed(1)}</span>
+                    <span className="text-xs tabular-nums text-zinc-300">R:R 1:{rr.toFixed(1)}</span>
                 )}
-                <span className="text-[11px] text-zinc-500">Size {analysis.positionSize?.line || size.line}</span>
+                <span className="text-xs text-zinc-400">Size {analysis.positionSize?.line || size.line}</span>
                 {promptLane && (
-                    <span className="text-[10px] uppercase tracking-widest text-zinc-600">{promptLane}</span>
+                    <span className="text-xs uppercase tracking-widest text-zinc-500">{promptLane}</span>
                 )}
-                {validityLine && <span className="text-[11px] text-zinc-500">{validityLine}</span>}
+                {validityLine && <span className="text-sm text-zinc-400">{validityLine}</span>}
                 {gateLine && (
-                    <span className="w-full text-[11px] text-zinc-500">{gateLine}</span>
+                    <span className="w-full text-sm leading-6 text-zinc-400">{gateLine}</span>
                 )}
                 <div className="ml-auto flex shrink-0 items-center gap-2">
                     <button
@@ -237,7 +244,7 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
                             const sheet = buildTicketSheet(analysis);
                             void navigator.clipboard?.writeText(sheet);
                         }}
-                        className="text-[11px] font-medium text-zinc-500 transition-colors hover:text-zinc-200"
+                        className="text-sm font-medium text-zinc-400 transition-colors hover:text-zinc-200"
                         title="Copy a one-page ticket"
                     >
                         Copy ticket
@@ -246,7 +253,7 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
                         <button
                             type="button"
                             onClick={onReRun}
-                            className="text-[11px] font-medium text-zinc-500 transition-colors hover:text-zinc-200"
+                            className="text-sm font-medium text-zinc-400 transition-colors hover:text-zinc-200"
                             title="Adds a fresh analysis with the same prompt + chart; the old card is kept for comparison"
                         >
                             ↻ Regenerate
@@ -275,12 +282,12 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
                     </Stat>
                 </div>
                 {priorLine && (
-                    <p className="text-[11px] leading-relaxed text-zinc-600">vs last tape: {priorLine}</p>
+                    <p className="text-sm leading-6 text-zinc-500">vs last tape: {priorLine}</p>
                 )}
                 {analysis.dualScenarioAnalysis && (
                     <div>
-                        <div className="ui-kicker">Other side</div>
-                        <p className="mt-1 text-[12px] leading-relaxed text-zinc-400">
+                        <div className="text-xs font-medium uppercase tracking-wider text-zinc-500">Other side</div>
+                        <p className="mt-1 text-sm leading-6 text-zinc-300">
                             {analysis.dualScenarioAnalysis.selectedScenario === 'bearish' ? 'Kept short' : analysis.dualScenarioAnalysis.selectedScenario === 'bullish' ? 'Kept long' : 'Neutral'}
                             {' · '}
                             Long: {analysis.dualScenarioAnalysis.bullish.target} / inv {analysis.dualScenarioAnalysis.bullish.invalidation}
@@ -295,23 +302,23 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
                         <table className="w-full border-collapse text-left">
                             <thead>
                                 <tr className="border-b border-white/10 bg-zinc-800/80">
-                                    <th className="px-3 py-2 text-[10px] font-medium uppercase tracking-wide text-zinc-500">Level</th>
-                                    <th className="px-3 py-2 text-[10px] font-medium uppercase tracking-wide text-zinc-500">Price</th>
-                                    <th className="px-3 py-2 text-[10px] font-medium uppercase tracking-wide text-zinc-500">Cite</th>
-                                    <th className="px-3 py-2 text-right text-[10px] font-medium uppercase tracking-wide text-zinc-500">Hit</th>
+                                    <th className="px-3 py-2.5 text-xs font-medium uppercase tracking-wide text-zinc-500">Level</th>
+                                    <th className="px-3 py-2.5 text-xs font-medium uppercase tracking-wide text-zinc-500">Price</th>
+                                    <th className="px-3 py-2.5 text-xs font-medium uppercase tracking-wide text-zinc-500">Cite</th>
+                                    <th className="px-3 py-2.5 text-right text-xs font-medium uppercase tracking-wide text-zinc-500">Hit</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {levelRows.map(row => (
                                     <tr key={row.label} className="border-b border-white/5 last:border-b-0">
-                                        <td className="px-3 py-2 text-[11px] font-medium text-zinc-400">{row.label}</td>
-                                        <td className={`px-3 py-2 text-[15px] font-semibold tabular-nums ${priceTone(row.tone)}`}>
+                                        <td className="px-3 py-2.5 text-sm font-medium text-zinc-300">{row.label}</td>
+                                        <td className={`px-3 py-2.5 text-sm font-semibold tabular-nums ${priceTone(row.tone)}`}>
                                             {row.price}
                                         </td>
-                                        <td className="max-w-[8rem] truncate px-3 py-2 text-[10px] text-zinc-600" title={row.cite}>
+                                        <td className="max-w-[10rem] truncate px-3 py-2.5 text-sm text-zinc-500" title={row.cite}>
                                             {row.cite}
                                         </td>
-                                        <td className={`px-3 py-2 text-right text-[11px] font-bold tabular-nums ${hitTone(row.tone)}`}>
+                                        <td className={`px-3 py-2.5 text-right text-sm font-bold tabular-nums ${hitTone(row.tone)}`}>
                                             {row.hit !== undefined ? `${row.hit}% hit` : '—'}
                                         </td>
                                     </tr>
@@ -323,10 +330,12 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
 
                 {analysis.confidence && (
                     <div>
-                        <div className="ui-kicker">Confidence</div>
-                        <p className="mt-1 border-l-2 border-white/15 pl-3 text-[13px] leading-relaxed text-zinc-300">{confidenceWhy}</p>
+                        <div className="text-xs font-medium uppercase tracking-wider text-zinc-500">Confidence</div>
+                        <div className="mt-1 border-l-2 border-white/15 pl-3">
+                            <SignalMarkdown content={confidenceWhy} />
+                        </div>
                         {drift.status !== 'insufficient_data' && drift.actual !== null && (
-                            <p className="mt-1 text-[11px] text-zinc-500">
+                            <p className="mt-1 text-sm leading-6 text-zinc-500">
                                 {drift.status === 'overconfident' && `Declared ${Math.round(drift.declared)}% vs ${Math.round(drift.actual)}% realized (n=${drift.sampleSize}) — running hot`}
                                 {drift.status === 'underconfident' && `Declared ${Math.round(drift.declared)}% vs ${Math.round(drift.actual)}% realized (n=${drift.sampleSize}) — running cold`}
                                 {drift.status === 'accurate' && `In line with history: ${Math.round(drift.actual)}% at this confidence (n=${drift.sampleSize})`}
@@ -337,29 +346,33 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
 
                 {noTradeWhy && (
                     <div>
-                        <div className="ui-kicker">No trade</div>
-                        <p className="mt-1 text-[13px] leading-relaxed text-zinc-400">{noTradeWhy}</p>
+                        <div className="text-xs font-medium uppercase tracking-wider text-zinc-500">No trade</div>
+                        <div className="mt-1">
+                            <SignalMarkdown content={noTradeWhy} />
+                        </div>
                     </div>
                 )}
 
                 {invalidation && (
                     <div>
-                        <div className="ui-kicker">Invalidation</div>
-                        <p className="mt-1 text-[13px] leading-relaxed text-zinc-300">{invalidation}</p>
+                        <div className="text-xs font-medium uppercase tracking-wider text-zinc-500">Invalidation</div>
+                        <div className="mt-1">
+                            <SignalMarkdown content={invalidation} />
+                        </div>
                     </div>
                 )}
 
                 {why && (
                     <div>
-                        <div className="mb-1 ui-kicker">Why</div>
-                        <p className="text-[13px] leading-relaxed text-zinc-400">{why}</p>
+                        <div className="mb-1 text-xs font-medium uppercase tracking-wider text-zinc-500">Why</div>
+                        <SignalMarkdown content={why} />
                     </div>
                 )}
 
                 {analysis.recommendationContract && (
                     <div>
-                        <div className="ui-kicker">Contract</div>
-                        <p className="mt-1 text-[13px] leading-relaxed text-zinc-300">
+                        <div className="text-xs font-medium uppercase tracking-wider text-zinc-500">Contract</div>
+                        <p className="mt-1 text-sm leading-6 text-zinc-200">
                             {analysis.recommendationContract.action.toUpperCase()} · {analysis.recommendationContract.riskBoundary}
                             {analysis.recommendationContract.validityMinutes
                                 ? ` · valid ${analysis.recommendationContract.validityMinutes}m`
@@ -374,12 +387,12 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
 
                 {supplementMarkdown && (
                     <div className="border-t border-white/5 pt-4">
-                        <MarkdownContent content={supplementMarkdown} className="text-xs leading-6 text-zinc-400" />
+                        <SignalMarkdown content={supplementMarkdown} />
                     </div>
                 )}
 
                 {ensembleNote && (
-                    <p className="border-t border-white/5 pt-3 text-[11px] leading-relaxed text-zinc-500">{ensembleNote}</p>
+                    <p className="border-t border-white/5 pt-3 text-sm leading-6 text-zinc-400">{ensembleNote}</p>
                 )}
                 {onFollowUp && (
                     <form

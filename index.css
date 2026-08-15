@@ -233,6 +233,14 @@ body {
   background-position: center top;
 }
 
+/* Shared column for messages + composer so they share one width. */
+.chat-column {
+  width: 100%;
+  max-width: 42rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
 /* ===== SAFE AREA INSETS (notched / punch-hole devices) =====
    P1-8: Without these the header renders under the status bar / camera
    cutout on Android devices with notches. viewport-fit=cover (index.html)
