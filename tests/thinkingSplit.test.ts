@@ -18,6 +18,13 @@ describe('splitThinkingFromOutput', () => {
         expect(split.output).toBe('');
     });
 
+    it('strips native CoT when the content stream repeats it before the answer', () => {
+        const cot = 'Weigh HTF vs LTF.';
+        const split = splitThinkingFromOutput(cot, `${cot}\n\nShort the failed sweep.`);
+        expect(split.thinking).toBe(cot);
+        expect(split.output).toBe('Short the failed sweep.');
+    });
+
     it('keeps native streamed CoT and drops tagged THINKING from content', () => {
         const split = splitThinkingFromOutput(
             'Native chain-of-thought from the provider.',
