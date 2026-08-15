@@ -2025,6 +2025,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                     // Streamed moderator chain-of-thought accumulates
                                     // (deltas replace nothing — they append).
                                     reasoningMapRef.current.moderator = (reasoningMapRef.current.moderator || '') + reasoning;
+                                    reasoningMapRef.current.Moderator = reasoningMapRef.current.moderator;
                                     thoughtMap.moderator = reasoningMapRef.current.moderator;
                                 },
                                 // Provider IDs for Bayesian calibration (keyed by id)
@@ -2154,6 +2155,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                     // Streamed moderator chain-of-thought accumulates
                                     // (deltas replace nothing — they append).
                                     reasoningMapRef.current.moderator = (reasoningMapRef.current.moderator || '') + reasoning;
+                                    reasoningMapRef.current.Moderator = reasoningMapRef.current.moderator;
                                     thoughtMap.moderator = reasoningMapRef.current.moderator;
                             },
                             (speaker: string, reasoning: string, round?: number) => {
@@ -2348,10 +2350,11 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                         let moderatorRound = 0;
 
                         const peelDebateTurn = (speaker: string, raw: string, key: string): { text: string; reasoning?: string } => {
-                            const split = splitThinkingFromOutput(
-                                turnReasoningRef.current[key] || reasoningMapRef.current[speaker] || '',
-                                raw,
-                            );
+                            const cot = turnReasoningRef.current[key]
+                                || reasoningMapRef.current[speaker]
+                                || (speaker === 'Moderator' ? reasoningMapRef.current.moderator : '')
+                                || '';
+                            const split = splitThinkingFromOutput(cot, raw);
                             return {
                                 text: sanitizeAIResponseLight(split.output),
                                 reasoning: split.thinking || undefined,
