@@ -14,6 +14,7 @@ import SetupLifecycleCard from '../analysis/SetupLifecycleCard';
 import ThinkingModal from '../analysis/ThinkingModal';
 import TodayReassessmentPanel from './TodayReassessmentPanel';
 import { buildSupplementMarkdown } from '../../utils/analysisUtils';
+import { formatModelDisplayName } from '../../utils/providerUtils';
 import { AutopilotResolution } from '../../services/ui/OutcomeAutopilotService';
 
 // Helper to validate URLs (XSS prevention)
@@ -346,6 +347,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     onRetryAnalyst={onReRunAnalysis ? () => onReRunAnalysis(message.id) : undefined}
                                     debateTurns={debateTurns}
                                     activeDebateSpeakers={message.activeDebateSpeakers}
+                                    reasoningProcesses={message.reasoningProcesses}
                                 />
                             )}
 
@@ -581,7 +583,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 </div>
                             )}
 
-                            {(message.isDebating || debateTurns.length > 0) && (
+                            {(message.isDebating || debateTurns.length > 0) && !message.ensembleProgress && (
                                 <DebateChat
                                     debateTurns={debateTurns}
                                     modelsUsed={message.modelsUsed}
@@ -640,7 +642,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                                     {message.runStats.analysts.map(a => (
                                                         <tr key={`${a.providerId}::${a.modelId}`} className="border-t border-white/5 text-zinc-300">
                                                             <td className="px-2 py-1 whitespace-nowrap max-w-[160px] truncate" title={a.displayName}>{a.displayName}</td>
-                                                            <td className="px-2 py-1 whitespace-nowrap max-w-[140px] truncate text-zinc-400" title={a.modelId}>{a.modelId}</td>
+                                                            <td className="px-2 py-1 whitespace-nowrap max-w-[140px] truncate text-zinc-400" title={a.modelId}>{formatModelDisplayName(a.modelId)}</td>
                                                             <td className="px-2 py-1 whitespace-nowrap">{a.durationMs !== undefined ? `${(a.durationMs / 1000).toFixed(1)}s` : '—'}</td>
                                                             <td className="px-2 py-1 whitespace-nowrap">{a.charsOut !== undefined ? a.charsOut.toLocaleString() : '—'}</td>
                                                             <td className="px-2 py-1 whitespace-nowrap">{

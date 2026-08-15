@@ -1,12 +1,26 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { clearSessionUsage, loadSessionUsage, SessionUsageEntry, summarizeUsagePeriod } from '../../utils/sessionUsage';
+import { clearSessionUsage, loadSessionUsage, SessionUsageEntry, summarizeModelUsage, summarizeUsagePeriod } from '../../utils/sessionUsage';
 import { getHarnessSettings, saveHarnessSettings } from '../../utils/harnessSettings';
 import { formatChars } from '../../utils/runUsage';
+import { formatModelDisplayName } from '../../utils/providerUtils';
+
+const SLICE_COLORS = ['#8aabd8', '#b0b0b6', '#648dc6', '#6f6f78', '#d2d2d6', '#39587f', '#85858d'];
 
 const startOfToday = (): number => {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
     return d.getTime();
+};
+
+const polar = (cx: number, cy: number, r: number, angle: number): { x: number; y: number } => {
+    const rad = (angle - 90) * (Math.PI / 180);
+    return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+};
+
+const arcPath = (start: number, sweep: number): string => {
+    const s = polar(40, 40, 28, start);
+    const e = polar(40, 40, 28, start + sweep);
+    return `M ${s.x} ${s.y} A 28 28 0 ${sweep > 180 ? 1 : 0} 1 ${e.x} ${e.y}`;
 };
 
 const SessionUsagePanel: React.FC = () => {
@@ -18,6 +32,9 @@ const SessionUsagePanel: React.FC = () => {
 
     const today = useMemo(() => summarizeUsagePeriod(entries, startOfToday()), [entries]);
     const week = useMemo(() => summarizeUsagePeriod(entries, Date.now() - 7 * 24 * 60 * 60 * 1000), [entries]);
+    const models = useMemo(() => summarizeModelUsage(entries, startOfToday()), [entries]);
+    const topModel = models[0];
+    const todayTokens = today.promptTokens + today.completionTokens || today.tokensEst;
 
     const renderSummary = (label: string, s: ReturnType<typeof summarizeUsagePeriod>): React.ReactNode => {
         const tokens = s.promptTokens + s.completionTokens || s.tokensEst;
@@ -43,6 +60,58 @@ const SessionUsagePanel: React.FC = () => {
                 {renderSummary('Today', today)}
                 {renderSummary('Last 7 days', week)}
             </div>
+            {models.length > 0 && (
+                <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-500">Today by model</p>
+                    <div className="mt-3 flex items-center gap-4">
+                        <svg viewBox="0 0 80 80" className="h-20 w-20 shrink-0" aria-hidden="true">
+                            {models.reduce<{ offset: number; nodes: React.ReactNode[] }>((acc, slice, index) => {
+                                const sweep = Math.max(2, slice.share * 360);
+                                acc.nodes.push(
+                                    <path
+                                        key={slice.modelId}
+                                        d={arcPath(acc.offset, Math.min(359.9, sweep))}
+                                        fill="none"
+                                        stroke={SLICE_COLORS[index % SLICE_COLORS.length]}
+                                        strokeWidth="10"
+                                    />,
+                                );
+                                acc.offset += sweep;
+                                return acc;
+                            }, { offset: 0, nodes: [] }).nodes}
+                            <circle cx="40" cy="40" r="18" fill="#161618" />
+                        </svg>
+                        <div className="min-w-0 flex-1">
+                            <p className="text-sm text-zinc-100">{today.tokensExact ? '' : '~'}{formatChars(todayTokens)} tok today</p>
+                            {topModel && (
+                                <p className="mt-1 text-[11px] text-zinc-400">
+                                    Top model · {formatModelDisplayName(topModel.modelId)} · {Math.round(topModel.share * 100)}%
+                                </p>
+                            )}
+                            <div className="mt-2 flex h-2 overflow-hidden rounded-full bg-zinc-800" role="img" aria-label="Token share by model">
+                                {models.map((slice, index) => (
+                                    <div
+                                        key={slice.modelId}
+                                        className="h-full"
+                                        style={{ width: `${Math.max(2, slice.share * 100)}%`, background: SLICE_COLORS[index % SLICE_COLORS.length] }}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                    <ul className="mt-3 space-y-1">
+                        {models.map((slice, index) => (
+                            <li key={slice.modelId} className="flex items-center justify-between gap-2 text-[11px] text-zinc-400">
+                                <span className="flex min-w-0 items-center gap-2">
+                                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: SLICE_COLORS[index % SLICE_COLORS.length] }} />
+                                    <span className="truncate" title={slice.modelId}>{formatModelDisplayName(slice.modelId)}</span>
+                                </span>
+                                <span className="shrink-0 tabular-nums">{formatChars(slice.tokens)}</span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
             {entries.length > 0 && (
                 <button
                     type="button"

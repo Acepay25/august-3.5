@@ -12,7 +12,8 @@
 
 import { ProviderConfig } from '../../types/provider';
 import { AnalystLensConfig, AnalystRole, AnalystRoleAssignment } from '../../types';
-import { ANALYST_ROLE_DEFINITIONS, getRoleForProvider, EnsembleModelSelection } from './AnalystLensService';
+import { ANALYST_ROLE_DEFINITIONS, EnsembleModelSelection } from './AnalystLensService';
+import { formatModelDisplayName } from '../../utils/providerUtils';
 
 /** One ensemble participant — a model-level entry (several per provider possible). */
 export interface EnsembleAnalystEntry {
@@ -68,7 +69,7 @@ const resolveAssignedModel = (
  * Build the ensemble analyst list (model-level entries) from the ready
  * providers, honoring (in order of precedence, mirroring the old hook logic):
  *   - Lenses ON + complete assignments  → the 3 assigned (resolved) models
- *   - Lenses OFF + picker selection     → the "Debate Models" picker entries
+ *   - otherwise + Team dropdown slots   → those models, in slot order
  *   - otherwise                         → per-provider ensembleModels
  *                                     (falling back to selectedModel)
  * Capped at 3 entries total.
@@ -116,41 +117,62 @@ export const buildEnsembleAnalysts = (
             return resolved ? { ...a, assignedModel: resolved } : a;
         });
 
-    const analysts: EnsembleAnalystEntry[] = providerConfigs
-        .filter(c => c.isEnabled && c.apiKey.trim().length > 0)
-        .flatMap(c => {
-            // Lens assignments for THIS provider, resolved against its current
-            // model list (stale assigned ids fall back to the selected model).
-            const assignedModels = assignments
-                .filter(assignment => assignment.assignedProvider === c.id)
-                .map(assignment => resolveAssignedModel(assignment, c))
-                .filter((model): model is string => Boolean(model));
-            const configuredModels = c.ensembleModels?.filter(model => c.models.includes(model)).slice(0, 3) || [];
-            if (configuredModels.length === 0 && c.selectedModel) configuredModels.push(c.selectedModel);
-            const uniqueAssignedModels = [...new Set(assignedModels)].slice(0, 3);
-            // Lenses OFF: the plain 3-model picker in the chat input is the
-            // source of truth for the cards + debate.
-            const selectionModels = (isEnsembleEnabled && !lensConfig.enabled && ensembleModelSelection && ensembleModelSelection.length > 0)
-                ? ensembleModelSelection.filter(s => s.providerId === c.id && c.models.includes(s.model)).map(s => s.model)
-                : [];
-            const models = isEnsembleEnabled
-                ? (lensConfig.enabled && hasCompleteAnalystAssignments
-                    ? uniqueAssignedModels
-                    : (selectionModels.length > 0 ? selectionModels : configuredModels))
-                : (c.selectedModel ? [c.selectedModel] : []);
-            return models.map(model => ({
-                config: { ...c, selectedModel: model },
-                name: (() => {
-                    if (!isEnsembleEnabled || !hasCompleteAnalystAssignments) return isEnsembleEnabled && models.length > 1 ? `${c.name} · ${model}` : c.name;
-                    const role = getRoleForProvider(`${c.id}::${model}`, resolvedAssignments);
-                    return role !== AnalystRole.UNASSIGNED ? ANALYST_ROLE_DEFINITIONS[role].name : c.name;
-                })(),
-                model,
-                useImages: false as const,
-                thoughtsKey: `${c.id}:${model}`,
-            }));
-        })
-        .slice(0, 3);
+    const ready = (id: string | null | undefined): ProviderConfig | undefined =>
+        providerConfigs.find(c => c.id === id && c.isEnabled && c.apiKey.trim().length > 0);
+
+    const toEntry = (c: ProviderConfig, model: string, name: string): EnsembleAnalystEntry => ({
+        config: { ...c, selectedModel: model },
+        name,
+        model,
+        useImages: false,
+        thoughtsKey: `${c.id}:${model}`,
+    });
+
+    let analysts: EnsembleAnalystEntry[] = [];
+
+    if (isEnsembleEnabled && lensConfig.enabled && hasCompleteAnalystAssignments) {
+        analysts = REQUIRED_ANALYST_ROLES.flatMap(role => {
+            const assignment = assignmentForRole(role);
+            const provider = ready(assignment?.assignedProvider);
+            const model = assignment ? resolveAssignedModel(assignment, provider) : null;
+            if (!provider || !model) return [];
+            const roleName = ANALYST_ROLE_DEFINITIONS[role].name;
+            return [toEntry(provider, model, roleName)];
+        });
+    } else if (isEnsembleEnabled) {
+        // Normal mode: Team dropdown slots are the only roster. Do not fall
+        // back to provider.ensembleModels — those leftover defaults used to
+        // fill the first provider and hide the models the user just picked.
+        const slots = (ensembleModelSelection ?? []).filter(s => s?.providerId && s.model).slice(0, 3);
+        if (slots.length > 0) {
+            analysts = slots.flatMap(slot => {
+                const provider = ready(slot.providerId);
+                if (!provider) return [];
+                const model = slot.model;
+                const pretty = formatModelDisplayName(model);
+                const sameProvider = slots.filter(s => s.providerId === slot.providerId).length > 1;
+                return [toEntry(provider, model, sameProvider ? `${provider.name} · ${pretty}` : pretty)];
+            });
+        } else {
+            analysts = providerConfigs
+                .filter(c => c.isEnabled && c.apiKey.trim().length > 0)
+                .flatMap(c => {
+                    const configuredModels = c.ensembleModels?.filter(model => c.models.includes(model)).slice(0, 3) || [];
+                    if (configuredModels.length === 0 && c.selectedModel) configuredModels.push(c.selectedModel);
+                    return configuredModels.map(model => toEntry(
+                        c,
+                        model,
+                        configuredModels.length > 1 ? `${c.name} · ${formatModelDisplayName(model)}` : formatModelDisplayName(model),
+                    ));
+                })
+                .slice(0, 3);
+        }
+    } else {
+        analysts = providerConfigs
+            .filter(c => c.isEnabled && c.apiKey.trim().length > 0)
+            .flatMap(c => (c.selectedModel ? [toEntry(c, c.selectedModel, c.name)] : []))
+            .slice(0, 3);
+    }
 
     return { analysts, missingAnalystRoles, hasCompleteAnalystAssignments, resolvedAssignments };
 };
@@ -168,7 +190,7 @@ export const buildAnalystFailureReport = (
     settledResults.forEach((settled, index) => {
         if (settled.status !== 'rejected') return;
         const provider = enabledProviders[index];
-        const label = provider ? `${provider.name} · ${provider.model}` : `#${index}`;
+        const label = provider ? `${provider.name} · ${formatModelDisplayName(provider.model)}` : `#${index}`;
         const reason = settled.reason instanceof Error ? settled.reason.message : String(settled.reason ?? 'Unknown error');
         lines.push(`• ${label} — ${reason}`);
     });

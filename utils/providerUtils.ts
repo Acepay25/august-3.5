@@ -23,11 +23,67 @@ export function getFirstReadyProvider(configs: ProviderConfig[]): ProviderConfig
     return configs.find(isProviderReady) ?? null;
 }
 
+const KNOWN_MODEL_TOKENS: Record<string, string> = {
+    gpt: 'GPT',
+    glm: 'GLM',
+    llama: 'Llama',
+    qwen: 'Qwen',
+    claude: 'Claude',
+    gemini: 'Gemini',
+    deepseek: 'Deepseek',
+    mistral: 'Mistral',
+    grok: 'Grok',
+    o1: 'O1',
+    o3: 'O3',
+    o4: 'O4',
+};
+
+/**
+ * Turn a model slug into a short label: `deepseek-v4-flash` → `Deepseek V4 Flash`.
+ * Provider prefixes (`openrouter/…`) and `:free` suffixes are stripped to words.
+ */
+export function formatModelDisplayName(modelId: string | undefined): string {
+    if (!modelId) return '';
+    const trimmed = modelId.trim();
+    if (!trimmed) return '';
+    const slug = trimmed.includes('/') ? trimmed.slice(trimmed.lastIndexOf('/') + 1) : trimmed;
+    return slug
+        .split(/[:]+/)
+        .flatMap(part => part.split(/[-_]+/))
+        .map(token => token.trim())
+        .filter(Boolean)
+        .map(formatModelToken)
+        .join(' ');
+}
+
+/** Pretty-print a seat/team label that may still contain a raw model slug. */
+export function formatSeatLabel(name: string | undefined): string {
+    if (!name) return '';
+    const sep = name.indexOf(' · ');
+    if (sep >= 0) {
+        const prefix = name.slice(0, sep).trim();
+        const slug = name.slice(sep + 3).trim();
+        return slug ? `${prefix} · ${formatModelDisplayName(slug)}` : prefix;
+    }
+    if (/[/:_]/.test(name) || /^[a-z0-9]+(?:-[a-z0-9.]+)+$/i.test(name)) {
+        return formatModelDisplayName(name) || name;
+    }
+    return name;
+}
+
+const formatModelToken = (token: string): string => {
+    const lower = token.toLowerCase();
+    if (KNOWN_MODEL_TOKENS[lower]) return KNOWN_MODEL_TOKENS[lower];
+    if (/^v\d/i.test(token)) return `V${token.slice(1)}`;
+    if (/^\d/.test(token)) return token;
+    return token.charAt(0).toUpperCase() + token.slice(1).toLowerCase();
+};
+
 /**
  * Build a model-id → display label map from all configured providers.
  * Replaces the legacy static `modelIdToName` / `ocrModelIdToName` constants.
- * Label format: "ProviderName · model-id". Consumers fall back to the raw
- * model id when a lookup misses.
+ * Label format: "ProviderName · Pretty Model". Consumers fall back to a
+ * formatted slug when a lookup misses.
  */
 export function buildModelIdToName(configs: ProviderConfig[]): Record<string, string> {
     const map: Record<string, string> = {};
@@ -36,7 +92,7 @@ export function buildModelIdToName(configs: ProviderConfig[]): Record<string, st
             if (!model) continue;
             // First provider wins if two providers list the same model id.
             if (!(model in map)) {
-                map[model] = `${config.name} · ${model}`;
+                map[model] = `${config.name} · ${formatModelDisplayName(model)}`;
             }
         }
     }
@@ -65,7 +121,7 @@ export function buildProviderNameToId(configs: ProviderConfig[]): Record<string,
  */
 export function resolveModelLabel(modelId: string | undefined, modelIdToName: Record<string, string>): string {
     if (!modelId) return 'Unknown';
-    return modelIdToName[modelId] ?? modelId;
+    return modelIdToName[modelId] ?? formatModelDisplayName(modelId);
 }
 
 /**

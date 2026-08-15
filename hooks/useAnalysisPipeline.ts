@@ -1753,15 +1753,19 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                          charsOut: (result.finalOutput?.length ?? 0) + (result.thoughtProcess?.length ?? 0),
                                      });
                                      if (isStagedEnsemble) {
+                                         const split = splitThinkingFromOutput(
+                                             reasoningMapRef.current[provider.thoughtsKey || provider.name] || result.thoughtProcess || '',
+                                             result.finalOutput || '',
+                                         );
                                          updateEnsembleProgress(progress => ({
                                              ...progress,
                                              analysts: progress.analysts.map(analyst => analyst.key === provider.thoughtsKey
                                                  ? {
                                                      ...analyst,
                                                      status: 'complete',
-                                                     finalOutput: result.finalOutput || '',
-                                                     thoughtProcess: result.thoughtProcess,
-                                                     reasoning: reasoningMapRef.current[provider.thoughtsKey || provider.name],
+                                                     finalOutput: split.output,
+                                                     thoughtProcess: split.thinking || result.thoughtProcess,
+                                                     reasoning: split.thinking,
                                                  }
                                                  : analyst),
                                          }));
@@ -2716,6 +2720,10 @@ ${accuracyVerificationNote}`
                             costUsd: updatedMessage.runStats.costUsd,
                             coin: processedAnalysis?.coinName,
                             direction: processedAnalysis?.direction,
+                            models: updatedMessage.runStats.analysts?.map(a => ({
+                                modelId: a.modelId,
+                                tokens: (a.promptTokens ?? 0) + (a.completionTokens ?? 0) || Math.round((a.charsOut ?? 0) / 4),
+                            })),
                         });
 
                         const newMessages = [...prev];

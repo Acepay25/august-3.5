@@ -4,6 +4,8 @@ import { ProviderConfig } from '../../types/provider';
 import { getMemoryFilesStats } from '../../services/learning/MemoryFilesService';
 import { getStrategyDocs } from '../../services/infrastructure/StrategyService';
 
+export type InjectionChipKind = 'notebook' | 'strategies' | 'team' | 'accuracy' | 'hybrid' | 'regime';
+
 interface InjectionContextBarProps {
     providers: ProviderConfig[];
     isEnsembleEnabled: boolean;
@@ -11,6 +13,7 @@ interface InjectionContextBarProps {
     hybridConnectionStatus?: 'disconnected' | 'connecting' | 'connected' | 'error';
     /** Current hybrid packet — provides the live regime chip. */
     hybridData?: any;
+    onChip?: (kind: InjectionChipKind) => void;
 }
 
 /**
@@ -25,13 +28,15 @@ const InjectionContextBar: React.FC<InjectionContextBarProps> = ({
     isAccuracyModeEnabled,
     hybridConnectionStatus,
     hybridData,
+    onChip,
 }) => {
     const chips = useMemo(() => {
-        const list: { label: string; title: string; active: boolean; Icon: React.ComponentType<{ className?: string }> }[] = [];
+        const list: { kind: InjectionChipKind; label: string; title: string; active: boolean; Icon: React.ComponentType<{ className?: string }> }[] = [];
 
         const notebook = getMemoryFilesStats();
         if (notebook.enabledCount > 0) {
             list.push({
+                kind: 'notebook',
                 label: `Notebook ${notebook.enabledCount} · ${(notebook.charCount / 1000).toFixed(1)}k`,
                 title: 'Trader Notebook — the markdown memory files injected into every analysis',
                 active: true,
@@ -42,6 +47,7 @@ const InjectionContextBar: React.FC<InjectionContextBarProps> = ({
         const strategies = getStrategyDocs().filter(d => d.enabled && d.summary.trim()).length;
         if (strategies > 0) {
             list.push({
+                kind: 'strategies',
                 label: `Strategies ${strategies}`,
                 title: 'Uploaded strategy books injected into the analysis',
                 active: true,
@@ -50,22 +56,23 @@ const InjectionContextBar: React.FC<InjectionContextBarProps> = ({
         }
 
         if (isEnsembleEnabled) {
-            list.push({ label: 'Team', title: 'Analyst team is on', active: true, Icon: BrainCircuit });
+            list.push({ kind: 'team', label: 'Team', title: 'Analyst team is on', active: true, Icon: BrainCircuit });
         }
         if (isAccuracyModeEnabled) {
-            list.push({ label: 'Accuracy', title: 'Accuracy Mode is on', active: true, Icon: Target });
+            list.push({ kind: 'accuracy', label: 'Accuracy', title: 'Accuracy Mode is on', active: true, Icon: Target });
         }
 
         const hybrid = hybridConnectionStatus === 'connected';
         if (hybrid) {
-            list.push({ label: 'Hybrid live', title: 'Real-time market data is injected (15m/1h/4h/1d)', active: true, Icon: Activity });
+            list.push({ kind: 'hybrid', label: 'Hybrid live', title: 'Real-time market data is injected (15m/1h/4h/1d)', active: true, Icon: Activity });
         } else if (hybridConnectionStatus === 'connecting') {
-            list.push({ label: 'Hybrid…', title: 'Connecting to live market data', active: false, Icon: Activity });
+            list.push({ kind: 'hybrid', label: 'Hybrid…', title: 'Connecting to live market data', active: false, Icon: Activity });
         }
 
         const regime = hybridData?.regime?.regime;
         if (hybrid && typeof regime === 'string' && regime) {
             list.push({
+                kind: 'regime',
                 label: `regime ${regime.replace(/_/g, ' ')}`,
                 title: 'Current market regime — drives the regime-matched model weighting',
                 active: true,
@@ -79,22 +86,25 @@ const InjectionContextBar: React.FC<InjectionContextBarProps> = ({
     if (chips.length === 0) return null;
 
     return (
-        <div className="flex items-center gap-1.5 flex-wrap pb-2" aria-label="Analysis context">
+        <div className="flex flex-wrap items-center justify-end gap-1.5" aria-label="Analysis context">
             {chips.map(chip => {
                 const Icon = chip.Icon;
+                const className = `inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[9px] font-bold tracking-wide transition-colors ${
+                    chip.active
+                        ? 'border-white/10 bg-zinc-900/80 text-zinc-400 hover:text-zinc-200'
+                        : 'border-white/5 bg-zinc-950 text-zinc-600'
+                }`;
                 return (
-                    <span
+                    <button
                         key={chip.label}
+                        type="button"
                         title={chip.title}
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-bold tracking-wide border transition-colors ${
-                            chip.active
-                                ? 'bg-zinc-900/80 border-white/10 text-zinc-400 hover:text-zinc-200'
-                                : 'bg-zinc-950 border-white/5 text-zinc-600'
-                        }`}
+                        className={className}
+                        onClick={() => onChip?.(chip.kind)}
                     >
-                        <Icon className="w-3 h-3" />
+                        <Icon className="h-3 w-3" />
                         {chip.label}
-                    </span>
+                    </button>
                 );
             })}
         </div>

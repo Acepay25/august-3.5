@@ -275,14 +275,9 @@ async function chatCompletionsCall(
         // timeout is applied internally on the next attempt).
         return chatCompletionsCall(config, messages, { ...options, jsonMode: false });
     }
-    // Reasoning is forwarded as a separate channel only when the answer text
-    // exists — otherwise the reasoning IS the answer and returning it both via
-    // onReasoning and as content would make callers accumulate it twice.
-    if (reasoning.trim() && content) {
-        options?.onReasoning?.(reasoning.trim());
-    }
+    if (reasoning.trim()) options?.onReasoning?.(reasoning.trim());
     reportUsage(config, response, options);
-    return content || reasoning || '';
+    return typeof content === 'string' ? content : '';
 }
 
 async function* chatCompletionsStream(
@@ -682,12 +677,9 @@ export async function sendChatRequest(
                                 : message.content;
                             text = content || '';
                         }
-                        // Reasoning goes out on its own channel only when the
-                        // answer text exists; otherwise it IS the answer and
-                        // must not be double-reported as content too.
-                        if (reasoning.trim() && text) options?.onReasoning?.(reasoning.trim());
+                        if (reasoning.trim()) options?.onReasoning?.(reasoning.trim());
                         reportUsage(effectiveConfig, data, options);
-                        return text || reasoning || '';
+                        return text || '';
                     });
                 }
                 switch (effectiveConfig.apiFormat) {

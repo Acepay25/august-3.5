@@ -1,5 +1,29 @@
 import { describe, expect, it } from 'vitest';
-import { isFreeModelId, sortModelsFreeFirst, mergeDiscoveredModels } from '../utils/providerUtils';
+import { formatModelDisplayName, formatSeatLabel, isFreeModelId, sortModelsFreeFirst, mergeDiscoveredModels, resolveModelLabel } from '../utils/providerUtils';
+
+describe('formatModelDisplayName', () => {
+    it('turns slugs into readable labels', () => {
+        expect(formatModelDisplayName('deepseek-v4-flash')).toBe('Deepseek V4 Flash');
+        expect(formatModelDisplayName('openrouter/deepseek/deepseek-v4-flash')).toBe('Deepseek V4 Flash');
+        expect(formatModelDisplayName('deepseek-v4-flash:free')).toBe('Deepseek V4 Flash Free');
+        expect(formatModelDisplayName('gpt-4o')).toBe('GPT 4o');
+    });
+});
+
+describe('formatSeatLabel', () => {
+    it('pretty-prints a provider · slug seat name', () => {
+        expect(formatSeatLabel('Kilocode · stepfun/step-3.7-flash:free')).toBe('Kilocode · Step 3.7 Flash Free');
+        expect(formatSeatLabel('tencent/hy3:free')).toBe('Hy3 Free');
+        expect(formatSeatLabel('Macro & Volatility Analyst')).toBe('Macro & Volatility Analyst');
+    });
+});
+
+describe('resolveModelLabel', () => {
+    it('falls back to a formatted slug when the map misses', () => {
+        expect(resolveModelLabel('deepseek-v4-flash', {})).toBe('Deepseek V4 Flash');
+        expect(resolveModelLabel('x', { x: 'Custom Label' })).toBe('Custom Label');
+    });
+});
 
 describe('isFreeModelId', () => {
     it('matches OpenRouter and *-free slugs', () => {

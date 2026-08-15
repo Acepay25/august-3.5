@@ -8,8 +8,10 @@ const PLAN_RE = /FINAL TRADE PLAN|\b(?:Direction|Stop Loss|Take Profit(?:\s*[123
 
 const SCRATCHPAD_START_RE = /(?:^|\n)\s*(?:here(?:['’]s| is)\s+(?:my\s+)?(?:a\s+)?)?thinking\s+process\s*:/i;
 const SCRATCHPAD_META_RE = /Analyze User Input\s*:|Deconstruct (?:the )?Context|Current Round\s*:/i;
+const THINK_TAG_RE = /<(?:think|thinking|thought)>/i;
+const LET_ME_THINK_RE = /(?:^|\n)\s*(?:let me think|thinking out loud|internal monologue|chain of thought)\b/i;
 const ANSWER_MARK_RE = /(?:^|\n)\s*(?:\*\*)?(?:answer|final(?:\s*output)?|response|conclusion)(?:\*\*)?\s*[:.-]\s*/i;
-const META_PARA_RE = /^(?:Analyze User Input|Deconstruct|My State|Role\s*:|Current Round\s*:|YOUR TASK|Moderator's question|Here's a thinking)/i;
+const META_PARA_RE = /^(?:Analyze User Input|Deconstruct|My State|Role\s*:|Current Round\s*:|YOUR TASK|Moderator's question|Here's a thinking|Let me think)/i;
 
 export const looksLikeTradeOutput = (text: string): boolean => {
     if (!text || text.length < 40) return false;
@@ -21,10 +23,37 @@ export const looksLikeTradeOutput = (text: string): boolean => {
 
 const eq = (a: string, b: string): boolean => a.trim() === b.trim();
 
-const stripTags = (text: string): string => text
-    .replace(/<THINKING>[\s\S]*?<\/THINKING>/gi, '')
+const THINK_TAG_NAMES = 'think|thinking|thought|reasoning|REASONING_SCRATCHPAD';
+const THINK_BLOCK_RE = new RegExp(`<(${THINK_TAG_NAMES})\\b[^>]*>[\\s\\S]*?<\\/\\1>`, 'gi');
+const THINK_ORPHAN_RE = new RegExp(`<\\/?(?:${THINK_TAG_NAMES})\\b[^>]*>`, 'gi');
+
+/** Same rule as Hermes `_strip_think_blocks`: tags never stay in the answer. */
+export const extractAndStripThinkBlocks = (text: string): { visible: string; leaked: string } => {
+    const raw = text || '';
+    if (!/<(?:think|thinking|thought|reasoning|REASONING_SCRATCHPAD)\b/i.test(raw)) {
+        return { visible: raw, leaked: '' };
+    }
+    const leaked: string[] = [];
+    const visible = raw
+        .replace(THINK_BLOCK_RE, (block, name: string) => {
+            const inner = block.replace(new RegExp(`^<${name}\\b[^>]*>|<\\/${name}>$`, 'gi'), '').trim();
+            if (inner) leaked.push(inner);
+            return '';
+        })
+        .replace(new RegExp(`<(${THINK_TAG_NAMES})\\b[^>]*>[\\s\\S]*$`, 'i'), (block) => {
+            const inner = block.replace(THINK_ORPHAN_RE, '').trim();
+            if (inner) leaked.push(inner);
+            return '';
+        })
+        .replace(THINK_ORPHAN_RE, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+    return { visible, leaked: leaked.join('\n\n').trim() };
+};
+
+const stripTags = (text: string): string => extractAndStripThinkBlocks(text).visible
     .replace(/<FINAL_OUTPUT>[\s\S]*?<\/FINAL_OUTPUT>/gi, '')
-    .replace(/<\/?(?:THINKING|FINAL_OUTPUT)>/gi, '')
+    .replace(/<\/?FINAL_OUTPUT>/gi, '')
     .replace(/^\s*(?:\*\*)?(?:THINKING|FINAL OUTPUT|FINAL_OUTPUT)(?:\*\*)?\s*:?\s*$/gim, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
@@ -32,7 +61,7 @@ const stripTags = (text: string): string => text
 export const looksLikeScratchpad = (text: string): boolean => {
     const raw = (text || '').trim();
     if (!raw) return false;
-    return SCRATCHPAD_START_RE.test(raw) || SCRATCHPAD_META_RE.test(raw);
+    return SCRATCHPAD_START_RE.test(raw) || SCRATCHPAD_META_RE.test(raw) || THINK_TAG_RE.test(raw) || LET_ME_THINK_RE.test(raw);
 };
 
 /**
@@ -100,11 +129,12 @@ export const splitThinkingFromOutput = (
 ): { thinking: string; output: string } => {
     const streamed = (streamedReasoning || '').trim();
     const raw = (responseText || '').trim();
-    const taggedThinking = raw.match(/<THINKING>\s*([\s\S]*?)\s*<\/THINKING>/i)?.[1]?.trim() ?? '';
+    const taggedThinking = raw.match(/<(?:THINKING|THINK|THOUGHT)>\s*([\s\S]*?)\s*<\/(?:THINKING|THINK|THOUGHT)>/i)?.[1]?.trim() ?? '';
     const taggedOutput = raw.match(/<FINAL_OUTPUT>\s*([\s\S]*?)\s*<\/FINAL_OUTPUT>/i)?.[1]?.trim() ?? '';
     const headers = splitThinkingHeaders(raw);
+    const inlineThink = extractAndStripThinkBlocks(raw);
 
-    let thinking = streamed || taggedThinking || headers.thinking;
+    let thinking = streamed || taggedThinking || headers.thinking || inlineThink.leaked;
     let output = taggedOutput || headers.output || (raw ? stripTags(raw) : '');
 
     if (!raw && streamed) {
