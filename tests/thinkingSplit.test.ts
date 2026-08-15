@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { displayThinkingParts, looksLikeTradeOutput, splitThinkingFromOutput } from '../utils/thinkingSplit';
+import { createThinkingStreamGate, displayThinkingParts, looksLikeTradeOutput, splitThinkingFromOutput, visibleReplyFromThinking } from '../utils/thinkingSplit';
 
 describe('splitThinkingFromOutput', () => {
     it('keeps streamed CoT as thinking and the content stream as output', () => {
@@ -18,11 +18,41 @@ describe('splitThinkingFromOutput', () => {
         expect(split.output).toBe('');
     });
 
-    it('strips native CoT when the content stream repeats it before the answer', () => {
+    it('strips native CoT when whitespace in the content stream differs', () => {
         const cot = 'Weigh HTF vs LTF.';
-        const split = splitThinkingFromOutput(cot, `${cot}\n\nShort the failed sweep.`);
+        const split = splitThinkingFromOutput(cot, `Weigh HTF vs LTF.\n\nShort the failed sweep.`);
         expect(split.thinking).toBe(cot);
         expect(split.output).toBe('Short the failed sweep.');
+    });
+
+    it('does not copy Thinking paragraphs into the Final output bubble', () => {
+        const cot = 'Weigh HTF vs LTF and fade the failed sweep.';
+        const visible = visibleReplyFromThinking(
+            cot,
+            `${cot}\n\n**Direction:** Short\n**Entry:** 63748\n**Stop Loss:** 63971\n**Take Profit 1:** 63251`,
+        );
+        expect(visible).toContain('Direction');
+        expect(visible).not.toMatch(/Weigh HTF vs LTF/);
+    });
+
+    it('hides a prompt-echo dump that never uses an Answer header', () => {
+        const dump = `Here's a thinking process:
+
+Analyze User Input: I'm in a debate/ensemble scenario. Role: Risk & Execution Specialist. Current Round: Round 5. Moderator's question: "State direction and give exact TP2, TP3, and R:R ratio." There's a "LIVE PRICE REFRESH: $63,653.08" note. There's a levels snapshot table showing my R3 entry: 63,694, SL: 63,420, TP1: 63,251. I need to answer directly, 60-100 words max, plain prose, no JSON/XML/tags/headers. I must correct any misunderstanding. I need to give exact TP2, TP3, and R:R ratio.
+
+Deconstruct the Context: The levels snapshot restates Entry 63694 SL 63420 TP1 63251.`;
+        const split = splitThinkingFromOutput('', dump);
+        expect(split.output).toBe('');
+        expect(split.thinking).toMatch(/Analyze User Input/i);
+        expect(split.thinking).toMatch(/LIVE PRICE REFRESH/i);
+    });
+
+    it('keeps a numeric clarification that follows a scratchpad without an Answer header', () => {
+        const dump = `Here's a thinking process:\n\nAnalyze User Input: Round 5 clarification.\n\nShort. TP2 62980, TP3 62640, R:R 1.8.`;
+        const split = splitThinkingFromOutput('', dump);
+        expect(split.output).toContain('TP2 62980');
+        expect(split.output).not.toMatch(/thinking process/i);
+        expect(split.thinking).toMatch(/Analyze User Input/i);
     });
 
     it('keeps native streamed CoT and drops tagged THINKING from content', () => {
@@ -139,5 +169,27 @@ describe('looksLikeTradeOutput', () => {
     it('detects a labeled plan and ignores a short CoT note', () => {
         expect(looksLikeTradeOutput('**Direction:** Short\nEntry: 1\nStop Loss: 2\nTake Profit 1: 3')).toBe(true);
         expect(looksLikeTradeOutput('Fade the wick if 15m stays weak.')).toBe(false);
+    });
+});
+
+describe('createThinkingStreamGate', () => {
+    it('holds think-tag bodies off the visible stream until the close tag', () => {
+        const gate = createThinkingStreamGate();
+        const a = gate.push('<thi');
+        expect(a.visible).toBe('');
+        const b = gate.push('nk>Weigh HTF vs LTF.</think>\nShort the failed sweep.');
+        expect(b.thinking).toContain('Weigh HTF vs LTF.');
+        expect(b.visible).toContain('Short the failed sweep.');
+        expect(b.visible).not.toMatch(/think/i);
+    });
+
+    it('does not swallow the answer when </think> is split across chunks', () => {
+        const gate = createThinkingStreamGate();
+        const start = gate.push('<think>Weigh HTF.');
+        const mid = gate.push('</thi');
+        const end = gate.push('nk>\nShort the failed sweep.');
+        expect(start.thinking + mid.thinking + end.thinking).toContain('Weigh HTF.');
+        expect(mid.visible).toBe('');
+        expect(end.visible).toContain('Short the failed sweep.');
     });
 });

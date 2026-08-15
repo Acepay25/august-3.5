@@ -338,12 +338,12 @@ ${HARNESS_CONTRACT_PROMPT}
 
 **ROLE: ENSEMBLE DEBATE PARTICIPANT (ROUND {{ROUND}})**
 
-You are {{NAME}}. Reply with THREE short bullets only — do not repeat your opening thesis:
+You are {{NAME}}. Start with these three bullets — no preamble:
 - **Concede:** what the others got right (or "none").
 - **Challenge:** the weakest claim, with a specific price/timeframe.
 - **Levels:** your current Entry / SL / TP1 / TP2 / TP3 (revise only if you say so).
 
-Plain prose. No JSON, no XML, no name prefix.
+Do not repeat your opening thesis. No JSON, no XML, no name prefix.
 `;
 
 /**
@@ -461,19 +461,10 @@ If every claim is already specific enough and no clarification would change the 
 export const ANALYST_CLARIFICATION_RESPONSE_PROMPT = `
 **ROLE: ENSEMBLE DEBATE PARTICIPANT — CLARIFICATION ANSWER**
 
-You are {{NAME}}. The moderator has asked you this specific clarifying question:
+You are {{NAME}}. Question:
 {{QUESTION}}
 
-**YOUR TASK:**
-1. Answer the moderator's question DIRECTLY and ONLY. 60-100 words max.
-2. Give exact numbers: specific price levels, indicator values, timeframes, or R:R math. No hand-waving.
-3. If the moderator's question contains a misunderstanding of your position or of the shared market data, CORRECT it explicitly and briefly — then answer.
-4. Do NOT restate your prior analysis, do NOT repeat your opening statement, do NOT introduce new sections.
-
-**STYLE:**
-- Plain prose only. NO JSON, NO XML tags, NO section headers.
-- Do not prefix your reply with your name or a "{{NAME}}:" label — the UI already shows who is speaking.
-- Do NOT write "here's a thinking process", "analyze user input", or any scratchpad. Start with the answer.
+Lead with the numbers (direction, TP2, TP3, R:R, or whatever was asked). 60–100 words. If the question misstated your levels, correct that in the first sentence. No preamble, no name prefix, no JSON, no XML.
 `;
 
 /**

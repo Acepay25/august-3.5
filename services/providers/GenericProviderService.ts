@@ -23,6 +23,7 @@ import { assertValidProviderUrl } from '../../utils/providerUrlValidation';
 import { recordProviderSuccess, recordProviderError } from '../infrastructure/ProviderHealthService';
 import { emitTokenUsage, extractTokenUsage, TokenUsage } from '../../utils/tokenUsage';
 import { chatMessagesToGemini, googleGenerateUrl, parseGeminiResponse } from '../../utils/googleGeminiFormat';
+import { createThinkingStreamGate, extractAndStripThinkBlocks } from '../../utils/thinkingSplit';
 interface ElectronProviderBridge {
     isElectron?: boolean;
         providerChat?: (request: {
@@ -95,9 +96,65 @@ function reportUsageDirect(config: ProviderConfig, usage: TokenUsage | undefined
 export function extractReasoning(value: unknown): string {
     if (typeof value === 'string') return value;
     if (Array.isArray(value)) {
-        return value.filter((part): part is string => typeof part === 'string').join('\n');
+        return value.map(extractReasoning).filter(Boolean).join('\n');
+    }
+    if (value && typeof value === 'object') {
+        const obj = value as Record<string, unknown>;
+        return extractReasoning(obj.text ?? obj.content ?? obj.reasoning ?? obj.reasoning_content);
     }
     return '';
+}
+
+/** Pull public text vs thinking out of chat-completions `content` (string or parts). */
+export function splitChatContent(content: unknown): { text: string; reasoning: string } {
+    if (typeof content === 'string') {
+        const split = extractAndStripThinkBlocks(content);
+        return { text: split.visible, reasoning: split.leaked };
+    }
+    if (!Array.isArray(content)) return { text: '', reasoning: '' };
+    const texts: string[] = [];
+    const thoughts: string[] = [];
+    for (const part of content) {
+        if (typeof part === 'string') {
+            texts.push(part);
+            continue;
+        }
+        if (!part || typeof part !== 'object') continue;
+        const block = part as { type?: string; thought?: boolean; thinking?: string; text?: string };
+        const type = String(block.type || '');
+        if (type === 'thinking' || type === 'reason' || block.thought === true) {
+            const inner = block.thinking || block.text || '';
+            if (inner.trim()) thoughts.push(inner);
+            continue;
+        }
+        if (typeof block.text === 'string' && block.text) texts.push(block.text);
+    }
+    const stripped = extractAndStripThinkBlocks(texts.join('\n'));
+    return {
+        text: stripped.visible,
+        reasoning: [...thoughts, stripped.leaked].filter(Boolean).join('\n'),
+    };
+}
+
+function deltaReasoning(delta: { reasoning_content?: unknown; reasoning?: unknown; reasoning_details?: unknown; content?: unknown }): string {
+    const fromField = extractReasoning(delta?.reasoning_content)
+        || extractReasoning(delta?.reasoning)
+        || extractReasoning(delta?.reasoning_details);
+    if (typeof delta?.content === 'string') return fromField;
+    const fromContent = splitChatContent(delta?.content).reasoning;
+    return [fromField, fromContent].filter(Boolean).join('\n');
+}
+
+function deltaVisibleText(delta: { content?: unknown }): string {
+    if (typeof delta?.content === 'string') return delta.content;
+    return splitChatContent(delta?.content).text;
+}
+
+function requestReasoningSideChannel(config: ProviderConfig, params: object): void {
+    const host = `${config.baseUrl || ''} ${config.selectedModel || ''}`;
+    if (/openrouter\.ai|deepseek|groq\.com|together\.xyz|fireworks\.ai|siliconflow/i.test(host)) {
+        (params as Record<string, unknown>).include_reasoning = true;
+    }
 }
 
 /**
@@ -246,6 +303,7 @@ async function chatCompletionsCall(
     if (options?.jsonMode) {
         (params as any).response_format = { type: 'json_object' };
     }
+    requestReasoningSideChannel(config, params);
     let response: OpenAI.Chat.Completions.ChatCompletion;
     try {
         // Timeout wrap happens here (not at the call site) so the jsonMode
@@ -267,10 +325,14 @@ async function chatCompletionsCall(
         }
     }
     const message = response.choices[0]?.message as any;
-    const reasoning = extractReasoning(message?.reasoning_content) || extractReasoning(message?.reasoning);
-    const content = Array.isArray(message?.content)
-        ? message.content.filter((part: any) => typeof part?.text === 'string').map((part: any) => part.text).join('\n')
-        : message?.content;
+    const splitContent = splitChatContent(message?.content);
+    const reasoning = [
+        extractReasoning(message?.reasoning_content),
+        extractReasoning(message?.reasoning),
+        extractReasoning(message?.reasoning_details),
+        splitContent.reasoning,
+    ].filter(Boolean).join('\n');
+    const content = splitContent.text;
     if (!content && !reasoning && options?.jsonMode) {
         // Some gateways return 200 with an empty message when response_format
         // is present. Retry once without the optional JSON enforcement (fresh
@@ -299,14 +361,21 @@ async function* chatCompletionsStream(
     if (options?.jsonMode) {
         (params as any).response_format = { type: 'json_object' };
     }
+    requestReasoningSideChannel(config, params);
     const stream = await client.chat.completions.create(params, { signal: withStreamTimeoutSignal(options?.signal) });
+    const gate = createThinkingStreamGate();
     for await (const chunk of stream) {
         reportUsage(config, chunk, options);
         const delta = chunk.choices[0]?.delta as any;
-        const reasoning = extractReasoning(delta?.reasoning_content) || extractReasoning(delta?.reasoning);
+        const reasoning = deltaReasoning(delta);
         if (reasoning.trim()) options?.onReasoning?.(reasoning);
-        yield chunk.choices[0]?.delta?.content || '';
+        const gated = gate.push(deltaVisibleText(delta));
+        if (gated.thinking.trim()) options?.onReasoning?.(gated.thinking);
+        if (gated.visible) yield gated.visible;
     }
+    const flushed = gate.flush();
+    if (flushed.thinking.trim()) options?.onReasoning?.(flushed.thinking);
+    if (flushed.visible) yield flushed.visible;
 }
 
 // ─── Messages Format (Anthropic-style) ──────────────────────────────────────
@@ -859,6 +928,14 @@ async function* streamViaProxy(
     const decoder = new TextDecoder();
     let buffer = '';
     let droppedEvents = 0;
+    const gate = createThinkingStreamGate();
+    const forwardDelta = (delta: Record<string, unknown>): string => {
+        const reasoning = deltaReasoning(delta);
+        if (reasoning.trim()) options?.onReasoning?.(reasoning);
+        const gated = gate.push(deltaVisibleText(delta));
+        if (gated.thinking.trim()) options?.onReasoning?.(gated.thinking);
+        return gated.visible;
+    };
     try {
         for (;;) {
             const { done, value } = await reader.read();
@@ -895,11 +972,8 @@ async function* streamViaProxy(
                     throw error;
                 }
                 reportUsage(config, chunk, options);
-                const delta = chunk?.choices?.[0]?.delta || {};
-                const reasoning = extractReasoning(delta.reasoning_content) || extractReasoning(delta.reasoning);
-                if (reasoning.trim()) options?.onReasoning?.(reasoning);
-                const content = delta.content;
-                if (typeof content === 'string' && content) yield content;
+                const visible = forwardDelta(chunk?.choices?.[0]?.delta || {});
+                if (visible) yield visible;
             }
         }
         // Flush any trailing buffer (final event without a blank line).
@@ -921,14 +995,15 @@ async function* streamViaProxy(
                         throw error;
                     }
                     if (chunk) {
-                        const delta = chunk?.choices?.[0]?.delta || {};
-                        const reasoning = extractReasoning(delta.reasoning_content) || extractReasoning(delta.reasoning);
-                        if (reasoning.trim()) options?.onReasoning?.(reasoning);
-                        if (typeof delta.content === 'string' && delta.content) yield delta.content;
+                        const visible = forwardDelta(chunk?.choices?.[0]?.delta || {});
+                        if (visible) yield visible;
                     }
                 }
             }
         }
+        const flushed = gate.flush();
+        if (flushed.thinking.trim()) options?.onReasoning?.(flushed.thinking);
+        if (flushed.visible) yield flushed.visible;
     } finally {
         reader.releaseLock();
     }

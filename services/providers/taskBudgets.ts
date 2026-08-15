@@ -8,10 +8,10 @@
 export const TASK_BUDGETS = {
   /** Full chart analysis (multi-timeframe + ensemble + accuracy modes). */
   analysis: 8192,
-  /** Per-analyst rebuttal round in the real debate. */
-  rebuttal: 4096,
+  /** Per-analyst rebuttal round in the real debate (three short bullets). */
+  rebuttal: 1536,
   /** Clarification answers (60-100 words). */
-  clarification: 300,
+  clarification: 400,
   /** Vision/OCR structured report — 6 sections; 1024 truncated mid-field. */
   ocr: 2560,
   /** Casual chat reply. */

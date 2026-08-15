@@ -6,7 +6,7 @@ import { getRoleDisplayForProvider } from '../../services/ui/AnalystLensService'
 import { buildTranscriptMarkdown, buildTranscriptJson, buildTranscriptFilename, downloadTextFile } from '../../utils/transcriptExport';
 import DebateSummary from './DebateSummary';
 import { useSmoothStreamText } from '../../hooks/useSmoothStreamText';
-import { splitThinkingFromOutput } from '../../utils/thinkingSplit';
+import { splitThinkingFromOutput, visibleReplyFromThinking } from '../../utils/thinkingSplit';
 
 interface DebateChatProps {
     debateTurns: DebateTurn[];
@@ -634,7 +634,7 @@ const DebateChat: React.FC<DebateChatProps> = ({
                                     segmentIndex === 0 ? storedReasoning : '',
                                     rawBody,
                                 );
-                                const body = peeled.output;
+                                const body = visibleReplyFromThinking(peeled.thinking, peeled.output);
                                 const turnReasoning = segmentIndex === 0 ? peeled.thinking : '';
                                 return (
                                 <div

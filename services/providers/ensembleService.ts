@@ -2398,6 +2398,8 @@ export interface RealDebateTurnEvent {
     speaker: string;
     round: number;
     text: string;
+    /** Native CoT for THIS turn only (reasoning side-channel). */
+    reasoning?: string;
 }
 
 /**
@@ -2571,7 +2573,7 @@ export const conductRealDebate = async function* (
     learningContext?: string,
     signal?: AbortSignal,
     onReasoning?: (reasoning: string) => void,
-    onAnalystReasoning?: (speaker: string, reasoning: string) => void,
+    onAnalystReasoning?: (speaker: string, reasoning: string, round?: number) => void,
     onSpeakerStatus?: (speaker: string, round: number, active: boolean) => void,
     hybridContext?: string,
     /** Wall-clock budget for the whole debate (rebuttals + clarification
@@ -2810,7 +2812,7 @@ export const conductRealDebate = async function* (
                             temperature: 0.35,
                             signal,
                             maxTokens: TASK_BUDGETS.rebuttal,
-                            onReasoning: (reasoning: string) => onAnalystReasoning?.(analyst.provider.name, reasoning),
+                            onReasoning: (reasoning: string) => onAnalystReasoning?.(analyst.provider.name, reasoning, round),
                         }),
                         emit,
                         `${analyst.provider.name} Round ${round} rebuttal`,
@@ -2824,7 +2826,7 @@ export const conductRealDebate = async function* (
         // Stream every rebuttal of this round concurrently, coalescing the
         // deltas through a small queue so the generator can yield as fast as
         // each provider responds (rounds stay parallel; rounds are sequential).
-        const queue: { name: string; delta: string }[] = [];
+        const queue: { name: string; delta: string; kind?: 'text' | 'reasoning' }[] = [];
         let notify: (() => void) | null = null;
         let finished = 0;
         const total = tasks.length;
@@ -3033,7 +3035,7 @@ export const conductRealDebate = async function* (
                             temperature: 0.3,
                             signal,
                             maxTokens: TASK_BUDGETS.clarification,
-                            onReasoning: (reasoning: string) => onAnalystReasoning?.(analyst.provider.name, reasoning),
+                            onReasoning: (reasoning: string) => onAnalystReasoning?.(analyst.provider.name, reasoning, answerRound),
                         }),
                         emit,
                         `${analyst.provider.name} clarification answer`,

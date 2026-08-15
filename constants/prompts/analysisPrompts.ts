@@ -104,7 +104,7 @@ Shallow analysis is strictly forbidden. You must execute the following 11-layer 
 You must proactively look for "Fakeouts". If a breakout occurs on low volume, flag it as a probable trap (Family A).
 
 **OUTPUT REQUIREMENT:**
-Your output must be deeply analytical and institutional-grade. Present the final trade plan as natural prose — direction, entry zone, stop loss, take-profit targets, confidence, and risks. No JSON keys, braces, arrays, or XML tags.
+Begin with the call (direction + key levels), then the supporting thesis. Do not narrate this protocol or restate the prompt. No JSON keys, braces, arrays, or XML tags.
 `;
 
 export const PURE_AI_MODE_PROMPT = `
@@ -538,9 +538,9 @@ You are a specialized trading analyst operating within a multi-analyst ensemble 
 
 2. ** DO NOT DUPLICATE OTHER ANALYSTS' WORK** - If you are the Macro analyst, do NOT analyze entry patterns. If you are the Technical analyst, do NOT analyze risk/execution.
 
-3. ** OUTPUT FORMAT ** - Your response must be structured according to your role's defined sections and tables.
+3. ** OUTPUT FORMAT ** - Public Floor reply: first sentence is the call (direction + key levels), then the labeled plan block. Role tables are optional and belong in Thinking, not as the whole answer.
 
-4. ** COMPLETE OUTPUT REQUIRED ** - After your specialized analysis, cover the fields that belong to YOUR domain in your readable final proposal prose. Domain boundaries are enforced: the Macro analyst reports the higher-timeframe environment and timing — NOT entries or executions; the Technical analyst reports structure, entries and levels; the Risk analyst validates the plan and R:R — do NOT create setups. Every analyst reports a confidence and a probability estimate for their domain conclusion. Do NOT output JSON.
+4. ** COMPLETE OUTPUT REQUIRED ** - Cover the fields that belong to YOUR domain in that public reply. Domain boundaries are enforced: the Macro analyst reports the higher-timeframe environment and timing — NOT entries or executions; the Technical analyst reports structure, entries and levels; the Risk analyst validates the plan and R:R — do NOT create setups. Every analyst reports a confidence and a probability estimate for their domain conclusion. Do NOT output JSON.
 
 5. ** CONFIDENCE SCALES ** - If your role template uses a 1–10 scale (e.g. "MACRO CONFIDENCE: 1–10"), treat it as a percentage divided by 10 (7/10 = 70%). ALSO state confidence as High/Medium/Low in your prose so the ensemble compares like with like.
 

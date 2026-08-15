@@ -509,6 +509,16 @@ export interface MarkdownTradePlan extends ProseTradePlan {
  * are found, the free-form prose parser rescues the plan. The plan block
  * itself doubles as the card's strategy markdown.
  */
+export const isBindingMarkdownPlan = (plan: MarkdownTradePlan | null | undefined): boolean => {
+    if (!plan) return false;
+    const conf = (plan.confidence || '').toLowerCase();
+    if ((plan.direction === 'Long' || plan.direction === 'Short') && conf === 'avoid') return false;
+    if (conf === 'avoid') return true;
+    if (!plan.direction) return false;
+    const tps = plan.takeProfits?.length || (plan.takeProfit ? 1 : 0);
+    return Boolean(plan.entry && plan.stopLoss && tps > 0);
+};
+
 export const parseMarkdownTradePlan = (text: string): MarkdownTradePlan | null => {
     if (!text || typeof text !== 'string') return null;
     const out: MarkdownTradePlan = {};

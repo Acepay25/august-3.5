@@ -20,6 +20,14 @@ const readRaw = (): ThinkingLeakEntry[] => {
 
 export const loadThinkingLeakBin = (): ThinkingLeakEntry[] => readRaw();
 
+export const clearThinkingLeakBin = (): void => {
+    try {
+        localStorage.removeItem(STORAGE_KEY);
+    } catch {
+        // private mode
+    }
+};
+
 /** Keep a short sample when content still looks like CoT after the splitter. */
 export const noteThinkingLeak = (text: string): void => {
     const snippet = (text || '').replace(/\s+/g, ' ').trim().slice(0, SNIPPET);
@@ -39,5 +47,9 @@ export const stillLooksLikeLeakedThinking = (output: string): boolean => {
     if (!raw) return false;
     return /<(?:think|thinking|thought|reasoning)\b/i.test(raw)
         || /thinking process\s*:/i.test(raw)
-        || /<\|begin_of_thought\|/i.test(raw);
+        || /<\|begin_of_thought\|/i.test(raw)
+        || /Analyze User Input\s*:/i.test(raw)
+        || /YOUR TASK\b/i.test(raw)
+        || /I(?:['’]m| am) in a debate/i.test(raw)
+        || /Moderator's question\s*:/i.test(raw);
 };

@@ -4,6 +4,7 @@ import {
     extractMessagesThinking,
     extractResponsesReasoning,
     shouldRequestExtendedThinking,
+    splitChatContent,
 } from '../services/providers/GenericProviderService';
 import type { ProviderConfig } from '../types/provider';
 
@@ -46,6 +47,11 @@ describe('extractReasoning — OpenAI-compatible reasoning payloads', () => {
     it('prefers reasoning_content over reasoning when both exist', () => {
         const payload: any = { reasoning_content: 'deepseek', reasoning: 'other' };
         expect(extractReasoning(payload.reasoning_content) || extractReasoning(payload.reasoning)).toBe('deepseek');
+    });
+
+    it('reads OpenRouter-style reasoning objects and details arrays', () => {
+        expect(extractReasoning({ text: 'object cot' })).toBe('object cot');
+        expect(extractReasoning([{ type: 'reasoning.text', text: 'detail one' }, { text: 'detail two' }])).toBe('detail one\ndetail two');
     });
 });
 
@@ -129,5 +135,22 @@ describe('shouldRequestExtendedThinking — Anthropic thinking request gating', 
         expect(shouldRequestExtendedThinking(config, { maxTokens: 10 })).toBe(false);
         expect(shouldRequestExtendedThinking(config, { maxTokens: 4096 })).toBe(true);
         expect(shouldRequestExtendedThinking(config, { maxTokens: 8192, jsonMode: true })).toBe(false);
+    });
+});
+
+describe('splitChatContent', () => {
+    it('routes thinking parts out of the public answer', () => {
+        const split = splitChatContent([
+            { type: 'thinking', thinking: 'Weigh HTF vs LTF.' },
+            { type: 'text', text: 'Short the failed sweep.' },
+        ]);
+        expect(split.reasoning).toBe('Weigh HTF vs LTF.');
+        expect(split.text).toBe('Short the failed sweep.');
+    });
+
+    it('strips think tags that arrived inside a text string', () => {
+        const split = splitChatContent('<think>Weigh HTF vs LTF.</think>\nShort the failed sweep.');
+        expect(split.reasoning).toContain('Weigh HTF vs LTF.');
+        expect(split.text).toBe('Short the failed sweep.');
     });
 });

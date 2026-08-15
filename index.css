@@ -219,6 +219,181 @@ body {
 .stream-fade {
   animation: stream-fade 160ms ease-out;
 }
+
+/* ===== FLOOR DEBATE (Grok-like bots, thought-in-head, turn-taking) ===== */
+.debate-bot {
+  display: inline-flex;
+  position: relative;
+  flex-shrink: 0;
+  border-radius: 14px;
+}
+.debate-bot svg {
+  display: block;
+}
+.debate-bot-shell {
+  fill: #161618;
+  stroke: #3a3a40;
+  stroke-width: 1.25;
+}
+.debate-bot-shine {
+  fill: rgba(255, 255, 255, 0.04);
+}
+.debate-bot-eye {
+  fill: #d2d2d6;
+}
+.debate-bot-mouth {
+  stroke: #8a8a92;
+  fill: none;
+}
+.debate-bot-thinking .debate-bot-eye {
+  animation: debate-bot-blink 2.6s ease-in-out infinite;
+}
+.debate-bot-speaking .debate-bot-mouth {
+  animation: debate-bot-talk 0.55s ease-in-out infinite;
+}
+.debate-bot-live {
+  animation: debate-bot-ring 1.7s ease-out infinite;
+}
+@keyframes debate-bot-blink {
+  0%, 38%, 46%, 100% { opacity: 1; }
+  42% { opacity: 0.12; }
+}
+@keyframes debate-bot-talk {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(0.8px); }
+}
+@keyframes debate-bot-ring {
+  0% { box-shadow: 0 0 0 0 rgba(210, 210, 214, 0.42); }
+  70% { box-shadow: 0 0 0 8px rgba(210, 210, 214, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(210, 210, 214, 0); }
+}
+
+.debate-roster {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  overflow-x: auto;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.debate-roster-seat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 3.25rem;
+  opacity: 0.38;
+  transform: scale(0.9);
+  transition: opacity 0.28s ease, transform 0.28s ease;
+}
+.debate-roster-seat.is-live {
+  opacity: 1;
+  transform: scale(1.08);
+}
+.debate-roster-name {
+  max-width: 4.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #6f6f78;
+}
+.debate-roster-name::after {
+  content: attr(data-name);
+}
+
+.debate-seat-live {
+  background: rgba(255, 255, 255, 0.025);
+}
+.debate-seat-wait {
+  opacity: 0.55;
+  transition: opacity 0.3s ease;
+}
+.debate-seat-wait:hover,
+.debate-seat-wait:focus-within {
+  opacity: 1;
+}
+
+.debate-thought {
+  position: absolute;
+  left: calc(100% - 6px);
+  bottom: calc(100% - 12px);
+  z-index: 2;
+  pointer-events: none;
+  min-width: 7.5rem;
+  max-width: 12rem;
+}
+.debate-thought-puff {
+  position: absolute;
+  border-radius: 999px;
+  background: #202024;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.debate-thought-puff-1 { width: 5px; height: 5px; left: -4px; bottom: 0; }
+.debate-thought-puff-2 { width: 8px; height: 8px; left: 4px; bottom: 7px; }
+.debate-thought-cloud {
+  margin-left: 14px;
+  padding: 6px 8px;
+  border-radius: 12px 12px 12px 4px;
+  background: #202024;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #8a8a92;
+  font-size: 10px;
+  line-height: 1.35;
+  animation: debate-thought-float 2.4s ease-in-out infinite;
+}
+.debate-thought-inline {
+  position: relative;
+  left: auto;
+  bottom: auto;
+  margin-top: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+.debate-thought-inline .debate-thought-puff-1 { left: -10px; bottom: 6px; }
+.debate-thought-inline .debate-thought-puff-2 { left: -4px; bottom: 12px; }
+.debate-thought-inline .debate-thought-cloud {
+  margin-left: 8px;
+}
+.debate-thought-dots {
+  display: flex;
+  gap: 3px;
+  margin-bottom: 4px;
+}
+.debate-thought-dots span {
+  width: 3px;
+  height: 3px;
+  border-radius: 999px;
+  background: #8a8a92;
+  animation: debate-thought-dot 1.15s ease-in-out infinite;
+}
+.debate-thought-dots span:nth-child(2) { animation-delay: 0.14s; }
+.debate-thought-dots span:nth-child(3) { animation-delay: 0.28s; }
+.debate-thought-text {
+  display: block;
+  word-break: break-word;
+}
+.debate-thought-text::after {
+  content: attr(data-thought);
+}
+@keyframes debate-thought-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+@keyframes debate-thought-dot {
+  0%, 80%, 100% { opacity: 0.25; transform: translateY(0); }
+  40% { opacity: 1; transform: translateY(-2px); }
+}
+
+.debate-speech {
+  animation: debate-speech-in 0.28s ease-out;
+}
+@keyframes debate-speech-in {
+  from { opacity: 0.45; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 .ui-control {
   border-radius: 0.5rem;
   border: 1px solid rgba(255, 255, 255, 0.1);
