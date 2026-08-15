@@ -92,7 +92,7 @@ const WorkspaceWelcome: React.FC<WorkspaceWelcomeProps> = ({
     }, [username, trades, latestAnalysis, conversationCount, readyProviderCount, hasProviderConfig]);
 
     return (
-        <div className="w-full max-w-3xl">
+        <div className="w-full chat-column">
             {/* Rendered like a normal AI message bubble */}
             <div className="rounded-2xl border border-white/5 bg-zinc-900/80 p-4 sm:p-5 shadow-lg">
                 <div className="flex items-center gap-2 mb-3">

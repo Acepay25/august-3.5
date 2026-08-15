@@ -262,7 +262,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
     return (
         <div
             id={`message-${message.id}`}
-            className={`status-surface flex items-start gap-2 sm:gap-4 my-2 sm:my-4 px-2 sm:px-4 transition-all duration-200 ${isUserMessage ? 'lg:max-w-4xl' : 'lg:max-w-5xl'} lg:mx-auto
+            className={`status-surface flex items-start gap-2 sm:gap-4 my-2 sm:my-4 px-3 sm:px-4 lg:px-8 transition-all duration-200 chat-column
             ${message.role === MessageRole.USER ? 'justify-end' : message.role === MessageRole.SYSTEM ? 'justify-center' : ''} 
             ${isHighlighted ? 'rounded-2xl' : ''}
             ${isSelectionMode ? 'cursor-pointer hover:bg-zinc-800 rounded-xl py-2' : ''}
@@ -287,8 +287,8 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
             )}
 
             <div className={`${isUserMessage
-                ? 'py-1 pl-1 pr-6 max-w-[85%] sm:max-w-3xl break-words relative group text-zinc-100'
-                : 'w-full max-w-5xl break-words relative group'
+                ? 'py-1 pl-1 pr-6 max-w-[85%] sm:max-w-none w-full break-words relative group text-zinc-100'
+                : 'w-full break-words relative group'
                 } ${isUserMessage ? '' : bubbleClass}`}>
 
                 <>
@@ -435,10 +435,8 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 </div>
                             ) : message.analysis ? (
                                 <div className="ui-panel">
-                                <div className="grid md:grid-cols-[minmax(220px,280px)_minmax(0,1fr)]">
-                                <div className="border-b border-white/5 md:border-b-0 md:border-r">
-                                    <DebateSummary debateTurns={debateTurns} analysis={message.analysis} />
-                                </div>
+                                <DebateSummary debateTurns={debateTurns} analysis={message.analysis} />
+                                <div className="border-t border-white/5">
                                 <TradingSignalCard
                                     analysis={message.analysis}
                                     debateTurns={message.debateTurns}

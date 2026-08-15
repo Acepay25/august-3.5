@@ -71,7 +71,7 @@ export const QuickActionChips: React.FC<QuickActionChipsProps> = ({
     }
 
     return (
-        <div className="flex lg:flex-col items-center lg:items-start gap-2 pb-2 lg:pb-0 lg:w-full lg:max-w-3xl lg:mx-auto transition-all duration-300">
+        <div className="flex lg:flex-col items-center lg:items-start gap-2 pb-2 lg:pb-0 w-full transition-all duration-300">
             {/* Toggle Button - Always visible */}
             <button
                 onClick={() => setIsHidden(!isHidden)}

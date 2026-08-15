@@ -607,7 +607,8 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 </div>
                 {/* Keep the composer mounted during generation so its send
                     control changes into the active Stop control. */}
-                <div className="w-full">
+                <div className="w-full px-3 sm:px-4 lg:px-8">
+                    <div className="chat-column">
                     <InjectionContextBar
                         providers={providers}
                         isEnsembleEnabled={isEnsembleEnabled}
@@ -615,6 +616,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                         hybridConnectionStatus={hybridConnectionStatus}
                         hybridData={hybridData}
                     />
+                    </div>
                 </div>
                 <ChatInput {...chatInputProps} />
                 </>
@@ -632,7 +634,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                                 August 3.5 makes your trading easier.
                             </h1>
                         )}
-                        <div className={`w-full max-w-3xl ${homeDashboard ? '' : 'mt-8'}`}>
+                        <div className={`w-full chat-column ${homeDashboard ? '' : 'mt-8'}`}>
                             <InjectionContextBar
                                 providers={providers}
                                 isEnsembleEnabled={isEnsembleEnabled}
@@ -641,7 +643,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                             />
                             <ChatInput centered {...chatInputProps} />
                         </div>
-                        <div className="w-full max-w-3xl mt-4">
+                        <div className="w-full chat-column mt-4">
                             <QuickActionChips
                                 layout="centered"
                                 onNewAnalysis={onNewConversation}
@@ -660,8 +662,8 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 <>
                     {/* Quick Action Chips - docked above the input once the
                         session has content */}
-                    <div className="absolute bottom-[6.75rem] sm:bottom-[7.25rem] left-0 right-0 px-3 sm:px-4 lg:px-0 pointer-events-none z-10 lg:w-full lg:max-w-3xl lg:mx-auto">
-                        <div className="w-full pointer-events-auto">
+                    <div className="absolute bottom-[6.75rem] sm:bottom-[7.25rem] left-0 right-0 px-3 sm:px-4 lg:px-8 pointer-events-none z-10">
+                        <div className="chat-column pointer-events-auto">
                             <QuickActionChips
                                 onNewAnalysis={onNewConversation}
                                 onOpenJournal={onOpenJournal}
@@ -674,13 +676,15 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                             />
                         </div>
                     </div>
-                    <div className="w-full">
+                    <div className="w-full px-3 sm:px-4 lg:px-8">
+                        <div className="chat-column">
                         <InjectionContextBar
                             providers={providers}
                             isEnsembleEnabled={isEnsembleEnabled}
                             isAccuracyModeEnabled={isAccuracyModeEnabled}
                             hybridConnectionStatus={hybridConnectionStatus}
                         />
+                        </div>
                     </div>
                     <ChatInput {...chatInputProps} />
                 </>

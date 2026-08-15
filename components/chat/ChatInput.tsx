@@ -220,7 +220,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
         <div className={centered
             ? 'w-full status-surface'
             : 'absolute bottom-0 left-0 right-0 px-3 sm:px-4 lg:px-8 pointer-events-none z-20 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] sm:pb-[calc(env(safe-area-inset-bottom)+0.75rem)] lg:pb-4 status-surface'}>
-            <div className={centered ? 'w-full' : 'w-full lg:max-w-3xl lg:mx-auto pointer-events-auto'}>
+            <div className={centered ? 'w-full' : 'chat-column pointer-events-auto'}>
                 {/* Main Input Container — compact composer */}
                 <div className="rounded-lg border border-white/10 bg-zinc-950 p-2 transition-all">
 
