@@ -128,7 +128,7 @@ export const buildEnsembleAnalysts = (
         thoughtsKey: `${c.id}:${model}`,
     });
 
-    let analysts: EnsembleAnalystEntry[] = [];
+    let analysts: EnsembleAnalystEntry[];
 
     if (isEnsembleEnabled && lensConfig.enabled && hasCompleteAnalystAssignments) {
         analysts = REQUIRED_ANALYST_ROLES.flatMap(role => {
