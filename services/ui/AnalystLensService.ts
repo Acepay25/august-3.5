@@ -1046,6 +1046,8 @@ export function retainEnsembleSelection(
     providerIds: Iterable<string>,
 ): EnsembleModelSelection {
     const ids = new Set(providerIds);
+    // Empty catalog means providers have not loaded yet — do not wipe picks.
+    if (ids.size === 0) return selection;
     return selection.filter(entry => ids.has(entry.providerId));
 }
 
