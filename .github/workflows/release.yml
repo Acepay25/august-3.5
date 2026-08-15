@@ -1,7 +1,7 @@
 name: Build & Release
 
 # Verify gates live on CI (push/PR to main). This job only packages.
-# Tag must still match package.json (v1.0.14 === version 1.0.14).
+# Tag must still match package.json (v1.0.15 === version 1.0.15).
 on:
   push:
     tags:
