@@ -111,7 +111,8 @@ test('first-run chat shows the onboarding card when no providers are configured'
 
 test('seeded analysis can log a WIN through the capture dialog', async ({ page }) => {
     await seedWorkspace(page, 'Journal Workspace', true);
-    await expect(page.getByText('Trading signal')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('BTCUSDT')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('R:R')).toBeVisible();
     await page.getByRole('button', { name: 'Win', exact: true }).click();
     await expect(page.getByRole('dialog', { name: 'Capture trade data' })).toBeVisible({ timeout: 10_000 });
     await page.locator('#pnl-amount').fill('25');
