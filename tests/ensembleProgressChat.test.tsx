@@ -64,12 +64,12 @@ describe('EnsembleProgressChat', () => {
         // Just verify the card renders without crashing
     });
 
-    it('displays model name from modelIdToName mapping', () => {
+    it('displays a readable model name instead of the raw id', () => {
         const progress = makeProgress([
-            makeAnalyst({ key: 'a1', displayName: 'Analyst A', modelId: 'gpt-4', modelName: 'gpt-4' }),
+            makeAnalyst({ key: 'a1', displayName: 'Analyst A', modelId: 'deepseek-v4-flash', modelName: 'deepseek-v4-flash' }),
         ]);
-        render(<EnsembleProgressChat progress={progress} modelIdToName={{ 'gpt-4': 'GPT-4 Turbo' }} />);
-        expect(screen.getByText('GPT-4 Turbo')).toBeDefined();
+        render(<EnsembleProgressChat progress={progress} />);
+        expect(screen.getByText('Deepseek V4 Flash')).toBeDefined();
     });
 
     it('shows completed status visual indicators', () => {
@@ -102,26 +102,21 @@ describe('EnsembleProgressChat', () => {
             makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'complete', reasoning: 'Chain of thought trace', finalOutput: 'Bullish call' }),
         ]);
         render(<EnsembleProgressChat progress={progress} />);
-        // Collapsed by default — the details stay hidden until expanded.
-        expect(screen.queryByText('Final output')).toBeNull();
-        fireEvent.click(screen.getByLabelText('Expand Analyst A analysis'));
-        // Final output is always visible once the card is expanded...
-        expect(screen.getByText('Final output')).toBeDefined();
         expect(screen.getByText('Bullish call')).toBeDefined();
-        // ...while the thinking stays behind its own collapsible toggle
-        // (closed <details> keeps its children in the DOM, so assert `open`).
         expect(screen.getByText('Chain of thought trace').closest('details')?.open).toBe(false);
         fireEvent.click(screen.getByText(/Thinking/));
         expect(screen.getByText('Chain of thought trace').closest('details')?.open).toBe(true);
     });
 
-    it('keeps the thinking trace collapsed while an analyst is streaming', () => {
+    it('keeps the thinking trace behind a toggle while an analyst is streaming', () => {
         const progress = makeProgress([
             makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'analyzing', reasoning: 'Live trace in progress' }),
         ]);
         render(<EnsembleProgressChat progress={progress} isLive={true} />);
-        expect(screen.getByText('Live trace in progress')).toBeDefined();
-        expect(screen.queryByText('Thinking')).toBeNull();
+        expect(screen.getByText('Thinking')).toBeDefined();
+        expect(screen.getByText('Live trace in progress').closest('details')?.open).toBe(false);
+        fireEvent.click(screen.getByText(/Thinking/));
+        expect(screen.getByText('Live trace in progress').closest('details')?.open).toBe(true);
     });
 
     it('renders a timeline for each analyst plus the moderator', () => {
@@ -132,5 +127,97 @@ describe('EnsembleProgressChat', () => {
         expect(screen.getByLabelText('Floor')).toBeDefined();
         expect(screen.getAllByText('Macro').length).toBeGreaterThan(0);
         expect(screen.getByText('Moderator')).toBeDefined();
+    });
+
+    it('lists seats vertically and closes a card back to the row', () => {
+        const progress = makeProgress([
+            makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'complete' }),
+        ]);
+        render(<EnsembleProgressChat progress={progress} />);
+        expect(screen.getAllByLabelText('Collapse Analyst A analysis').length).toBeGreaterThan(0);
+        fireEvent.click(screen.getByLabelText('Close Analyst A analysis'));
+        expect(screen.getByLabelText('Expand Analyst A analysis')).toBeDefined();
+        expect(screen.getByText(/Completed/)).toBeDefined();
+    });
+
+    it('collapses the card when the seat name in the header is clicked', () => {
+        const progress = makeProgress([
+            makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'complete' }),
+        ]);
+        render(<EnsembleProgressChat progress={progress} />);
+        const headerTitle = screen.getAllByLabelText('Collapse Analyst A analysis')[1];
+        fireEvent.click(headerTitle);
+        expect(screen.getByLabelText('Expand Analyst A analysis')).toBeDefined();
+        expect(screen.queryByLabelText('Close Analyst A analysis')).toBeNull();
+    });
+
+    it('does not label openings as reply-to tape', () => {
+        const progress = makeProgress([
+            makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'complete', finalOutput: 'Bullish outlook' }),
+        ]);
+        render(<EnsembleProgressChat progress={progress} />);
+        expect(screen.queryByText(/reply to tape/i)).toBeNull();
+        expect(screen.getByText('Bullish outlook')).toBeDefined();
+    });
+
+    it('labels rebuttals as reply to Moderator only', () => {
+        const progress = makeProgress([
+            makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'complete', finalOutput: 'Opening call' }),
+        ]);
+        render(
+            <EnsembleProgressChat
+                progress={progress}
+                debateTurns={[{
+                    speaker: 'Analyst A',
+                    text: 'I still fade the wick.',
+                    round: 2,
+                }]}
+            />,
+        );
+        expect(screen.getByText('reply to Moderator')).toBeDefined();
+        expect(screen.queryByText(/reply to tape/i)).toBeNull();
+    });
+
+    it('splits moderator turns into reply-to blocks', () => {
+        const progress = makeProgress([
+            makeAnalyst({ key: 'a1', displayName: 'Macro Analyst', status: 'complete' }),
+            makeAnalyst({ key: 'a2', displayName: 'Technical Analyst', status: 'complete' }),
+        ]);
+        render(
+            <EnsembleProgressChat
+                progress={progress}
+                debateTurns={[{
+                    speaker: 'Moderator',
+                    text: 'Macro Analyst: Fix the entry.\nTechnical Analyst: Hold the sweep high.',
+                    round: 4,
+                }]}
+            />,
+        );
+        expect(screen.getByText('reply to Macro Analyst')).toBeDefined();
+        expect(screen.getByText('reply to Technical Analyst')).toBeDefined();
+        expect(screen.getByText('Fix the entry.')).toBeDefined();
+        expect(screen.getByText('Fix the entry.').closest('.border')).toBeDefined();
+        expect(screen.getByText('Hold the sweep high.').closest('.border')).toBeDefined();
+    });
+
+    it('keeps streamed moderator CoT in Thinking, not in the reply', () => {
+        const progress = makeProgress([
+            makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'complete' }),
+        ]);
+        render(
+            <EnsembleProgressChat
+                progress={progress}
+                reasoningProcesses={{ moderator: 'Weigh size before asking about entry.' }}
+                debateTurns={[{
+                    speaker: 'Moderator',
+                    text: 'What is the entry?',
+                    reasoning: 'Ask for a number, not a vibe.',
+                }]}
+            />,
+        );
+        expect(screen.getByText('What is the entry?')).toBeDefined();
+        expect(screen.getByText(/Ask for a number, not a vibe/).closest('details')).toBeDefined();
+        expect(screen.getByText(/Weigh size before asking about entry/).closest('details')).toBeDefined();
+        expect(screen.getByText('What is the entry?').closest('details')).toBeNull();
     });
 });

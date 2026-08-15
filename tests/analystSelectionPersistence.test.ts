@@ -7,6 +7,9 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
     loadEnsembleModelSelection,
     saveEnsembleModelSelection,
+    retainEnsembleSelection,
+    loadLastModeratorPick,
+    saveLastModeratorPick,
     loadLensConfig,
     saveLensConfig,
 } from '../services/ui/AnalystLensService';
@@ -65,5 +68,21 @@ describe('Analyst model selection persistence (save → load round-trip)', () =>
         const stored = localStorage.getItem(PREF_KEYS.ANALYST_LENS_CONFIG);
         expect(stored).toBeTruthy();
         expect(JSON.parse(stored!).assignments).toEqual(config.assignments);
+    });
+
+    it('keeps a saved model even when it is not in the provider catalog yet', () => {
+        const kept = retainEnsembleSelection(
+            [
+                { providerId: 'kilocode', model: 'stepfun/step-3.7-flash:free' },
+                { providerId: 'gone', model: 'x' },
+            ],
+            ['kilocode'],
+        );
+        expect(kept).toEqual([{ providerId: 'kilocode', model: 'stepfun/step-3.7-flash:free' }]);
+    });
+
+    it('persists the last moderator pick through save → load', () => {
+        saveLastModeratorPick({ providerId: 'kilocode', model: 'deepseek-v4-flash' });
+        expect(loadLastModeratorPick()).toEqual({ providerId: 'kilocode', model: 'deepseek-v4-flash' });
     });
 });

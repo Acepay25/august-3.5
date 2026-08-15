@@ -33,6 +33,26 @@ describe('splitThinkingFromOutput', () => {
         expect(split.thinking).toMatch(/Analyze User Input/i);
     });
 
+    it('peels THINKING / FINAL OUTPUT headers into the two channels', () => {
+        const split = splitThinkingFromOutput(
+            '',
+            'THINKING:\nFade if the sweep fails.\n\nFINAL OUTPUT:\nShort. SL above the wick.',
+        );
+        expect(split.thinking).toContain('Fade if the sweep fails');
+        expect(split.output).toContain('Short. SL above the wick');
+        expect(split.output).not.toMatch(/THINKING/i);
+    });
+
+    it('strips Hermes-style think tags out of the answer', () => {
+        const split = splitThinkingFromOutput(
+            '',
+            '<think>Weigh HTF vs LTF.</think>\nShort the failed sweep.',
+        );
+        expect(split.thinking).toContain('Weigh HTF vs LTF');
+        expect(split.output).toBe('Short the failed sweep.');
+        expect(split.output).not.toMatch(/<\/?think>/i);
+    });
+
     it('hides a scratchpad-only dump until a real answer exists', () => {
         const dump = `Here's a thinking process:\n\nAnalyze User Input: I'm in a debate/ensemble scenario. Role: Risk & Execution Specialist. Current Round: Round 5.`;
         const split = splitThinkingFromOutput('', dump);

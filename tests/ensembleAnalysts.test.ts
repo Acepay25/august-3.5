@@ -89,6 +89,36 @@ describe('buildEnsembleAnalysts', () => {
     const selection: EnsembleModelSelection = [{ providerId: 'prov-a', model: 'm3' }, { providerId: 'prov-a', model: 'm2' }];
     const plan = buildEnsembleAnalysts(providers, lens([], false), selection, true);
     expect(plan.analysts.map(a => a.model)).toEqual(['m3', 'm2']);
+    expect(plan.analysts.map(a => a.name)).toEqual(['prov-a · M3', 'prov-a · M2']);
+  });
+
+  it('uses Normal dropdown slots in order instead of the first provider ensembleModels', () => {
+    const providers = [
+      makeProvider('prov-a', ['old1', 'old2', 'old3'], 'old1', { ensembleModels: ['old1', 'old2', 'old3'] }),
+      makeProvider('prov-b', ['new1', 'new2'], 'new1'),
+    ];
+    const selection: EnsembleModelSelection = [
+      { providerId: 'prov-b', model: 'new1' },
+      { providerId: 'prov-b', model: 'new2' },
+      { providerId: 'prov-a', model: 'old2' },
+    ];
+    const plan = buildEnsembleAnalysts(providers, lens([], false), selection, true);
+    expect(plan.analysts.map(a => `${a.config.id}:${a.model}`)).toEqual([
+      'prov-b:new1',
+      'prov-b:new2',
+      'prov-a:old2',
+    ]);
+  });
+
+  it('keeps a Normal dropdown model even if it is not in the cached catalog yet', () => {
+    const providers = [makeProvider('prov-a', ['m1'], 'm1', { ensembleModels: ['m1'] })];
+    const plan = buildEnsembleAnalysts(
+      providers,
+      lens([], false),
+      [{ providerId: 'prov-a', model: 'fresh-from-dropdown' }],
+      true,
+    );
+    expect(plan.analysts.map(a => a.model)).toEqual(['fresh-from-dropdown']);
   });
 
   it('caps the analyst list at three entries', () => {
@@ -128,8 +158,8 @@ describe('buildAnalystFailureReport', () => {
       { name: 'Groq', model: 'llama-3.3' },
     ]);
     expect(report).toBe(
-      '• Qwen · qwen-max — Received an empty response from the AI.\n' +
-      '• Groq · llama-3.3 — 404 model not found',
+      '• Qwen · Qwen Max — Received an empty response from the AI.\n' +
+      '• Groq · Llama 3.3 — 404 model not found',
     );
   });
 

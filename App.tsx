@@ -99,7 +99,7 @@ import * as MemoryService from './services/learning/MemoryService';
 import { insightTextForTrade } from './utils/tradeInsightBrief';
 import { ProviderConfig } from './types/provider';
 import { syncFromTradeLog, syncRollingWindowFromTradeLog, initModelPerformanceService } from './services/backtesting/ModelPerformanceService';
-import { saveLensConfig, initAnalystLensService, loadLensConfig, saveEnsembleModelSelection, EnsembleModelSelection, saveCustomEnsemblePrompt, saveCustomLensPrompts } from './services/ui/AnalystLensService';
+import { saveLensConfig, initAnalystLensService, loadLensConfig, saveEnsembleModelSelection, retainEnsembleSelection, loadLastModeratorPick, saveLastModeratorPick, EnsembleModelSelection, saveCustomEnsemblePrompt, saveCustomLensPrompts } from './services/ui/AnalystLensService';
 import { detectTradingStyle, getEffectiveStyle, generateMasterPromptStyleInjection } from './services/ui/TradingStyleDetector';
 import { checkDataIntegrity, createStartupBackup, updateTradeCount, logIntegrityEvent, runMigrations } from './services/validation/DataIntegrityService';
 import { startAutoBackup, stopAutoBackup, createBackup } from './services/infrastructure/BackupService';
@@ -206,8 +206,19 @@ const App: React.FC = () => {
         moderatorProviderId, moderatorModel,
         handleSetVisionModel,
         handleSetSelectedOcrModel,
-        handleSetModeratorProvider, handleSetModeratorModel,
+        handleSetModeratorProvider: setConversationModeratorProvider,
+        handleSetModeratorModel: setConversationModeratorModel,
     } = useConversations();
+
+    const handleSetModeratorProvider = useCallback((providerId: string) => {
+        setConversationModeratorProvider(providerId);
+        saveLastModeratorPick({ providerId, model: moderatorModel || '' });
+    }, [setConversationModeratorProvider, moderatorModel]);
+
+    const handleSetModeratorModel = useCallback((model: string) => {
+        setConversationModeratorModel(model);
+        if (moderatorProviderId) saveLastModeratorPick({ providerId: moderatorProviderId, model });
+    }, [setConversationModeratorModel, moderatorProviderId]);
 
     // UI and other state
 
@@ -1691,10 +1702,6 @@ const App: React.FC = () => {
                 changed = true;
                 return { ...a, assignedProvider: null, assignedModel: undefined };
             }
-            if (a.assignedModel && !provider.models.includes(a.assignedModel)) {
-                changed = true;
-                return { ...a, assignedModel: undefined };
-            }
             return a;
         });
         if (changed) {
@@ -1707,9 +1714,7 @@ const App: React.FC = () => {
     useEffect(() => {
         if (!ensembleModelSelection || ensembleModelSelection.length === 0) return;
         const providersById = new Map(providerConfigs.map(c => [c.id, c]));
-        const cleaned = ensembleModelSelection.filter(e =>
-            Boolean(providersById.get(e.providerId)?.models.includes(e.model))
-        );
+        const cleaned = retainEnsembleSelection(ensembleModelSelection, providersById.keys());
         if (cleaned.length !== ensembleModelSelection.length) {
             handleSetEnsembleModelSelection(cleaned);
         }
@@ -2078,15 +2083,31 @@ const App: React.FC = () => {
             return;
         }
         const newConv = createNewConversation();
+        const lastModerator = loadLastModeratorPick();
         if (activeConversation) {
             newConv.ocrModel = activeConversation.ocrModel;
-            newConv.moderatorProviderId = activeConversation.moderatorProviderId;
-            newConv.moderatorModel = activeConversation.moderatorModel;
+            newConv.moderatorProviderId = activeConversation.moderatorProviderId || lastModerator?.providerId || '';
+            newConv.moderatorModel = activeConversation.moderatorModel || lastModerator?.model || '';
             newConv.leverage = activeConversation.leverage;
+        } else if (lastModerator) {
+            newConv.moderatorProviderId = lastModerator.providerId;
+            newConv.moderatorModel = lastModerator.model;
         }
         setConversationHistory(prev => [newConv, ...prev]);
         setActiveConversationId(newConv.id);
     }, [handleCancelAnalysis, invalidatePostMortemRuns, conversationHistory, activeConversationId, activeConversation]);
+
+    useEffect(() => {
+        if (moderatorProviderId && moderatorModel) {
+            saveLastModeratorPick({ providerId: moderatorProviderId, model: moderatorModel });
+            return;
+        }
+        if (!activeConversation || activeConversation.moderatorProviderId) return;
+        const lastModerator = loadLastModeratorPick();
+        if (!lastModerator?.providerId) return;
+        setConversationModeratorProvider(lastModerator.providerId);
+        if (lastModerator.model) setConversationModeratorModel(lastModerator.model);
+    }, [activeConversation, moderatorProviderId, moderatorModel, setConversationModeratorProvider, setConversationModeratorModel]);
 
     // F3: Ctrl/Cmd+N = new conversation; "/" focuses the composer (unless
     // already typing or an overlay is open).
@@ -3487,13 +3508,8 @@ const App: React.FC = () => {
                 slOptimization={currentSlOptimization}
                 suggestedEntryPrice={currentSuggestedEntryPrice}
                 entryTimingScore={currentEntryTimingScore}
-                onNewConversation={handleStartNewConversation}
-                onOpenJournal={handleOpenJournal}
+                onOpenSettings={(tab) => { setSettingsInitialTab(tab || 'models'); setIsSettingsMenuVisible(true); }}
                 onOpenLiveMarket={handleOpenLiveMarket}
-                onOpenAnalytics={handleOpenAnalytics}
-                onOpenSettings={() => { setSettingsInitialTab('models'); setIsSettingsMenuVisible(true); }}
-                onOpenWatchList={() => setIsWatchListVisible(true)}
-                watchOpenCount={watchedSignals.filter(s => !s.outcome || s.outcome === TradeOutcome.PENDING).length}
                 homeDashboard={homeDashboard}
                 onInteract={handleInteract}
             />

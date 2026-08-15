@@ -1,7 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { DebateTurn, EnsembleAnalystProgress, EnsembleProgress } from '../../types';
 import MarkdownContent from '../shared/MarkdownContent';
+import { formatModelDisplayName, formatSeatLabel } from '../../utils/providerUtils';
 import { buildAnalystGantt, lastThoughtSnippet } from '../../utils/runGantt';
+import { splitThinkingFromOutput } from '../../utils/thinkingSplit';
 
 interface EnsembleProgressChatProps {
     progress: EnsembleProgress;
@@ -12,13 +14,14 @@ interface EnsembleProgressChatProps {
     onRetryAnalyst?: (analystKey: string) => void;
     debateTurns?: DebateTurn[];
     activeDebateSpeakers?: Record<string, number>;
+    reasoningProcesses?: Record<string, string>;
 }
 
 const STATUS_TEXT: Record<EnsembleAnalystProgress['status'], string> = {
-    waiting: 'waiting',
+    waiting: 'Waiting',
     analyzing: 'thinking',
     error: 'unavailable',
-    complete: 'done',
+    complete: 'Completed',
 };
 
 const PHASES = ['Openings', 'Rebuttals', 'Verdict'] as const;
@@ -42,83 +45,131 @@ const splitAddresses = (text: string, names: string[]): Array<{ target?: string;
     }).filter(s => s.text);
 };
 
-const LiveLane: React.FC<{
-    analyst: EnsembleAnalystProgress;
+const matchesSpeaker = (speaker: string, analyst: EnsembleAnalystProgress): boolean => {
+    const needle = speaker.trim().toLowerCase();
+    const aliases = [
+        analyst.displayName,
+        formatSeatLabel(analyst.displayName),
+        analyst.providerName,
+        analyst.displayName.split(/[&/]/)[0],
+    ].map(name => name.trim().toLowerCase()).filter(Boolean);
+    return aliases.some(name => needle === name || needle.startsWith(`${name} `));
+};
+
+interface SeatBlock {
+    id: string;
+    replyTo?: string;
+    text: string;
+    live?: boolean;
+}
+
+const FadeStream: React.FC<{ text: string; live?: boolean; className?: string }> = ({ text, live, className }) => (
+    <div className={live ? 'stream-fade' : undefined}>
+        <MarkdownContent content={text} className={className} />
+    </div>
+);
+
+const ReplyBlock: React.FC<{ block: SeatBlock }> = ({ block }) => (
+    <div className="mx-2 rounded-lg border border-white/10 bg-zinc-950/50 px-3 py-2">
+        {block.replyTo && (
+            <p className="mb-1 text-[10px] font-medium uppercase tracking-widest text-zinc-500">
+                reply to {block.replyTo}
+            </p>
+        )}
+        <FadeStream text={block.text} live={block.live} className="text-sm leading-6 text-zinc-200" />
+    </div>
+);
+
+const SeatChat: React.FC<{
+    title: string;
     modelName: string;
-    answering: boolean;
-    fill: number;
-    onRetryAnalyst?: (analystKey: string) => void;
-}> = ({ analyst, modelName, answering, fill, onRetryAnalyst }) => {
-    const [open, setOpen] = useState(false);
-    const thinkingContent = analyst.reasoning || analyst.thoughtProcess || '';
-    const snippet = analyst.status === 'analyzing'
-        ? lastThoughtSnippet(thinkingContent, 88)
-        : analyst.status === 'complete'
-            ? lastThoughtSnippet(analyst.finalOutput || thinkingContent, 88)
-            : analyst.error || '';
-    const live = analyst.status === 'analyzing';
+    status: string;
+    live: boolean;
+    thinking: string;
+    blocks: SeatBlock[];
+    defaultOpen: boolean;
+    expandLabel: string;
+    onRetry?: () => void;
+    error?: string;
+}> = ({ title, modelName, status, live, thinking, blocks, defaultOpen, expandLabel, onRetry, error }) => {
+    const [open, setOpen] = useState(defaultOpen);
+    const snippet = lastThoughtSnippet(blocks[blocks.length - 1]?.text || thinking, 72);
 
     return (
-        <div className="border-t border-white/5 first:border-t-0">
-            <div className="flex items-center gap-1">
+        <div className="border-t border-white/5">
+            <div className="flex items-start gap-1">
                 <button
                     type="button"
                     onClick={() => setOpen(o => !o)}
-                    className="flex min-w-0 flex-1 items-center gap-2 px-3 py-1.5 text-left hover:bg-zinc-800/40"
+                    className="flex min-w-0 flex-1 items-start gap-2 px-3 py-2.5 text-left hover:bg-zinc-800/30"
                     aria-expanded={open}
-                    aria-label={`${open ? 'Collapse' : 'Expand'} ${analyst.displayName} analysis`}
+                    aria-label={`${open ? 'Collapse' : 'Expand'} ${expandLabel}`}
                 >
-                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                    <span className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${
                         live ? 'animate-pulse bg-zinc-200' :
-                        analyst.status === 'complete' ? 'bg-zinc-400' :
-                        analyst.status === 'error' ? 'bg-zinc-600' : 'bg-zinc-700'
+                        status === 'unavailable' ? 'bg-zinc-600' :
+                        status === 'Completed' ? 'bg-zinc-400' : 'bg-zinc-700'
                     }`} />
-                    <span className="w-[7.5rem] shrink-0 truncate text-[13px] text-zinc-200">{analyst.displayName}</span>
-                    <span className="min-w-0 flex-1 truncate text-[11px] text-zinc-600">{modelName}</span>
-                    <span className="w-16 shrink-0 text-right text-[11px] text-zinc-500">{laneStatusText(analyst, answering)}</span>
-                    <div className="h-1.5 w-24 shrink-0 overflow-hidden rounded-full bg-zinc-800 sm:w-32">
-                        <div
-                            className={`h-full rounded-full ${analyst.status === 'error' ? 'bg-zinc-600' : live ? 'bg-zinc-300' : 'bg-zinc-500'}`}
-                            style={{ width: `${fill}%` }}
-                        />
-                    </div>
+                    <span className="min-w-0 flex-1">
+                        <span className="flex items-baseline gap-2">
+                            <span className="min-w-0 truncate text-[13px] text-zinc-200">{title}</span>
+                            {modelName && (
+                                <span className="ml-auto hidden min-w-0 truncate text-[11px] text-zinc-600 sm:inline">{modelName}</span>
+                            )}
+                        </span>
+                        <span className="mt-0.5 block truncate text-[11px] text-zinc-500">
+                            {status}{!open && snippet ? ` · ${snippet}` : ''}
+                        </span>
+                    </span>
                 </button>
-                {analyst.status === 'error' && onRetryAnalyst && (
+                {onRetry && (
                     <button
                         type="button"
-                        onClick={() => onRetryAnalyst(analyst.key)}
-                        className="mr-2 shrink-0 rounded-lg border border-white/10 px-2 py-1 text-[11px] text-zinc-400 hover:text-zinc-200"
+                        onClick={onRetry}
+                        className="mr-2 mt-2 shrink-0 rounded-lg border border-white/10 px-2 py-1 text-[11px] text-zinc-400 hover:text-zinc-200"
                     >
                         Retry
                     </button>
                 )}
             </div>
-            {snippet && !open && (
-                <p className="truncate px-3 pb-1.5 pl-7 text-[11px] text-zinc-500">{snippet}</p>
-            )}
+
             {open && (
-                <div className="space-y-2 border-t border-white/5 px-3 pb-2 pt-2">
-                    {thinkingContent && thinkingContent.trim() !== (analyst.finalOutput || '').trim() && (
-                        <details className="group">
-                            <summary className="cursor-pointer list-none text-[11px] text-zinc-500 group-open:text-zinc-300">Thinking</summary>
-                            <div className="pt-1">
-                                <MarkdownContent content={thinkingContent} className="text-zinc-500" />
+                <div className="mx-3 mb-3 overflow-hidden rounded-xl border border-white/10 bg-zinc-900/70">
+                    <div className="flex items-center gap-2 border-b border-white/5 px-3 py-2">
+                        <button
+                            type="button"
+                            onClick={() => setOpen(false)}
+                            className="min-w-0 flex-1 truncate text-left text-[13px] text-zinc-200 hover:text-zinc-50"
+                            aria-label={`Collapse ${expandLabel}`}
+                        >
+                            {title}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setOpen(false)}
+                            className="shrink-0 text-[11px] text-zinc-500 hover:text-zinc-200"
+                            aria-label={`Close ${expandLabel}`}
+                        >
+                            Close
+                        </button>
+                    </div>
+                    {thinking && (
+                        <details className="border-b border-white/5 px-3 py-2">
+                            <summary className="cursor-pointer list-none text-[11px] uppercase tracking-widest text-zinc-500">
+                                Thinking
+                            </summary>
+                            <div className="custom-scrollbar mt-2 max-h-40 overflow-y-auto pr-1">
+                                <FadeStream text={thinking} live={live} className="text-zinc-500" />
                             </div>
                         </details>
                     )}
-                    {analyst.status === 'complete' && (
-                        <div>
-                            <div className="mb-1 text-[11px] text-zinc-500">Final output</div>
-                            {analyst.finalOutput ? (
-                                <MarkdownContent content={analyst.finalOutput} className="text-sm leading-6 text-zinc-200" />
-                            ) : (
-                                <p className="text-xs italic text-zinc-600">No final output was captured for this analyst.</p>
-                            )}
-                        </div>
-                    )}
-                    {analyst.status === 'error' && analyst.error && (
-                        <p className="text-[11px] text-zinc-500">{analyst.error}</p>
-                    )}
+                    <div className="flex max-h-[22rem] flex-col gap-2 overflow-y-auto py-2">
+                        {blocks.map(block => <ReplyBlock key={block.id} block={block} />)}
+                        {error && <p className="px-3 py-2 text-[11px] text-zinc-500">{error}</p>}
+                        {blocks.length === 0 && !thinking && !error && (
+                            <p className="px-3 py-2 text-xs italic text-zinc-600">Waiting for this seat.</p>
+                        )}
+                    </div>
                 </div>
             )}
         </div>
@@ -134,10 +185,10 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
     onRetryAnalyst,
     debateTurns = [],
     activeDebateSpeakers = {},
+    reasoningProcesses = {},
 }) => {
     const lanes = useMemo(() => buildAnalystGantt(progress), [progress]);
     const analystNames = progress.analysts.map(a => a.displayName);
-    const lastModTurn = [...debateTurns].reverse().find(t => t.speaker === 'Moderator');
     const modLive = Boolean(activeDebateSpeakers['Moderator']) || progress.moderator.status === 'reviewing';
     const anyAnalystLive = progress.analysts.some(a => a.status === 'analyzing') || Object.keys(activeDebateSpeakers).some(k => k !== 'Moderator');
     const openingsDone = debateTurns.some(t => t.round === 1);
@@ -148,17 +199,47 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
         : rebuttalStarted
             ? 'Rebuttals'
             : 'Openings';
-    const addresses = lastModTurn ? splitAddresses(lastModTurn.text, analystNames) : [];
-    const posedLine = addresses.length > 0
-        ? addresses.map(a => a.target ? `${a.target}: ${lastThoughtSnippet(a.text, 40)}` : lastThoughtSnippet(a.text, 48)).join('    ')
-        : lastThoughtSnippet(lastModTurn?.text, 88);
+
+    const { moderatorBlocks, moderatorThinking } = useMemo(() => {
+        const turns = debateTurns.filter(t => t.speaker === 'Moderator');
+        const lastId = turns[turns.length - 1] ? `${turns.length - 1}` : '';
+        const leaked: string[] = [];
+        const blocks = turns.flatMap((turn, index) => {
+            const live = modLive && String(index) === lastId;
+            const split = splitThinkingFromOutput(turn.reasoning || '', turn.text || '');
+            if (split.thinking) leaked.push(split.thinking);
+            const parts = splitAddresses(split.output, analystNames);
+            if (!split.output) return [];
+            if (parts.length === 0) return [{ id: `mod-${index}`, text: split.output, live }];
+            return parts.map((part, partIndex) => ({
+                id: `mod-${index}-${partIndex}`,
+                replyTo: part.target,
+                text: part.text,
+                live,
+            }));
+        });
+        const streamed = (reasoningProcesses.moderator || '').trim();
+        return {
+            moderatorBlocks: blocks,
+            moderatorThinking: [...new Set([streamed, ...leaked].filter(Boolean))].join('\n\n'),
+        };
+    }, [analystNames, debateTurns, modLive, reasoningProcesses.moderator]);
+
+    const [floorOpen, setFloorOpen] = useState(true);
 
     if (hideSubagents || progress.analysts.length === 0) return null;
 
     return (
         <div className={`ui-panel ${compact ? 'mt-0 mb-4' : 'mt-4'}`} aria-label="Floor">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-white/5 px-3 py-2 text-[11px] text-zinc-500">
-                <span className="font-medium text-zinc-300">{isLive ? 'Floor' : 'Seats'}</span>
+                <button
+                    type="button"
+                    onClick={() => setFloorOpen(o => !o)}
+                    className="font-medium text-zinc-300 hover:text-zinc-100"
+                    aria-expanded={floorOpen}
+                >
+                    {isLive ? 'Floor' : 'Seats'}
+                </button>
                 {PHASES.map((p, i) => (
                     <React.Fragment key={p}>
                         {i > 0 && <span className="text-zinc-700">·</span>}
@@ -172,44 +253,67 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
                 )}
             </div>
 
-            {(modLive || lastModTurn || progress.moderator) && (
-                <div className="border-b border-white/5 px-3 py-2">
-                    <div className="flex items-center gap-2 text-[12px]">
-                        <span className={`h-1.5 w-1.5 rounded-full ${modLive ? 'animate-pulse bg-zinc-200' : 'bg-zinc-500'}`} />
-                        <span className="font-medium uppercase tracking-wider text-[10px] text-zinc-400">Moderator</span>
-                        <span className="text-[11px] text-zinc-500">
-                            {verdictLive ? 'verdict' : modLive ? 'asking' : 'posed'}
-                        </span>
-                    </div>
-                    {modLive && addresses.length > 0 ? (
-                        <ul className="mt-1 space-y-0.5 pl-4 text-[12px] text-zinc-300">
-                            {addresses.map((a, i) => (
-                                <li key={`${a.target || i}`}>
-                                    {a.target ? <span className="text-zinc-500">→ {a.target} </span> : null}
-                                    {lastThoughtSnippet(a.text, 96)}
-                                </li>
-                            ))}
-                        </ul>
-                    ) : posedLine ? (
-                        <p className="mt-1 truncate pl-4 text-[12px] text-zinc-400">{posedLine}</p>
-                    ) : null}
+            {floorOpen && (
+                <div>
+                    <SeatChat
+                        title="Moderator"
+                        modelName="Floor"
+                        status={verdictLive ? 'verdict' : modLive ? 'asking' : moderatorBlocks.length > 0 ? 'posed' : 'Waiting'}
+                        live={modLive}
+                        thinking={moderatorThinking}
+                        blocks={moderatorBlocks}
+                        defaultOpen={modLive || moderatorBlocks.length > 0}
+                        expandLabel="Moderator analysis"
+                    />
+                    {progress.analysts.map((analyst) => {
+                        const answering = Boolean(activeDebateSpeakers[analyst.displayName] || activeDebateSpeakers[analyst.providerName]);
+                        const live = analyst.status === 'analyzing';
+                        const speakerTurns = debateTurns.filter(t => t.speaker !== 'Moderator' && matchesSpeaker(t.speaker, analyst));
+                        const lastTurn = speakerTurns[speakerTurns.length - 1];
+                        const openingRaw = analyst.finalOutput && analyst.finalOutput !== lastTurn?.text ? analyst.finalOutput : '';
+                        const openingSplit = splitThinkingFromOutput(
+                            [analyst.reasoning, analyst.thoughtProcess].filter(Boolean).join('\n\n'),
+                            openingRaw,
+                        );
+                        const turnSplits = speakerTurns.map((turn, index) => {
+                            const split = splitThinkingFromOutput(turn.reasoning || '', turn.text || '');
+                            return {
+                                id: `${analyst.key}-${index}`,
+                                replyTo: turn.round && turn.round > 1 ? 'Moderator' : undefined,
+                                text: split.output,
+                                thinking: split.thinking,
+                                live: live && answering && index === speakerTurns.length - 1,
+                            };
+                        });
+                        const thinking = [openingSplit.thinking, ...turnSplits.map(t => t.thinking)]
+                            .filter(Boolean)
+                            .filter((text, index, all) => all.indexOf(text) === index)
+                            .join('\n\n');
+                        const blocks: SeatBlock[] = [
+                            ...(openingSplit.output ? [{ id: `${analyst.key}-open`, text: openingSplit.output }] : []),
+                            ...turnSplits.map(({ thinking: _t, ...block }) => block),
+                        ];
+                        const title = formatSeatLabel(analyst.displayName);
+                        const prettyModel = formatModelDisplayName(analyst.modelId || analyst.modelName);
+                        return (
+                            <SeatChat
+                                key={analyst.key}
+                                title={title}
+                                modelName={prettyModel && title.includes(prettyModel) ? analyst.providerName : prettyModel}
+                                status={laneStatusText(analyst, answering && live)}
+                                live={live}
+                                thinking={thinking}
+                                blocks={blocks}
+                                defaultOpen={live || analyst.status === 'complete'}
+                                expandLabel={`${title} analysis`}
+                                onRetry={analyst.status === 'error' && onRetryAnalyst ? () => onRetryAnalyst(analyst.key) : undefined}
+                                error={analyst.error}
+                            />
+                        );
+                    })}
+                    <span className="sr-only">{lanes.length} timeline lanes</span>
                 </div>
             )}
-
-            {progress.analysts.map((analyst) => {
-                const lane = lanes.find(l => l.id === analyst.key);
-                const answering = Boolean(activeDebateSpeakers[analyst.displayName] || activeDebateSpeakers[analyst.providerName]);
-                return (
-                    <LiveLane
-                        key={analyst.key}
-                        analyst={analyst}
-                        modelName={modelIdToName[analyst.modelId] ?? analyst.modelName}
-                        answering={answering && analyst.status === 'analyzing'}
-                        fill={lane?.fill ?? 6}
-                        onRetryAnalyst={onRetryAnalyst}
-                    />
-                );
-            })}
         </div>
     );
 };

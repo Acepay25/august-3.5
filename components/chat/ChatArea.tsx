@@ -6,13 +6,11 @@ import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
 import ErrorBoundary from '../shared/ErrorBoundary';
 import MessageItem, { ChatContextProps } from './MessageItem';
 import { ChatInput } from './ChatInput';
-import { QuickActionChips } from './QuickActionChips';
 import { ArrowUpIcon, ArrowDownIcon, CloseIcon, LoadingIcon, EyeIcon, BrainIcon, EditIcon, CheckIcon, TrashIcon } from '../shared/Icons';
 import HybridDataPanel from '../analysis/HybridDataPanel';
 import ImageViewerModal from '../modals/ImageViewerModal';
 import AnalysisProgress from '../analysis/AnalysisProgress';
 import WorkspaceWelcome, { WorkspaceWelcomeProps } from './WorkspaceWelcome';
-import InjectionContextBar from './InjectionContextBar';
 
 // Hoisted list components to prevent re-creation on each render
 const ListHeader = () => <div className="h-16"></div>;
@@ -113,14 +111,8 @@ interface ChatAreaProps {
         timingQuality: string;
         suggestedEntry?: { price: number; reason: string } | null;
     } | null;
-    // Quick Action callbacks
-    onNewConversation: () => void;
-    onOpenJournal: () => void;
-    onOpenLiveMarket: () => void;
-    onOpenAnalytics: () => void;
-    onOpenSettings?: () => void;
-    onOpenWatchList?: () => void;
-    watchOpenCount?: number;
+    onOpenSettings?: (tab?: string) => void;
+    onOpenLiveMarket?: () => void;
     onInteract?: () => void;
     onSelectMessageForProbability?: (id: string) => void;
     /** Returning-user summary shown when the active conversation is empty. */
@@ -203,13 +195,8 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     slOptimization,
     suggestedEntryPrice,
     entryTimingScore,
-    onNewConversation,
-    onOpenJournal,
-    onOpenLiveMarket,
-    onOpenAnalytics,
     onOpenSettings,
-    onOpenWatchList,
-    watchOpenCount = 0,
+    onOpenLiveMarket,
     onInteract,
     onSelectMessageForProbability,
     homeDashboard,
@@ -388,6 +375,10 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         onSetModeratorProvider,
         onSetModeratorModel,
         onOpenSettings,
+        onOpenLiveMarket,
+        isAccuracyModeEnabled,
+        hybridConnectionStatus,
+        hybridData,
     }), [
         images, removeImage, leverageRef, setIsLeverageDropdownOpen,
         leverageInput, handleLeverageChange, handleLeverageBlur,
@@ -402,7 +393,8 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         isEnsembleEnabled, setIsEnsembleEnabled, selectedChatModel,
         setSelectedChatModel, regimeProviderStats,
         moderatorProviderId, moderatorModel, onSetModeratorProvider, onSetModeratorModel,
-        onOpenSettings,
+        onOpenSettings, onOpenLiveMarket, isAccuracyModeEnabled,
+        hybridConnectionStatus, hybridData,
     ]);
 
     return (
@@ -605,89 +597,27 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                         )}
                     </div>
                 </div>
-                {/* Keep the composer mounted during generation so its send
-                    control changes into the active Stop control. */}
-                <div className="w-full px-3 sm:px-4 lg:px-8">
-                    <div className="chat-column">
-                    <InjectionContextBar
-                        providers={providers}
-                        isEnsembleEnabled={isEnsembleEnabled}
-                        isAccuracyModeEnabled={isAccuracyModeEnabled}
-                        hybridConnectionStatus={hybridConnectionStatus}
-                        hybridData={hybridData}
-                    />
-                    </div>
-                </div>
                 <ChatInput {...chatInputProps} />
                 </>
             ) : messages.length === 0 ? (
-                /* Fresh session: open canvas, tagline, centered composer,
-                    and quick actions */
-                <div className="chat-hero-grid absolute inset-0 z-10 bg-zinc-950 overflow-y-auto">
-                    <div className={`min-h-full flex flex-col items-center px-3 sm:px-4 lg:px-8 py-10 ${homeDashboard ? 'justify-start' : 'justify-center'}`}>
-                        {homeDashboard ? (
-                            <div className="w-full mb-6 flex justify-center">
-                                <WorkspaceWelcome {...homeDashboard} />
-                            </div>
-                        ) : (
-                            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-zinc-100 text-center">
-                                August 3.5 makes your trading easier.
-                            </h1>
-                        )}
-                        <div className={`w-full chat-column ${homeDashboard ? '' : 'mt-8'}`}>
-                            <InjectionContextBar
-                                providers={providers}
-                                isEnsembleEnabled={isEnsembleEnabled}
-                                isAccuracyModeEnabled={isAccuracyModeEnabled}
-                                hybridConnectionStatus={hybridConnectionStatus}
-                            />
-                            <ChatInput centered {...chatInputProps} />
-                        </div>
-                        <div className="w-full chat-column mt-4">
-                            <QuickActionChips
-                                layout="centered"
-                                onNewAnalysis={onNewConversation}
-                                onOpenJournal={onOpenJournal}
-                                onOpenLiveMarket={onOpenLiveMarket}
-                                onOpenAnalytics={onOpenAnalytics}
-                                onOpenWatchList={onOpenWatchList}
-                                watchOpenCount={watchOpenCount}
-                                isDisabled={!!loadingMessage}
-                                disableNewAnalysis={messages.length === 0}
-                            />
-                        </div>
-                    </div>
-                </div>
-            ) : (
                 <>
-                    {/* Quick Action Chips - docked above the input once the
-                        session has content */}
-                    <div className="absolute bottom-[6.75rem] sm:bottom-[7.25rem] left-0 right-0 px-3 sm:px-4 lg:px-8 pointer-events-none z-10">
-                        <div className="chat-column pointer-events-auto">
-                            <QuickActionChips
-                                onNewAnalysis={onNewConversation}
-                                onOpenJournal={onOpenJournal}
-                                onOpenLiveMarket={onOpenLiveMarket}
-                                onOpenAnalytics={onOpenAnalytics}
-                                onOpenWatchList={onOpenWatchList}
-                                watchOpenCount={watchOpenCount}
-                                isDisabled={!!loadingMessage}
-                                disableNewAnalysis={messages.length === 0}
-                            />
-                        </div>
-                    </div>
-                    <div className="w-full px-3 sm:px-4 lg:px-8">
-                        <div className="chat-column">
-                        <InjectionContextBar
-                            providers={providers}
-                            isEnsembleEnabled={isEnsembleEnabled}
-                            isAccuracyModeEnabled={isAccuracyModeEnabled}
-                            hybridConnectionStatus={hybridConnectionStatus}
-                        />
+                    <div className="chat-hero-grid absolute inset-0 z-10 overflow-y-auto bg-zinc-950 pb-40">
+                        <div className={`flex min-h-full flex-col items-center px-3 py-10 sm:px-4 lg:px-8 ${homeDashboard ? 'justify-start' : 'justify-center'}`}>
+                            {homeDashboard ? (
+                                <div className="mb-6 flex w-full justify-center">
+                                    <WorkspaceWelcome {...homeDashboard} />
+                                </div>
+                            ) : (
+                                <h1 className="text-center text-3xl font-bold tracking-tight text-zinc-100 sm:text-4xl">
+                                    August 3.5 makes your trading easier.
+                                </h1>
+                            )}
                         </div>
                     </div>
                     <ChatInput {...chatInputProps} />
                 </>
+            ) : (
+                <ChatInput {...chatInputProps} />
             )}
 
             {/* Image Viewer Modal */}

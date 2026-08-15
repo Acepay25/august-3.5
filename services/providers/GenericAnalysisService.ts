@@ -649,9 +649,7 @@ export async function analyzeTradingView(
         if (!finalOutput || /^\s*\{/.test(finalOutput) || (!thoughtProcess && /^\s*\{/.test(responseText))) {
             tryFormatJsonPlan(finalOutput || responseText || reasoningAccumulated);
         }
-        if (!finalOutput && thoughtProcess) {
-            finalOutput = thoughtProcess;
-        } else if (thoughtProcess && finalOutput && thoughtProcess.trim() !== finalOutput.trim()) {
+        if (thoughtProcess && finalOutput && thoughtProcess.trim() !== finalOutput.trim()) {
             const recovered = splitThinkingFromOutput(thoughtProcess, finalOutput);
             thoughtProcess = recovered.thinking || thoughtProcess;
             finalOutput = recovered.output || finalOutput;

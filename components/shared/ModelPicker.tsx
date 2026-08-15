@@ -8,7 +8,7 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { ProviderConfig } from '../../types/provider';
-import { isFreeModelId, sortModelsFreeFirst } from '../../utils/providerUtils';
+import { formatModelDisplayName, isFreeModelId, sortModelsFreeFirst } from '../../utils/providerUtils';
 import { ChevronRightIcon, CheckIcon } from './Icons';
 
 /** Viewport rect of the trigger at open time (kept so the flyout can be
@@ -156,15 +156,15 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
         if (mode === 'model-only') {
             for (const p of readyProviders) {
                 if (p.models.includes(value)) {
-                    return `${p.name}/${value}`;
+                    return `${p.name} · ${formatModelDisplayName(value)}`;
                 }
             }
-            return value;
+            return formatModelDisplayName(value) || value;
         }
         // provider-model
         if (currentProviderId && currentModelId) {
             const p = readyProviders.find(p => p.id === currentProviderId);
-            return `${p?.name || currentProviderId}/${currentModelId}`;
+            return `${p?.name || currentProviderId} · ${formatModelDisplayName(currentModelId)}`;
         }
         if (currentProviderId) {
             const p = readyProviders.find(p => p.id === currentProviderId);
@@ -281,10 +281,13 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
     const hoveredModels = hoveredProvider
         ? readyProviders.find(p => p.id === hoveredProvider)?.models ?? []
         : [];
+    const catalogModels = mode !== 'provider-only' && freeOnly
+        ? hoveredModels.filter(isFreeModelId)
+        : hoveredModels;
     const visibleModels = sortModelsFreeFirst(
-        mode !== 'provider-only' && freeOnly
-            ? hoveredModels.filter(isFreeModelId)
-            : hoveredModels,
+        hoveredProvider === currentProviderId && currentModelId && !catalogModels.includes(currentModelId)
+            ? [currentModelId, ...catalogModels]
+            : catalogModels,
     );
 
     const handleFreeOnlyToggle = useCallback((next: boolean) => {
@@ -420,7 +423,7 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
                                                             : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'
                                                 }`}
                                             >
-                                                <span className="truncate">{model}</span>
+                                                <span className="truncate" title={model}>{formatModelDisplayName(model)}</span>
                                                 {isCurrent && (
                                                     <CheckIcon className="w-3 h-3 text-cyan-400 shrink-0" />
                                                 )}

@@ -10,8 +10,10 @@ import { MASTER_ANALYSIS_PROMPT } from '../../constants/prompts';
 import PromptEditorModal from '../settings/PromptEditorModal';
 import TeamModal from './TeamModal';
 import ModelPicker from '../shared/ModelPicker';
+import InjectionContextBar, { InjectionChipKind } from './InjectionContextBar';
 
 import { parseComposerIntent } from '../../utils/composerMentions';
+import { formatModelDisplayName } from '../../utils/providerUtils';
 import { listSkillSlugs } from '../../services/learning/SkillMemoryService';
 
 const LENS_ROSTER_ROLES: AnalystRole[] = [
@@ -84,7 +86,11 @@ interface ChatInputProps {
      * regime, not blended all-time.
      */
     regimeProviderStats?: RegimeProviderStatsMap;
-    onOpenSettings?: () => void;
+    onOpenSettings?: (tab?: string) => void;
+    onOpenLiveMarket?: () => void;
+    isAccuracyModeEnabled?: boolean;
+    hybridConnectionStatus?: 'disconnected' | 'connecting' | 'connected' | 'error';
+    hybridData?: unknown;
     // Fresh-session layout: center the input until the first message exists.
     centered?: boolean;
 }
@@ -135,6 +141,10 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
     onSetModeratorProvider,
     onSetModeratorModel,
     onOpenSettings,
+    onOpenLiveMarket,
+    isAccuracyModeEnabled = false,
+    hybridConnectionStatus,
+    hybridData,
     // Fresh-session layout: static centered input until the first message
     // exists, then it docks at the bottom.
     centered = false,
@@ -158,9 +168,10 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
     // stored selection is empty or no longer available.
     const chatProviders = providers.filter(p => p.isEnabled && p.apiKey.trim().length > 0);
     const chatModelOptions = chatProviders.flatMap(p => p.models.map(m => ({ providerName: p.name, modelId: m })));
-    const effectiveChatModel = selectedChatModel && chatModelOptions.some(o => o.modelId === selectedChatModel)
-        ? selectedChatModel
-        : (chatProviders[0]?.selectedModel || chatProviders[0]?.models[0] || '');
+    const effectiveChatModel = selectedChatModel
+        || chatProviders[0]?.selectedModel
+        || chatProviders[0]?.models[0]
+        || '';
     const rosterSlots = React.useMemo(() => {
         if (lensConfig.enabled) {
             return LENS_ROSTER_ROLES.map(role => {
@@ -171,7 +182,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                 return {
                     initial: def.shortName.charAt(0).toUpperCase(),
                     label: def.shortName,
-                    model: provider && model ? `${provider.name} · ${model}` : '',
+                    model: provider && model ? `${provider.name} · ${formatModelDisplayName(model)}` : '',
                 };
             }).filter(slot => slot.model);
         }
@@ -183,10 +194,33 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                 return {
                     initial: (provider?.name || 'E').charAt(0).toUpperCase(),
                     label: provider?.name || `Expert ${index + 1}`,
-                    model: entry.model,
+                    model: formatModelDisplayName(entry.model),
                 };
             });
     }, [chatProviders, ensembleModelSelection, lensConfig]);
+
+    const handleInjectionChip = (kind: InjectionChipKind): void => {
+        if (kind === 'team') {
+            setIsEnsembleEnabled(true);
+            setIsTeamModalOpen(true);
+            return;
+        }
+        if (kind === 'notebook') {
+            onOpenSettings?.('memory');
+            return;
+        }
+        if (kind === 'strategies') {
+            onOpenSettings?.('strategies');
+            return;
+        }
+        if (kind === 'accuracy') {
+            onOpenSettings?.('lenses');
+            return;
+        }
+        if (kind === 'hybrid' || kind === 'regime') {
+            onOpenLiveMarket?.();
+        }
+    };
 
     // --- PROMPT EDITOR (view / modify each mode's prompt) ---
     type PromptEditorTarget =
@@ -268,9 +302,6 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             style={{ overflow: 'hidden' }}
                         />
                     </div>
-                    {isEnsembleEnabled && lensConfig.enabled && (
-                        <p className="px-2 pb-1 text-[10px] text-zinc-600">Seats: Macro · Technical · Risk</p>
-                    )}
                     {(isEnsembleEnabled || listSkillSlugs().length > 0) && (
                         <div className="flex flex-wrap gap-1 px-2 pb-1">
                             {isEnsembleEnabled ? ['@Macro', '@Technical', '@Risk'].map(tag => (
@@ -413,11 +444,26 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                         </div>
                     </div>
 
-                    {isEnsembleEnabled && rosterSlots.length > 0 && (
-                        <p className="mt-1 truncate px-1 text-[11px] text-zinc-500" title={rosterSlots.map(s => `${s.label} · ${s.model}`).join('   ')}>
-                            {rosterSlots.map(slot => `${slot.label} · ${slot.model}`).join('   ')}
-                        </p>
-                    )}
+                    <div className="mt-1 flex flex-col items-end gap-1 px-1">
+                        {isEnsembleEnabled && rosterSlots.length > 0 && (
+                            <button
+                                type="button"
+                                onClick={() => setIsTeamModalOpen(true)}
+                                className="max-w-full truncate text-right text-[11px] text-zinc-500 hover:text-zinc-200"
+                                title="Open analyst team"
+                            >
+                                {rosterSlots.map(slot => `${slot.label} · ${slot.model}`).join('   ')}
+                            </button>
+                        )}
+                        <InjectionContextBar
+                            providers={providers}
+                            isEnsembleEnabled={isEnsembleEnabled}
+                            isAccuracyModeEnabled={isAccuracyModeEnabled}
+                            hybridConnectionStatus={hybridConnectionStatus}
+                            hybridData={hybridData}
+                            onChip={handleInjectionChip}
+                        />
+                    </div>
                 </div>
             </div>
 

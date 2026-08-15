@@ -1040,6 +1040,34 @@ export function loadEnsembleModelSelection(): EnsembleModelSelection {
     return [];
 }
 
+/** Keep saved slots whose provider still exists. Do not drop a model just because it is not in the cached catalog yet. */
+export function retainEnsembleSelection(
+    selection: EnsembleModelSelection,
+    providerIds: Iterable<string>,
+): EnsembleModelSelection {
+    const ids = new Set(providerIds);
+    return selection.filter(entry => ids.has(entry.providerId));
+}
+
+export type LastModeratorPick = { providerId: string; model: string };
+
+export function loadLastModeratorPick(): LastModeratorPick | null {
+    try {
+        const stored = localStorage.getItem(PREF_KEYS.LAST_MODERATOR_PICK);
+        if (!stored) return null;
+        const parsed = JSON.parse(stored) as LastModeratorPick;
+        if (parsed?.providerId && parsed.model) return parsed;
+    } catch { /* ignore */ }
+    return null;
+}
+
+export function saveLastModeratorPick(pick: LastModeratorPick): void {
+    setPreferenceObject(PREF_KEYS.LAST_MODERATOR_PICK, pick).catch(() => undefined);
+    try {
+        localStorage.setItem(PREF_KEYS.LAST_MODERATOR_PICK, JSON.stringify(pick));
+    } catch { /* ignore */ }
+}
+
 /** Persist the ordinary ensemble model selection (capped at 3 entries). */
 export function saveEnsembleModelSelection(selection: EnsembleModelSelection): void {
     setPreferenceObject(PREF_KEYS.ENSEMBLE_MODEL_SELECTION, selection.slice(0, 3)).catch(e =>
