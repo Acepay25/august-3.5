@@ -1,7 +1,7 @@
 {
   "name": "august-3.5",
   "private": true,
-  "version": "1.0.12",
+  "version": "1.0.13",
   "engines": {
     "node": ">=22"
   },
