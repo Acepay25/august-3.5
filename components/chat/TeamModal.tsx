@@ -8,6 +8,8 @@ import { RegimeProviderStatsMap } from '../../services/learning/SetupMemoryServi
 import { ANALYST_ROLE_DEFINITIONS } from '../../services/ui/AnalystLensService';
 import { CloseIcon, EditIcon } from '../shared/Icons';
 import ModelPicker from '../shared/ModelPicker';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 interface TeamModalProps {
     isOpen: boolean;
@@ -33,6 +35,7 @@ interface TeamModalProps {
     onClose: () => void;
     onEditLensPrompt?: (role: AnalystRole) => void;
     onEditNormalPrompt?: () => void;
+    onOpenSettings?: () => void;
 }
 
 const LENS_ROLES: { role: AnalystRole; label: string; focus: string; initial: string }[] = [
@@ -58,11 +61,14 @@ const TeamModal: React.FC<TeamModalProps> = ({
     onClose,
     onEditLensPrompt,
     onEditNormalPrompt,
+    onOpenSettings,
 }) => {
     const readyProviders = useMemo(
         () => providers.filter(p => p.isEnabled && p.apiKey.trim().length > 0),
         [providers]
     );
+    useEscapeClose(isOpen, onClose);
+    const dialogRef = useFocusTrap<HTMLDivElement>(isOpen);
 
     if (!isOpen) return null;
 
@@ -158,19 +164,37 @@ const TeamModal: React.FC<TeamModalProps> = ({
     };
 
     return (
-        <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/70 p-4 animate-fade-in pointer-events-auto" onClick={onClose}>
-            <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center justify-between border-b border-white/5 bg-zinc-900 px-4 py-3">
+        <div className="fixed inset-0 z-[95] flex items-end justify-end bg-black/50 sm:items-stretch pointer-events-auto" role="dialog" aria-label="Analyst team">
+            <button type="button" className="absolute inset-0 cursor-default" aria-label="Close team overlay" onClick={onClose} />
+            <div ref={dialogRef} className="relative flex h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl border border-white/10 bg-zinc-950 shadow-2xl sm:h-full sm:rounded-none sm:border-l sm:border-t-0 sm:border-b-0" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
                     <div>
                         <p className="text-sm font-medium text-white">Analyst team</p>
-                        <p className="mt-0.5 text-[11px] text-zinc-500">Choose who analyzes your charts before you send.</p>
+                        <p className="mt-0.5 text-[11px] text-zinc-500">Who analyzes your charts before you send.</p>
                     </div>
-                    <button onClick={onClose} className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-white/10 hover:text-zinc-200" aria-label="Close team modal">
+                    <button onClick={onClose} className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-200" aria-label="Close team sheet">
                         <CloseIcon className="h-4 w-4" />
                     </button>
                 </div>
 
-                <div className="custom-scrollbar max-h-[70vh] space-y-4 overflow-y-auto p-4">
+                <div className="custom-scrollbar flex-1 space-y-4 overflow-y-auto p-4">
+                    {readyProviders.length === 0 ? (
+                        <div className="rounded-xl border border-white/10 bg-zinc-900/60 p-4">
+                            <p className="text-sm text-zinc-200">No providers ready</p>
+                            <p className="mt-1 text-[12px] text-zinc-500">Add an API key and at least one model before a team can run.</p>
+                            <button
+                                type="button"
+                                className="mt-3 rounded-lg bg-zinc-100 px-3 py-1.5 text-[12px] font-medium text-zinc-950"
+                                onClick={() => {
+                                    onClose();
+                                    onOpenSettings?.();
+                                }}
+                            >
+                                Open AI setup
+                            </button>
+                        </div>
+                    ) : (
+                    <>
                     <div className="flex rounded-lg border border-white/10 bg-zinc-900 p-0.5">
                         {(['normal', 'lenses'] as const).map(m => (
                             <button
@@ -263,9 +287,9 @@ const TeamModal: React.FC<TeamModalProps> = ({
                         </div>
                     )}
 
-                    <div className="rounded-xl border border-cyan-400/15 bg-zinc-900/60 p-3">
+                    <div className="rounded-xl border border-white/10 bg-zinc-900/60 p-3">
                         <div className="mb-2 flex items-center gap-2">
-                            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-cyan-400/30 bg-cyan-500/10 text-[10px] font-semibold text-cyan-300">
+                            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-white/10 bg-zinc-800 text-[10px] font-semibold text-zinc-300">
                                 S
                             </span>
                             <div className="min-w-0">
@@ -280,13 +304,25 @@ const TeamModal: React.FC<TeamModalProps> = ({
                             mode="provider-model"
                         />
                     </div>
+                    </>
+                    )}
                 </div>
 
-                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/5 bg-zinc-900 px-4 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/10 px-4 py-3">
                     <span className="text-[11px] text-zinc-500">
                         {assignedCount}/3 {mode === 'lenses' ? 'roles' : 'experts'}{moderatorValue ? ' · moderator set' : ' · pick a moderator'}
                     </span>
                     <div className="flex gap-2">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setIsEnsembleEnabled(false);
+                                onClose();
+                            }}
+                            className="rounded-lg border border-white/10 px-3 py-1.5 text-[11px] font-medium text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200"
+                        >
+                            Casual chat
+                        </button>
                         <button
                             type="button"
                             onClick={() => setMode('lenses')}
@@ -297,7 +333,7 @@ const TeamModal: React.FC<TeamModalProps> = ({
                         <button
                             type="button"
                             onClick={onClose}
-                            className="rounded-lg bg-cyan-600 px-3 py-1.5 text-[11px] font-medium text-white transition-colors hover:bg-cyan-500"
+                            className="rounded-lg bg-zinc-100 px-3 py-1.5 text-[11px] font-medium text-zinc-950 transition-colors hover:bg-white"
                         >
                             Done
                         </button>

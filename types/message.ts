@@ -102,6 +102,9 @@ export interface RunStats {
    * analysts that dropped out mid-debate).
    */
   analysts?: RunAnalystStats[];
+  promptTokens?: number;
+  completionTokens?: number;
+  costUsd?: number;
 }
 
 /** One analyst's entry in the run ledger. */
@@ -114,6 +117,8 @@ export interface RunAnalystStats {
   durationMs?: number;
   /** Combined output size (final output + thought process), chars. */
   charsOut?: number;
+  promptTokens?: number;
+  completionTokens?: number;
 }
 
 /** A candidate provider the user can pick to replace an analyst that dropped
@@ -208,6 +213,8 @@ export interface Message {
   watchEpisodes?: WatchEpisode[];
   /** Append-only debate run log (model-visible facts for replay). */
   debateRunLog?: DebateRunEvent[];
+  /** Notebook files / skills retrieved for this run (inspectable on the card). */
+  memoryRetrieved?: Array<{ path: string; kind: string }>;
   /** Crash-resume: last completed debate round (cleared when a verdict lands). */
   debateCheckpoint?: DebateCheckpoint;
   /** "What would I do today?" — fresh forward-looking re-assessment of the

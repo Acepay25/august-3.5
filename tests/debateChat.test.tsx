@@ -106,17 +106,16 @@ describe('DebateChat', () => {
         expect(screen.getAllByText('Verdict').length).toBeGreaterThanOrEqual(1);
     });
 
-    it('shows TL;DR summary when analysis is provided and debate is complete', () => {
+    it('does not pin a TL;DR above the briefing (board lives next to the signal)', () => {
         const analysis = makeAnalysis();
         const turns = [
             makeTurn('Analyst A', 'Opening', 1),
             makeTurn('Moderator', 'Verdict', 2),
         ];
         render(<DebateChat {...baseProps} debateTurns={turns} analysis={analysis} isDebating={false} />);
-        expect(screen.getByText('TL;DR')).toBeDefined();
-        // "Long" appears in both consensus strip and TL;DR card
-        expect(screen.getAllByText('Buy').length).toBeGreaterThanOrEqual(1);
-        expect(screen.getAllByText('High').length).toBeGreaterThanOrEqual(1);
+        expect(screen.queryByText('TL;DR')).toBeNull();
+        expect(screen.getByRole('button', { name: 'Openings' })).toBeDefined();
+        expect(screen.getByRole('button', { name: 'All' })).toBeDefined();
     });
 
     it('does not show TL;DR while debating', () => {
@@ -175,8 +174,7 @@ describe('DebateChat', () => {
         const turns = [makeTurn('Analyst A', 'Opening', 1)];
         const activeSpeakers = { 'Analyst A': 2 };
         render(<DebateChat {...baseProps} debateTurns={turns} isDebating={true} activeDebateSpeakers={activeSpeakers} />);
-        expect(screen.getByText(/Now speaking/)).toBeDefined();
-        expect(screen.getByText(/Analyst A \(R2\)/)).toBeDefined();
+        expect(screen.queryByText(/Now speaking/)).toBeNull();
         expect(screen.getByText('Speaking')).toBeDefined();
         expect(screen.getByText('Writing')).toBeDefined();
     });
@@ -257,16 +255,15 @@ describe('DebateChat', () => {
         expect(screen.getByText(/Analyze User Input/i)).toBeDefined();
     });
 
-    it('jumps to a phase heading when the round tab is clicked', () => {
-        const scrollIntoView = vi.fn();
-        HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    it('filters to a phase when the round tab is clicked', () => {
         const turns = [
             makeTurn('Analyst A', 'Opening', 1),
             makeTurn('Analyst A', 'Rebuttal', 2),
         ];
         render(<DebateChat {...baseProps} debateTurns={turns} />);
         fireEvent.click(screen.getByRole('button', { name: 'Rebuttals' }));
-        expect(scrollIntoView).toHaveBeenCalled();
+        expect(screen.getByText('Rebuttal')).toBeDefined();
+        expect(screen.queryByText('Opening')).toBeNull();
     });
 
     it('shows moderator thinking keyed to lowercase moderator (post-mortem transcript)', () => {

@@ -1076,8 +1076,11 @@ const App: React.FC = () => {
     // ─── Side-by-side compare ──────────────────────────────────────────────
     const [compareState, setCompareState] = useState<{ primaryId: string; secondaryId: string | null } | null>(null);
     const handleCompareAnalysis = useCallback((messageId: string) => {
-        setCompareState({ primaryId: messageId, secondaryId: null });
-    }, []);
+        const analyses = messages.filter(m => m.analysis);
+        const idx = analyses.findIndex(m => m.id === messageId);
+        const previous = idx > 0 ? analyses[idx - 1] : analyses.find(m => m.id !== messageId);
+        setCompareState({ primaryId: messageId, secondaryId: previous?.id ?? null });
+    }, [messages]);
     const handlePickSecondary = useCallback((messageId: string) => {
         setCompareState(prev => prev ? { ...prev, secondaryId: messageId } : prev);
     }, []);
@@ -2287,8 +2290,8 @@ const App: React.FC = () => {
         },
         {
             id: 'toggle-ensemble',
-            label: isEnsembleEnabled ? 'Disable Ensemble mode' : 'Enable Ensemble mode',
-            hint: 'Debates',
+            label: isEnsembleEnabled ? 'Switch to casual chat' : 'Enable Team analysis',
+            hint: 'Team',
             // The canonical handler — the raw setter skipped image cleanup and
             // the setup-warning toasts.
             run: () => handleSetEnsembleEnabled(!isEnsembleEnabled),
@@ -3428,6 +3431,7 @@ const App: React.FC = () => {
                 onOpenJournal={handleOpenJournal}
                 onOpenLiveMarket={handleOpenLiveMarket}
                 onOpenAnalytics={handleOpenAnalytics}
+                onOpenSettings={() => { setSettingsInitialTab('models'); setIsSettingsMenuVisible(true); }}
                 onOpenWatchList={() => setIsWatchListVisible(true)}
                 watchOpenCount={watchedSignals.filter(s => !s.outcome || s.outcome === TradeOutcome.PENDING).length}
                 homeDashboard={homeDashboard}

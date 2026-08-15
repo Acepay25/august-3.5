@@ -77,3 +77,24 @@ export function isFreeModelId(modelId: string): boolean {
     if (!id) return false;
     return /(^|[/:\-_.])free($|[/:\-_.])/.test(id);
 }
+
+/** Stable unique list with free-tier ids first, original order preserved within each group. */
+export function sortModelsFreeFirst(modelIds: string[]): string[] {
+    const seen = new Set<string>();
+    const unique: string[] = [];
+    for (const id of modelIds) {
+        const trimmed = id.trim();
+        if (!trimmed || seen.has(trimmed)) continue;
+        seen.add(trimmed);
+        unique.push(trimmed);
+    }
+    return [
+        ...unique.filter(isFreeModelId),
+        ...unique.filter(id => !isFreeModelId(id)),
+    ];
+}
+
+/** Merge a /models catalog with ids the user already saved (keep custom extras). */
+export function mergeDiscoveredModels(existing: string[], discovered: string[]): string[] {
+    return sortModelsFreeFirst([...discovered, ...existing]);
+}

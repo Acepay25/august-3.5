@@ -40,8 +40,8 @@ describe('EnsembleProgressChat', () => {
             makeAnalyst({ key: 'a2', displayName: 'Analyst Beta', status: 'complete' }),
         ]);
         render(<EnsembleProgressChat progress={progress} />);
-        expect(screen.getByText('Analyst Alpha')).toBeDefined();
-        expect(screen.getByText('Analyst Beta')).toBeDefined();
+        expect(screen.getAllByText('Analyst Alpha').length).toBeGreaterThan(0);
+        expect(screen.getAllByText('Analyst Beta').length).toBeGreaterThan(0);
     });
 
     it('shows typing indicator for active analysts in live mode', () => {
@@ -59,7 +59,7 @@ describe('EnsembleProgressChat', () => {
             makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'complete', reasoning: 'Strong support at 95k' }),
         ]);
         render(<EnsembleProgressChat progress={progress} />);
-        expect(screen.getByText('Analyst A')).toBeDefined();
+        expect(screen.getAllByText('Analyst A').length).toBeGreaterThan(0);
         // The card should be present - reasoning may or may not be visible depending on expand state
         // Just verify the card renders without crashing
     });
@@ -78,8 +78,8 @@ describe('EnsembleProgressChat', () => {
             makeAnalyst({ key: 'a2', displayName: 'Analyst B', status: 'error' }),
         ]);
         render(<EnsembleProgressChat progress={progress} />);
-        expect(screen.getByText('Analyst A')).toBeDefined();
-        expect(screen.getByText('Analyst B')).toBeDefined();
+        expect(screen.getAllByText('Analyst A').length).toBeGreaterThan(0);
+        expect(screen.getAllByText('Analyst B').length).toBeGreaterThan(0);
     });
 
     it('renders with empty analysts array gracefully', () => {
@@ -120,7 +120,17 @@ describe('EnsembleProgressChat', () => {
             makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'analyzing', reasoning: 'Live trace in progress' }),
         ]);
         render(<EnsembleProgressChat progress={progress} isLive={true} />);
-        const details = screen.getByText('Live trace in progress').closest('details');
-        expect(details?.open).toBe(false);
+        expect(screen.getByText('Live trace in progress')).toBeDefined();
+        expect(screen.queryByText('Thinking')).toBeNull();
+    });
+
+    it('renders a timeline for each analyst plus the moderator', () => {
+        const progress = makeProgress([
+            makeAnalyst({ key: 'a1', displayName: 'Macro', status: 'analyzing' }),
+        ]);
+        render(<EnsembleProgressChat progress={progress} isLive />);
+        expect(screen.getByLabelText('Analyst timeline')).toBeDefined();
+        expect(screen.getAllByText('Macro').length).toBeGreaterThan(0);
+        expect(screen.getByText('Moderator')).toBeDefined();
     });
 });

@@ -6,6 +6,7 @@ import { debateTurnsToRoundTexts, lastCompletedRound, reconstructOpenings } from
 import { computeEvidenceQualityStats } from '../utils/analysisQuality';
 import { buildAnalysisReportMarkdown } from '../utils/analysisReport';
 import { describeWatchTick } from '../utils/watchTicks';
+import { buildAnalystGantt, lastThoughtSnippet, laneFillForStatus } from '../utils/runGantt';
 import { TradeOutcome } from '../types';
 
 describe('harness envelopes', () => {
@@ -107,5 +108,22 @@ describe('watch ticks', () => {
 
     it('ignores tiny price noise', () => {
         expect(describeWatchTick({ direction: 'Long' } as any, 100.1, 100)).toBeNull();
+    });
+});
+
+describe('run gantt', () => {
+    it('fills complete lanes and clips a thinking snippet', () => {
+        expect(laneFillForStatus('complete')).toBe(100);
+        expect(laneFillForStatus('waiting')).toBeLessThan(20);
+        expect(lastThoughtSnippet('line one\nclose above 64510')).toBe('close above 64510');
+        const lanes = buildAnalystGantt({
+            analysts: [{
+                key: 'a1', displayName: 'Macro', providerId: 'p', providerName: 'P',
+                modelId: 'm', modelName: 'M', status: 'analyzing',
+            }],
+            moderator: { status: 'waiting' },
+        });
+        expect(lanes.map(l => l.label)).toEqual(['Macro', 'Moderator']);
+        expect(lanes[0].live).toBe(true);
     });
 });

@@ -145,6 +145,51 @@ const rulesBlock = (query?: MemoryRetrievalQuery): string => {
     return lines.length ? `**Matching rules**\n${lines.join('\n')}` : '';
 };
 
+export interface RetrievedMemorySource {
+    path: string;
+    kind: 'identity' | 'skill' | 'playbook' | 'diary' | 'rules' | 'similar';
+}
+
+export const listRetrievedMemorySources = (
+    query?: MemoryRetrievalQuery,
+    trades?: LoggedTrade[],
+    audience: 'analyst' | 'moderator' = 'analyst',
+): RetrievedMemorySource[] => {
+    const { files } = getMemoryFiles();
+    const ranked = files
+        .map(f => ({ f, score: fileScore(f, query) }))
+        .filter(x => x.score >= 0)
+        .sort((a, b) => b.score - a.score);
+    const out: RetrievedMemorySource[] = [];
+    let skillsKept = 0;
+    for (const { f } of ranked.slice(0, 12)) {
+        const folder = folderOf(f);
+        if (folder === 'skills') {
+            if (audience === 'moderator') continue;
+            if (skillsKept >= 2) continue;
+            skillsKept += 1;
+            out.push({ path: `${folder}/${f.name}`, kind: 'skill' });
+            continue;
+        }
+        const kind: RetrievedMemorySource['kind'] =
+            ALWAYS_ON.has(f.name) ? 'identity'
+                : folder === 'trader-diary' ? 'diary'
+                    : folder === 'rules' ? 'rules'
+                        : 'playbook';
+        out.push({ path: `${folder}/${f.name}`, kind });
+    }
+    if (audience === 'moderator' && skillCatalogBlock(query)) {
+        out.push({ path: 'skills/catalog', kind: 'skill' });
+    }
+    if (similarTradesBlock(query, trades)) {
+        out.push({ path: 'journal/similar-trades', kind: 'similar' });
+    }
+    if (rulesBlock(query)) {
+        out.push({ path: 'rules/if-then', kind: 'rules' });
+    }
+    return out;
+};
+
 /**
  * Capped, setup-aware harness context. Replaces dumping every notebook file.
  * `audience: 'moderator'` weaves a skill catalog (name, W/L, trigger) instead

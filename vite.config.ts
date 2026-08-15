@@ -112,7 +112,7 @@ function devProviderProxy() {
           // (direct browser SDK calls are blocked by providers without CORS
           // headers, e.g. opencode). The renderer parses the SSE events.
           if (request.stream) {
-            const streamBody: Record<string, unknown> = { ...body, stream: true };
+            const streamBody: Record<string, unknown> = { ...body, stream: true, stream_options: { include_usage: true } };
             let sse = await fetch(url, { method: 'POST', headers, body: JSON.stringify(streamBody), signal: AbortSignal.timeout(300000) });
             if (!sse.ok && request.jsonMode && (sse.status === 400 || sse.status === 422) && streamBody.response_format) {
               const fallbackBody = { ...streamBody };

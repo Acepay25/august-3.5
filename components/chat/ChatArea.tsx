@@ -118,6 +118,7 @@ interface ChatAreaProps {
     onOpenJournal: () => void;
     onOpenLiveMarket: () => void;
     onOpenAnalytics: () => void;
+    onOpenSettings?: () => void;
     onOpenWatchList?: () => void;
     watchOpenCount?: number;
     onInteract?: () => void;
@@ -206,6 +207,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     onOpenJournal,
     onOpenLiveMarket,
     onOpenAnalytics,
+    onOpenSettings,
     onOpenWatchList,
     watchOpenCount = 0,
     onInteract,
@@ -374,6 +376,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         moderatorModel,
         onSetModeratorProvider,
         onSetModeratorModel,
+        onOpenSettings,
     }), [
         images, removeImage, leverageRef, setIsLeverageDropdownOpen,
         leverageInput, handleLeverageChange, handleLeverageBlur,
@@ -388,6 +391,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         isEnsembleEnabled, setIsEnsembleEnabled, selectedChatModel,
         setSelectedChatModel, regimeProviderStats,
         moderatorProviderId, moderatorModel, onSetModeratorProvider, onSetModeratorModel,
+        onOpenSettings,
     ]);
 
     return (

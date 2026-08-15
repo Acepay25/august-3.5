@@ -12,6 +12,7 @@ vi.mock('../services/infrastructure/PreferencesService', () => ({
 }));
 
 import { initMemoryFiles, getMemoryFiles, getMemoryFilesContext, createMemoryFile } from '../services/learning/MemoryFilesService';
+import { listRetrievedMemorySources } from '../services/learning/MemoryRetrievalService';
 import {
   maybeUpsertSkill,
   applySkillEvidence,
@@ -80,6 +81,13 @@ describe('Harness memory (skills + retrieval)', () => {
     }, trades);
     expect(ctx).toContain('[skills/');
     expect(ctx).toContain('kind: avoid');
+    const sources = listRetrievedMemorySources({
+      coin: 'BTCUSDT',
+      direction: 'Short',
+      family: 'Family A',
+      regime: 'ranging',
+    }, trades);
+    expect(sources.some(s => s.kind === 'skill' || s.path.includes('skills/'))).toBe(true);
 
     const moderator = getMemoryFilesContext({
       coin: 'BTCUSDT',

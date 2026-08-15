@@ -49,14 +49,6 @@ const getPhaseHeading = (round: number, isVerdictRound = false): (typeof PHASES)
     return 'Clarification';
 };
 
-/** Human phase name for the thinking indicator (instead of a raw round number). */
-const getPhaseLabel = (round: number, isVerdictRound: boolean): string => {
-    if (isVerdictRound) return 'Verdict';
-    if (round === 1) return 'Openings';
-    if (round === 2 || round === 3) return 'Rebuttals';
-    return 'Clarification';
-};
-
 interface ModeratorSegment {
     target?: string;
     text: string;
@@ -104,7 +96,7 @@ const TurnThinking: React.FC<{ content: string; streaming?: boolean }> = ({ cont
             <summary className="cursor-pointer list-none px-3 py-2 text-[11px] text-zinc-500 group-open:text-zinc-300">
                 {streaming ? (
                     <span className="inline-flex items-center gap-1.5">
-                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400"></span>
+                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-zinc-300"></span>
                         Thinking…
                     </span>
                 ) : (
@@ -120,7 +112,7 @@ const TurnThinking: React.FC<{ content: string; streaming?: boolean }> = ({ cont
 
 const SpeakerAvatar: React.FC<{ name: string; live?: boolean }> = ({ name, live = false }) => (
     <div
-        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border bg-zinc-800 text-[10px] font-semibold text-zinc-200 ${live ? 'border-cyan-400/50 ring-1 ring-cyan-400/30' : 'border-white/10'}`}
+        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border bg-zinc-800 text-[10px] font-semibold text-zinc-200 ${live ? 'border-zinc-400 ring-1 ring-zinc-400/30' : 'border-white/10'}`}
         aria-hidden="true"
     >
         {name.trim().charAt(0).toUpperCase() || '?'}
@@ -137,7 +129,7 @@ const StreamedTurnBody: React.FC<{ text: string; live: boolean }> = ({ text, liv
         return (
             <p className="text-sm italic text-zinc-500">
                 Writing
-                <span className="ml-1 inline-block h-4 w-1.5 animate-pulse bg-cyan-400 align-middle" aria-hidden="true" />
+                <span className="ml-1 inline-block h-4 w-1.5 animate-pulse bg-zinc-300 align-middle" aria-hidden="true" />
             </p>
         );
     }
@@ -145,7 +137,7 @@ const StreamedTurnBody: React.FC<{ text: string; live: boolean }> = ({ text, liv
         return (
             <p className="whitespace-pre-wrap text-sm leading-6 text-zinc-200">
                 {shown}
-                <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-cyan-400 align-middle" aria-hidden="true" />
+                <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-zinc-300 align-middle" aria-hidden="true" />
             </p>
         );
     }
@@ -169,6 +161,7 @@ const DebateChat: React.FC<DebateChatProps> = ({
     onForkDebate,
 }) => {
     const [showTranscript, setShowTranscript] = useState(false);
+    const [briefingTab, setBriefingTab] = useState<(typeof PHASES)[number] | 'All'>('All');
     const [isScrolledUp, setIsScrolledUp] = useState(false);
     const [isReplaying, setIsReplaying] = useState(false);
     const [replayIndex, setReplayIndex] = useState(0);
@@ -189,7 +182,6 @@ const DebateChat: React.FC<DebateChatProps> = ({
     // clarification-question round is never mistaken for the verdict while
     // the verdict round is still streaming.
     const latestModeratorRound = useMemo(() => Math.max(0, ...debateTurns.filter(turn => turn.speaker === 'Moderator').map(turn => turn.round ?? 0)), [debateTurns]);
-    const activeSpeakers = useMemo(() => Object.entries(activeDebateSpeakers), [activeDebateSpeakers]);
     const analystNames = useMemo(() => [...new Set(debateTurns.filter(turn => turn.speaker !== 'Moderator').map(turn => turn.speaker))], [debateTurns]);
     const modelNames = useMemo(() => Object.entries(modelsUsed).map(([key, modelId]) => modelIdToName[modelId] ?? modelId ?? key), [modelIdToName, modelsUsed]);
 
@@ -259,8 +251,13 @@ const DebateChat: React.FC<DebateChatProps> = ({
         if (element) element.scrollTo({ top: element.scrollHeight, behavior: 'smooth' });
     };
 
-    const jumpToPhase = (phase: (typeof PHASES)[number]): void => {
+    const jumpToPhase = (phase: (typeof PHASES)[number] | 'All'): void => {
         setShowTranscript(true);
+        setBriefingTab(phase);
+        if (phase === 'All') {
+            setPendingPhaseJump(null);
+            return;
+        }
         setPendingPhaseJump(phase);
         userScrolledUpRef.current = true;
         setIsScrolledUp(true);
@@ -349,7 +346,9 @@ const DebateChat: React.FC<DebateChatProps> = ({
         if (!pendingPhaseJump) return;
         const el = phaseAnchorRefs.current[pendingPhaseJump];
         if (!el) return;
-        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        if (typeof el.scrollIntoView === 'function') {
+            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
         setPendingPhaseJump(null);
     }, [pendingPhaseJump, debateTurns, transcriptOpen]);
 
@@ -389,17 +388,20 @@ const DebateChat: React.FC<DebateChatProps> = ({
         return [...base, ...extra].sort((a, b) => (a.round ?? 0) - (b.round ?? 0));
     }, [visibleTurns, isReplaying, replayIndex, isDebating, activeDebateSpeakers]);
     const isComplete = Boolean(analysis && !isDebating && debateTurns.length > 0);
-    const liveRound = Math.max(
-        1,
-        ...debateTurns.map(turn => turn.round ?? 1),
-        ...Object.values(activeDebateSpeakers),
-    );
-    const liveIsVerdict = !isDebating || (
-        activeDebateSpeakers['Moderator'] !== undefined
-        && activeDebateSpeakers['Moderator'] === latestModeratorRound
-        && latestModeratorRound > 3
-    );
-    const activePhase = getPhaseLabel(liveRound, liveIsVerdict || Boolean(analysis && !isDebating));
+
+    useEffect(() => {
+        if (isComplete) setBriefingTab(prev => (prev === 'All' ? 'Openings' : prev));
+        else if (isDebating) setBriefingTab('All');
+    }, [isComplete, isDebating]);
+
+    const filteredTurns = useMemo(() => {
+        if (briefingTab === 'All' || isReplaying) return displayedTurns;
+        return displayedTurns.filter(turn => {
+            if (typeof turn.round !== 'number') return briefingTab === 'Openings';
+            const isVerdictRound = turn.speaker === 'Moderator' && turn.round === latestModeratorRound;
+            return getPhaseHeading(turn.round, isVerdictRound) === briefingTab;
+        });
+    }, [displayedTurns, briefingTab, isReplaying, latestModeratorRound]);
 
     const startReplay = () => {
         setShowTranscript(true);
@@ -412,17 +414,17 @@ const DebateChat: React.FC<DebateChatProps> = ({
         <div className="mt-4 ui-panel">
             <div className="flex flex-wrap items-center gap-2 border-b border-white/10 bg-zinc-900/80 px-3 py-2">
                 <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-zinc-500">
-                    {PHASES.map((phase, index) => (
+                    {([...PHASES, 'All'] as const).map((phase, index) => (
                         <React.Fragment key={phase}>
                             {index > 0 && <span className="text-zinc-700">·</span>}
                             <button
                                 type="button"
                                 onClick={() => jumpToPhase(phase)}
-                                disabled={!reachedPhases.has(phase)}
+                                disabled={phase !== 'All' && !reachedPhases.has(phase)}
                                 className={`rounded px-1 py-0.5 transition-colors ${
-                                    phase === activePhase
+                                    phase === briefingTab
                                         ? 'font-medium text-zinc-200'
-                                        : reachedPhases.has(phase)
+                                        : phase === 'All' || reachedPhases.has(phase)
                                             ? 'text-zinc-500 hover:text-zinc-200'
                                             : 'cursor-default text-zinc-700'
                                 }`}
@@ -570,12 +572,6 @@ const DebateChat: React.FC<DebateChatProps> = ({
                 </div>
             )}
 
-            {isComplete && (
-                <div className="px-3 pt-3">
-                    <DebateSummary debateTurns={debateTurns} analysis={analysis} />
-                </div>
-            )}
-
             {transcriptOpen && (
             <div
                 ref={scrollRef}
@@ -594,16 +590,9 @@ const DebateChat: React.FC<DebateChatProps> = ({
                     lockIfScrollingUp(touchYRef.current - currentY);
                     touchYRef.current = currentY;
                 }}
-                className="relative max-h-[520px] overflow-y-auto px-4 py-4 custom-scrollbar"
+                className="relative max-h-[360px] overflow-y-auto px-4 py-3 custom-scrollbar"
             >
-                {isDebating && activeSpeakers.length > 0 && (
-                    <div className="mb-3 rounded-lg border border-cyan-400/15 bg-cyan-500/5 px-3 py-2 text-[11px] text-zinc-400">
-                        <span className="font-medium text-cyan-300">Now speaking</span>
-                        <span className="mx-1.5 text-zinc-700">·</span>
-                        {activeSpeakers.map(([speaker, round]) => `${getDisplayName(speaker)} (R${round})`).join(', ')}
-                    </div>
-                )}
-                {displayedTurns.map((turn, index) => {
+                {filteredTurns.map((turn, index) => {
                     if (turn.speaker === 'System') {
                         return (
                             <div key={`${turn.speaker}-${turn.round ?? 'legacy'}-${index}`} className="py-2 text-center text-[11px] italic leading-relaxed text-zinc-600">
@@ -611,7 +600,7 @@ const DebateChat: React.FC<DebateChatProps> = ({
                             </div>
                         );
                     }
-                    const previous = displayedTurns[index - 1];
+                    const previous = filteredTurns[index - 1];
                     const isVerdictRound = turn.speaker === 'Moderator' && turn.round === latestModeratorRound;
                     const isVerdict = isVerdictRound && !isDebating;
                     const phase = typeof turn.round === 'number' ? getPhaseHeading(turn.round, isVerdictRound) : '';
@@ -624,7 +613,7 @@ const DebateChat: React.FC<DebateChatProps> = ({
                     const segments = turn.speaker === 'Moderator'
                         ? splitModeratorTurn(turn.text, analystNames, modelNames)
                         : [{ text: turn.text }];
-                    const priorFromSpeaker = displayedTurns.slice(0, index).some(item => item.speaker === turn.speaker);
+                    const priorFromSpeaker = filteredTurns.slice(0, index).some(item => item.speaker === turn.speaker);
                     const storedReasoning = (turn.reasoning || (!priorFromSpeaker ? getReasoning(turn.speaker) : '') || '').trim();
                     const isThisTurnStreaming = isDebating && activeDebateSpeakers[turn.speaker] === turn.round;
                     return (
@@ -651,7 +640,7 @@ const DebateChat: React.FC<DebateChatProps> = ({
                                     key={`${turn.speaker}-${turn.round ?? 'legacy'}-${index}-${segmentIndex}`}
                                     className={`space-y-3 rounded-xl px-2 py-3 transition-colors ${
                                         isThisTurnStreaming
-                                            ? 'border border-cyan-400/20 bg-cyan-500/5'
+                                            ? 'border border-white/15 bg-zinc-900'
                                             : segmentIndex === 0 && !showPhase
                                                 ? 'border-t border-white/5'
                                                 : ''
@@ -668,7 +657,7 @@ const DebateChat: React.FC<DebateChatProps> = ({
                                             </div>
                                         </div>
                                         {isThisTurnStreaming ? (
-                                            <span className="shrink-0 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-1.5 py-0.5 text-[10px] text-cyan-300">
+                                            <span className="shrink-0 rounded-md border border-white/15 bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-200">
                                                 Speaking
                                             </span>
                                         ) : (body.trim() || turnReasoning) ? (
