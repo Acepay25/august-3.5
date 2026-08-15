@@ -1,7 +1,8 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import EnsembleProgressChat from '../components/analysis/EnsembleProgressChat';
+import { botFillForKey } from '../components/analysis/DebateBotAvatar';
 import { EnsembleProgress, EnsembleAnalystProgress } from '../types';
 
 // Mock Icons
@@ -33,6 +34,10 @@ const makeProgress = (analysts: EnsembleAnalystProgress[] = []): EnsembleProgres
     moderator: { status: 'waiting' },
 });
 
+const openSeat = (name: string): void => {
+    fireEvent.click(screen.getByLabelText(`Open ${name} analysis`));
+};
+
 describe('EnsembleProgressChat', () => {
     it('renders analyst cards with display names', () => {
         const progress = makeProgress([
@@ -59,6 +64,7 @@ describe('EnsembleProgressChat', () => {
             makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'complete', reasoning: 'Strong support at 95k' }),
         ]);
         render(<EnsembleProgressChat progress={progress} />);
+        openSeat('Analyst A');
         expect(screen.getByText('Thinking')).toBeDefined();
         expect(screen.getByText('Strong support at 95k').closest('details')).toBeDefined();
         expect(screen.getByText('Bullish outlook').closest('details')).toBeNull();
@@ -75,6 +81,7 @@ describe('EnsembleProgressChat', () => {
             }),
         ]);
         render(<EnsembleProgressChat progress={progress} isLive />);
+        openSeat('Analyst A');
         expect(screen.getByText('Thinking')).toBeDefined();
         expect(screen.getByText('Still weighing the sweep.').closest('details')).toBeDefined();
         expect(screen.getByText('Still weighing the sweep.').closest('.mx-2')).toBeNull();
@@ -85,7 +92,8 @@ describe('EnsembleProgressChat', () => {
             makeAnalyst({ key: 'a1', displayName: 'Analyst A', modelId: 'deepseek-v4-flash', modelName: 'deepseek-v4-flash' }),
         ]);
         render(<EnsembleProgressChat progress={progress} />);
-        expect(screen.getByText('Deepseek V4 Flash')).toBeDefined();
+        openSeat('Analyst A');
+        expect(screen.getByText(/Deepseek V4 Flash/)).toBeDefined();
     });
 
     it('shows completed status visual indicators', () => {
@@ -118,6 +126,7 @@ describe('EnsembleProgressChat', () => {
             makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'complete', reasoning: 'Chain of thought trace', finalOutput: 'Bullish call' }),
         ]);
         render(<EnsembleProgressChat progress={progress} />);
+        openSeat('Analyst A');
         expect(screen.getByText('Final output')).toBeDefined();
         expect(screen.getByText('Bullish call')).toBeDefined();
         expect(screen.getByText('Chain of thought trace').closest('details')?.open).toBe(false);
@@ -130,6 +139,7 @@ describe('EnsembleProgressChat', () => {
             makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'analyzing', reasoning: 'Live trace in progress' }),
         ]);
         render(<EnsembleProgressChat progress={progress} isLive={true} />);
+        openSeat('Analyst A');
         expect(screen.getByText('Thinking')).toBeDefined();
         expect(screen.getByText('Live trace in progress').closest('details')?.open).toBe(true);
         expect(screen.getByText('Bullish outlook')).toBeDefined();
@@ -145,26 +155,48 @@ describe('EnsembleProgressChat', () => {
         expect(screen.getByText('Moderator')).toBeDefined();
     });
 
-    it('lists seats vertically and closes a card back to the row', () => {
+    it('opens a seat chat modal from the stage and closes it', () => {
         const progress = makeProgress([
             makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'complete' }),
         ]);
         render(<EnsembleProgressChat progress={progress} />);
-        expect(screen.getAllByLabelText('Collapse Analyst A analysis').length).toBeGreaterThan(0);
-        fireEvent.click(screen.getByLabelText('Close Analyst A analysis'));
-        expect(screen.getByLabelText('Expand Analyst A analysis')).toBeDefined();
+        expect(screen.queryByRole('dialog', { name: 'Analyst A analysis' })).toBeNull();
+        openSeat('Analyst A');
+        expect(screen.getByRole('dialog', { name: 'Analyst A analysis' })).toBeDefined();
         expect(screen.getByText(/Completed/)).toBeDefined();
+        fireEvent.click(screen.getByLabelText('Close Analyst A analysis'));
+        expect(screen.queryByRole('dialog', { name: 'Analyst A analysis' })).toBeNull();
     });
 
-    it('collapses the card when the seat name in the header is clicked', () => {
+    it('collapses the modal when the header is clicked', () => {
         const progress = makeProgress([
             makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'complete' }),
         ]);
         render(<EnsembleProgressChat progress={progress} />);
-        const headerTitle = screen.getAllByLabelText('Collapse Analyst A analysis')[1];
-        fireEvent.click(headerTitle);
-        expect(screen.getByLabelText('Expand Analyst A analysis')).toBeDefined();
-        expect(screen.queryByLabelText('Close Analyst A analysis')).toBeNull();
+        openSeat('Analyst A');
+        fireEvent.click(screen.getByLabelText('Collapse Analyst A analysis'));
+        expect(screen.queryByRole('dialog', { name: 'Analyst A analysis' })).toBeNull();
+    });
+
+    it('opens the seat modal from a thought bubble', () => {
+        const progress = makeProgress([
+            makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'analyzing', reasoning: 'Weigh the sweep.' }),
+        ]);
+        const { container } = render(<EnsembleProgressChat progress={progress} isLive />);
+        fireEvent.click(container.querySelector('.debate-stage-thought') as HTMLElement);
+        expect(screen.getByRole('dialog', { name: 'Analyst A analysis' })).toBeDefined();
+        fireEvent.click(screen.getByLabelText('Collapse Analyst A analysis'));
+        expect(screen.queryByRole('dialog', { name: 'Analyst A analysis' })).toBeNull();
+    });
+
+    it('keeps the stage as the only seat list', () => {
+        const progress = makeProgress([
+            makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'complete' }),
+        ]);
+        render(<EnsembleProgressChat progress={progress} />);
+        expect(screen.getByLabelText('Open Analyst A analysis')).toBeDefined();
+        expect(screen.queryByLabelText('Expand Analyst A analysis')).toBeNull();
+        expect(screen.queryByLabelText('Collapse Analyst A analysis')).toBeNull();
     });
 
     it('does not label openings as reply-to tape', () => {
@@ -172,6 +204,7 @@ describe('EnsembleProgressChat', () => {
             makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'complete', finalOutput: 'Bullish outlook' }),
         ]);
         render(<EnsembleProgressChat progress={progress} />);
+        openSeat('Analyst A');
         expect(screen.queryByText(/reply to tape/i)).toBeNull();
         expect(screen.getByText('Bullish outlook')).toBeDefined();
     });
@@ -190,6 +223,7 @@ describe('EnsembleProgressChat', () => {
                 }]}
             />,
         );
+        openSeat('Analyst A');
         expect(screen.getByText('reply to Moderator')).toBeDefined();
         expect(screen.queryByText(/reply to tape/i)).toBeNull();
     });
@@ -209,6 +243,7 @@ describe('EnsembleProgressChat', () => {
                 }]}
             />,
         );
+        openSeat('Moderator');
         expect(screen.getByText('reply to Macro Analyst')).toBeDefined();
         expect(screen.getByText('reply to Technical Analyst')).toBeDefined();
         expect(screen.getByText('Fix the entry.')).toBeDefined();
@@ -231,10 +266,55 @@ describe('EnsembleProgressChat', () => {
                 }]}
             />,
         );
+        openSeat('Moderator');
         expect(screen.getByText('What is the entry?')).toBeDefined();
         expect(screen.getByText(/Ask for a number, not a vibe/).closest('details')).toBeDefined();
         expect(screen.getByText(/Weigh size before asking about entry/).closest('details')).toBeDefined();
         expect(screen.getByText('What is the entry?').closest('details')).toBeNull();
+    });
+
+    it('shows live moderator thinking on the stage and in the modal', () => {
+        const progress = makeProgress([
+            makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'complete' }),
+        ]);
+        const { container } = render(
+            <EnsembleProgressChat
+                progress={progress}
+                isLive
+                activeDebateSpeakers={{ Moderator: 2 }}
+                reasoningProcesses={{ moderator: 'Weigh size before asking about entry.' }}
+            />,
+        );
+        expect(container.querySelector('[data-thought]')?.getAttribute('data-thought')).toMatch(/Weigh size/);
+        openSeat('Moderator');
+        expect(screen.getByText(/Weigh size before asking about entry/).closest('details')).toBeDefined();
+        expect(screen.getByText(/Weigh size before asking about entry/).closest('.mx-2')).toBeNull();
+    });
+
+    it('keeps moderator thinking visible while questions fly to receivers', async () => {
+        const progress = makeProgress([
+            makeAnalyst({ key: 'a1', displayName: 'Macro Analyst', status: 'complete' }),
+            makeAnalyst({ key: 'a2', displayName: 'Technical Analyst', status: 'complete' }),
+        ]);
+        const { container } = render(
+            <EnsembleProgressChat
+                progress={progress}
+                isLive
+                activeDebateSpeakers={{ Moderator: 4 }}
+                reasoningProcesses={{ moderator: 'Weigh size before asking about entry.' }}
+                debateTurns={[{
+                    speaker: 'Moderator',
+                    text: 'Macro Analyst: Fix the entry.\nTechnical Analyst: Hold the sweep high.',
+                    round: 4,
+                }]}
+            />,
+        );
+        expect(container.querySelector('[data-thought]')?.getAttribute('data-thought')).toMatch(/Weigh size/);
+        await waitFor(() => {
+            expect(container.querySelector('.debate-stage-packet')?.getAttribute('data-packet')).toMatch(/Fix the entry/i);
+        });
+        openSeat('Moderator');
+        expect(screen.getByText(/Weigh size before asking about entry/).closest('details')).toBeDefined();
     });
 
     it('keeps the live round open and collapses earlier rounds', () => {
@@ -253,6 +333,7 @@ describe('EnsembleProgressChat', () => {
                 }]}
             />,
         );
+        openSeat('Analyst A');
         expect(screen.getByText('I still fade the wick.')).toBeDefined();
         expect(screen.getByText('I still fade the wick.').closest('details')).toBeNull();
         expect(screen.getByText('Opening call').closest('details')?.open).toBe(false);
@@ -272,6 +353,7 @@ describe('EnsembleProgressChat', () => {
             }),
         ]);
         render(<EnsembleProgressChat progress={progress} />);
+        openSeat('Analyst A');
         expect(screen.getByText('Final output')).toBeDefined();
         expect(screen.getByText(/Weigh HTF vs LTF/).closest('details')).toBeDefined();
         expect(screen.getByText(/Weigh HTF vs LTF/).closest('.mx-2')).toBeNull();
@@ -294,6 +376,7 @@ describe('EnsembleProgressChat', () => {
                 }]}
             />,
         );
+        openSeat('Analyst A');
         expect(screen.getByText('Opening call').closest('.mx-2')?.textContent).toMatch(/Final output/);
         expect(screen.getByText('I still fade the wick.').closest('.mx-2')?.textContent).not.toMatch(/Final output/);
     });
@@ -313,20 +396,94 @@ Deconstruct the Context: Entry 63694 SL 63420.`;
                 debateTurns={[{ speaker: 'Risk & Execution Specialist', text: dump, round: 5 }]}
             />,
         );
+        openSeat('Risk & Execution Specialist');
         expect(screen.getByText('Thinking')).toBeDefined();
         expect(screen.getByText(/Analyze User Input/i).closest('details')).toBeDefined();
         expect(screen.queryByText('Final output')).toBeNull();
         expect(screen.getByText(/Analyze User Input/i).closest('.mx-2')).toBeNull();
     });
 
-    it('renders Grok-like bot avatars and a live turn caption', () => {
+    it('renders Grok-style circle bots on a stage separate from the transcript', () => {
         const progress = makeProgress([
             makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'analyzing', reasoning: 'Weigh the sweep.' }),
         ]);
         const { container } = render(<EnsembleProgressChat progress={progress} isLive />);
+        expect(container.querySelector('.debate-stage')).toBeDefined();
         expect(container.querySelectorAll('.debate-bot').length).toBeGreaterThan(1);
+        const fills = [...container.querySelectorAll('.debate-bot')].map(
+            el => (el as HTMLElement).style.getPropertyValue('--bot-fill'),
+        );
+        expect(new Set(fills).size).toBeGreaterThan(1);
         expect(screen.getByText('Analyst A is thinking')).toBeDefined();
+        expect(screen.queryByRole('dialog')).toBeNull();
+        openSeat('Analyst A');
+        expect(screen.getByRole('dialog', { name: 'Analyst A analysis' })).toBeDefined();
         expect(screen.getByText(/Weigh the sweep/).closest('details')).toBeDefined();
         expect(screen.getByText(/Weigh the sweep/).closest('.mx-2')).toBeNull();
+    });
+
+    it('gives each model a distinct bot fill and keeps the moderator black', () => {
+        expect(botFillForKey('moderator')).toBe('#111111');
+        expect(botFillForKey('gemini-2.0-flash')).not.toBe(botFillForKey('deepseek-v4-flash'));
+        expect(botFillForKey('gemini-2.0-flash')).toBe(botFillForKey('gemini-2.0-flash'));
+    });
+
+    it('opens thinking and output in a chat modal from the stage', () => {
+        const progress = makeProgress([
+            makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'analyzing', reasoning: 'Weigh the sweep and the failed reclaim.' }),
+        ]);
+        render(<EnsembleProgressChat progress={progress} isLive />);
+        openSeat('Analyst A');
+        const dialog = screen.getByRole('dialog', { name: 'Analyst A analysis' });
+        expect(dialog.textContent).toMatch(/Weigh the sweep and the failed reclaim/);
+        fireEvent.click(screen.getByLabelText('Close Analyst A analysis'));
+        expect(screen.queryByRole('dialog', { name: 'Analyst A analysis' })).toBeNull();
+    });
+
+    it('flies a reply packet from the speaker to the receiver and shows sent!', async () => {
+        const progress = makeProgress([
+            makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'complete', finalOutput: 'Opening call' }),
+        ]);
+        const { container } = render(
+            <EnsembleProgressChat
+                progress={progress}
+                isLive
+                activeDebateSpeakers={{ 'Analyst A': 2 }}
+                debateTurns={[{
+                    speaker: 'Analyst A',
+                    text: 'I still fade the wick.',
+                    round: 2,
+                }]}
+            />,
+        );
+        await waitFor(() => {
+            expect(container.querySelector('.debate-stage-packet')?.getAttribute('data-packet')).toMatch(/fade the wick/i);
+        });
+        fireEvent.click(container.querySelector('.debate-stage-packet') as HTMLElement);
+        expect(screen.getByRole('dialog', { name: 'Analyst A analysis' })).toBeDefined();
+        fireEvent.click(screen.getByLabelText('Collapse Analyst A analysis'));
+        await waitFor(() => {
+            expect(screen.getByText('sent!')).toBeDefined();
+        }, { timeout: 1500 });
+    });
+
+    it('opens the seat modal from a speech balloon', () => {
+        const progress = makeProgress([
+            makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'complete', finalOutput: 'Opening call' }),
+        ]);
+        const { container } = render(
+            <EnsembleProgressChat
+                progress={progress}
+                isLive
+                activeDebateSpeakers={{ 'Analyst A': 2 }}
+                debateTurns={[{
+                    speaker: 'Analyst A',
+                    text: 'I still fade the wick.',
+                    round: 2,
+                }]}
+            />,
+        );
+        fireEvent.click(container.querySelector('.debate-stage-balloon') as HTMLElement);
+        expect(screen.getByRole('dialog', { name: 'Analyst A analysis' })).toBeDefined();
     });
 });

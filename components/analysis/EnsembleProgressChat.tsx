@@ -1,10 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { DebateTurn, EnsembleAnalystProgress, EnsembleProgress, RunStats } from '../../types';
 import MarkdownContent from '../shared/MarkdownContent';
 import { formatModelDisplayName, formatSeatLabel } from '../../utils/providerUtils';
 import { buildAnalystGantt, lastThoughtSnippet } from '../../utils/runGantt';
 import { splitThinkingFromOutput, visibleReplyFromThinking, looksLikePublicAnswer, looksLikeScratchpad, looksLikeTradeOutput } from '../../utils/thinkingSplit';
 import { DebateBotAvatar } from './DebateBotAvatar';
+import { DebateStage, DebateStageActor } from './DebateStage';
 
 interface EnsembleProgressChatProps {
     progress: EnsembleProgress;
@@ -68,6 +69,21 @@ interface SeatBlock {
     thinking?: string;
 }
 
+interface SeatView {
+    id: string;
+    title: string;
+    modelName: string;
+    status: string;
+    live: boolean;
+    speaking?: boolean;
+    thinking: string;
+    blocks: SeatBlock[];
+    usage?: string;
+    retryKey?: string;
+    error?: string;
+    toneKey: string;
+}
+
 const roundLabel = (round: number): string => {
     if (round <= 1) return 'Openings';
     if (round === 2 || round === 3) return 'Rebuttals';
@@ -110,27 +126,6 @@ const ReplyBlock: React.FC<{ block: SeatBlock; fallbackThinking?: string }> = ({
     );
 };
 
-const ThoughtCloud: React.FC<{ text: string; live?: boolean; inline?: boolean }> = ({ text, live, inline }) => {
-    const snippet = lastThoughtSnippet(text, 56);
-    if (!snippet) return null;
-    return (
-        <div className={`debate-thought ${live ? 'debate-thought-live' : ''} ${inline ? 'debate-thought-inline' : ''}`} aria-hidden="true">
-            <span className="debate-thought-puff debate-thought-puff-1" />
-            <span className="debate-thought-puff debate-thought-puff-2" />
-            <div className="debate-thought-cloud">
-                {live && (
-                    <span className="debate-thought-dots">
-                        <span />
-                        <span />
-                        <span />
-                    </span>
-                )}
-                <span className="debate-thought-text" data-thought={snippet} />
-            </div>
-        </div>
-    );
-};
-
 const ThinkingDetails: React.FC<{ text: string; live?: boolean }> = ({ text, live }) => {
     if (!text) return null;
     return (
@@ -145,23 +140,13 @@ const ThinkingDetails: React.FC<{ text: string; live?: boolean }> = ({ text, liv
     );
 };
 
-const SeatChat: React.FC<{
+const SeatTranscript: React.FC<{
     title: string;
-    modelName: string;
-    status: string;
     live: boolean;
-    speaking?: boolean;
     thinking: string;
     blocks: SeatBlock[];
-    defaultOpen: boolean;
-    expandLabel: string;
-    usage?: string;
-    onRetry?: () => void;
     error?: string;
-    floorLive?: boolean;
-}> = ({ title, modelName, status, live, speaking = false, thinking, blocks, defaultOpen, expandLabel, usage, onRetry, error, floorLive = false }) => {
-    const [open, setOpen] = useState(defaultOpen);
-    const snippet = lastThoughtSnippet(blocks[blocks.length - 1]?.text || thinking, 72);
+}> = ({ title, live, thinking, blocks, error }) => {
     const rounds = useMemo(() => {
         const order: number[] = [];
         const grouped = new Map<number, SeatBlock[]>();
@@ -187,135 +172,55 @@ const SeatChat: React.FC<{
     }, [blocks, title]);
     const currentRound = rounds[rounds.length - 1];
     const pastRounds = rounds.slice(0, -1);
-    const leftoverThinking = thinking && rounds.every(r => !r.thinking) ? thinking : '';
-    const headThinking = currentRound?.thinking || leftoverThinking || thinking;
-    const thinkingNow = live && !speaking;
-    const showThoughtCloud = thinkingNow && Boolean(headThinking.trim());
-    const displayStatus = floorLive && !live && status !== 'unavailable' ? 'waiting their turn' : status;
+    const leftoverThinking = thinking && !rounds.some(group => group.thinking && (group.thinking.includes(thinking) || thinking.includes(group.thinking)))
+        ? thinking
+        : '';
 
     return (
-        <div className={`border-t border-white/5 ${live ? 'debate-seat-live' : floorLive ? 'debate-seat-wait' : ''}`}>
-            <div className="flex items-start gap-1">
-                <button
-                    type="button"
-                    onClick={() => setOpen(o => !o)}
-                    className="flex min-w-0 flex-1 items-start gap-2 px-3 py-2.5 text-left hover:bg-zinc-800/30"
-                    aria-expanded={open}
-                    aria-label={`${open ? 'Collapse' : 'Expand'} ${expandLabel}`}
-                >
-                    <span className="relative mt-0.5 shrink-0">
-                        <DebateBotAvatar
-                            name={title}
-                            live={live}
-                            thinking={thinkingNow}
-                            speaking={speaking}
-                            size={36}
-                        />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                        <span className="flex items-baseline gap-2">
-                            <span className="min-w-0 truncate text-[13px] text-zinc-200">{title}</span>
-                            {modelName && (
-                                <span className="ml-auto hidden min-w-0 truncate text-[11px] text-zinc-600 sm:inline">{modelName}</span>
-                            )}
-                        </span>
-                        <span className="mt-0.5 block truncate text-[11px] text-zinc-500">
-                            {displayStatus}{usage ? ` · ${usage}` : ''}{!open && snippet ? ` · ${snippet}` : ''}
-                        </span>
-                    </span>
-                </button>
-                {onRetry && (
-                    <button
-                        type="button"
-                        onClick={onRetry}
-                        className="mr-2 mt-2 shrink-0 rounded-lg border border-white/10 px-2 py-1 text-[11px] text-zinc-400 hover:text-zinc-200"
-                    >
-                        Retry
-                    </button>
-                )}
-            </div>
-
-            {open && (
-                <div className="mx-3 mb-3 overflow-hidden rounded-xl border border-white/10 bg-zinc-900/70">
-                    <div className="flex items-start gap-2 border-b border-white/5 px-3 py-2">
-                        <span className="relative mt-0.5 shrink-0">
-                            <DebateBotAvatar
-                                name={title}
-                                live={live}
-                                thinking={thinkingNow}
-                                speaking={speaking}
-                                size={44}
-                            />
-                        </span>
-                        <div className="min-w-0 flex-1">
-                            <div className="flex items-start gap-2">
-                                <button
-                                    type="button"
-                                    onClick={() => setOpen(false)}
-                                    className="min-w-0 flex-1 truncate pt-1 text-left text-[13px] text-zinc-200 hover:text-zinc-50"
-                                    aria-label={`Collapse ${expandLabel}`}
-                                >
-                                    {title}
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setOpen(false)}
-                                    className="shrink-0 text-[11px] text-zinc-500 hover:text-zinc-200"
-                                    aria-label={`Close ${expandLabel}`}
-                                >
-                                    Close
-                                </button>
-                            </div>
-                            {showThoughtCloud && (
-                                <ThoughtCloud text={headThinking} live={live} inline />
-                            )}
+        <div className="debate-seat-modal-chat custom-scrollbar">
+            {leftoverThinking && <ThinkingDetails text={leftoverThinking} live={live} />}
+            <div className="flex flex-col gap-2 py-1">
+                {currentRound && (
+                    <div>
+                        {rounds.length > 1 && (
+                            <p className="px-3 pb-1 text-[11px] uppercase tracking-widest text-zinc-500">
+                                {currentRound.label}{currentRound.live ? ' · live' : ''}
+                            </p>
+                        )}
+                        <ThinkingDetails text={currentRound.thinking} live={currentRound.live || live} />
+                        <div className="flex flex-col gap-2">
+                            {currentRound.blocks.map(block => (
+                                <ReplyBlock
+                                    key={block.id}
+                                    block={block}
+                                    fallbackThinking={currentRound.thinking || leftoverThinking}
+                                />
+                            ))}
                         </div>
                     </div>
-                    {leftoverThinking && <ThinkingDetails text={leftoverThinking} live={live} />}
-                    <div className="flex max-h-[22rem] flex-col gap-2 overflow-y-auto py-2">
-                        {currentRound && (
-                            <div>
-                                {rounds.length > 1 && (
-                                    <p className="px-3 pb-1 text-[11px] uppercase tracking-widest text-zinc-500">
-                                        {currentRound.label}{currentRound.live ? ' · live' : ''}
-                                    </p>
-                                )}
-                                <ThinkingDetails text={currentRound.thinking} live={currentRound.live || live} />
-                                <div className="flex flex-col gap-2">
-                                    {currentRound.blocks.map(block => (
-                                        <ReplyBlock
-                                            key={block.id}
-                                            block={block}
-                                            fallbackThinking={currentRound.thinking || leftoverThinking}
-                                        />
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                        {pastRounds.map(group => (
-                            <details key={group.round} className="mx-2 rounded-lg border border-white/10 bg-zinc-950/30 px-3 py-2">
-                                <summary className="cursor-pointer list-none text-[11px] uppercase tracking-widest text-zinc-500">
-                                    {group.label}
-                                    {group.blocks[0]?.text ? ` · ${lastThoughtSnippet(group.blocks[0].text, 48)}` : ''}
-                                </summary>
-                                <div className="mt-2 flex flex-col gap-2">
-                                    <ThinkingDetails text={group.thinking} />
-                                    {group.blocks.map(block => (
-                                        <ReplyBlock key={block.id} block={block} fallbackThinking={group.thinking} />
-                                    ))}
-                                </div>
-                            </details>
-                        ))}
-                        {error && <p className="px-3 py-2 text-[11px] text-zinc-500">{error}</p>}
-                        {blocks.every(b => !b.text.trim()) && thinking && live && (
-                            <p className="px-3 py-1 text-xs italic text-zinc-600">Writing</p>
-                        )}
-                        {blocks.length === 0 && !thinking && !error && (
-                            <p className="px-3 py-2 text-xs italic text-zinc-600">Waiting for this seat.</p>
-                        )}
-                    </div>
-                </div>
-            )}
+                )}
+                {pastRounds.map(group => (
+                    <details key={group.round} className="mx-2 rounded-lg border border-white/10 bg-zinc-950/30 px-3 py-2">
+                        <summary className="cursor-pointer list-none text-[11px] uppercase tracking-widest text-zinc-500">
+                            {group.label}
+                            {group.blocks[0]?.text ? ` · ${lastThoughtSnippet(group.blocks[0].text, 48)}` : ''}
+                        </summary>
+                        <div className="mt-2 flex flex-col gap-2">
+                            <ThinkingDetails text={group.thinking} />
+                            {group.blocks.map(block => (
+                                <ReplyBlock key={block.id} block={block} fallbackThinking={group.thinking} />
+                            ))}
+                        </div>
+                    </details>
+                ))}
+                {error && <p className="px-3 py-2 text-[11px] text-zinc-500">{error}</p>}
+                {blocks.every(b => !b.text.trim()) && thinking && live && (
+                    <p className="px-3 py-1 text-xs italic text-zinc-600">Writing</p>
+                )}
+                {blocks.length === 0 && !thinking && !error && (
+                    <p className="px-3 py-2 text-xs italic text-zinc-600">Waiting for this seat.</p>
+                )}
+            </div>
         </div>
     );
 };
@@ -371,7 +276,7 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
                 thinking: partIndex === 0 ? split.thinking : undefined,
             }));
         });
-        const streamed = (reasoningProcesses.moderator || '').trim();
+        const streamed = (reasoningProcesses.moderator || reasoningProcesses.Moderator || '').trim();
         if (streamed && blocks.length > 0) {
             const last = blocks[blocks.length - 1];
             if (!last.thinking?.includes(streamed)) {
@@ -380,12 +285,12 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
         }
         return {
             moderatorBlocks: blocks,
-            moderatorThinking: streamed && blocks.length === 0 ? streamed : [...new Set(leaked)].join('\n\n'),
+            moderatorThinking: [...new Set([streamed, ...leaked].filter(Boolean))].join('\n\n'),
         };
-    }, [analystNames, debateTurns, modLive, reasoningProcesses.moderator]);
+    }, [analystNames, debateTurns, modLive, reasoningProcesses.Moderator, reasoningProcesses.moderator]);
 
     const [floorOpen, setFloorOpen] = useState(true);
-    const floorLive = isLive && (anyAnalystLive || modLive);
+    const [openSeatId, setOpenSeatId] = useState<string | null>(null);
     const liveAnalyst = progress.analysts.find(a =>
         a.status === 'analyzing' || Boolean(activeDebateSpeakers[a.displayName] || activeDebateSpeakers[a.providerName])
     );
@@ -404,15 +309,170 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
                     : liveAnalyst
                         ? `${formatSeatLabel(liveAnalyst.displayName)} is thinking`
                         : 'Waiting for the next turn';
+    const stageActors = useMemo((): DebateStageActor[] => [
+        {
+            id: 'moderator',
+            name: 'Moderator',
+            toneKey: 'moderator',
+            live: modLive,
+            thinking: modLive && Boolean(moderatorThinking.trim()),
+            speaking: modSpeaking,
+            thought: moderatorThinking,
+            speech: [...moderatorBlocks].reverse().find(b => b.text.trim())?.text,
+            replyTo: [...moderatorBlocks].reverse().find(b => b.live && b.replyTo)?.replyTo
+                || [...moderatorBlocks].reverse().find(b => b.replyTo)?.replyTo,
+            replies: moderatorBlocks
+                .filter(block => block.replyTo && block.text.trim() && (!modLive || block.live))
+                .map(block => ({ id: block.id, target: block.replyTo || '', text: block.text })),
+        },
+        ...progress.analysts.map((analyst): DebateStageActor => {
+            const answering = Boolean(activeDebateSpeakers[analyst.displayName] || activeDebateSpeakers[analyst.providerName]);
+            const live = analyst.status === 'analyzing' || answering;
+            const speakerTurns = debateTurns.filter(t => t.speaker !== 'Moderator' && matchesSpeaker(t.speaker, analyst));
+            return {
+                id: analyst.key,
+                name: formatSeatLabel(analyst.displayName),
+                toneKey: analyst.modelId || analyst.modelName || analyst.displayName,
+                live,
+                thinking: live && !answering,
+                speaking: answering && live,
+                thought: [analyst.reasoning, analyst.thoughtProcess, reasoningProcesses[analyst.key]].filter(Boolean).join('\n\n'),
+                speech: speakerTurns[speakerTurns.length - 1]?.text || analyst.finalOutput,
+                replyTo: speakerTurns.some(t => (t.round ?? 0) > 1) ? 'Moderator' : undefined,
+                replies: speakerTurns.some(t => (t.round ?? 0) > 1) && (speakerTurns[speakerTurns.length - 1]?.text || analyst.finalOutput)
+                    ? [{
+                        id: `${analyst.key}-${speakerTurns[speakerTurns.length - 1]?.round ?? 'last'}`,
+                        target: 'Moderator',
+                        text: speakerTurns[speakerTurns.length - 1]?.text || analyst.finalOutput,
+                    }]
+                    : undefined,
+            };
+        }),
+    ], [
+        activeDebateSpeakers,
+        debateTurns,
+        modLive,
+        modSpeaking,
+        moderatorBlocks,
+        moderatorThinking,
+        progress.analysts,
+        reasoningProcesses,
+    ]);
+
+    const seats = useMemo((): SeatView[] => {
+        const moderatorTokens = (runStats?.promptTokens ?? 0) + (runStats?.completionTokens ?? 0);
+        const moderator: SeatView = {
+            id: 'moderator',
+            title: 'Moderator',
+            modelName: 'Floor',
+            status: verdictLive ? 'verdict' : modLive ? 'asking' : moderatorBlocks.length > 0 ? 'posed' : 'Waiting',
+            live: modLive,
+            speaking: modSpeaking,
+            thinking: moderatorThinking,
+            blocks: moderatorBlocks,
+            usage: moderatorTokens > 0 ? `${moderatorTokens.toLocaleString()} tok` : undefined,
+            toneKey: 'moderator',
+        };
+        const analysts: SeatView[] = progress.analysts.map((analyst): SeatView => {
+            const answering = Boolean(activeDebateSpeakers[analyst.displayName] || activeDebateSpeakers[analyst.providerName]);
+            const live = analyst.status === 'analyzing' || answering;
+            const speakerTurns = debateTurns.filter(t => t.speaker !== 'Moderator' && matchesSpeaker(t.speaker, analyst));
+            const lastTurn = speakerTurns[speakerTurns.length - 1];
+            const openingRaw = analyst.finalOutput && analyst.finalOutput !== lastTurn?.text ? analyst.finalOutput : '';
+            const streamedCot = [
+                analyst.reasoning,
+                analyst.thoughtProcess,
+                reasoningProcesses[analyst.key],
+                reasoningProcesses[analyst.displayName],
+                reasoningProcesses[analyst.providerName],
+            ].filter(Boolean).join('\n\n');
+            const openingSplit = splitThinkingFromOutput(streamedCot, openingRaw);
+            const turnSplits = speakerTurns.map((turn, index) => {
+                const streamed = turn.reasoning
+                    || (index === 0 || index === speakerTurns.length - 1 ? streamedCot : '');
+                const split = splitThinkingFromOutput(streamed, turn.text || '');
+                return {
+                    id: `${analyst.key}-${index}`,
+                    replyTo: turn.round && turn.round > 1 ? 'Moderator' : undefined,
+                    text: split.output,
+                    thinking: split.thinking,
+                    live: live && answering && index === speakerTurns.length - 1,
+                    round: turn.round && turn.round > 0 ? turn.round : index + 1,
+                };
+            });
+            const blocks: SeatBlock[] = [
+                ...(openingSplit.output ? [{
+                    id: `${analyst.key}-open`,
+                    text: openingSplit.output,
+                    round: 1,
+                    thinking: openingSplit.thinking,
+                    live: live && speakerTurns.length === 0,
+                }] : []),
+                ...turnSplits,
+            ];
+            const onBlocks = blocks.map(b => b.thinking).filter(Boolean).join('\n\n');
+            const thinking = onBlocks ? '' : (openingSplit.thinking || streamedCot);
+            const title = formatSeatLabel(analyst.displayName);
+            const prettyModel = formatModelDisplayName(analyst.modelId || analyst.modelName);
+            const ledger = runStats?.analysts?.find(a =>
+                a.providerId === analyst.providerId || a.modelId === analyst.modelId || a.displayName === analyst.displayName
+            );
+            const tokens = ledger
+                ? (ledger.promptTokens ?? 0) + (ledger.completionTokens ?? 0) || Math.round((ledger.charsOut ?? 0) / 4)
+                : 0;
+            return {
+                id: analyst.key,
+                title,
+                modelName: prettyModel && title.includes(prettyModel) ? analyst.providerName : prettyModel,
+                status: laneStatusText(analyst, answering && live),
+                live,
+                speaking: answering && live,
+                thinking,
+                blocks,
+                usage: tokens > 0 ? `${tokens.toLocaleString()} tok` : undefined,
+                retryKey: analyst.status === 'error' ? analyst.key : undefined,
+                error: analyst.error,
+                toneKey: analyst.modelId || analyst.modelName || analyst.displayName,
+            };
+        });
+        return [moderator, ...analysts];
+    }, [
+        activeDebateSpeakers,
+        debateTurns,
+        modLive,
+        modSpeaking,
+        moderatorBlocks,
+        moderatorThinking,
+        progress.analysts,
+        reasoningProcesses,
+        runStats,
+        verdictLive,
+    ]);
+
+    const openSeat = seats.find(seat => seat.id === openSeatId) ?? null;
+
+    useEffect(() => {
+        if (!openSeatId) return;
+        const onKey = (event: KeyboardEvent): void => {
+            if (event.key === 'Escape') setOpenSeatId(null);
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [openSeatId]);
 
     if (hideSubagents || progress.analysts.length === 0) return null;
 
     return (
-        <div className={`ui-panel ${compact ? 'mt-0 mb-4' : 'mt-4'}`} aria-label="Floor">
+        <div className={`ui-panel relative ${compact ? 'mt-0 mb-4' : 'mt-4'}`} aria-label="Floor">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-white/5 px-3 py-2 text-[11px] text-zinc-500">
                 <button
                     type="button"
-                    onClick={() => setFloorOpen(o => !o)}
+                    onClick={() => {
+                        setFloorOpen(open => {
+                            if (open) setOpenSeatId(null);
+                            return !open;
+                        });
+                    }}
                     className="font-medium text-zinc-300 hover:text-zinc-100"
                     aria-expanded={floorOpen}
                 >
@@ -432,127 +492,70 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
             </div>
 
             {floorOpen && (
-                <div>
-                    {isLive && (
-                        <>
-                            <div className="debate-roster" aria-hidden="true">
-                                <div className={`debate-roster-seat ${modLive ? 'is-live' : ''}`}>
+                <div className="debate-floor-body">
+                    <DebateStage actors={stageActors} caption={turnCaption} onOpenActor={setOpenSeatId} />
+                    {openSeat && (
+                        <div
+                            className="debate-seat-modal"
+                            role="dialog"
+                            aria-modal="true"
+                            aria-label={`${openSeat.title} analysis`}
+                        >
+                            <div
+                                className="debate-seat-modal-head"
+                                onClick={() => setOpenSeatId(null)}
+                            >
+                                <button
+                                    type="button"
+                                    className="debate-seat-modal-collapse"
+                                    onClick={() => setOpenSeatId(null)}
+                                    aria-label={`Collapse ${openSeat.title} analysis`}
+                                >
                                     <DebateBotAvatar
-                                        name="Moderator"
-                                        live={modLive}
-                                        thinking={modLive && !modSpeaking}
-                                        speaking={modSpeaking}
-                                        size={32}
+                                        name={openSeat.title}
+                                        toneKey={openSeat.toneKey}
+                                        live={openSeat.live}
+                                        thinking={openSeat.live && !openSeat.speaking}
+                                        speaking={openSeat.speaking}
+                                        size={36}
                                     />
-                                    <span className="debate-roster-name" data-name="Moderator" />
-                                </div>
-                                {progress.analysts.map(analyst => {
-                                    const answering = Boolean(activeDebateSpeakers[analyst.displayName] || activeDebateSpeakers[analyst.providerName]);
-                                    const live = analyst.status === 'analyzing' || answering;
-                                    const label = formatSeatLabel(analyst.displayName);
-                                    return (
-                                        <div key={analyst.key} className={`debate-roster-seat ${live ? 'is-live' : ''}`}>
-                                            <DebateBotAvatar
-                                                name={label}
-                                                live={live}
-                                                thinking={live && !answering}
-                                                speaking={answering && live}
-                                                size={32}
-                                            />
-                                            <span className="debate-roster-name" data-name={label} />
-                                        </div>
-                                    );
-                                })}
+                                    <div className="min-w-0 flex-1">
+                                        <p className="truncate text-[13px] text-zinc-200">{openSeat.title}</p>
+                                        <p className="truncate text-[11px] text-zinc-500">
+                                            {[openSeat.modelName, openSeat.status, openSeat.usage].filter(Boolean).join(' · ')}
+                                        </p>
+                                    </div>
+                                </button>
+                                {openSeat.retryKey && onRetryAnalyst && (
+                                    <button
+                                        type="button"
+                                        onClick={(event) => {
+                                            event.stopPropagation();
+                                            onRetryAnalyst(openSeat.retryKey!);
+                                        }}
+                                        className="shrink-0 rounded-lg border border-white/10 px-2 py-1 text-[11px] text-zinc-400 hover:text-zinc-200"
+                                    >
+                                        Retry
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    onClick={() => setOpenSeatId(null)}
+                                    className="shrink-0 text-[11px] text-zinc-500 hover:text-zinc-200"
+                                    aria-label={`Close ${openSeat.title} analysis`}
+                                >
+                                    Close
+                                </button>
                             </div>
-                            {turnCaption && (
-                                <p className="border-b border-white/5 px-3 py-1.5 text-[11px] text-zinc-400" aria-live="polite">
-                                    {turnCaption}
-                                </p>
-                            )}
-                        </>
-                    )}
-                    <SeatChat
-                        title="Moderator"
-                        modelName="Floor"
-                        status={verdictLive ? 'verdict' : modLive ? 'asking' : moderatorBlocks.length > 0 ? 'posed' : 'Waiting'}
-                        live={modLive}
-                        speaking={modSpeaking}
-                        thinking={moderatorThinking}
-                        blocks={moderatorBlocks}
-                        defaultOpen={modLive || moderatorBlocks.length > 0}
-                        expandLabel="Moderator analysis"
-                        usage={runStats?.promptTokens || runStats?.completionTokens
-                            ? `${((runStats.promptTokens ?? 0) + (runStats.completionTokens ?? 0)).toLocaleString()} tok`
-                            : undefined}
-                        floorLive={floorLive}
-                    />
-                    {progress.analysts.map((analyst) => {
-                        const answering = Boolean(activeDebateSpeakers[analyst.displayName] || activeDebateSpeakers[analyst.providerName]);
-                        const live = analyst.status === 'analyzing' || answering;
-                        const speakerTurns = debateTurns.filter(t => t.speaker !== 'Moderator' && matchesSpeaker(t.speaker, analyst));
-                        const lastTurn = speakerTurns[speakerTurns.length - 1];
-                        const openingRaw = analyst.finalOutput && analyst.finalOutput !== lastTurn?.text ? analyst.finalOutput : '';
-                        const streamedCot = [
-                            analyst.reasoning,
-                            analyst.thoughtProcess,
-                            reasoningProcesses[analyst.key],
-                            reasoningProcesses[analyst.displayName],
-                            reasoningProcesses[analyst.providerName],
-                        ].filter(Boolean).join('\n\n');
-                        const openingSplit = splitThinkingFromOutput(streamedCot, openingRaw);
-                        const turnSplits = speakerTurns.map((turn, index) => {
-                            const streamed = turn.reasoning
-                                || (index === 0 || index === speakerTurns.length - 1 ? streamedCot : '');
-                            const split = splitThinkingFromOutput(streamed, turn.text || '');
-                            return {
-                                id: `${analyst.key}-${index}`,
-                                replyTo: turn.round && turn.round > 1 ? 'Moderator' : undefined,
-                                text: split.output,
-                                thinking: split.thinking,
-                                live: live && answering && index === speakerTurns.length - 1,
-                                round: turn.round && turn.round > 0 ? turn.round : index + 1,
-                            };
-                        });
-                        const blocks: SeatBlock[] = [
-                            ...(openingSplit.output ? [{
-                                id: `${analyst.key}-open`,
-                                text: openingSplit.output,
-                                round: 1,
-                                thinking: openingSplit.thinking,
-                                live: live && speakerTurns.length === 0,
-                            }] : []),
-                            ...turnSplits,
-                        ];
-                        const onBlocks = blocks.map(b => b.thinking).filter(Boolean).join('\n\n');
-                        const thinking = onBlocks ? '' : (openingSplit.thinking || streamedCot);
-                        const title = formatSeatLabel(analyst.displayName);
-                        const prettyModel = formatModelDisplayName(analyst.modelId || analyst.modelName);
-                        const ledger = runStats?.analysts?.find(a =>
-                            a.providerId === analyst.providerId || a.modelId === analyst.modelId || a.displayName === analyst.displayName
-                        );
-                        const tokens = ledger
-                            ? (ledger.promptTokens ?? 0) + (ledger.completionTokens ?? 0) || Math.round((ledger.charsOut ?? 0) / 4)
-                            : 0;
-                        const usage = tokens > 0 ? `${tokens.toLocaleString()} tok` : undefined;
-                        return (
-                            <SeatChat
-                                key={analyst.key}
-                                title={title}
-                                modelName={prettyModel && title.includes(prettyModel) ? analyst.providerName : prettyModel}
-                                status={laneStatusText(analyst, answering && live)}
-                                live={live}
-                                speaking={answering && live}
-                                thinking={thinking}
-                                blocks={blocks}
-                                defaultOpen={live || analyst.status === 'complete'}
-                                expandLabel={`${title} analysis`}
-                                usage={usage}
-                                onRetry={analyst.status === 'error' && onRetryAnalyst ? () => onRetryAnalyst(analyst.key) : undefined}
-                                error={analyst.error}
-                                floorLive={floorLive}
+                            <SeatTranscript
+                                title={openSeat.title}
+                                live={openSeat.live}
+                                thinking={openSeat.thinking}
+                                blocks={openSeat.blocks}
+                                error={openSeat.error}
                             />
-                        );
-                    })}
+                        </div>
+                    )}
                     <span className="sr-only">{lanes.length} timeline lanes</span>
                 </div>
             )}

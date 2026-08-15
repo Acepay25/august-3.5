@@ -1,10 +1,14 @@
 import React from 'react';
 
-interface DebateBotAvatarProps {
+export interface DebateBotAvatarProps {
     name: string;
+    /** Stable key for body color — prefer model id so the same model stays the same hue. */
+    toneKey?: string;
     live?: boolean;
     thinking?: boolean;
     speaking?: boolean;
+    /** -1 look left, 0 default (up-right), 1 look right */
+    look?: number;
     size?: number;
 }
 
@@ -14,41 +18,71 @@ const hashName = (name: string): number => {
     return Math.abs(h);
 };
 
+/** Dark fills so the white pill eyes stay high-contrast, one tint per model. */
+const BOT_FILLS = [
+    '#111111',
+    '#1e3a5f',
+    '#3d2b1f',
+    '#1d3d2f',
+    '#3b2048',
+    '#3d3a12',
+    '#4a2020',
+    '#1a3344',
+] as const;
+
+export const botFillForKey = (key: string): string => {
+    if (!key || /^moderator$/i.test(key.trim())) return BOT_FILLS[0];
+    return BOT_FILLS[hashName(key) % BOT_FILLS.length];
+};
+
 /**
- * Grok-like desk bot: rounded zinc face, two eyes, a small mouth.
- * Thinking looks up; speaking opens the mouth; live gets a pulse ring.
+ * Grok-style circular bot: solid disc, two white pill eyes tilted up-right.
+ * Idle bobs and glances; thinking scans; speaking steps forward with a ring.
  */
 export const DebateBotAvatar: React.FC<DebateBotAvatarProps> = ({
     name,
+    toneKey,
     live = false,
     thinking = false,
     speaking = false,
-    size = 40,
+    look = 0,
+    size = 56,
 }) => {
-    const seed = hashName(name || '?');
-    const eyeY = thinking ? 16.2 : 18;
-    const eyeGap = 4 + (seed % 3);
-    const smile = speaking ? 3.4 : thinking ? 0.4 : 1.2;
-    const rx = 11 + (seed % 2);
+    const seed = hashName(toneKey || name || '?');
+    const style = {
+        '--bot-size': `${size}px`,
+        '--bot-fill': botFillForKey(toneKey || name || '?'),
+        '--look': String(look),
+        '--bob-delay': `${seed % 1100}ms`,
+        '--gaze-delay': `${(seed * 7) % 1600}ms`,
+    } as React.CSSProperties;
+
     return (
         <span
-            className={`debate-bot ${live ? 'debate-bot-live' : ''} ${thinking ? 'debate-bot-thinking' : ''} ${speaking ? 'debate-bot-speaking' : ''}`}
-            style={{ width: size, height: size }}
+            className={[
+                'debate-bot',
+                live ? 'is-live' : '',
+                thinking ? 'is-thinking' : '',
+                speaking ? 'is-speaking' : '',
+            ].filter(Boolean).join(' ')}
+            style={style}
             aria-hidden="true"
             title={name}
         >
-            <svg viewBox="0 0 40 40" width={size} height={size} fill="none">
-                <rect x="3" y="3" width="34" height="34" rx={rx} className="debate-bot-shell" />
-                <rect x="6" y="6" width="28" height="10" rx="6" className="debate-bot-shine" />
-                <circle cx={20 - eyeGap} cy={eyeY} r="2.2" className="debate-bot-eye" />
-                <circle cx={20 + eyeGap} cy={eyeY} r="2.2" className="debate-bot-eye" />
-                <path
-                    d={`M16 26.2 Q20 ${26.2 + smile} 24 26.2`}
-                    className="debate-bot-mouth"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                />
-            </svg>
+            <span className="debate-bot-shadow" />
+            <span className="debate-bot-body">
+                <span className="debate-bot-eyes">
+                    <span className="debate-bot-eye" />
+                    <span className="debate-bot-eye" />
+                </span>
+            </span>
+            {thinking && (
+                <span className="debate-bot-orbs">
+                    <span />
+                    <span />
+                    <span />
+                </span>
+            )}
         </span>
     );
 };
