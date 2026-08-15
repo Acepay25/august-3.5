@@ -75,8 +75,9 @@ describe('TradingSignalCard', () => {
                 ]}
             />,
         );
-        expect(screen.queryByTestId('md')?.textContent ?? '').not.toContain('Technical Analyst');
-        expect(screen.queryByTestId('md')?.textContent ?? '').not.toContain('MODERATOR VERDICT');
+        const md = screen.getAllByTestId('md').map(node => node.textContent ?? '').join('\n');
+        expect(md).not.toContain('Technical Analyst');
+        expect(md).not.toContain('MODERATOR VERDICT');
         expect(screen.queryByText('Final trade plan')).toBeNull();
     });
 
