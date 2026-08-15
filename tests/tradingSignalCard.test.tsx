@@ -123,7 +123,7 @@ describe('TradingSignalCard', () => {
                 analysis={analysis({
                     direction: 'Long',
                     confidence: 'Medium',
-                    entryPoints: [{ price: '100' }],
+                    entryPoints: [{ price: '100', description: '' }],
                     stopLoss: '90',
                     takeProfit: [{ price: '120' }],
                 })}
@@ -139,7 +139,7 @@ describe('TradingSignalCard', () => {
                 analysis={analysis({
                     direction: 'Long',
                     confidence: 'Medium',
-                    entryPoints: [{ price: '100' }],
+                    entryPoints: [{ price: '100', description: '' }],
                     stopLoss: '90',
                     takeProfit: [{ price: '120' }],
                 })}

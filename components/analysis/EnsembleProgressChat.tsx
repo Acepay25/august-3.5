@@ -270,14 +270,16 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
         const turns = debateTurns.filter(t => t.speaker === 'Moderator');
         const lastId = turns[turns.length - 1] ? `${turns.length - 1}` : '';
         const leaked: string[] = [];
-        const blocks = turns.flatMap((turn, index) => {
+        const blocks: SeatBlock[] = turns.flatMap((turn, index): SeatBlock[] => {
             const live = modLive && String(index) === lastId;
             const split = splitThinkingFromOutput(turn.reasoning || '', turn.text || '');
             if (split.thinking) leaked.push(split.thinking);
             const parts = splitAddresses(split.output, analystNames);
             if (!split.output) return [];
             const round = turn.round && turn.round > 0 ? turn.round : index + 1;
-            if (parts.length === 0) return [{ id: `mod-${index}`, text: split.output, live, round, thinking: split.thinking }];
+            if (parts.length === 0) {
+                return [{ id: `mod-${index}`, replyTo: undefined, text: split.output, live, round, thinking: split.thinking }];
+            }
             return parts.map((part, partIndex) => ({
                 id: `mod-${index}-${partIndex}`,
                 replyTo: part.target,
