@@ -28,7 +28,7 @@ interface AnalysisDetailsProps {
     onCompare?: (messageId: string) => void;
     watched?: boolean;
     onToggleWatch?: (messageId: string) => void;
-    message?: Pick<Message, 'analysis' | 'debateTurns' | 'debateRunLog'> & { text?: string };
+    message?: Pick<Message, 'analysis' | 'debateTurns' | 'debateRunLog' | 'memoryRetrieved'> & { text?: string };
     tradingStyle?: Exclude<TradingStyle, 'auto'>;
     highlighted?: boolean;
 }
@@ -82,73 +82,73 @@ const AnalysisDetails: React.FC<AnalysisDetailsProps> = ({
     };
 
     const pending = outcome === TradeOutcome.PENDING && !autopilotResolution;
+    const r = autopilotResolution;
+    const autoWin = r?.outcome === TradeOutcome.WIN;
+    const autoLoss = r?.outcome === TradeOutcome.LOSS;
+    const autoTint = !r
+        ? ''
+        : r.expiredOpen
+            ? 'bg-amber-500/5 border-amber-500/20 text-amber-200'
+            : autoWin
+                ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-200'
+                : autoLoss
+                    ? 'bg-rose-500/5 border-rose-500/20 text-rose-200'
+                    : 'bg-amber-500/5 border-amber-500/20 text-amber-200';
+    const winTier = autoWin && r?.hitTarget ? ` · ${r.hitTarget}${r.recoveredAfterSlTouch ? ' · recovered after SL touch' : ' · clean'}` : '';
+    const confirmLabel = !r || r.expiredOpen
+        ? null
+        : r.outcome === TradeOutcome.ENTRY_NOT_HIT
+            ? 'Entry not hit'
+            : autoWin
+                ? `WIN${r.pnlPercent !== undefined ? ` (+${r.pnlPercent}%)` : ''}${winTier}`
+                : `LOSS${r.pnlPercent !== undefined ? ` (${r.pnlPercent}%)` : ''}`;
 
     return (
         <div className="mt-0 space-y-3">
-            {autopilotResolution && outcome === TradeOutcome.PENDING && (() => {
-                const r = autopilotResolution;
-                const isWin = r.outcome === TradeOutcome.WIN;
-                const isLoss = r.outcome === TradeOutcome.LOSS;
-                const tint = r.expiredOpen
-                    ? 'bg-amber-500/5 border-amber-500/20 text-amber-200'
-                    : isWin
-                        ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-200'
-                        : isLoss
-                            ? 'bg-rose-500/5 border-rose-500/20 text-rose-200'
-                            : 'bg-amber-500/5 border-amber-500/20 text-amber-200';
-                const winTier = isWin && r.hitTarget ? ` · ${r.hitTarget}${r.recoveredAfterSlTouch ? ' · recovered after SL touch' : ' · clean'}` : '';
-                const confirmLabel = r.expiredOpen
-                    ? null
-                    : r.outcome === TradeOutcome.ENTRY_NOT_HIT
-                        ? 'Entry not hit'
-                        : isWin
-                            ? `WIN${r.pnlPercent !== undefined ? ` (+${r.pnlPercent}%)` : ''}${winTier}`
-                            : `LOSS${r.pnlPercent !== undefined ? ` (${r.pnlPercent}%)` : ''}`;
-                return (
-                    <div className={`px-4 py-3 rounded-xl border ${tint}`}>
-                        <div className="flex items-start justify-between gap-3 flex-wrap">
-                            <div className="min-w-0">
-                                <div className="text-[10px] font-black uppercase tracking-widest opacity-80">Autopilot Detection</div>
-                                <div className="text-xs sm:text-sm font-semibold mt-1">{r.detail}</div>
-                                {r.timeToOutcome && <div className="text-[10px] opacity-60 mt-0.5">Resolved {r.timeToOutcome} after analysis</div>}
-                            </div>
-                            <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                                {confirmLabel && onConfirmAutopilot && (
-                                    <button
-                                        onClick={() => onConfirmAutopilot(messageId)}
-                                        className={`status-surface rounded-xl px-4 py-2 text-xs font-bold uppercase tracking-wider transition-colors ${
-                                            isWin
-                                                ? 'bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25'
-                                                : isLoss
-                                                    ? 'bg-rose-500/15 border border-rose-500/40 text-rose-300 hover:bg-rose-500/25'
-                                                    : 'bg-amber-500/15 border border-amber-500/40 text-amber-300 hover:bg-amber-500/25'
-                                        }`}
-                                    >
-                                        Confirm {confirmLabel}
-                                    </button>
-                                )}
-                                {!r.expiredOpen && (isWin || isLoss) && (
-                                    <button
-                                        onClick={() => onLogTrade(messageId, r.outcome as TradeOutcome.WIN | TradeOutcome.LOSS)}
-                                        className="rounded-xl border border-white/10 bg-zinc-800 px-4 py-2 text-xs font-bold text-zinc-200 transition-colors hover:bg-zinc-700"
-                                        title="Open the capture flow to attach a chart screenshot"
-                                    >
-                                         Attach Screenshot
-                                    </button>
-                                )}
-                                {onDismissAutopilot && (
-                                    <button
-                                        onClick={() => onDismissAutopilot(messageId)}
-                                        className="rounded-xl border border-white/10 bg-zinc-800 px-4 py-2 text-xs font-bold text-zinc-400 transition-colors hover:bg-zinc-700 hover:text-zinc-200 opacity-70 hover:opacity-100"
-                                    >
-                                        Dismiss
-                                    </button>
-                                )}
-                            </div>
+            {r && (
+                <div className={`status-surface px-4 py-3 rounded-xl border ${autoTint}`}>
+                    <div className="flex items-start justify-between gap-3 flex-wrap">
+                        <div className="min-w-0">
+                            <div className="text-[10px] font-black uppercase tracking-widest opacity-80">Autopilot Detection</div>
+                            <div className="text-xs sm:text-sm font-semibold mt-1">{r.detail}</div>
+                            {r.timeToOutcome && <div className="text-[10px] opacity-60 mt-0.5">Resolved {r.timeToOutcome} after analysis</div>}
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                            {confirmLabel && onConfirmAutopilot && (
+                                <button
+                                    onClick={() => onConfirmAutopilot(messageId)}
+                                    className={`rounded-xl px-4 py-2 text-xs font-bold uppercase tracking-wider transition-colors ${
+                                        autoWin
+                                            ? 'bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25'
+                                            : autoLoss
+                                                ? 'bg-rose-500/15 border border-rose-500/40 text-rose-300 hover:bg-rose-500/25'
+                                                : 'bg-amber-500/15 border border-amber-500/40 text-amber-300 hover:bg-amber-500/25'
+                                    }`}
+                                >
+                                    Confirm {confirmLabel}
+                                </button>
+                            )}
+                            {!r.expiredOpen && (autoWin || autoLoss) && (
+                                <button
+                                    onClick={() => onLogTrade(messageId, r.outcome as TradeOutcome.WIN | TradeOutcome.LOSS)}
+                                    className="rounded-xl border border-white/10 bg-zinc-800 px-4 py-2 text-xs font-bold text-zinc-200 transition-colors hover:bg-zinc-700"
+                                    title="Open the capture flow to attach a chart screenshot"
+                                >
+                                    Attach Screenshot
+                                </button>
+                            )}
+                            {onDismissAutopilot && (
+                                <button
+                                    onClick={() => onDismissAutopilot(messageId)}
+                                    className="rounded-xl border border-white/10 bg-zinc-800 px-4 py-2 text-xs font-bold text-zinc-400 transition-colors hover:bg-zinc-700 hover:text-zinc-200 opacity-70 hover:opacity-100"
+                                >
+                                    Dismiss
+                                </button>
+                            )}
                         </div>
                     </div>
-                );
-            })()}
+                </div>
+            )}
 
             {showHint && pending && (
                 <div className="flex items-start justify-between gap-3 rounded-xl border border-white/10 bg-zinc-900/80 px-3 py-2">
@@ -162,6 +162,19 @@ const AnalysisDetails: React.FC<AnalysisDetailsProps> = ({
                     >
                         Got it
                     </button>
+                </div>
+            )}
+
+            {message?.memoryRetrieved && message.memoryRetrieved.length > 0 && (
+                <div className="rounded-xl border border-white/10 bg-zinc-900/60 px-3 py-2">
+                    <p className="text-[10px] uppercase tracking-wider text-zinc-500">Retrieved memory</p>
+                    <p className="mt-1 flex flex-wrap gap-1.5">
+                        {message.memoryRetrieved.map(source => (
+                            <span key={source.path} className="rounded-md border border-white/10 bg-zinc-950 px-1.5 py-0.5 text-[11px] text-zinc-400" title={source.kind}>
+                                {source.path}
+                            </span>
+                        ))}
+                    </p>
                 </div>
             )}
 

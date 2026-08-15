@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isFreeModelId } from '../utils/providerUtils';
+import { isFreeModelId, sortModelsFreeFirst, mergeDiscoveredModels } from '../utils/providerUtils';
 
 describe('isFreeModelId', () => {
     it('matches OpenRouter and *-free slugs', () => {
@@ -15,5 +15,23 @@ describe('isFreeModelId', () => {
         expect(isFreeModelId('gpt-4o')).toBe(false);
         expect(isFreeModelId('freedom-preview')).toBe(false);
         expect(isFreeModelId('')).toBe(false);
+    });
+});
+
+describe('sortModelsFreeFirst / mergeDiscoveredModels', () => {
+    it('lists free ids before paid and drops duplicates', () => {
+        expect(sortModelsFreeFirst(['gpt-4o', 'deepseek-v4-flash-free', 'gpt-4o', 'mimo-v2.5-free'])).toEqual([
+            'deepseek-v4-flash-free',
+            'mimo-v2.5-free',
+            'gpt-4o',
+        ]);
+    });
+
+    it('keeps user extras that the catalog omitted', () => {
+        expect(mergeDiscoveredModels(['custom-local', 'paid-model'], ['paid-model', 'hy3-free'])).toEqual([
+            'hy3-free',
+            'paid-model',
+            'custom-local',
+        ]);
     });
 });

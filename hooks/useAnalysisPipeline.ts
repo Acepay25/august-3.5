@@ -22,6 +22,8 @@ import { getGateAnalysis, GateOutput } from '../services/validation/GateKeeperSe
 // Utils
 import { isQuotaError } from '../utils/errorUtils';
 import { recalculateAnalysisMetrics, sanitizeTradeAnalysis, clampProbabilityToGate, parsePrice, parseProseTradePlan, parseMarkdownTradePlan, tradePlanToAnalysis, stripPlanTags } from '../utils/analysisUtils';
+import { subscribeTokenUsage, mergeTokenUsage, emptyTokenUsage, estimateCostUsd, TokenUsage } from '../utils/tokenUsage';
+import { appendSessionUsage } from '../utils/sessionUsage';
 import { saveThinkingBatch, buildThinkingRecordId, getThinkingTradeId, getThinkingExemplars } from '../services/infrastructure/ThinkingStoreService';
 import { offlineQueue } from '../services/infrastructure/OfflineQueueService';
 import { notifyAnalysisComplete } from '../services/infrastructure/CompletionNotifications';
@@ -59,6 +61,7 @@ import { generatePersonalizedInjection } from '../services/ui/PersonalizedPrompt
 import { PriceAlertService } from '../services/ui/PriceAlertService';
 import { buildUnifiedLearningContext } from '../services/learning/UnifiedLearningBuilder';
 import { getMemoryFilesContext, writeModelNote } from '../services/learning/MemoryFilesService';
+import { listRetrievedMemorySources } from '../services/learning/MemoryRetrievalService';
 import { writeNotebookNoteFromRequest } from '../services/learning/NotebookWriterService';
 import { buildSimilarSetupsContext, buildRegimeWeightingContext } from '../services/learning/SetupMemoryService';
 import { generateMandatoryPatternCheck, generatePatternMemoryEnforcementContext } from '../services/learning/PatternMemorySynthesisService';
@@ -641,6 +644,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         resumeMessageId?: string;
     }) => {
         const isAutomationRun = !!options?.automation;
+        let stopTokenUsage: (() => void) | undefined;
+        const tokenByProvider = new Map<string, TokenUsage>();
         // Automation runs redirect message writes to a private list and mute
         // the chat UI (loading text, step tracker, hybrid panel).
         automationSilentRef.current = isAutomationRun;
@@ -1077,20 +1082,16 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
             // TRADER NOTEBOOK: retrieve matching files, skills, similar trades
             // and rules for THIS setup — never dump the whole notebook.
-            const memoryFilesContext = getMemoryFilesContext({
+            const memoryQuery = {
                 coin: detectedLearningCoin,
                 direction: pendingDirection,
                 family: pendingPattern,
                 pattern: pendingPattern,
                 regime: freshHybridData?.regime?.regime,
-            }, loggedTrades, 'analyst');
-            const moderatorMemoryContext = getMemoryFilesContext({
-                coin: detectedLearningCoin,
-                direction: pendingDirection,
-                family: pendingPattern,
-                pattern: pendingPattern,
-                regime: freshHybridData?.regime?.regime,
-            }, loggedTrades, 'moderator');
+            };
+            const memoryFilesContext = getMemoryFilesContext(memoryQuery, loggedTrades, 'analyst');
+            const moderatorMemoryContext = getMemoryFilesContext(memoryQuery, loggedTrades, 'moderator');
+            const memoryRetrieved = listRetrievedMemorySources(memoryQuery, loggedTrades, 'analyst');
 
             // JOURNAL-DRIVEN ACCURACY (SetupMemoryService): before the
             // analysts answer, they see their own logged track record on
@@ -1574,6 +1575,12 @@ ${reflectionBlock}`
                     // Per-analyst cost & latency ledger: measure each analyst's
                     // initial-analysis wall time + output size as they run.
                     const analystTimings = new Map<string, { durationMs: number; charsOut: number }>();
+                    stopTokenUsage = subscribeTokenUsage(event => {
+                        tokenByProvider.set(
+                            event.providerId,
+                            mergeTokenUsage(tokenByProvider.get(event.providerId) ?? emptyTokenUsage(), event.usage),
+                        );
+                    });
                     // Shared analysis options for the initial analysts AND any
                     // mid-debate replacement (the replacement must see the exact
                     // same prompt/images/context as the analysts it steps in for —
@@ -1843,6 +1850,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                         thoughtProcesses: { ...(ensemblePlaceholder?.thoughtProcesses || {}), ...thoughtMap },
                         reasoningProcesses: { ...(ensemblePlaceholder?.reasoningProcesses || {}), ...reasoningMapRef.current },
                         activeDebateSpeakers: {},
+                        memoryRetrieved,
                     };
 
                     updateRequestMessages(prev => ensemblePlaceholder
@@ -2556,6 +2564,7 @@ ${accuracyVerificationNote}`
                             tradingStyle: effectiveTradingStyle,
                             debateRunLog: [...debateRunLogRef.current],
                             debateCheckpoint: undefined,
+                            memoryRetrieved,
                         };
 
                         // Per-run execution summary (compare mode + diagnostics).
@@ -2575,14 +2584,43 @@ ${accuracyVerificationNote}`
                             // with their model, wall time, and output size.
                             analysts: allFulfilledAnalysts.map(a => {
                                 const timing = analystTimings.get(a.provider.thoughtsKey);
+                                const tokens = tokenByProvider.get(a.provider.config.id);
                                 return {
                                     providerId: a.provider.config.id,
                                     displayName: a.provider.name,
                                     modelId: a.provider.model,
                                     ...(timing ? { durationMs: timing.durationMs, charsOut: timing.charsOut } : {}),
+                                    ...(tokens ? { promptTokens: tokens.promptTokens, completionTokens: tokens.completionTokens } : {}),
                                 };
                             }),
+                            promptTokens: [...tokenByProvider.values()].reduce((sum, u) => sum + u.promptTokens, 0) || undefined,
+                            completionTokens: [...tokenByProvider.values()].reduce((sum, u) => sum + u.completionTokens, 0) || undefined,
+                            costUsd: (() => {
+                                let total = 0;
+                                let any = false;
+                                tokenByProvider.forEach((usage, providerId) => {
+                                    const cfg = providerConfigs.find(p => p.id === providerId);
+                                    const cost = estimateCostUsd(usage, cfg);
+                                    if (cost !== undefined) {
+                                        any = true;
+                                        total += cost;
+                                    }
+                                });
+                                return any ? total : undefined;
+                            })(),
                         };
+
+                        void appendSessionUsage({
+                            at: updatedMessage.runStats.finishedAt,
+                            durationMs: updatedMessage.runStats.durationMs,
+                            promptTokens: updatedMessage.runStats.promptTokens ?? 0,
+                            completionTokens: updatedMessage.runStats.completionTokens ?? 0,
+                            tokensEst: updatedMessage.runStats.analysts?.reduce((sum, a) => sum + Math.round((a.charsOut ?? 0) / 4), 0) ?? 0,
+                            analystCount: updatedMessage.runStats.analystCount ?? 0,
+                            costUsd: updatedMessage.runStats.costUsd,
+                            coin: processedAnalysis?.coinName,
+                            direction: processedAnalysis?.direction,
+                        });
 
                         const newMessages = [...prev];
                         newMessages[messageIndex] = updatedMessage;
@@ -2972,6 +3010,7 @@ ${accuracyVerificationNote}`
                 options?.automation?.onError?.(safeMessage || 'Automation run failed.');
             }
         } finally {
+            stopTokenUsage?.();
             automationSilentRef.current = false;
             if (analysisAbortController.current === currentAbortController) {
                 setLoadingMessage(null);

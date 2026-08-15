@@ -78,6 +78,24 @@ export const parseSkillMarkdown = (content: string): SkillMeta | null => {
     };
 };
 
+export const setSkillStatus = async (fileId: string, status: SkillStatus, username?: string): Promise<void> => {
+    const file = getMemoryFiles().files.find(f => f.id === fileId);
+    if (!file) return;
+    const meta = parseSkillMarkdown(file.content);
+    if (!meta) return;
+    meta.status = status;
+    await updateMemoryFile(fileId, {
+        content: serializeSkill(meta, titleFromMeta(meta)),
+        enabled: status !== 'retired',
+    }, username || 'local');
+};
+
+export const listSkills = (): Array<{ file: MemoryFile; meta: SkillMeta }> =>
+    getMemoryFiles().files.filter(isSkillFile).map(file => {
+        const meta = parseSkillMarkdown(file.content);
+        return meta ? { file, meta } : null;
+    }).filter((row): row is { file: MemoryFile; meta: SkillMeta } => Boolean(row));
+
 export const serializeSkill = (meta: SkillMeta, title: string): string => {
     const lines = [
         '---',

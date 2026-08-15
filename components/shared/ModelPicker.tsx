@@ -8,7 +8,7 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { ProviderConfig } from '../../types/provider';
-import { isFreeModelId } from '../../utils/providerUtils';
+import { isFreeModelId, sortModelsFreeFirst } from '../../utils/providerUtils';
 import { ChevronRightIcon, CheckIcon } from './Icons';
 
 /** Viewport rect of the trigger at open time (kept so the flyout can be
@@ -281,9 +281,11 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
     const hoveredModels = hoveredProvider
         ? readyProviders.find(p => p.id === hoveredProvider)?.models ?? []
         : [];
-    const visibleModels = mode !== 'provider-only' && freeOnly
-        ? hoveredModels.filter(isFreeModelId)
-        : hoveredModels;
+    const visibleModels = sortModelsFreeFirst(
+        mode !== 'provider-only' && freeOnly
+            ? hoveredModels.filter(isFreeModelId)
+            : hoveredModels,
+    );
 
     const handleFreeOnlyToggle = useCallback((next: boolean) => {
         setFreeOnly(next);

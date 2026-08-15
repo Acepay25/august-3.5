@@ -6,6 +6,7 @@ import MarkdownContent from '../shared/MarkdownContent';
 import LiveMarketDataView from '../market/LiveMarketDataView';
 import EnsembleProgressChat from '../analysis/EnsembleProgressChat';
 import DebateChat from '../analysis/DebateChat';
+import DebateSummary from '../analysis/DebateSummary';
 import TradingSignalCard from '../analysis/TradingSignalCard';
 import DebateRunLog from '../analysis/DebateRunLog';
 import AnalysisDetails from './AnalysisDetails';
@@ -166,7 +167,6 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
     const isUserMessage = message.role === MessageRole.USER;
     const [isThinkingModalOpen, setIsThinkingModalOpen] = React.useState(false);
     const [isRunLedgerOpen, setIsRunLedgerOpen] = React.useState(false);
-    const [isRunLogOpen, setIsRunLogOpen] = React.useState(false);
     const [isMemoryGateExpanded, setIsMemoryGateExpanded] = React.useState(false);
     // Inline edit of a sent user message (history correction).
     const [editingMessageId, setEditingMessageId] = React.useState<string | null>(null);
@@ -261,7 +261,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
             id={`message-${message.id}`}
             className={`status-surface flex items-start gap-2 sm:gap-4 my-2 sm:my-4 px-2 sm:px-4 transition-all duration-200 lg:max-w-4xl lg:mx-auto
             ${message.role === MessageRole.USER ? 'justify-end' : message.role === MessageRole.SYSTEM ? 'justify-center' : ''} 
-            ${isHighlighted ? 'ring-2 ring-blue-500/40 rounded-2xl bg-blue-900/10' : ''}
+            ${isHighlighted ? 'rounded-2xl' : ''}
             ${isSelectionMode ? 'cursor-pointer hover:bg-zinc-800 rounded-xl py-2' : ''}
         `}
             onClick={isSelectionMode ? handleSelectionClick : undefined}
@@ -420,6 +420,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 </div>
                             ) : message.analysis ? (
                                 <div className="ui-panel">
+                                <div className="grid md:grid-cols-[minmax(0,1.4fr)_minmax(200px,280px)]">
                                 <TradingSignalCard
                                     analysis={message.analysis}
                                     debateTurns={message.debateTurns}
@@ -430,6 +431,12 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     calibration={confidenceCalibration}
                                     bare
                                 />
+                                {debateTurns.length > 0 && (
+                                    <div className="border-t border-white/5 md:border-l md:border-t-0">
+                                        <DebateSummary debateTurns={debateTurns} analysis={message.analysis} />
+                                    </div>
+                                )}
+                                </div>
                                 <SetupLifecycleCard
                                     analysis={message.analysis}
                                     outcome={message.outcome}
@@ -455,6 +462,9 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     highlighted={isHighlighted}
                                 />
                                 </div>
+                                {(message.debateRunLog && message.debateRunLog.length > 0) || message.runStats ? (
+                                    <DebateRunLog events={message.debateRunLog ?? []} runStats={message.runStats} defaultOpen={false} />
+                                ) : null}
                                 </div>
                             ) : message.isPostMortem ? (
                                 <div className="overflow-x-auto min-w-0">
@@ -558,8 +568,16 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                             )}
 
                             {/* Analyst launch (pre-debate) then the live/completed transcript. */}
-                            {!message.isDebating && !message.analysis && message.ensembleProgress && (
-                                <EnsembleProgressChat progress={message.ensembleProgress} modelIdToName={modelIdToName} isLive onRetryAnalyst={onReRunAnalysis ? () => onReRunAnalysis(message.id) : undefined} />
+                            {!message.analysis && message.ensembleProgress && (
+                                <EnsembleProgressChat
+                                    progress={message.ensembleProgress}
+                                    modelIdToName={modelIdToName}
+                                    isLive={!!message.isDebating || !message.analysis}
+                                    compact={!!message.isDebating}
+                                    onRetryAnalyst={onReRunAnalysis ? () => onReRunAnalysis(message.id) : undefined}
+                                    debateTurns={debateTurns}
+                                    activeDebateSpeakers={message.activeDebateSpeakers}
+                                />
                             )}
                             {(message.isDebating || debateTurns.length > 0) && (
                                 <DebateChat
@@ -580,42 +598,18 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 />
                             )}
 
-                            {/* Per-run summary — durations, gate cap, Monte Carlo (from runStats) */}
-                            {message.analysis && message.runStats && (
+                            {message.analysis && message.runStats?.analysts && message.runStats.analysts.length > 0 && (
                                 <div className="mb-2">
-                                    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[9px] uppercase tracking-wider text-zinc-600">
-                                        <span>Run {Math.round(message.runStats.durationMs / 1000)}s</span>
-                                        {message.runStats.analystCount !== undefined && <span>{message.runStats.analystCount} analysts</span>}
-                                        {message.runStats.gateCap !== undefined && <span>Gate cap {Math.round(message.runStats.gateCap * 100)}%</span>}
-                                        {message.runStats.mcWinRate !== undefined && <span>MC win {message.runStats.mcWinRate}%</span>}
-                                        {message.runStats.mcEV !== undefined && <span>MC EV {message.runStats.mcEV}R</span>}
-                                        {message.runStats.btMatches !== undefined && message.runStats.btMatches > 0 && (
-                                            <span title="How this exact setup did historically (similar past trades)">
-                                                Similar setups: {message.runStats.btMatches} · {message.runStats.btWinRate !== undefined ? `${message.runStats.btWinRate.toFixed(0)}% WR` : '—'} · {message.runStats.btEV !== undefined ? `${message.runStats.btEV > 0 ? '+' : ''}${message.runStats.btEV}R` : '—'}
-                                            </span>
-                                        )}
-                                        {message.debateRunLog && message.debateRunLog.length > 0 && (
-                                            <button
-                                                type="button"
-                                                onClick={() => setIsRunLogOpen(o => !o)}
-                                                aria-expanded={isRunLogOpen}
-                                                className="text-zinc-500 hover:text-zinc-300 transition-colors"
-                                                title="Append-only debate run log"
-                                            >
-                                                {isRunLogOpen ? '▾' : '▸'} {message.debateRunLog.length} run events
-                                            </button>
-                                        )}
-                                        {message.runStats.analysts && message.runStats.analysts.length > 0 && (
-                                            <button
-                                                type="button"
-                                                onClick={() => setIsRunLedgerOpen(o => !o)}
-                                                aria-expanded={isRunLedgerOpen}
-                                                className="text-zinc-500 hover:text-zinc-300 transition-colors"
-                                                title="Per-analyst cost & latency ledger"
-                                            >
-                                                {isRunLedgerOpen ? '▾ Run ledger' : '▸ Run ledger'}
-                                            </button>
-                                        )}
+                                    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-zinc-500">
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsRunLedgerOpen(o => !o)}
+                                            aria-expanded={isRunLedgerOpen}
+                                            className="text-zinc-500 hover:text-zinc-300 transition-colors"
+                                            title="Per-analyst cost & latency ledger"
+                                        >
+                                            {isRunLedgerOpen ? '▾ Run ledger' : '▸ Run ledger'}
+                                        </button>
                                         {message.text && (
                                             <button
                                                 type="button"
@@ -628,18 +622,16 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                             </button>
                                         )}
                                     </div>
-                                    {isRunLogOpen && message.debateRunLog && message.debateRunLog.length > 0 && (
-                                        <DebateRunLog events={message.debateRunLog} />
-                                    )}
-                                    {isRunLedgerOpen && message.runStats.analysts && message.runStats.analysts.length > 0 && (
+                                    {isRunLedgerOpen && (
                                         <div className="mt-1.5 overflow-x-auto rounded-lg border border-white/10 bg-zinc-900/60">
-                                            <table className="w-full text-left text-[9px] border-collapse">
+                                            <table className="w-full text-left text-[11px] border-collapse">
                                                 <thead>
-                                                    <tr className="text-zinc-500 uppercase tracking-wide">
-                                                        <th className="px-2 py-1 font-semibold">Analyst</th>
-                                                        <th className="px-2 py-1 font-semibold">Model</th>
-                                                        <th className="px-2 py-1 font-semibold">Time</th>
-                                                        <th className="px-2 py-1 font-semibold">Output</th>
+                                                    <tr className="text-zinc-500">
+                                                        <th className="px-2 py-1 font-medium">Analyst</th>
+                                                        <th className="px-2 py-1 font-medium">Model</th>
+                                                        <th className="px-2 py-1 font-medium">Time</th>
+                                                        <th className="px-2 py-1 font-medium">Chars</th>
+                                                        <th className="px-2 py-1 font-medium">Est. tok</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
@@ -648,7 +640,12 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                                             <td className="px-2 py-1 whitespace-nowrap max-w-[160px] truncate" title={a.displayName}>{a.displayName}</td>
                                                             <td className="px-2 py-1 whitespace-nowrap max-w-[140px] truncate text-zinc-400" title={a.modelId}>{a.modelId}</td>
                                                             <td className="px-2 py-1 whitespace-nowrap">{a.durationMs !== undefined ? `${(a.durationMs / 1000).toFixed(1)}s` : '—'}</td>
-                                                            <td className="px-2 py-1 whitespace-nowrap">{a.charsOut !== undefined ? `${a.charsOut.toLocaleString()} chars` : '—'}</td>
+                                                            <td className="px-2 py-1 whitespace-nowrap">{a.charsOut !== undefined ? a.charsOut.toLocaleString() : '—'}</td>
+                                                            <td className="px-2 py-1 whitespace-nowrap">{
+                                                                a.promptTokens !== undefined || a.completionTokens !== undefined
+                                                                    ? ((a.promptTokens ?? 0) + (a.completionTokens ?? 0)).toLocaleString()
+                                                                    : (a.charsOut !== undefined ? `~${Math.round(a.charsOut / 4).toLocaleString()}` : '—')
+                                                            }</td>
                                                         </tr>
                                                     ))}
                                                 </tbody>

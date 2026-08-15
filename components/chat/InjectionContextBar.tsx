@@ -50,7 +50,7 @@ const InjectionContextBar: React.FC<InjectionContextBarProps> = ({
         }
 
         if (isEnsembleEnabled) {
-            list.push({ label: 'Ensemble', title: 'Analyst debate is on', active: true, Icon: BrainCircuit });
+            list.push({ label: 'Team', title: 'Analyst team is on', active: true, Icon: BrainCircuit });
         }
         if (isAccuracyModeEnabled) {
             list.push({ label: 'Accuracy', title: 'Accuracy Mode is on', active: true, Icon: Target });

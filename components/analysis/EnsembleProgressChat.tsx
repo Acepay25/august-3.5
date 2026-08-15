@@ -1,116 +1,107 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { EnsembleAnalystProgress, EnsembleProgress } from '../../types';
-import { BotIcon } from '../shared/Icons';
+import React, { useMemo, useState } from 'react';
+import { DebateTurn, EnsembleAnalystProgress, EnsembleProgress } from '../../types';
 import MarkdownContent from '../shared/MarkdownContent';
+import { buildAnalystGantt, lastThoughtSnippet } from '../../utils/runGantt';
 
 interface EnsembleProgressChatProps {
     progress: EnsembleProgress;
     modelIdToName?: Record<string, string>;
     isLive?: boolean;
-    /** Live runs render their analyst list in the floating activity card. */
     hideSubagents?: boolean;
-    /** Re-run affordance for failed analysts — wired by the host app (the
-     *  pipeline has no per-analyst re-dispatch; the host re-runs the analysis
-     *  with the same prompt context). */
+    compact?: boolean;
     onRetryAnalyst?: (analystKey: string) => void;
+    debateTurns?: DebateTurn[];
+    activeDebateSpeakers?: Record<string, number>;
 }
 
-const AnalystAvatar: React.FC<{ name: string; active?: boolean; small?: boolean }> = ({ name, active = false, small = false }) => (
-    <div
-        className={`${small ? 'h-7 w-7 text-[10px]' : 'h-8 w-8 text-xs'} flex shrink-0 items-center justify-center rounded-lg border border-white/10 bg-zinc-800 font-medium text-zinc-200 ${active ? 'ring-1 ring-cyan-400/50' : ''}`}
-        title={name}
-    >
-        {name.trim().charAt(0).toUpperCase() || '?'}
-    </div>
-);
-
 const STATUS_TEXT: Record<EnsembleAnalystProgress['status'], string> = {
-    waiting: 'queued',
+    waiting: 'waiting',
     analyzing: 'thinking',
     error: 'unavailable',
     complete: 'done',
 };
 
-const STATUS_CHIP: Record<EnsembleAnalystProgress['status'], string> = {
-    waiting: 'text-zinc-500 border-white/10 bg-zinc-900',
-    analyzing: 'text-cyan-300 border-cyan-500/30 bg-cyan-500/10',
-    error: 'text-rose-300 border-rose-500/30 bg-rose-500/10',
-    complete: 'text-zinc-300 border-white/10 bg-zinc-800',
+const PHASES = ['Openings', 'Rebuttals', 'Verdict'] as const;
+
+const laneStatusText = (analyst: EnsembleAnalystProgress, answering: boolean): string => {
+    if (analyst.status === 'analyzing') return answering ? 'answering' : 'thinking';
+    return STATUS_TEXT[analyst.status];
 };
 
-/**
- * Zinc run-log row: avatar, name, model, status. Thinking stays collapsed
- * until the user opens it; the row still expands while a live stream is
- * in progress so the Thinking toggle is visible.
- */
-const AnalystRow: React.FC<{
+const splitAddresses = (text: string, names: string[]): Array<{ target?: string; text: string }> => {
+    const labels = [...new Set(names.map(n => n.trim()).filter(Boolean))].sort((a, b) => b.length - a.length);
+    if (labels.length < 2) return [{ text }];
+    const escaped = labels.map(l => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const re = new RegExp(`(?:^|\\n)\\s*[*_~]*(${escaped.join('|')})[*_~]*\\s*:\\s*`, 'g');
+    const matches = [...text.matchAll(re)];
+    if (matches.length === 0) return [{ text }];
+    return matches.map((match, index) => {
+        const start = (match.index ?? 0) + match[0].length;
+        const end = index + 1 < matches.length ? (matches[index + 1].index ?? text.length) : text.length;
+        return { target: match[1].trim(), text: text.slice(start, end).trim() };
+    }).filter(s => s.text);
+};
+
+const LiveLane: React.FC<{
     analyst: EnsembleAnalystProgress;
     modelName: string;
+    answering: boolean;
+    fill: number;
     onRetryAnalyst?: (analystKey: string) => void;
-}> = ({ analyst, modelName, onRetryAnalyst }) => {
+}> = ({ analyst, modelName, answering, fill, onRetryAnalyst }) => {
     const [open, setOpen] = useState(false);
-    const [thinkingOpen, setThinkingOpen] = useState(false);
-    const userInteractedRef = useRef(false);
-
     const thinkingContent = analyst.reasoning || analyst.thoughtProcess || '';
-    const finalOutput = analyst.finalOutput || '';
-    const showThinking = thinkingContent.length > 0 && thinkingContent.trim() !== finalOutput.trim();
-    const isStreamingThinking = analyst.status === 'analyzing' && showThinking;
-    const expanded = open || (isStreamingThinking && !userInteractedRef.current);
-    const showThinkingBlock = showThinking;
+    const snippet = analyst.status === 'analyzing'
+        ? lastThoughtSnippet(thinkingContent, 88)
+        : analyst.status === 'complete'
+            ? lastThoughtSnippet(analyst.finalOutput || thinkingContent, 88)
+            : analyst.error || '';
+    const live = analyst.status === 'analyzing';
 
     return (
-        <div className="border-b border-white/5 last:border-b-0">
-            <div className="flex items-center gap-2">
+        <div className="border-t border-white/5 first:border-t-0">
+            <div className="flex items-center gap-1">
                 <button
                     type="button"
-                    onClick={() => { setOpen(o => !o); userInteractedRef.current = true; }}
-                    className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-zinc-800/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
-                    aria-expanded={expanded}
-                    aria-label={`${expanded ? 'Collapse' : 'Expand'} ${analyst.displayName} analysis`}
+                    onClick={() => setOpen(o => !o)}
+                    className="flex min-w-0 flex-1 items-center gap-2 px-3 py-1.5 text-left hover:bg-zinc-800/40"
+                    aria-expanded={open}
+                    aria-label={`${open ? 'Collapse' : 'Expand'} ${analyst.displayName} analysis`}
                 >
-                    <AnalystAvatar name={analyst.displayName} active={analyst.status === 'analyzing'} small />
-                    <div className="min-w-0 flex-1">
-                        <div className="truncate text-[13px] font-medium text-zinc-200">{analyst.displayName}</div>
-                        <div className="truncate text-[11px] text-zinc-600">{modelName}</div>
+                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                        live ? 'animate-pulse bg-zinc-200' :
+                        analyst.status === 'complete' ? 'bg-zinc-400' :
+                        analyst.status === 'error' ? 'bg-zinc-600' : 'bg-zinc-700'
+                    }`} />
+                    <span className="w-[7.5rem] shrink-0 truncate text-[13px] text-zinc-200">{analyst.displayName}</span>
+                    <span className="min-w-0 flex-1 truncate text-[11px] text-zinc-600">{modelName}</span>
+                    <span className="w-16 shrink-0 text-right text-[11px] text-zinc-500">{laneStatusText(analyst, answering)}</span>
+                    <div className="h-1.5 w-24 shrink-0 overflow-hidden rounded-full bg-zinc-800 sm:w-32">
+                        <div
+                            className={`h-full rounded-full ${analyst.status === 'error' ? 'bg-zinc-600' : live ? 'bg-zinc-300' : 'bg-zinc-500'}`}
+                            style={{ width: `${fill}%` }}
+                        />
                     </div>
-                    <span className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] ${STATUS_CHIP[analyst.status]}`}>
-                        {STATUS_TEXT[analyst.status]}
-                    </span>
                 </button>
                 {analyst.status === 'error' && onRetryAnalyst && (
                     <button
                         type="button"
                         onClick={() => onRetryAnalyst(analyst.key)}
-                        className="mr-2 shrink-0 rounded-lg border border-white/10 px-2 py-1.5 text-[11px] text-zinc-400 transition-colors hover:border-white/20 hover:text-zinc-200"
-                        title="Re-run the analysis with this analyst included"
+                        className="mr-2 shrink-0 rounded-lg border border-white/10 px-2 py-1 text-[11px] text-zinc-400 hover:text-zinc-200"
                     >
                         Retry
                     </button>
                 )}
             </div>
-            {expanded && (
-                <div className="space-y-3 border-t border-white/5 px-2.5 pb-3 pt-2">
-                    {showThinkingBlock && (
-                        <details
-                            className="group rounded-lg border border-white/10 bg-black/20"
-                            open={thinkingOpen}
-                            onToggle={(e) => setThinkingOpen((e.target as HTMLDetailsElement).open)}
-                        >
-                            <summary
-                                onClick={() => { userInteractedRef.current = true; }}
-                                className="cursor-pointer list-none px-3 py-2 text-[11px] text-zinc-500 group-open:text-zinc-300"
-                            >
-                                {isStreamingThinking ? (
-                                    <span className="inline-flex items-center gap-1.5">
-                                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400"></span>
-                                        Thinking…
-                                    </span>
-                                ) : (
-                                    <>Thinking</>
-                                )}
-                            </summary>
-                            <div className="border-t border-white/5 px-3 py-2">
+            {snippet && !open && (
+                <p className="truncate px-3 pb-1.5 pl-7 text-[11px] text-zinc-500">{snippet}</p>
+            )}
+            {open && (
+                <div className="space-y-2 border-t border-white/5 px-3 pb-2 pt-2">
+                    {thinkingContent && thinkingContent.trim() !== (analyst.finalOutput || '').trim() && (
+                        <details className="group">
+                            <summary className="cursor-pointer list-none text-[11px] text-zinc-500 group-open:text-zinc-300">Thinking</summary>
+                            <div className="pt-1">
                                 <MarkdownContent content={thinkingContent} className="text-zinc-500" />
                             </div>
                         </details>
@@ -125,132 +116,104 @@ const AnalystRow: React.FC<{
                             )}
                         </div>
                     )}
+                    {analyst.status === 'error' && analyst.error && (
+                        <p className="text-[11px] text-zinc-500">{analyst.error}</p>
+                    )}
                 </div>
             )}
         </div>
     );
 };
 
-export const AnalystSubagents: React.FC<{
-    progress: EnsembleProgress;
-    modelIdToName?: Record<string, string>;
-    isLive?: boolean;
-    onRetryAnalyst?: (analystKey: string) => void;
-}> = ({ progress, modelIdToName = {}, isLive = false, onRetryAnalyst }) => {
-    const activeAnalysts = progress.analysts.filter(analyst => analyst.status === 'analyzing');
-    const waitingAnalysts = progress.analysts.filter(analyst => analyst.status === 'waiting');
-    const typingLabel = activeAnalysts.length > 0
-        ? `${activeAnalysts.length > 1 ? 'Analysts are' : activeAnalysts[0]?.displayName || 'Analyst is'} thinking`
-        : waitingAnalysts.length > 0
-            ? `Waiting for ${waitingAnalysts.length} analyst${waitingAnalysts.length === 1 ? '' : 's'}`
-            : 'Preparing analyst outputs';
+const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
+    progress,
+    modelIdToName = {},
+    isLive = false,
+    hideSubagents = false,
+    compact = false,
+    onRetryAnalyst,
+    debateTurns = [],
+    activeDebateSpeakers = {},
+}) => {
+    const lanes = useMemo(() => buildAnalystGantt(progress), [progress]);
+    const analystNames = progress.analysts.map(a => a.displayName);
+    const lastModTurn = [...debateTurns].reverse().find(t => t.speaker === 'Moderator');
+    const modLive = Boolean(activeDebateSpeakers['Moderator']) || progress.moderator.status === 'reviewing';
+    const anyAnalystLive = progress.analysts.some(a => a.status === 'analyzing') || Object.keys(activeDebateSpeakers).some(k => k !== 'Moderator');
+    const openingsDone = debateTurns.some(t => t.round === 1);
+    const rebuttalStarted = debateTurns.some(t => (t.round ?? 0) >= 2);
+    const verdictLive = modLive && rebuttalStarted && !anyAnalystLive;
+    const phase = verdictLive || progress.moderator.status === 'reviewing' && openingsDone
+        ? (rebuttalStarted ? 'Verdict' : 'Openings')
+        : rebuttalStarted
+            ? 'Rebuttals'
+            : 'Openings';
+    const addresses = lastModTurn ? splitAddresses(lastModTurn.text, analystNames) : [];
+    const posedLine = addresses.length > 0
+        ? addresses.map(a => a.target ? `${a.target}: ${lastThoughtSnippet(a.text, 40)}` : lastThoughtSnippet(a.text, 48)).join('    ')
+        : lastThoughtSnippet(lastModTurn?.text, 88);
+
+    if (hideSubagents || progress.analysts.length === 0) return null;
 
     return (
-        <div className="ui-panel status-surface">
-            <div className="flex items-center gap-2 border-b border-white/5 px-3 py-2 text-[12px] text-zinc-500">
-                <span className="font-medium text-zinc-300">Analysts</span>
-                <span className="tabular-nums text-zinc-600">{progress.analysts.length}</span>
+        <div className={`ui-panel ${compact ? 'mt-3' : 'mt-4'}`} aria-label="Analyst timeline">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-white/5 px-3 py-2 text-[11px] text-zinc-500">
+                <span className="font-medium text-zinc-300">{isLive ? 'Live' : 'Analysts'}</span>
+                {PHASES.map((p, i) => (
+                    <React.Fragment key={p}>
+                        {i > 0 && <span className="text-zinc-700">·</span>}
+                        <span className={p === phase ? 'text-zinc-200' : 'text-zinc-600'}>
+                            {p} {p === 'Openings' && openingsDone ? '●' : p === phase ? '●' : '○'}
+                        </span>
+                    </React.Fragment>
+                ))}
                 {isLive && (
-                    <>
-                        <span className="h-1 w-1 rounded-full bg-cyan-400" aria-hidden="true" />
-                        <span className="text-zinc-400">{typingLabel}</span>
-                    </>
+                    <span className="ml-auto text-zinc-600">{progress.analysts.length} analysts</span>
                 )}
             </div>
-            {progress.analysts.map((analyst) => (
-                <AnalystRow
-                    key={analyst.key}
-                    analyst={analyst}
-                    modelName={modelIdToName[analyst.modelId] ?? analyst.modelName}
-                    onRetryAnalyst={onRetryAnalyst}
-                />
-            ))}
+
+            {(modLive || lastModTurn || progress.moderator) && (
+                <div className="border-b border-white/5 px-3 py-2">
+                    <div className="flex items-center gap-2 text-[12px]">
+                        <span className={`h-1.5 w-1.5 rounded-full ${modLive ? 'animate-pulse bg-zinc-200' : 'bg-zinc-500'}`} />
+                        <span className="font-medium uppercase tracking-wider text-[10px] text-zinc-400">Moderator</span>
+                        <span className="text-[11px] text-zinc-500">
+                            {verdictLive ? 'verdict' : modLive ? 'asking' : 'posed'}
+                        </span>
+                    </div>
+                    {modLive && addresses.length > 0 ? (
+                        <ul className="mt-1 space-y-0.5 pl-4 text-[12px] text-zinc-300">
+                            {addresses.map((a, i) => (
+                                <li key={`${a.target || i}`}>
+                                    {a.target ? <span className="text-zinc-500">→ {a.target} </span> : null}
+                                    {lastThoughtSnippet(a.text, 96)}
+                                </li>
+                            ))}
+                        </ul>
+                    ) : posedLine ? (
+                        <p className="mt-1 truncate pl-4 text-[12px] text-zinc-400">{posedLine}</p>
+                    ) : null}
+                </div>
+            )}
+
+            {progress.analysts.map((analyst) => {
+                const lane = lanes.find(l => l.id === analyst.key);
+                const answering = Boolean(activeDebateSpeakers[analyst.displayName] || activeDebateSpeakers[analyst.providerName]);
+                return (
+                    <LiveLane
+                        key={analyst.key}
+                        analyst={analyst}
+                        modelName={modelIdToName[analyst.modelId] ?? analyst.modelName}
+                        answering={answering && analyst.status === 'analyzing'}
+                        fill={lane?.fill ?? 6}
+                        onRetryAnalyst={onRetryAnalyst}
+                    />
+                );
+            })}
         </div>
     );
 };
 
-const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({ progress, modelIdToName = {}, isLive = false, hideSubagents = false, onRetryAnalyst }) => {
-    const scrollRef = useRef<HTMLDivElement>(null);
-    const userScrolledUpRef = useRef(false);
-    const touchYRef = useRef<number | null>(null);
-
-    useEffect(() => {
-        const element = scrollRef.current;
-        if (isLive && element && !userScrolledUpRef.current) {
-            element.scrollTop = element.scrollHeight;
-        }
-    }, [progress, isLive]);
-
-    const lockIfScrollingUp = (deltaY: number): void => {
-        if (deltaY < 0) {
-            userScrolledUpRef.current = true;
-            return;
-        }
-        const element = scrollRef.current;
-        if (element && element.scrollHeight - element.scrollTop - element.clientHeight <= 80) {
-            userScrolledUpRef.current = false;
-        }
-    };
-
-    return (
-        <div className="ui-panel mt-4">
-            <div
-                ref={scrollRef}
-                onScroll={() => {
-                    const element = scrollRef.current;
-                    if (!element) return;
-                    userScrolledUpRef.current = element.scrollHeight - element.scrollTop - element.clientHeight > 80;
-                }}
-                onWheel={(event) => lockIfScrollingUp(event.deltaY)}
-                onTouchStart={(event) => { touchYRef.current = event.touches[0]?.clientY ?? null; }}
-                onTouchMove={(event) => {
-                    const currentY = event.touches[0]?.clientY;
-                    if (touchYRef.current == null || currentY == null) return;
-                    lockIfScrollingUp(touchYRef.current - currentY);
-                    touchYRef.current = currentY;
-                }}
-                className="custom-scrollbar max-h-[560px] space-y-3 overflow-y-auto px-3 py-4"
-            >
-                {progress.moderator.status === 'waiting' && (
-                    <div className="flex items-start gap-2.5">
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-zinc-800 text-zinc-300"><BotIcon /></div>
-                        <div className="max-w-[88%] rounded-lg border border-white/10 bg-zinc-900 px-3.5 py-3">
-                            <div className="mb-1 text-xs font-medium text-zinc-200">Strategist</div>
-                            <div className="text-xs text-zinc-500">
-                                {progress.moderator.waitingFor?.length
-                                    ? `Waiting for ${progress.moderator.waitingFor.length} analyst${progress.moderator.waitingFor.length === 1 ? '' : 's'}`
-                                    : 'Waiting for analyst outputs'}
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {progress.moderator.status === 'error' && (
-                    <div className="status-surface flex items-start gap-2.5">
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-rose-400/20 bg-rose-500/10 text-rose-300"><BotIcon /></div>
-                        <div className="max-w-[88%] rounded-2xl border border-rose-400/20 bg-rose-500/5 px-3.5 py-3">
-                            <div className="mb-1 text-xs font-medium text-rose-300">Strategist</div>
-                            <div className="text-xs text-zinc-500">{progress.moderator.error || 'The ensemble could not continue.'}</div>
-                        </div>
-                    </div>
-                )}
-
-                {progress.moderator.status === 'reviewing' && (
-                    <div className="flex items-start gap-2.5">
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-cyan-400/20 bg-cyan-500/10 text-cyan-300"><BotIcon /></div>
-                        <div className="max-w-[88%] rounded-2xl border border-white/10 bg-zinc-900/60 px-3.5 py-3">
-                            <div className="mb-1 text-xs font-medium text-zinc-200">Strategist</div>
-                            <div className="text-xs text-zinc-500">Reviewing all analyst outputs</div>
-                        </div>
-                    </div>
-                )}
-
-                {!hideSubagents && progress.analysts.length > 0 && (
-                    <AnalystSubagents progress={progress} modelIdToName={modelIdToName} isLive={isLive} onRetryAnalyst={onRetryAnalyst} />
-                )}
-            </div>
-        </div>
-    );
-};
+export const AnalystSubagents = EnsembleProgressChat;
 
 export default React.memo(EnsembleProgressChat);

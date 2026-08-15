@@ -20,16 +20,17 @@ import { withRetry, ProviderName } from '../../utils/apiErrorUtils';
 import { assertValidProviderUrl } from '../../utils/providerUrlValidation';
 
 import { recordProviderSuccess, recordProviderError } from '../infrastructure/ProviderHealthService';
+import { emitTokenUsage, extractTokenUsage, TokenUsage } from '../../utils/tokenUsage';
 interface ElectronProviderBridge {
     isElectron?: boolean;
-    providerChat?: (request: {
+        providerChat?: (request: {
         config: ProviderConfig;
         messages: ChatMessage[];
         requestId?: string;
         maxTokens?: number;
         temperature?: number;
         jsonMode?: boolean;
-    }) => Promise<{ ok: boolean; text?: string; reasoning?: string; status?: number; code?: string; message?: string }>;
+    }) => Promise<{ ok: boolean; text?: string; reasoning?: string; usage?: TokenUsage; status?: number; code?: string; message?: string }>;
     cancelProviderChat?: (requestId: string) => Promise<boolean>;
     discoverModels?: (config: {
         baseUrl: string;
@@ -65,6 +66,20 @@ export interface ChatRequestOptions {
     /** Abort signal for cancellation. */
     signal?: AbortSignal;
     onReasoning?: (reasoning: string) => void;
+    onUsage?: (usage: TokenUsage) => void;
+}
+
+function reportUsage(config: ProviderConfig, data: unknown, options?: ChatRequestOptions): void {
+    const usage = extractTokenUsage(data);
+    if (!usage) return;
+    options?.onUsage?.(usage);
+    emitTokenUsage({ providerId: config.id, modelId: config.selectedModel, usage });
+}
+
+function reportUsageDirect(config: ProviderConfig, usage: TokenUsage | undefined, options?: ChatRequestOptions): void {
+    if (!usage) return;
+    options?.onUsage?.(usage);
+    emitTokenUsage({ providerId: config.id, modelId: config.selectedModel, usage });
 }
 
 // ─── Thinking / Chain-of-Thought Extraction ──────────────────────────────────
@@ -266,10 +281,7 @@ async function chatCompletionsCall(
     if (reasoning.trim() && content) {
         options?.onReasoning?.(reasoning.trim());
     }
-    // Some reasoning-capable gateways place the generated answer in
-    // reasoning_content when the final content field is omitted. Preserve it
-    // so the caller can still extract a structured answer instead of seeing
-    // a misleading empty-response error.
+    reportUsage(config, response, options);
     return content || reasoning || '';
 }
 
@@ -285,12 +297,14 @@ async function* chatCompletionsStream(
         max_tokens: options?.maxTokens ?? 4096,
         temperature: options?.temperature ?? 0.7,
         stream: true,
+        stream_options: { include_usage: true },
     };
     if (options?.jsonMode) {
         (params as any).response_format = { type: 'json_object' };
     }
     const stream = await client.chat.completions.create(params, { signal: withStreamTimeoutSignal(options?.signal) });
     for await (const chunk of stream) {
+        reportUsage(config, chunk, options);
         const delta = chunk.choices[0]?.delta as any;
         const reasoning = extractReasoning(delta?.reasoning_content) || extractReasoning(delta?.reasoning);
         if (reasoning.trim()) options?.onReasoning?.(reasoning);
@@ -386,6 +400,7 @@ async function messagesCall(
     // it on the same side channel as chat_completions reasoning_content.
     const thinking = extractMessagesThinking(data.content);
     if (thinking) options?.onReasoning?.(thinking);
+    reportUsage(config, data, options);
     if (data.content && Array.isArray(data.content)) {
         return data.content
             .filter((block: any) => block.type === 'text')
@@ -455,6 +470,7 @@ async function responsesCall(
     // `reasoning` (full text + public summary) — forward on onReasoning.
     const reasoning = extractResponsesReasoning(data.output);
     if (reasoning) options?.onReasoning?.(reasoning);
+    reportUsage(config, data, options);
     if (data.output && Array.isArray(data.output)) {
         const texts: string[] = [];
         for (const item of data.output) {
@@ -607,6 +623,7 @@ export async function sendChatRequest(
                             throw error;
                         }
                         if (result.reasoning) options?.onReasoning?.(result.reasoning);
+                        reportUsageDirect(effectiveConfig, result.usage, options);
                         return result.text || '';
                     }).finally(() => {
                         window.clearTimeout(timeout);
@@ -669,6 +686,7 @@ export async function sendChatRequest(
                         // answer text exists; otherwise it IS the answer and
                         // must not be double-reported as content too.
                         if (reasoning.trim() && text) options?.onReasoning?.(reasoning.trim());
+                        reportUsage(effectiveConfig, data, options);
                         return text || reasoning || '';
                     });
                 }
@@ -835,6 +853,7 @@ async function* streamViaProxy(
                     if (chunk.error.status !== undefined) (error as any).status = chunk.error.status;
                     throw error;
                 }
+                reportUsage(config, chunk, options);
                 const delta = chunk?.choices?.[0]?.delta || {};
                 const reasoning = extractReasoning(delta.reasoning_content) || extractReasoning(delta.reasoning);
                 if (reasoning.trim()) options?.onReasoning?.(reasoning);
@@ -939,9 +958,9 @@ export async function testConnection(config: ProviderConfig): Promise<{ success:
         // with empty/error content used to report "Connected successfully",
         // and max_tokens 10 truncated reasoning models into false failures.
         if (!/OK/i.test(result || '')) {
-            return { success: false, message: `${config.name} responded without the expected 'OK' — check the base URL and model id.` };
+            return { success: false, message: `${config.name} · ${model} responded without the expected 'OK'.` };
         }
-        return { success: true, message: `Connected to ${config.name} successfully` };
+        return { success: true, message: `${config.name} · ${model} replied OK` };
     } catch (error: any) {
         return { success: false, message: error.message || 'Connection failed' };
     }

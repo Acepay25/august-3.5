@@ -252,6 +252,16 @@ function parseProviderErrorBody(raw) {
     }
 }
 
+function extractTokenUsageJs(data) {
+    const usage = data && data.usage;
+    if (!usage || typeof usage !== 'object') return undefined;
+    const prompt = Number(usage.prompt_tokens ?? usage.input_tokens ?? 0) || 0;
+    const completion = Number(usage.completion_tokens ?? usage.output_tokens ?? 0) || 0;
+    const total = Number(usage.total_tokens ?? prompt + completion) || 0;
+    if (!prompt && !completion && !total) return undefined;
+    return { promptTokens: prompt, completionTokens: completion, totalTokens: total || prompt + completion };
+}
+
 async function sendProviderRequest(request) {
     const { url, headers, body } = providerRequestDetails(request);
     const controller = new AbortController();
@@ -366,7 +376,7 @@ async function sendProviderRequest(request) {
             ? msgReasoning.filter(part => typeof part === 'string').join('\n')
             : msgReasoning || '';
     }
-    return { text: text || reasoning || '', reasoning };
+    return { text: text || reasoning || '', reasoning, usage: extractTokenUsageJs(data) };
 }
 
 async function createWindow() {

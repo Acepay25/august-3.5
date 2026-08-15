@@ -16,13 +16,31 @@ interface TradingSignalCardProps {
     bare?: boolean;
 }
 
+const parsePrice = (value?: string): number | undefined => {
+    if (!value) return undefined;
+    const n = Number(value.replace(/[$,\s]/g, ''));
+    return Number.isFinite(n) ? n : undefined;
+};
+
 const formatLevel = (value?: string): string => {
     if (!value) return '';
-    const cleaned = value.replace(/[$,\s]/g, '');
-    const n = Number(cleaned);
-    if (!Number.isFinite(n)) return value.replace(/^\$/, '');
+    const n = parsePrice(value);
+    if (n === undefined) return value.replace(/^\$/, '');
     if (Math.abs(n) >= 1000) return n.toLocaleString('en-US', { maximumFractionDigits: 0 });
     return n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+};
+
+const resolveRr = (analysis: TradeAnalysis): number | undefined => {
+    if (typeof analysis.rrRatio === 'number' && Number.isFinite(analysis.rrRatio)) {
+        return analysis.rrRatio;
+    }
+    const entryN = parsePrice(analysis.entryPoints?.[0]?.price);
+    const slN = parsePrice(analysis.stopLoss);
+    const tpN = parsePrice(analysis.takeProfit?.[0]?.price);
+    if (entryN === undefined || slN === undefined || tpN === undefined) return undefined;
+    const risk = Math.abs(entryN - slN);
+    if (risk <= 0) return undefined;
+    return parseFloat((Math.abs(tpN - entryN) / risk).toFixed(2));
 };
 
 const directionChip = (direction?: string): string => {
@@ -82,7 +100,7 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
     const entry = analysis.entryPoints?.[0]?.price;
     const sl = analysis.stopLoss;
     const tps = (analysis.takeProfit ?? []).map(tp => tp.price).filter(Boolean);
-    const rr = typeof analysis.rrRatio === 'number' ? analysis.rrRatio : undefined;
+    const rr = resolveRr(analysis);
     const dirLabel = signalDirectionLabel(analysis.direction, analysis.confidence);
     const noTrade = isNoTradeSignal(analysis.direction, analysis.confidence);
     const noTradeWhy = useMemo(
@@ -124,7 +142,7 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
     return (
         <div className={bare ? 'status-surface' : 'status-surface overflow-hidden rounded-2xl border border-white/10 bg-zinc-950/80'}>
             <div className="flex flex-wrap items-center gap-2 px-4 py-3 sm:px-5">
-                <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
+                <span className="h-1.5 w-1.5 rounded-full bg-zinc-400" />
                 <span className="ui-kicker">Trading signal</span>
                 {analysis.direction && (
                     <span className={`inline-flex items-center rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${directionChip(analysis.direction)}`}>
@@ -138,6 +156,9 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
                 )}
                 {typeof analysis.probability === 'number' && (
                     <span className="text-[11px] tabular-nums text-zinc-500">{Math.round(analysis.probability)}%</span>
+                )}
+                {rr !== undefined && (
+                    <span className="text-[11px] tabular-nums text-zinc-400">R:R 1:{rr.toFixed(1)}</span>
                 )}
                 <div className="ml-auto flex shrink-0 items-center gap-2">
                     {isLatest && onReRun && (
@@ -154,25 +175,21 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
             </div>
 
             <div className="space-y-4 border-t border-white/5 px-4 py-4 sm:px-5">
-                {(analysis.direction || rr !== undefined) && (
-                    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                        {analysis.direction && (
-                            <Stat label="Direction">
-                                <span className={`uppercase tracking-wide ${directionText(analysis.direction)}`}>{dirLabel}</span>
-                            </Stat>
-                        )}
-                        {rr !== undefined && (
-                            <Stat label="R:R">
-                                <span className="tabular-nums text-cyan-400">1:{rr.toFixed(1)}</span>
-                            </Stat>
-                        )}
-                        {analysis.grade && (
-                            <Stat label="Grade">
-                                <span className="text-zinc-100">{analysis.grade}</span>
-                            </Stat>
-                        )}
-                    </div>
-                )}
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                    {analysis.direction && (
+                        <Stat label="Direction">
+                            <span className={`uppercase tracking-wide ${directionText(analysis.direction)}`}>{dirLabel}</span>
+                        </Stat>
+                    )}
+                    <Stat label="R:R">
+                        <span className="tabular-nums text-zinc-100">{rr !== undefined ? `1:${rr.toFixed(1)}` : '—'}</span>
+                    </Stat>
+                    {analysis.grade && (
+                        <Stat label="Grade">
+                            <span className="text-zinc-100">{analysis.grade}</span>
+                        </Stat>
+                    )}
+                </div>
 
                 {levelRows.length > 0 && (
                     <div className="overflow-hidden rounded-xl border border-white/10">

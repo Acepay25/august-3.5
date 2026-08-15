@@ -2,6 +2,7 @@ import React from 'react';
 import { Message } from '../../types';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { formatChars, summarizeRunUsage } from '../../utils/runUsage';
 
 interface CompareModalProps {
   primary: Message;
@@ -37,7 +38,14 @@ const summaryOf = (message: Message, modelIdToName: Record<string, string>) => {
     grade: a.grade || '—',
     gateCap: a.gateResult?.confidenceCap !== undefined ? `${Math.round(a.gateResult.confidenceCap * 100)}%` : '—',
     mcWinRate: message.runStats?.mcWinRate !== undefined ? `${message.runStats.mcWinRate}%` : '—',
+    mcEV: message.runStats?.mcEV !== undefined ? `${message.runStats.mcEV > 0 ? '+' : ''}${message.runStats.mcEV}R` : '—',
     duration: message.runStats ? `${Math.round(message.runStats.durationMs / 1000)}s` : '—',
+    tokens: (() => {
+      if (!message.runStats) return '—';
+      const usage = summarizeRunUsage(message.runStats);
+      return `${usage.tokensExact ? '' : '~'}${formatChars(usage.tokensEst)}`;
+    })(),
+    cost: message.runStats?.costUsd !== undefined ? `$${message.runStats.costUsd.toFixed(3)}` : '—',
     models: modelNames || '—',
     createdAt: new Date(message.createdAt).toLocaleString(),
   };
@@ -60,8 +68,8 @@ const CompareModal: React.FC<CompareModalProps> = ({ primary, secondary, analysi
       <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Compare analyses" className="w-full max-w-2xl overflow-hidden rounded-2xl border border-white/10 bg-zinc-900 shadow-2xl">
         <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
           <div>
-            <div className="text-xs font-black uppercase tracking-widest text-cyan-300">Compare analyses</div>
-            <div className="text-[10px] text-zinc-500">Side-by-side stat comparison of two trade cards</div>
+            <div className="text-xs font-medium text-zinc-200">Compare runs</div>
+            <div className="text-[10px] text-zinc-500">This run vs the previous analysis in the thread</div>
           </div>
           <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white" aria-label="Close">✕</button>
         </div>
@@ -83,7 +91,10 @@ const CompareModal: React.FC<CompareModalProps> = ({ primary, secondary, analysi
           <StatRow label="Grade" a={a.grade} b={b?.grade ?? '—'} />
           <StatRow label="Gate cap" a={a.gateCap} b={b?.gateCap ?? '—'} />
           <StatRow label="MC win rate" a={a.mcWinRate} b={b?.mcWinRate ?? '—'} />
+          <StatRow label="MC EV" a={a.mcEV} b={b?.mcEV ?? '—'} />
           <StatRow label="Run time" a={a.duration} b={b?.duration ?? '—'} />
+          <StatRow label="Tokens" a={a.tokens} b={b?.tokens ?? '—'} />
+          <StatRow label="Est. cost" a={a.cost} b={b?.cost ?? '—'} />
 
           {!secondary && (
             <div className="mt-3">
@@ -97,7 +108,7 @@ const CompareModal: React.FC<CompareModalProps> = ({ primary, secondary, analysi
                       key={m.id}
                       type="button"
                       onClick={() => onPickSecondary(m.id)}
-                      className="flex w-full items-center justify-between rounded-lg border border-white/5 bg-zinc-950/60 px-3 py-1.5 text-left text-[11px] text-zinc-300 transition-colors hover:border-cyan-400/30 hover:bg-zinc-800"
+                      className="flex w-full items-center justify-between rounded-lg border border-white/5 bg-zinc-950/60 px-3 py-1.5 text-left text-[11px] text-zinc-300 transition-colors hover:border-white/20 hover:bg-zinc-800"
                     >
                       <span className="truncate">{m.analysis?.direction} {m.analysis?.coinName || ''} · {m.analysis?.confidence}</span>
                       <span className="shrink-0 text-[9px] text-zinc-500">{new Date(m.createdAt).toLocaleString()}</span>

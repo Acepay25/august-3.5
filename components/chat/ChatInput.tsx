@@ -82,6 +82,7 @@ interface ChatInputProps {
      * regime, not blended all-time.
      */
     regimeProviderStats?: RegimeProviderStatsMap;
+    onOpenSettings?: () => void;
     // Fresh-session layout: center the input until the first message exists.
     centered?: boolean;
 }
@@ -131,6 +132,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
     moderatorModel,
     onSetModeratorProvider,
     onSetModeratorModel,
+    onOpenSettings,
     // Fresh-session layout: static centered input until the first message
     // exists, then it docks at the bottom.
     centered = false,
@@ -218,7 +220,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
             : 'absolute bottom-0 left-0 right-0 px-3 sm:px-4 lg:px-8 pointer-events-none z-20 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] sm:pb-[calc(env(safe-area-inset-bottom)+0.75rem)] lg:pb-4 status-surface'}>
             <div className={centered ? 'w-full' : 'w-full lg:max-w-3xl lg:mx-auto pointer-events-auto'}>
                 {/* Main Input Container — compact composer */}
-                <div className="rounded-2xl border border-white/10 bg-[#202020]/95 shadow-[0_8px_32px_rgba(0,0,0,0.24)] p-2 transition-all">
+                <div className="rounded-lg border border-white/10 bg-zinc-950 p-2 transition-all">
 
                     {/* Image Preview */}
                     <ImagePreview images={images} onRemoveImage={removeImage} />
@@ -272,14 +274,12 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                         <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2 flex-wrap">
                             <button
                                 onClick={() => fileInputRef.current?.click()}
-                                className={`h-9 w-9 rounded-full transition-all shrink-0 flex items-center justify-center ${uploadDisabled ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-400 hover:text-white'}`}
+                                className={`h-9 w-9 rounded-lg transition-all shrink-0 flex items-center justify-center ${uploadDisabled ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'}`}
                                 disabled={uploadDisabled}
-                                title={isEnsembleEnabled ? "Upload charts" : "Enable Ensemble to analyze charts"}
+                                title={isEnsembleEnabled ? 'Upload charts' : 'Open Team to analyze charts'}
                             >
                                 <PlusIcon className="h-5 w-5" />
                             </button>
-                            {/* Casual-chat model dropdown — only when ensemble
-                                is off: pick which model answers casual chat. */}
                             {!isEnsembleEnabled && chatModelOptions.length > 0 && (
                                 <ModelPicker
                                     providers={providers}
@@ -291,40 +291,37 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                 />
                             )}
 
-                            {/* Ensemble toggle — simple on/off button */}
                             <button
-                                onClick={() => setIsEnsembleEnabled(!isEnsembleEnabled)}
-                                className={`flex items-center gap-1 sm:gap-1.5 px-3 sm:px-4 py-1 rounded-full transition-all text-xs sm:text-sm ${isEnsembleEnabled ? 'bg-cyan-600 text-white shadow-[inset_0_0_10px_rgba(0,0,0,0.1)]' : 'bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700'}`}
-                                title={isEnsembleEnabled ? 'Ensemble on — chart analysis enabled' : 'Enable ensemble mode for chart analysis'}
-                                aria-pressed={isEnsembleEnabled}
+                                type="button"
+                                onClick={() => {
+                                    setIsEnsembleEnabled(true);
+                                    setIsTeamModalOpen(true);
+                                }}
+                                className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs sm:text-sm transition-colors ${
+                                    isEnsembleEnabled
+                                        ? 'bg-zinc-800 text-zinc-100 hover:bg-zinc-700'
+                                        : 'bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800'
+                                }`}
+                                aria-haspopup="dialog"
+                                aria-expanded={isTeamModalOpen}
+                                title="Choose the analyst team"
                             >
-                                <span className="font-medium">Ensemble</span>
-                            </button>
-
-                            {isEnsembleEnabled && (
-                                <button
-                                    type="button"
-                                    onClick={() => setIsTeamModalOpen(true)}
-                                    className="flex items-center gap-1.5 rounded-full bg-zinc-800 px-2.5 py-1 text-xs sm:text-sm text-zinc-300 transition-colors hover:bg-zinc-700 hover:text-white"
-                                    aria-haspopup="dialog"
-                                    aria-expanded={isTeamModalOpen}
-                                    title="Choose the analyst team"
-                                >
-                                    <span className="font-medium">Team</span>
+                                <span className="font-medium">Team</span>
+                                {isEnsembleEnabled && (
                                     <span className="flex -space-x-1.5">
                                         {(rosterSlots.length > 0 ? rosterSlots : [{ initial: '?', label: 'Unassigned', model: '' }]).map((slot, index) => (
                                             <span
                                                 key={`${slot.label}-${index}`}
-                                                className="flex h-5 w-5 items-center justify-center rounded-full border border-zinc-900 bg-zinc-700 text-[9px] font-semibold text-zinc-200"
+                                                className="flex h-5 w-5 items-center justify-center rounded-full border border-zinc-950 bg-zinc-700 text-[9px] font-semibold text-zinc-200"
                                                 title={slot.model ? `${slot.label} · ${slot.model}` : slot.label}
                                             >
                                                 {slot.initial}
                                             </span>
                                         ))}
                                     </span>
-                                    <ChevronDownIcon className="h-3 w-3 text-zinc-500" />
-                                </button>
-                            )}
+                                )}
+                                <ChevronDownIcon className="h-3 w-3 text-zinc-500" />
+                            </button>
 
                         </div>
 
@@ -334,7 +331,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             <div className="relative" ref={leverageRef}>
                                 <button
                                     onClick={() => setIsLeverageDropdownOpen(!isLeverageDropdownOpen)}
-                                    className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full transition-all text-xs sm:text-sm focus-visible:ring-2 focus-visible:ring-cyan-400 ${isLeverageDropdownOpen ? 'bg-zinc-700 text-white' : 'bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700'}`}
+                                    className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg transition-all text-xs sm:text-sm focus-visible:ring-2 focus-visible:ring-zinc-500 ${isLeverageDropdownOpen ? 'bg-zinc-700 text-white' : 'bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800'}`}
                                     aria-label={`Select leverage, currently ${leverageInput}x`}
                                     aria-expanded={isLeverageDropdownOpen}
                                     aria-haspopup="menu"
@@ -343,14 +340,17 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                     <span className="font-medium">{leverageInput}x</span>
                                 </button>
                                 {isLeverageDropdownOpen && (
-                                     <div role="menu" aria-label="Leverage presets" className="absolute bottom-full right-0 mb-2 w-36 overflow-hidden rounded-2xl border border-cyan-400/20 bg-zinc-950/95 shadow-[0_18px_50px_rgba(0,0,0,0.45)] backdrop-blur-xl animate-fade-in">
-                                        <div className="border-b border-white/10 bg-gradient-to-br from-cyan-950/35 via-zinc-900 to-zinc-900 px-3 py-2.5"><div className="text-[10px] font-black uppercase tracking-[0.16em] text-cyan-300">Leverage</div><div className="mt-1 text-[10px] text-zinc-500">Choose a risk multiplier.</div></div>
+                                     <div role="menu" aria-label="Leverage presets" className="absolute bottom-full right-0 mb-2 w-36 overflow-hidden rounded-lg border border-white/10 bg-zinc-950 shadow-2xl animate-fade-in">
+                                        <div className="border-b border-white/10 px-3 py-2.5">
+                                            <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Leverage</div>
+                                            <div className="mt-1 text-[10px] text-zinc-600">Risk multiplier</div>
+                                        </div>
                                         <div className="p-1.5">
                                         {[25, 50, 75, 100, 125].map(preset => (
                                             <button
                                                 key={preset}
                                                 onClick={() => handlePresetLeverage(preset)}
-                                                className={`w-full rounded-lg px-3 py-2 text-left text-sm font-mono transition-colors ${parseInt(leverageInput) === preset ? 'bg-cyan-500/15 text-cyan-200' : 'text-zinc-300 hover:bg-zinc-800'}`}
+                                                className={`w-full rounded-md px-3 py-2 text-left text-sm font-mono transition-colors ${parseInt(leverageInput) === preset ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-300 hover:bg-zinc-900'}`}
                                             >
                                                 {preset}x
                                             </button>
@@ -361,7 +361,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                                 value={leverageInput}
                                                 onChange={handleLeverageChange}
                                                 onBlur={handleLeverageBlur}
-                                                className="w-full bg-zinc-800 border border-white/10 rounded-lg px-2 py-1.5 text-sm font-mono text-cyan-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus:border-cyan-500/50"
+                                                className="w-full bg-zinc-900 border border-white/10 rounded-md px-2 py-1.5 text-sm font-mono text-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500"
                                                 aria-label="Custom leverage"
                                                 min="1"
                                                 max="125"
@@ -375,7 +375,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             <button
                                 onClick={isAnalysisInProgress ? handleCancelAnalysis : handleSendMessage}
                                 disabled={isSummarizing || (!isAnalysisInProgress && ((!input.trim() && images.length === 0) || isRateLimited || !isAnyProviderEnabled))}
-                                className={`h-9 w-9 rounded-xl text-white transition-all flex items-center justify-center shrink-0 ${isAnalysisInProgress ? 'bg-rose-500/80 hover:bg-rose-500' : 'bg-cyan-500 hover:bg-cyan-400'} disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-zinc-800`}
+                                className={`h-9 w-9 rounded-lg transition-all flex items-center justify-center shrink-0 disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-zinc-800 ${isAnalysisInProgress ? 'status-surface bg-rose-500/80 hover:bg-rose-500 text-white' : 'bg-zinc-100 text-zinc-950 hover:bg-white'}`}
                                 title={isAnalysisInProgress ? 'Stop generating' : 'Send'}
                                 aria-label={isAnalysisInProgress ? 'Stop generating' : 'Send message'}
                             >
@@ -435,6 +435,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                 onClose={() => setIsTeamModalOpen(false)}
                 onEditLensPrompt={openLensPromptEditor}
                 onEditNormalPrompt={() => setPromptEditor({ kind: 'normal' })}
+                onOpenSettings={onOpenSettings}
             />
         </div>
     );

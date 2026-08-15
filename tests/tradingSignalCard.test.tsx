@@ -44,6 +44,7 @@ describe('TradingSignalCard', () => {
         expect(screen.getAllByText('62% hit').length).toBeGreaterThanOrEqual(1);
         expect(screen.getAllByText('44% hit').length).toBeGreaterThanOrEqual(1);
         expect(screen.getAllByText('1:0.6').length).toBeGreaterThanOrEqual(1);
+        expect(screen.getByText('R:R 1:0.6')).toBeDefined();
         expect(screen.queryByText('Final trade plan')).toBeNull();
         expect(screen.queryByText(/What SL/)).toBeNull();
     });
@@ -104,6 +105,12 @@ describe('TradingSignalCard', () => {
         expect(screen.getByText('Confidence')).toBeDefined();
         expect(screen.getByText(/Avoid because/)).toBeDefined();
         expect(screen.getAllByText(/Incomplete take-profit ladder/).length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('computes R:R from levels when rrRatio is missing', () => {
+        render(<TradingSignalCard analysis={analysis({ rrRatio: undefined })} />);
+        expect(screen.getAllByText('1:0.6').length).toBeGreaterThanOrEqual(1);
+        expect(screen.getByText('R:R 1:0.6')).toBeDefined();
     });
 
     it('shows Sell for a Short with Medium confidence', () => {

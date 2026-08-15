@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useConfirmDialog } from '../shared/ConfirmDialog';
 import { APP_NAME, APP_VERSION } from '../../constants/version';
 import { AIProvider, AccuracySubMode, LoggedTrade } from '../../types';
@@ -10,10 +10,11 @@ import AnalystLensSettings from './AnalystLensSettings';
 import CustomInstructionsEditor, { InstructionTab } from './CustomInstructionsEditor';
 import MemorySettings from './MemorySettings';
 import { DiagnosticsPanel } from './DiagnosticsPanel';
+import SessionUsagePanel from './SessionUsagePanel';
 import { BackupManager } from './BackupManager';
 import { AlertManager } from './AlertManager';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
-import { ActivityIcon, AISettingsIcon, BrainIcon, ChevronLeftIcon, CloseIcon, EditIcon, HistoryIcon, BookmarkIcon, SettingsIcon, UserIcon, ExportIcon, SearchIcon, SwitchUserIcon, CodeIcon } from '../shared/Icons';
+import { ActivityIcon, AISettingsIcon, ChevronLeftIcon, CloseIcon, HistoryIcon, SettingsIcon, SwitchUserIcon, CodeIcon } from '../shared/Icons';
 import PromptManager from './PromptManager';
 import StrategiesManager from './StrategiesManager';
 import MemoryFilesManager from './MemoryFilesManager';
@@ -21,6 +22,11 @@ import ModelPicker from '../shared/ModelPicker';
 import { Journal } from '../journal/Journal';
 
 export type SettingsTab = 'general' | 'models' | 'journal' | 'lenses' | 'instructions' | 'memory' | 'actions' | 'prompts' | 'strategies';
+
+const SETTINGS_TABS: SettingsTab[] = ['general', 'models', 'journal', 'lenses', 'instructions', 'memory', 'actions', 'prompts', 'strategies'];
+
+const isSettingsTab = (value?: string): value is SettingsTab =>
+    !!value && SETTINGS_TABS.includes(value as SettingsTab);
 
 interface SettingsMenuProps {
     isVisible: boolean;
@@ -141,6 +147,25 @@ interface SettingsMenuProps {
 
 // ─── Shared UI Helpers ────────────────────────────────────────────────────────
 
+const SettingsSubNav: React.FC<{
+    items: { id: SettingsTab; label: string }[];
+    value: SettingsTab;
+    onChange: (id: SettingsTab) => void;
+}> = ({ items, value, onChange }) => (
+    <div className="flex gap-1 border-b border-zinc-800 px-1 pb-3">
+        {items.map(item => (
+            <button
+                key={item.id}
+                type="button"
+                onClick={() => onChange(item.id)}
+                className={`rounded-md px-2.5 py-1 text-[11px] ${value === item.id ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'}`}
+            >
+                {item.label}
+            </button>
+        ))}
+    </div>
+);
+
 const NavTabButton: React.FC<{
     id: SettingsTab;
     activeTab: SettingsTab;
@@ -148,8 +173,9 @@ const NavTabButton: React.FC<{
     icon: React.ReactNode;
     label: string;
     badge?: string;
-}> = ({ activeTab, id, onClick, icon, label, badge }) => {
-    const isActive = activeTab === id;
+    activeWhen?: SettingsTab[];
+}> = ({ activeTab, id, onClick, icon, label, badge, activeWhen }) => {
+    const isActive = activeWhen ? activeWhen.includes(activeTab) : activeTab === id;
     return (
         <button
             onClick={onClick}
@@ -240,8 +266,8 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
     // technical tab (provider CRUD).
     const [activeTab, setActiveTab] = useState<SettingsTab>(() => {
         // If settingsInitialTab is provided (e.g., from handleOpenJournal), use it
-        if (props.settingsInitialTab && props.settingsInitialTab in ['general', 'models', 'journal', 'lenses', 'instructions', 'memory', 'actions', 'prompts', 'strategies']) {
-            return props.settingsInitialTab as SettingsTab;
+        if (isSettingsTab(props.settingsInitialTab)) {
+            return props.settingsInitialTab;
         }
         const hasReadyProvider = (providerConfigs ?? []).some(c => c.isEnabled && c.apiKey.trim().length > 0);
         return hasReadyProvider ? 'general' : 'models';
@@ -254,8 +280,8 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
 
     // Handle settingsInitialTab prop changes (e.g., when handleOpenJournal sets it)
     useEffect(() => {
-        if (props.settingsInitialTab && props.settingsInitialTab in ['general', 'models', 'journal', 'lenses', 'instructions', 'memory', 'actions', 'prompts', 'strategies']) {
-            setActiveTab(props.settingsInitialTab as SettingsTab);
+        if (isSettingsTab(props.settingsInitialTab)) {
+            setActiveTab(props.settingsInitialTab);
             props.onSettingsInitialTabConsumed?.();
         }
     }, [props.settingsInitialTab]);
@@ -298,9 +324,10 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
 
     // Enabled providers list for lens settings —
     // derived from dynamic provider configs (ready = enabled + API key).
-    const readyConfigProviders = (providerConfigs ?? []).filter(c => c.isEnabled && c.apiKey.trim().length > 0);
-    // First ready provider — used as the default summarization provider for the embedded journal
-    const firstReadyProvider = readyConfigProviders[0];
+    const readyConfigProviders = useMemo(
+        () => (providerConfigs ?? []).filter(c => c.isEnabled && c.apiKey.trim().length > 0),
+        [providerConfigs],
+    );
 
     // Provider configs load asynchronously. Resolve the landing tab once after
     // that load so existing users do not get stranded on provider CRUD while
@@ -311,22 +338,19 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
         setActiveTab(readyConfigProviders.length > 0 ? 'general' : 'models');
     }, [isVisible, providerConfigsLoaded, readyConfigProviders.length]);
 
-    // Heal stale vision-model selections: both the global `visionModel` and
-    // the legacy per-conversation `selectedOcrModel` are bare model ids, and
-    // if their provider was disabled/removed they appear in no dropdown
-    // option (the select renders blank). Fall back to the first ready
-    // provider's model so the UI and the vision path stay in sync.
-    // NOTE: this effect must stay ABOVE the `!isVisible` early return — React
-    // forbids conditional hook order.
+    // Heal only when a saved id disappeared. Never copy the provider-list
+    // "active" model into Vision / OCR — clicking another provider used to
+    // rewrite those pickers via firstReady.selectedModel.
     useEffect(() => {
         if (readyConfigProviders.length === 0) return;
-        if (!visionModel || !readyConfigProviders.some(p => p.models.includes(visionModel))) {
-            onSetVisionModel?.(firstReadyProvider?.selectedModel || firstReadyProvider?.models?.[0] || '');
+        const known = (id: string): boolean => readyConfigProviders.some(p => p.models.includes(id));
+        if (visionModel && !known(visionModel)) {
+            onSetVisionModel?.('');
         }
-        if (selectedOcrModel && !readyConfigProviders.some(p => p.models.includes(selectedOcrModel))) {
-            onSetOcrModel?.(firstReadyProvider?.selectedModel || firstReadyProvider?.models?.[0] || '');
+        if (selectedOcrModel && !known(selectedOcrModel)) {
+            onSetOcrModel?.('');
         }
-    }, [readyConfigProviders, selectedOcrModel, visionModel, firstReadyProvider, onSetOcrModel, onSetVisionModel]);
+    }, [readyConfigProviders, selectedOcrModel, visionModel, onSetOcrModel, onSetVisionModel]);
 
     if (!isVisible) return null;
 
@@ -377,44 +401,26 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                 <NavTabButton
                                     id="general"
                                     activeTab={activeTab}
+                                    activeWhen={['general', 'lenses']}
                                     onClick={() => setActiveTab('general')}
                                     icon={<SettingsIcon className="w-4 h-4" />}
                                     label="Analysis"
                                 />
                                 <NavTabButton
-                                    id="lenses"
-                                    activeTab={activeTab}
-                                    onClick={() => setActiveTab('lenses')}
-                                    icon={<BrainIcon className="w-4 h-4" />}
-                                    label="Analyst roles"
-                                />
-                                <NavTabButton
-                                    id="instructions"
-                                    activeTab={activeTab}
-                                    onClick={() => setActiveTab('instructions')}
-                                    icon={<EditIcon className="w-4 h-4" />}
-                                    label="Response preferences"
-                                />
-                                <NavTabButton
                                     id="prompts"
                                     activeTab={activeTab}
+                                    activeWhen={['prompts', 'instructions']}
                                     onClick={() => setActiveTab('prompts')}
                                     icon={<CodeIcon className="w-4 h-4" />}
                                     label="Prompts"
                                 />
                                 <NavTabButton
-                                    id="strategies"
-                                    activeTab={activeTab}
-                                    onClick={() => setActiveTab('strategies')}
-                                    icon={<BookmarkIcon className="w-4 h-4" />}
-                                    label="Strategies"
-                                />
-                                <NavTabButton
                                     id="memory"
                                     activeTab={activeTab}
+                                    activeWhen={['memory', 'strategies']}
                                     onClick={() => setActiveTab('memory')}
                                     icon={<ActivityIcon className="w-4 h-4" />}
-                                    label="Memory"
+                                    label="Knowledge"
                                 />
                                 {/* Account & Data — journal, profile, backups */}
                                 <p className="ui-kicker px-3 pt-5 pb-2">
@@ -459,7 +465,11 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
 
                         {/* Right Content Workspace */}
                         <div className={`flex-1 min-h-0 overflow-y-auto bg-zinc-950 custom-scrollbar ${
-                            activeTab === 'journal' || activeTab === 'prompts' || activeTab === 'memory' ? '' : 'px-6 py-8 lg:px-10 [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-3xl'
+                            activeTab === 'journal' || activeTab === 'prompts' || activeTab === 'memory' || activeTab === 'instructions' || activeTab === 'strategies'
+                                ? ''
+                                : activeTab === 'models'
+                                    ? 'px-6 py-8 lg:px-12 [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-6xl'
+                                    : 'px-6 py-8 lg:px-10 [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-3xl'
                         }`}>
                             
                             {/* TAB 0: Trading Journal — embedded inside Settings */}
@@ -510,18 +520,17 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
 
                             {/* TAB 1: AI Models & Providers */}
                             {activeTab === 'models' && (
-                                <div className="space-y-6 animate-fade-in">
+                                <div className="space-y-6 animate-fade-in min-h-0">
                                     {providerConfigsLoaded && readyConfigProviders.length === 0 && (
-                                        <div className="status-surface rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-4">
+                                        <div className="status-surface rounded-2xl border border-zinc-700/60 bg-zinc-900 p-4">
                                             <h3 className="text-sm font-bold text-zinc-100">Connect an AI service to get started</h3>
                                             <p className="mt-1 text-xs leading-relaxed text-zinc-400">
-                                                Choose a provider below, paste your key, select a model, then use Test before running your first analysis. Connection type, custom endpoints, and model IDs are advanced options.
+                                                Choose a provider below, paste your key, select a model, then use Test before running your first analysis.
                                             </p>
                                         </div>
                                     )}
-                                    {/* Vision & Moderator Controls Header bar */}
+
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {/* Vision Model Selector — models from ready providers */}
                                         {readyConfigProviders.length > 0 && (
                                             <div className="p-4 rounded-xl bg-zinc-900 border border-zinc-800/80">
                                                 <div className="text-xs font-bold text-zinc-400 mb-2 uppercase tracking-wider">
@@ -539,9 +548,8 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                             </div>
                                         )}
 
-                                        {/* Debate Moderator Selector */}
-                                        <div className="p-4 rounded-xl bg-zinc-900 border border-cyan-500/20">
-                                            <div className="text-xs font-bold text-cyan-400 mb-2 uppercase tracking-wider">
+                                        <div className="p-4 rounded-xl bg-zinc-900 border border-zinc-800/80">
+                                            <div className="text-xs font-bold text-zinc-400 mb-2 uppercase tracking-wider">
                                                 Debate Moderator
                                             </div>
                                             <ModelPicker
@@ -567,7 +575,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         </div>
                                     </div>
 
-                                    {/* Main Provider Manager UI */}
                                     {providerConfigs && onUpdateProvider && onAddCustomProvider && onRemoveProvider && onToggleProviderConfig ? (
                                         <ProviderManager
                                             configs={providerConfigs}
@@ -590,9 +597,17 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                             {/* TAB 2: General & Analysis */}
                             {activeTab === 'general' && (
                                 <div className="space-y-6 max-w-3xl animate-fade-in">
+                                    <SettingsSubNav
+                                        items={[
+                                            { id: 'general', label: 'Modes' },
+                                            { id: 'lenses', label: 'Roles' },
+                                        ]}
+                                        value={activeTab}
+                                        onChange={setActiveTab}
+                                    />
                                     <div className="border-b border-zinc-800 pb-3">
-                                        <h3 className="text-base font-bold text-white">General & Analysis Modes</h3>
-                                        <p className="text-xs text-zinc-500 mt-1">Core analysis modes first; fine-tuning options are tucked under Advanced.</p>
+                                        <h3 className="text-base font-bold text-white">Analysis</h3>
+                                        <p className="text-xs text-zinc-500 mt-1">Core analysis modes first; fine-tuning is under Advanced.</p>
                                     </div>
 
                                     {/* CORE — the two modes that change how analyses behave */}
@@ -617,7 +632,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                                         onClick={() => setAccuracySubMode?.('original')}
                                                         className={`p-3 rounded-xl border text-left transition-all ${
                                                             accuracySubMode === 'original'
-                                                                ? 'bg-cyan-500/10 border-cyan-500/60 text-cyan-300'
+                                                                ? 'bg-zinc-900 border-zinc-500 text-zinc-100'
                                                                 : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-zinc-200'
                                                         }`}
                                                     >
@@ -628,7 +643,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                                         onClick={() => setAccuracySubMode?.('pure_ai')}
                                                         className={`p-3 rounded-xl border text-left transition-all ${
                                                             accuracySubMode === 'pure_ai'
-                                                                ? 'bg-cyan-500/10 border-cyan-500/60 text-cyan-300'
+                                                                ? 'bg-zinc-900 border-zinc-500 text-zinc-100'
                                                                 : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-zinc-200'
                                                         }`}
                                                     >
@@ -729,12 +744,19 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                 </div>
                             )}
 
-                            {/* TAB 3: Analyst Lenses */}
-                            {activeTab === 'lenses' && (
+                            {(activeTab === 'general' || activeTab === 'lenses') && activeTab === 'lenses' && (
                                 <div className="space-y-4 animate-fade-in">
+                                    <SettingsSubNav
+                                        items={[
+                                            { id: 'general', label: 'Modes' },
+                                            { id: 'lenses', label: 'Roles' },
+                                        ]}
+                                        value={activeTab}
+                                        onChange={setActiveTab}
+                                    />
                                     <div className="border-b border-zinc-800 pb-3">
-                                        <h3 className="text-base font-bold text-white">Analyst Lenses</h3>
-                                        <p className="text-xs text-zinc-500 mt-1">Assign role-based personas (Technical, Risk, Macro) to AI models.</p>
+                                        <h3 className="text-base font-bold text-white">Analyst roles</h3>
+                                        <p className="text-xs text-zinc-500 mt-1">Assign Technical, Risk, and Macro personas to models.</p>
                                     </div>
                                     <AnalystLensSettings
                                         config={lensConfig}
@@ -744,59 +766,72 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                 </div>
                             )}
 
-                            {/* TAB 4: Custom Instructions */}
-                            {activeTab === 'instructions' && (
-                                <div className="space-y-4 animate-fade-in h-full flex flex-col">
-                                    <div className="border-b border-zinc-800 pb-3 shrink-0">
-                                        <h3 className="text-base font-bold text-white">Custom Instructions</h3>
-                                        <p className="text-xs text-zinc-500 mt-1">Define global rules, trading strategies, and behavioral prompts for the AI ensemble.</p>
-                                    </div>
-                                    <div className="flex-1 min-h-[480px]">
-                                        <CustomInstructionsEditor
-                                            customInstructions={customInstructions}
-                                            setCustomInstructions={setCustomInstructions}
-                                            activeTab={activeInstructionTab}
-                                            onTabChange={setActiveInstructionTab}
+                            {(activeTab === 'prompts' || activeTab === 'instructions') && (
+                                <div className="h-full min-h-0 animate-fade-in flex flex-col">
+                                    <div className="px-4 pt-4 shrink-0">
+                                        <SettingsSubNav
+                                            items={[
+                                                { id: 'prompts', label: 'Registry' },
+                                                { id: 'instructions', label: 'Instructions' },
+                                            ]}
+                                            value={activeTab === 'instructions' ? 'instructions' : 'prompts'}
+                                            onChange={setActiveTab}
                                         />
                                     </div>
-                                </div>
-                            )}
-
-                            {/* TAB 5: Prompts — browse + edit every prompt the app sends */}
-                            {activeTab === 'prompts' && (
-                                <div className="h-full min-h-0 animate-fade-in">
-                                    <PromptManager username={props.username} />
-                                </div>
-                            )}
-
-                            {/* TAB 5b: Strategies — upload PDF books, summarize, inject */}
-                            {activeTab === 'strategies' && (
-                                <div className="h-full min-h-0 animate-fade-in">
-                                    <StrategiesManager
-                                        username={props.username}
-                                        providerConfigs={providerConfigs ?? []}
-                                        visionConfig={visionConfig ?? null}
-                                        isStrategiesEnabled={isStrategiesEnabled}
-                                        setIsStrategiesEnabled={setIsStrategiesEnabled}
-                                    />
-                                </div>
-                            )}
-
-                            {activeTab === 'memory' && (
-                                <div className="h-full min-h-0 animate-fade-in">
-                                    <MemoryFilesManager
-                                        username={username}
-                                        isGlobalMemoryEnabled={isGlobalMemoryEnabled}
-                                        setIsGlobalMemoryEnabled={setIsGlobalMemoryEnabled}
-                                        memoryConfig={memoryConfig ?? null}
-                                        memorySettings={
-                                            <MemorySettings
-                                                providerConfigs={providerConfigs ?? []}
-                                                memoryConfig={memoryConfig ?? null}
-                                                onMemoryConfigChange={onMemoryConfigChange}
+                                    {activeTab === 'instructions' ? (
+                                        <div className="flex-1 min-h-[480px] px-4 pb-4">
+                                            <CustomInstructionsEditor
+                                                customInstructions={customInstructions}
+                                                setCustomInstructions={setCustomInstructions}
+                                                activeTab={activeInstructionTab}
+                                                onTabChange={setActiveInstructionTab}
                                             />
-                                        }
-                                    />
+                                        </div>
+                                    ) : (
+                                        <div className="flex-1 min-h-0">
+                                            <PromptManager username={props.username} />
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {(activeTab === 'memory' || activeTab === 'strategies') && (
+                                <div className="h-full min-h-0 animate-fade-in flex flex-col">
+                                    <div className="px-4 pt-4 shrink-0">
+                                        <SettingsSubNav
+                                            items={[
+                                                { id: 'memory', label: 'Memory' },
+                                                { id: 'strategies', label: 'Playbooks' },
+                                            ]}
+                                            value={activeTab === 'strategies' ? 'strategies' : 'memory'}
+                                            onChange={setActiveTab}
+                                        />
+                                    </div>
+                                    <div className="flex-1 min-h-0">
+                                        {activeTab === 'strategies' ? (
+                                            <StrategiesManager
+                                                username={props.username}
+                                                providerConfigs={providerConfigs ?? []}
+                                                visionConfig={visionConfig ?? null}
+                                                isStrategiesEnabled={isStrategiesEnabled}
+                                                setIsStrategiesEnabled={setIsStrategiesEnabled}
+                                            />
+                                        ) : (
+                                            <MemoryFilesManager
+                                                username={username}
+                                                isGlobalMemoryEnabled={isGlobalMemoryEnabled}
+                                                setIsGlobalMemoryEnabled={setIsGlobalMemoryEnabled}
+                                                memoryConfig={memoryConfig ?? null}
+                                                memorySettings={
+                                                    <MemorySettings
+                                                        providerConfigs={providerConfigs ?? []}
+                                                        memoryConfig={memoryConfig ?? null}
+                                                        onMemoryConfigChange={onMemoryConfigChange}
+                                                    />
+                                                }
+                                            />
+                                        )}
+                                    </div>
                                 </div>
                             )}
 
@@ -805,8 +840,10 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                 <div className="space-y-6 max-w-3xl animate-fade-in">
                                     <div className="border-b border-zinc-800 pb-3">
                                         <h3 className="text-base font-bold text-white">Data</h3>
-                                        <p className="text-xs text-zinc-500 mt-1">Backups and price alerts.</p>
+                                        <p className="text-xs text-zinc-500 mt-1">Usage, backups, and price alerts.</p>
                                     </div>
+
+                                    <SessionUsagePanel />
 
                                     {/* Backups — list/export/restore/delete the 30-min auto-backups */}
                                     {username && onProfileRestored && (

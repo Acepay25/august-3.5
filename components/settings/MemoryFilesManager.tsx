@@ -8,6 +8,7 @@ import MarkdownRenderer from '../shared/MarkdownRenderer';
 import { FileTextIcon, ChevronRightIcon, ChevronLeftIcon, FolderIcon } from '../shared/Icons';
 import { Sparkles, Loader2 } from 'lucide-react';
 import { runNotebookReview } from '../../services/learning/MemoryReviewService';
+import { listSkills, setSkillStatus } from '../../services/learning/SkillMemoryService';
 import {
     initMemoryFiles,
     getMemoryFiles,
@@ -46,6 +47,7 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
     const [folders, setFolders] = useState<MemoryFolder[]>([]);
     const [files, setFiles] = useState<MemoryFile[]>([]);
     const [stats, setStats] = useState({ enabledCount: 0, charCount: 0 });
+    const [skills, setSkills] = useState(listSkills());
     const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
     const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
     const [draft, setDraft] = useState('');
@@ -65,6 +67,7 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
         setFolders(folders);
         setFiles(files);
         setStats(getMemoryFilesStats());
+        setSkills(listSkills());
     }, []);
 
     useEffect(() => {
@@ -267,6 +270,29 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                     </div>
                 )}
             </div>
+
+            {skills.length > 0 && (
+                <div className="shrink-0 mb-6 rounded-xl border border-zinc-800 bg-zinc-900 p-3">
+                    <p className="text-[11px] uppercase tracking-wider text-zinc-500 mb-2">Skills</p>
+                    <div className="max-h-40 space-y-1 overflow-y-auto custom-scrollbar">
+                        {skills.map(({ file, meta }) => (
+                            <div key={file.id} className="flex items-center gap-2 text-[12px] text-zinc-300">
+                                <span className="min-w-0 flex-1 truncate">{file.name.replace(/\.md$/i, '')}</span>
+                                <span className="shrink-0 text-zinc-500">{meta.status} · {meta.kind} · {meta.wins}W/{meta.losses}L</span>
+                                {meta.status !== 'retired' && (
+                                    <button
+                                        type="button"
+                                        className="shrink-0 text-[11px] text-zinc-500 hover:text-zinc-200"
+                                        onClick={() => { void setSkillStatus(file.id, 'retired', activeUser).then(refresh); }}
+                                    >
+                                        Retire
+                                    </button>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {isCreatingFolder && !selectedFolder && !selectedFile && (
                 <div className="shrink-0 mb-4">
