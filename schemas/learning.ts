@@ -103,3 +103,27 @@ export const parseStrategySearchResults = (raw: unknown): ValidatedStrategySearc
   }
   return results;
 };
+
+export const CraftedSkillSchema = z.object({
+  name: z.string().min(2).max(80),
+  kind: z.enum(['repeat', 'avoid']).catch('avoid'),
+  when: z.string().min(8),
+  inputs: z.array(z.string()).default([]),
+  steps: z.array(z.string()).min(1),
+  validate: z.string().min(4),
+  output: z.string().min(4),
+  approval: z.string().min(4),
+  ifCondition: z.string().min(8),
+  thenAction: z.string().min(8),
+});
+
+export type CraftedSkill = z.infer<typeof CraftedSkillSchema>;
+
+export const parseCraftedSkill = (raw: unknown): CraftedSkill | null => {
+  const obj = raw && typeof raw === 'object' && !Array.isArray(raw)
+    ? (raw as Record<string, unknown>).skill ?? raw
+    : raw;
+  const result = CraftedSkillSchema.safeParse(obj);
+  return result.success ? result.data : null;
+};
+

@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import ImagePreview from '../shared/ImagePreview';
 import { PlusIcon, LoadingIcon, SendIcon, StopIcon, ChevronDownIcon } from '../shared/Icons';
 import { ImageMetadata, AnalystLensConfig, AnalystRole } from '../../types';
+import { ProviderConfig } from '../../types/provider';
 import { EnsembleModelSelection, ANALYST_ROLE_DEFINITIONS, getLensPromptForRole } from '../../services/ui/AnalystLensService';
 import { RegimeProviderStatsMap } from '../../services/learning/SetupMemoryService';
 import { MASTER_ANALYSIS_PROMPT } from '../../constants/prompts';
@@ -10,7 +11,8 @@ import PromptEditorModal from '../settings/PromptEditorModal';
 import TeamModal from './TeamModal';
 import ModelPicker from '../shared/ModelPicker';
 
-import { ProviderConfig } from '../../types/provider';
+import { parseComposerIntent } from '../../utils/composerMentions';
+import { listSkillSlugs } from '../../services/learning/SkillMemoryService';
 
 const LENS_ROSTER_ROLES: AnalystRole[] = [
     AnalystRole.MACRO_VOLATILITY,
@@ -266,6 +268,33 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             style={{ overflow: 'hidden' }}
                         />
                     </div>
+                    {isEnsembleEnabled && lensConfig.enabled && (
+                        <p className="px-2 pb-1 text-[10px] text-zinc-600">Seats: Macro · Technical · Risk</p>
+                    )}
+                    {(isEnsembleEnabled || listSkillSlugs().length > 0) && (
+                        <div className="flex flex-wrap gap-1 px-2 pb-1">
+                            {isEnsembleEnabled ? ['@Macro', '@Technical', '@Risk'].map(tag => (
+                                <button
+                                    key={tag}
+                                    type="button"
+                                    className="rounded-md border border-white/10 px-1.5 py-0.5 text-[10px] text-zinc-500 hover:text-zinc-200"
+                                    onClick={() => setInput(input.includes(tag) ? input : `${tag} ${input}`.trim())}
+                                >
+                                    {tag}
+                                </button>
+                            )) : null}
+                            {listSkillSlugs().slice(0, 4).map(slug => (
+                                <button
+                                    key={slug}
+                                    type="button"
+                                    className="rounded-md border border-white/10 px-1.5 py-0.5 text-[10px] text-zinc-500 hover:text-zinc-200"
+                                    onClick={() => setInput(`/${slug} ${parseComposerIntent(input).rest}`.trim())}
+                                >
+                                    /{slug}
+                                </button>
+                            ))}
+                        </div>
+                    )}
                     <input type="file" multiple accept="image/*" ref={fileInputRef} onChange={handleImageUpload} className="hidden" disabled={uploadDisabled} />
 
                     {/* Bottom Toolbar — unified control row for all breakpoints */}

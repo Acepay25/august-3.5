@@ -148,6 +148,8 @@ export interface TradeAnalysis {
    * must cite its data sources and mark gaps explicitly instead of guessing.
    */
   evidence?: EvidenceClaim[];
+  /** Structured Entry/SL/TP cites (source ids). Preferred over free-text evidence match. */
+  levelCitations?: Array<{ label: string; price: string; sourceId: string }>;
   /**
    * Invalidation contract: the concrete conditions that falsify this setup.
    * Formalizes the invalidation thesis the prompts already require, so the
@@ -166,6 +168,12 @@ export interface TradeAnalysis {
    * risk boundary, invalidation, validity). App-computed for journal/watch.
    */
   recommendationContract?: RecommendationContract;
+  positionSize?: {
+    line: string;
+    riskUsd: number;
+    fraction: number;
+    label: 'full' | 'half' | 'none';
+  };
 }
 
 /**

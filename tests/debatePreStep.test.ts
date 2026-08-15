@@ -18,4 +18,10 @@ describe('debatePreStep', () => {
         expect(debatePreStep({ gateResult: 'PASS' })).toEqual({ action: 'continue', inject: '' });
         expect(debatePreStep(null).action).toBe('continue');
     });
+
+    it('skips rebuttals on a confirmed skill veto', () => {
+        const d = debatePreStep({ skillVeto: 'avoid BTC short squeeze' });
+        expect(d.action).toBe('skip_to_verdict');
+        expect(d.inject).toContain('SKILL VETO');
+    });
 });

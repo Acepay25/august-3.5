@@ -15,6 +15,7 @@ import { SLOptimizationData } from '../services/backtesting/StopLossOptimizerSer
 import { ConfidenceLevel } from '../services/validation/ConfidenceCalibrationService';
 import { syncClosedTradeToNotebook } from '../services/learning/SkillMemoryService';
 import { appendWatchEpisode } from '../utils/watchList';
+import { parseIfThenClauses } from '../utils/ifThenSkill';
 
 // Maximum number of trade summaries (Recent Insights) to keep - enforces FIFO when limit reached
 export const MAX_TRADE_SUMMARIES = 100;
@@ -142,10 +143,13 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         if (trade.outcome === TradeOutcome.LOSS && analysis.coinName) {
             try {
                 const rulesStorage = loadLearningRules();
+                const clause = parseIfThenClauses(trade.postMortem || '')[0];
                 const newRule: LearningRule = {
                     id: `auto_${Date.now()}`,
-                    ifCondition: `${analysis.coinName} + ${analysis.direction} + ${analysis.detectedPatternFamily || 'unknown'}`,
-                    thenAction: 'Apply extra scrutiny - similar setup recently lost',
+                    ifCondition: clause?.ifCondition
+                        || `${analysis.coinName} + ${analysis.direction} + ${analysis.detectedPatternFamily || 'unknown'}`,
+                    thenAction: clause?.thenAction
+                        || 'Apply extra scrutiny - similar setup recently lost',
                     sourceTradeId: trade.id,
                     outcome: 'LOSS',
                     coin: analysis.coinName,
@@ -273,6 +277,8 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             debateTurns: message.debateTurns,
             moderatorSynthesis: message.text,
             patternMemoryGate: message.patternMemoryGate,
+            promptVersion: message.runStats?.promptVersion,
+            promptLane: message.runStats?.promptLane,
         };
 
         setLoggedTrades(prev => prev.some(t => t.id === loggedTrade.id) ? prev : [loggedTrade, ...prev]);
@@ -517,6 +523,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             isAccuracyMode: candidate.message.isAccuracyMode,
             accuracySubMode: candidate.message.accuracySubMode,
             patternMemoryGate: candidate.message.patternMemoryGate,
+            promptVersion: candidate.message.runStats?.promptVersion,
         };
         // Dedupe by id — a double-confirm (e.g. retrying after a capture
         // failure that actually logged) previously appended a second row

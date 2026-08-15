@@ -12,6 +12,8 @@ import { writeModelNote } from '../services/learning/MemoryFilesService';
 import { syncClosedTradeToNotebook } from '../services/learning/SkillMemoryService';
 import { applyOutcomeToRules } from '../services/learning/LearningRulesService';
 import { writeNotebookNoteFromPostMortem } from '../services/learning/NotebookWriterService';
+import { craftSkillFromPostMortem } from '../services/learning/SkillCraftService';
+import { queueSkillDraft } from '../utils/skillDrafts';
 import { MAX_TRADE_SUMMARIES } from './useTradeLogging';
 import { saveThinkingBatch, buildThinkingRecordId, getThinkingTradeId } from '../services/infrastructure/ThinkingStoreService';
 import { lensFromSpeakerName } from '../utils/thinkingLens';
@@ -646,6 +648,17 @@ Please investigate this discrepancy in your analysis.
                 try {
                     const notebookUser = localStorage.getItem('last_active_user') || 'default';
                     const closed = { ...tradeToUpdate, postMortem: finalPostMortemReport };
+                    const craftConfig = memoryConfig ?? enabledProviders[0]?.config;
+                    if (craftConfig) {
+                        const crafted = await craftSkillFromPostMortem(closed, craftConfig);
+                        if (crafted) {
+                            queueSkillDraft({
+                                tradeId: closed.id,
+                                coin: closed.analysis?.coinName,
+                                crafted,
+                            });
+                        }
+                    }
                     await syncClosedTradeToNotebook(closed, loggedTradesRef.current, notebookUser);
                     applyOutcomeToRules(closed);
                 } catch (notebookError) {

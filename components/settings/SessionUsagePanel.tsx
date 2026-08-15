@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { clearSessionUsage, loadSessionUsage, SessionUsageEntry, summarizeUsagePeriod } from '../../utils/sessionUsage';
+import { getHarnessSettings, saveHarnessSettings } from '../../utils/harnessSettings';
 import { formatChars } from '../../utils/runUsage';
 
 const startOfToday = (): number => {
@@ -25,7 +26,7 @@ const SessionUsagePanel: React.FC = () => {
                 <p className="text-[11px] text-zinc-500">{label}</p>
                 <p className="mt-1 text-sm text-zinc-100">{s.runs} runs · {Math.round(s.durationMs / 1000)}s</p>
                 <p className="mt-1 text-[11px] text-zinc-500">
-                    {formatChars(tokens)} tok
+                    {s.tokensExact ? '' : '~'}{formatChars(tokens)} tok
                     {s.costUsd > 0 ? ` · $${s.costUsd.toFixed(3)}` : ''}
                 </p>
             </div>
@@ -51,6 +52,52 @@ const SessionUsagePanel: React.FC = () => {
                     Clear usage history
                 </button>
             )}
+            <HarnessControls />
+        </div>
+    );
+};
+
+const HarnessControls: React.FC = () => {
+    const [settings, setSettings] = useState(getHarnessSettings);
+    const persist = (next: Partial<ReturnType<typeof getHarnessSettings>>): void => {
+        setSettings(saveHarnessSettings(next));
+    };
+    return (
+        <div className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-500">Harness</p>
+            <label className="block text-[11px] text-zinc-400">
+                Account equity (USD)
+                <input
+                    type="number"
+                    min={100}
+                    value={settings.equityUsd}
+                    onChange={e => persist({ equityUsd: Number(e.target.value) || 10_000 })}
+                    className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-100"
+                />
+            </label>
+            <label className="block text-[11px] text-zinc-400">
+                Prompt A/B (control lane)
+                <select
+                    value={String(settings.promptAbRate)}
+                    onChange={e => persist({ promptAbRate: Number(e.target.value) as 0 | 0.1 | 0.5 })}
+                    className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-100"
+                >
+                    <option value="0">Off</option>
+                    <option value="0.1">10%</option>
+                    <option value="0.5">50%</option>
+                </select>
+            </label>
+            <label className="block text-[11px] text-zinc-400">
+                Debate cost cap (USD, 0 = off)
+                <input
+                    type="number"
+                    min={0}
+                    step={0.05}
+                    value={settings.debateCostCapUsd}
+                    onChange={e => persist({ debateCostCapUsd: Number(e.target.value) || 0 })}
+                    className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-100"
+                />
+            </label>
         </div>
     );
 };

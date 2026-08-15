@@ -12,11 +12,34 @@
  */
 
 import { getPreferenceObject, setPreferenceObject, removePreference } from './PreferencesService';
+import { getHarnessSettings } from '../../utils/harnessSettings';
 
 const OVERRIDES_KEY_PREFIX = 'prompt_overrides_v1_';
 
 /** Synchronous override cache — populated by initOverrides/save/reset. */
 let overridesCache: Record<string, string> = {};
+/** When true, getPrompt ignores overrides (A/B control lane). */
+let controlLane = false;
+
+export const beginPromptLane = (): 'live' | 'control' => {
+    const settings = getHarnessSettings();
+    if (settings.pinnedPromptLane === 'live') {
+        controlLane = false;
+        return 'live';
+    }
+    if (settings.pinnedPromptLane === 'control') {
+        controlLane = true;
+        return 'control';
+    }
+    const hasOverride = Object.keys(overridesCache).length > 0;
+    const rate = settings.promptAbRate;
+    controlLane = hasOverride && rate > 0 && Math.random() < rate;
+    return controlLane ? 'control' : 'live';
+};
+
+export const endPromptLane = (): void => {
+    controlLane = false;
+};
 
 /**
  * Load the active user's overrides into the sync cache.
@@ -37,6 +60,7 @@ export const initPromptOverrides = async (username: string): Promise<void> => {
  * Synchronous by design — prompt assembly happens inside provider calls.
  */
 export const getPrompt = (id: string, fallback: string): string => {
+    if (controlLane) return fallback;
     const override = overridesCache[id];
     return typeof override === 'string' && override.trim() ? override : fallback;
 };

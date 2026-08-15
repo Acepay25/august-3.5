@@ -9,6 +9,9 @@ export interface LoggedTrade {
   analysis: TradeAnalysis;
   /** Pattern-memory gate outcome at analysis time (journal badge). */
   patternMemoryGate?: PatternMemoryGateView;
+  /** Prompt-layer fingerprint from the originating run (journal A/B). */
+  promptVersion?: string;
+  promptLane?: 'live' | 'control';
   tradeType?: 'scalp' | 'swing';  // Denormalized for filtering/stats
   outcome: TradeOutcome;
   timestamp: string;

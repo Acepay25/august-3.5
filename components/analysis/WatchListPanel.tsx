@@ -2,7 +2,9 @@ import React, { useMemo, useState } from 'react';
 import { TradeOutcome } from '../../types';
 import { CloseIcon, EyeIcon } from '../shared/Icons';
 import { AutopilotResolution } from '../../services/ui/OutcomeAutopilotService';
+import { PriceAlertService } from '../../services/ui/PriceAlertService';
 import { signalDirectionLabel } from '../../utils/analysisUtils';
+import { describeOpenBookRisk, paperPnlR } from '../../utils/paperPnl';
 import { WatchedSignal } from '../../utils/watchList';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
@@ -44,6 +46,7 @@ const WatchListPanel: React.FC<WatchListPanelProps> = ({
         return signals.filter(s => !isOpen(s.outcome));
     }, [filter, signals]);
     const openCount = signals.filter(s => isOpen(s.outcome)).length;
+    const bookRisk = useMemo(() => describeOpenBookRisk(signals), [signals]);
 
     if (!isVisible) return null;
 
@@ -72,6 +75,9 @@ const WatchListPanel: React.FC<WatchListPanelProps> = ({
                     ))}
                 </div>
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2">
+                    {bookRisk && (
+                        <p className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-[11px] leading-relaxed text-zinc-400">{bookRisk}</p>
+                    )}
                     {visible.length === 0 ? (
                         <p className="px-2 py-8 text-center text-[13px] text-zinc-500">
                             {filter === 'open'
@@ -84,6 +90,9 @@ const WatchListPanel: React.FC<WatchListPanelProps> = ({
                         const pending = isOpen(signal.outcome);
                         const inThisChat = signal.conversationId === activeConversationId;
                         const resolution = autopilotResolutions[signal.messageId];
+                        const symbol = (analysis.coinName || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+                        const priced = symbol ? PriceAlertService.getCurrentPrice(symbol.includes('USDT') ? symbol : `${symbol}USDT`) : undefined;
+                        const paper = paperPnlR(analysis, priced);
                         return (
                             <div key={signal.messageId} className="status-surface rounded-xl border border-white/10 bg-zinc-900/60 p-3">
                                 <div className="flex flex-wrap items-baseline gap-2">
@@ -92,6 +101,9 @@ const WatchListPanel: React.FC<WatchListPanelProps> = ({
                                     <span className="text-[10px] text-zinc-600">{signal.conversationTitle}</span>
                                     {!pending && (
                                         <span className="ml-auto text-[10px] font-semibold uppercase tracking-widest text-zinc-400">{signal.outcome}</span>
+                                    )}
+                                    {pending && paper && (
+                                        <span className="ml-auto text-[11px] tabular-nums text-zinc-400">{paper.line}</span>
                                     )}
                                 </div>
                                 <div className="mt-2 grid grid-cols-3 gap-2 text-[11px] tabular-nums">

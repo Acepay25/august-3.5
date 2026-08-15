@@ -7,6 +7,8 @@ import { loadLearningRules } from '../../services/learning/LearningRulesService'
 import { initMemoryFiles, getMemoryFiles, computeTopLessons, TopLesson } from '../../services/learning/MemoryFilesService';
 import { summarizeSimilarSetups, COLD_START_MIN } from '../../services/learning/SetupMemoryService';
 import { computeEvidenceQualityStats } from '../../utils/analysisQuality';
+import { summarizePromptVersions, summarizePromptLanes } from '../../utils/promptVersionStats';
+import { listSkills } from '../../services/learning/SkillMemoryService';
 import { EmptyState } from '../ui/EmptyState';
 
 interface LearningDashboardProps {
@@ -116,6 +118,9 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
     const isClosed = (t: LoggedTrade) => t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS;
     const closedWindowed = useMemo(() => windowedTrades.filter(isClosed), [windowedTrades]);
     const evidenceQuality = useMemo(() => computeEvidenceQualityStats(closedWindowed), [closedWindowed]);
+    const promptVersions = useMemo(() => summarizePromptVersions(closedWindowed), [closedWindowed]);
+    const promptLanes = useMemo(() => summarizePromptLanes(closedWindowed), [closedWindowed]);
+    const notebookSkills = useMemo(() => listSkills(), [notebook]);
 
     // Pool stats: setups indexed + avg matches per query (sampled for cost)
     // + how many queries hit the cold-start flag.
@@ -554,6 +559,41 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
                         subtext: `(n=${r.count})`,
                         color: getWinRateColor(r.winRate)
                     }))}
+                />
+
+                <StatCard
+                    title="Prompt versions"
+                    items={promptVersions.slice(0, 5).map(v => ({
+                        name: v.version,
+                        value: v.winRate !== null ? `${v.winRate}%` : '—',
+                        subtext: v.avgDeclared !== null
+                            ? `(n=${v.trades} · said ${v.avgDeclared}% vs ${v.avgRealized}%)`
+                            : `(n=${v.trades})`,
+                        color: v.winRate !== null ? getWinRateColor(v.winRate) : 'text-zinc-500',
+                    }))}
+                    emptyText="Log closed trades after a run to compare prompt versions"
+                />
+                <StatCard
+                    title="Prompt A/B lanes"
+                    items={promptLanes.filter(l => l.trades > 0).map(l => ({
+                        name: l.lane,
+                        value: l.winRate !== null ? `${l.winRate}%` : '—',
+                        subtext: `(n=${l.trades})`,
+                        color: l.winRate !== null ? getWinRateColor(l.winRate) : 'text-zinc-500',
+                    }))}
+                    emptyText="Need closed trades on both live and control lanes"
+                />
+                <StatCard
+                    title="Skills"
+                    items={notebookSkills.slice(0, 6).map(({ meta, file }) => ({
+                        name: file.name.replace(/\.md$/i, ''),
+                        value: meta.wins + meta.losses > 0
+                            ? `${Math.round((meta.wins / (meta.wins + meta.losses)) * 100)}%`
+                            : meta.status,
+                        subtext: `${meta.kind} · ${meta.wins}/${meta.losses}${meta.ifCondition ? ` · IF ${meta.ifCondition.slice(0, 28)}` : ''}`,
+                        color: meta.kind === 'avoid' ? 'text-zinc-400' : 'text-white',
+                    }))}
+                    emptyText="Closed trades with an IF/THEN become skills"
                 />
             </div>
 

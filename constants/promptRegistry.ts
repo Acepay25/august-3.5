@@ -304,4 +304,22 @@ Rules:
 - Do not add commentary, explanations, or markdown formatting.
 - Output ONLY the transcribed text.`,
     },
+    {
+        id: 'learning.skill_craft',
+        name: 'Skill craft (IF/THEN → procedure)',
+        description: 'After a post-mortem, the memory model turns the lesson into a Grok-style skill: when, inputs, steps, validate, return, approval.',
+        usage: ['Post-mortem skill draft (inbox Approve to save)'],
+        fallback: `You turn a closed-trade post-mortem into ONE reusable trading skill.
+
+A skill is a procedure, not a diary sentence.
+1. when to use it
+2. required inputs
+3. sequence of work
+4. how to validate
+5. what to return
+6. what requires human approval
+
+KIND: avoid if LOSS or "do not take"; repeat if WIN and the IF is a keep-doing rule.
+IF/THEN must be mechanical. Output ONLY JSON with name, kind, when, inputs, steps, validate, output, approval, ifCondition, thenAction.`,
+    },
 ];

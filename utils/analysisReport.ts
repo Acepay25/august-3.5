@@ -84,6 +84,21 @@ export const buildAnalysisReportMarkdown = (
     return lines.join('\n');
 };
 
+/** Phone-sized execution sheet — levels, size, validity, cites. No debate dump. */
+export const buildTicketSheet = (analysis: TradeAnalysis): string => {
+    const cites = (analysis.levelCitations || []).map(c => `${c.label} ${c.price} (${c.sourceId})`).join('\n');
+    return [
+        `${analysis.coinName || 'Ticket'} · ${analysis.direction || '—'} · ${analysis.confidence || '—'}`,
+        `Entry ${analysis.entryPoints?.[0]?.price || '—'}  SL ${analysis.stopLoss || '—'}  TP ${(analysis.takeProfit || []).map(t => t.price).join(', ') || '—'}`,
+        analysis.positionSize?.line ? `Size ${analysis.positionSize.line}` : '',
+        analysis.recommendationContract
+            ? `Contract ${analysis.recommendationContract.action} · ${analysis.recommendationContract.riskBoundary}${analysis.recommendationContract.validityMinutes ? ` · ${analysis.recommendationContract.validityMinutes}m` : ''}`
+            : '',
+        cites ? `Cites\n${cites}` : '',
+        (analysis.invalidationCriteria || []).map(i => `Invalidate ${i.level} — ${i.condition}`).join('\n'),
+    ].filter(Boolean).join('\n');
+};
+
 export const buildAnalysisReportHtml = (message: Pick<Message, 'analysis' | 'debateTurns' | 'debateRunLog'> & { text?: string }): string => {
     const md = buildAnalysisReportMarkdown(message);
     const body = esc(md).replace(/\n/g, '<br/>');

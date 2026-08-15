@@ -1,9 +1,7 @@
 name: CI
 
-# Verify every push/PR before a release tag — previously main got zero
-# feedback until a `v*` tag triggered release.yml (typecheck/test/lint/build
-# failures only surfaced at release time). e2e + electron-builder stay on the
-# tag job; this covers the fast, deterministic gates.
+# Fast gates on every push/PR. Release.yml assumes these passed on main
+# and only packages the Electron installer (plus a Playwright smoke).
 on:
   push:
     branches: [main]

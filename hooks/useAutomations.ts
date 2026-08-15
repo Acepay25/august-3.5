@@ -320,6 +320,7 @@ export function useAutomations(params: UseAutomationsParams) {
                 for (const config of loaded) {
                     if (cancelled || budget <= 0) break;
                     if (!config.enabled) continue;
+                    if (config.pauseUntil && config.pauseUntil > Date.now()) continue;
                     const missed = getMissedRunCount(config, new Date(lastSeen));
                     const toRun = Math.min(missed, budget);
                     for (let i = 0; i < toRun; i++) {
@@ -355,6 +356,7 @@ export function useAutomations(params: UseAutomationsParams) {
             }
             for (const config of configsRef.current) {
                 if (!config.enabled) continue;
+                if (config.pauseUntil && config.pauseUntil > now) continue;
                 const lastCheck = lastCheckedRef.current.get(config.id)
                     ?? (config.lastRunAt ?? Date.now());
                 if (hasCronFireBetween(config.schedule.cron, new Date(lastCheck), new Date(now))) {
@@ -411,6 +413,10 @@ export function useAutomations(params: UseAutomationsParams) {
         lastCheckedRef.current.set(id, Date.now());
     }, [persistConfigs]);
 
+    const pauseAutomationUntil = useCallback(async (id: string, untilMs: number) => {
+        await persistConfigs(configsRef.current.map(c => c.id === id ? { ...c, pauseUntil: untilMs, updatedAt: Date.now() } : c));
+    }, [persistConfigs]);
+
     // ─── UI state helpers ─────────────────────────────────────────────────
     const openAutomation = useCallback((id: string | null) => {
         setViewAutomationId(id);
@@ -444,6 +450,7 @@ export function useAutomations(params: UseAutomationsParams) {
         saveAutomation,
         deleteAutomation,
         toggleAutomationEnabled,
+        pauseAutomationUntil,
         getNextRunPreview,
         isCronValid: (cron: string) => parseCron(cron) !== null,
         uid,

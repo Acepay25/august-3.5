@@ -1,5 +1,7 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { DebateTurn, TradeAnalysis } from '../../types';
+import { listAppliedSkills } from '../../services/learning/SkillMemoryService';
+import { initMemoryFiles } from '../../services/learning/MemoryFilesService';
 import { signalDirectionLabel } from '../../utils/analysisUtils';
 
 interface DebateSummaryProps {
@@ -19,6 +21,11 @@ const callFromText = (text: string): 'Long' | 'Short' | 'Neutral' => {
  * Levels stay on the trading signal.
  */
 const DebateSummary: React.FC<DebateSummaryProps> = ({ debateTurns, analysis }) => {
+    const [notebookReady, setNotebookReady] = useState(false);
+    useEffect(() => {
+        const user = localStorage.getItem('last_active_user') || 'default';
+        void initMemoryFiles(user).then(() => setNotebookReady(true));
+    }, []);
     const board = useMemo(() => {
         if (!analysis) return null;
         const analystTurns = debateTurns.filter(t => t.speaker !== 'Moderator' && t.round === 1);
@@ -33,17 +40,27 @@ const DebateSummary: React.FC<DebateSummaryProps> = ({ debateTurns, analysis }) 
             call: (a.direction === 'Long' || a.direction === 'Short' ? a.direction : 'Neutral') as 'Long' | 'Short' | 'Neutral',
         }));
         const displayRows = consensusRows.length > 0 ? consensusRows : rows;
-        const dropped = uniqueDirections.filter(d => d !== analysis.direction);
+        const droppedCalls = uniqueDirections.filter(d => d !== analysis.direction);
+        const droppedLanes = [...new Set(
+            debateTurns
+                .filter(t => t.speaker === 'System' && /dropped out/i.test(t.text))
+                .map(t => t.text.replace(/\s+dropped out[\s\S]*/i, '').trim())
+                .filter(Boolean),
+        )];
         return {
             direction: analysis.direction,
             confidence: analysis.confidence,
             grade: analysis.grade,
             rows: displayRows,
             mergeLine: uniqueDirections.length > 1
-                ? `Moderator kept ${analysis.direction}, dropped ${dropped.join(' / ') || 'the rest'}.`
+                ? `Moderator kept ${analysis.direction}, dropped ${droppedCalls.join(' / ') || 'the rest'}.`
                 : `Openings aligned ${analysis.direction}.`,
+            rosterNote: droppedLanes.length > 0
+                ? `Verdict used ${Math.max(1, displayRows.length)} analyst${displayRows.length === 1 ? '' : 's'}; ${droppedLanes.join(', ')} left the floor.`
+                : '',
+            skills: notebookReady ? listAppliedSkills(analysis) : [],
         };
-    }, [analysis, debateTurns]);
+    }, [analysis, debateTurns, notebookReady]);
 
     if (!board) return null;
 
@@ -80,6 +97,25 @@ const DebateSummary: React.FC<DebateSummaryProps> = ({ debateTurns, analysis }) 
                 ))}
             </ul>
             <p className="mt-2 text-[11px] leading-relaxed text-zinc-500">{board.mergeLine}</p>
+            {board.rosterNote && (
+                <p className="mt-1 text-[11px] leading-relaxed text-zinc-600">{board.rosterNote}</p>
+            )}
+            {board.skills.length > 0 && (
+                <ul className="mt-3 space-y-1.5 border-t border-white/5 pt-2">
+                    {board.skills.map(s => (
+                        <li key={`${s.kind}-${s.title}`} className="rounded-lg border border-white/5 bg-zinc-900/40 px-2 py-1.5">
+                            <div className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-widest text-zinc-600">
+                                <span>{s.status} {s.kind}</span>
+                                {s.hitRate !== null && <span className="tabular-nums text-zinc-400">{s.wins}/{s.wins + s.losses} · {s.hitRate}%</span>}
+                            </div>
+                            <div className="mt-0.5 text-[12px] text-zinc-200">{s.title}</div>
+                            {s.procedure && (
+                                <p className="mt-0.5 text-[11px] leading-relaxed text-zinc-500">{s.procedure.slice(0, 120)}</p>
+                            )}
+                        </li>
+                    ))}
+                </ul>
+            )}
         </div>
     );
 };

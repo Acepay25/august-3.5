@@ -46,6 +46,9 @@ interface HeaderProps {
     onCreateAutomation?: () => void;
     onOpenWatchList?: () => void;
     watchOpenCount?: number;
+    watchOpenR?: string;
+    onOpenApprovals?: () => void;
+    approvalCount?: number;
 }
 
 // Memoized: Header re-renders every time App does (typing, progress ticks);
@@ -80,6 +83,9 @@ export const Header: React.FC<HeaderProps> = memo(({
     onCreateAutomation,
     onOpenWatchList,
     watchOpenCount = 0,
+    watchOpenR,
+    onOpenApprovals,
+    approvalCount = 0,
 }) => {
     const [sessionContext, setSessionContext] = useState<SessionContext | null>(null);
     const [allSessions, setAllSessions] = useState<SessionStatus[]>([]);
@@ -173,7 +179,7 @@ export const Header: React.FC<HeaderProps> = memo(({
                     {/* Hamburger Menu Button */}
                     <button
                         onClick={() => setIsMobileMenuOpen(prev => !prev)}
-                        className="p-2 text-zinc-400 hover:text-zinc-100 rounded-lg hover:bg-zinc-800 transition-colors lg:hidden focus-visible:ring-2 focus-visible:ring-cyan-400"
+                        className="p-2 text-zinc-400 hover:text-zinc-100 rounded-lg hover:bg-zinc-800 transition-colors lg:hidden focus-visible:ring-2 focus-visible:ring-zinc-500"
                         title="Menu"
                         aria-label="Toggle navigation menu"
                         aria-expanded={isMobileMenuOpen}
@@ -191,7 +197,7 @@ export const Header: React.FC<HeaderProps> = memo(({
                                 <div className="static sm:relative" ref={sessionModalRef}>
                                     <button
                                         onClick={() => setIsSessionModalOpen(!isSessionModalOpen)}
-                                        className="flex items-center gap-1.5 px-2 py-0.5 bg-zinc-800 hover:bg-zinc-700 rounded-full border border-white/5 hover:border-white/10 text-[10px] font-medium text-zinc-400 whitespace-nowrap transition-all focus-visible:ring-2 focus-visible:ring-cyan-400"
+                                        className="flex items-center gap-1.5 px-2 py-0.5 bg-zinc-800 hover:bg-zinc-700 rounded-full border border-white/5 hover:border-white/10 text-[10px] font-medium text-zinc-400 whitespace-nowrap transition-all focus-visible:ring-2 focus-visible:ring-zinc-500"
                                         aria-expanded={isSessionModalOpen}
                                         aria-haspopup="dialog"
                                     >
@@ -214,8 +220,8 @@ export const Header: React.FC<HeaderProps> = memo(({
                                                 {liveMarketConditions && (
                                                     <div className="mb-3 p-2 bg-zinc-800 rounded-lg border border-white/5">
                                                         <div className="flex items-center justify-between mb-1.5">
-                                                            <div className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-1">
-                                                                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                                                            <div className="text-[10px] font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1">
+                                                                <span className="w-1.5 h-1.5 rounded-full bg-zinc-300 animate-pulse" />
                                                                 LIVE MARKET (BTC)
                                                             </div>
                                                         </div>
@@ -295,18 +301,34 @@ export const Header: React.FC<HeaderProps> = memo(({
                         <UpdateButton />
                     </div>
 
+                    {onOpenApprovals && (
+                        <button
+                            type="button"
+                            onClick={onOpenApprovals}
+                            className="relative hidden sm:inline-flex items-center gap-1.5 rounded-lg p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 transition-colors"
+                            title="Approvals"
+                            aria-label={`Approvals, ${approvalCount} waiting`}
+                        >
+                            <span className="text-[11px] font-semibold">Inbox</span>
+                            {approvalCount > 0 && (
+                                <span className="absolute -right-0.5 -top-0.5 min-w-[1rem] rounded-full bg-zinc-200 px-1 text-[9px] font-bold leading-4 text-zinc-900">
+                                    {approvalCount > 99 ? '99+' : approvalCount}
+                                </span>
+                            )}
+                        </button>
+                    )}
                     {onOpenWatchList && (
                         <button
                             type="button"
                             onClick={onOpenWatchList}
                             className="relative hidden sm:inline-flex items-center gap-1.5 rounded-lg p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 transition-colors"
-                            title="Watch list"
+                            title={watchOpenR ? `Watch · ${watchOpenR}` : 'Watch list'}
                             aria-label={`Watch list, ${watchOpenCount} open`}
                         >
                             <EyeIcon className="h-5 w-5" />
                             {watchOpenCount > 0 && (
                                 <span className="absolute -right-0.5 -top-0.5 min-w-[1rem] rounded-full bg-zinc-200 px-1 text-[9px] font-bold leading-4 text-zinc-900">
-                                    {watchOpenCount > 99 ? '99+' : watchOpenCount}
+                                    {watchOpenR || (watchOpenCount > 99 ? '99+' : watchOpenCount)}
                                 </span>
                             )}
                         </button>
@@ -315,7 +337,7 @@ export const Header: React.FC<HeaderProps> = memo(({
                     {/* Changelog / Version History Button */}
                     <button
                         onClick={onOpenVersionHistory}
-                        className="p-2 text-zinc-400 hover:text-cyan-400 hover:bg-zinc-800 rounded-lg transition-colors"
+                        className="p-2 text-zinc-400 hover:text-zinc-300 hover:bg-zinc-800 rounded-lg transition-colors"
                         title="Changelog & Features"
                         aria-label="Changelog and features"
                     >
@@ -325,7 +347,7 @@ export const Header: React.FC<HeaderProps> = memo(({
                     {isPostMortemInProgress && (
                         <button
                             onClick={() => setIsLivePostMortemVisible(true)}
-                            className="p-2.5 bg-cyan-500/10 text-cyan-400 rounded-xl animate-pulse"
+                            className="p-2.5 bg-zinc-800 text-zinc-300 rounded-xl animate-pulse"
                             title="Live Post-Mortem"
                             aria-label="View live post-mortem progress"
                         >
@@ -347,7 +369,7 @@ export const Header: React.FC<HeaderProps> = memo(({
                          <div id="mobile-navigation-menu" ref={mobileMenuRef} className="absolute left-0 top-0 h-full w-72 bg-zinc-950 border-r border-white/10 shadow-2xl animate-slide-in-left flex flex-col pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]" role="dialog" aria-modal="true" aria-label="Navigation menu">
                             <div className="p-5 border-b border-white/10 flex items-center justify-between">
                                 <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-full bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+                                    <div className="w-10 h-10 rounded-full bg-zinc-800 border border-white/15 flex items-center justify-center text-zinc-300">
                                         <BotIcon />
                                     </div>
                                     <div>

@@ -18,6 +18,7 @@ import {
   applySkillEvidence,
   applyNotebookSkillsToAnalysis,
   parseSkillMarkdown,
+  ingestIfThenFromTrade,
   MIN_CLUSTER_FOR_SKILL,
 } from '../services/learning/SkillMemoryService';
 import { LoggedTrade, TradeOutcome } from '../types';
@@ -151,5 +152,17 @@ tradeIds: a,b,c,d,e,f,g
     expect(next.confidence).toBe('Avoid');
     expect(next.direction).toBe('Neutral');
     expect(next.riskVeto).toMatch(/NOTEBOOK SKILL VETO/);
+  });
+
+  it('promotes a post-mortem IF/THEN into a skill on the first closed trade', async () => {
+    const trade = makeTrade({
+      id: 'if-1',
+      postMortem: 'IF 15m close reclaims VWAP with rising volume THEN wait for a retest before shorting.',
+    });
+    await ingestIfThenFromTrade(trade, 'test-user');
+    const hit = getMemoryFiles().files.map(f => parseSkillMarkdown(f.content)).find(m => m?.ifCondition?.includes('VWAP'));
+    expect(hit?.thenAction).toMatch(/retest/i);
+    expect(hit?.kind).toBe('avoid');
+    expect(hit?.losses).toBe(1);
   });
 });
