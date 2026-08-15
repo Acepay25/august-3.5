@@ -32,7 +32,6 @@ const analysis = (overrides: Partial<TradeAnalysis> = {}): TradeAnalysis => ({
 describe('TradingSignalCard', () => {
     it('renders colored levels without a duplicate plan list', () => {
         render(<TradingSignalCard analysis={analysis()} />);
-        expect(screen.getByText('Trading signal')).toBeDefined();
         expect(screen.getAllByText('No trade').length).toBeGreaterThanOrEqual(1);
         expect(screen.getByText(/Skip this setup/)).toBeDefined();
         expect(screen.getByText('63,710')).toBeDefined();
@@ -40,10 +39,9 @@ describe('TradingSignalCard', () => {
         expect(screen.getByText('63,210')).toBeDefined();
         expect(screen.getByText('62,710')).toBeDefined();
         expect(screen.getByText('62,200')).toBeDefined();
-        expect(screen.getAllByText('28% hit').length).toBeGreaterThanOrEqual(1);
-        expect(screen.getAllByText('62% hit').length).toBeGreaterThanOrEqual(1);
-        expect(screen.getAllByText('44% hit').length).toBeGreaterThanOrEqual(1);
-        expect(screen.getAllByText('1:0.6').length).toBeGreaterThanOrEqual(1);
+        expect(screen.getAllByText('28%').length).toBeGreaterThanOrEqual(1);
+        expect(screen.getAllByText('62%').length).toBeGreaterThanOrEqual(1);
+        expect(screen.getAllByText('44%').length).toBeGreaterThanOrEqual(1);
         expect(screen.getByText('R:R 1:0.6')).toBeDefined();
         expect(screen.queryByText('Final trade plan')).toBeNull();
         expect(screen.queryByText(/What SL/)).toBeNull();
@@ -58,10 +56,10 @@ describe('TradingSignalCard', () => {
                 })}
             />,
         );
-        expect(screen.getAllByText('31% hit').length).toBeGreaterThanOrEqual(1);
-        expect(screen.getAllByText('68% hit').length).toBeGreaterThanOrEqual(1);
-        expect(screen.getAllByText('49% hit').length).toBeGreaterThanOrEqual(1);
-        expect(screen.getAllByText('22% hit').length).toBeGreaterThanOrEqual(1);
+        expect(screen.getAllByText('31%').length).toBeGreaterThanOrEqual(1);
+        expect(screen.getAllByText('68%').length).toBeGreaterThanOrEqual(1);
+        expect(screen.getAllByText('49%').length).toBeGreaterThanOrEqual(1);
+        expect(screen.getAllByText('22%').length).toBeGreaterThanOrEqual(1);
     });
 
     it('does not dump the moderator verdict recap into strategy', () => {
@@ -89,7 +87,7 @@ describe('TradingSignalCard', () => {
                 })}
             />,
         );
-        expect(screen.getByText('Invalidation')).toBeDefined();
+        expect(screen.getByText(/Invalidation/)).toBeDefined();
         expect(screen.getByText(/15m close above the sweep high/)).toBeDefined();
     });
 
@@ -110,7 +108,6 @@ describe('TradingSignalCard', () => {
 
     it('computes R:R from levels when rrRatio is missing', () => {
         render(<TradingSignalCard analysis={analysis({ rrRatio: undefined })} />);
-        expect(screen.getAllByText('1:0.6').length).toBeGreaterThanOrEqual(1);
         expect(screen.getByText('R:R 1:0.6')).toBeDefined();
     });
 
@@ -118,6 +115,39 @@ describe('TradingSignalCard', () => {
         render(<TradingSignalCard analysis={analysis({ confidence: 'Medium' })} />);
         expect(screen.getAllByText('Sell').length).toBeGreaterThanOrEqual(1);
         expect(screen.queryByText('No trade')).toBeNull();
+    });
+
+    it('shows leveraged SL/TP percentages for the session Nx', () => {
+        const { rerender } = render(
+            <TradingSignalCard
+                analysis={analysis({
+                    direction: 'Long',
+                    confidence: 'Medium',
+                    entryPoints: [{ price: '100' }],
+                    stopLoss: '90',
+                    takeProfit: [{ price: '120' }],
+                })}
+                leverage={10}
+            />,
+        );
+        expect(screen.getByText('-100.0%')).toBeDefined();
+        expect(screen.getByText('-100.0%').className).toMatch(/rose/);
+        expect(screen.getByText('+200.0%')).toBeDefined();
+        expect(screen.getByText('+200.0%').className).toMatch(/emerald/);
+        rerender(
+            <TradingSignalCard
+                analysis={analysis({
+                    direction: 'Long',
+                    confidence: 'Medium',
+                    entryPoints: [{ price: '100' }],
+                    stopLoss: '90',
+                    takeProfit: [{ price: '120' }],
+                })}
+                leverage={1}
+            />,
+        );
+        expect(screen.getByText('-10.0%')).toBeDefined();
+        expect(screen.getByText('+20.0%')).toBeDefined();
     });
 
     it('does not put Watch on the signal header (pin lives on next steps)', () => {

@@ -14,6 +14,7 @@ import SetupLifecycleCard from '../analysis/SetupLifecycleCard';
 import ThinkingModal from '../analysis/ThinkingModal';
 import TodayReassessmentPanel from './TodayReassessmentPanel';
 import { buildSupplementMarkdown } from '../../utils/analysisUtils';
+import { debateFloorProgress } from '../../utils/debateFloor';
 import { formatModelDisplayName } from '../../utils/providerUtils';
 import { AutopilotResolution } from '../../services/ui/OutcomeAutopilotService';
 
@@ -189,6 +190,8 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
         Object.keys(message.modelsUsed ?? {}).length > 1
     );
     const debateTurns = message.debateTurns ?? message.postMortemDebateTurns ?? [];
+    const floorProgress = debateFloorProgress(message);
+    const showFloor = Boolean(floorProgress) && (message.isDebating || !message.analysis);
 
     React.useEffect(() => {
         if (isEnsembleMessage) {
@@ -338,9 +341,9 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                             )}
 
                             {/* Live Market Data Component */}
-                            {!message.analysis && message.ensembleProgress && (
+                            {showFloor && floorProgress && (
                                 <EnsembleProgressChat
-                                    progress={message.ensembleProgress}
+                                    progress={floorProgress}
                                     modelIdToName={modelIdToName}
                                     isLive={!!message.isDebating || !message.analysis}
                                     compact={!!message.isDebating}
@@ -348,6 +351,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     debateTurns={debateTurns}
                                     activeDebateSpeakers={message.activeDebateSpeakers}
                                     reasoningProcesses={message.reasoningProcesses}
+                                    runStats={message.runStats}
                                 />
                             )}
 
@@ -450,6 +454,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     priorAnalysis={context.priorAnalysisById?.[message.id]}
                                     promptLane={message.runStats?.promptLane}
                                     onFollowUp={context.onFollowUpTicket ? (text) => context.onFollowUpTicket!(message.id, text) : undefined}
+                                    leverage={leverage}
                                     bare
                                 />
                                 </div>
@@ -583,7 +588,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 </div>
                             )}
 
-                            {(message.isDebating || debateTurns.length > 0) && !message.ensembleProgress && (
+                            {(message.isDebating || debateTurns.length > 0) && !showFloor && (
                                 <DebateChat
                                     debateTurns={debateTurns}
                                     modelsUsed={message.modelsUsed}

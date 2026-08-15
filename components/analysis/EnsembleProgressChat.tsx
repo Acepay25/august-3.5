@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { DebateTurn, EnsembleAnalystProgress, EnsembleProgress } from '../../types';
+import { DebateTurn, EnsembleAnalystProgress, EnsembleProgress, RunStats } from '../../types';
 import MarkdownContent from '../shared/MarkdownContent';
 import { formatModelDisplayName, formatSeatLabel } from '../../utils/providerUtils';
 import { buildAnalystGantt, lastThoughtSnippet } from '../../utils/runGantt';
@@ -15,6 +15,7 @@ interface EnsembleProgressChatProps {
     debateTurns?: DebateTurn[];
     activeDebateSpeakers?: Record<string, number>;
     reasoningProcesses?: Record<string, string>;
+    runStats?: RunStats;
 }
 
 const STATUS_TEXT: Record<EnsembleAnalystProgress['status'], string> = {
@@ -61,7 +62,15 @@ interface SeatBlock {
     replyTo?: string;
     text: string;
     live?: boolean;
+    round?: number;
+    thinking?: string;
 }
+
+const roundLabel = (round: number): string => {
+    if (round <= 1) return 'Openings';
+    if (round === 2 || round === 3) return 'Rebuttals';
+    return `Round ${round}`;
+};
 
 const FadeStream: React.FC<{ text: string; live?: boolean; className?: string }> = ({ text, live, className }) => (
     <div className={live ? 'stream-fade' : undefined}>
@@ -80,6 +89,20 @@ const ReplyBlock: React.FC<{ block: SeatBlock }> = ({ block }) => (
     </div>
 );
 
+const ThinkingDetails: React.FC<{ text: string; live?: boolean }> = ({ text, live }) => {
+    if (!text) return null;
+    return (
+        <details className="border-b border-white/5 px-3 py-2">
+            <summary className="cursor-pointer list-none text-[11px] uppercase tracking-widest text-zinc-500">
+                Thinking
+            </summary>
+            <div className="custom-scrollbar mt-2 max-h-40 overflow-y-auto pr-1">
+                <FadeStream text={text} live={live} className="text-zinc-500" />
+            </div>
+        </details>
+    );
+};
+
 const SeatChat: React.FC<{
     title: string;
     modelName: string;
@@ -89,11 +112,38 @@ const SeatChat: React.FC<{
     blocks: SeatBlock[];
     defaultOpen: boolean;
     expandLabel: string;
+    usage?: string;
     onRetry?: () => void;
     error?: string;
-}> = ({ title, modelName, status, live, thinking, blocks, defaultOpen, expandLabel, onRetry, error }) => {
+}> = ({ title, modelName, status, live, thinking, blocks, defaultOpen, expandLabel, usage, onRetry, error }) => {
     const [open, setOpen] = useState(defaultOpen);
     const snippet = lastThoughtSnippet(blocks[blocks.length - 1]?.text || thinking, 72);
+    const rounds = useMemo(() => {
+        const order: number[] = [];
+        const grouped = new Map<number, SeatBlock[]>();
+        blocks.forEach(block => {
+            const round = block.round && block.round > 0 ? block.round : 1;
+            if (!grouped.has(round)) {
+                order.push(round);
+                grouped.set(round, []);
+            }
+            grouped.get(round)!.push(block);
+        });
+        return order.map((round, index) => {
+            const roundBlocks = grouped.get(round) ?? [];
+            const roundThinking = [...new Set(roundBlocks.map(b => b.thinking).filter(Boolean))].join('\n\n');
+            return {
+                round,
+                label: title === 'Moderator' && index === order.length - 1 && round >= 4 ? 'Verdict' : roundLabel(round),
+                blocks: roundBlocks,
+                thinking: roundThinking,
+                live: roundBlocks.some(block => block.live),
+            };
+        });
+    }, [blocks, title]);
+    const currentRound = rounds[rounds.length - 1];
+    const pastRounds = rounds.slice(0, -1);
+    const leftoverThinking = thinking && rounds.every(r => !r.thinking) ? thinking : '';
 
     return (
         <div className="border-t border-white/5">
@@ -118,7 +168,7 @@ const SeatChat: React.FC<{
                             )}
                         </span>
                         <span className="mt-0.5 block truncate text-[11px] text-zinc-500">
-                            {status}{!open && snippet ? ` · ${snippet}` : ''}
+                            {status}{usage ? ` · ${usage}` : ''}{!open && snippet ? ` · ${snippet}` : ''}
                         </span>
                     </span>
                 </button>
@@ -153,18 +203,33 @@ const SeatChat: React.FC<{
                             Close
                         </button>
                     </div>
-                    {thinking && (
-                        <details className="border-b border-white/5 px-3 py-2">
-                            <summary className="cursor-pointer list-none text-[11px] uppercase tracking-widest text-zinc-500">
-                                Thinking
-                            </summary>
-                            <div className="custom-scrollbar mt-2 max-h-40 overflow-y-auto pr-1">
-                                <FadeStream text={thinking} live={live} className="text-zinc-500" />
-                            </div>
-                        </details>
-                    )}
+                    {leftoverThinking && <ThinkingDetails text={leftoverThinking} live={live} />}
                     <div className="flex max-h-[22rem] flex-col gap-2 overflow-y-auto py-2">
-                        {blocks.map(block => <ReplyBlock key={block.id} block={block} />)}
+                        {currentRound && (
+                            <div>
+                                {rounds.length > 1 && (
+                                    <p className="px-3 pb-1 text-[11px] uppercase tracking-widest text-zinc-500">
+                                        {currentRound.label}{currentRound.live ? ' · live' : ''}
+                                    </p>
+                                )}
+                                <ThinkingDetails text={currentRound.thinking} live={currentRound.live} />
+                                <div className="flex flex-col gap-2">
+                                    {currentRound.blocks.map(block => <ReplyBlock key={block.id} block={block} />)}
+                                </div>
+                            </div>
+                        )}
+                        {pastRounds.map(group => (
+                            <details key={group.round} className="mx-2 rounded-lg border border-white/10 bg-zinc-950/30 px-3 py-2">
+                                <summary className="cursor-pointer list-none text-[11px] uppercase tracking-widest text-zinc-500">
+                                    {group.label}
+                                    {group.blocks[0]?.text ? ` · ${lastThoughtSnippet(group.blocks[0].text, 48)}` : ''}
+                                </summary>
+                                <div className="mt-2 flex flex-col gap-2">
+                                    <ThinkingDetails text={group.thinking} />
+                                    {group.blocks.map(block => <ReplyBlock key={block.id} block={block} />)}
+                                </div>
+                            </details>
+                        ))}
                         {error && <p className="px-3 py-2 text-[11px] text-zinc-500">{error}</p>}
                         {blocks.length === 0 && !thinking && !error && (
                             <p className="px-3 py-2 text-xs italic text-zinc-600">Waiting for this seat.</p>
@@ -186,6 +251,7 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
     debateTurns = [],
     activeDebateSpeakers = {},
     reasoningProcesses = {},
+    runStats,
 }) => {
     const lanes = useMemo(() => buildAnalystGantt(progress), [progress]);
     const analystNames = progress.analysts.map(a => a.displayName);
@@ -210,18 +276,27 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
             if (split.thinking) leaked.push(split.thinking);
             const parts = splitAddresses(split.output, analystNames);
             if (!split.output) return [];
-            if (parts.length === 0) return [{ id: `mod-${index}`, text: split.output, live }];
+            const round = turn.round && turn.round > 0 ? turn.round : index + 1;
+            if (parts.length === 0) return [{ id: `mod-${index}`, text: split.output, live, round, thinking: split.thinking }];
             return parts.map((part, partIndex) => ({
                 id: `mod-${index}-${partIndex}`,
                 replyTo: part.target,
                 text: part.text,
                 live,
+                round,
+                thinking: partIndex === 0 ? split.thinking : undefined,
             }));
         });
         const streamed = (reasoningProcesses.moderator || '').trim();
+        if (streamed && blocks.length > 0) {
+            const last = blocks[blocks.length - 1];
+            if (!last.thinking?.includes(streamed)) {
+                last.thinking = [streamed, last.thinking].filter(Boolean).join('\n\n');
+            }
+        }
         return {
             moderatorBlocks: blocks,
-            moderatorThinking: [...new Set([streamed, ...leaked].filter(Boolean))].join('\n\n'),
+            moderatorThinking: streamed && blocks.length === 0 ? streamed : [...new Set(leaked)].join('\n\n'),
         };
     }, [analystNames, debateTurns, modLive, reasoningProcesses.moderator]);
 
@@ -264,6 +339,9 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
                         blocks={moderatorBlocks}
                         defaultOpen={modLive || moderatorBlocks.length > 0}
                         expandLabel="Moderator analysis"
+                        usage={runStats?.promptTokens || runStats?.completionTokens
+                            ? `${((runStats.promptTokens ?? 0) + (runStats.completionTokens ?? 0)).toLocaleString()} tok`
+                            : undefined}
                     />
                     {progress.analysts.map((analyst) => {
                         const answering = Boolean(activeDebateSpeakers[analyst.displayName] || activeDebateSpeakers[analyst.providerName]);
@@ -283,18 +361,23 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
                                 text: split.output,
                                 thinking: split.thinking,
                                 live: live && answering && index === speakerTurns.length - 1,
+                                round: turn.round && turn.round > 0 ? turn.round : index + 1,
                             };
                         });
-                        const thinking = [openingSplit.thinking, ...turnSplits.map(t => t.thinking)]
-                            .filter(Boolean)
-                            .filter((text, index, all) => all.indexOf(text) === index)
-                            .join('\n\n');
+                        const thinking = '';
                         const blocks: SeatBlock[] = [
-                            ...(openingSplit.output ? [{ id: `${analyst.key}-open`, text: openingSplit.output }] : []),
-                            ...turnSplits.map(({ thinking: _t, ...block }) => block),
+                            ...(openingSplit.output ? [{ id: `${analyst.key}-open`, text: openingSplit.output, round: 1, thinking: openingSplit.thinking }] : []),
+                            ...turnSplits,
                         ];
                         const title = formatSeatLabel(analyst.displayName);
                         const prettyModel = formatModelDisplayName(analyst.modelId || analyst.modelName);
+                        const ledger = runStats?.analysts?.find(a =>
+                            a.providerId === analyst.providerId || a.modelId === analyst.modelId || a.displayName === analyst.displayName
+                        );
+                        const tokens = ledger
+                            ? (ledger.promptTokens ?? 0) + (ledger.completionTokens ?? 0) || Math.round((ledger.charsOut ?? 0) / 4)
+                            : 0;
+                        const usage = tokens > 0 ? `${tokens.toLocaleString()} tok` : undefined;
                         return (
                             <SeatChat
                                 key={analyst.key}
@@ -306,6 +389,7 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
                                 blocks={blocks}
                                 defaultOpen={live || analyst.status === 'complete'}
                                 expandLabel={`${title} analysis`}
+                                usage={usage}
                                 onRetry={analyst.status === 'error' && onRetryAnalyst ? () => onRetryAnalyst(analyst.key) : undefined}
                                 error={analyst.error}
                             />

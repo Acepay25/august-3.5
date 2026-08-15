@@ -1,17 +1,19 @@
 /**
  * Keep chain-of-thought out of the final answer (and vice versa).
- * Providers often dump the plan into the thinking channel, or the pipeline
- * used to persist the whole stream as `reasoning`.
+ * Same rule as Hermes / OpenCode / Codex: tags and scratchpads never stay
+ * in the user-visible reply, even when a model dumps them into `content`.
  */
+
+import { noteThinkingLeak, stillLooksLikeLeakedThinking } from './thinkingLeakBin';
 
 const PLAN_RE = /FINAL TRADE PLAN|\b(?:Direction|Stop Loss|Take Profit(?:\s*[123])?|Invalidation)\s*:/i;
 
 const SCRATCHPAD_START_RE = /(?:^|\n)\s*(?:here(?:['’]s| is)\s+(?:my\s+)?(?:a\s+)?)?thinking\s+process\s*:/i;
-const SCRATCHPAD_META_RE = /Analyze User Input\s*:|Deconstruct (?:the )?Context|Current Round\s*:/i;
-const THINK_TAG_RE = /<(?:think|thinking|thought)>/i;
-const LET_ME_THINK_RE = /(?:^|\n)\s*(?:let me think|thinking out loud|internal monologue|chain of thought)\b/i;
-const ANSWER_MARK_RE = /(?:^|\n)\s*(?:\*\*)?(?:answer|final(?:\s*output)?|response|conclusion)(?:\*\*)?\s*[:.-]\s*/i;
-const META_PARA_RE = /^(?:Analyze User Input|Deconstruct|My State|Role\s*:|Current Round\s*:|YOUR TASK|Moderator's question|Here's a thinking|Let me think)/i;
+const SCRATCHPAD_META_RE = /Analyze User Input\s*:|Deconstruct (?:the )?Context|Current Round\s*:|YOUR TASK\b|The user (?:is asking|wants|asked)\b/i;
+const THINK_TAG_RE = /<(?:think|thinking|thought|reasoning|REASONING_SCRATCHPAD)|<\|begin_of_thought\||\[(?:THINKING|REASONING)\]|◁think▷/i;
+const LET_ME_THINK_RE = /(?:^|\n)\s*(?:let me think|let's think|thinking out loud|internal monologue|chain of thought|wait,\s+i\b)\b/i;
+const ANSWER_MARK_RE = /(?:^|\n)\s*(?:\*\*)?(?:answer|final(?:\s*output)?|response|conclusion|verdict|solution)(?:\*\*)?\s*[:.-]\s*/i;
+const META_PARA_RE = /^(?:Analyze User Input|Deconstruct|My State|Role\s*:|Current Round\s*:|YOUR TASK|Moderator's question|Here's a thinking|Let me think|The user (?:is asking|wants)|I need to (?:analyze|weigh|consider))/i;
 
 export const looksLikeTradeOutput = (text: string): boolean => {
     if (!text || text.length < 40) return false;
@@ -23,38 +25,90 @@ export const looksLikeTradeOutput = (text: string): boolean => {
 
 const eq = (a: string, b: string): boolean => a.trim() === b.trim();
 
-const THINK_TAG_NAMES = 'think|thinking|thought|reasoning|REASONING_SCRATCHPAD';
+const THINK_TAG_NAMES = 'think|thinking|thought|reasoning|REASONING_SCRATCHPAD|redacted_thinking';
 const THINK_BLOCK_RE = new RegExp(`<(${THINK_TAG_NAMES})\\b[^>]*>[\\s\\S]*?<\\/\\1>`, 'gi');
 const THINK_ORPHAN_RE = new RegExp(`<\\/?(?:${THINK_TAG_NAMES})\\b[^>]*>`, 'gi');
+const THINK_CLOSE_RE = new RegExp(`<\\/(?:${THINK_TAG_NAMES})>`, 'i');
+const THINK_OPEN_RE = new RegExp(`<(${THINK_TAG_NAMES})\\b[^>]*>`, 'i');
+
+const SPECIAL_THINK_RE = /<\|begin_of_thought\|>([\s\S]*?)<\|end_of_thought\|>/gi;
+const SPECIAL_SOLUTION_RE = /<\|begin_of_solution\|>([\s\S]*?)<\|end_of_solution\|>/gi;
+const BRACKET_THINK_RE = /\[(?:THINKING|THINK|REASONING)\]([\s\S]*?)\[\/(?:THINKING|THINK|REASONING)\]/gi;
+const FENCE_THINK_RE = /```(?:thinking|thought|reasoning|scratchpad)\s*\n([\s\S]*?)```/gi;
+const UNICODE_THINK_RE = /◁think▷([\s\S]*?)◁\/think▷/gi;
+
+const takeMatches = (raw: string, re: RegExp): { visible: string; leaked: string[] } => {
+    const leaked: string[] = [];
+    const visible = raw.replace(re, (_all, inner: string) => {
+        if (inner?.trim()) leaked.push(inner.trim());
+        return '';
+    });
+    return { visible, leaked };
+};
 
 /** Same rule as Hermes `_strip_think_blocks`: tags never stay in the answer. */
 export const extractAndStripThinkBlocks = (text: string): { visible: string; leaked: string } => {
-    const raw = text || '';
-    if (!/<(?:think|thinking|thought|reasoning|REASONING_SCRATCHPAD)\b/i.test(raw)) {
-        return { visible: raw, leaked: '' };
-    }
+    let visible = text || '';
     const leaked: string[] = [];
-    const visible = raw
-        .replace(THINK_BLOCK_RE, (block, name: string) => {
-            const inner = block.replace(new RegExp(`^<${name}\\b[^>]*>|<\\/${name}>$`, 'gi'), '').trim();
-            if (inner) leaked.push(inner);
-            return '';
-        })
-        .replace(new RegExp(`<(${THINK_TAG_NAMES})\\b[^>]*>[\\s\\S]*$`, 'i'), (block) => {
-            const inner = block.replace(THINK_ORPHAN_RE, '').trim();
-            if (inner) leaked.push(inner);
-            return '';
-        })
-        .replace(THINK_ORPHAN_RE, '')
-        .replace(/\n{3,}/g, '\n\n')
-        .trim();
-    return { visible, leaked: leaked.join('\n\n').trim() };
+
+    const special = takeMatches(visible, SPECIAL_THINK_RE);
+    visible = special.visible;
+    leaked.push(...special.leaked);
+    const solution = takeMatches(visible, SPECIAL_SOLUTION_RE);
+    if (solution.leaked.length > 0) {
+        visible = solution.leaked.join('\n\n');
+    } else {
+        visible = solution.visible;
+    }
+    const bracket = takeMatches(visible, BRACKET_THINK_RE);
+    visible = bracket.visible;
+    leaked.push(...bracket.leaked);
+    const fence = takeMatches(visible, FENCE_THINK_RE);
+    visible = fence.visible;
+    leaked.push(...fence.leaked);
+    const unicode = takeMatches(visible, UNICODE_THINK_RE);
+    visible = unicode.visible;
+    leaked.push(...unicode.leaked);
+
+    if (THINK_OPEN_RE.test(visible) || THINK_CLOSE_RE.test(visible)) {
+        visible = visible
+            .replace(THINK_BLOCK_RE, (block, name: string) => {
+                const inner = block.replace(new RegExp(`^<${name}\\b[^>]*>|<\\/${name}>$`, 'gi'), '').trim();
+                if (inner) leaked.push(inner);
+                return '';
+            });
+        const closeAt = visible.search(THINK_CLOSE_RE);
+        const openAt = visible.search(THINK_OPEN_RE);
+        if (closeAt >= 0 && (openAt < 0 || closeAt < openAt)) {
+            const before = visible.slice(0, closeAt).replace(THINK_ORPHAN_RE, '').trim();
+            const after = visible.slice(closeAt).replace(THINK_CLOSE_RE, '').replace(THINK_ORPHAN_RE, '').trim();
+            if (before) leaked.push(before);
+            visible = after;
+        } else if (openAt >= 0) {
+            const before = visible.slice(0, openAt).replace(THINK_ORPHAN_RE, '').trim();
+            const afterOpen = visible.slice(openAt);
+            const closed = afterOpen.match(THINK_BLOCK_RE);
+            if (closed) {
+                visible = (before + '\n\n' + afterOpen.replace(THINK_BLOCK_RE, '')).replace(THINK_ORPHAN_RE, '').trim();
+            } else {
+                const inner = afterOpen.replace(THINK_ORPHAN_RE, '').trim();
+                if (inner) leaked.push(inner);
+                visible = before;
+            }
+        }
+        visible = visible.replace(THINK_ORPHAN_RE, '');
+    }
+
+    return {
+        visible: visible.replace(/\n{3,}/g, '\n\n').trim(),
+        leaked: leaked.filter(Boolean).join('\n\n').trim(),
+    };
 };
 
 const stripTags = (text: string): string => extractAndStripThinkBlocks(text).visible
     .replace(/<FINAL_OUTPUT>[\s\S]*?<\/FINAL_OUTPUT>/gi, '')
     .replace(/<\/?FINAL_OUTPUT>/gi, '')
-    .replace(/^\s*(?:\*\*)?(?:THINKING|FINAL OUTPUT|FINAL_OUTPUT)(?:\*\*)?\s*:?\s*$/gim, '')
+    .replace(/^\s*(?:\*\*)?(?:THINKING|FINAL OUTPUT|FINAL_OUTPUT|REASONING|ANSWER)(?:\*\*)?\s*:?\s*$/gim, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 
@@ -101,21 +155,36 @@ export const stripLeakedScratchpad = (text: string): { visible: string; leaked: 
     }
 
     if (before) return { visible: before, leaked: rest };
+    if (looksLikeTradeOutput(raw)) return { visible: raw, leaked: '' };
     return { visible: '', leaked: raw };
 };
 
 export const splitThinkingHeaders = (raw: string): { thinking: string; output: string } => {
-    const headerRe = /^\s*(?:\*\*)?(THINKING|FINAL OUTPUT|FINAL_OUTPUT)(?:\*\*)?\s*:?[ \t]*\r?\n?/gim;
+    const headerRe = /^\s*(?:\*\*|#{1,3}\s*)?(THINKING|REASONING|SCRATCHPAD|INTERNAL(?:\s+MONOLOGUE)?|CHAIN OF THOUGHT|FINAL OUTPUT|FINAL_OUTPUT|ANSWER|RESPONSE|VERDICT|SOLUTION|CONCLUSION)(?:\*\*)?\s*:?[ \t]*\r?\n?/gim;
     const matches = [...raw.matchAll(headerRe)];
-    if (matches.length < 2) return { thinking: '', output: '' };
-    const sections: Record<string, string> = {};
+    if (matches.length === 0) return { thinking: '', output: '' };
+
+    const thinkKeys = /^(THINKING|REASONING|SCRATCHPAD|INTERNAL|CHAIN OF THOUGHT)/i;
+    const outKeys = /^(FINAL OUTPUT|FINAL_OUTPUT|ANSWER|RESPONSE|VERDICT|SOLUTION|CONCLUSION)/i;
+    const sections: Array<{ kind: 'think' | 'out'; text: string }> = [];
     matches.forEach((match, i) => {
         const start = (match.index ?? 0) + match[0].length;
         const end = i + 1 < matches.length ? (matches[i + 1].index ?? raw.length) : raw.length;
-        const key = match[1].toUpperCase().replace(/[ _]/g, '_');
-        sections[key] = raw.slice(start, end).trim();
+        const label = match[1];
+        const kind = outKeys.test(label) ? 'out' : thinkKeys.test(label) ? 'think' : 'out';
+        sections.push({ kind, text: raw.slice(start, end).trim() });
     });
-    return { thinking: sections['THINKING'] ?? '', output: sections['FINAL_OUTPUT'] ?? '' };
+    const thinking = sections.filter(s => s.kind === 'think').map(s => s.text).filter(Boolean).join('\n\n');
+    const output = sections.filter(s => s.kind === 'out').map(s => s.text).filter(Boolean).join('\n\n');
+    if (thinking && output) return { thinking, output };
+    if (thinking && !output) {
+        const prefix = raw.slice(0, matches[0].index ?? 0).trim();
+        return { thinking, output: prefix };
+    }
+    if (!thinking && output && matches[0].index && matches[0].index > 0) {
+        return { thinking: raw.slice(0, matches[0].index).trim(), output };
+    }
+    return { thinking, output };
 };
 
 /**
@@ -135,7 +204,15 @@ export const splitThinkingFromOutput = (
     const inlineThink = extractAndStripThinkBlocks(raw);
 
     let thinking = streamed || taggedThinking || headers.thinking || inlineThink.leaked;
-    let output = taggedOutput || headers.output || (raw ? stripTags(raw) : '');
+    let output = taggedOutput || headers.output || (raw ? (inlineThink.visible || stripTags(raw)) : '');
+
+    if (headers.thinking && headers.output) {
+        thinking = streamed || headers.thinking;
+        output = taggedOutput || headers.output;
+    } else if (inlineThink.leaked) {
+        thinking = [streamed, inlineThink.leaked].filter(Boolean).join('\n\n');
+        output = taggedOutput || inlineThink.visible;
+    }
 
     if (!raw && streamed) {
         thinking = streamed;
@@ -160,7 +237,14 @@ export const splitThinkingFromOutput = (
         output = peeled.visible;
     }
 
-    return { thinking: thinking.trim(), output: output.trim() };
+    if (output && looksLikeScratchpad(output) && !looksLikeTradeOutput(output) && !ANSWER_MARK_RE.test(output)) {
+        thinking = [thinking, output].filter(Boolean).join('\n\n').trim();
+        output = '';
+    }
+
+    const next = { thinking: thinking.trim(), output: output.trim() };
+    if (stillLooksLikeLeakedThinking(next.output)) noteThinkingLeak(next.output);
+    return next;
 };
 
 export interface ThinkingDisplayParts {
@@ -183,13 +267,14 @@ export const displayThinkingParts = (record: {
     let raw = (record.rawReasoning || '').trim();
 
     if (record.role === 'debate_turn') {
-        const peeled = stripLeakedScratchpad(output || thinking);
-        if (!output) {
-            output = peeled.visible;
-            thinking = peeled.leaked || '';
-        } else if (peeled.leaked) {
-            thinking = [thinking, peeled.leaked].filter(Boolean).join('\n\n').trim();
-            output = peeled.visible;
+        const split = splitThinkingFromOutput(thinking, output);
+        if (output) {
+            thinking = split.thinking;
+            output = split.output;
+        } else {
+            const peeled = splitThinkingFromOutput('', thinking);
+            output = peeled.output;
+            thinking = peeled.thinking;
         }
         if (eq(thinking, output)) thinking = '';
         if (eq(raw, output) || eq(raw, thinking)) raw = '';
