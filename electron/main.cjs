@@ -137,9 +137,9 @@ async function sendDiscoverRequest(config) {
         return { ok: response.ok, status: response.status, body };
     } catch (error) {
         if (error?.name === 'AbortError') {
-            throw new Error('Model discovery timed out — check the base URL.');
+            throw new Error('Model discovery timed out — check the base URL.', { cause: error });
         }
-        throw new Error('Could not reach the provider — check the base URL and your network.');
+        throw new Error('Could not reach the provider — check the base URL and your network.', { cause: error });
     } finally {
         clearTimeout(timeout);
     }

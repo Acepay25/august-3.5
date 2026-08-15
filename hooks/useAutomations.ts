@@ -369,8 +369,6 @@ export function useAutomations(params: UseAutomationsParams) {
             cancelled = true;
             window.clearInterval(interval);
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- the interval
-        // reads refs; only the username re-arms it.
     }, [activeUsername]);
 
     // ─── CRUD ─────────────────────────────────────────────────────────────
