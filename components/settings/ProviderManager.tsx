@@ -9,6 +9,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { ProviderConfig, ApiFormat, API_FORMAT_LABELS } from '../../types/provider';
+import { GOOGLE_GEMINI_DEFAULT_BASE } from '../../utils/googleGeminiFormat';
 import { testConnection } from '../../services/providers/GenericProviderService';
 import { discoverProviderModels } from '../../services/infrastructure/ProviderConfigService';
 import { resetProviderHealth } from '../../services/infrastructure/ProviderHealthService';
@@ -522,12 +523,16 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                             </div>
                             <div>
                                 <FieldLabel>Base URI</FieldLabel>
-                                <input type="text" value={newUrl} onChange={(e) => setNewUrl(e.target.value)} placeholder="https://opencode.ai/zen/v1" className={inputBase} />
+                                <input type="text" value={newUrl} onChange={(e) => setNewUrl(e.target.value)} placeholder={newFormat === 'google' ? GOOGLE_GEMINI_DEFAULT_BASE : 'https://opencode.ai/zen/v1'} className={inputBase} />
                                 {!newUrlValidation.valid && newUrl.trim() && <p className="mt-1 text-xs text-red-300">{newUrlValidation.message}</p>}
                             </div>
                             <div>
                                 <FieldLabel>Endpoint</FieldLabel>
-                                <select value={newFormat} onChange={(e) => setNewFormat(e.target.value as ApiFormat)} className={selectBase}>
+                                <select value={newFormat} onChange={(e) => {
+                                    const next = e.target.value as ApiFormat;
+                                    setNewFormat(next);
+                                    if (next === 'google' && !newUrl.trim()) setNewUrl(GOOGLE_GEMINI_DEFAULT_BASE);
+                                }} className={selectBase}>
                                     {(Object.entries(API_FORMAT_LABELS) as [ApiFormat, string][]).map(([val, label]) => (
                                         <option key={val} value={val}>{label}</option>
                                     ))}
@@ -535,12 +540,12 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                             </div>
                             <div>
                                 <FieldLabel>API key</FieldLabel>
-                                <input type="password" value={newKey} onChange={(e) => setNewKey(e.target.value)} placeholder="sk-…" className={inputBase} autoComplete="off" />
+                                <input type="password" value={newKey} onChange={(e) => setNewKey(e.target.value)} placeholder={newFormat === 'google' ? 'AIza…' : 'sk-…'} className={inputBase} autoComplete="off" />
                             </div>
                             <div>
                                 <FieldLabel>Model list (comma-separated)</FieldLabel>
                                 <div className="flex gap-2">
-                                    <input type="text" value={newModels} onChange={(e) => { setNewModels(e.target.value); setAddError(''); }} placeholder="deepseek-v4-flash-free, mimo-v2.5-free" className={`${inputBase} min-w-0 flex-1`} />
+                                    <input type="text" value={newModels} onChange={(e) => { setNewModels(e.target.value); setAddError(''); }} placeholder={newFormat === 'google' ? 'gemini-2.5-flash, gemini-2.5-pro' : 'deepseek-v4-flash-free, mimo-v2.5-free'} className={`${inputBase} min-w-0 flex-1`} />
                                     <button type="button" onClick={handleDiscoverNewModels} disabled={isDiscoveringNew || !newUrl.trim() || !newKey.trim()} className="shrink-0 rounded-xl border border-zinc-700 px-3 text-xs text-zinc-400 disabled:opacity-40">
                                         {isDiscoveringNew ? '…' : 'Discover'}
                                     </button>
@@ -601,12 +606,16 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
 
                             <div>
                                 <FieldLabel>Base URI</FieldLabel>
-                                <input type="text" value={draftUrl} onChange={(e) => setDraftUrl(e.target.value)} placeholder="https://opencode.ai/zen/v1" className={inputBase} />
+                                <input type="text" value={draftUrl} onChange={(e) => setDraftUrl(e.target.value)} placeholder={draftFormat === 'google' ? GOOGLE_GEMINI_DEFAULT_BASE : 'https://opencode.ai/zen/v1'} className={inputBase} />
                                 {!draftUrlValidation.valid && draftUrl.trim() && <p className="mt-1 text-xs text-red-300">{draftUrlValidation.message}</p>}
                             </div>
                             <div>
                                 <FieldLabel>Endpoint</FieldLabel>
-                                <select value={draftFormat} onChange={(e) => setDraftFormat(e.target.value as ApiFormat)} className={selectBase}>
+                                <select value={draftFormat} onChange={(e) => {
+                                    const next = e.target.value as ApiFormat;
+                                    setDraftFormat(next);
+                                    if (next === 'google' && !draftUrl.trim()) setDraftUrl(GOOGLE_GEMINI_DEFAULT_BASE);
+                                }} className={selectBase}>
                                     {(Object.entries(API_FORMAT_LABELS) as [ApiFormat, string][]).map(([val, label]) => (
                                         <option key={val} value={val}>{label}</option>
                                     ))}

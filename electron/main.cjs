@@ -108,7 +108,7 @@ function discoverProviderDetails(config) {
     const baseUrl = normalizeProviderUrl(config?.baseUrl);
     const apiKey = String(config?.apiKey || '').trim();
     if (!apiKey) throw new Error('API key is required to discover models.');
-    const isGemini = /generativelanguage/i.test(baseUrl);
+    const isGemini = config?.apiFormat === 'google' || /generativelanguage/i.test(baseUrl);
     const isAnthropic = config?.apiFormat === 'messages' && !isGemini;
     const url = isGemini
         ? `${baseUrl}/models?key=${encodeURIComponent(apiKey)}`
@@ -212,6 +212,43 @@ function providerRequestDetails(request) {
             max_output_tokens: request.maxTokens ?? 4096,
             temperature: request.temperature ?? 0.7,
         };
+    } else if (format === 'google') {
+        const geminiModel = model.replace(/^models\//, '');
+        url = `${baseUrl}/models/${encodeURIComponent(geminiModel)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+        if (apiKey) headers['x-goog-api-key'] = apiKey;
+        const systemBits = [];
+        const contents = [];
+        for (const message of messages) {
+            if (message?.role === 'system') {
+                const text = contentToText(message.content);
+                if (text) systemBits.push(text);
+                continue;
+            }
+            const parts = toGeminiParts(message.content);
+            if (parts.length === 0) continue;
+            const role = message.role === 'assistant' || message.role === 'model' ? 'model' : 'user';
+            const last = contents[contents.length - 1];
+            if (last && last.role === role) last.parts.push(...parts);
+            else contents.push({ role, parts });
+        }
+        if (contents.length === 0) {
+            contents.push({ role: 'user', parts: [{ text: systemBits.join('\n\n') || ' ' }] });
+            systemBits.length = 0;
+        } else if (contents[0].role !== 'user') {
+            contents.unshift({ role: 'user', parts: [{ text: 'Continue.' }] });
+        }
+        body = {
+            contents,
+            generationConfig: {
+                temperature: request.temperature ?? 0.7,
+                maxOutputTokens: request.maxTokens ?? 4096,
+            },
+        };
+        if (systemBits.length > 0) body.systemInstruction = { parts: [{ text: systemBits.join('\n\n') }] };
+        if (request.jsonMode) body.generationConfig.responseMimeType = 'application/json';
+        if (!request.jsonMode && /gemini|thinking/i.test(geminiModel)) {
+            body.generationConfig.thinkingConfig = { includeThoughts: true, thinkingBudget: 8192 };
+        }
     } else {
         throw new Error('Unknown provider API format.');
     }
@@ -223,6 +260,43 @@ function contentToText(content) {
     return typeof content === 'string'
         ? content
         : (Array.isArray(content) ? content.filter(part => part?.type === 'text').map(part => part.text).join('') : '');
+}
+
+function toGeminiParts(content) {
+    if (typeof content === 'string') return content ? [{ text: content }] : [];
+    if (!Array.isArray(content)) return [];
+    return content.map(part => {
+        if (part?.type === 'text') return { text: part.text };
+        const url = part?.image_url?.url || '';
+        const commaIndex = url.indexOf(',');
+        if (url.startsWith('data:') && commaIndex !== -1) {
+            const header = url.slice(5, commaIndex);
+            const mimeMatch = header.match(/^image\/(png|jpeg|jpg|webp|gif)\b/i);
+            const mimeType = mimeMatch
+                ? `image/${mimeMatch[1].toLowerCase() === 'jpg' ? 'jpeg' : mimeMatch[1].toLowerCase()}`
+                : 'image/png';
+            return { inlineData: { mimeType, data: url.slice(commaIndex + 1) } };
+        }
+        return url ? { text: `[image: ${url}]` } : { text: '' };
+    }).filter(part => part.text || part.inlineData);
+}
+
+function parseGeminiResponseJs(data) {
+    const texts = [];
+    const thoughts = [];
+    const candidates = data?.candidates;
+    if (Array.isArray(candidates)) {
+        for (const candidate of candidates) {
+            const parts = candidate?.content?.parts;
+            if (!Array.isArray(parts)) continue;
+            for (const part of parts) {
+                if (typeof part?.text !== 'string' || !part.text) continue;
+                if (part.thought) thoughts.push(part.text);
+                else texts.push(part.text);
+            }
+        }
+    }
+    return { text: texts.join('\n').trim(), reasoning: thoughts.join('\n').trim() };
 }
 
 function toAnthropicContent(content) {
@@ -254,12 +328,22 @@ function parseProviderErrorBody(raw) {
 
 function extractTokenUsageJs(data) {
     const usage = data && data.usage;
-    if (!usage || typeof usage !== 'object') return undefined;
-    const prompt = Number(usage.prompt_tokens ?? usage.input_tokens ?? 0) || 0;
-    const completion = Number(usage.completion_tokens ?? usage.output_tokens ?? 0) || 0;
-    const total = Number(usage.total_tokens ?? prompt + completion) || 0;
-    if (!prompt && !completion && !total) return undefined;
-    return { promptTokens: prompt, completionTokens: completion, totalTokens: total || prompt + completion };
+    if (usage && typeof usage === 'object') {
+        const prompt = Number(usage.prompt_tokens ?? usage.input_tokens ?? 0) || 0;
+        const completion = Number(usage.completion_tokens ?? usage.output_tokens ?? 0) || 0;
+        const total = Number(usage.total_tokens ?? prompt + completion) || 0;
+        if (!prompt && !completion && !total) return undefined;
+        return { promptTokens: prompt, completionTokens: completion, totalTokens: total || prompt + completion };
+    }
+    const meta = data && data.usageMetadata;
+    if (meta && typeof meta === 'object') {
+        const prompt = Number(meta.promptTokenCount ?? 0) || 0;
+        const completion = Number(meta.candidatesTokenCount ?? 0) || 0;
+        const total = Number(meta.totalTokenCount ?? prompt + completion) || 0;
+        if (!prompt && !completion && !total) return undefined;
+        return { promptTokens: prompt, completionTokens: completion, totalTokens: total || prompt + completion };
+    }
+    return undefined;
 }
 
 async function sendProviderRequest(request) {
@@ -365,6 +449,10 @@ async function sendProviderRequest(request) {
                 ]);
             reasoning = reasoningParts.join('\n');
         }
+    } else if (request.config.apiFormat === 'google') {
+        const parsed = parseGeminiResponseJs(data);
+        text = parsed.text;
+        reasoning = parsed.reasoning;
     } else {
         const content = data.choices?.[0]?.message?.content;
         text = Array.isArray(content)

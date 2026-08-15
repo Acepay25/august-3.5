@@ -18,17 +18,31 @@ export const mergeTokenUsage = (a: TokenUsage, b: TokenUsage): TokenUsage => ({
 
 export const extractTokenUsage = (data: unknown): TokenUsage | null => {
     if (!data || typeof data !== 'object') return null;
-    const usage = (data as { usage?: Record<string, unknown> }).usage;
-    if (!usage || typeof usage !== 'object') return null;
-    const prompt = Number(usage.prompt_tokens ?? usage.input_tokens ?? 0) || 0;
-    const completion = Number(usage.completion_tokens ?? usage.output_tokens ?? 0) || 0;
-    const total = Number(usage.total_tokens ?? prompt + completion) || 0;
-    if (prompt === 0 && completion === 0 && total === 0) return null;
-    return {
-        promptTokens: prompt,
-        completionTokens: completion,
-        totalTokens: total || prompt + completion,
-    };
+    const usage = (data as { usage?: Record<string, unknown>; usageMetadata?: Record<string, unknown> }).usage;
+    const meta = (data as { usageMetadata?: Record<string, unknown> }).usageMetadata;
+    if (usage && typeof usage === 'object') {
+        const prompt = Number(usage.prompt_tokens ?? usage.input_tokens ?? 0) || 0;
+        const completion = Number(usage.completion_tokens ?? usage.output_tokens ?? 0) || 0;
+        const total = Number(usage.total_tokens ?? prompt + completion) || 0;
+        if (prompt === 0 && completion === 0 && total === 0) return null;
+        return {
+            promptTokens: prompt,
+            completionTokens: completion,
+            totalTokens: total || prompt + completion,
+        };
+    }
+    if (meta && typeof meta === 'object') {
+        const prompt = Number(meta.promptTokenCount ?? 0) || 0;
+        const completion = Number(meta.candidatesTokenCount ?? 0) || 0;
+        const total = Number(meta.totalTokenCount ?? prompt + completion) || 0;
+        if (prompt === 0 && completion === 0 && total === 0) return null;
+        return {
+            promptTokens: prompt,
+            completionTokens: completion,
+            totalTokens: total || prompt + completion,
+        };
+    }
+    return null;
 };
 
 export const estimateCostUsd = (

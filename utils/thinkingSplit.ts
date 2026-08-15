@@ -219,6 +219,19 @@ export const splitThinkingFromOutput = (
         output = '';
     }
 
+    // Content often repeats the native CoT then the answer. Strip the prefix
+    // so Thinking owns the CoT and the reply is only the leftover.
+    if (streamed && output && output.startsWith(streamed)) {
+        thinking = streamed;
+        output = output.slice(streamed.length).trim();
+    } else if (streamed && output) {
+        const idx = output.indexOf(streamed);
+        if (idx >= 0 && idx < 80) {
+            thinking = streamed;
+            output = (output.slice(0, idx) + output.slice(idx + streamed.length)).trim();
+        }
+    }
+
     if (thinking && output && eq(thinking, output)) {
         if (looksLikeTradeOutput(output)) thinking = '';
         else output = '';

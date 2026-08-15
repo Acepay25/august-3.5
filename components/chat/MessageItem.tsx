@@ -191,7 +191,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
     );
     const debateTurns = message.debateTurns ?? message.postMortemDebateTurns ?? [];
     const floorProgress = debateFloorProgress(message);
-    const showFloor = Boolean(floorProgress) && (message.isDebating || !message.analysis);
+    const showFloor = Boolean(floorProgress);
 
     React.useEffect(() => {
         if (isEnsembleMessage) {
@@ -345,7 +345,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 <EnsembleProgressChat
                                     progress={floorProgress}
                                     modelIdToName={modelIdToName}
-                                    isLive={!!message.isDebating || !message.analysis}
+                                    isLive={!!message.isDebating}
                                     compact={!!message.isDebating}
                                     onRetryAnalyst={onReRunAnalysis ? () => onReRunAnalysis(message.id) : undefined}
                                     debateTurns={debateTurns}

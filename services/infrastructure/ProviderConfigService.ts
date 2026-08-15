@@ -3,9 +3,10 @@
  * Stores provider configs via PreferencesService (localStorage / Capacitor Preferences).
  */
 
-import { ProviderConfig, ApiFormat } from '../../types/provider';
+import { ProviderConfig, ApiFormat, parseApiFormat } from '../../types/provider';
 import { getPreferenceObject, setPreferenceObject } from './PreferencesService';
 import { assertValidProviderUrl } from '../../utils/providerUrlValidation';
+import { usesGoogleGeminiDiscovery, googleModelsUrl } from '../../utils/googleGeminiFormat';
 
 const STORAGE_KEY = 'provider_configs_v1';
 
@@ -79,9 +80,7 @@ export async function loadProviderConfigs(): Promise<ProviderConfig[]> {
 
     return Promise.all(saved.map(async (raw) => {
         const config = raw as Partial<ProviderConfig>;
-        const apiFormat: ApiFormat = config.apiFormat === 'messages' || config.apiFormat === 'responses'
-            ? config.apiFormat
-            : 'chat_completions';
+        const apiFormat: ApiFormat = parseApiFormat(config.apiFormat);
         const models = Array.isArray(config.models)
             ? config.models.filter((model): model is string => typeof model === 'string' && model.trim().length > 0)
             // Legacy configs predate the models array — keep the old
@@ -277,7 +276,7 @@ export function getReadyProviders(configs: ProviderConfig[]): ProviderConfig[] {
  *    with `Authorization: Bearer <key>` → { data: [{ id }] }
  *  - Anthropic (messages): GET {baseUrl}/models with `x-api-key` +
  *    `anthropic-version` headers → { data: [{ id }] }
- *  - Gemini (generativelanguage baseUrl): GET {baseUrl}/models?key=<key>
+ *  - Gemini / Google format: GET {baseUrl}/models?key=<key>
  *    → { models: [{ name: "models/..." }] } (the "models/" prefix is stripped)
  *
  * Returns the model ids, deduped and in the provider's order. Throws
@@ -363,9 +362,9 @@ async function fetchDiscoverPayload(config: {
 
     const base = assertValidProviderUrl(config.baseUrl);
     const key = (config.apiKey || '').trim();
-    const isGemini = /generativelanguage/i.test(base);
+    const isGemini = usesGoogleGeminiDiscovery(base, config.apiFormat);
     const isAnthropic = config.apiFormat === 'messages' && !isGemini;
-    const url = isGemini ? `${base}/models?key=${encodeURIComponent(key)}` : `${base}/models`;
+    const url = isGemini ? googleModelsUrl(base, key) : `${base}/models`;
     const headers: Record<string, string> = {};
     if (isAnthropic) {
         headers['x-api-key'] = key;

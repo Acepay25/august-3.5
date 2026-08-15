@@ -3,6 +3,13 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import dns from 'dns';
 import * as process from 'process';
+import {
+  chatMessagesToGemini,
+  googleGenerateUrl,
+  parseGeminiResponse,
+  usesGoogleGeminiDiscovery,
+  googleModelsUrl,
+} from './utils/googleGeminiFormat';
 
 function devProviderProxy() {
   return {
@@ -39,10 +46,10 @@ function devProviderProxy() {
           const baseUrl = parsed.toString().replace(/\/$/, '');
           const apiKey = String(config.apiKey || '').trim();
           if (request.discover) {
-            const isGemini = /generativelanguage/i.test(baseUrl);
+            const isGemini = usesGoogleGeminiDiscovery(baseUrl, config.apiFormat);
             const isAnthropic = config.apiFormat === 'messages' && !isGemini;
             const discoverUrl = isGemini
-              ? `${baseUrl}/models?key=${encodeURIComponent(apiKey)}`
+              ? googleModelsUrl(baseUrl, apiKey)
               : `${baseUrl}/models`;
             const discoverHeaders: Record<string, string> = {};
             if (isAnthropic) {
@@ -104,6 +111,15 @@ function devProviderProxy() {
               max_output_tokens: request.maxTokens ?? 4096,
               temperature: request.temperature ?? 0.7
             };
+          } else if (config.apiFormat === 'google') {
+            url = googleGenerateUrl(baseUrl, config.selectedModel, apiKey, false);
+            if (apiKey) headers['x-goog-api-key'] = apiKey;
+            body = chatMessagesToGemini(messages, {
+              maxTokens: request.maxTokens,
+              temperature: request.temperature,
+              jsonMode: request.jsonMode,
+              model: config.selectedModel,
+            }) as unknown as Record<string, unknown>;
           } else {
             throw new Error('Unknown provider API format.');
           }
@@ -190,6 +206,8 @@ function devProviderProxy() {
               reasoning = extractMessagesThinking(parsed.content);
             } else if (config.apiFormat === 'responses') {
               reasoning = extractResponsesReasoning(parsed.output);
+            } else if (config.apiFormat === 'google') {
+              reasoning = parseGeminiResponse(parsed).reasoning;
             } else {
               const msgReasoning = parsed.choices?.[0]?.message?.reasoning_content ?? parsed.choices?.[0]?.message?.reasoning;
               reasoning = Array.isArray(msgReasoning)

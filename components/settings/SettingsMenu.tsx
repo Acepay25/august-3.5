@@ -14,7 +14,7 @@ import SessionUsagePanel from './SessionUsagePanel';
 import { BackupManager } from './BackupManager';
 import { AlertManager } from './AlertManager';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
-import { ActivityIcon, AISettingsIcon, ChevronLeftIcon, CloseIcon, HistoryIcon, SettingsIcon, SwitchUserIcon, CodeIcon } from '../shared/Icons';
+import { ActivityIcon, AISettingsIcon, ChevronLeftIcon, HistoryIcon, SettingsIcon, SwitchUserIcon, CodeIcon } from '../shared/Icons';
 import PromptManager from './PromptManager';
 import StrategiesManager from './StrategiesManager';
 import MemoryFilesManager from './MemoryFilesManager';
@@ -353,20 +353,13 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                         
                         <div className="w-full md:w-60 max-h-[32vh] overflow-y-auto md:max-h-none md:overflow-y-auto border-b md:border-b-0 md:border-r border-white/10 bg-zinc-950 px-3 py-5 space-y-1 shrink-0 flex flex-col justify-between custom-scrollbar">
                             <div className="space-y-1">
-                                <div className="flex items-center justify-between px-2 mb-5">
+                                <div className="px-2 mb-5">
                                     <button
                                         type="button"
                                         onClick={requestClose}
                                         className="flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-100 transition-colors"
                                     >
                                         <ChevronLeftIcon className="w-4 h-4" /> Back to workspace
-                                    </button>
-                                    <button
-                                        onClick={requestClose}
-                                        className="p-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-zinc-900"
-                                        aria-label="Close settings"
-                                    >
-                                        <CloseIcon />
                                     </button>
                                 </div>
                                 <h2 id="settings-title" className="sr-only">Settings</h2>
@@ -511,7 +504,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         <div className="status-surface rounded-2xl border border-zinc-700/60 bg-zinc-900 p-4">
                                             <h3 className="text-sm font-bold text-zinc-100">Connect an AI service to get started</h3>
                                             <p className="mt-1 text-xs leading-relaxed text-zinc-400">
-                                                Choose a provider below, paste your key, select a model, then use Test before running your first analysis.
+                                                Add a provider, paste its key, pick a model, then use Test before running your first analysis.
                                             </p>
                                         </div>
                                     )}

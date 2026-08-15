@@ -59,9 +59,25 @@ describe('EnsembleProgressChat', () => {
             makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'complete', reasoning: 'Strong support at 95k' }),
         ]);
         render(<EnsembleProgressChat progress={progress} />);
-        expect(screen.getAllByText('Analyst A').length).toBeGreaterThan(0);
-        // The card should be present - reasoning may or may not be visible depending on expand state
-        // Just verify the card renders without crashing
+        expect(screen.getByText('Thinking')).toBeDefined();
+        expect(screen.getByText('Strong support at 95k').closest('details')).toBeDefined();
+        expect(screen.getByText('Bullish outlook').closest('details')).toBeNull();
+    });
+
+    it('shows live CoT in Thinking before any answer exists', () => {
+        const progress = makeProgress([
+            makeAnalyst({
+                key: 'a1',
+                displayName: 'Analyst A',
+                status: 'analyzing',
+                finalOutput: '',
+                reasoning: 'Still weighing the sweep.',
+            }),
+        ]);
+        render(<EnsembleProgressChat progress={progress} isLive />);
+        expect(screen.getByText('Thinking')).toBeDefined();
+        expect(screen.getByText('Still weighing the sweep.').closest('details')).toBeDefined();
+        expect(screen.getByText('Still weighing the sweep.').closest('.mx-2')).toBeNull();
     });
 
     it('displays a readable model name instead of the raw id', () => {
@@ -102,21 +118,21 @@ describe('EnsembleProgressChat', () => {
             makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'complete', reasoning: 'Chain of thought trace', finalOutput: 'Bullish call' }),
         ]);
         render(<EnsembleProgressChat progress={progress} />);
+        expect(screen.getByText('Final output')).toBeDefined();
         expect(screen.getByText('Bullish call')).toBeDefined();
         expect(screen.getByText('Chain of thought trace').closest('details')?.open).toBe(false);
         fireEvent.click(screen.getByText(/Thinking/));
         expect(screen.getByText('Chain of thought trace').closest('details')?.open).toBe(true);
     });
 
-    it('keeps the thinking trace behind a toggle while an analyst is streaming', () => {
+    it('opens live Thinking while an analyst is streaming', () => {
         const progress = makeProgress([
             makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'analyzing', reasoning: 'Live trace in progress' }),
         ]);
         render(<EnsembleProgressChat progress={progress} isLive={true} />);
         expect(screen.getByText('Thinking')).toBeDefined();
-        expect(screen.getByText('Live trace in progress').closest('details')?.open).toBe(false);
-        fireEvent.click(screen.getByText(/Thinking/));
         expect(screen.getByText('Live trace in progress').closest('details')?.open).toBe(true);
+        expect(screen.getByText('Bullish outlook')).toBeDefined();
     });
 
     it('renders a timeline for each analyst plus the moderator', () => {

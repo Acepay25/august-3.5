@@ -58,6 +58,12 @@ describe('ProviderConfigService', () => {
       store = saved;
       expect(await loadProviderConfigs()).toEqual(saved);
     });
+
+    it('keeps the Google Gemini generateContent format', async () => {
+      store = [makeConfig({ id: 'gemini', name: 'Gemini', apiFormat: 'google', baseUrl: 'https://generativelanguage.googleapis.com/v1beta' })];
+      const loaded = await loadProviderConfigs();
+      expect(loaded[0].apiFormat).toBe('google');
+    });
   });
 
   describe('addCustomProvider / removeCustomProvider', () => {
@@ -159,6 +165,19 @@ describe('ProviderConfigService', () => {
       const [url, init] = fetchMock.mock.calls[0];
       expect(url).toBe('https://opencode.ai/zen/v1/models');
       expect((init as RequestInit).headers).toMatchObject({ Authorization: 'Bearer sk-test' });
+    });
+
+    it('uses a key query param when the format is google even without a Gemini host', async () => {
+      const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        okResponse({ models: [{ name: 'models/gemini-2.5-flash' }] })
+      );
+      const models = await discoverProviderModels({
+        baseUrl: 'https://ai.example.com/v1beta',
+        apiKey: 'AIza-test',
+        apiFormat: 'google',
+      });
+      expect(models).toEqual(['gemini-2.5-flash']);
+      expect(fetchMock.mock.calls[0][0]).toBe('https://ai.example.com/v1beta/models?key=AIza-test');
     });
 
     it('parses the Gemini { models: [{ name }] } shape with a key query param', async () => {

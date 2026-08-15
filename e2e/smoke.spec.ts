@@ -128,7 +128,7 @@ test('journal and live market are reachable as labelled dialogs', async ({ page 
     await expect(settings).toBeVisible({ timeout: 10_000 });
     await settings.getByRole('button', { name: 'Journal', exact: true }).click();
     await expect(settings.getByRole('heading', { name: 'Journal' })).toBeVisible({ timeout: 10_000 });
-    await page.getByRole('button', { name: 'Close settings' }).click();
+    await page.getByRole('button', { name: /Back to workspace/i }).click();
 
     await page.getByRole('button', { name: 'Live Market', exact: true }).first().click();
     await expect(page.getByRole('dialog', { name: 'Live Market' })).toBeVisible({ timeout: 10_000 });

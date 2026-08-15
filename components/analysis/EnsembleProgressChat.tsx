@@ -78,21 +78,32 @@ const FadeStream: React.FC<{ text: string; live?: boolean; className?: string }>
     </div>
 );
 
-const ReplyBlock: React.FC<{ block: SeatBlock }> = ({ block }) => (
-    <div className="mx-2 rounded-lg border border-white/10 bg-zinc-950/50 px-3 py-2">
-        {block.replyTo && (
-            <p className="mb-1 text-[10px] font-medium uppercase tracking-widest text-zinc-500">
-                reply to {block.replyTo}
-            </p>
-        )}
-        <FadeStream text={block.text} live={block.live} className="text-sm leading-6 text-zinc-200" />
-    </div>
-);
+const ReplyBlock: React.FC<{ block: SeatBlock }> = ({ block }) => {
+    if (!block.text.trim()) {
+        if (!block.live) return null;
+        return (
+            <p className="px-3 py-1 text-xs italic text-zinc-600">Writing</p>
+        );
+    }
+    return (
+        <div className="mx-2 rounded-lg border border-white/10 bg-zinc-950/50 px-3 py-2">
+            {block.replyTo && (
+                <p className="mb-1 text-[10px] font-medium uppercase tracking-widest text-zinc-500">
+                    reply to {block.replyTo}
+                </p>
+            )}
+            {!block.live && (
+                <p className="mb-1 text-[11px] text-zinc-500">Final output</p>
+            )}
+            <FadeStream text={block.text} live={block.live} className="text-sm leading-6 text-zinc-200" />
+        </div>
+    );
+};
 
 const ThinkingDetails: React.FC<{ text: string; live?: boolean }> = ({ text, live }) => {
     if (!text) return null;
     return (
-        <details className="border-b border-white/5 px-3 py-2">
+        <details className="border-b border-white/5 px-3 py-2" open={Boolean(live)}>
             <summary className="cursor-pointer list-none text-[11px] uppercase tracking-widest text-zinc-500">
                 Thinking
             </summary>
@@ -212,7 +223,7 @@ const SeatChat: React.FC<{
                                         {currentRound.label}{currentRound.live ? ' · live' : ''}
                                     </p>
                                 )}
-                                <ThinkingDetails text={currentRound.thinking} live={currentRound.live} />
+                                <ThinkingDetails text={currentRound.thinking} live={currentRound.live || live} />
                                 <div className="flex flex-col gap-2">
                                     {currentRound.blocks.map(block => <ReplyBlock key={block.id} block={block} />)}
                                 </div>
@@ -231,6 +242,9 @@ const SeatChat: React.FC<{
                             </details>
                         ))}
                         {error && <p className="px-3 py-2 text-[11px] text-zinc-500">{error}</p>}
+                        {blocks.every(b => !b.text.trim()) && thinking && live && (
+                            <p className="px-3 py-1 text-xs italic text-zinc-600">Writing</p>
+                        )}
                         {blocks.length === 0 && !thinking && !error && (
                             <p className="px-3 py-2 text-xs italic text-zinc-600">Waiting for this seat.</p>
                         )}
@@ -275,8 +289,11 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
             const split = splitThinkingFromOutput(turn.reasoning || '', turn.text || '');
             if (split.thinking) leaked.push(split.thinking);
             const parts = splitAddresses(split.output, analystNames);
-            if (!split.output) return [];
+            if (!split.output && !split.thinking) return [];
             const round = turn.round && turn.round > 0 ? turn.round : index + 1;
+            if (!split.output) {
+                return [{ id: `mod-${index}`, replyTo: undefined, text: '', live, round, thinking: split.thinking }];
+            }
             if (parts.length === 0) {
                 return [{ id: `mod-${index}`, replyTo: undefined, text: split.output, live, round, thinking: split.thinking }];
             }
@@ -351,12 +368,18 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
                         const speakerTurns = debateTurns.filter(t => t.speaker !== 'Moderator' && matchesSpeaker(t.speaker, analyst));
                         const lastTurn = speakerTurns[speakerTurns.length - 1];
                         const openingRaw = analyst.finalOutput && analyst.finalOutput !== lastTurn?.text ? analyst.finalOutput : '';
-                        const openingSplit = splitThinkingFromOutput(
-                            [analyst.reasoning, analyst.thoughtProcess].filter(Boolean).join('\n\n'),
-                            openingRaw,
-                        );
+                        const streamedCot = [
+                            analyst.reasoning,
+                            analyst.thoughtProcess,
+                            reasoningProcesses[analyst.key],
+                            reasoningProcesses[analyst.displayName],
+                            reasoningProcesses[analyst.providerName],
+                        ].filter(Boolean).join('\n\n');
+                        const openingSplit = splitThinkingFromOutput(streamedCot, openingRaw);
                         const turnSplits = speakerTurns.map((turn, index) => {
-                            const split = splitThinkingFromOutput(turn.reasoning || '', turn.text || '');
+                            const streamed = turn.reasoning
+                                || (index === 0 ? streamedCot : '');
+                            const split = splitThinkingFromOutput(streamed, turn.text || '');
                             return {
                                 id: `${analyst.key}-${index}`,
                                 replyTo: turn.round && turn.round > 1 ? 'Moderator' : undefined,
@@ -366,11 +389,18 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
                                 round: turn.round && turn.round > 0 ? turn.round : index + 1,
                             };
                         });
-                        const thinking = '';
                         const blocks: SeatBlock[] = [
-                            ...(openingSplit.output ? [{ id: `${analyst.key}-open`, text: openingSplit.output, round: 1, thinking: openingSplit.thinking }] : []),
+                            ...(openingSplit.output ? [{
+                                id: `${analyst.key}-open`,
+                                text: openingSplit.output,
+                                round: 1,
+                                thinking: openingSplit.thinking,
+                                live: live && speakerTurns.length === 0,
+                            }] : []),
                             ...turnSplits,
                         ];
+                        const onBlocks = blocks.map(b => b.thinking).filter(Boolean).join('\n\n');
+                        const thinking = onBlocks ? '' : (openingSplit.thinking || streamedCot);
                         const title = formatSeatLabel(analyst.displayName);
                         const prettyModel = formatModelDisplayName(analyst.modelId || analyst.modelName);
                         const ledger = runStats?.analysts?.find(a =>

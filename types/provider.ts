@@ -8,8 +8,9 @@
  * - chat_completions: OpenAI-compatible /v1/chat/completions (most providers)
  * - messages: Anthropic-style /v1/messages
  * - responses: OpenAI Responses API /responses
+ * - google: Gemini generateContent (generativelanguage.googleapis.com)
  */
-export type ApiFormat = 'chat_completions' | 'messages' | 'responses';
+export type ApiFormat = 'chat_completions' | 'messages' | 'responses' | 'google';
 
 /**
  * Configuration for a single AI provider.
@@ -42,4 +43,12 @@ export const API_FORMAT_LABELS: Record<ApiFormat, string> = {
   chat_completions: 'Chat completions (/chat/completions)',
   messages: 'Messages (/v1/messages)',
   responses: 'Responses (/responses)',
+  google: 'Google Gemini (generateContent)',
+};
+
+export const parseApiFormat = (value: unknown): ApiFormat => {
+  if (value === 'messages' || value === 'responses' || value === 'google' || value === 'chat_completions') {
+    return value;
+  }
+  return 'chat_completions';
 };

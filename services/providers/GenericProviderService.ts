@@ -1,10 +1,11 @@
 /**
- * GenericProviderService — Universal AI provider client supporting 3 API formats.
+ * GenericProviderService — Universal AI provider client supporting 4 API formats.
  *
  * Formats:
  * - chat_completions: OpenAI-compatible /chat/completions (most providers)
  * - messages: Anthropic-style /v1/messages
  * - responses: OpenAI Responses API /responses
+ * - google: Gemini generateContent
  *
  * Capabilities:
  * - Non-streaming chat (`sendChatRequest`)
@@ -21,6 +22,7 @@ import { assertValidProviderUrl } from '../../utils/providerUrlValidation';
 
 import { recordProviderSuccess, recordProviderError } from '../infrastructure/ProviderHealthService';
 import { emitTokenUsage, extractTokenUsage, TokenUsage } from '../../utils/tokenUsage';
+import { chatMessagesToGemini, googleGenerateUrl, parseGeminiResponse } from '../../utils/googleGeminiFormat';
 interface ElectronProviderBridge {
     isElectron?: boolean;
         providerChat?: (request: {
@@ -483,6 +485,47 @@ async function responsesCall(
     return JSON.stringify(data);
 }
 
+async function googleCall(
+    config: ProviderConfig,
+    messages: ChatMessage[],
+    options?: ChatRequestOptions
+): Promise<string> {
+    const base = normalizeBaseUrl(config.baseUrl, config.apiFormat);
+    const key = (config.apiKey || '').trim();
+    const url = googleGenerateUrl(base, config.selectedModel, key, false);
+    const body = chatMessagesToGemini(messages, {
+        maxTokens: options?.maxTokens,
+        temperature: options?.temperature,
+        jsonMode: options?.jsonMode,
+        model: config.selectedModel,
+    });
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': key,
+        },
+        body: JSON.stringify(body),
+        signal: options?.signal,
+    });
+    if (!response.ok) {
+        const status = response.status;
+        const friendlyMessage =
+            status === 401 || status === 403 ? 'Invalid API key. Check your provider settings.' :
+            status === 429 ? 'Rate limit reached. Please wait and try again.' :
+            status >= 500 ? `${config.name || 'Provider'} server error. Try again later.` :
+            `${config.name || 'Provider'} request failed (${status}).`;
+        const err = new Error(friendlyMessage);
+        (err as { status?: number }).status = status;
+        throw err;
+    }
+    const data = await response.json();
+    const parsed = parseGeminiResponse(data);
+    if (parsed.reasoning) options?.onReasoning?.(parsed.reasoning);
+    reportUsage(config, data, options);
+    return parsed.text;
+}
+
 // ─── Universal Dispatchers ──────────────────────────────────────────────────
 
 function assertHasKey(config: ProviderConfig): void {
@@ -661,6 +704,8 @@ export async function sendChatRequest(
                                 reasoning = extractMessagesThinking(data.content);
                             } else if (effectiveConfig.apiFormat === 'responses') {
                                 reasoning = extractResponsesReasoning(data.output);
+                            } else if (effectiveConfig.apiFormat === 'google') {
+                                reasoning = parseGeminiResponse(data).reasoning;
                             } else {
                                 reasoning = extractReasoning(data.choices?.[0]?.message?.reasoning_content) || extractReasoning(data.choices?.[0]?.message?.reasoning);
                             }
@@ -670,6 +715,8 @@ export async function sendChatRequest(
                             text = Array.isArray(data.content) ? data.content.filter((block: any) => block?.type === 'text').map((block: any) => block.text).join('\n') : data.text || '';
                         } else if (effectiveConfig.apiFormat === 'responses') {
                             text = data.output_text || '';
+                        } else if (effectiveConfig.apiFormat === 'google') {
+                            text = parseGeminiResponse(data).text;
                         } else {
                             const message = data.choices?.[0]?.message || {};
                             const content = Array.isArray(message.content)
@@ -691,6 +738,8 @@ export async function sendChatRequest(
                         return messagesCall(effectiveConfig, messages, { ...options, signal: withTimeoutSignal(options?.signal) });
                     case 'responses':
                         return responsesCall(effectiveConfig, messages, { ...options, signal: withTimeoutSignal(options?.signal) });
+                    case 'google':
+                        return googleCall(effectiveConfig, messages, { ...options, signal: withTimeoutSignal(options?.signal) });
                     default:
                         throw new Error(`Unknown API format: ${effectiveConfig.apiFormat}`);
                 }
