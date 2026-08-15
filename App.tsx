@@ -549,19 +549,30 @@ const App: React.FC = () => {
     // Casual-chat model (used when ensemble is off): app-wide preference,
     // persisted in Preferences. Empty until loaded or chosen — the pipeline
     // falls back to the first ready provider's model.
-    const [selectedChatModel, setSelectedChatModel] = useState('');
+    const [selectedChatModel, setSelectedChatModel] = useState(() => {
+        try { return localStorage.getItem(PREF_KEYS.CASUAL_CHAT_MODEL) || ''; } catch { return ''; }
+    });
+    const chatModelReadyRef = useRef(false);
     useEffect(() => {
         let cancelled = false;
         getPreference(PREF_KEYS.CASUAL_CHAT_MODEL).then(v => {
-            if (!cancelled && v) setSelectedChatModel(v);
+            if (cancelled) return;
+            if (v) {
+                try { localStorage.setItem(PREF_KEYS.CASUAL_CHAT_MODEL, v); } catch { /* ignore */ }
+                setSelectedChatModel(v);
+            }
+            chatModelReadyRef.current = true;
         });
         return () => { cancelled = true; };
     }, []);
     useEffect(() => {
+        if (!chatModelReadyRef.current && !selectedChatModel) return;
         if (selectedChatModel) {
             setPreference(PREF_KEYS.CASUAL_CHAT_MODEL, selectedChatModel);
-        } else {
+            try { localStorage.setItem(PREF_KEYS.CASUAL_CHAT_MODEL, selectedChatModel); } catch { /* ignore */ }
+        } else if (chatModelReadyRef.current) {
             removePreference(PREF_KEYS.CASUAL_CHAT_MODEL);
+            try { localStorage.removeItem(PREF_KEYS.CASUAL_CHAT_MODEL); } catch { /* ignore */ }
         }
     }, [selectedChatModel]);
 
@@ -1692,6 +1703,7 @@ const App: React.FC = () => {
     // exists, so the lens dropdowns never render a blank value for a dead
     // assignment (the pipeline used to run a model the UI could not show).
     useEffect(() => {
+        if (!providerConfigsLoaded || providerConfigs.length === 0) return;
         if (!lensConfig || !lensConfig.assignments) return;
         const providersById = new Map(providerConfigs.map(c => [c.id, c]));
         let changed = false;
@@ -1707,18 +1719,20 @@ const App: React.FC = () => {
         if (changed) {
             handleSetLensConfig({ ...lensConfig, assignments });
         }
-    }, [providerConfigs, lensConfig, handleSetLensConfig]);
+    }, [providerConfigsLoaded, providerConfigs, lensConfig, handleSetLensConfig]);
 
     // Reconcile stale ordinary ensemble selections: drop entries whose
-    // provider was removed or whose model no longer exists on that provider.
+    // provider was removed. Wait until configs are loaded so an empty list
+    // cannot wipe the last pick on refresh.
     useEffect(() => {
+        if (!providerConfigsLoaded || providerConfigs.length === 0) return;
         if (!ensembleModelSelection || ensembleModelSelection.length === 0) return;
         const providersById = new Map(providerConfigs.map(c => [c.id, c]));
         const cleaned = retainEnsembleSelection(ensembleModelSelection, providersById.keys());
         if (cleaned.length !== ensembleModelSelection.length) {
             handleSetEnsembleModelSelection(cleaned);
         }
-    }, [providerConfigs, ensembleModelSelection, handleSetEnsembleModelSelection]);
+    }, [providerConfigsLoaded, providerConfigs, ensembleModelSelection, handleSetEnsembleModelSelection]);
 
     // Quota flagging UI never materialized (the old quotaExceededModels state
     // was set but never read by any component) — keep the callback for the

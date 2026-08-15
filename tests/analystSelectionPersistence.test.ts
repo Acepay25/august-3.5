@@ -70,6 +70,11 @@ describe('Analyst model selection persistence (save → load round-trip)', () =>
         expect(JSON.parse(stored!).assignments).toEqual(config.assignments);
     });
 
+    it('does not wipe picks when the provider list has not loaded yet', () => {
+        const selection = [{ providerId: 'kilocode', model: 'deepseek-v4-flash' }];
+        expect(retainEnsembleSelection(selection, [])).toEqual(selection);
+    });
+
     it('keeps a saved model even when it is not in the provider catalog yet', () => {
         const kept = retainEnsembleSelection(
             [
