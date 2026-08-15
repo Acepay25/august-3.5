@@ -5,8 +5,8 @@ import ConsensusPanel from './ConsensusPanel';
 import { explainSignalConfidence, extractSignalStrategyText, formatInvalidationLine, isNoTradeSignal, explainNoTrade, resolveLevelHitOdds, signalDirectionLabel, leveragedMovePercent } from '../../utils/analysisUtils';
 import { getCalibrationDrift } from '../../services/validation/ConfidenceCalibrationService';
 import { citeLevel } from '../../utils/levelEvidence';
-import { computeContractSize } from '../../utils/ticketSize';
-import { getHarnessSettings } from '../../utils/harnessSettings';
+import { computeContractSize, computeLiquidationBuffer } from '../../utils/ticketSize';
+import { getHarnessSettings, saveHarnessSettings } from '../../utils/harnessSettings';
 import { ticketExpiryLine } from '../../utils/paperPnl';
 import { buildTicketSheet } from '../../utils/analysisReport';
 
@@ -187,9 +187,15 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
         return bits.join(' · ');
     }, [analysis]);
 
+    const [equityUsd, setEquityUsd] = useState(() => getHarnessSettings().equityUsd);
+    const [riskPercent, setRiskPercent] = useState(() => getHarnessSettings().riskPercent);
     const size = useMemo(
-        () => computeContractSize(analysis, getHarnessSettings().equityUsd, leverage || 1),
-        [analysis, leverage],
+        () => computeContractSize(analysis, equityUsd, leverage || 1, riskPercent),
+        [analysis, equityUsd, leverage, riskPercent],
+    );
+    const liq = useMemo(
+        () => computeLiquidationBuffer(analysis.entryPoints?.[0]?.price, analysis.stopLoss, leverage || 1),
+        [analysis.entryPoints, analysis.stopLoss, leverage],
     );
     const [nowMs, setNowMs] = useState(() => Date.now());
     const [followUp, setFollowUp] = useState('');
@@ -299,6 +305,46 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
                     {size.notionalUsd > 0 ? ` · $${Math.round(size.notionalUsd).toLocaleString()} notional` : ''}
                     {` · ${lev}x`}
                 </p>
+                {size.fraction > 0 && (
+                    <div className="grid grid-cols-2 gap-2">
+                        <label className="block text-[11px] text-zinc-500">
+                            Balance $
+                            <input
+                                type="number"
+                                min={100}
+                                step={100}
+                                value={equityUsd}
+                                aria-label="Account balance"
+                                onChange={e => {
+                                    const next = Number(e.target.value) || 10_000;
+                                    setEquityUsd(next);
+                                    saveHarnessSettings({ equityUsd: next });
+                                }}
+                                className="mt-1 w-full rounded-lg border border-white/10 bg-zinc-900 px-2 py-1.5 text-[13px] text-zinc-200"
+                            />
+                        </label>
+                        <label className="block text-[11px] text-zinc-500">
+                            Risk %
+                            <input
+                                type="number"
+                                min={0.1}
+                                max={10}
+                                step={0.1}
+                                value={riskPercent}
+                                aria-label="Risk percent"
+                                onChange={e => {
+                                    const next = Math.min(10, Math.max(0.1, Number(e.target.value) || 1));
+                                    setRiskPercent(next);
+                                    saveHarnessSettings({ riskPercent: next });
+                                }}
+                                className="mt-1 w-full rounded-lg border border-white/10 bg-zinc-900 px-2 py-1.5 text-[13px] text-zinc-200"
+                            />
+                        </label>
+                    </div>
+                )}
+                {size.fraction > 0 && liq && (
+                    <p className="text-xs text-zinc-600">{liq.line}</p>
+                )}
 
                 {noTradeWhy && (
                     <p className="text-sm leading-6 text-zinc-400">{noTradeWhy.replace(/^#+\s*/gm, '').slice(0, 220)}</p>

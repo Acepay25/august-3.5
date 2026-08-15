@@ -55,14 +55,14 @@ export const PROMPT_REGISTRY: PromptRegistryEntry[] = [
     {
         id: 'analysis.master',
         name: 'Master Analysis Prompt',
-        description: 'Standard-mode system prompt: the full multi-section analysis contract (structure, families, probability, trade setup) every analyst sees.',
+        description: 'Standard-mode system prompt: desk-trader scan (structure, liquidity, volume, session, playbooks if they fit). Prose output follows the findings — no section template.',
         usage: ['Standard-mode analysis (analyzeTradingView)', 'Accuracy-mode base (combined with the accuracy protocol)'],
         fallback: MASTER_ANALYSIS_PROMPT,
     },
     {
         id: 'analysis.accuracy',
-        name: 'Accuracy Protocol (11-Layer)',
-        description: 'High-precision accuracy-mode header: the mandatory 11-layer pipeline and output contract.',
+        name: 'Accuracy Protocol',
+        description: 'Accuracy-mode checklist: run extra verification in Thinking, then the same public reply contract as master analysis.',
         usage: ['Accuracy-mode analysis system prompt'],
         fallback: ACCURACY_MODE_PROMPT,
     },
@@ -76,14 +76,14 @@ export const PROMPT_REGISTRY: PromptRegistryEntry[] = [
     {
         id: 'analysis.lens',
         name: 'Analyst Lens Base Prompt',
-        description: 'Base system prompt when specialized analyst roles (Macro / Technical / Risk) are enabled.',
+        description: 'Base system prompt when specialized analyst roles (Macro / Technical / Risk) are enabled. Domain stays strict; the write-up is prose, not a form.',
         usage: ['Lens-mode analysis system prompt'],
         fallback: LENS_MODE_BASE_PROMPT,
     },
     {
         id: 'analysis.compact',
         name: 'Compact Analysis Prompt',
-        description: 'Trimmed analysis contract for small-context models (low context window).',
+        description: 'Trimmed desk-trader brief for small-context models (low context window).',
         usage: ['Small-context-model analysis'],
         fallback: COMPACT_ANALYSIS_PROMPT,
     },
@@ -104,7 +104,7 @@ export const PROMPT_REGISTRY: PromptRegistryEntry[] = [
     {
         id: 'analysis.memory_enforcement',
         name: 'Pattern Memory Enforcement',
-        description: 'Instructs the model to treat the provided pattern memory / recent insights as the source of truth.',
+        description: 'Instructs the model to use retrieved memory only when it matches this setup — never invent citations.',
         usage: ['Standard-mode analysis system prompt'],
         fallback: AI_PROVIDER_MEMORY_ENFORCEMENT_PROMPT,
     },
@@ -132,7 +132,7 @@ export const PROMPT_REGISTRY: PromptRegistryEntry[] = [
     {
         id: 'debate.moderator_authority',
         name: 'Moderator Final Authority',
-        description: 'Ends the debate with the moderator\'s binding verdict and JSON plan contract.',
+        description: 'Ends the debate with the moderator\'s binding verdict and labeled markdown plan.',
         usage: ['Simulated debates', 'Post-mortem debates'],
         fallback: MODERATOR_FINAL_AUTHORITY_PROTOCOL,
     },
@@ -146,7 +146,7 @@ export const PROMPT_REGISTRY: PromptRegistryEntry[] = [
     {
         id: 'debate.probability_estimation',
         name: 'Probability Estimation Contract',
-        description: 'Level-probability JSON contract for the live-debate moderator verdict.',
+        description: 'Level-probability labeled lines for the live-debate moderator verdict.',
         usage: ['Live real-debate moderator'],
         fallback: PROBABILITY_ESTIMATION_PROMPT,
     },

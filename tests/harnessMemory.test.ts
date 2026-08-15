@@ -165,4 +165,14 @@ tradeIds: a,b,c,d,e,f,g
     expect(hit?.kind).toBe('avoid');
     expect(hit?.losses).toBe(1);
   });
+
+  it('does not ingest an IF/THEN from an execution-error post-mortem', async () => {
+    const trade = makeTrade({
+      id: 'exec-1',
+      rootCauseClass: 'EXECUTION_ERROR',
+      postMortem: 'EXECUTION_ERROR\nI chased.\nIF 15m close reclaims VWAP THEN wait for a retest before shorting.',
+    });
+    await ingestIfThenFromTrade(trade, 'test-user');
+    expect(getMemoryFiles().files.map(f => parseSkillMarkdown(f.content)).some(m => m?.ifCondition?.includes('VWAP'))).toBe(false);
+  });
 });

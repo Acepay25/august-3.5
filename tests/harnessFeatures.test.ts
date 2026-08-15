@@ -7,7 +7,7 @@ import { citeLevel } from '../utils/levelEvidence';
 import { buildRebuttalDiffPacket } from '../utils/debateDiff';
 import { summarizePromptVersions } from '../utils/promptVersionStats';
 import { parseKeptAnalyst } from '../utils/keptAnalyst';
-import { computeTicketSize } from '../utils/ticketSize';
+import { computeTicketSize, computeContractSize, computeLiquidationBuffer } from '../utils/ticketSize';
 import { enforceUngroundedLevels } from '../utils/ungroundedGate';
 import { describeOpenBookRisk, paperPnlR } from '../utils/paperPnl';
 import { enforceCitedVerdict } from '../services/providers/ensembleService';
@@ -146,6 +146,28 @@ describe('ticket size', () => {
             confidence: 'Medium', direction: 'Long',
             gateResult: { confidenceCap: 0.55 },
         } as any).label).toBe('half');
+    });
+
+    it('sizes qty from entry to SL at the chosen risk percent', () => {
+        const sized = computeContractSize({
+            confidence: 'High',
+            direction: 'Long',
+            coinName: 'BTCUSDT',
+            entryPoints: [{ price: '100' }],
+            stopLoss: '90',
+        } as any, 10_000, 10, 1);
+        expect(sized.riskUsd).toBe(100);
+        expect(sized.qty).toBeCloseTo(10, 5);
+        expect(sized.notionalUsd).toBeCloseTo(1000, 5);
+        expect(sized.line).toMatch(/\$100 risk/);
+    });
+
+    it('flags a stop past isolated liquidation', () => {
+        const ok = computeLiquidationBuffer('100', '99', 10);
+        expect(ok?.bufferPct).toBeCloseTo(9, 5);
+        expect(ok?.line).toMatch(/Liq buffer/);
+        const past = computeLiquidationBuffer('100', '80', 10);
+        expect(past?.line).toMatch(/past isolated liquidation/);
     });
 });
 

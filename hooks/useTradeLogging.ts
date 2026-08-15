@@ -16,6 +16,7 @@ import { ConfidenceLevel } from '../services/validation/ConfidenceCalibrationSer
 import { syncClosedTradeToNotebook } from '../services/learning/SkillMemoryService';
 import { appendWatchEpisode } from '../utils/watchList';
 import { parseIfThenClauses } from '../utils/ifThenSkill';
+import { tradeAdmitsTechnicalStrategyRule } from '../utils/rootCause';
 
 // Maximum number of trade summaries (Recent Insights) to keep - enforces FIFO when limit reached
 export const MAX_TRADE_SUMMARIES = 100;
@@ -140,7 +141,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         });
 
         // Auto-create learning rule from LOSS
-        if (trade.outcome === TradeOutcome.LOSS && analysis.coinName) {
+        if (trade.outcome === TradeOutcome.LOSS && analysis.coinName && (trade.postMortem || '').trim() && tradeAdmitsTechnicalStrategyRule(trade)) {
             try {
                 const rulesStorage = loadLearningRules();
                 const clause = parseIfThenClauses(trade.postMortem || '')[0];

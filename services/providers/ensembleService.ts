@@ -1,7 +1,8 @@
 
 import { TradeAnalysis, Message, TradeOutcome, AccuracySubMode, LoggedTrade, AnalystLensConfig, AnalystRole, AnalystConsensus } from '../../types';
 import { ProviderConfig } from '../../types/provider';
-import { streamChatRequest, ChatMessage } from './GenericProviderService';
+import { ChatMessage } from './GenericProviderService';
+import { streamChatWithDeskTools, resolveDefaultSymbol } from '../analysis/DeskToolsService';
 import { TASK_BUDGETS } from './taskBudgets';
 import { getPrompt } from '../infrastructure/PromptOverrideService';
 
@@ -261,6 +262,7 @@ CRITICAL RULES:
 3. If prices are unclear, ESTIMATE based on the discussion context
 4. The FINAL TRADE PLAN must contain real price values, not placeholders
 5. Every trade setup needs: direction, entry price, stop loss price, take profit price(s)
+6. Desk tools are available on this turn — call search / derivatives / session tools when a live lookup would improve the verdict
 
 You must complete the ENTIRE response including the **FINAL TRADE PLAN** markdown block at the end.`;
 
@@ -272,7 +274,14 @@ const fillPromptPlaceholders = (template: string, vars: Record<string, string>):
  * `config` is the moderator provider's ProviderConfig; `model` overrides config.selectedModel
  * (kept for backward-compat with the per-conversation moderator model selection).
  */
-const getModeratorAnalysisStream = async function* (config: ProviderConfig, model: string, prompt: string, signal?: AbortSignal, onReasoning?: (reasoning: string) => void): AsyncGenerator<string> {
+const getModeratorAnalysisStream = async function* (
+    config: ProviderConfig,
+    model: string,
+    prompt: string,
+    signal?: AbortSignal,
+    onReasoning?: (reasoning: string) => void,
+    defaultSymbol?: string | null,
+): AsyncGenerator<string> {
     const effectiveConfig: ProviderConfig = { ...config, selectedModel: model || config.selectedModel };
     const messages: ChatMessage[] = [
         { role: 'system', content: MODERATOR_SYSTEM_MESSAGE },
@@ -285,7 +294,14 @@ const getModeratorAnalysisStream = async function* (config: ProviderConfig, mode
         // the context grew (notebook files, similar setups, regime weighting)
         // — 8192 truncates the plan at the end when the moderator writes long
         // rebuttal prose.
-        for await (const chunk of streamChatRequest(effectiveConfig, messages, { temperature: 0.1, maxTokens: 12288, signal, onReasoning })) {
+        for await (const chunk of streamChatWithDeskTools(effectiveConfig, messages, {
+            temperature: 0.1,
+            maxTokens: 12288,
+            signal,
+            onReasoning,
+            defaultSymbol: defaultSymbol ?? resolveDefaultSymbol(prompt),
+            afterToolsNudge: 'Tool results are above. Continue the moderator turn now. If this is the final verdict, end with the labeled FINAL TRADE PLAN markdown. No JSON, no tool tags.',
+        })) {
             if (chunk) yield chunk;
         }
     } catch (e: any) {
@@ -2426,6 +2442,28 @@ const CLARIFICATION_MARKERS = /<CLARIFICATION_(DONE|SATISFIED|UNSATISFIED)>/gi;
 
 const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+/** Who is on the Floor this turn — stops models treating harness/Moderator text as a new trader request. */
+const buildFloorOrientation = (opts: {
+    selfName: string;
+    otherAnalysts: string[];
+    turn: 'rebuttal' | 'clarification';
+    round: number;
+}): string => {
+    const others = opts.otherAnalysts.filter(Boolean).join(', ') || 'none';
+    const thisTurn = opts.turn === 'clarification'
+        ? `This turn: the **Moderator** (Master Strategist) is asking **you (${opts.selfName})**. Reply to the Moderator. Do not treat the Moderator as the trader.`
+        : `This turn: Round ${opts.round} rebuttal among analysts. Address the other seats' claims. The Moderator is not speaking this turn.`;
+    return [
+        '**FLOOR ORIENTATION:**',
+        `- You are **${opts.selfName}**, an analyst on the August Floor.`,
+        `- Other analysts: ${others}.`,
+        '- **Moderator** = Master Strategist (another Floor speaker). **Trader** = the person who submitted the original chart/request in Round 1.',
+        '- The chat "user" role is August\'s debate harness — not the trader and not the Moderator.',
+        `- ${thisTurn}`,
+        '- Never start from "the user is asking" or "analyze user input". A Moderator question is not a new trading request. The only trader speech after Round 1 is a **USER STEERING** note, if present.',
+    ].join('\n');
+};
+
 /**
  * Extract the clarifying question addressed to a specific analyst. The
  * moderator prefixes each question with a speaker label (provider name or
@@ -2775,10 +2813,14 @@ export const conductRealDebate = async function* (
                         lensConfig.tradingStyle === 'auto' ? 'swing' : lensConfig.tradingStyle
                     )
                     : '';
+                const otherAnalystNames = debateRoster
+                    .map(o => o.provider.name)
+                    .filter(n => n !== analyst.provider.name);
                 const systemPrompt = (rolePrefix ? `${rolePrefix}\n\n` : '')
                     + fillPromptPlaceholders(getPrompt('debate.rebuttal', DEBATE_RESPONSE_PROMPT), {
                         NAME: analyst.provider.name,
                         ROUND: String(round),
+                        OTHERS: otherAnalystNames.join(', ') || 'none',
                     });
                 // Snapshot the live price ONCE per round so every analyst in
                 // the parallel batch sees the SAME current price.
@@ -2788,7 +2830,13 @@ export const conductRealDebate = async function* (
                     .map(o => extractDebateLevels(o.provider.name, roundTexts[o.provider.name][round - 1]));
                 const levelsSnap = formatDebateLevelsTable(snapshotRows);
                 const userContent =
-                    `**TRADING REQUEST (trim):**\n${truncateTextToTokens(userPrompt, 120)}\n\n` +
+                    `${buildFloorOrientation({
+                        selfName: analyst.provider.name,
+                        otherAnalysts: otherAnalystNames,
+                        turn: 'rebuttal',
+                        round,
+                    })}\n\n` +
+                    `**TRADER REQUEST (Round 1 context only — already answered):**\n${truncateTextToTokens(userPrompt, 120)}\n\n` +
                     (levelsSnap ? `**LEVELS SNAPSHOT:**\n${levelsSnap}\n\n` : '') +
                     `${others}\n\n` +
                     `Respond now with your rebuttal for Round ${round}.` +
@@ -2808,11 +2856,13 @@ export const conductRealDebate = async function* (
                         // any output must not permanently drop the analyst
                         // (the drop path asks the user to pick a replacement).
                     await streamWithTransientRetry(
-                        () => streamChatRequest(analyst.provider.config, messages, {
+                        () => streamChatWithDeskTools(analyst.provider.config, messages, {
                             temperature: 0.35,
                             signal,
                             maxTokens: TASK_BUDGETS.rebuttal,
                             onReasoning: (reasoning: string) => onAnalystReasoning?.(analyst.provider.name, reasoning, round),
+                            defaultSymbol: resolveDefaultSymbol(userPrompt),
+                            afterToolsNudge: 'Tool results are above. Write your rebuttal Floor turn now. No JSON, no tool tags.',
                         }),
                         emit,
                         `${analyst.provider.name} Round ${round} rebuttal`,
@@ -2960,6 +3010,7 @@ export const conductRealDebate = async function* (
                 `${questionSystemPrompt}\n\n${questionUserContent}`,
                 signal,
                 onReasoning,
+                resolveDefaultSymbol(userPrompt),
             )) {
                 if (chunk) {
                     questionText += chunk;
@@ -3010,15 +3061,31 @@ export const conductRealDebate = async function* (
             1500,
         );
         const answerTasks = liveAnalysts.map((analyst) => {
+            const otherAnalystNames = liveAnalysts
+                .map(o => o.provider.name)
+                .filter(n => n !== analyst.provider.name);
+            const moderatorQuestion = getAnalystClarificationQuestion(
+                questionText,
+                targetAliasesFor(analyst.provider.name),
+                speakerLabels,
+            );
             const answerSystemPrompt = fillPromptPlaceholders(
                 getPrompt('debate.clarification_answer', ANALYST_CLARIFICATION_RESPONSE_PROMPT),
                 {
                     NAME: analyst.provider.name,
-                    QUESTION: getAnalystClarificationQuestion(questionText, targetAliasesFor(analyst.provider.name), speakerLabels),
+                    OTHERS: otherAnalystNames.join(', ') || 'none',
+                    QUESTION: moderatorQuestion,
                 },
             );
             const answerUserContent =
-                `**THE DEBATE TRANSCRIPT (with this round's moderator questions):**\n${clarificationTranscript}\n\n` +
+                `${buildFloorOrientation({
+                    selfName: analyst.provider.name,
+                    otherAnalysts: otherAnalystNames,
+                    turn: 'clarification',
+                    round: answerRound,
+                })}\n\n` +
+                `**MODERATOR → ${analyst.provider.name} (answer this speaker — not a new trader request):**\n${moderatorQuestion}\n\n` +
+                `**FLOOR TRANSCRIPT (context only):**\n${clarificationTranscript}\n\n` +
                 `Respond now with your answer for Round ${answerRound}.` +
                 buildLivePriceRefreshBlock(getLivePrice?.() ?? null, 'before the clarification answers');
             const messages: ChatMessage[] = [
@@ -3031,11 +3098,13 @@ export const conductRealDebate = async function* (
                     // Bounded retry — same transient-failure semantics as the
                     // rebuttal rounds (see streamWithTransientRetry).
                     await streamWithTransientRetry(
-                        () => streamChatRequest(analyst.provider.config, messages, {
+                        () => streamChatWithDeskTools(analyst.provider.config, messages, {
                             temperature: 0.3,
                             signal,
                             maxTokens: TASK_BUDGETS.clarification,
                             onReasoning: (reasoning: string) => onAnalystReasoning?.(analyst.provider.name, reasoning, answerRound),
+                            defaultSymbol: resolveDefaultSymbol(userPrompt),
+                            afterToolsNudge: 'Tool results are above. Answer the Moderator now. No JSON, no tool tags.',
                         }),
                         emit,
                         `${analyst.provider.name} clarification answer`,
@@ -3138,6 +3207,8 @@ export const conductRealDebate = async function* (
                 moderatorConfig, moderatorModel,
                 `${getPrompt('debate.clarification_judgment', MODERATOR_CLARIFICATION_JUDGMENT_PROMPT)}\n\n**THE CYCLE Q&A:**\n${judgmentTranscript}`,
                 signal,
+                undefined,
+                resolveDefaultSymbol(userPrompt),
             )) {
                 if (chunk) judgmentText += chunk;
             }
@@ -3274,7 +3345,7 @@ export const conductRealDebate = async function* (
         let moderatorText = '';
         let streamFailed = false;
         try {
-            for await (const chunk of getModeratorAnalysisStream(moderatorConfig, moderatorModel, attempts[attempt], signal, onReasoning)) {
+            for await (const chunk of getModeratorAnalysisStream(moderatorConfig, moderatorModel, attempts[attempt], signal, onReasoning, resolveDefaultSymbol(userPrompt))) {
                 if (chunk) {
                     moderatorText += chunk;
                     yield { speaker: 'Moderator', round: finalRound, text: chunk };

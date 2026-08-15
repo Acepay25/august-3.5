@@ -4,10 +4,8 @@
  * Replaces the 9 per-provider main services + 9 accuracy services. All AI calls
  * route through GenericProviderService (no per-provider clients, no process.env keys).
  *
- * `analyzeTradingView` unifies the standard-mode and accuracy-mode prompt paths:
- * - subMode === undefined        → Standard mode (full MASTER_ANALYSIS_PROMPT + formatting)
- * - subMode === 'pure_ai'        → Pure AI mode (PURE_AI_MODE_PROMPT)
- * - other accuracy subModes      → Accuracy mode (ACCURACY_MODE_PROMPT + MASTER_ANALYSIS_PROMPT)
+ * `analyzeTradingView` unifies the standard-mode and accuracy-mode prompt paths
+ * via composePrompt (contract once + this-turn job + extras).
  */
 
 import { ProviderConfig } from '../../types/provider';
@@ -23,6 +21,7 @@ import {
     LENS_MODE_BASE_PROMPT, COMPACT_ANALYSIS_PROMPT, ACCURACY_MODE_PROMPT, PURE_AI_MODE_PROMPT,
     RISK_MANAGEMENT_RULES, TRADING_FAMILIES_PROMPT, AI_PROVIDER_MEMORY_ENFORCEMENT_PROMPT,
     ENTRY_NOT_HIT_ANALYSIS_PROMPT, ENTRY_NOT_HIT_ANALYSIS_QUESTIONS,
+    HARNESS_CONTRACT_PROMPT,
 } from '../../constants/prompts';
 import { constructOptimizedContext } from '../../utils/memoryUtils';
 import { parseLiveMarketData } from '../../utils/liveMarketParser';
@@ -32,6 +31,14 @@ import {
 import { TASK_BUDGETS } from './taskBudgets';
 import { getPrompt } from '../infrastructure/PromptOverrideService';
 import { getMemoryFilesContext } from '../learning/MemoryFilesService';
+import { composePrompt } from '../../utils/composePrompt';
+import { getHarnessSettings } from '../../utils/harnessSettings';
+import {
+    DESK_TOOLS_PROMPT,
+    TEXT_TOOL_FALLBACK_PROMPT,
+    resolveDefaultSymbol,
+    streamChatWithDeskTools,
+} from '../analysis/DeskToolsService';
 
 import { isVisionModel } from '../../utils/modelUtils';
 
@@ -72,9 +79,10 @@ function stripTagArtifacts(text: string): string {
 // analysis.entryPoints/stopLoss/takeProfit/probability. Before this parser
 // existed the pipeline stored a hardcoded Neutral/Low placeholder per
 // analyst, silently killing all of those consumers. This mines the fields
-// out of the prose: labeled values first, then the machine-readable
-// TRADE PLAN BLOCK the prompts mandate (see LENS_MODE_BASE_PROMPT /
-// MASTER_ANALYSIS_PROMPT).
+// out of the prose: labeled values first (Direction / Entry / Stop Loss /
+// Probability), then a TRADE PLAN BLOCK if a model still emits one. Prompts
+// no longer mandate that block — a fabricated N/A pad is worse than omitting
+// a field.
 
 export interface ParsedTradePlan {
     direction?: 'Long' | 'Short' | 'Neutral';
@@ -313,229 +321,79 @@ export async function analyzeTradingView(
         : '';
 
     // --- BUILD SYSTEM PROMPT ---
-    let systemPrompt: string;
-    // Analyst Lens persona is injected in EVERY mode — the old branches for
-    // pure-AI/accuracy dropped rolePrompt silently, so Lenses + Accuracy ran
-    // with zero personas while the moderator still received lens context.
+    // Contract once, then persona/job, then extras. Nested harness copies are stripped.
     const roleBlock = rolePrompt
-        ? ` **SPECIALIZED ANALYST ROLE ACTIVE**\n\n${rolePrompt}\n\n---\n\n`
+        ? `**SPECIALIZED ANALYST ROLE ACTIVE**\n\n${rolePrompt}`
+        : '';
+    const playbookBlock = frameworksList
+        ? `**PLAYBOOK: CORE TRADING FRAMEWORKS**\n${frameworksList}`
+        : '';
+    const outputContract = `**OUTPUT:** No JSON, XML, restated instructions, section templates, or TRADE PLAN BLOCK. Public reply: the call (direction + key levels), then only the findings that support it. Name prices in the sentences when you have them (Direction, Entry, Stop Loss, Take Profit, Probability: N%). Name an invalidation price. Use retrieved memory only when it matches this setup.`;
+    const deskToolsEnabled = getHarnessSettings().deskToolsEnabled && !isSmallContextModel(modelName);
+    const deskToolsNative = deskToolsEnabled && config.apiFormat === 'chat_completions';
+    const deskToolsBlock = deskToolsEnabled
+        ? `${DESK_TOOLS_PROMPT}${deskToolsNative ? '' : TEXT_TOOL_FALLBACK_PROMPT}`
         : '';
 
+    let systemPrompt: string;
     if (isPureAiMode) {
         const playbookContext = isPlaybookEnabledInPureAI
             ? `**PLAYBOOK REFERENCE (ENABLED BY USER):**\nAlthough this is Pure AI Mode, the user has enabled access to the following frameworks as a reference:\n${frameworksList}\nYou may use these if they align with your reasoning.`
-            : "";
+            : '';
         const familiesContext = isFamiliesEnabledInPureAI
             ? `**MARKET CLASSIFICATION FAMILIES (ENABLED BY USER):**\nAlthough this is Pure AI Mode, the user has explicitly requested that you classify the setup into one of the following Families:\n${getPrompt('analysis.families', TRADING_FAMILIES_PROMPT)}\nYou MUST assign a 'detectedPatternFamily' (Family A, B, C, or Omega) based on your reasoning.`
-            : "";
+            : '';
         const memoryContextPrompt = isMemoryEnabledInPureAI
-            ? `\n\n**PATTERN MEMORY REFERENCE (ENABLED BY USER):**\nAlthough this is Pure AI Mode, the user has enabled access to your historical Pattern Memory. You may use this as a reference to identify recurring patterns from the user's past trades.\n`
-            : "";
-
-        systemPrompt = `${roleBlock}${getPrompt('analysis.pure_ai', PURE_AI_MODE_PROMPT)}
-
-      ${visionDeepDive}
-
-      ${userOverride}
-
-      ${playbookContext}
-
-      ${familiesContext}
-
-      ${memoryContextPrompt}
-
-      ${userStrategiesBlock}
-
-      ${getPrompt('analysis.risk_rules', RISK_MANAGEMENT_RULES)}
-
-      **SYNTHESIS & OUTPUT:**
-      Do NOT output JSON. Present your readable trade proposal with direction,
-      levels, confidence, and risks as natural prose — no JSON keys, braces,
-      arrays, XML tags, or section labels.
-    `;
+            ? `**PATTERN MEMORY REFERENCE (ENABLED BY USER):** Use retrieved history only when it matches this coin, direction, or regime.`
+            : '';
+        systemPrompt = composePrompt([
+            { id: 'contract', text: HARNESS_CONTRACT_PROMPT },
+            { id: 'role', text: roleBlock },
+            { id: 'job', text: getPrompt('analysis.pure_ai', PURE_AI_MODE_PROMPT) },
+            { id: 'vision', text: visionDeepDive },
+            { id: 'override', text: userOverride },
+            { id: 'playbook', text: playbookContext },
+            { id: 'families', text: familiesContext },
+            { id: 'memory', text: memoryContextPrompt },
+            { id: 'strategies', text: userStrategiesBlock },
+            { id: 'desk_tools', text: deskToolsBlock },
+            { id: 'risk', text: getPrompt('analysis.risk_rules', RISK_MANAGEMENT_RULES) },
+            { id: 'output', text: outputContract },
+        ]);
     } else if (isAccuracyMode) {
-        systemPrompt = `${roleBlock}${getPrompt('analysis.accuracy', ACCURACY_MODE_PROMPT)}
-
-      ${getPrompt('analysis.master', MASTER_ANALYSIS_PROMPT)}
-
-      ${visionDeepDive}
-
-      ${userOverride}
-
-      **CONTEXTUAL DATA:**
-      **PLAYBOOK: CORE TRADING FRAMEWORKS**
-      ${frameworksList}
-
-      ${userStrategiesBlock}
-
-      **CRITICAL: PATTERN MEMORY INTEGRATION (SECTION 4):**
-      Use the **PATTERN MEMORY** and **RECENT INSIGHTS** provided below for user-specific patterns. Do NOT use Layer 3 Global Memory for past trade references.
-
-      ${getPrompt('analysis.risk_rules', RISK_MANAGEMENT_RULES)}
-
-      **SYNTHESIS & OUTPUT:**
-      Do NOT output JSON. Present your readable trade proposal with direction,
-      levels, confidence, and risks as natural prose — no JSON keys, braces,
-      arrays, XML tags, or section labels.
-    `;
+        systemPrompt = composePrompt([
+            { id: 'contract', text: HARNESS_CONTRACT_PROMPT },
+            { id: 'role', text: roleBlock },
+            { id: 'accuracy', text: getPrompt('analysis.accuracy', ACCURACY_MODE_PROMPT) },
+            { id: 'job', text: getPrompt('analysis.master', MASTER_ANALYSIS_PROMPT) },
+            { id: 'vision', text: visionDeepDive },
+            { id: 'override', text: userOverride },
+            { id: 'playbook', text: playbookBlock },
+            { id: 'strategies', text: userStrategiesBlock },
+            { id: 'memory', text: getPrompt('analysis.memory_enforcement', AI_PROVIDER_MEMORY_ENFORCEMENT_PROMPT) },
+            { id: 'desk_tools', text: deskToolsBlock },
+            { id: 'risk', text: getPrompt('analysis.risk_rules', RISK_MANAGEMENT_RULES) },
+            { id: 'output', text: outputContract },
+        ]);
     } else {
-        // Standard mode — full master prompt with formatting rules and lens support.
         const basePrompt = rolePrompt
             ? getPrompt('analysis.lens', LENS_MODE_BASE_PROMPT)
             : (systemPromptOverride || getPrompt('analysis.master', MASTER_ANALYSIS_PROMPT));
-
-        systemPrompt = `${rolePrompt ? ' **SPECIALIZED ANALYST ROLE ACTIVE**\n\n' + rolePrompt + '\n\n---\n\n' : ''}${basePrompt}
-
-      ${rolePrompt ? '' : visionDeepDive}
-
-      ${getPrompt('analysis.memory_enforcement', AI_PROVIDER_MEMORY_ENFORCEMENT_PROMPT)}
-
-      ${userOverride}
-
-      **CONTEXTUAL DATA:**
-      **PLAYBOOK: CORE TRADING FRAMEWORKS**
-      ${frameworksList}
-
-      ${userStrategiesBlock}
-
-      ${rolePrompt ? '' : `
-      **ANALYTICAL PROCESS OVERRIDE:**
-      You must perform the analysis exactly as defined in the MASTER PROMPT sections 1-8.
-
-      **CRITICAL: PATTERN MEMORY INTEGRATION (SECTION 4):**
-      Use the **PATTERN MEMORY** and **RECENT INSIGHTS** provided below as your source of truth for user-specific patterns and corrections. Do NOT use Layer 3 Global Memory for past trade references.
-      `}
-
-      ${getPrompt('analysis.risk_rules', RISK_MANAGEMENT_RULES)}
-
-      **SYNTHESIS & OUTPUT (READABLE TEXT ONLY):**
-
-      ${rolePrompt ? '' : `**FORMATTING RULE (MANDATORY):** Structure the analysis using these sections with separator lines:
-
-      ────────────────────────────────────────
-      SECTION 1 — MULTI-TIMEFRAME STRUCTURE
-
-      5m Bias:
-      Trend: [Bullish/Bearish]
-      Market Structure: [HH/HL or LL/LH]
-      Key zones: [Specific levels]
-      Momentum: RSI [value] ([status]). MACD [status].
-      EMA alignment: [Bullish/Bearish/Mixed]
-      Volume behavior: [High/Normal/Low] volume.
-
-      15m Bias (Code-Calculated):
-      [Same format as 5m]
-
-      1h Bias (Code-Calculated):
-      [Same format]
-
-      4h Bias (Code-Calculated):
-      [Same format]
-
-      Summary Bias: [Bullish/Bearish/Neutral]
-
-      ────────────────────────────────────────
-      SECTION 2 — PRICE ACTION TYPE
-
-      Classification: [Continuation/Reversal/Compression/Breakout]
-      Explanation: [2-3 sentences]
-
-      ────────────────────────────────────────
-      SECTION 3 — FAMILY CLASSIFICATION SYSTEM
-
-      Classification: FAMILY [A/B/C/Omega] — [Nickname]
-      Reasoning: [Explain why this family based on indicators]
-
-      ────────────────────────────────────────
-      SECTION 4 — PATTERN MATCHING USING TRADE LOG
-
-      [List similar trades or "No direct similarity found in trade log."]
-
-      ────────────────────────────────────────
-      SECTION 5 — CONTINUATION vs COUNTERTREND BIAS FRAMEWORK
-
-      Continuation Probability % ([Direction]): [X]%
-      Countertrend Probability % ([Direction]): [Y]%
-      Dominant Bias: [Continuation/Countertrend] ([Direction])
-      Exact signals that produce these probabilities: [List signals]
-      What must happen to flip the bias: [Specific conditions]
-
-      ────────────────────────────────────────
-      SECTION 6 — ADAPTIVE PROBABILITY MODEL
-
-      Long Probability %: [X]%
-      Short Probability %: [Y]%
-      Confidence Weight (0.0–1.0): [Value]
-      Detected Pattern Family: Family [A/B/C/Omega]
-      Detected Phase: [1-5] ([Phase name])
-      Explanation: [Why these probabilities]
-
-      ────────────────────────────────────────
-      SECTION 7 — NUMERIC CHART ANALYSIS (MANDATORY)
-
-      Trend Maturity: [Early/Mid/Late]
-      Market Regime: [Trend/Range/Compression/Breakout]
-      Pattern Validation: [Supported/Not Supported by chart data]
-      Wick Bias: [Bullish/Bearish]
-      Volume Trend: [Rising/Falling]
-      State Shift: [Trend_Change/Momentum_Loss/None]
-
-      ────────────────────────────────────────
-      SECTION 8 — FULL TRADE SETUP (MANDATORY)
-
-      Direction: [Long/Short]
-      Market Classification Family: [A/B/C/Omega]
-      Entry Zone: [Price range]
-      Stop Loss: [Price]
-      Take Profit 1: [Price]
-      Take Profit 2: [Price]
-      Take Profit 3: [Price]
-      Risk:Reward (R:R): [Ratio]
-      Stop Loss Percentage: [X]%
-      Invalidation conditions: [Specific conditions]
-      Re-entry conditions: [If applicable]
-
-       DEVIL'S ADVOCATE ANALYSIS (MANDATORY)
-
-      BEAR CASE / BULL CASE AGAINST THIS TRADE:
-      1. Technical reason: [Why this could fail]
-      2. Volume/Momentum concern: [Volume or momentum issue]
-      3. Market structure risk: [Structure-based risk]
-
-      FAILURE SCENARIOS:
-      1. Scenario A: [Specific failure scenario]
-      2. Scenario B: [Another failure scenario]
-
-      CROWDED TRADE CHECK:
-      Funding Rate: [X]% - [Neutral/Elevated/Extreme]
-      Long/Short Ratio: [X] - [Balanced/Crowded]
-      Recent liquidation data: $[X]M ([High/Medium/Low] pressure)
-
-      DEVIL'S RISK SCORE: [X]/100
-
-       TRADE INVALIDATION THESIS (MANDATORY)
-
-      1. Critical Invalidation Level: This trade is INVALID if price closes [above/below] $[X] on the [timeframe] chart.
-      2. Time Invalidation: If entry is not triggered within [X] hours, re-evaluate the thesis.
-      3. Structure Invalidation: Invalidated by: [Specific structure condition]
-      4. Counter-Signal Watch: Would flip to [Long/Short] if: [Condition]
-      5. Early Exit Triggers: Consider early exit if: [Condition]
-
-       CORRELATION & MACRO AWARENESS
-
-      BTC CORRELATION CHECK: [Analysis of BTC impact]
-      MACRO CONSIDERATIONS: [Weekend/events/volatility factors]
-
-      ────────────────────────────────────────
-      `}
-
-      Do NOT output JSON. Present your readable trade proposal as natural prose — no JSON keys, braces, arrays, XML tags, or section labels. Cover the full analysis from Sections 1-8 (with separator lines): the coin, direction, entry level(s), stop loss, take-profit target(s), probability, confidence, strategy, key support/resistance levels, and the key risks.
-
-      **EVIDENCE DISCIPLINE (MANDATORY):** Back your 2-4 most important conclusions with concrete data sources (indicator names, timeframes, OCR/chart references, injected market data). Mark each as observed (directly verified), partial (some supporting data), or unobserved (inference only) — never fabricate data to fill gaps.
-
-      **INVALIDATION CONTRACT (MANDATORY):** State exactly what kills this setup — 2-4 concrete criteria: at least one price level (a number, not prose) that breaks the thesis, plus time (validity expiry), structure (market-structure shift), or signal (indicator/counter-signal) criteria where relevant. For each: the observable trigger and the consequence. A setup with no invalidation is not a setup.
-    `;
+        systemPrompt = composePrompt([
+            { id: 'contract', text: HARNESS_CONTRACT_PROMPT },
+            { id: 'role', text: roleBlock },
+            { id: 'job', text: basePrompt },
+            { id: 'vision', text: rolePrompt ? '' : visionDeepDive },
+            { id: 'memory', text: getPrompt('analysis.memory_enforcement', AI_PROVIDER_MEMORY_ENFORCEMENT_PROMPT) },
+            { id: 'override', text: userOverride },
+            { id: 'playbook', text: playbookBlock },
+            { id: 'strategies', text: userStrategiesBlock },
+            { id: 'desk_tools', text: deskToolsBlock },
+            { id: 'risk', text: getPrompt('analysis.risk_rules', RISK_MANAGEMENT_RULES) },
+            { id: 'output', text: outputContract },
+        ]);
     }
+
 
     // --- BUILD USER PROMPT ---
     const isLiveMarketData = prompt.includes("**LIVE MARKET DATA**");
@@ -557,7 +415,10 @@ export async function analyzeTradingView(
             : "\n\n** RECENT INSIGHTS:** No recent trade insights available.\n";
 
         if (isSmallContextModel(modelName)) {
-            const effectiveSystemPrompt = getPrompt('analysis.compact', COMPACT_ANALYSIS_PROMPT);
+            const effectiveSystemPrompt = composePrompt([
+                { id: 'contract', text: HARNESS_CONTRACT_PROMPT },
+                { id: 'job', text: getPrompt('analysis.compact', COMPACT_ANALYSIS_PROMPT) },
+            ]);
             const minimalPattern = patternMemoryContext.length > 400 ? patternMemoryContext.substring(0, 400) + '...[truncated]' : patternMemoryContext;
             const minimalInsights = recentInsightsContext.length > 200 ? recentInsightsContext.substring(0, 200) + '...[truncated]' : recentInsightsContext;
             const minimalImages = imageSummaryContext.length > 500 ? imageSummaryContext.substring(0, 500) + '...[truncated]' : imageSummaryContext;
@@ -594,20 +455,18 @@ export async function analyzeTradingView(
         messages.push({ role: 'user', content: userPromptText });
     }
 
-    // --- CALL THE GENERIC CLIENT (STREAMING) ---
-    // Stream so the model's chain of thought (reasoning_content / reasoning
-    // deltas) flows to onReasoning in real-time and the live cards can render
-    // it harness-style, THEN present the final output. Non-chat_completions
-    // formats and Electron fall back to non-streaming inside streamChatRequest.
-    // Temperature: 0.4 (the 0.7 default samples too randomly for a trading
-    // read — pro-trader discipline wants determinism; the three analysts
-    // still differ because their PROMPTS differ, not because of dice).
+    // --- CALL THE GENERIC CLIENT (optional desk-tools loop, then stream) ---
+    // Temperature: 0.35 — pro-trader discipline wants determinism; the three
+    // analysts still differ because their PROMPTS differ, not because of dice.
     const options: ChatRequestOptions = { jsonMode: false, maxTokens: TASK_BUDGETS.analysis, temperature: 0.35, signal, onReasoning };
     let responseText = '';
     let reasoningAccumulated = '';
     try {
-        for await (const chunk of streamChatRequest(config, messages, {
+        for await (const chunk of streamChatWithDeskTools(config, messages, {
             ...options,
+            enabled: deskToolsEnabled,
+            defaultSymbol: resolveDefaultSymbol(prompt, marketDataOverride),
+            afterToolsNudge: 'Tool results are above. Write the public Floor reply now from the findings. No JSON, no tool tags.',
             onReasoning: (reasoning: string) => {
                 reasoningAccumulated += reasoning;
                 options.onReasoning?.(reasoning);
@@ -854,6 +713,9 @@ Answer **all** of the following **MANDATORY WIN ANALYSIS QUESTIONS**:
 3. **Risk Management Review** - Was SL threatened? Calculate final R multiple achieved
 4. **Pattern Family Validation** - Does this win STRENGTHEN confidence in this family?
 5. **Replication Checklist** - Extract 3-5 SPECIFIC conditions that MUST be present to replicate
+6. **Blame Assessment** - Setup __% | Execution __% | Market __%
+   Then write exactly one label: SETUP_EDGE_FAILURE | EXECUTION_ERROR | MACRO_SHOCK
+   A lucky fill (execution) or news spike (macro) must NOT become a repeat-this-setup rule.
 
 **Critical Learning Output (REQUIRED):**
 * Generate **one IF / THEN rule** that captures the WINNING FORMULA
@@ -895,6 +757,8 @@ Answer **all** of the following **MANDATORY LOSS ANALYSIS QUESTIONS**:
 4. **Entry Timing Critique** - Was entry premature or too late?
 5. **Pattern Family Reliability Check** - Should this family require STRICTER conditions?
 6. **Blame Assessment** - Setup __% | Execution __% | Market __%
+   Then write exactly one label: SETUP_EDGE_FAILURE | EXECUTION_ERROR | MACRO_SHOCK
+   Execution (chase, late click, moved SL) and macro shocks (CPI/FOMC/news) must NOT become a setup IF/THEN.
 
 **Critical Learning Output (REQUIRED):**
 * Generate **one IF / THEN rule** that would have PREVENTED this loss

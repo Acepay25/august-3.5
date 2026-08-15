@@ -78,6 +78,10 @@ function devProviderProxy() {
             if (apiKey && apiKey !== 'not-needed') headers.Authorization = `Bearer ${apiKey}`;
             body = { model: config.selectedModel, messages: request.messages || [], max_tokens: request.maxTokens ?? 4096, temperature: request.temperature ?? 0.7 };
             if (request.jsonMode) body.response_format = { type: 'json_object' };
+            if (Array.isArray(request.tools) && request.tools.length > 0) {
+              body.tools = request.tools;
+              body.tool_choice = request.toolChoice || 'auto';
+            }
           } else if (config.apiFormat === 'messages') {
             url = `${baseUrl}/messages`;
             if (apiKey) headers['x-api-key'] = apiKey;

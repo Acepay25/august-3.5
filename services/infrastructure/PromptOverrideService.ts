@@ -94,7 +94,7 @@ export const savePromptOverride = async (id: string, text: string, username: str
 
 const ALLOWED_PLACEHOLDERS = new Set([
     'NAME', 'ROUND', 'COIN', 'COINNAME', 'DIRECTION', 'TIMEFRAME',
-    'ANALYSTS', 'DIALOGUE_INSTRUCTIONS', 'CONTEXT', 'QUESTION',
+    'ANALYSTS', 'DIALOGUE_INSTRUCTIONS', 'CONTEXT', 'QUESTION', 'OTHERS',
 ]);
 
 /** Advisory checks for user-edited prompts. Does not block save. */

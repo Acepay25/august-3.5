@@ -13,7 +13,23 @@ const { streamMock, sendMock } = vi.hoisted(() => ({
 vi.mock('../services/providers/GenericProviderService', () => ({
   streamChatRequest: ((...args: any[]) => streamMock(...args)) as any,
   sendChatRequest: ((...args: any[]) => sendMock(...args)) as any,
+  sendChatTurn: (async () => ({
+    text: '',
+    reasoning: '',
+    toolCalls: [],
+    assistantMessage: { role: 'assistant', content: '' },
+  })) as any,
 }));
+
+// Parser tests care about stream chunks, not the tool loop. Bypass desk tools
+// so streamMock remains the single transport under test.
+vi.mock('../services/analysis/DeskToolsService', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../services/analysis/DeskToolsService')>();
+  return {
+    ...actual,
+    streamChatWithDeskTools: ((...args: any[]) => streamMock(...args)) as any,
+  };
+});
 
 import { analyzeTradingView } from '../services/providers/GenericAnalysisService';
 import type { AnalyzeTradingViewParams } from '../services/providers/GenericAnalysisService';

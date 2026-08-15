@@ -7,8 +7,8 @@ import type { ProviderConfig } from '../types/provider';
  *
  *   REAL lens prompts (LENS_MODE_BASE_PROMPT + the role's promptPrefix) are
  *   assembled by analyzeTradingView → the transport is mocked with realistic
- *   lens transcripts (the shapes the prompts demand, including the
- *   machine-readable TRADE PLAN BLOCK) → the REAL structured-plan parser and
+ *   lens transcripts (desk-trader prose with named levels, not a forced
+ *   TRADE PLAN BLOCK) → the REAL structured-plan parser and
  *   schema pipeline run → the REAL consensus/divergence layer consumes the
  *   per-analyst plans.
  *
@@ -24,6 +24,12 @@ const { streamMock } = vi.hoisted(() => ({
 vi.mock('../services/providers/GenericProviderService', () => ({
     streamChatRequest: ((...args: any[]) => streamMock(...args)) as any,
     sendChatRequest: ((...args: any[]) => Promise.resolve('')) as any,
+    sendChatTurn: (async () => ({
+        text: '',
+        reasoning: '',
+        toolCalls: [],
+        assistantMessage: { role: 'assistant', content: '' },
+    })) as any,
 }));
 
 import { analyzeTradingView } from '../services/providers/GenericAnalysisService';
@@ -61,47 +67,17 @@ const ASSIGNMENTS = [
 
 // Realistic transcripts in the shapes the lens prompts demand.
 const MACRO_TRANSCRIPT = `
-**MACRO TREND ANALYSIS**
+Weekly and daily are both HH/HL. 4H is still holding $93,800. Liquidity sits above $97,500; ATR on the 4H is expanding, so continuation has room if we wait for the session.
 
-| Timeframe | Trend Direction | Structure | Key Level | Confidence |
-| Weekly | Bull | HH/HL | $92,000 | High |
-| Daily | Bull | HH/HL | $94,500 | Med |
-| 4H | Bull | HH/HL | $93,800 | High |
-
-**MACRO VERDICT:** Bullish
-**MACRO CONFIDENCE:** 7
-
-Liquidity sits above $97,500; ATR(4h) is expanding, favoring continuation into the kill zone.
-
-TRADE PLAN BLOCK:
-Direction: Long
-Entry: N/A
-Stop Loss: N/A
-Take Profit 1: N/A
-Take Profit 2: N/A
+MACRO VERDICT: Bullish
 Probability: 65%
 `;
 
 const TECHNICAL_TRANSCRIPT = `
-**STRUCTURE:** HH/HL intact on 1h after the BOS at $93,200.
+1H HH/HL is intact after the BOS at $93,200. FVG at $93,600–$93,900 is partially filled; RSI 58 rising, MACD histogram expanding. This is a continuation long, not a trap.
 
-**TECHNICAL BIAS:**
-LONG
-
-**PATTERN CONFIDENCE:**
-7
-
-**Optimal Entry Zone:**
-$93,800 to $94,200
-
-**Pattern Invalidation Level:**
-$93,400
-
-FVG at $93,600 - $93,900 partially filled; RSI 58 rising, MACD histogram expanding.
-
-TRADE PLAN BLOCK:
-Direction: Long
-Entry: 93,800 - 94,200
+TECHNICAL BIAS: LONG
+Optimal Entry Zone: $93,800 to $94,200
 Stop Loss: 93,400
 Take Profit 1: 96,500
 Take Profit 2: 97,800
@@ -109,22 +85,12 @@ Probability: 68%
 `;
 
 const RISK_TRANSCRIPT = `
-**R:R VALIDATION:** Entry 94,000, SL 93,400 → risk 600. TP1 96,500 → reward 2,500 → R:R 4.2:1. PASS.
+The technical long is mathematically fine: 600 risk to 2,500 reward is 4.2 R. Session is not a news window. I'd size full.
 
-**Position Size Authorization:**
-Full
-
-**Risk Confidence Score:**
-8 / 10
-
-**VERDICT:** APPROVE LONG at 94,000, stop 93,400, first target 96,500.
-
-TRADE PLAN BLOCK:
-Direction: Long
+VERDICT: APPROVE LONG
 Entry: 94,000
 Stop Loss: 93,400
 Take Profit 1: 96,500
-Take Profit 2: N/A
 Probability: 70%
 `;
 
@@ -179,7 +145,9 @@ describe('lens-mode pipeline end-to-end (real prompts + parser + consensus)', ()
         const systemPrompt = messages[0].content as string;
         expect(systemPrompt).toContain('Macro & Volatility Analyst');
         expect(systemPrompt).toContain('SPECIALIZED ANALYST ROLE ACTIVE');
-        expect(systemPrompt).toContain('TRADE PLAN BLOCK');
+        expect(systemPrompt).toContain('WRITE-UP');
+        expect(systemPrompt).not.toContain('TRADE PLAN BLOCK (MANDATORY');
+        expect(systemPrompt).not.toContain('Output **exactly**');
 
         // Macro: domain-respecting — direction + probability, NO fabricated levels.
         expect(macro.analysis.direction).toBe('Long');

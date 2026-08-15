@@ -1586,6 +1586,7 @@ ${reflectionBlock}`
                         finalAnalysis,
                         getHarnessSettings().equityUsd,
                         activeConversation?.leverage || DEFAULT_LEVERAGE,
+                        getHarnessSettings().riskPercent,
                     );
                     finalAnalysis.positionSize = {
                         line: sized.line,

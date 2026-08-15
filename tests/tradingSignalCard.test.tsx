@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import TradingSignalCard from '../components/analysis/TradingSignalCard';
 import { TradeAnalysis } from '../types';
 
@@ -158,5 +158,26 @@ describe('TradingSignalCard', () => {
         );
         expect(screen.queryByText('Watch')).toBeNull();
         expect(screen.queryByText('Pin')).toBeNull();
+    });
+
+    it('lets the user size from balance and risk percent', () => {
+        localStorage.removeItem('harness_settings_v1');
+        render(
+            <TradingSignalCard
+                analysis={analysis({
+                    coinName: 'BTCUSDT',
+                    direction: 'Long',
+                    confidence: 'High',
+                    entryPoints: [{ price: '100', description: 'Entry' }],
+                    stopLoss: '90',
+                    takeProfit: [{ price: '120' }],
+                })}
+                leverage={5}
+            />,
+        );
+        expect(screen.getByLabelText('Account balance')).toBeDefined();
+        fireEvent.change(screen.getByLabelText('Risk percent'), { target: { value: '2' } });
+        expect(screen.getByText(/\$200 risk/)).toBeDefined();
+        expect(screen.getByText(/Liq buffer/)).toBeDefined();
     });
 });

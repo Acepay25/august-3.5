@@ -5,6 +5,7 @@ import { extractAndParseJson } from '../../utils/jsonUtils';
 import { CraftedSkill, parseCraftedSkill } from '../../schemas/learning';
 import { getPrompt } from '../infrastructure/PromptOverrideService';
 import { parseIfThenClauses } from '../../utils/ifThenSkill';
+import { tradeAdmitsTechnicalStrategyRule } from '../../utils/rootCause';
 
 export const SKILL_CRAFT_FALLBACK = `You turn a closed-trade post-mortem into ONE reusable trading skill.
 
@@ -54,6 +55,7 @@ export const craftSkillFromPostMortem = async (
 ): Promise<CraftedSkill | null> => {
     const pm = trade.postMortem || '';
     if (pm.length < 40) return null;
+    if (!tradeAdmitsTechnicalStrategyRule(trade)) return null;
     const clauses = parseIfThenClauses(pm);
     const details = [
         `Coin: ${trade.analysis?.coinName || '?'}`,

@@ -101,6 +101,6 @@ describe('validatePromptOverride', () => {
   });
 
   it('allows known debate placeholders', () => {
-    expect(validatePromptOverride('You are {{NAME}} in round {{ROUND}} for {{ANALYSTS}}.')).toEqual([]);
+    expect(validatePromptOverride('You are {{NAME}} in round {{ROUND}} for {{ANALYSTS}} with {{OTHERS}}.')).toEqual([]);
   });
 });

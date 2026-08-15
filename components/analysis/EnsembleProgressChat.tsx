@@ -329,6 +329,8 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
             const answering = Boolean(activeDebateSpeakers[analyst.displayName] || activeDebateSpeakers[analyst.providerName]);
             const live = analyst.status === 'analyzing' || answering;
             const speakerTurns = debateTurns.filter(t => t.speaker !== 'Moderator' && matchesSpeaker(t.speaker, analyst));
+            const lastTurn = speakerTurns[speakerTurns.length - 1];
+            const replyText = lastTurn?.text || analyst.finalOutput || '';
             return {
                 id: analyst.key,
                 name: formatSeatLabel(analyst.displayName),
@@ -337,13 +339,13 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
                 thinking: live && !answering,
                 speaking: answering && live,
                 thought: [analyst.reasoning, analyst.thoughtProcess, reasoningProcesses[analyst.key]].filter(Boolean).join('\n\n'),
-                speech: speakerTurns[speakerTurns.length - 1]?.text || analyst.finalOutput,
+                speech: replyText || undefined,
                 replyTo: speakerTurns.some(t => (t.round ?? 0) > 1) ? 'Moderator' : undefined,
-                replies: speakerTurns.some(t => (t.round ?? 0) > 1) && (speakerTurns[speakerTurns.length - 1]?.text || analyst.finalOutput)
+                replies: speakerTurns.some(t => (t.round ?? 0) > 1) && replyText
                     ? [{
-                        id: `${analyst.key}-${speakerTurns[speakerTurns.length - 1]?.round ?? 'last'}`,
+                        id: `${analyst.key}-${lastTurn?.round ?? 'last'}`,
                         target: 'Moderator',
-                        text: speakerTurns[speakerTurns.length - 1]?.text || analyst.finalOutput,
+                        text: replyText,
                     }]
                     : undefined,
             };

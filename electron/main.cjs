@@ -168,6 +168,10 @@ function providerRequestDetails(request) {
             temperature: request.temperature ?? 0.7,
         };
         if (request.jsonMode) body.response_format = { type: 'json_object' };
+        if (Array.isArray(request.tools) && request.tools.length > 0) {
+            body.tools = request.tools;
+            body.tool_choice = request.toolChoice || 'auto';
+        }
     } else if (format === 'messages') {
         url = `${baseUrl}/messages`;
         if (apiKey) headers['x-api-key'] = apiKey;
@@ -454,15 +458,42 @@ async function sendProviderRequest(request) {
         text = parsed.text;
         reasoning = parsed.reasoning;
     } else {
-        const content = data.choices?.[0]?.message?.content;
+        const message = data.choices?.[0]?.message || {};
+        const content = message.content;
         text = Array.isArray(content)
             ? content.filter(block => typeof block?.text === 'string').map(block => block.text).join('\n')
             : content || '';
         // Qwen/Kimi-style gateways return `reasoning` as an array of strings.
-        const msgReasoning = data.choices?.[0]?.message?.reasoning_content ?? data.choices?.[0]?.message?.reasoning;
+        const msgReasoning = message.reasoning_content ?? message.reasoning;
         reasoning = Array.isArray(msgReasoning)
             ? msgReasoning.filter(part => typeof part === 'string').join('\n')
             : msgReasoning || '';
+        if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
+            const toolCalls = message.tool_calls.map((tc, i) => {
+                let args = {};
+                try {
+                    args = tc?.function?.arguments ? JSON.parse(tc.function.arguments) : {};
+                } catch {
+                    args = { raw: tc?.function?.arguments || '' };
+                }
+                return {
+                    id: tc?.id || `call_${i}`,
+                    name: String(tc?.function?.name || ''),
+                    arguments: args && typeof args === 'object' ? args : {},
+                };
+            }).filter(c => c.name);
+            return {
+                text: text || reasoning || '',
+                reasoning,
+                usage: extractTokenUsageJs(data),
+                toolCalls,
+                assistantMessage: {
+                    role: 'assistant',
+                    content: text || '',
+                    tool_calls: message.tool_calls,
+                },
+            };
+        }
     }
     return { text: text || reasoning || '', reasoning, usage: extractTokenUsageJs(data) };
 }

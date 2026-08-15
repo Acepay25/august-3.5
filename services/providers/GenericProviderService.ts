@@ -33,7 +33,9 @@ interface ElectronProviderBridge {
         maxTokens?: number;
         temperature?: number;
         jsonMode?: boolean;
-    }) => Promise<{ ok: boolean; text?: string; reasoning?: string; usage?: TokenUsage; status?: number; code?: string; message?: string }>;
+        tools?: ChatRequestOptions['tools'];
+        toolChoice?: ChatRequestOptions['toolChoice'];
+    }) => Promise<{ ok: boolean; text?: string; reasoning?: string; usage?: TokenUsage; toolCalls?: ChatTurnResult['toolCalls']; assistantMessage?: ChatMessage; status?: number; code?: string; message?: string }>;
     cancelProviderChat?: (requestId: string) => Promise<boolean>;
     discoverModels?: (config: {
         baseUrl: string;
@@ -58,7 +60,16 @@ export type ContentPart =
 /** A chat message. `content` may be a plain string or an array of content parts (vision). */
 export interface ChatMessage {
     role: string;
-    content: string | ContentPart[];
+    content: string | ContentPart[] | null;
+    /** OpenAI-style tool calls on assistant turns. */
+    tool_calls?: Array<{
+        id: string;
+        type: 'function';
+        function: { name: string; arguments: string };
+    }>;
+    /** OpenAI-style tool result linkage. */
+    tool_call_id?: string;
+    name?: string;
 }
 
 export interface ChatRequestOptions {
@@ -70,6 +81,24 @@ export interface ChatRequestOptions {
     signal?: AbortSignal;
     onReasoning?: (reasoning: string) => void;
     onUsage?: (usage: TokenUsage) => void;
+    /** OpenAI-style tool definitions (chat_completions). */
+    tools?: Array<{
+        type: 'function';
+        function: {
+            name: string;
+            description: string;
+            parameters: Record<string, unknown>;
+        };
+    }>;
+    toolChoice?: 'auto' | 'none' | 'required';
+}
+
+export interface ChatTurnResult {
+    text: string;
+    reasoning: string;
+    toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
+    /** Raw assistant message for appending into a tool loop (chat_completions). */
+    assistantMessage?: ChatMessage;
 }
 
 function reportUsage(config: ProviderConfig, data: unknown, options?: ChatRequestOptions): void {
@@ -288,11 +317,11 @@ function withStreamTimeoutSignal(signal?: AbortSignal): AbortSignal {
 
 // ─── Chat Completions Format ────────────────────────────────────────────────
 
-async function chatCompletionsCall(
+async function chatCompletionsTurn(
     config: ProviderConfig,
     messages: ChatMessage[],
     options?: ChatRequestOptions
-): Promise<string> {
+): Promise<ChatTurnResult> {
     const client = createOpenAIClient(config);
     const params: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming = {
         model: config.selectedModel,
@@ -303,22 +332,24 @@ async function chatCompletionsCall(
     if (options?.jsonMode) {
         (params as any).response_format = { type: 'json_object' };
     }
+    if (options?.tools?.length) {
+        (params as any).tools = options.tools;
+        (params as any).tool_choice = options.toolChoice ?? 'auto';
+    }
     requestReasoningSideChannel(config, params);
     let response: OpenAI.Chat.Completions.ChatCompletion;
     try {
-        // Timeout wrap happens here (not at the call site) so the jsonMode
-        // retry below gets a FRESH budget — AbortSignal.any keeps the old
-        // timer, so wrapping at the call site made the retry inherit a
-        // partially-consumed timeout. Always applied (even with no caller
-        // signal) so a wedged gateway can never hang the pipeline.
         response = await client.chat.completions.create(params, { signal: withTimeoutSignal(options?.signal) });
     } catch (error: any) {
-        // A number of OpenAI-compatible gateways reject response_format even
-        // though they support the chat-completions endpoint. Retry once
-        // without that optional parameter; the prompt still requires JSON.
         if (options?.jsonMode && (error?.status === 400 || error?.status === 422)) {
             const fallbackParams = { ...params } as Record<string, unknown>;
             delete fallbackParams.response_format;
+            response = await client.chat.completions.create(fallbackParams as any, { signal: withTimeoutSignal(options?.signal) });
+        } else if (options?.tools?.length && (error?.status === 400 || error?.status === 422)) {
+            // Gateway rejects tools — retry without them so the text-protocol fallback can run.
+            const fallbackParams = { ...params } as Record<string, unknown>;
+            delete fallbackParams.tools;
+            delete fallbackParams.tool_choice;
             response = await client.chat.completions.create(fallbackParams as any, { signal: withTimeoutSignal(options?.signal) });
         } else {
             throw error;
@@ -333,15 +364,44 @@ async function chatCompletionsCall(
         splitContent.reasoning,
     ].filter(Boolean).join('\n');
     const content = splitContent.text;
-    if (!content && !reasoning && options?.jsonMode) {
-        // Some gateways return 200 with an empty message when response_format
-        // is present. Retry once without the optional JSON enforcement (fresh
-        // timeout is applied internally on the next attempt).
-        return chatCompletionsCall(config, messages, { ...options, jsonMode: false });
+    if (!content && !reasoning && !message?.tool_calls?.length && options?.jsonMode) {
+        return chatCompletionsTurn(config, messages, { ...options, jsonMode: false });
     }
     if (reasoning.trim()) options?.onReasoning?.(reasoning.trim());
     reportUsage(config, response, options);
-    return typeof content === 'string' ? content : '';
+    const toolCalls = (message?.tool_calls || []).map((tc: any, i: number) => {
+        let args: Record<string, unknown> = {};
+        try {
+            args = tc?.function?.arguments ? JSON.parse(tc.function.arguments) : {};
+        } catch {
+            args = { raw: tc?.function?.arguments || '' };
+        }
+        return {
+            id: tc?.id || `call_${i}`,
+            name: String(tc?.function?.name || ''),
+            arguments: args && typeof args === 'object' ? args : {},
+        };
+    }).filter((c: { name: string }) => c.name);
+    const assistantMessage: ChatMessage = {
+        role: 'assistant',
+        content: typeof content === 'string' ? content : (content ?? ''),
+        ...(message?.tool_calls?.length ? { tool_calls: message.tool_calls } : {}),
+    };
+    return {
+        text: typeof content === 'string' ? content : '',
+        reasoning: reasoning.trim(),
+        toolCalls,
+        assistantMessage,
+    };
+}
+
+async function chatCompletionsCall(
+    config: ProviderConfig,
+    messages: ChatMessage[],
+    options?: ChatRequestOptions
+): Promise<string> {
+    const turn = await chatCompletionsTurn(config, messages, options);
+    return turn.text;
 }
 
 async function* chatCompletionsStream(
@@ -381,9 +441,10 @@ async function* chatCompletionsStream(
 // ─── Messages Format (Anthropic-style) ──────────────────────────────────────
 
 /** Convert a ChatMessage's content to Anthropic message content blocks. */
-export function toAnthropicContent(content: string | ContentPart[]): any[] {
+export function toAnthropicContent(content: string | ContentPart[] | null): any[] {
+    if (content == null) return [];
     if (typeof content === 'string') {
-        return [{ type: 'text', text: content }];
+        return content ? [{ type: 'text', text: content }] : [];
     }
     return content.map(part => {
         if (part.type === 'text') return { type: 'text', text: part.text };
@@ -484,7 +545,9 @@ export function toResponsesInput(messages: ChatMessage[]): any[] {
     // Passing role:'system' here gets a 400-class rejection.
     return messages.filter(m => m.role !== 'system').map(m => ({
         role: m.role,
-        content: typeof m.content === 'string'
+        content: m.content == null
+            ? ''
+            : typeof m.content === 'string'
             ? m.content
             : (m.content as ContentPart[]).map(p => p.type === 'text' ? { type: 'input_text', text: p.text } : { type: 'input_image', image_url: p.image_url.url }),
     }));
@@ -722,6 +785,8 @@ export async function sendChatRequest(
                         maxTokens: options?.maxTokens,
                         temperature: options?.temperature,
                         jsonMode: options?.jsonMode,
+                        tools: options?.tools,
+                        toolChoice: options?.toolChoice,
                     }).then(result => {
                         if (!result.ok) {
                             const error = new Error(result.message || 'Provider request failed.');
@@ -747,6 +812,8 @@ export async function sendChatRequest(
                             maxTokens: options?.maxTokens,
                             temperature: options?.temperature,
                             jsonMode: options?.jsonMode,
+                            tools: options?.tools,
+                            toolChoice: options?.toolChoice,
                         }),
                         signal: options?.signal,
                     }).then(async response => {
@@ -812,6 +879,185 @@ export async function sendChatRequest(
                     default:
                         throw new Error(`Unknown API format: ${effectiveConfig.apiFormat}`);
                 }
+            },
+            (effectiveConfig.name as ProviderName) || 'Provider',
+            3,
+            options?.signal
+        );
+        recordProviderSuccess(config.id, Date.now() - startedAt);
+        return result;
+    } catch (error) {
+        const err = error as { name?: string; code?: string };
+        const isAbort = err?.name === 'AbortError' || err?.code === 'ABORT_ERR' || err?.name === 'TimeoutError';
+        if (!isAbort) recordProviderError(config.id, error);
+        throw toFriendlyProviderError(error, `${effectiveConfig.name} · ${effectiveConfig.selectedModel}`);
+    }
+}
+
+/**
+ * One chat turn that can return native tool calls (chat_completions).
+ * Other formats return text only — callers may fall back to the text tool protocol.
+ */
+export async function sendChatTurn(
+    config: ProviderConfig,
+    messages: ChatMessage[],
+    options?: ChatRequestOptions
+): Promise<ChatTurnResult> {
+    assertHasKey(config);
+    const effectiveConfig = {
+        ...config,
+        apiKey: config.apiKey?.trim() || 'not-needed'
+    };
+    const startedAt = Date.now();
+    try {
+        const result = await withRetry(
+            async () => {
+                const electronAPI = typeof window !== 'undefined' ? window.electronAPI : undefined;
+                if (electronAPI?.isElectron && electronAPI.providerChat) {
+                    const requestId = `provider-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+                    const cancelRequest = () => {
+                        void electronAPI.cancelProviderChat?.(requestId);
+                    };
+                    options?.signal?.addEventListener('abort', cancelRequest, { once: true });
+                    if (options?.signal?.aborted) cancelRequest();
+                    const timeout = window.setTimeout(() => cancelRequest(), REQUEST_TIMEOUT_MS);
+                    try {
+                        const bridge = await electronAPI.providerChat({
+                            config: effectiveConfig,
+                            messages,
+                            requestId,
+                            maxTokens: options?.maxTokens,
+                            temperature: options?.temperature,
+                            jsonMode: options?.jsonMode,
+                            tools: options?.tools,
+                            toolChoice: options?.toolChoice,
+                        });
+                        if (!bridge.ok) {
+                            const error = new Error(bridge.message || 'Provider request failed.');
+                            if (bridge.status !== undefined) (error as any).status = bridge.status;
+                            if (bridge.code !== undefined) (error as any).code = bridge.code;
+                            throw error;
+                        }
+                        if (bridge.reasoning) options?.onReasoning?.(bridge.reasoning);
+                        reportUsageDirect(effectiveConfig, bridge.usage, options);
+                        return {
+                            text: bridge.text || '',
+                            reasoning: bridge.reasoning || '',
+                            toolCalls: bridge.toolCalls || [],
+                            assistantMessage: bridge.assistantMessage || {
+                                role: 'assistant',
+                                content: bridge.text || '',
+                            },
+                        } satisfies ChatTurnResult;
+                    } finally {
+                        window.clearTimeout(timeout);
+                        options?.signal?.removeEventListener('abort', cancelRequest);
+                    }
+                }
+                if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+                    const response = await fetch('/__provider_proxy', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            config: effectiveConfig,
+                            messages,
+                            maxTokens: options?.maxTokens,
+                            temperature: options?.temperature,
+                            jsonMode: options?.jsonMode,
+                            tools: options?.tools,
+                            toolChoice: options?.toolChoice,
+                        }),
+                        signal: options?.signal,
+                    });
+                    const result = await response.json() as { ok?: boolean; status?: number; body?: string; reasoning?: string; message?: string };
+                    if (!response.ok || !result.ok) {
+                        const providerBody = result.body ? parseProviderErrorBody(result.body) : '';
+                        const error = new Error(result.message || providerBody || `Provider request failed (${result.status || response.status}).`);
+                        if (result.status !== undefined) (error as any).status = result.status;
+                        throw error;
+                    }
+                    let data: any = {};
+                    try {
+                        data = result.body ? JSON.parse(result.body) : {};
+                    } catch (e) {
+                        const message = e instanceof Error ? e.message : 'Unknown JSON parsing error';
+                        throw new Error(`Provider proxy returned invalid JSON: ${message}. Body: ${(result.body || '').slice(0, 200)}`, { cause: e });
+                    }
+                    if (effectiveConfig.apiFormat === 'chat_completions') {
+                        const message = data.choices?.[0]?.message || {};
+                        const splitContent = splitChatContent(message.content);
+                        const reasoning = result.reasoning
+                            || extractReasoning(message.reasoning_content)
+                            || extractReasoning(message.reasoning)
+                            || splitContent.reasoning;
+                        if (reasoning.trim()) options?.onReasoning?.(reasoning.trim());
+                        reportUsage(effectiveConfig, data, options);
+                        const toolCalls = (message.tool_calls || []).map((tc: any, i: number) => {
+                            let args: Record<string, unknown> = {};
+                            try {
+                                args = tc?.function?.arguments ? JSON.parse(tc.function.arguments) : {};
+                            } catch {
+                                args = { raw: tc?.function?.arguments || '' };
+                            }
+                            return {
+                                id: tc?.id || `call_${i}`,
+                                name: String(tc?.function?.name || ''),
+                                arguments: args && typeof args === 'object' ? args : {},
+                            };
+                        }).filter((c: { name: string }) => c.name);
+                        return {
+                            text: splitContent.text || '',
+                            reasoning: reasoning.trim(),
+                            toolCalls,
+                            assistantMessage: {
+                                role: 'assistant',
+                                content: splitContent.text || '',
+                                ...(message.tool_calls?.length ? { tool_calls: message.tool_calls } : {}),
+                            },
+                        } satisfies ChatTurnResult;
+                    }
+                    // Non-chat_completions via proxy: text only.
+                    let text = '';
+                    let reasoning = result.reasoning || '';
+                    if (effectiveConfig.apiFormat === 'messages') {
+                        text = Array.isArray(data.content) ? data.content.filter((block: any) => block?.type === 'text').map((block: any) => block.text).join('\n') : data.text || '';
+                        if (!reasoning) reasoning = extractMessagesThinking(data.content);
+                    } else if (effectiveConfig.apiFormat === 'responses') {
+                        text = data.output_text || '';
+                        if (!reasoning) reasoning = extractResponsesReasoning(data.output);
+                    } else if (effectiveConfig.apiFormat === 'google') {
+                        const parsed = parseGeminiResponse(data);
+                        text = parsed.text;
+                        if (!reasoning) reasoning = parsed.reasoning;
+                    } else {
+                        text = data.choices?.[0]?.message?.content || '';
+                    }
+                    if (reasoning.trim()) options?.onReasoning?.(reasoning.trim());
+                    reportUsage(effectiveConfig, data, options);
+                    return {
+                        text: text || '',
+                        reasoning: reasoning.trim(),
+                        toolCalls: [],
+                        assistantMessage: { role: 'assistant', content: text || '' },
+                    } satisfies ChatTurnResult;
+                }
+                if (effectiveConfig.apiFormat === 'chat_completions') {
+                    return chatCompletionsTurn(effectiveConfig, messages, options);
+                }
+                // Other formats: reuse string path; text-protocol tools still work.
+                const text = effectiveConfig.apiFormat === 'messages'
+                    ? await messagesCall(effectiveConfig, messages, { ...options, signal: withTimeoutSignal(options?.signal) })
+                    : effectiveConfig.apiFormat === 'responses'
+                        ? await responsesCall(effectiveConfig, messages, { ...options, signal: withTimeoutSignal(options?.signal) })
+                        : effectiveConfig.apiFormat === 'google'
+                            ? await googleCall(effectiveConfig, messages, { ...options, signal: withTimeoutSignal(options?.signal) })
+                            : '';
+                return {
+                    text,
+                    reasoning: '',
+                    toolCalls: [],
+                    assistantMessage: { role: 'assistant', content: text },
+                } satisfies ChatTurnResult;
             },
             (effectiveConfig.name as ProviderName) || 'Provider',
             3,
