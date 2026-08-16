@@ -554,7 +554,8 @@ body {
   text-align: center;
 }
 .debate-stage-thought,
-.debate-stage-balloon {
+.debate-stage-balloon,
+.debate-stage-bubble {
   position: absolute;
   z-index: 4;
   max-width: 5.75rem;
@@ -610,9 +611,6 @@ body {
   word-break: break-word;
   overflow-wrap: anywhere;
 }
-.debate-stage-ticker::after {
-  content: attr(data-ticker-text);
-}
 .debate-stage-balloon .debate-stage-ticker {
   -webkit-line-clamp: 2;
 }
@@ -661,10 +659,7 @@ body {
   animation: debate-packet-fly 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 .debate-stage-packet::after {
-  content: attr(data-packet);
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: none;
 }
 /* A little motion trail angled toward the receiver. */
 .debate-stage-packet::before {
@@ -935,6 +930,7 @@ body {
   .debate-stage-beam,
   .debate-stage-thought,
   .debate-stage-balloon,
+  .debate-stage-bubble,
   .debate-stage-packet,
   .debate-stage-sent,
   .debate-speech {
@@ -1011,7 +1007,8 @@ body {
   .debate-stage-cast { gap: 4px; }
   .debate-stage-actor { flex-basis: 4.75rem; width: 4.75rem; }
   .debate-stage-balloon,
-  .debate-stage-thought { max-width: 4.5rem; width: 4.5rem; }
+  .debate-stage-thought,
+  .debate-stage-bubble { max-width: 4.5rem; width: 4.5rem; }
 }
 .ui-control {
   border-radius: 0.5rem;

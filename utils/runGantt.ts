@@ -56,10 +56,14 @@ export const stageTickerText = (text?: string, max = 72): string => {
     const sentences = (compact.match(/.*?(?:[.!?](?=\s|$)|$)/g) ?? [compact]).filter(Boolean);
     const completed = sentences.filter(sentence => /[.!?]\s*$/.test(sentence));
     const trailing = sentences[sentences.length - 1] || compact;
-    const candidate = /[.!?]\s*$/.test(trailing)
+    const candidate = (/[.!?]\s*$/.test(trailing)
         ? (completed[completed.length - 1] || trailing)
-        : trailing;
-    return formatStageSnippet(candidate, max);
+        : trailing).trim();
+    if (candidate.length <= max) return candidate;
+    // An unfinished streamed sentence keeps growing. Showing its leading
+    // characters made the ticker freeze permanently at the width limit, so
+    // use the newest bounded tail until punctuation advances the sentence.
+    return `…${candidate.slice(-(Math.max(1, max - 1))).trimStart()}`;
 };
 
 export const buildAnalystGantt = (progress: EnsembleProgress): GanttLane[] => {

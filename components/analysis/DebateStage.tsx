@@ -19,6 +19,7 @@ interface DebateStageProps {
     actors: DebateStageActor[];
     caption?: string;
     onOpenActor?: (id: string) => void;
+    suppressBubbles?: boolean;
 }
 
 interface Flight {
@@ -76,11 +77,10 @@ const StageTicker: React.FC<StageTickerProps> = ({ text, fallback = '', max = 72
         return () => window.clearInterval(timer);
     }, [target]);
 
-    // Keep the live text in a sanitized data attribute so the compact stage
-    // surface does not duplicate the same sentence in the transcript DOM.
-    // CSS only paints this already-normalized value; Markdown markers can
-    // never reach the attribute.
-    return <span className="debate-stage-ticker" data-ticker-text={shown} aria-label={shown} />;
+    // Render the sanitized text as real content. The old CSS-only attr()
+    // approach made the bubble difficult to animate and invisible to normal
+    // text measurement/accessibility APIs.
+    return <span className="debate-stage-ticker" data-ticker-text={shown} aria-label={shown}>{shown}</span>;
 };
 
 /**
@@ -88,7 +88,7 @@ const StageTicker: React.FC<StageTickerProps> = ({ text, fallback = '', max = 72
  * snippets, replies that fly sender → receiver. Click a seat to open its
  * chat modal.
  */
-export const DebateStage: React.FC<DebateStageProps> = ({ actors, caption, onOpenActor }) => {
+export const DebateStage: React.FC<DebateStageProps> = ({ actors, caption, onOpenActor, suppressBubbles = false }) => {
     const sceneRef = useRef<HTMLDivElement>(null);
     const actorRefs = useRef<Map<string, HTMLElement>>(new Map());
     const flownRef = useRef<Set<string>>(new Set());
@@ -172,8 +172,16 @@ export const DebateStage: React.FC<DebateStageProps> = ({ actors, caption, onOpe
                     {actors.map((actor, index) => {
                         const focused = actor.speaking || actor.thinking || actor.live;
                         const look = focusIndex < 0 || focused ? 0 : Math.sign(focusIndex - index);
-                        const thought = stageTickerText(actor.thought || (actor.thinking ? 'Thinking' : ''), 72);
-                        const speech = actor.speaking ? stageTickerText(actor.speech, 42) : '';
+                        // One actor gets one floating bubble. When a model has
+                        // both a live reasoning trace and public text, public
+                        // speech wins; the old implementation rendered both
+                        // bubbles at once (most visible on the moderator).
+                        const bubbleText = actor.speaking
+                            ? (actor.speech || actor.thought || '')
+                            : actor.thinking
+                                ? (actor.thought || 'Thinking')
+                                : '';
+                        const bubble = stageTickerText(bubbleText, actor.speaking ? 42 : 72);
                         return (
                             <button
                                 key={actor.id}
@@ -192,9 +200,13 @@ export const DebateStage: React.FC<DebateStageProps> = ({ actors, caption, onOpe
                                 }}
                             >
                                 {actor.speaking && <span className="debate-stage-beam" aria-hidden="true" />}
-                                {actor.thinking && thought && (
-                                    <span className="debate-stage-thought" data-thought={thought}>
-                                        <StageTicker text={actor.thought} fallback="Thinking" max={72} />
+                                {!suppressBubbles && bubble && (
+                                    <span
+                                        className={`debate-stage-bubble ${actor.speaking ? 'debate-stage-balloon' : 'debate-stage-thought'}`}
+                                        data-thought={actor.thought ? stageTickerText(actor.thought, 72) : undefined}
+                                        data-speech={actor.speaking ? bubble : undefined}
+                                    >
+                                        <StageTicker text={bubbleText} fallback={actor.speaking ? '' : 'Thinking'} max={actor.speaking ? 42 : 72} />
                                     </span>
                                 )}
                                 {actor.speaking && <span className="debate-stage-spot" />}
@@ -207,11 +219,6 @@ export const DebateStage: React.FC<DebateStageProps> = ({ actors, caption, onOpe
                                     look={look}
                                     size={52}
                                 />
-                                {speech && (
-                                    <span className="debate-stage-balloon" data-speech={speech}>
-                                        <StageTicker text={actor.speech} max={42} />
-                                    </span>
-                                )}
                                 {sentId === actor.id && (
                                     <span className="debate-stage-sent">sent!</span>
                                 )}
@@ -220,7 +227,7 @@ export const DebateStage: React.FC<DebateStageProps> = ({ actors, caption, onOpe
                         );
                     })}
                 </div>
-                {flight && (
+                {!suppressBubbles && flight && (
                     <span
                         className="debate-stage-packet"
                         aria-hidden="true"
@@ -234,6 +241,7 @@ export const DebateStage: React.FC<DebateStageProps> = ({ actors, caption, onOpe
                             ['--angle' as string]: `${flight.angle}deg`,
                         }}
                     >
+                        {formatStageSnippet(flight.text, 36)}
                     </span>
                 )}
             </div>

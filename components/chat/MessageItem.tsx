@@ -6,7 +6,6 @@ import MarkdownContent from '../shared/MarkdownContent';
 import ReasoningRow from '../shared/ReasoningRow';
 import LiveMarketDataView from '../market/LiveMarketDataView';
 import EnsembleProgressChat from '../analysis/EnsembleProgressChat';
-import DebateChat from '../analysis/DebateChat';
 import DebateSummary from '../analysis/DebateSummary';
 import TradingSignalCard from '../analysis/TradingSignalCard';
 import DebateRunLog from '../analysis/DebateRunLog';
@@ -144,7 +143,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
         typingMessageState, highlightedAnalysisId, expandedPostMortems, setExpandedPostMortems,
         expandedPostMortemImages, setExpandedPostMortemImages,
         savedAnalyses,
-        activeFrameworks, modelIdToName, providerNameToId,
+        activeFrameworks, modelIdToName,
         handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy,
         handleSaveAnalysis, handleInitiateUpdateTrade, handleInitiateSimulator,
         isSelectionMode, selectedMessageIds, onToggleMessageSelection,
@@ -159,13 +158,10 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
         onResumeDebate,
         onFollowUpTicket,
         onEditUserMessage,
-        onReplacementChoice,
-        onForkDebate,
         copiedMessageId,
         handleCopy,
         onTodayReassessment,
         todayReassessmentInFlight,
-        lensConfig,
     } = context;
 
     const isHighlighted = highlightedAnalysisId === message.id;
@@ -311,7 +307,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
 
                             {/* Inline thinking trace — collapsible reasoning row.
                                 Ensemble messages present their reasoning inside the
-                                Floor / DebateChat surfaces instead of this bubble. */}
+                                Floor surface instead of this bubble. */}
                             {message.role === MessageRole.AI && !isEnsembleMessage && thinkingEntries.length > 0 && (
                                 <div className="mb-4">
                                     <ReasoningRow
@@ -567,29 +563,6 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                         ))}
                                     </div>
                                 </div>
-                            )}
-
-                            {/* Debate transcript lives in the chat area next to
-                                the Floor stage: live streams below the stage,
-                                completed debates collapse behind "Show debate".
-                                Per-turn Thinking + Final output both render here. */}
-                            {(message.isDebating || debateTurns.length > 0) && (
-                                <DebateChat
-                                    debateTurns={debateTurns}
-                                    modelsUsed={message.modelsUsed}
-                                    reasoningProcesses={message.reasoningProcesses}
-                                    thoughtProcesses={message.thoughtProcesses}
-                                    modelIdToName={modelIdToName}
-                                    providerNameToId={providerNameToId}
-                                    lensConfig={lensConfig}
-                                    isDebating={!!message.isDebating}
-                                    activeDebateSpeakers={message.activeDebateSpeakers}
-                                    analysis={message.analysis}
-                                    messageId={message.id}
-                                    replacementOffer={message.replacementOffer}
-                                    onReplacementChoice={onReplacementChoice}
-                                    onForkDebate={onForkDebate}
-                                />
                             )}
 
                             {message.analysis && message.runStats?.analysts && message.runStats.analysts.length > 0 && (

@@ -29,7 +29,7 @@ import { offlineQueue } from '../services/infrastructure/OfflineQueueService';
 import { notifyAnalysisComplete } from '../services/infrastructure/CompletionNotifications';
 import { ThinkingRecord } from '../types/thinking';
 import { lensFromAnalystRole, lensFromSpeakerName } from '../utils/thinkingLens';
-import { splitThinkingFromOutput, looksLikeTradeOutput } from '../utils/thinkingSplit';
+import { splitThinkingFromOutput } from '../utils/thinkingSplit';
 import { sanitizeAIResponseLight } from '../utils/sanitizers';
 import { buildModelIdToName, isProviderReady } from '../utils/providerUtils';
 import { DEFAULT_LEVERAGE } from '../utils/conversationUtils';
@@ -37,9 +37,6 @@ import { loadLearningRules } from '../services/learning/LearningRulesService';
 import { buildDecisionReflectionContext } from '../services/learning/DecisionReflectionService';
 import { getEnabledStrategiesText } from '../services/infrastructure/StrategyService';
 import { StructuredRule } from '../types';
-import {
-    getCachedResponse, cacheResponse, getImageHash, hashString,
-} from '../services/infrastructure/responseCache';
 import { COMMON_WORDS } from '../constants/commonWords';
 import { useRafThrottle } from './useRafThrottle';
 
@@ -299,16 +296,10 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         confirmDialog,
     } = params;
 
-    // ─── P1-4: Response cache wrapper ─────────────────────────────────────
-    // Wraps a provider's analyzeTradingView call with a short-TTL response
-    // cache. Re-analyzing the same chart (same images + prompt + model) within
-    // 10 minutes returns the cached result instantly instead of re-OCRing,
-    // re-encoding images to base64, and re-calling the API. Cache hits are
-    // logged so they're visible during debugging.
-    /** Named parameters for cachedAnalyzeTradingView — replaces the fragile
-     *  `...rest: any[]` positional access. Every caller passes these by name
-     *  so adding/removing/renrolling fields is caught at compile time. */
-    interface CacheableAnalysisParams {
+    // Every analysis request goes to the configured provider. Keeping this
+    // wrapper preserves one typed call shape for the ensemble, solo, and
+    // replacement paths without replaying a locally cached AI response.
+    interface AnalysisRequestParams {
         imageSummaries: string[];
         chatHistory: Message[];
         finalTradeSummary: string | null;
@@ -331,69 +322,24 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         onPartialOutput: (chunk: string) => void;
     }
 
-    const cachedAnalyzeTradingView = useCallback(async (
+    const runAnalyzeTradingView = useCallback(async (
         config: ProviderConfig,
         model: string,
         prompt: string,
         imageFiles: File[],
         dataURLs: string[],
         signal: AbortSignal | undefined,
-        params: CacheableAnalysisParams,
+        params: AnalysisRequestParams,
     ): Promise<{ thoughtProcess: string; finalOutput: string; analysis: any; sources?: any[] }> => {
-        // Build cache key from image hashes + prompt + model. The hash comes
-        // from the actual image BYTES (the dataURLs) — keying by File
-        // name:size:lastModified let two different charts re-exported with
-        // identical metadata collide and serve each other's analysis.
-        const imageHashes = dataURLs.length > 0
-            ? dataURLs.map(url => getImageHash(url))
-            : ['no-images'];
-
-        // Everything that alters the model input beyond the prompt itself must
-        // be part of the key: deep analysis, accuracy submode, role/custom
-        // prompts, custom instructions, learning flags, pattern-memory summary,
-        // recent insights, global memory, and thread context. Hashing keeps the
-        // key short. Without this a 10-minute-TTL hit serves an analysis
-        // computed under DIFFERENT instructions for the same chart.
-        // OCR image summaries, the recent chat-history tail (bounded —
-        // full-history hashing would run on every call) and the provider
-        // identity (config.id) are folded in too: two providers exposing the
-        // same model id, or a re-analysis after a different vision model
-        // re-OCR'd the chart, must not share entries.
-        // Message IDs are deliberately excluded from the history fingerprint:
-        // every send creates a fresh `user-<Date.now()>` id, so including ids
-        // made the tail differ on EVERY run — the same-chart repeat (the
-        // whole point of the 10-min TTL) could never hit the cache.
-        const historyFingerprint = hashString(JSON.stringify(
-            params.chatHistory?.slice(-10).map(m => `${m.role}:${(m.text || '').slice(0, 200)}`) || []
-        ));
-        const modeContext = hashString(JSON.stringify([
-            params.deepenAnalysis, params.subMode, params.rolePrompt, params.systemPromptOverride,
-            params.finalTradeSummary, params.recentInsights, params.globalMemory, params.threadSummary,
-            params.customInstructions, params.userStrategies, params.isPlaybookEnabledInPureAI, params.isFamiliesEnabledInPureAI, params.isMemoryEnabledInPureAI,
-            params.activeFrameworks,
-            params.imageSummaries,
-            historyFingerprint,                    // recent chat history (bounded)
-            config.id,                             // provider identity
-        ]));
-
-        const cached = await getCachedResponse(imageHashes, prompt, model, config.id, modeContext);
-        if (cached) {
-            devLog(`[ResponseCache] HIT for ${config.name || model} (${model})`);
-            // Replay the stored reasoning through onReasoning — a cache hit
-            // otherwise left the live reasoning views and the thinking
-            // record's rawReasoning empty for this run.
-            if (cached.thoughtProcess && !looksLikeTradeOutput(cached.thoughtProcess)) {
-                params.onReasoning?.(cached.thoughtProcess);
-            }
-            return {
-                thoughtProcess: cached.thoughtProcess,
-                finalOutput: cached.finalOutput || '',
-                analysis: cached.analysis,
-                sources: cached.sources,
-            };
-        }
-
-        const result = await analyzeTradingViewWithTransientRetry(config, {
+        // The seat model is authoritative. Provider configs can be stale after
+        // a Team/Lens selection or replacement choice, and the generic client
+        // reads config.selectedModel when constructing the API request. Clone
+        // only when necessary so the request cannot silently run on a prior
+        // model while the UI labels it as another seat.
+        const requestConfig = config.selectedModel === model
+            ? config
+            : { ...config, selectedModel: model };
+        const result = await analyzeTradingViewWithTransientRetry(requestConfig, {
             prompt,
             images: (params.imageSummaries?.length ?? 0) > 0 ? [] : imageFiles,
             imageSummaries: params.imageSummaries ?? [],
@@ -416,18 +362,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             onReasoning: params.onReasoning,
             onPartialOutput: params.onPartialOutput,
         });
-
-        // Only cache successful, non-empty results.
-        if (result && result.analysis) {
-            cacheResponse(imageHashes, prompt, model, {
-                thoughtProcess: result.thoughtProcess,
-                finalOutput: result.finalOutput,
-                analysis: result.analysis,
-                sources: result.sources,
-            }, config.id, modeContext);
-            devLog(`[ResponseCache] STORED for ${config.name || model} (${model})`);
-        }
-
         return result;
     }, []);
 
@@ -1704,7 +1638,7 @@ ${reflectionBlock}`
                     // mid-debate replacement (the replacement must see the exact
                     // same prompt/images/context as the analysts it steps in for —
                     // otherwise the moderator gets an incomparable position).
-                    const buildAnalystParams = (provider: { config: ProviderConfig; name: string; model: string; thoughtsKey: string }): CacheableAnalysisParams => ({
+                    const buildAnalystParams = (provider: { config: ProviderConfig; name: string; model: string; thoughtsKey: string }): AnalysisRequestParams => ({
                         imageSummaries: summaries,
                         chatHistory: currentMessages,
                         finalTradeSummary: enhancedFinalTradeSummary,
@@ -1781,7 +1715,7 @@ ${reflectionBlock}`
                             );
                         },
                     });
-                    const analysisPromises = enabledProviders.map(provider => {
+                    const analysisPromises = enabledProviders.map((provider, analystIndex) => {
                         if (useResume) {
                             const seed = resumeSeeds.find(s => s.name === provider.name);
                             if (!seed) {
@@ -1826,10 +1760,13 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 buildHybridEnvelope(freshHybridData, envelopeKind),
                                 buildOcrEnvelope(summaries, envelopeKind),
                             ].filter(Boolean).join('\n\n');
-                            return cachedAnalyzeTradingView(
+                            const independentSeatInstruction = !runLensConfig.enabled
+                                ? `\n\n**INDEPENDENT ANALYST SEAT ${analystIndex + 1}:** Recompute this chart independently. Do not copy a stock reasoning script or assume another seat's conclusion. Prioritize ${analystIndex === 0 ? 'market structure and directional context' : analystIndex === 1 ? 'entry mechanics, levels, and confirmation' : 'risk, invalidation, and failure scenarios'} and use your own wording.`
+                                : '';
+                            return runAnalyzeTradingView(
                                 provider.config,
                                 provider.model,
-                                `${envelope ? `${envelope}\n\n` : ''}${enhancedPrompt}${exemplarBlock}`,
+                                `${envelope ? `${envelope}\n\n` : ''}${enhancedPrompt}${independentSeatInstruction}${exemplarBlock}`,
                                 imageFiles,
                                 dataURLs,
                                 currentAbortController.signal,
@@ -2242,7 +2179,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                             const model = candidate.selectedModel || candidate.models?.[0] || '';
                             const replacementProvider = { config: candidate, name: candidate.name, model, thoughtsKey: `${candidate.id}:${model}` };
                             const runStartedAtMs = performance.now();
-                            const result = await cachedAnalyzeTradingView(
+                            const result = await runAnalyzeTradingView(
                                 candidate,
                                 model,
                                 enhancedPrompt,
@@ -3085,7 +3022,7 @@ ${accuracyVerificationNote}`
                             // same onReasoning slot as the multi path so the
                             // thinking record carries the chain-of-thought.
                             let soloRawReasoning = '';
-                            const result = await cachedAnalyzeTradingView(
+                            const result = await runAnalyzeTradingView(
                             provider.config,
                             provider.model,
                             `${buildHybridEnvelope(freshHybridData, 'general') ? `${buildHybridEnvelope(freshHybridData, 'general')}\n\n` : ''}${enhancedPrompt}`,
