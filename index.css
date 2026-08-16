@@ -220,7 +220,142 @@ body {
   animation: stream-fade 160ms ease-out;
 }
 
-/* ===== FLOOR DEBATE STAGE (3D cube bots, DualTalk-style turn-taking) ===== */
+/* ===== REASONING ROW (collapsible thinking, DeepSeek-style) =====
+   One quiet 24px line: a live ticker while running (latest line), a
+   first-line summary when done, gradient light-sweep as the running
+   indicator. Expands to the dimmed full trace. */
+.reasoning-row {
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.02);
+  overflow: hidden;
+}
+.reasoning-row-summary {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 24px;
+  margin: 0;
+  padding: 3px 8px;
+  border: 0;
+  background: transparent;
+  color: #71717a;
+  font-size: 11px;
+  line-height: 18px;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  list-style: none;
+}
+.reasoning-row-summary::-webkit-details-marker { display: none; }
+.reasoning-row-summary:hover { color: #d4d4d8; }
+.reasoning-row-icon { width: 14px; height: 14px; flex-shrink: 0; opacity: 0.8; }
+.reasoning-row-label { flex-shrink: 0; letter-spacing: 0.02em; }
+.reasoning-row-clip {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  color: #52525b;
+}
+.reasoning-row-line {
+  display: inline-block;
+  white-space: nowrap;
+}
+/* Blinking caret at the ticker's edge while running. */
+.reasoning-row[data-state="running"] .reasoning-row-line::after {
+  content: '';
+  display: inline-block;
+  width: 5px;
+  height: 10px;
+  margin-left: 3px;
+  vertical-align: -1px;
+  border-radius: 1px;
+  background: #a1a1aa;
+  animation: reasoning-caret-blink 0.9s steps(2, start) infinite;
+}
+/* Talking dots next to the label while the trace streams. */
+.reasoning-row-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 2.5px;
+  flex-shrink: 0;
+}
+.reasoning-row-dots span {
+  width: 3px;
+  height: 3px;
+  border-radius: 999px;
+  background: #a1a1aa;
+  animation: reasoning-dots-bounce 1.1s ease-in-out infinite;
+}
+.reasoning-row-dots span:nth-child(2) { animation-delay: 0.16s; }
+.reasoning-row-dots span:nth-child(3) { animation-delay: 0.32s; }
+/* Blinking caret at the end of the expanded live trace. */
+.reasoning-row-caret {
+  display: inline-block;
+  width: 6px;
+  height: 0.95em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  border-radius: 1px;
+  background: #a1a1aa;
+  animation: reasoning-caret-blink 0.9s steps(2, start) infinite;
+}
+@keyframes reasoning-dots-bounce {
+  0%, 70%, 100% { opacity: 0.3; transform: translateY(0); }
+  35% { opacity: 1; transform: translateY(-2.5px); }
+}
+@keyframes reasoning-caret-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+.reasoning-row-chevron {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 120ms ease, transform 160ms ease;
+}
+.reasoning-row-summary:hover .reasoning-row-chevron,
+.reasoning-row.is-open .reasoning-row-chevron { opacity: 0.7; }
+.reasoning-row-chevron.is-open { transform: rotate(180deg); }
+.reasoning-row-body {
+  max-height: 16rem;
+  overflow-y: auto;
+  padding: 8px 10px 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 12px;
+}
+.reasoning-row[data-state="running"] .reasoning-row-summary::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 20%, rgba(255, 255, 255, 0.07) 50%, transparent 80%);
+  transform: translateX(-100%);
+  animation: reasoning-sweep 2.6s ease-out infinite;
+  pointer-events: none;
+}
+@keyframes reasoning-sweep {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .reasoning-row[data-state="running"] .reasoning-row-summary::after {
+    animation: none;
+    transform: none;
+    opacity: 0.35;
+  }
+  .reasoning-row-dots span,
+  .reasoning-row-caret,
+  .reasoning-row[data-state="running"] .reasoning-row-line::after {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
+/* ===== FLOOR DEBATE STAGE (lit stage, Grok disc bots, DualTalk turn-taking) ===== */
 .debate-floor-body {
   position: relative;
   display: flex;
@@ -236,27 +371,65 @@ body {
   overflow: visible;
   border-bottom: none;
   background:
-    radial-gradient(ellipse at 50% 70%, rgba(255, 255, 255, 0.05), transparent 58%),
-    #0c0c0e;
+    radial-gradient(ellipse 120% 66% at 50% 0%, rgba(255, 255, 255, 0.06), transparent 60%),
+    radial-gradient(ellipse at 50% 108%, rgba(255, 255, 255, 0.05), transparent 55%),
+    #0a0a0c;
 }
 .debate-stage-scene {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  min-height: 220px;
-  padding: 48px 16px 28px;
+  min-height: 230px;
+  padding: 52px 16px 30px;
 }
-.debate-stage-desk {
+/* Depth layers: a receding floor grid + a horizon line, both masked so they
+   fade before the edges. Pure white alphas — stays monochrome. */
+.debate-stage-backdrop {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+/* Static depth grid — the old infinite drift burned frames for ambience the
+   eye stopped noticing; a still grid reads the same and costs nothing. */
+.debate-stage-grid {
   position: absolute;
   left: 50%;
-  bottom: 38px;
-  width: min(32rem, 78%);
-  height: 12px;
+  top: 46%;
+  width: 190%;
+  height: 120%;
+  transform: translateX(-50%) perspective(340px) rotateX(58deg);
+  transform-origin: 50% 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(ellipse 62% 90% at 50% 12%, #000 32%, transparent 78%);
+  -webkit-mask-image: radial-gradient(ellipse 62% 90% at 50% 12%, #000 32%, transparent 78%);
+}
+.debate-stage-horizon {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  top: 46%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.16), transparent);
+}
+.debate-stage-floor {
+  position: absolute;
+  left: 50%;
+  bottom: 34px;
+  width: min(34rem, 82%);
+  height: 20px;
   border-radius: 50%;
-  background: #202024;
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
   transform: translateX(-50%);
+  background:
+    radial-gradient(ellipse at 50% 30%, rgba(255, 255, 255, 0.09), transparent 62%),
+    #17171a;
+  box-shadow:
+    0 2px 0 rgba(255, 255, 255, 0.05) inset,
+    0 10px 22px rgba(0, 0, 0, 0.5);
 }
 .debate-stage-cast {
   position: relative;
@@ -287,23 +460,43 @@ body {
   opacity: 0.42;
   transform: none;
   cursor: pointer;
-  transition: opacity 0.35s ease, transform 0.35s ease;
+  transition: opacity 0.35s ease, transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+/* Ground reflection under each bot — anchors the cast to the platform. */
+.debate-stage-actor::after {
+  content: '';
+  position: absolute;
+  bottom: 26px;
+  left: 50%;
+  width: 44px;
+  height: 8px;
+  border-radius: 50%;
+  transform: translateX(-50%);
+  background: radial-gradient(ellipse, rgba(255, 255, 255, 0.14), transparent 70%);
+  opacity: 0.5;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  pointer-events: none;
 }
 .debate-stage-actor:focus-visible {
   outline: 1px solid #a1a1aa;
   outline-offset: 4px;
 }
 .debate-stage-name {
-  margin-top: 6px;
+  margin-top: 8px;
   max-width: 5.5rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(22, 22, 24, 0.85);
   font-size: 9px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #6f6f78;
   text-align: center;
+  transition: color 0.3s ease, border-color 0.3s ease;
 }
 .debate-stage-actor.is-live,
 .debate-stage-actor.is-thinking,
@@ -311,9 +504,37 @@ body {
   opacity: 1;
   z-index: 2;
 }
+.debate-stage-actor.is-thinking::after,
+.debate-stage-actor.is-speaking::after {
+  opacity: 0.9;
+  transform: translateX(-50%) scaleX(1.18);
+}
+.debate-stage-actor.is-thinking .debate-stage-name {
+  color: #b0b0b6;
+  border-color: rgba(255, 255, 255, 0.18);
+}
 .debate-stage-actor.is-speaking {
-  transform: scale(1.08);
+  transform: scale(1.1);
   z-index: 3;
+}
+.debate-stage-actor.is-speaking .debate-stage-name {
+  color: #f5f5f6;
+  border-color: rgba(255, 255, 255, 0.28);
+}
+/* Spotlight cone behind the active speaker — fades in from above. */
+.debate-stage-beam {
+  position: absolute;
+  top: -34px;
+  left: 50%;
+  width: 130px;
+  height: 150px;
+  transform: translateX(-50%);
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.02) 78%, transparent);
+  clip-path: polygon(46% 0, 54% 0, 100% 100%, 0 100%);
+  filter: blur(1px);
+  opacity: 0.85;
+  pointer-events: none;
+  animation: debate-beam-in 0.5s ease-out;
 }
 .debate-stage-spot {
   position: absolute;
@@ -336,26 +557,36 @@ body {
 .debate-stage-balloon {
   position: absolute;
   z-index: 4;
-  max-width: 5.5rem;
+  max-width: 5.75rem;
   max-height: 3.2rem;
   overflow: hidden;
-  padding: 5px 7px;
+  padding: 5px 8px;
   font-size: 10px;
   line-height: 1.3;
   color: #b0b0b6;
-  background: #202024;
+  background: rgba(32, 32, 36, 0.96);
   border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
+/* Thinking bubble: anchored (no infinite bobbing) with a slow light sweep
+   across its background as the only live signal. */
 .debate-stage-thought {
   bottom: calc(100% - 2px);
   left: 50%;
-  width: 5.5rem;
+  width: 5.75rem;
   transform: translateX(-50%);
   border-radius: 10px 10px 10px 4px;
   cursor: pointer;
   pointer-events: auto;
   text-align: left;
-  animation: debate-thought-float 2.2s ease-in-out infinite;
+  background: linear-gradient(
+    100deg,
+    rgba(32, 32, 36, 0.96) 38%,
+    rgba(52, 52, 58, 0.96) 50%,
+    rgba(32, 32, 36, 0.96) 62%
+  );
+  background-size: 260% 100%;
+  animation: debate-thought-sweep 2.6s ease-out infinite;
 }
 .debate-stage-thought::before {
   content: '';
@@ -369,7 +600,9 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.12);
 }
 .debate-stage-thought::after {
-  content: attr(data-thought);
+  display: none;
+}
+.debate-stage-ticker {
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
@@ -377,8 +610,14 @@ body {
   word-break: break-word;
   overflow-wrap: anywhere;
 }
+.debate-stage-ticker::after {
+  content: attr(data-ticker-text);
+}
+.debate-stage-balloon .debate-stage-ticker {
+  -webkit-line-clamp: 2;
+}
 .debate-stage-balloon {
-  top: 6px;
+  top: 4px;
   left: 50%;
   transform: translateX(-50%);
   border-radius: 10px;
@@ -386,14 +625,20 @@ body {
   pointer-events: auto;
   animation: debate-stage-balloon-in 0.28s ease-out;
 }
+.debate-stage-balloon::before {
+  content: '';
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  border-right: 1px solid rgba(255, 255, 255, 0.12);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  background: #202024;
+  transform: translateX(-50%) rotate(45deg);
+}
 .debate-stage-balloon::after {
-  content: attr(data-speech);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  word-break: break-word;
-  overflow-wrap: anywhere;
+  display: none;
 }
 .debate-stage-packet {
   position: absolute;
@@ -413,10 +658,25 @@ body {
   pointer-events: auto;
   transform: translate(-50%, -50%);
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 8px 0 16px rgba(210, 210, 214, 0.18);
-  animation: debate-packet-fly 0.85s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: debate-packet-fly 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 .debate-stage-packet::after {
   content: attr(data-packet);
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* A little motion trail angled toward the receiver. */
+.debate-stage-packet::before {
+  content: '';
+  position: absolute;
+  right: -12px;
+  top: 50%;
+  width: 16px;
+  height: 2px;
+  background: linear-gradient(90deg, rgba(210, 210, 214, 0.5), transparent);
+  transform: translateY(-50%);
+  opacity: 0.7;
 }
 .debate-stage-sent {
   position: absolute;
@@ -428,7 +688,7 @@ body {
   text-transform: uppercase;
   color: #d2d2d6;
   pointer-events: none;
-  animation: debate-sent-pop 1.05s ease-out forwards;
+  animation: debate-sent-pop 0.7s ease-out forwards;
 }
 .debate-stage-thought-panel {
   margin: 0 12px 12px;
@@ -444,6 +704,9 @@ body {
   --look: 0;
   --bob-delay: 0ms;
   --gaze-delay: 0ms;
+  --blink-delay: 0ms;
+  --flap-delay: 0ms;
+  --ring-delay: 0ms;
   position: relative;
   display: inline-flex;
   align-items: flex-end;
@@ -464,8 +727,29 @@ body {
   transition: transform 0.35s ease, opacity 0.35s ease;
 }
 .debate-bot.is-speaking .debate-bot-shadow {
-  transform: scaleX(0.78);
-  opacity: 0.7;
+  transform: scaleX(0.74);
+  opacity: 0.6;
+}
+/* Sonar rings — ripple outward while the bot talks. */
+.debate-bot-rings {
+  position: absolute;
+  left: 50%;
+  bottom: 4px;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.debate-bot-ring {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--bot-size);
+  height: var(--bot-size);
+  border-radius: 50%;
+  border: 1px solid rgba(245, 245, 246, 0.28);
+  transform: translate(-50%, -50%);
+  animation: debate-bot-ring 1.6s ease-out infinite;
+  animation-delay: var(--ring-delay);
 }
 .debate-bot-body {
   position: relative;
@@ -474,8 +758,12 @@ body {
   aspect-ratio: 1;
   flex-shrink: 0;
   border-radius: 50%;
-  background: var(--bot-fill);
+  background:
+    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.16), transparent 46%),
+    var(--bot-fill);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   animation: debate-bot-idle 3.2s ease-in-out infinite;
   animation-delay: var(--bob-delay);
 }
@@ -483,13 +771,22 @@ body {
   animation: debate-bot-think 2s ease-in-out infinite;
 }
 .debate-bot.is-speaking .debate-bot-body {
-  animation: debate-bot-speak 0.7s ease-in-out infinite;
-  box-shadow: 0 0 0 2px rgba(245, 245, 246, 0.22);
+  animation: debate-bot-speak 0.9s ease-in-out infinite;
+  box-shadow:
+    0 0 0 2px rgba(245, 245, 246, 0.22),
+    0 4px 16px rgba(0, 0, 0, 0.45);
+}
+.debate-bot-face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  animation: debate-bot-face 4.8s ease-in-out infinite;
+  animation-delay: var(--gaze-delay);
 }
 .debate-bot-eyes {
-  position: absolute;
-  top: 22%;
-  left: 48%;
   display: flex;
   gap: 16%;
   width: 32%;
@@ -500,8 +797,6 @@ body {
   animation-delay: var(--gaze-delay);
 }
 .debate-bot.is-thinking .debate-bot-eyes {
-  top: 16%;
-  left: 50%;
   animation: debate-bot-scan 1.8s ease-in-out infinite;
 }
 .debate-bot.is-speaking .debate-bot-eyes {
@@ -512,27 +807,44 @@ body {
   min-width: 0;
   border-radius: 999px;
   background: #f5f5f6;
-}
-.debate-bot.is-thinking .debate-bot-eye {
+  transform-origin: center;
   animation: debate-bot-blink 2.6s ease-in-out infinite;
+  animation-delay: var(--blink-delay);
 }
-.debate-bot-orbs {
+.debate-bot-mouth {
+  width: 18%;
+  height: 5px;
+  margin-top: 12%;
+  border-radius: 999px;
+  background: rgba(245, 245, 246, 0.85);
+  transform-origin: center;
+  animation: debate-bot-mouth-idle 4.8s ease-in-out infinite;
+  animation-delay: var(--flap-delay);
+}
+.debate-bot.is-speaking .debate-bot-mouth {
+  animation: debate-bot-mouth-talk 0.24s ease-in-out infinite;
+}
+/* Thinking orbit — a particle trail tracing the bot's own parametric curve.
+   Centered on the disc; dots travel via offset-path (compositor-friendly). */
+.debate-bot-orbit {
   position: absolute;
-  left: 62%;
-  top: -4px;
-  width: 28px;
-  height: 36px;
+  left: 50%;
+  top: 50%;
+  width: 64px;
+  height: 64px;
+  transform: translate(-50%, -50%);
   pointer-events: none;
 }
-.debate-bot-orbs span {
+.debate-bot-orbit-dot {
   position: absolute;
+  left: 0;
+  top: 0;
   border-radius: 999px;
-  background: #8a8a92;
-  animation: debate-orb 1.35s ease-in-out infinite;
+  background: #d4d4d8;
+  offset-rotate: 0deg;
+  offset-anchor: center;
+  animation: debate-orbit-travel 4.8s linear infinite;
 }
-.debate-bot-orbs span:nth-child(1) { width: 5px; height: 5px; left: 0; bottom: 0; }
-.debate-bot-orbs span:nth-child(2) { width: 7px; height: 7px; left: 8px; bottom: 10px; animation-delay: 0.15s; }
-.debate-bot-orbs span:nth-child(3) { width: 9px; height: 9px; left: 16px; bottom: 22px; animation-delay: 0.3s; }
 
 @keyframes debate-bot-idle {
   0%, 100% { transform: translateY(0); }
@@ -543,8 +855,12 @@ body {
   50% { transform: translateY(-6px) scale(1.03); }
 }
 @keyframes debate-bot-speak {
-  0%, 100% { transform: translateY(-2px) scale(1.06); }
-  50% { transform: translateY(0) scale(1.1); }
+  0%, 100% { transform: translateY(-1px) scale(1.02); }
+  50% { transform: translateY(0) scale(1.05); }
+}
+@keyframes debate-bot-face {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(1px); }
 }
 @keyframes debate-bot-gaze {
   0%, 100% { transform: rotate(12deg) translate(0, 0); }
@@ -560,30 +876,76 @@ body {
   50% { transform: rotate(12deg) scaleY(0.72); }
 }
 @keyframes debate-bot-blink {
-  0%, 40%, 48%, 100% { transform: scaleY(1); }
-  44% { transform: scaleY(0.12); }
+  0%, 42%, 50%, 100% { transform: scaleY(1); }
+  46% { transform: scaleY(0.12); }
 }
-@keyframes debate-orb {
-  0%, 100% { opacity: 0.25; transform: translateY(0); }
-  40% { opacity: 1; transform: translateY(-4px); }
+@keyframes debate-bot-mouth-idle {
+  0%, 100% { transform: scaleX(1); opacity: 0.85; }
+  50% { transform: scaleX(0.72); opacity: 0.5; }
+}
+@keyframes debate-bot-mouth-talk {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(1.8); }
+}
+/* A single calm pulse ring replaces the twin sonar rings. */
+@keyframes debate-bot-ring {
+  0% { transform: translate(-50%, -50%) scale(0.92); opacity: 0.5; }
+  100% { transform: translate(-50%, -50%) scale(1.7); opacity: 0; }
+}
+@keyframes debate-orbit-travel {
+  from { offset-distance: 0%; }
+  to { offset-distance: 100%; }
 }
 @keyframes debate-spot {
   0%, 100% { opacity: 0.45; transform: scaleX(1); }
   50% { opacity: 0.85; transform: scaleX(1.12); }
 }
-@keyframes debate-thought-float {
-  0%, 100% { transform: translateX(-50%) translateY(0); }
-  50% { transform: translateX(-50%) translateY(-3px); }
+@keyframes debate-beam-in {
+  from { opacity: 0; transform: translateX(-50%) scaleY(0.6); transform-origin: top; }
+  to { opacity: 0.85; transform: translateX(-50%) scaleY(1); }
+}
+@keyframes debate-thought-sweep {
+  from { background-position: 130% 0; }
+  to { background-position: -130% 0; }
 }
 @keyframes debate-packet-fly {
-  0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  0% { transform: translate(-50%, -50%) rotate(var(--angle, 0deg)) scale(1); opacity: 1; }
   70% { opacity: 1; }
-  100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.72); opacity: 0.18; }
+  100% {
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) rotate(var(--angle, 0deg)) scale(0.72);
+    opacity: 0.18;
+  }
 }
 @keyframes debate-sent-pop {
   0% { opacity: 0; transform: translate(-50%, 6px) scale(0.85); }
   18% { opacity: 1; transform: translate(-50%, -10px) scale(1); }
   100% { opacity: 0; transform: translate(-50%, -18px) scale(1); }
+}
+/* Motion follows state, never decoration: under reduced motion the Floor
+   keeps its state styling (dim/lit, ring, bubble) but stops animating. */
+@media (prefers-reduced-motion: reduce) {
+  .debate-bot-body,
+  .debate-bot-face,
+  .debate-bot-eyes,
+  .debate-bot-eye,
+  .debate-bot-mouth,
+  .debate-bot-ring,
+  .debate-bot-orbit-dot,
+  .debate-stage-spot,
+  .debate-stage-beam,
+  .debate-stage-thought,
+  .debate-stage-balloon,
+  .debate-stage-packet,
+  .debate-stage-sent,
+  .debate-speech {
+    animation: none !important;
+  }
+  .debate-stage-actor,
+  .debate-stage-name,
+  .debate-stage-actor::after,
+  .debate-bot-shadow {
+    transition: none !important;
+  }
 }
 .debate-speech {
   animation: debate-speech-in 0.28s ease-out;

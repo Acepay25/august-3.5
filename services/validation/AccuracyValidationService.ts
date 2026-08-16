@@ -138,12 +138,24 @@ export const validateMultiTimeframeConfluence = (
     const expectedDirection = proposedDirection === 'Long' ? 'bullish' : 'bearish';
 
     if (confluenceDirection !== expectedDirection && confluenceDirection !== 'neutral') {
+        const stronglyOpposite = proposedDirection === 'Long'
+            ? confluence.score <= 25
+            : confluence.score >= 75;
         errors.push(` CONFLUENCE CONFLICT: MTF confluence is ${confluenceDirection.toUpperCase()} but trade is ${proposedDirection}`);
-        adjustedConfidence = 'Avoid';
+        if (stronglyOpposite) {
+            // A strongly opposite multi-timeframe read is a genuine hard
+            // blocker. A normal disagreement is uncertainty, not proof that
+            // no trade can work, so it should remain a graded downgrade.
+            adjustedConfidence = 'Avoid';
+            warnings.push(` HARD BLOCK: MTF confluence strongly opposes ${proposedDirection} (score ${confluence.score}).`);
+        } else {
+            adjustedConfidence = proposedConfidence === 'High' ? 'Medium' : 'Low';
+            warnings.push(` MTF disagreement: ${confluenceDirection} opposes ${proposedDirection}; downgraded to ${adjustedConfidence}, not Avoid.`);
+        }
     }
 
     // Check confluence score requirements based on confidence
-    if (proposedConfidence === 'High') {
+    if (proposedConfidence === 'High' && adjustedConfidence !== 'Avoid') {
         if (confluence.score < 65 && proposedDirection === 'Long') {
             warnings.push(`High confidence requires MTF score ≥65 for Long trades (current: ${confluence.score})`);
             adjustedConfidence = 'Medium';

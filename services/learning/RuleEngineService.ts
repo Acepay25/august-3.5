@@ -17,6 +17,20 @@ import { StructuredRule } from '../../types';
 import { checkTradeAgainstRules as checkInvalidationRules, RuleCheckResult } from '../validation/InvalidationRuleService';
 import { parsePrice } from '../../utils/analysisUtils';
 
+/**
+ * A post-mortem sentence is not a hard trading rule by itself.  The notebook
+ * skill system needs repeated outcome evidence before it can veto a setup.
+ * Keep the legacy structured-rule path aligned with that policy.
+ */
+const MIN_CONFIRMED_RULE_SAMPLES = 5;
+
+const isConfirmedLossRule = (rule: StructuredRule): boolean => {
+    const sample = (rule.wins ?? 0) + (rule.losses ?? 0);
+    return rule.outcome === 'LOSS'
+        && rule.status === 'confirmed'
+        && sample >= MIN_CONFIRMED_RULE_SAMPLES;
+};
+
 export interface RuleValidationResult {
     isValid: boolean;
     adjustedConfidence: ConfidenceLevel | null;
@@ -92,12 +106,12 @@ export const validateAllRules = (
                     const msg = `🛑 RULE VIOLATION: "${rule.ifCondition}" requires >${rule.constraints.minRR} R:R.`;
                     structuredViolations++;
 
-                    if (rule.isStrictMode) {
+                    if (rule.isStrictMode && isConfirmedLossRule(rule)) {
                         errors.push(msg);
                         adjustedConfidence = 'Avoid';
                         blockingViolations = true;
                     } else {
-                        warnings.push(msg);
+                        warnings.push(`${msg} Advisory only until this loss pattern is confirmed by ${MIN_CONFIRMED_RULE_SAMPLES}+ matching outcomes.`);
                     }
                 }
             }

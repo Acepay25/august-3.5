@@ -14,7 +14,7 @@ import { enforceCitedVerdict } from '../services/providers/ensembleService';
 import { computeEvidenceQualityStats } from '../utils/analysisQuality';
 import { buildAnalysisReportMarkdown } from '../utils/analysisReport';
 import { describeWatchTick } from '../utils/watchTicks';
-import { buildAnalystGantt, lastThoughtSnippet, laneFillForStatus } from '../utils/runGantt';
+import { buildAnalystGantt, formatStageSnippet, lastThoughtSnippet, laneFillForStatus, stageTickerText } from '../utils/runGantt';
 import { parseComposerIntent, formatComposerSteer } from '../utils/composerMentions';
 import { collectApprovalItems, autoJournalPolicyFor, setAutoJournalRule } from '../utils/approvalInbox';
 import { parseIfThenClauses } from '../utils/ifThenSkill';
@@ -266,6 +266,18 @@ describe('run gantt', () => {
         });
         expect(lanes.map(l => l.label)).toEqual(['Macro', 'Moderator']);
         expect(lanes[0].live).toBe(true);
+    });
+
+    it('formats compact stage text without Markdown markers', () => {
+        expect(formatStageSnippet('**Direction:** Long with `BTCUSDT`')).toBe('Direction: Long with BTCUSDT');
+        expect(formatStageSnippet('- first point\n- second point')).toBe('first point second point');
+        expect(formatStageSnippet('a '.repeat(40), 20)).toHaveLength(20);
+    });
+
+    it('advances the bounded ticker at sentence punctuation', () => {
+        expect(stageTickerText('First sentence. Second sentence')).toBe('Second sentence');
+        expect(stageTickerText('Price 63.748 is holding.')).toBe('Price 63.748 is holding.');
+        expect(stageTickerText('Still weighing the entry')).toBe('Still weighing the entry');
     });
 });
 

@@ -13,7 +13,7 @@ import { Message, GroundingChunk, TradeAnalysis, GlobalMemory, AccuracySubMode, 
 import { extractAndParseJson, extractLastJson } from '../../utils/jsonUtils';
 import { sanitizeAIResponse, sanitizeAIResponseLight, sanitizeJSONString } from '../../utils/sanitizers';
 import { sanitizeTradeAnalysis, truncateTextToTokens, formatAnalysisForDisplay, parsePrice } from '../../utils/analysisUtils';
-import { splitThinkingFromOutput } from '../../utils/thinkingSplit';
+import { splitThinkingFromOutput, extractAndStripThinkBlocks } from '../../utils/thinkingSplit';
 import { buildTradeInsightBrief, compactInsightForPatternMemory } from '../../utils/tradeInsightBrief';
 import { parseGlobalMemory, parseStrategySearchResults } from '../../schemas/learning';
 import {
@@ -260,6 +260,9 @@ export interface AnalyzeTradingViewParams {
     systemPromptOverride?: string;
     signal?: AbortSignal;
     onReasoning?: (reasoning: string) => void;
+    /** Visible content deltas as they stream — lets the Floor show the
+     *  answer (and any untagged thinking) forming live, not just at the end. */
+    onPartialOutput?: (chunk: string) => void;
 }
 
 export async function analyzeTradingView(
@@ -270,7 +273,7 @@ export async function analyzeTradingView(
         prompt, images, imageSummaries, chatHistory, finalTradeSummary, recentInsights,
         activeFrameworks, globalMemory, threadSummary, subMode, customInstructions,
         isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI,
-        rolePrompt, systemPromptOverride, userStrategies, signal, onReasoning,
+        rolePrompt, systemPromptOverride, userStrategies, signal, onReasoning, onPartialOutput,
     } = params;
 
     const modelName = config.selectedModel;
@@ -472,7 +475,10 @@ export async function analyzeTradingView(
                 options.onReasoning?.(reasoning);
             },
         })) {
-            if (chunk) responseText += chunk;
+            if (chunk) {
+                responseText += chunk;
+                onPartialOutput?.(chunk);
+            }
         }
     } catch (error) {
         console.error(`${config.name} analysis streaming failed:`, error);
@@ -899,9 +905,15 @@ export async function getQuickResponse(
     }
 
     const result = await sendChatRequest(config, messages, { maxTokens: TASK_BUDGETS.chat, signal, onReasoning });
+    // Defensive: some apiFormats leave <think> bodies in the final content.
+    // Strip them here (idempotent — chat_completions already peeled them via
+    // splitChatContent) and route any leftover to the reasoning side channel
+    // so the bubble's Thinking row owns it instead of the visible reply.
+    const stripped = extractAndStripThinkBlocks(result || '');
+    if (stripped.leaked.trim()) onReasoning?.(stripped.leaked);
     // Chat replies render via MarkdownRenderer — the light sanitizer keeps the
     // model's markdown (bold/lists/code) instead of flattening it to plain text.
-    return sanitizeAIResponseLight(result || "I am sorry, I could not generate a response.");
+    return sanitizeAIResponseLight(stripped.visible || "I am sorry, I could not generate a response.");
 }
 
 // ─── summarizeChartImage (vision/OCR) ───────────────────────────────────────

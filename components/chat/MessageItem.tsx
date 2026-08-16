@@ -1,8 +1,9 @@
 
 import React from 'react';
 import { Message, MessageRole, TradeOutcome, SavedAnalysis, Conversation, ConfidenceCalibration, AnalystLensConfig, TradeAnalysis } from '../../types';
-import { ChevronDownIcon, LinkIcon, CheckIcon, BrainIcon } from '../shared/Icons';
+import { ChevronDownIcon, LinkIcon, CheckIcon } from '../shared/Icons';
 import MarkdownContent from '../shared/MarkdownContent';
+import ReasoningRow from '../shared/ReasoningRow';
 import LiveMarketDataView from '../market/LiveMarketDataView';
 import EnsembleProgressChat from '../analysis/EnsembleProgressChat';
 import DebateChat from '../analysis/DebateChat';
@@ -11,7 +12,6 @@ import TradingSignalCard from '../analysis/TradingSignalCard';
 import DebateRunLog from '../analysis/DebateRunLog';
 import AnalysisDetails from './AnalysisDetails';
 import SetupLifecycleCard from '../analysis/SetupLifecycleCard';
-import ThinkingModal from '../analysis/ThinkingModal';
 import TodayReassessmentPanel from './TodayReassessmentPanel';
 import { buildSupplementMarkdown } from '../../utils/analysisUtils';
 import { debateFloorProgress } from '../../utils/debateFloor';
@@ -170,7 +170,6 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
 
     const isHighlighted = highlightedAnalysisId === message.id;
     const isUserMessage = message.role === MessageRole.USER;
-    const [isThinkingModalOpen, setIsThinkingModalOpen] = React.useState(false);
     const [isRunLedgerOpen, setIsRunLedgerOpen] = React.useState(false);
     const [isMemoryGateExpanded, setIsMemoryGateExpanded] = React.useState(false);
     // Inline edit of a sent user message (history correction).
@@ -180,8 +179,6 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
         ...(message.thoughtProcesses ?? {}),
         ...(message.reasoningProcesses ?? {}),
     }).filter(([, content]) => Boolean(content));
-    const isCasualReply = message.role === MessageRole.AI && !message.analysis && !message.isDebating;
-
     // Ensemble reasoning is presented in the analyst progress/output card.
     // Do not duplicate it in the generic chat-level Thinking disclosure.
     const isEnsembleMessage = Boolean(
@@ -192,12 +189,6 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
     const debateTurns = message.debateTurns ?? message.postMortemDebateTurns ?? [];
     const floorProgress = debateFloorProgress(message);
     const showFloor = Boolean(floorProgress);
-
-    React.useEffect(() => {
-        if (isEnsembleMessage) {
-            setIsThinkingModalOpen(false);
-        }
-    }, [isEnsembleMessage, message.id, thinkingEntries.length]);
 
     // Extract embedded Live Market JSON if present
     const liveMarketMatch = message.text.match(/\*\*LIVE MARKET DATA\*\*\s*```json\s*([\s\S]*?)\s*```/);
@@ -318,25 +309,15 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                         {/* Main Content Container - Collapsible if Post-Mortem */}
                         <div id={message.isPostMortem ? `post-mortem-content-${message.id}` : undefined} className={`${message.isPostMortem ? `collapsible-content ${expandedPostMortems[message.id] ? 'expanded' : ''} w-full` : ''}`}>
 
-                            {isCasualReply && !isEnsembleMessage && (
-                                <div className="mb-4 border-b border-white/10 pb-3">
-                                    <button type="button" onClick={() => setIsThinkingModalOpen(true)} className="flex w-full items-center gap-2 text-left text-sm text-zinc-500 hover:text-zinc-300 transition-colors" aria-haspopup="dialog">
-                                        <BrainIcon className="h-4 w-4" />
-                                        <span className="font-medium">Thinking</span>
-                                        <span className="text-zinc-600">for a few seconds</span>
-                                        <span className="ml-auto text-[10px] uppercase tracking-wider text-zinc-600">View</span>
-                                    </button>
-                                </div>
-                            )}
-
-                            {message.role === MessageRole.AI && !isCasualReply && !isEnsembleMessage && thinkingEntries.length > 0 && (
-                                <div className="mb-4 border-b border-white/10 pb-3">
-                                    <button type="button" onClick={() => setIsThinkingModalOpen(true)} className="flex w-full items-center gap-2 text-left text-sm text-zinc-500 hover:text-zinc-300 transition-colors" aria-haspopup="dialog">
-                                        <BrainIcon className="h-4 w-4" />
-                                        <span className="font-medium">Thinking</span>
-                                        <span className="text-zinc-600">for a few seconds</span>
-                                        <span className="ml-auto text-[10px] uppercase tracking-wider text-zinc-600">View</span>
-                                    </button>
+                            {/* Inline thinking trace — collapsible reasoning row.
+                                Ensemble messages present their reasoning inside the
+                                Floor / DebateChat surfaces instead of this bubble. */}
+                            {message.role === MessageRole.AI && !isEnsembleMessage && thinkingEntries.length > 0 && (
+                                <div className="mb-4">
+                                    <ReasoningRow
+                                        thinking={thinkingEntries.map(([, content]) => content).join('\n\n')}
+                                        label={thinkingEntries.length > 1 ? `Thinking · ${thinkingEntries.length} traces` : 'Thinking'}
+                                    />
                                 </div>
                             )}
 
@@ -588,7 +569,11 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 </div>
                             )}
 
-                            {(message.isDebating || debateTurns.length > 0) && !showFloor && (
+                            {/* Debate transcript lives in the chat area next to
+                                the Floor stage: live streams below the stage,
+                                completed debates collapse behind "Show debate".
+                                Per-turn Thinking + Final output both render here. */}
+                            {(message.isDebating || debateTurns.length > 0) && (
                                 <DebateChat
                                     debateTurns={debateTurns}
                                     modelsUsed={message.modelsUsed}
@@ -715,19 +700,6 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                         </div>
                 </>
             </div>
-            <ThinkingModal
-                isOpen={isThinkingModalOpen}
-                onClose={() => setIsThinkingModalOpen(false)}
-                title="Model thinking"
-                subtitle={thinkingEntries.length > 0 ? `${thinkingEntries.length} reasoning trace${thinkingEntries.length === 1 ? '' : 's'}` : 'No separate reasoning trace'}
-            >
-                {thinkingEntries.length > 0 ? thinkingEntries.map(([providerId, content]) => (
-                    <div key={providerId} className="mb-5 last:mb-0">
-                        <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-zinc-500">{providerId}</div>
-                        <MarkdownContent content={content} className="text-sm leading-7 text-zinc-300" />
-                    </div>
-                )) : <p className="text-sm italic text-zinc-600">This model did not return a separate reasoning trace. Only the generated answer is available.</p>}
-            </ThinkingModal>
         </div>
     );
 });

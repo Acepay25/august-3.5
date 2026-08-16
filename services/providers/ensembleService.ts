@@ -27,6 +27,7 @@ import { DUAL_SCENARIO_JSON_SCHEMA, MASTER_TRADE_PLAN_MARKDOWN } from '../../con
 import { parseLiveMarketData } from '../../utils/liveMarketParser';
 import { truncateTextToTokens, parsePrice, parseMarkdownTradePlan } from '../../utils/analysisUtils';
 import { extractDebateLevels, formatDebateLevelsTable } from '../../utils/debateLevels';
+import { stripLeakedScratchpad } from '../../utils/thinkingSplit';
 import { buildRebuttalDiffPacket } from '../../utils/debateDiff';
 import { compactDebateEpisode } from '../../utils/debateEpisodes';
 import { debatePreStep } from '../../utils/debatePreStep';
@@ -2336,6 +2337,27 @@ export interface RealDebateAnalyst {
     result: { thoughtProcess: string; finalOutput: string; analysis: TradeAnalysis };
 }
 
+/**
+ * Recover the public opening statement from an analyst result WITHOUT ever
+ * flooring the raw chain-of-thought. `finalOutput` is already peeled during
+ * the analysis phase; when it is empty we fall back to the thoughtProcess
+ * and peel a leaked scratchpad so only a genuine public answer (if any)
+ * reaches the floor. The leftover thinking is returned so callers can route
+ * it to the reasoning side-channel instead of the visible reply.
+ */
+export const openingFromResult = (result: { finalOutput?: string; thoughtProcess?: string }): { opening: string; thinking: string } => {
+    const finalOutput = (result.finalOutput || '').trim();
+    const thought = (result.thoughtProcess || '').trim();
+    if (finalOutput) return { opening: finalOutput, thinking: thought };
+    if (thought) {
+        const recovered = stripLeakedScratchpad(thought);
+        if (recovered.visible.trim()) {
+            return { opening: recovered.visible.trim(), thinking: recovered.leaked.trim() || thought };
+        }
+    }
+    return { opening: 'No opening statement provided.', thinking: thought };
+};
+
 /** How long the debate waits for the user to pick a replacement analyst before continuing without one. */
 export const DEBATE_REPLACEMENT_WAIT_MS = 60_000;
 
@@ -2664,6 +2686,15 @@ export const conductRealDebate = async function* (
         emitLog('steer', note.slice(0, 280), round);
         return note;
     };
+    /** Route a moderator stream's chain-of-thought to BOTH the global
+     *  moderator channel (Floor caption / thought bubble) AND the moderator's
+     *  current turn (transcript Thinking row). Without the per-turn route the
+     *  transcript only revealed the moderator's thinking after the turn
+     *  finished — the questions appeared to be "sent without thinking". */
+    const moderatorReasoningFor = (round: number) => (reasoning: string): void => {
+        onReasoning?.(reasoning);
+        onAnalystReasoning?.('Moderator', reasoning, round);
+    };
 
     const names = analysts.map(a => a.provider.name);
     const activeAnalystNames = new Set(names);
@@ -2734,7 +2765,7 @@ export const conductRealDebate = async function* (
         names.push(name);
         activeAnalystNames.add(name);
         roundTexts[name] = [];
-        const opening = replacement.result.finalOutput || replacement.result.thoughtProcess || 'No opening statement provided.';
+        const { opening } = openingFromResult(replacement.result);
         roundTexts[name][dropRound] = opening;
         debateRoster.push(replacement);
         if (analystProviders) analystProviders.push(replacement.provider.config.id);
@@ -2749,9 +2780,10 @@ export const conductRealDebate = async function* (
     // --- ROUND 1: OPENING STATEMENTS (free — each analyst's own final output) ---
     if (lastDone < 1) {
         for (const analyst of analysts) {
-            const opening = analyst.result.finalOutput || analyst.result.thoughtProcess || 'No opening statement provided.';
+            const { opening, thinking } = openingFromResult(analyst.result);
             roundTexts[analyst.provider.name][1] = opening;
             onSpeakerStatus?.(analyst.provider.name, 1, true);
+            if (thinking) onAnalystReasoning?.(analyst.provider.name, thinking, 1);
             yield { speaker: analyst.provider.name, round: 1, text: opening };
             onSpeakerStatus?.(analyst.provider.name, 1, false);
         }
@@ -2957,7 +2989,8 @@ export const conductRealDebate = async function* (
                 if (replacement && !activeAnalystNames.has(replacement.provider.name)) {
                     injectReplacement(replacement, round);
                     yield { speaker: 'System', round, text: `${droppedName} was replaced by ${replacement.provider.name} — ${replacement.provider.name} joins the debate from Round ${round + 1}.` };
-                    const opening = replacement.result.finalOutput || replacement.result.thoughtProcess;
+                    const { opening, thinking } = openingFromResult(replacement.result);
+                    if (thinking) onAnalystReasoning?.(replacement.provider.name, thinking, round);
                     if (opening) yield { speaker: replacement.provider.name, round, text: opening };
                 }
             }
@@ -3009,7 +3042,7 @@ export const conductRealDebate = async function* (
                 moderatorConfig, moderatorModel,
                 `${questionSystemPrompt}\n\n${questionUserContent}`,
                 signal,
-                onReasoning,
+                moderatorReasoningFor(questionRound),
                 resolveDefaultSymbol(userPrompt),
             )) {
                 if (chunk) {
@@ -3178,7 +3211,8 @@ export const conductRealDebate = async function* (
                 if (replacement && !activeAnalystNames.has(replacement.provider.name)) {
                     injectReplacement(replacement, answerRound);
                     yield { speaker: 'System', round: answerRound, text: `${droppedName} was replaced by ${replacement.provider.name}.` };
-                    const opening = replacement.result.finalOutput || replacement.result.thoughtProcess;
+                    const { opening, thinking } = openingFromResult(replacement.result);
+                    if (thinking) onAnalystReasoning?.(replacement.provider.name, thinking, answerRound);
                     if (opening) yield { speaker: replacement.provider.name, round: answerRound, text: opening };
                 }
             }
@@ -3345,7 +3379,7 @@ export const conductRealDebate = async function* (
         let moderatorText = '';
         let streamFailed = false;
         try {
-            for await (const chunk of getModeratorAnalysisStream(moderatorConfig, moderatorModel, attempts[attempt], signal, onReasoning, resolveDefaultSymbol(userPrompt))) {
+            for await (const chunk of getModeratorAnalysisStream(moderatorConfig, moderatorModel, attempts[attempt], signal, moderatorReasoningFor(finalRound), resolveDefaultSymbol(userPrompt))) {
                 if (chunk) {
                     moderatorText += chunk;
                     yield { speaker: 'Moderator', round: finalRound, text: chunk };

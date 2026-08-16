@@ -87,6 +87,24 @@ describe('EnsembleProgressChat', () => {
         expect(screen.getByText('Still weighing the sweep.').closest('.mx-2')).toBeNull();
     });
 
+    it('shows a neutral moderator Thinking bubble before reasoning or public text', () => {
+        const progress = makeProgress([
+            makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'complete' }),
+        ]);
+        const { container } = render(
+            <EnsembleProgressChat
+                progress={{ ...progress, moderator: { status: 'reviewing' } }}
+                isLive
+                activeDebateSpeakers={{ Moderator: 2 }}
+            />,
+        );
+        const moderatorThought = container.querySelector('[data-thought]');
+        expect(moderatorThought?.getAttribute('data-thought')).toBe('Thinking');
+        expect(container.querySelector('[aria-label="Open Moderator analysis"]')?.className).toMatch(/is-thinking/);
+        openSeat('Moderator');
+        expect(screen.getAllByText('Thinking').length).toBeGreaterThan(0);
+    });
+
     it('displays a readable model name instead of the raw id', () => {
         const progress = makeProgress([
             makeAnalyst({ key: 'a1', displayName: 'Analyst A', modelId: 'deepseek-v4-flash', modelName: 'deepseek-v4-flash' }),
@@ -403,6 +421,24 @@ Deconstruct the Context: Entry 63694 SL 63420.`;
         expect(screen.getByText(/Analyze User Input/i).closest('.mx-2')).toBeNull();
     });
 
+    it('shows a finished scratchpad-only seat as "No public answer" instead of hiding it', () => {
+        const progress = makeProgress([
+            makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'complete', finalOutput: '' }),
+        ]);
+        render(
+            <EnsembleProgressChat
+                progress={progress}
+                debateTurns={[{
+                    speaker: 'Analyst A',
+                    text: "Here's a thinking process:\n\nAnalyze User Input: debate turn.",
+                    round: 3,
+                }]}
+            />,
+        );
+        openSeat('Analyst A');
+        expect(screen.getByText(/No public answer/i)).toBeDefined();
+    });
+
     it('renders Grok-style circle bots on a stage separate from the transcript', () => {
         const progress = makeProgress([
             makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'analyzing', reasoning: 'Weigh the sweep.' }),
@@ -485,5 +521,57 @@ Deconstruct the Context: Entry 63694 SL 63420.`;
         );
         fireEvent.click(container.querySelector('.debate-stage-balloon') as HTMLElement);
         expect(screen.getByRole('dialog', { name: 'Analyst A analysis' })).toBeDefined();
+    });
+
+    it('keeps the bot THINKING (thought bubble, orbit) while CoT streams before any output', () => {
+        const progress = makeProgress([
+            makeAnalyst({
+                key: 'a1',
+                displayName: 'Analyst A',
+                status: 'analyzing',
+                finalOutput: '',
+                reasoning: 'Weighing the failed reclaim.',
+            }),
+        ]);
+        const { container } = render(
+            <EnsembleProgressChat
+                progress={progress}
+                isLive
+                activeDebateSpeakers={{ 'Analyst A': 1 }}
+                debateTurns={[{
+                    speaker: 'Analyst A',
+                    text: '',
+                    reasoning: 'Weighing the failed reclaim.',
+                    round: 1,
+                }]}
+            />,
+        );
+        const actor = container.querySelector('button[aria-label="Open Analyst A analysis"]');
+        expect(actor?.classList.contains('is-thinking')).toBe(true);
+        expect(actor?.classList.contains('is-speaking')).toBe(false);
+        // The thinking bubble is visible while the bot thinks.
+        expect(container.querySelector('.debate-stage-thought')).toBeDefined();
+    });
+
+    it('flips the bot to SPEAKING once its output text streams', () => {
+        const progress = makeProgress([
+            makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'analyzing' }),
+        ]);
+        const { container } = render(
+            <EnsembleProgressChat
+                progress={progress}
+                isLive
+                activeDebateSpeakers={{ 'Analyst A': 1 }}
+                debateTurns={[{
+                    speaker: 'Analyst A',
+                    text: 'Long the breakout with SL below 95k.',
+                    round: 1,
+                }]}
+            />,
+        );
+        const actor = container.querySelector('button[aria-label="Open Analyst A analysis"]');
+        expect(actor?.classList.contains('is-speaking')).toBe(true);
+        expect(actor?.classList.contains('is-thinking')).toBe(false);
+        expect(container.querySelector('.debate-stage-balloon')).toBeDefined();
     });
 });

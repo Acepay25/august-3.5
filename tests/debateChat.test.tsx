@@ -179,6 +179,25 @@ describe('DebateChat', () => {
         expect(screen.getByText('Writing')).toBeDefined();
     });
 
+    it('streams a thinking-only opening turn live (analysis phase)', () => {
+        const turns = [{
+            speaker: 'Macro Analyst' as DebateTurn['speaker'],
+            round: 1,
+            text: '',
+            reasoning: 'Weighing the 4H structure and the failed reclaim.',
+            createdAt: '2025-01-01T12:00:00Z',
+        }];
+        render(<DebateChat {...baseProps} debateTurns={turns} isDebating activeDebateSpeakers={{ 'Macro Analyst': 1 }} />);
+        // Thinking row is present, auto-expanded (visible generation)…
+        expect(screen.getByText('Weighing the 4H structure and the failed reclaim.')).toBeDefined();
+        expect(screen.getByText('Weighing the 4H structure and the failed reclaim.').closest('details')?.open).toBe(true);
+        // …the answer area shows the live "Writing…" placeholder, not a
+        // final-output label or a scratchpad notice.
+        expect(screen.getByText('Writing')).toBeDefined();
+        expect(screen.queryByText(/No public answer/i)).toBeNull();
+        expect(screen.queryByText('Final output')).toBeNull();
+    });
+
     it('does not mark an earlier turn as speaking when a later round is live', () => {
         const turns = [makeTurn('Analyst A', 'Opening', 1)];
         render(<DebateChat {...baseProps} debateTurns={turns} isDebating={true} activeDebateSpeakers={{ 'Analyst A': 2 }} />);
@@ -242,6 +261,37 @@ describe('DebateChat', () => {
         expect(screen.getByText('Short from the 4H supply zone')).toBeDefined();
     });
 
+    it('keeps the final output when the reply echoes its own stored reasoning', () => {
+        // The pipeline already split this turn once (reasoning = thinking,
+        // text = public output). A display-level re-peel must not drop the
+        // reply paragraph just because it restates the scratchpad.
+        const turns = [{
+            speaker: 'Macro Analyst' as DebateTurn['speaker'],
+            round: 1,
+            reasoning: 'The 4H structure is bullish — higher low at 95k holds.',
+            text: 'The 4H structure is bullish — higher low at 95k holds. Long the retest into 95.5k, SL 94.8k.',
+            createdAt: '2025-01-01T12:00:00Z',
+        }];
+        render(<DebateChat {...baseProps} debateTurns={turns} />);
+        expect(screen.getByText(/Long the retest into 95\.5k/)).toBeDefined();
+        expect(screen.queryByText(/No public answer/i)).toBeNull();
+    });
+
+    it('still surfaces thinking as Thinking and body as Final output for a split turn', () => {
+        const turns = [{
+            speaker: 'Macro Analyst' as DebateTurn['speaker'],
+            round: 1,
+            reasoning: 'Chain of thought: momentum is rolling over on the 4H.',
+            text: 'Short the failed sweep with SL above 95k.',
+            createdAt: '2025-01-01T12:00:00Z',
+        }];
+        render(<DebateChat {...baseProps} debateTurns={turns} />);
+        expect(screen.getByText('Final output')).toBeDefined();
+        expect(screen.getByText('Short the failed sweep with SL above 95k.')).toBeDefined();
+        const details = screen.getByText('Chain of thought: momentum is rolling over on the 4H.').closest('details');
+        expect(details?.open).toBe(false);
+    });
+
     it('hides a leaked thinking-process dump from the debate floor', () => {
         const turns = [makeTurn(
             'Risk & Execution Specialist',
@@ -283,5 +333,18 @@ describe('DebateChat', () => {
         expect(details?.open).toBe(false);
         fireEvent.click(screen.getByText(/Thinking/));
         expect(screen.getByText('Weighed the extended SL zone and missed-win flag…').closest('details')?.open).toBe(true);
+    });
+
+    it('renders moderator reasoning before public moderator text exists', () => {
+        render(
+            <DebateChat
+                {...baseProps}
+                isDebating
+                reasoningProcesses={{ moderator: 'Comparing the analyst levels before asking a question.' }}
+            />,
+        );
+        const reasoning = screen.getByText('Comparing the analyst levels before asking a question.');
+        expect(reasoning.closest('details')?.open).toBe(true);
+        expect(screen.queryByText('Final output')).toBeNull();
     });
 });
