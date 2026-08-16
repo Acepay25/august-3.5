@@ -278,6 +278,7 @@ describe('run gantt', () => {
         expect(stageTickerText('First sentence. Second sentence')).toBe('Second sentence');
         expect(stageTickerText('Price 63.748 is holding.')).toBe('Price 63.748 is holding.');
         expect(stageTickerText('Still weighing the entry')).toBe('Still weighing the entry');
+        expect(stageTickerText('A very long unfinished thought that keeps streaming new words', 20)).toMatch(/^…/);
     });
 });
 

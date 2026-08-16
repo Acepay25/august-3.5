@@ -537,7 +537,12 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
 
             {floorOpen && (
                 <div className="debate-floor-body">
-                    <DebateStage actors={stageActors} caption={turnCaption} onOpenActor={setOpenSeatId} />
+                    <DebateStage
+                        actors={stageActors}
+                        caption={turnCaption}
+                        onOpenActor={setOpenSeatId}
+                        suppressBubbles={Boolean(openSeat)}
+                    />
                     {openSeat && (
                         <div
                             className="debate-seat-modal"

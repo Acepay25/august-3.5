@@ -1044,6 +1044,12 @@ const App: React.FC = () => {
     // is a no-op.)
     const previousUsernameRef = useRef<string | null>(activeUsernameRef.current);
     useEffect(() => {
+        // Remove response-cache records written by older builds. Analysis no
+        // longer reads or writes this cache, but clearing it avoids leaving
+        // stale AI responses in the user's local IndexedDB.
+        void clearAllCaches();
+    }, []);
+    useEffect(() => {
         const previous = previousUsernameRef.current;
         const current = activeUsername ?? null;
         if (previous !== current) {
