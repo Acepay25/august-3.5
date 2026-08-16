@@ -54,6 +54,7 @@ export interface RuleCheckResult {
 
 const RULES_STORAGE_KEY = 'invalidation_rules';
 const MAX_RULES = 50;
+const MIN_OUTCOME_SAMPLES_FOR_BLOCK = 5;
 
 // In-memory cache
 let _rulesCache: InvalidationRule[] | null = null;
@@ -349,8 +350,6 @@ export function checkTradeAgainstRules(
         if (violation) {
             violations.push(violation);
 
-            // Track that rule was triggered
-            rule.timesTriggered++;
         }
     }
 
@@ -365,14 +364,22 @@ export function checkTradeAgainstRules(
         const severityIcon = v.severity === 'high' ? '' : v.severity === 'medium' ? '' : '';
         warnings.push(`${severityIcon} RULE VIOLATION: ${v.rule.fullRule}`);
         warnings.push(`   Reason: ${v.matchReason}`);
+        const outcomeSamples = v.rule.timesFollowed + v.rule.timesViolated;
+        if (v.severity === 'high' && v.rule.effectiveness >= 70 && outcomeSamples < MIN_OUTCOME_SAMPLES_FOR_BLOCK) {
+            warnings.push(`   Advisory only: this rule has ${outcomeSamples}/${MIN_OUTCOME_SAMPLES_FOR_BLOCK} recorded outcome samples.`);
+        }
     }
 
     // Generate prompt injection
     const promptInjection = generateRuleViolationPrompt(violations);
 
-    // Determine if there's a blocking violation (high severity with high effectiveness)
+    // An extracted rule starts with a neutral/LLM confidence score, not proven
+    // trading evidence.  Require recorded follow/violation outcomes before a
+    // text rule can hard-block; otherwise it remains useful advisory context.
     const hasBlockingViolation = violations.some(v =>
-        v.severity === 'high' && v.rule.effectiveness >= 70
+        v.severity === 'high'
+        && v.rule.effectiveness >= 70
+        && (v.rule.timesFollowed + v.rule.timesViolated) >= MIN_OUTCOME_SAMPLES_FOR_BLOCK
     );
 
     // Save updated trigger counts

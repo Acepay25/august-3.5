@@ -29,6 +29,7 @@ import {
   conductRealDebate,
   awaitReplacementWithTimeout,
   buildLivePriceRefreshBlock,
+  openingFromResult,
   REAL_DEBATE_RESPONSE_ROUNDS,
 } from '../services/providers/ensembleService';
 import type { RealDebateTurnEvent } from '../services/providers/ensembleService';
@@ -980,6 +981,110 @@ describe('conductRealDebate (real inter-model debate)', () => {
     expect(onReplacementRequested).toHaveBeenCalledWith('Analyst Two', 5);
     expect(events.some(e => e.speaker === 'Analyst Three' && e.round === 5)).toBe(true);
     expect(events.some(e => e.speaker === 'Moderator')).toBe(true);
+  });
+
+  // Opening statements must never floor the raw chain-of-thought. When an
+  // analyst has no finalOutput, openingFromResult peels a leaked scratchpad
+  // and only a genuine public answer (if any) reaches the floor.
+  describe('openingFromResult (never floors raw thinking)', () => {
+    it('uses finalOutput when present', () => {
+      const { opening, thinking } = openingFromResult({
+        finalOutput: 'Long the breakout with SL below 95k.',
+        thoughtProcess: 'Weighed the sweep and the reclaim.',
+      });
+      expect(opening).toBe('Long the breakout with SL below 95k.');
+      expect(thinking).toBe('Weighed the sweep and the reclaim.');
+    });
+
+    it('recovers a public answer from a scratchpad-only thoughtProcess', () => {
+      const thought = "Here's a thinking process:\n\nAnalyze User Input: I'm in a debate.\n\n**Answer:** Short the failed reclaim, SL above 96k, TP 94k.";
+      const { opening } = openingFromResult({ finalOutput: '', thoughtProcess: thought });
+      expect(opening).not.toContain('thinking process');
+      expect(opening).not.toContain('Analyze User Input');
+      expect(opening).toContain('Short the failed reclaim');
+    });
+
+    it('falls back to a placeholder when nothing public can be recovered', () => {
+      const { opening } = openingFromResult({
+        finalOutput: '',
+        thoughtProcess: "Here's a thinking process:\n\nAnalyze User Input: still deliberating.",
+      });
+      expect(opening).toBe('No opening statement provided.');
+    });
+  });
+
+  it('floors the recovered answer, not the raw scratchpad, as a scratchpad-only opening', async () => {
+    mockStreams();
+    const scratchpad = "Here's a thinking process:\n\nAnalyze User Input: I'm in a debate.\n\n**Answer:** Long the reclaim, SL 94.8k, TP 96k.";
+    const analysts = [
+      { ...realAnalyst('prov-a', 'Analyst One', 'model-a'), result: { thoughtProcess: scratchpad, finalOutput: '', analysis } },
+      realAnalyst('prov-b', 'Analyst Two', 'model-b'),
+    ];
+    const events = await collectEvents(conductRealDebate(
+      analysts,
+      'Analyze BTCUSDT',
+      null, config, 'model-a',
+      undefined, [], undefined, undefined, undefined, undefined, null, undefined,
+      new AbortController().signal,
+    ));
+    const oneOpening = events.find(e => e.speaker === 'Analyst One' && e.round === 1);
+    expect(oneOpening).toBeDefined();
+    expect(oneOpening!.text).toContain('Long the reclaim');
+    expect(oneOpening!.text).not.toContain('thinking process');
+    expect(oneOpening!.text).not.toContain('Analyze User Input');
+  });
+
+  it('routes moderator thinking per-turn (with a round) so the transcript can stream it live', async () => {
+    // Same scripted flow as mockStreams, but the moderator streams also emit
+    // chain-of-thought through the transport's onReasoning side channel.
+    streamMock.mockImplementation(async function* (...args: any[]) {
+      const messages = args[1] as { role: string; content: string }[];
+      const options = args[2] as { onReasoning?: (r: string) => void } | undefined;
+      const system = messages[0].content;
+      const user = messages[1]?.content ?? '';
+      if (system.includes('CLARIFICATION ANSWER')) {
+        yield `**${floorSeatName(system, ['Analyst One', 'Analyst Two'])}:** exact clarification answer`;
+      } else if (user.includes('CLARIFICATION JUDGMENT')) {
+        yield '<CLARIFICATION_SATISFIED>';
+      } else if (user.includes('CLARIFICATION ROUND')) {
+        // Moderator questions — think first, then (short-circuit) no questions.
+        options?.onReasoning?.('Moderator thinking about what to ask');
+        yield '<CLARIFICATION_DONE>';
+      } else if (system.includes('debate moderator')) {
+        // Moderator verdict — think first, then the verdict prose + plan.
+        options?.onReasoning?.('Moderator weighing the verdict');
+        yield 'Verdict: Long on breakout with tight stop.\n';
+        yield '</DEBATE_END>\n';
+        yield MARKDOWN_PLAN('Long', 'Medium', 60);
+      } else {
+        yield `rebuttal-${isFloorSeat(system, 'Analyst One') ? 'one' : 'two'}`;
+      }
+    });
+
+    const perTurn: { speaker: string; round?: number; text: string }[] = [];
+    const analysts = [realAnalyst('prov-a', 'Analyst One', 'model-a'), realAnalyst('prov-b', 'Analyst Two', 'model-b')];
+    await collectEvents(conductRealDebate(
+      analysts,
+      'Analyze BTCUSDT',
+      null, config, 'model-a',
+      undefined, [], undefined, undefined, undefined, undefined, null, undefined,
+      new AbortController().signal,
+      undefined, // moderator global onReasoning — intentionally left unset
+      (speaker, reasoning, round) => { perTurn.push({ speaker, round, text: reasoning }); },
+    ));
+
+    const moderator = perTurn.filter(r => r.speaker === 'Moderator');
+    expect(moderator.some(r => r.text.includes('thinking about what to ask'))).toBe(true);
+    expect(moderator.some(r => r.text.includes('weighing the verdict'))).toBe(true);
+    // Every moderator reasoning chunk carries its turn round — that is what
+    // lets the pipeline attach thinking to the right turn and stream it live.
+    expect(moderator.length).toBeGreaterThan(0);
+    for (const r of moderator) {
+      expect(typeof r.round).toBe('number');
+    }
+    // The two moderator turns (questions + verdict) must not share a round.
+    const rounds = new Set(moderator.map(r => r.round));
+    expect(rounds.size).toBe(2);
   });
 });
 

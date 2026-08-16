@@ -145,13 +145,28 @@ export const buildEnsembleAnalysts = (
         // fill the first provider and hide the models the user just picked.
         const slots = (ensembleModelSelection ?? []).filter(s => s?.providerId && s.model).slice(0, 3);
         if (slots.length > 0) {
+            // The same provider+model can occupy several Team slots. Those
+            // seats must stay distinguishable: identical names collapse the
+            // transcript turns into one seat (matchesSpeaker + the placeholder
+            // dedup match on speaker+round), so suffix the duplicates.
+            const identityCounts = new Map<string, number>();
+            for (const s of slots) {
+                const ident = `${s.providerId}:${s.model}`;
+                identityCounts.set(ident, (identityCounts.get(ident) ?? 0) + 1);
+            }
+            const seenIdentities = new Map<string, number>();
             analysts = slots.flatMap(slot => {
                 const provider = ready(slot.providerId);
                 if (!provider) return [];
                 const model = slot.model;
                 const pretty = formatModelDisplayName(model);
                 const sameProvider = slots.filter(s => s.providerId === slot.providerId).length > 1;
-                return [toEntry(provider, model, sameProvider ? `${provider.name} · ${pretty}` : pretty)];
+                const ident = `${slot.providerId}:${model}`;
+                const occurrence = (seenIdentities.get(ident) ?? 0) + 1;
+                seenIdentities.set(ident, occurrence);
+                const duplicatesIdentity = (identityCounts.get(ident) ?? 0) > 1;
+                const base = sameProvider ? `${provider.name} · ${pretty}` : pretty;
+                return [toEntry(provider, model, duplicatesIdentity && occurrence > 1 ? `${base} #${occurrence}` : base)];
             });
         } else {
             analysts = providerConfigs
@@ -173,6 +188,21 @@ export const buildEnsembleAnalysts = (
             .flatMap(c => (c.selectedModel ? [toEntry(c, c.selectedModel, c.name)] : []))
             .slice(0, 3);
     }
+
+    // Every seat needs its own reasoning lane. thoughtsKey is
+    // `${config.id}:${model}`, so duplicate provider+model slots would collide
+    // and share ONE merged chain-of-thought bucket — every colliding seat and
+    // transcript turn would show the same thinking. Suffix the duplicates
+    // (#1, #2) so each slot streams its own CoT/output independently. The
+    // first occurrence keeps the plain key, so distinct-model rosters are
+    // byte-identical to before.
+    const seenKeys = new Map<string, number>();
+    analysts = analysts.map(entry => {
+        const base = `${entry.config.id}:${entry.model}`;
+        const count = seenKeys.get(base) ?? 0;
+        seenKeys.set(base, count + 1);
+        return count === 0 ? entry : { ...entry, thoughtsKey: `${base}#${count}` };
+    });
 
     return { analysts, missingAnalystRoles, hasCompleteAnalystAssignments, resolvedAssignments };
 };

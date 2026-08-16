@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { DebateBotAvatar } from './DebateBotAvatar';
-import { lastThoughtSnippet } from '../../utils/runGantt';
+import { formatStageSnippet, stageTickerText } from '../../utils/runGantt';
 
 export interface DebateStageActor {
     id: string;
@@ -29,6 +29,7 @@ interface Flight {
     fromY: number;
     dx: number;
     dy: number;
+    angle: number;
     receiverId: string;
 }
 
@@ -41,9 +42,51 @@ const matchesActor = (actor: DebateStageActor, target: string): boolean => {
     });
 };
 
+interface StageTickerProps {
+    text?: string;
+    fallback?: string;
+    max?: number;
+}
+
 /**
- * The whole Floor is this table: Grok discs, thought snippets, replies that
- * fly sender → receiver. Click a seat to open its chat modal.
+ * Reveal the current bounded sentence progressively. When a new sentence is
+ * completed the target changes and the bubble types that sentence in; while
+ * the current sentence grows, the existing prefix is retained so the bubble
+ * flows instead of restarting on every streamed token.
+ */
+const StageTicker: React.FC<StageTickerProps> = ({ text, fallback = '', max = 72 }) => {
+    const target = stageTickerText(text || fallback, max);
+    const shownRef = useRef(target);
+    const [shown, setShown] = useState(target);
+
+    useEffect(() => {
+        let current = target.startsWith(shownRef.current) ? shownRef.current : '';
+        shownRef.current = current;
+        setShown(current);
+        if (!target || current === target) return undefined;
+
+        const timer = window.setInterval(() => {
+            const remaining = target.length - current.length;
+            const step = Math.max(1, Math.ceil(remaining / 4));
+            current = target.slice(0, current.length + step);
+            shownRef.current = current;
+            setShown(current);
+            if (current === target) window.clearInterval(timer);
+        }, 28);
+        return () => window.clearInterval(timer);
+    }, [target]);
+
+    // Keep the live text in a sanitized data attribute so the compact stage
+    // surface does not duplicate the same sentence in the transcript DOM.
+    // CSS only paints this already-normalized value; Markdown markers can
+    // never reach the attribute.
+    return <span className="debate-stage-ticker" data-ticker-text={shown} aria-label={shown} />;
+};
+
+/**
+ * The whole Floor is this table: Grok disc bots on a lit stage, thought
+ * snippets, replies that fly sender → receiver. Click a seat to open its
+ * chat modal.
  */
 export const DebateStage: React.FC<DebateStageProps> = ({ actors, caption, onOpenActor }) => {
     const sceneRef = useRef<HTMLDivElement>(null);
@@ -82,14 +125,17 @@ export const DebateStage: React.FC<DebateStageProps> = ({ actors, caption, onOpe
                 const from = fromEl.getBoundingClientRect();
                 const to = toEl.getBoundingClientRect();
                 flownRef.current.add(key);
+                const dx = (to.left + to.width / 2) - (from.left + from.width / 2);
+                const dy = (to.top + to.height / 2) - (from.top + from.height / 2);
                 queueRef.current.push({
                     id: key,
                     speakerId: actor.id,
-                    text: lastThoughtSnippet(delivery.text, 36),
+                    text: stageTickerText(delivery.text, 36),
                     fromX: from.left + from.width / 2 - box.left,
                     fromY: from.top + from.height / 2 - box.top,
-                    dx: (to.left + to.width / 2) - (from.left + from.width / 2),
-                    dy: (to.top + to.height / 2) - (from.top + from.height / 2),
+                    dx,
+                    dy,
+                    angle: (Math.atan2(dy, dx) * 180) / Math.PI,
                     receiverId: receiver.id,
                 });
             });
@@ -97,31 +143,37 @@ export const DebateStage: React.FC<DebateStageProps> = ({ actors, caption, onOpe
         if (!flight && queueRef.current.length > 0) startNextFlight();
     }, [actors, flight]);
 
+    // Flight + badge timings match the CSS keyframes (0.5s / 0.7s) — snappy
+    // hand-offs read faster than the old 850/1100ms choreography.
     useEffect(() => {
         if (!flight) return;
         const timer = window.setTimeout(() => {
             setSentId(flight.receiverId);
             setFlight(null);
-        }, 850);
+        }, 500);
         return () => window.clearTimeout(timer);
     }, [flight]);
 
     useEffect(() => {
         if (!sentId) return;
-        const timer = window.setTimeout(() => setSentId(null), 1100);
+        const timer = window.setTimeout(() => setSentId(null), 700);
         return () => window.clearTimeout(timer);
     }, [sentId]);
 
     return (
         <div className="debate-stage">
             <div className="debate-stage-scene" ref={sceneRef}>
-                <div className="debate-stage-desk" />
+                <div className="debate-stage-backdrop" aria-hidden="true">
+                    <span className="debate-stage-grid" />
+                    <span className="debate-stage-horizon" />
+                </div>
+                <div className="debate-stage-floor" aria-hidden="true" />
                 <div className="debate-stage-cast">
                     {actors.map((actor, index) => {
                         const focused = actor.speaking || actor.thinking || actor.live;
                         const look = focusIndex < 0 || focused ? 0 : Math.sign(focusIndex - index);
-                        const thought = lastThoughtSnippet(actor.thought, 72);
-                        const speech = actor.speaking ? lastThoughtSnippet(actor.speech, 42) : '';
+                        const thought = stageTickerText(actor.thought || (actor.thinking ? 'Thinking' : ''), 72);
+                        const speech = actor.speaking ? stageTickerText(actor.speech, 42) : '';
                         return (
                             <button
                                 key={actor.id}
@@ -139,8 +191,11 @@ export const DebateStage: React.FC<DebateStageProps> = ({ actors, caption, onOpe
                                     else actorRefs.current.delete(actor.id);
                                 }}
                             >
+                                {actor.speaking && <span className="debate-stage-beam" aria-hidden="true" />}
                                 {actor.thinking && thought && (
-                                    <span className="debate-stage-thought" data-thought={thought} />
+                                    <span className="debate-stage-thought" data-thought={thought}>
+                                        <StageTicker text={actor.thought} fallback="Thinking" max={72} />
+                                    </span>
                                 )}
                                 {actor.speaking && <span className="debate-stage-spot" />}
                                 <DebateBotAvatar
@@ -152,7 +207,11 @@ export const DebateStage: React.FC<DebateStageProps> = ({ actors, caption, onOpe
                                     look={look}
                                     size={52}
                                 />
-                                {speech && <span className="debate-stage-balloon" data-speech={speech} />}
+                                {speech && (
+                                    <span className="debate-stage-balloon" data-speech={speech}>
+                                        <StageTicker text={actor.speech} max={42} />
+                                    </span>
+                                )}
                                 {sentId === actor.id && (
                                     <span className="debate-stage-sent">sent!</span>
                                 )}
@@ -165,15 +224,17 @@ export const DebateStage: React.FC<DebateStageProps> = ({ actors, caption, onOpe
                     <span
                         className="debate-stage-packet"
                         aria-hidden="true"
-                        data-packet={flight.text}
+                        data-packet={formatStageSnippet(flight.text, 36)}
                         onClick={() => onOpenActor?.(flight.speakerId)}
                         style={{
                             left: flight.fromX,
                             top: flight.fromY,
                             ['--dx' as string]: `${flight.dx}px`,
                             ['--dy' as string]: `${flight.dy}px`,
+                            ['--angle' as string]: `${flight.angle}deg`,
                         }}
-                    />
+                    >
+                    </span>
                 )}
             </div>
             {caption ? (

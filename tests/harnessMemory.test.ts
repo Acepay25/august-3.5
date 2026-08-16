@@ -11,7 +11,7 @@ vi.mock('../services/infrastructure/PreferencesService', () => ({
   }),
 }));
 
-import { initMemoryFiles, getMemoryFiles, getMemoryFilesContext, createMemoryFile } from '../services/learning/MemoryFilesService';
+import { initMemoryFiles, getMemoryFiles, getMemoryFilesContext, createMemoryFile, updateMemoryFile } from '../services/learning/MemoryFilesService';
 import { listRetrievedMemorySources } from '../services/learning/MemoryRetrievalService';
 import {
   maybeUpsertSkill,
@@ -152,6 +152,35 @@ tradeIds: a,b,c,d,e,f,g
     expect(next.confidence).toBe('Avoid');
     expect(next.direction).toBe('Neutral');
     expect(next.riskVeto).toMatch(/NOTEBOOK SKILL VETO/);
+  });
+
+  it('does not apply a disabled notebook skill to a setup', async () => {
+    const folder = getMemoryFiles().folders.find(f => f.name === 'skills')!;
+    const disabled = await createMemoryFile(folder.id, 'disabled-eth-long-avoid.md', `---
+status: confirmed
+kind: avoid
+coin: ETHUSDT
+direction: Long
+family: Family Z
+wins: 1
+losses: 6
+tradeIds: a,b,c,d,e,f,g
+---
+
+# Disabled avoid skill
+
+Wait for the reclaim.
+`, 'test-user');
+    await updateMemoryFile(disabled.id, { enabled: false }, 'test-user');
+    const next = applyNotebookSkillsToAnalysis({
+      coinName: 'ETHUSDT',
+      direction: 'Long',
+      confidence: 'High',
+      probability: 80,
+      detectedPatternFamily: 'Family Z',
+    });
+    expect(next.confidence).toBe('High');
+    expect(next.direction).toBe('Long');
   });
 
   it('promotes a post-mortem IF/THEN into a skill on the first closed trade', async () => {

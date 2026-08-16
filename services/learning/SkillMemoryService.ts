@@ -150,6 +150,11 @@ export const skillMatchesSetup = (
     return hits >= 2;
 };
 
+const enabledSkillMeta = (file: MemoryFile): SkillMeta | null => {
+    if (!file.enabled || !isSkillFile(file)) return null;
+    return parseSkillMarkdown(file.content);
+};
+
 const deriveStatus = (meta: SkillMeta): SkillStatus => {
     const sample = meta.wins + meta.losses;
     const winRate = sample > 0 ? meta.wins / sample : 0;
@@ -202,7 +207,7 @@ export const applySkillEvidence = async (trade: LoggedTrade, username: string): 
     };
     for (const file of getMemoryFiles().files.filter(isSkillFile)) {
         const meta = parseSkillMarkdown(file.content);
-        if (!meta || !skillMatchesSetup(meta, setup)) continue;
+        if (!meta || !file.enabled || !skillMatchesSetup(meta, setup)) continue;
         if (meta.tradeIds.includes(trade.id)) continue;
         if (trade.outcome === TradeOutcome.WIN) meta.wins += 1;
         else meta.losses += 1;
@@ -481,8 +486,7 @@ export const applyNotebookSkillsToAnalysis = <T extends {
         pattern: analysis.marketConditions?.pattern,
     };
     const matches = getMemoryFiles().files
-        .filter(isSkillFile)
-        .map(f => parseSkillMarkdown(f.content))
+        .map(enabledSkillMeta)
         .filter((m): m is SkillMeta => Boolean(m && skillMatchesSetup(m, setup)));
     if (matches.length === 0) return analysis;
 
@@ -530,8 +534,7 @@ export const listAppliedSkills = (
         pattern: analysis.marketConditions?.pattern,
     };
     return getMemoryFiles().files
-        .filter(isSkillFile)
-        .map(f => parseSkillMarkdown(f.content))
+        .map(enabledSkillMeta)
         .filter((m): m is SkillMeta => Boolean(m && skillMatchesSetup(m, setup)))
         .map(m => ({
             title: titleFromMeta(m),
@@ -548,8 +551,7 @@ export const confirmedAvoidForSetup = (
     setup: { coin?: string; direction?: string; family?: string; pattern?: string },
 ): SkillMeta | null => {
     const matches = getMemoryFiles().files
-        .filter(isSkillFile)
-        .map(f => parseSkillMarkdown(f.content))
+        .map(enabledSkillMeta)
         .filter((m): m is SkillMeta => Boolean(m && skillMatchesSetup(m, setup)));
     return matches.find(m => m.kind === 'avoid' && m.status === 'confirmed') ?? null;
 };

@@ -327,6 +327,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         /** Summaries of user-uploaded strategy books (Settings → Strategies). */
         userStrategies: string | undefined;
         onReasoning: (reasoning: string) => void;
+        /** Visible content deltas — surfaces the answer forming live. */
+        onPartialOutput: (chunk: string) => void;
     }
 
     const cachedAnalyzeTradingView = useCallback(async (
@@ -412,6 +414,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             systemPromptOverride: params.systemPromptOverride,
             userStrategies: params.userStrategies,
             onReasoning: params.onReasoning,
+            onPartialOutput: params.onPartialOutput,
         });
 
         // Only cache successful, non-empty results.
@@ -511,6 +514,10 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     const [analysisSteps, setAnalysisSteps] = useState<AnalysisStep[]>([]);
     const reasoningMapRef = useRef<Record<string, string>>({});
     const turnReasoningRef = useRef<Record<string, string>>({});
+    // Visible content streamed during the opening analysis (keyed by
+    // thoughtsKey) — surfaced live as round-1 turn text before the debate
+    // rounds begin.
+    const openingTextRef = useRef<Record<string, string>>({});
     const activeDebateSpeakersRef = useRef<Record<string, number>>({});
     const debateTurnsRef = useRef<DebateTurn[]>([]);
     const debateRunLogRef = useRef<DebateRunEvent[]>([]);
@@ -548,6 +555,51 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     // run errors (the old catch hardcoded failStep('analysis'), so debate-phase
     // failures marked the wrong step and the finally force-completed everything).
     const currentPhaseRef = useRef<'analysis' | 'debate'>('analysis');
+
+    // ─── RAF-throttled OPENING-PHASE thinking/output surfacing ───────────
+    // While the analysts run their initial analysis (before any debate round
+    // exists) their chain-of-thought and answer only live in ensembleProgress
+    // — tiny stage bubbles / a click-to-open seat. That left "the three
+    // models thinking" invisible in the transcript. This coalesces the
+    // accumulated reasoning (and the visible answer forming) into round-1
+    // (openings) turns and marks them live, so DebateChat streams each
+    // model's thinking + output exactly the way it streams later debate
+    // turns. Guarded to the analysis phase: once the debate loop starts it
+    // owns the transcript.
+    const throttledOpeningThinking = useRafThrottle((
+        conversationId: string | null,
+        messageId: string,
+        analysts: { name: string; thoughtsKey: string }[],
+        reasoningMap: Record<string, string>,
+        partialMap: Record<string, string>,
+    ) => {
+        if (currentPhaseRef.current !== 'analysis') return;
+        updateMessages(prev => {
+            const idx = prev.findIndex(m => m.id === messageId);
+            if (idx === -1) return prev;
+            const turns: DebateTurn[] = [];
+            for (const a of analysts) {
+                const key = a.thoughtsKey || a.name;
+                const cot = reasoningMap[key];
+                const text = partialMap[key] || '';
+                if ((cot && cot.trim()) || text.trim()) {
+                    turns.push({ speaker: a.name, round: 1, text, reasoning: cot || '' });
+                }
+            }
+            if (turns.length === 0) return prev;
+            const active: Record<string, number> = {};
+            for (const t of turns) active[t.speaker] = 1;
+            const next = {
+                ...prev[idx],
+                isDebating: true,
+                debateTurns: turns,
+                activeDebateSpeakers: active,
+            };
+            const copy = [...prev];
+            copy[idx] = next;
+            return copy;
+        }, conversationId);
+    });
 
     useEffect(() => {
         const requestConversationId = analysisConversationIdRef.current;
@@ -1411,6 +1463,12 @@ ${reflectionBlock}`
                         if (validationResult.confidenceWasAdjusted) {
                             finalAnalysis.originalConfidence = validationResult.originalConfidence;
                             finalAnalysis.confidence = validationResult.adjustedConfidence;
+                            if (finalAnalysis.confidence === 'Avoid') {
+                                // Avoid is a no-trade result. Keep the
+                                // direction field consistent with the card's
+                                // final action after a hard validation veto.
+                                finalAnalysis.direction = 'Neutral';
+                            }
                             devLog(`[ValidationGate] Confidence adjusted: ${validationResult.originalConfidence} → ${validationResult.adjustedConfidence}`);
                         }
 
@@ -1433,8 +1491,11 @@ ${reflectionBlock}`
                         }
 
                         // Store validation warnings
-                        if (validationResult.warnings.length > 0) {
-                            finalAnalysis.validationWarnings = validationResult.warnings;
+                        if (validationResult.warnings.length > 0 || validationResult.errors.length > 0) {
+                            finalAnalysis.validationWarnings = [
+                                ...validationResult.warnings,
+                                ...validationResult.errors.map(error => ` HARD VALIDATION: ${error.trim()}`),
+                            ];
                             devLog(`[ValidationGate] ${validationResult.warnings.length} warnings added to analysis`);
                         }
 
@@ -1614,6 +1675,7 @@ ${reflectionBlock}`
                     }
                     reasoningMapRef.current = {};
                     turnReasoningRef.current = {};
+                    openingTextRef.current = {};
                     activeDebateSpeakersRef.current = {};
                     const resumeSeeds = canResume && resumeTarget ? reconstructOpenings(resumeTarget.debateTurns || []) : [];
                     const useResume = resumeSeeds.filter(s => enabledProviders.some(p => p.name === s.name)).length >= 2;
@@ -1692,8 +1754,32 @@ ${reflectionBlock}`
                                      provider.thoughtsKey,
                                      reasoningMapRef.current[reasoningKey],
                                  );
+                                 // Stream the analysis thinking into the transcript
+                                 // as live round-1 turns (see throttledOpeningThinking).
+                                 throttledOpeningThinking(
+                                     requestConversationId,
+                                     placeholderId,
+                                     enabledProviders,
+                                     reasoningMapRef.current,
+                                     openingTextRef.current,
+                                 );
                              }
                          },
+                        // Visible content deltas (the answer — and any thinking the
+                        // model writes directly into content — forming live). Mirrors
+                        // the reasoning channel: accumulate + surface as round-1 text.
+                        onPartialOutput: (chunk: string) => {
+                            if (!isStagedEnsemble || !provider.thoughtsKey) return;
+                            const reasoningKey = provider.thoughtsKey || provider.name;
+                            openingTextRef.current[reasoningKey] = (openingTextRef.current[reasoningKey] || '') + chunk;
+                            throttledOpeningThinking(
+                                requestConversationId,
+                                placeholderId,
+                                enabledProviders,
+                                reasoningMapRef.current,
+                                openingTextRef.current,
+                            );
+                        },
                     });
                     const analysisPromises = enabledProviders.map(provider => {
                         if (useResume) {
@@ -1791,6 +1877,11 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
 
                     const settledResults = await Promise.allSettled(analysisPromises);
                     if (!isCurrentRequest()) assertCurrentRequest();
+                    // Commit the last opening-phase frame before the message
+                    // changes ownership from the analyst progress view to the
+                    // debate view. The snapshot below is still built from the
+                    // refs because React state updates are asynchronous.
+                    throttledOpeningThinking.flush();
                     if (isStagedEnsemble) {
                         updateEnsembleProgress(progress => ({
                                 ...progress,
@@ -1809,6 +1900,33 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 console.warn(`[Ensemble] Analyst "${enabledProviders[index]?.name || `#${index}`}" failed:`, settled.reason);
                         }
                     });
+
+                    // Keep the opening trace visible when the debate object is
+                    // created. Previously this handoff replaced the staged
+                    // placeholder with `debateTurns: []`, which erased the
+                    // live opening thinking/output immediately before the real
+                    // debate stream began.
+                    const openingTurns: DebateTurn[] = settledResults
+                        .map((settled, index): DebateTurn | null => {
+                            if (settled.status !== 'fulfilled') return null;
+                            const provider = enabledProviders[index];
+                            const key = provider.thoughtsKey || provider.name;
+                            const streamedThinking = reasoningMapRef.current[key] || settled.value.thoughtProcess || '';
+                            const streamedOutput = openingTextRef.current[key] || '';
+                            const rawOutput = settled.value.finalOutput || streamedOutput;
+                            const split = splitThinkingFromOutput(streamedThinking, rawOutput);
+                            const text = split.output || streamedOutput.trim();
+                            const reasoning = split.thinking || streamedThinking;
+                            if (!text.trim() && !reasoning.trim()) return null;
+                            return {
+                                speaker: provider.name,
+                                round: 1,
+                                text,
+                                reasoning,
+                                createdAt: new Date().toISOString(),
+                            };
+                        })
+                        .filter((turn): turn is DebateTurn => Boolean(turn));
 
                     const thoughtMap: Record<string, string> = {};
                     // P1-6 (pre-existing fix): iterate settledResults, NOT the
@@ -1903,7 +2021,9 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 createdAt: new Date().toISOString(),
                         }),
                         isDebating: true,
-                        debateTurns: useResume && resumeTarget ? (resumeTarget.debateTurns || []) : [],
+                        debateTurns: useResume && resumeTarget
+                            ? (resumeTarget.debateTurns || [])
+                            : openingTurns,
                         // Non-staged runs never carried modelsUsed — the chat's
                         // per-bubble model line was blank for them.
                         modelsUsed: ensemblePlaceholder?.modelsUsed
@@ -1922,6 +2042,12 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
 
                     // --- ENSEMBLE ROUTING ---
                     let debateStream;
+                    // Assigned in the standard-mode branch below: rebuilds the
+                    // visible turns from the accumulated lanes (text AND
+                    // thinking) and flushes them to the message. Reasoning
+                    // callbacks invoke it so thinking-only turns appear live —
+                    // before a seat's first output delta. Null in accuracy mode.
+                    const rebuildDebateTurnsRef: { current: (() => void) | null } = { current: null };
 
                     const activeModModel = moderatorModel;
 
@@ -2028,6 +2154,19 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                     reasoningMapRef.current.moderator = (reasoningMapRef.current.moderator || '') + reasoning;
                                     reasoningMapRef.current.Moderator = reasoningMapRef.current.moderator;
                                     thoughtMap.moderator = reasoningMapRef.current.moderator;
+                                    // Accuracy/autoplay has no per-speaker
+                                    // status callback. Push the global
+                                    // moderator trace immediately so the Floor
+                                    // and DebateChat can show thinking before
+                                    // the transcript parser sees public text.
+                                    throttledDebateUpdate(
+                                        requestConversationId,
+                                        debateMessageId,
+                                        debateTurnsRef.current,
+                                        thoughtMap,
+                                        reasoningMapRef.current,
+                                        activeDebateSpeakersRef.current,
+                                    );
                                 },
                                 // Provider IDs for Bayesian calibration (keyed by id)
                                 fulfilledAnalysts.map(a => a.provider.config.id),
@@ -2158,30 +2297,50 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                     reasoningMapRef.current.moderator = (reasoningMapRef.current.moderator || '') + reasoning;
                                     reasoningMapRef.current.Moderator = reasoningMapRef.current.moderator;
                                     thoughtMap.moderator = reasoningMapRef.current.moderator;
+                                    // Push immediately (rAF-coalesced) so the Floor
+                                    // shows the moderator THINKING live — before the
+                                    // first visible text delta lands. Previously this
+                                    // only flushed when a turn text chunk arrived.
+                                    throttledDebateUpdate(
+                                        requestConversationId,
+                                        debateMessageId,
+                                        debateTurnsRef.current,
+                                        thoughtMap,
+                                        reasoningMapRef.current,
+                                        activeDebateSpeakersRef.current,
+                                    );
                             },
                             (speaker: string, reasoning: string, round?: number) => {
                                 // Rebuttal and clarification reasoning is keyed by speaker
                                 // so the debate chat can show it live. Deltas ACCUMULATE
                                 // (same as the analyst/moderator callbacks) — replacing
                                 // wiped everything but the last delta of the last round.
-                                reasoningMapRef.current[speaker] = (reasoningMapRef.current[speaker] || '') + reasoning;
+                                // The moderator's GLOBAL channel (.moderator / .Moderator)
+                                // is owned by the moderator callback above — it mirrors the
+                                // full accumulated trace, so appending here too would
+                                // double-count every chunk. Analysts keep accumulating.
+                                if (speaker !== 'Moderator') {
+                                    reasoningMapRef.current[speaker] = (reasoningMapRef.current[speaker] || '') + reasoning;
+                                }
                                 if (round && round > 0) {
                                     const key = `${round}::${speaker}`;
                                     turnReasoningRef.current[key] = (turnReasoningRef.current[key] || '') + reasoning;
-                                    debateTurnsRef.current = debateTurnsRef.current.map(turn =>
-                                        turn.speaker === speaker && turn.round === round
-                                            ? { ...turn, reasoning: turnReasoningRef.current[key] }
-                                            : turn
+                                }
+                                if (rebuildDebateTurnsRef.current) {
+                                    // Rebuild the lanes — this CREATES thinking-only
+                                    // turns before any output text exists — then flush
+                                    // (rAF-coalesced), so thinking streams live.
+                                    rebuildDebateTurnsRef.current();
+                                } else {
+                                    throttledDebateUpdate(
+                                        requestConversationId,
+                                        debateMessageId,
+                                        debateTurnsRef.current,
+                                        thoughtMap,
+                                        reasoningMapRef.current,
+                                        activeDebateSpeakersRef.current,
                                     );
                                 }
-                                throttledDebateUpdate(
-                                    requestConversationId,
-                                    debateMessageId,
-                                    debateTurnsRef.current,
-                                    thoughtMap,
-                                    reasoningMapRef.current,
-                                    activeDebateSpeakersRef.current,
-                                );
                             },
                             (speaker: string, round: number, active: boolean) => {
                                 if (active) {
@@ -2244,6 +2403,18 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                     }
 
                     let fullResponseText = '';
+                    // Peel thinking out of a turn BEFORE sanitizing —
+                    // sanitizeAIResponseLight strips <think> tags but keeps
+                    // their bodies, so the split must run first. Used by the
+                    // accuracy-mode autoplay path (the standard path uses
+                    // peelDebateTurn, which also merges streamed CoT).
+                    const peelRawTurn = (raw: string): { text: string; reasoning?: string } => {
+                        const split = splitThinkingFromOutput('', raw);
+                        return {
+                            text: sanitizeAIResponseLight(split.output),
+                            reasoning: split.thinking || undefined,
+                        };
+                    };
                     if (runAccuracyMode) {
                         // ACCURACY MODE — the moderator autoplays the whole
                         // simulated transcript as one stream; parse `Speaker:`
@@ -2311,10 +2482,12 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 if (speaker === "Master Strategist") speaker = "Moderator";
                                 speaker = speaker.charAt(0).toUpperCase() + speaker.slice(1);
                                 if (speaker === 'Moderator') autoplayRound++;
+                                const peeledTurn = peelRawTurn(m[2].trim());
                                 currentTurns.push({
                                     speaker: speaker as DebateTurn['speaker'],
                                     round: autoplayRound > 0 ? autoplayRound : undefined,
-                                    text: sanitizeAIResponseLight(m[2].trim()),
+                                    text: peeledTurn.text,
+                                    reasoning: peeledTurn.reasoning,
                                 });
                             }
 
@@ -2334,7 +2507,8 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 const cleanSynthesis = synthesisContent.replace(/^(?:[*_~]*)(Moderator|Master Strategist)[^:\n]*?:\s*/i, '');
                                 const lastTurn = currentTurns[currentTurns.length - 1];
                                 if (cleanSynthesis && (!lastTurn || lastTurn.text !== cleanSynthesis)) {
-                                    currentTurns.push({ speaker: 'Moderator', round: autoplayRound + 1, text: sanitizeAIResponseLight(cleanSynthesis) });
+                                    const peeledSynthesis = peelRawTurn(cleanSynthesis);
+                                    currentTurns.push({ speaker: 'Moderator', round: autoplayRound + 1, text: peeledSynthesis.text, reasoning: peeledSynthesis.reasoning });
                                 }
                             }
 
@@ -2362,42 +2536,21 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                             };
                         };
 
-                        for await (const event of debateStream as AsyncGenerator<ensembleService.RealDebateTurnEvent, void, unknown>) {
-                            if (!isCurrentRequest()) assertCurrentRequest();
-                            if (!event || typeof event.text !== 'string') continue;
-
-                            const key = `${event.round}::${event.speaker}`;
-                            // The engine emits this marker before a moderator
-                            // verdict retry — discard the failed attempt's
-                            // partial prose so it never glues onto the verdict.
-                            if (event.text.includes('<MODERATOR_RETRY>')) {
-                                // Discard the failed attempt entirely — text AND
-                                // first-delta timestamp (the retried verdict must
-                                // not carry the failed attempt's start time).
-                                turnTexts[key] = '';
-                                delete turnTimes[key];
-                                continue;
+                        // Single rebuild path shared by the text-event loop AND the
+                        // reasoning callbacks. Turns are assembled from BOTH lanes —
+                        // accumulated text AND accumulated thinking — so a seat that
+                        // is still thinking (no output deltas yet) already has a
+                        // live turn whose Thinking row streams.
+                        const rebuildDebateTurns = (): void => {
+                            const turnKeys = new Set<string>(Object.keys(turnTexts));
+                            for (const k of Object.keys(turnReasoningRef.current)) {
+                                if (turnReasoningRef.current[k]) turnKeys.add(k);
                             }
-                            // The engine abandoned the replacement wait — the
-                            // suspended requestReplacement must be unblocked so
-                            // a late click on the banner can never resolve into
-                            // a phantom analyst (a full paid re-analysis call
-                            // injected into consensus/runStats).
-                            if (event.text.includes('<REPLACEMENT_TIMEOUT>')) {
-                                const pending = replacementChoiceRef.current;
-                                if (pending) handleReplacementChoice(pending.messageId, null);
-                            }
-                            if (!turnTimes[key]) turnTimes[key] = new Date().toISOString();
-                            turnTexts[key] = (turnTexts[key] || '') + event.text;
-                            if (event.speaker === 'Moderator') {
-                                fullResponseText += event.text;
-                                moderatorRound = event.round;
-                            }
-
-                            const currentTurns: DebateTurn[] = Object.entries(turnTexts)
-                                .map(([k, text]) => {
+                            const currentTurns: DebateTurn[] = [...turnKeys]
+                                .map((k) => {
                                     const sep = k.indexOf('::');
                                     const speaker = k.slice(sep + 2) as DebateTurn['speaker'];
+                                    const text = turnTexts[k] || '';
                                     const cleanedText = speaker === 'Moderator'
                                         ? text
                                             .replace(/<CLARIFICATION_(?:DONE|SATISFIED|UNSATISFIED)>/gi, '')
@@ -2421,6 +2574,44 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
 
                             debateTurnsRef.current = currentTurns;
                             throttledDebateUpdate(requestConversationId, debateMessageId, currentTurns, thoughtMap, reasoningMapRef.current, activeDebateSpeakersRef.current);
+                        };
+                        rebuildDebateTurnsRef.current = rebuildDebateTurns;
+
+                        for await (const event of debateStream as AsyncGenerator<ensembleService.RealDebateTurnEvent, void, unknown>) {
+                            if (!isCurrentRequest()) assertCurrentRequest();
+                            if (!event || typeof event.text !== 'string') continue;
+
+                            const key = `${event.round}::${event.speaker}`;
+                            // The engine emits this marker before a moderator
+                            // verdict retry — discard the failed attempt's
+                            // partial prose so it never glues onto the verdict.
+                            if (event.text.includes('<MODERATOR_RETRY>')) {
+                                // Discard the failed attempt entirely — text, the
+                                // first-delta timestamp, AND the streamed thinking
+                                // (the retried verdict must not carry the failed
+                                // attempt's start time or chain-of-thought).
+                                turnTexts[key] = '';
+                                delete turnTimes[key];
+                                delete turnReasoningRef.current[key];
+                                continue;
+                            }
+                            // The engine abandoned the replacement wait — the
+                            // suspended requestReplacement must be unblocked so
+                            // a late click on the banner can never resolve into
+                            // a phantom analyst (a full paid re-analysis call
+                            // injected into consensus/runStats).
+                            if (event.text.includes('<REPLACEMENT_TIMEOUT>')) {
+                                const pending = replacementChoiceRef.current;
+                                if (pending) handleReplacementChoice(pending.messageId, null);
+                            }
+                            if (!turnTimes[key]) turnTimes[key] = new Date().toISOString();
+                            turnTexts[key] = (turnTexts[key] || '') + event.text;
+                            if (event.speaker === 'Moderator') {
+                                fullResponseText += event.text;
+                                moderatorRound = event.round;
+                            }
+
+                            rebuildDebateTurns();
                         }
 
                         // The moderator's verdict prose lives before the
@@ -2437,31 +2628,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                     .trim();
                                 if (cleaned) {
                                     turnTexts[modKey] = cleaned;
-                                    const finalTurns: DebateTurn[] = Object.entries(turnTexts)
-                                        .map(([k, text]) => {
-                                            const sep = k.indexOf('::');
-                                            const speaker = k.slice(sep + 2) as DebateTurn['speaker'];
-                                            const cleanedText = speaker === 'Moderator'
-                                                ? text
-                                                    .replace(/<CLARIFICATION_(?:DONE|SATISFIED|UNSATISFIED)>/gi, '')
-                                                    .replace(/<MODERATOR_ERROR>[\s\S]*?<\/MODERATOR_ERROR>/gi, '')
-                                                    .replace(/<JSON_PLAN>[\s\S]*/i, '')
-                                                    .replace(/<\/?DEBATE_END>/gi, '')
-                                                    .trim()
-                                                : text.trim();
-                                            const peeled = peelDebateTurn(speaker, cleanedText, k);
-                                            return {
-                                                speaker,
-                                                round: parseInt(k.slice(0, sep), 10) || undefined,
-                                                createdAt: turnTimes[k],
-                                                text: peeled.text,
-                                                reasoning: peeled.reasoning,
-                                            };
-                                        })
-                                        .filter(turn => Boolean(turn.text) || Boolean(turn.reasoning))
-                                        .sort((a, b) => (a.round ?? 0) - (b.round ?? 0));
-                                    debateTurnsRef.current = finalTurns;
-                                    throttledDebateUpdate(requestConversationId, debateMessageId, finalTurns, thoughtMap, reasoningMapRef.current, activeDebateSpeakersRef.current);
+                                    rebuildDebateTurns();
                                 }
                             }
                         }
@@ -2956,6 +3123,8 @@ ${accuracyVerificationNote}`
                                 // Streamed chain-of-thought deltas accumulate — the
                                 // multi path uses the same append pattern.
                                 onReasoning: (reasoning: string) => { soloRawReasoning += reasoning; },
+                                // Solo path has no Floor/transcript — nothing to surface.
+                                onPartialOutput: () => {},
                             },
                         );
                     if (!isCurrentRequest()) assertCurrentRequest();
@@ -3039,19 +3208,22 @@ ${accuracyVerificationNote}`
                     currentMessages,
                     undefined,
                     currentAbortController.signal,
-                    reasoning => { reasoningContent = reasoning; }
+                    reasoning => { reasoningContent += reasoning; }
                 );
                 if (!isCurrentRequest()) assertCurrentRequest();
+                // Split before display: native CoT and any leaked scratchpad
+                // belong in the bubble's Thinking row, never in the reply.
+                const casualSplit = splitThinkingFromOutput(reasoningContent, responseText);
                 // Casual chat is a single-model conversation. Do not store the
                 // answer as an individual insight; that creates an oversized
                 // "Individual AI Insights" section under ordinary replies.
                 updateRequestMessages(prev => [...prev, {
                     id: `ai-${Date.now()}`,
                     role: MessageRole.AI,
-                    text: responseText,
+                    text: casualSplit.output,
                     createdAt: new Date().toISOString(),
                     modelsUsed: { [provider.config.id]: provider.model },
-                    thoughtProcesses: reasoningContent ? { [provider.config.id]: reasoningContent } : undefined,
+                    thoughtProcesses: casualSplit.thinking ? { [provider.config.id]: casualSplit.thinking } : undefined,
                 }]);
             }
         } catch (error: any) {

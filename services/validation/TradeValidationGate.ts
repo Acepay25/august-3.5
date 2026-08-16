@@ -427,7 +427,10 @@ export const validateTimeframeAlignment = (
         if (alignedCount >= 3) newConfidence = 'High';
         else if (alignedCount >= 2) newConfidence = 'Medium';
         else if (alignedCount >= 1) newConfidence = 'Low';
-        else newConfidence = 'Avoid';
+        // No alignment with no recorded conflicts means the data has no
+        // usable directional evidence. If conflicts are present, this is a
+        // contested setup and should be graded Low rather than hard-blocked.
+        else newConfidence = confluence.conflicts.length > 0 ? 'Low' : 'Avoid';
 
         if (newConfidence !== proposedConfidence) {
             return {
@@ -602,7 +605,12 @@ ${patternMatch.warning ? `\n PATTERN MEMORY:\n${patternMatch.warning}` : ''}
             // Downgrade by one level
             if (adjustedConfidence === 'High') adjustedConfidence = 'Medium';
             else if (adjustedConfidence === 'Medium') adjustedConfidence = 'Low';
-            else adjustedConfidence = 'Avoid';
+            else if (rrResult.ratio < 1 || !Number.isFinite(rrResult.ratio)) {
+                // Below 1:1 (or no measurable risk) is not a viable trade.
+                // A merely weak Low-confidence setup remains Low so one soft
+                // R:R miss cannot turn every imperfect setup into Avoid.
+                adjustedConfidence = 'Avoid';
+            }
         }
     }
 

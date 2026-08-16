@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { DebateTurn, EnsembleAnalystProgress, EnsembleProgress, RunStats } from '../../types';
-import MarkdownContent from '../shared/MarkdownContent';
+import ReasoningRow from '../shared/ReasoningRow';
+import StreamingMarkdown from '../shared/StreamingMarkdown';
 import { formatModelDisplayName, formatSeatLabel } from '../../utils/providerUtils';
 import { buildAnalystGantt, lastThoughtSnippet } from '../../utils/runGantt';
-import { splitThinkingFromOutput, visibleReplyFromThinking, looksLikePublicAnswer, looksLikeScratchpad, looksLikeTradeOutput } from '../../utils/thinkingSplit';
+import { splitThinkingFromOutput, looksLikePublicAnswer, looksLikeScratchpad, looksLikeTradeOutput } from '../../utils/thinkingSplit';
 import { DebateBotAvatar } from './DebateBotAvatar';
 import { DebateStage, DebateStageActor } from './DebateStage';
 
@@ -92,23 +93,31 @@ const roundLabel = (round: number): string => {
 
 const FadeStream: React.FC<{ text: string; live?: boolean; className?: string }> = ({ text, live, className }) => (
     <div className={live ? 'stream-fade' : undefined}>
-        <MarkdownContent content={text} className={className} />
+        <StreamingMarkdown text={text} live={live} className={className} />
     </div>
 );
 
 const ReplyBlock: React.FC<{ block: SeatBlock; fallbackThinking?: string }> = ({ block, fallbackThinking }) => {
+    // block.text is already the split public output (the seats memo peeled
+    // it once) — re-running visibleReplyFromThinking here used to blank
+    // replies that echo their scratchpad.
+    const text = (block.text || '').trim();
     const thinking = block.thinking || fallbackThinking || '';
-    const text = visibleReplyFromThinking(thinking, block.text || '');
     const hideLiveScratch = Boolean(
         block.live
         && looksLikeScratchpad(text)
         && !looksLikePublicAnswer(text)
         && !looksLikeTradeOutput(text),
     );
-    if (!text.trim() || hideLiveScratch) {
-        if (!block.live) return null;
+    if (!text || hideLiveScratch) {
+        if (block.live) {
+            return (
+                <p className="px-3 py-1 text-xs italic text-zinc-600">Writing</p>
+            );
+        }
+        if (!thinking) return null;
         return (
-            <p className="px-3 py-1 text-xs italic text-zinc-600">Writing</p>
+            <p className="px-3 py-1 text-xs italic text-zinc-600">No public answer — the model only returned a scratchpad.</p>
         );
     }
     return (
@@ -129,14 +138,9 @@ const ReplyBlock: React.FC<{ block: SeatBlock; fallbackThinking?: string }> = ({
 const ThinkingDetails: React.FC<{ text: string; live?: boolean }> = ({ text, live }) => {
     if (!text) return null;
     return (
-        <details className="border-b border-white/5 px-3 py-2" open={Boolean(live)}>
-            <summary className="cursor-pointer list-none text-[11px] uppercase tracking-widest text-zinc-500">
-                Thinking
-            </summary>
-            <div className="custom-scrollbar mt-2 max-h-40 overflow-y-auto pr-1">
-                <FadeStream text={text} live={live} className="text-zinc-500" />
-            </div>
-        </details>
+        <div className="border-b border-white/5 px-3 py-2">
+            <ReasoningRow thinking={text} running={Boolean(live)} defaultOpen={Boolean(live)} />
+        </div>
     );
 };
 
@@ -294,14 +298,28 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
     const liveAnalyst = progress.analysts.find(a =>
         a.status === 'analyzing' || Boolean(activeDebateSpeakers[a.displayName] || activeDebateSpeakers[a.providerName])
     );
+    // "Speaking" requires actual speech: an analyst whose chain-of-thought is
+    // still streaming (no output yet) is THINKING on the stage, not speaking.
+    const liveAnalystSpeech = liveAnalyst
+        ? (() => {
+            const turns = debateTurns.filter(t => t.speaker !== 'Moderator' && matchesSpeaker(t.speaker, liveAnalyst));
+            return turns[turns.length - 1]?.text?.trim() || '';
+        })()
+        : '';
     const liveAnalystSpeaking = Boolean(
-        liveAnalyst && (activeDebateSpeakers[liveAnalyst.displayName] || activeDebateSpeakers[liveAnalyst.providerName])
+        liveAnalyst
+        && (activeDebateSpeakers[liveAnalyst.displayName] || activeDebateSpeakers[liveAnalyst.providerName])
+        && liveAnalystSpeech,
     );
-    const modSpeaking = verdictLive || (modLive && moderatorBlocks.some(b => b.live && Boolean(b.text.trim())));
+    // Entering the verdict round means the moderator is active, not that it
+    // has emitted public speech yet. Keep it in THINKING until visible text
+    // exists, just like the analyst seats.
+    const modSpeaking = modLive && moderatorBlocks.some(b => b.live && Boolean(b.text.trim()));
+    const modThinking = modLive && (Boolean(moderatorThinking.trim()) || !modSpeaking);
     const turnCaption = !isLive
         ? ''
         : verdictLive
-            ? 'Moderator is delivering the verdict'
+            ? (modSpeaking ? 'Moderator is delivering the verdict' : 'Moderator is thinking about the verdict')
             : modLive
                 ? (modSpeaking ? 'Moderator is speaking' : 'Moderator is thinking')
                 : liveAnalystSpeaking && liveAnalyst
@@ -315,9 +333,9 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
             name: 'Moderator',
             toneKey: 'moderator',
             live: modLive,
-            thinking: modLive && Boolean(moderatorThinking.trim()),
+            thinking: modThinking,
             speaking: modSpeaking,
-            thought: moderatorThinking,
+            thought: moderatorThinking || (modLive && !modSpeaking ? 'Thinking' : ''),
             speech: [...moderatorBlocks].reverse().find(b => b.text.trim())?.text,
             replyTo: [...moderatorBlocks].reverse().find(b => b.live && b.replyTo)?.replyTo
                 || [...moderatorBlocks].reverse().find(b => b.replyTo)?.replyTo,
@@ -330,15 +348,33 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
             const live = analyst.status === 'analyzing' || answering;
             const speakerTurns = debateTurns.filter(t => t.speaker !== 'Moderator' && matchesSpeaker(t.speaker, analyst));
             const lastTurn = speakerTurns[speakerTurns.length - 1];
-            const replyText = lastTurn?.text || analyst.finalOutput || '';
+            // finalOutput is raw provider prose — peel think tags so the
+            // balloon/packet snippet never shows scratchpad markup.
+            const replyText = lastTurn?.text
+                || (analyst.finalOutput ? splitThinkingFromOutput('', analyst.finalOutput).output : '');
+            // The bot SPEAKS only once it has output to say; while its CoT
+            // streams (analysis/openings, or a rebuttal's pre-text phase) it
+            // stays in the THINKING state — thought bubble + orbit animation.
+            const hasSpeech = Boolean(replyText.trim());
+            const speaking = answering && live && hasSpeech;
             return {
                 id: analyst.key,
                 name: formatSeatLabel(analyst.displayName),
                 toneKey: analyst.modelId || analyst.modelName || analyst.displayName,
                 live,
-                thinking: live && !answering,
-                speaking: answering && live,
-                thought: [analyst.reasoning, analyst.thoughtProcess, reasoningProcesses[analyst.key]].filter(Boolean).join('\n\n'),
+                thinking: live && !speaking,
+                speaking,
+                // Reasoning arrives keyed several ways (analyst key, display
+                // name, provider name) depending on the phase — check all of
+                // them so the stage thought bubble streams live during
+                // rebuttals/clarifications, not only the analysis phase.
+                thought: [
+                    analyst.reasoning,
+                    analyst.thoughtProcess,
+                    reasoningProcesses[analyst.key],
+                    reasoningProcesses[analyst.displayName],
+                    reasoningProcesses[analyst.providerName],
+                ].filter(Boolean).join('\n\n'),
                 speech: replyText || undefined,
                 replyTo: speakerTurns.some(t => (t.round ?? 0) > 1) ? 'Moderator' : undefined,
                 replies: speakerTurns.some(t => (t.round ?? 0) > 1) && replyText
@@ -354,6 +390,7 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
         activeDebateSpeakers,
         debateTurns,
         modLive,
+        modThinking,
         modSpeaking,
         moderatorBlocks,
         moderatorThinking,
@@ -370,7 +407,7 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
             status: verdictLive ? 'verdict' : modLive ? 'asking' : moderatorBlocks.length > 0 ? 'posed' : 'Waiting',
             live: modLive,
             speaking: modSpeaking,
-            thinking: moderatorThinking,
+            thinking: moderatorThinking || (modLive && !modSpeaking ? 'Thinking' : ''),
             blocks: moderatorBlocks,
             usage: moderatorTokens > 0 ? `${moderatorTokens.toLocaleString()} tok` : undefined,
             toneKey: 'moderator',
@@ -381,6 +418,9 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
             const speakerTurns = debateTurns.filter(t => t.speaker !== 'Moderator' && matchesSpeaker(t.speaker, analyst));
             const lastTurn = speakerTurns[speakerTurns.length - 1];
             const openingRaw = analyst.finalOutput && analyst.finalOutput !== lastTurn?.text ? analyst.finalOutput : '';
+            // Same speaking gate as the stage: no output text yet → still
+            // "thinking" in the seat header, even while the turn streams.
+            const hasSpeech = Boolean((lastTurn?.text || openingRaw || '').trim());
             const streamedCot = [
                 analyst.reasoning,
                 analyst.thoughtProcess,
@@ -413,7 +453,9 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
                 ...turnSplits,
             ];
             const onBlocks = blocks.map(b => b.thinking).filter(Boolean).join('\n\n');
-            const thinking = onBlocks ? '' : (openingSplit.thinking || streamedCot);
+            const thinking = onBlocks
+                ? ''
+                : (openingSplit.thinking || streamedCot || (live && !hasSpeech ? 'Thinking' : ''));
             const title = formatSeatLabel(analyst.displayName);
             const prettyModel = formatModelDisplayName(analyst.modelId || analyst.modelName);
             const ledger = runStats?.analysts?.find(a =>
@@ -426,9 +468,9 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
                 id: analyst.key,
                 title,
                 modelName: prettyModel && title.includes(prettyModel) ? analyst.providerName : prettyModel,
-                status: laneStatusText(analyst, answering && live),
+                status: laneStatusText(analyst, answering && live && hasSpeech),
                 live,
-                speaking: answering && live,
+                speaking: answering && live && hasSpeech,
                 thinking,
                 blocks,
                 usage: tokens > 0 ? `${tokens.toLocaleString()} tok` : undefined,

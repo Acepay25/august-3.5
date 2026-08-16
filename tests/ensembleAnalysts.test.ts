@@ -166,4 +166,21 @@ describe('buildAnalystFailureReport', () => {
   it('returns an empty string when every analyst succeeded', () => {
     expect(buildAnalystFailureReport([{ status: 'fulfilled', value: {} }], [{ name: 'A', model: 'm' }])).toBe('');
   });
+
+  it('gives duplicate provider:model Team slots unique lanes and names', () => {
+    const providers = [makeProvider('prov-a', ['m1'], 'm1')];
+    const selection: EnsembleModelSelection = [
+      { providerId: 'prov-a', model: 'm1' },
+      { providerId: 'prov-a', model: 'm1' },
+      { providerId: 'prov-a', model: 'm1' },
+    ];
+    const plan = buildEnsembleAnalysts(providers, lens([], false), selection, true);
+    expect(plan.analysts).toHaveLength(3);
+    // Each seat gets its own reasoning lane — without the suffix the three
+    // seats would share one merged chain-of-thought bucket and every bubble
+    // would show the same thinking.
+    expect(plan.analysts.map(a => a.thoughtsKey)).toEqual(['prov-a:m1', 'prov-a:m1#1', 'prov-a:m1#2']);
+    // Distinct names so the transcript turns never collapse into one seat.
+    expect(plan.analysts.map(a => a.name)).toEqual(['prov-a · M1', 'prov-a · M1 #2', 'prov-a · M1 #3']);
+  });
 });

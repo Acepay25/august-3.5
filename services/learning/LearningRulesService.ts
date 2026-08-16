@@ -370,11 +370,11 @@ export const generateLearningRulesPrompt = (
 
     const rulesText = relevantRules.map((rule, i) => {
         const source = rule.outcome === 'LOSS' ? '❌ From past LOSS' : '✅ From past WIN';
-        // Unvalidated rules (never used) must not ride as MANDATORY mandates —
-        // a single loss used to create a permanent "MUST" that could veto
-        // unrelated setups forever.
-        const validated = (rule.useCount ?? 0) > 0;
-        return `${i + 1}. **IF** ${rule.ifCondition} **THEN** ${rule.thenAction}\n   (${source}${rule.coin ? ` on ${rule.coin}` : ''}${validated ? '' : ' — unvalidated: advisory only'})`;
+        // Prompt usage is not outcome evidence. A single post-mortem must not
+        // become a permanent "MUST" that can veto unrelated setups.
+        const sample = (rule.wins ?? 0) + (rule.losses ?? 0);
+        const confirmed = rule.status === 'confirmed' && sample >= 5;
+        return `${i + 1}. **IF** ${rule.ifCondition} **THEN** ${rule.thenAction}\n   (${source}${rule.coin ? ` on ${rule.coin}` : ''}${confirmed ? ' — confirmed by repeated outcomes' : ' — advisory only'})`;
     }).join('\n\n');
 
     // Track usage so rules can be validated against later outcomes (decay
@@ -387,11 +387,11 @@ export const generateLearningRulesPrompt = (
 📚 **LEARNING RULES FROM PATTERN MEMORY**
 
 The following rules were extracted from your post-mortem analyses.
-**INSTRUCTION:** Apply these rules when evaluating this trade:
+**INSTRUCTION:** Use these rules as contextual notebook guidance when evaluating this trade:
 
 ${rulesText}
 
-**INSTRUCTION:** If ANY of these IF conditions match the current setup, you MUST apply the corresponding THEN action. Reference the specific rule number in your analysis.
+**INSTRUCTION:** If an advisory rule matches, explain the risk and consider the suggested action; do not turn it into **Avoid** by itself. Only a confirmed, repeated loss-backed rule may support a no-trade recommendation, and it must still match the current setup. Reference the specific rule number when relevant.
 `;
 };
 
