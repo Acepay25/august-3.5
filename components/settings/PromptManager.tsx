@@ -10,7 +10,7 @@ import {
 } from '../../services/infrastructure/PromptOverrideService';
 import { useToastActions } from '../shared/Toast';
 import { useConfirmDialog } from '../shared/ConfirmDialog';
-import MarkdownRenderer from '../shared/MarkdownRenderer';
+import MarkdownContent from '../shared/MarkdownContent';
 import { SearchIcon, LoadingIcon, FileTextIcon, ChevronRightIcon, ChevronLeftIcon, FolderIcon } from '../shared/Icons';
 
 interface PromptManagerProps {
@@ -287,7 +287,7 @@ const PromptManager: React.FC<PromptManagerProps> = ({ username }) => {
                     <div className="flex-1 min-h-[320px] rounded-xl border border-zinc-800 bg-zinc-900 overflow-hidden flex flex-col">
                         {isPreview ? (
                             <div className="flex-1 overflow-y-auto custom-scrollbar px-8 py-8 lg:px-10 lg:py-10">
-                                <MarkdownRenderer content={draft || '(empty prompt)'} className="text-[15px] leading-8" />
+                                <MarkdownContent content={draft || '(empty prompt)'} className="text-[15px] leading-8" />
                             </div>
                         ) : (
                             <textarea

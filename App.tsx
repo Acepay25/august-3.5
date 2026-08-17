@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { VirtuosoHandle } from 'react-virtuoso';
-import { Message, MessageRole, TradeOutcome, ImageMetadata, AIProvider, Conversation, UserProfile, SavedAnalysis, TradeSummary, GlobalMemory, AccuracySubMode, CustomInstructionsMap, AnalystLensConfig, LoggedTrade, SetupWatch, SetupWatchTriggerEvent } from './types';
+import { Message, MessageRole, TradeOutcome, ImageMetadata, AIProvider, UserProfile, SavedAnalysis, TradeSummary, CustomInstructionsMap, AnalystLensConfig, LoggedTrade, SetupWatch, SetupWatchTriggerEvent } from './types';
 import * as ensembleService from './services/providers/ensembleService';
 import { generateFinalSummary } from './services/providers/GenericAnalysisService';
 import * as dbService from './services/infrastructure/dbService';
@@ -10,7 +10,7 @@ import { initStrategyDocs } from './services/infrastructure/StrategyService';
 import { initMemoryFiles, syncPatternMemory, syncProfileMemory, syncRecurringMistakes, subscribeMemoryFilesChanged } from './services/learning/MemoryFilesService';
 import { runNotebookReview } from './services/learning/MemoryReviewService';
 import { computeRegimeProviderStats } from './services/learning/SetupMemoryService';
-import { ANALYST_ROLE_DEFINITIONS, getRoleForProvider } from './services/ui/AnalystLensService';
+import { ANALYST_ROLE_DEFINITIONS } from './services/ui/AnalystLensService';
 import { AnalystRole } from './types/enums';
 import { ProbabilityEngineService } from './services/analysis/ProbabilityEngineService';
 
@@ -32,7 +32,6 @@ import { useConversationLeverage } from './hooks/useConversationLeverage';
 import { useCatalogReconcile } from './hooks/useCatalogReconcile';
 import AutomationView from './components/automation/AutomationView';
 import AutomationEditorModal, { ModelOption } from './components/automation/AutomationEditorModal';
-import { PostMortemCandidate } from './components/modals/PostTradeUploadModal';
 import { ChevronLeftIcon, ChevronRightIcon } from './components/shared/Icons';
 
 // P1-6: Lazy-load heavy, conditionally-rendered components so the initial
@@ -40,7 +39,6 @@ import { ChevronLeftIcon, ChevronRightIcon } from './components/shared/Icons';
 // Each lazy() call below produces a separate chunk loaded on demand when
 // the user opens the corresponding panel/modal. ChatArea and Header stay
 // eager (always-rendered, critical path).
-const Journal = React.lazy(() => import('./components/journal/Journal').then(m => ({ default: m.Journal })));
 const StrategySearch = React.lazy(() => import('./components/shared/StrategySearch'));
 const UserProfileManager = React.lazy(() => import('./components/settings/UserProfileManager'));
 const SavedAnalyses = React.lazy(() => import('./components/journal/SavedAnalyses'));
@@ -50,7 +48,6 @@ const SettingsMenu = React.lazy(() => import('./components/settings/SettingsMenu
 const LiveStreamView = React.lazy(() => import('./components/analysis/LiveStreamView'));
 // (LogTradeModal was removed — the capture flow uses DataCaptureModal.)
 const PostTradeUploadModal = React.lazy(() => import('./components/modals/PostTradeUploadModal').then(m => ({ default: m.PostTradeUploadModal })));
-const SkipTradeModal = React.lazy(() => import('./components/modals/SkipTradeModal').then(m => ({ default: m.SkipTradeModal })));
 const DataCaptureModal = React.lazy(() => import('./components/modals/DataCaptureModal').then(m => ({ default: m.DataCaptureModal })));
 const EntryNotHitCaptureModal = React.lazy(() => import('./components/modals/EntryNotHitCaptureModal').then(m => ({ default: m.EntryNotHitCaptureModal })));
 const OutcomeMismatchModal = React.lazy(() => import('./components/modals/OutcomeMismatchModal'));
@@ -71,18 +68,15 @@ import { buildModelIdToName, buildProviderNameToId, getFirstReadyProvider } from
 import { createNewConversation, DEFAULT_LEVERAGE, findReusableEmptyConversation } from './utils/conversationUtils';
 import { recalculateAnalysisMetrics } from './utils/analysisUtils';
 import { parseAppHash, serializeAppHash } from './utils/appHash';
-import { appendWatchEpisode, collectWatchedSignals, toggleWatchOnMessage } from './utils/watchList';
+import { collectWatchedSignals, toggleWatchOnMessage } from './utils/watchList';
 import { collectApprovalItems, setAutoJournalRule } from './utils/approvalInbox';
 import { takeSkillDraft } from './utils/skillDrafts';
-import { ingestCraftedSkill } from './services/learning/SkillMemoryService';
+import { ingestCraftedSkill, ingestCraftedSkillFromDraft } from './services/learning/SkillMemoryService';
 import { buildRiskBook, formatRiskBookBadge } from './utils/riskBook';
 import { reconstructOpenings } from './utils/debateResume';
 import { processImagesForSummarization } from './utils/imageProcessor';
 import { extractLastJson } from './utils/jsonUtils';
 import { parseLevelProbabilities } from './schemas/tradeAnalysis';
-import { pingBinanceAPI } from './services/analysis/MarketDataService';
-import { updateCalibration, updateGranularCalibration, initializeCalibration } from './services/validation/ConfidenceCalibrationService';
-import { ConfidenceCalibration, InsightKnowledgeBase } from './types';
 import useNetworkStatus from './hooks/useNetworkStatus';
 import { useUIState } from './hooks/useUIState';
 import { useConversations } from './hooks/useConversations';
@@ -92,21 +86,20 @@ import { useAnalysisPipeline } from './hooks/useAnalysisPipeline';
 import { usePostMortem } from './hooks/usePostMortem';
 import { useUserProfiles } from './hooks/useUserProfiles';
 import { useSaveOnUnload } from './hooks/useSaveOnUnload';
-import { offlineQueue, QueuedRequest } from './services/infrastructure/OfflineQueueService';
+import { offlineQueue } from './services/infrastructure/OfflineQueueService';
 import { jobQueue, JobType } from './services/infrastructure/JobQueueService';
 import { getPreference, setPreference, removePreference, getPreferenceObject, PREF_KEYS } from './services/infrastructure/PreferencesService';
 // AI Learning Services - Adaptive Learning, Mistake Patterns, Insight Extraction
-import { extractInsightsFromPostMortem, storeInsights, initializeKnowledgeBase } from './services/learning/InsightExtractionService';
+import { storeInsights } from './services/learning/InsightExtractionService';
 import * as MemoryService from './services/learning/MemoryService';
 import { insightTextForTrade } from './utils/tradeInsightBrief';
 import { ProviderConfig } from './types/provider';
 import { syncFromTradeLog, syncRollingWindowFromTradeLog, initModelPerformanceService } from './services/backtesting/ModelPerformanceService';
-import { saveLensConfig, initAnalystLensService, loadLensConfig, saveEnsembleModelSelection, retainEnsembleSelection, loadLastModeratorPick, saveLastModeratorPick, EnsembleModelSelection, saveCustomEnsemblePrompt, saveCustomLensPrompts } from './services/ui/AnalystLensService';
-import { detectTradingStyle, getEffectiveStyle, generateMasterPromptStyleInjection } from './services/ui/TradingStyleDetector';
-import { checkDataIntegrity, createStartupBackup, updateTradeCount, logIntegrityEvent, runMigrations } from './services/validation/DataIntegrityService';
+import { saveLensConfig, initAnalystLensService, loadLensConfig, saveEnsembleModelSelection, loadLastModeratorPick, saveLastModeratorPick, EnsembleModelSelection, saveCustomEnsemblePrompt, saveCustomLensPrompts } from './services/ui/AnalystLensService';
+import { checkDataIntegrity, createStartupBackup, logIntegrityEvent, runMigrations } from './services/validation/DataIntegrityService';
 import { startAutoBackup, stopAutoBackup, createBackup } from './services/infrastructure/BackupService';
 import { storageService } from './services/infrastructure/StorageService';
-import { initInvalidationRuleService, loadInvalidationRules } from './services/validation/InvalidationRuleService';
+import { initInvalidationRuleService } from './services/validation/InvalidationRuleService';
 import { PriceAlertService } from './services/ui/PriceAlertService';
 import { SetupWatchService, describeWatchTrigger } from './services/ui/SetupWatchService';
 import { OutcomeAutopilotService, AutopilotResolution } from './services/ui/OutcomeAutopilotService';
@@ -2750,8 +2743,8 @@ const App: React.FC = () => {
         return () => window.removeEventListener('august-skill-drafts', bump);
     }, []);
     const approvalItems = useMemo(
-        () => collectApprovalItems(messages, autopilotResolutions),
-        [messages, autopilotResolutions, skillDraftNonce],
+        () => collectApprovalItems(messages, autopilotResolutions, activeUsername || undefined),
+        [messages, autopilotResolutions, skillDraftNonce, activeUsername],
     );
 
     useWatchSideEffects({
@@ -2760,6 +2753,7 @@ const App: React.FC = () => {
         setAutopilotResolutions,
         toast,
         confirmAutopilot: confirmAutopilotRef,
+        activeUsername,
     });
 
     // P5: diff ids instead of re-registering every message on every stream
@@ -3272,10 +3266,14 @@ const App: React.FC = () => {
                     items={approvalItems}
                     onAllow={(item) => {
                         if (item.kind === 'skill') {
-                            const draft = takeSkillDraft(item.id);
+                            const draft = takeSkillDraft(item.id, activeUsername || undefined);
                             const trade = loggedTrades.find(t => t.id === item.messageId);
                             if (draft && trade) {
                                 void ingestCraftedSkill(trade, draft.crafted, activeUsername || 'default');
+                                toast.success('Skill saved', draft.crafted.name);
+                            } else if (draft) {
+                                // Verdict-sourced draft — no closed trade behind it.
+                                void ingestCraftedSkillFromDraft(draft.crafted, draft.coin, activeUsername || 'default');
                                 toast.success('Skill saved', draft.crafted.name);
                             }
                             return;
@@ -3284,17 +3282,17 @@ const App: React.FC = () => {
                     }}
                     onDeny={(item) => {
                         if (item.kind === 'skill') {
-                            takeSkillDraft(item.id);
+                            takeSkillDraft(item.id, activeUsername || undefined);
                             return;
                         }
                         handleDismissAutopilot(item.messageId);
                     }}
                     onAlways={(item) => {
-                        if (item.coin) setAutoJournalRule(item.coin, 'always');
+                        if (item.coin) setAutoJournalRule(item.coin, 'always', activeUsername || undefined);
                         handleConfirmAutopilot(item.messageId);
                     }}
                     onNever={(item) => {
-                        if (item.coin) setAutoJournalRule(item.coin, 'deny');
+                        if (item.coin) setAutoJournalRule(item.coin, 'deny', activeUsername || undefined);
                         handleDismissAutopilot(item.messageId);
                     }}
                     onOpen={(item) => {

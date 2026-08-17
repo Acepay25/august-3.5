@@ -885,6 +885,24 @@ export const extractSignalStrategyText = (
 };
 
 /**
+ * The moderator's chain-of-thought, keyed several ways depending on the phase
+ * (`moderator` / `Moderator`). Merge the lanes so the bubble's Thinking row
+ * streams the full trace regardless of which callback filled it.
+ */
+export const extractModeratorThinking = (
+    reasoningProcesses?: Record<string, string>,
+    thoughtProcesses?: Record<string, string>,
+): string => {
+    const lanes = [
+        reasoningProcesses?.moderator,
+        reasoningProcesses?.Moderator,
+        thoughtProcesses?.moderator,
+        thoughtProcesses?.Moderator,
+    ].filter((lane): lane is string => Boolean(lane && lane.trim()));
+    return [...new Set(lanes)].join('\n\n').trim();
+};
+
+/**
  * Last moderator turn that is actually a verdict (not a clarification dump).
  * Falls back to cleaned strategy text when debate turns are missing.
  */
@@ -966,9 +984,9 @@ export const signalDirectionLabel = (direction?: string, confidence?: string): s
 export const isNoTradeSignal = (direction?: string, confidence?: string): boolean =>
     confidence === 'Avoid' || direction === 'Neutral' || direction === 'Avoid';
 
-export const explainNoTrade = (analysis: { direction?: string; confidence?: string; riskVeto?: string }): string => {
+export const explainNoTrade = (analysis: { direction?: string; confidence?: string; riskVeto?: string; validationWarnings?: string[] }): string => {
     if (analysis.confidence === 'Avoid') {
-        const extra = (analysis.riskVeto || '').trim();
+        const extra = (analysis.riskVeto || analysis.validationWarnings?.find(Boolean) || '').trim();
         return extra
             ? `Skip this setup. Avoid means do not enter — ${extra}`
             : 'Skip this setup. Avoid means there is no trade to take; autopilot will not watch for a win or loss.';

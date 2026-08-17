@@ -13,7 +13,7 @@ import { Message, GroundingChunk, TradeAnalysis, GlobalMemory, AccuracySubMode, 
 import { extractAndParseJson, extractLastJson } from '../../utils/jsonUtils';
 import { sanitizeAIResponse, sanitizeAIResponseLight, sanitizeJSONString } from '../../utils/sanitizers';
 import { sanitizeTradeAnalysis, truncateTextToTokens, formatAnalysisForDisplay, parsePrice } from '../../utils/analysisUtils';
-import { splitThinkingFromOutput, extractAndStripThinkBlocks } from '../../utils/thinkingSplit';
+import { splitThinkingFromOutput, extractAndStripThinkBlocks, createThinkingStreamGate } from '../../utils/thinkingSplit';
 import { buildTradeInsightBrief, compactInsightForPatternMemory } from '../../utils/tradeInsightBrief';
 import { parseGlobalMemory, parseStrategySearchResults } from '../../schemas/learning';
 import {
@@ -905,7 +905,7 @@ export async function getQuickResponse(
     }
 
     const result = await sendChatRequest(config, messages, { maxTokens: TASK_BUDGETS.chat, signal, onReasoning });
-    // Defensive: some apiFormats leave <think> bodies in the final content.
+    // Defensive: some apiFormats leave  bodies in the final content.
     // Strip them here (idempotent — chat_completions already peeled them via
     // splitChatContent) and route any leftover to the reasoning side channel
     // so the bubble's Thinking row owns it instead of the visible reply.
@@ -913,6 +913,58 @@ export async function getQuickResponse(
     if (stripped.leaked.trim()) onReasoning?.(stripped.leaked);
     // Chat replies render via MarkdownRenderer — the light sanitizer keeps the
     // model's markdown (bold/lists/code) instead of flattening it to plain text.
+    return sanitizeAIResponseLight(stripped.visible || "I am sorry, I could not generate a response.");
+}
+
+/**
+ * Streaming casual-chat reply (DeepSeek-style perceived speed). Same contract
+ * as getQuickResponse, but visible deltas are pushed to `onChunk` as they
+ * arrive so the bubble renders incrementally instead of appearing all at once
+ * after completion. Reasoning deltas still flow through `onReasoning`. The
+ * transport already routes think-tag bodies to the reasoning side channel, so
+ * the accumulated visible text is clean; a final strip is a safety net.
+ */
+export async function streamQuickResponse(
+    config: ProviderConfig,
+    prompt: string,
+    history: Message[],
+    systemInstruction?: string,
+    signal?: AbortSignal,
+    onReasoning?: (reasoning: string) => void,
+    onChunk?: (visibleDelta: string) => void
+): Promise<string> {
+    const messages: ChatMessage[] = (history || []).map(m => ({
+        role: m.role === MessageRole.AI ? 'assistant' : m.role === MessageRole.SYSTEM ? 'system' : 'user',
+        content: m.text,
+    }));
+    messages.unshift({ role: 'system', content: systemInstruction || 'You are a helpful and concise AI assistant specializing in futures trading concepts. Answer user questions clearly.' });
+    if (messages[messages.length - 1]?.content !== prompt) {
+        messages.push({ role: 'user', content: prompt });
+    }
+
+    let visible = '';
+    // Double safety net: chat_completions already gates think-tag bodies into
+    // the reasoning channel at the transport, but other apiFormats (and the
+    // Electron non-streaming path) can still leak them into content. Gating
+    // here guarantees the live bubble never shows scratchpad markup.
+    const gate = createThinkingStreamGate();
+    for await (const chunk of streamChatRequest(config, messages, { maxTokens: TASK_BUDGETS.chat, signal, onReasoning })) {
+        if (!chunk) continue;
+        const gated = gate.push(chunk);
+        if (gated.thinking) onReasoning?.(gated.thinking);
+        if (gated.visible) {
+            visible += gated.visible;
+            onChunk?.(gated.visible);
+        }
+    }
+    const flushed = gate.flush();
+    if (flushed.thinking) onReasoning?.(flushed.thinking);
+    if (flushed.visible) {
+        visible += flushed.visible;
+        onChunk?.(flushed.visible);
+    }
+    const stripped = extractAndStripThinkBlocks(visible || '');
+    if (stripped.leaked.trim()) onReasoning?.(stripped.leaked);
     return sanitizeAIResponseLight(stripped.visible || "I am sorry, I could not generate a response.");
 }
 

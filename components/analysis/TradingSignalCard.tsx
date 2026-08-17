@@ -2,7 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { DebateTurn, TradeAnalysis, ConfidenceCalibration } from '../../types';
 import MarkdownContent from '../shared/MarkdownContent';
 import ConsensusPanel from './ConsensusPanel';
-import { explainSignalConfidence, extractSignalStrategyText, formatInvalidationLine, isNoTradeSignal, explainNoTrade, resolveLevelHitOdds, signalDirectionLabel, leveragedMovePercent } from '../../utils/analysisUtils';
+import { explainSignalConfidence, extractSignalStrategyText, formatInvalidationLine, isNoTradeSignal, resolveLevelHitOdds, signalDirectionLabel, leveragedMovePercent } from '../../utils/analysisUtils';
+import { describeModelCalibration } from '../../utils/avoidReason';
+import { WhyAvoidPanel, WaitForConfirmationBanner } from './WhyAvoidPanel';
 import { getCalibrationDrift } from '../../services/validation/ConfidenceCalibrationService';
 import { citeLevel } from '../../utils/levelEvidence';
 import { computeContractSize, computeLiquidationBuffer } from '../../utils/ticketSize';
@@ -18,6 +20,7 @@ interface TradingSignalCardProps {
     supplementMarkdown?: string;
     ensembleNote?: string;
     calibration?: ConfidenceCalibration;
+    modelsUsed?: Record<string, string>;
     bare?: boolean;
     priorAnalysis?: TradeAnalysis | null;
     promptLane?: 'live' | 'control';
@@ -107,6 +110,7 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
     supplementMarkdown,
     ensembleNote,
     calibration,
+    modelsUsed,
     bare = false,
     priorAnalysis,
     leverage,
@@ -119,10 +123,6 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
     const dirLabel = signalDirectionLabel(analysis.direction, analysis.confidence);
     const noTrade = isNoTradeSignal(analysis.direction, analysis.confidence);
     const lev = leverage && leverage > 0 ? leverage : 1;
-    const noTradeWhy = useMemo(
-        () => (noTrade ? explainNoTrade(analysis) : ''),
-        [analysis, noTrade],
-    );
     const odds = useMemo(
         () => resolveLevelHitOdds(analysis, debateTurns),
         [analysis, debateTurns],
@@ -137,6 +137,10 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
         return leveragedMovePercent(entry, level, lev, 'loss');
     }, [analysis.invalidationCriteria, entry, lev]);
     const confidenceWhy = useMemo(() => explainSignalConfidence(analysis), [analysis]);
+    const modelCalibrationLines = useMemo(
+        () => describeModelCalibration(calibration, modelsUsed),
+        [calibration, modelsUsed],
+    );
     const drift = useMemo(
         () => analysis.confidence === 'Avoid'
             ? { status: 'insufficient_data' as const, declared: analysis.probability, actual: null, delta: null, sampleSize: 0 }
@@ -346,8 +350,10 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
                     <p className="text-xs text-zinc-600">{liq.line}</p>
                 )}
 
-                {noTradeWhy && (
-                    <p className="text-sm leading-6 text-zinc-400">{noTradeWhy.replace(/^#+\s*/gm, '').slice(0, 220)}</p>
+                {noTrade ? (
+                    <WhyAvoidPanel analysis={analysis} />
+                ) : (
+                    <WaitForConfirmationBanner analysis={analysis} />
                 )}
 
                 {invalidation && (
@@ -382,6 +388,14 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
                                     {drift.status === 'underconfident' && `Declared ${Math.round(drift.declared)}% vs ${Math.round(drift.actual)}% realized (n=${drift.sampleSize})`}
                                     {drift.status === 'accurate' && `In line: ${Math.round(drift.actual)}% at this confidence (n=${drift.sampleSize})`}
                                 </p>
+                            )}
+                            {modelCalibrationLines.length > 0 && (
+                                <div>
+                                    <div className="text-[10px] font-medium uppercase tracking-widest text-zinc-500">Per-model calibration</div>
+                                    {modelCalibrationLines.map(line => (
+                                        <p key={line} className="text-xs leading-5 text-zinc-400">{line}</p>
+                                    ))}
+                                </div>
                             )}
                             {why && (
                                 <div>

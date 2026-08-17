@@ -20,11 +20,14 @@ export interface AutoJournalRule {
     policy: Exclude<AutoJournalPolicy, 'ask'>;
 }
 
-const RULES_KEY = 'approval_rules_v1';
+const LEGACY_RULES_KEY = 'approval_rules_v1';
+const rulesKey = (username?: string): string =>
+    `approval_rules_v1:${(username || 'default').trim() || 'default'}`;
 
-const readRules = (): AutoJournalRule[] => {
+const readRules = (username?: string): AutoJournalRule[] => {
     try {
-        const raw = localStorage.getItem(RULES_KEY);
+        const raw = localStorage.getItem(rulesKey(username))
+            ?? (!username ? localStorage.getItem(LEGACY_RULES_KEY) : null);
         const parsed = raw ? JSON.parse(raw) : [];
         return Array.isArray(parsed) ? parsed : [];
     } catch {
@@ -32,28 +35,29 @@ const readRules = (): AutoJournalRule[] => {
     }
 };
 
-export const getAutoJournalRules = (): AutoJournalRule[] =>
-    typeof localStorage === 'undefined' ? [] : readRules();
+export const getAutoJournalRules = (username?: string): AutoJournalRule[] =>
+    typeof localStorage === 'undefined' ? [] : readRules(username);
 
-export const setAutoJournalRule = (coin: string, policy: AutoJournalPolicy): AutoJournalRule[] => {
+export const setAutoJournalRule = (coin: string, policy: AutoJournalPolicy, username?: string): AutoJournalRule[] => {
     const key = coin.toUpperCase();
-    const next = getAutoJournalRules().filter(r => r.coin !== key);
+    const next = getAutoJournalRules(username).filter(r => r.coin !== key);
     if (policy !== 'ask') next.push({ coin: key, policy });
     try {
-        localStorage.setItem(RULES_KEY, JSON.stringify(next));
+        localStorage.setItem(rulesKey(username), JSON.stringify(next));
     } catch { /* ignore */ }
     return next;
 };
 
-export const autoJournalPolicyFor = (coin?: string): AutoJournalPolicy => {
+export const autoJournalPolicyFor = (coin?: string, username?: string): AutoJournalPolicy => {
     if (!coin) return 'ask';
-    const hit = getAutoJournalRules().find(r => r.coin === coin.toUpperCase());
+    const hit = getAutoJournalRules(username).find(r => r.coin === coin.toUpperCase());
     return hit?.policy ?? 'ask';
 };
 
 export const collectApprovalItems = (
     messages: Message[],
     resolutions: Record<string, AutopilotResolution>,
+    username?: string,
 ): ApprovalItem[] => {
     const items: ApprovalItem[] = [];
     for (const message of messages) {
@@ -102,7 +106,7 @@ export const collectApprovalItems = (
             });
         }
     }
-    for (const draft of listSkillDrafts()) {
+    for (const draft of listSkillDrafts(username)) {
         items.push({
             id: draft.id,
             kind: 'skill',

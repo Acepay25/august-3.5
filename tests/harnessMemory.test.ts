@@ -11,6 +11,21 @@ vi.mock('../services/infrastructure/PreferencesService', () => ({
   }),
 }));
 
+// Provider layer is mocked so the skill-refinement LLM pass runs offline.
+const { quickResponseMock, loadConfigsMock } = vi.hoisted(() => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  quickResponseMock: vi.fn(async (..._args: any[]) => ''),
+  loadConfigsMock: vi.fn(async () => [] as unknown[]),
+}));
+vi.mock('../services/providers/GenericProviderService', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  getQuickResponse: ((...args: any[]) => quickResponseMock(...args)) as any,
+}));
+vi.mock('../services/infrastructure/ProviderConfigService', () => ({
+  loadProviderConfigs: (() => loadConfigsMock()) as never,
+  getReadyProviders: (configs: unknown[]) => configs,
+}));
+
 import { initMemoryFiles, getMemoryFiles, getMemoryFilesContext, createMemoryFile, updateMemoryFile } from '../services/learning/MemoryFilesService';
 import { listRetrievedMemorySources } from '../services/learning/MemoryRetrievalService';
 import {
@@ -20,6 +35,7 @@ import {
   parseSkillMarkdown,
   ingestIfThenFromTrade,
   MIN_CLUSTER_FOR_SKILL,
+  REFINE_AFTER_CONSECUTIVE_LOSSES,
 } from '../services/learning/SkillMemoryService';
 import { LoggedTrade, TradeOutcome } from '../types';
 
@@ -35,6 +51,10 @@ const makeTrade = (overrides: Partial<LoggedTrade> = {}): LoggedTrade => ({
 describe('Harness memory (skills + retrieval)', () => {
   beforeEach(async () => {
     store = {};
+    quickResponseMock.mockReset();
+    quickResponseMock.mockResolvedValue('');
+    loadConfigsMock.mockReset();
+    loadConfigsMock.mockResolvedValue([]);
     await initMemoryFiles('test-user');
   });
 
@@ -67,6 +87,102 @@ describe('Harness memory (skills + retrieval)', () => {
     const meta = parseSkillMarkdown(file!.content)!;
     expect(meta.wins).toBe(1);
     expect(meta.losses).toBe(MIN_CLUSTER_FOR_SKILL);
+  });
+
+  const seedConfirmedSkill = async (extra = ''): Promise<void> => {
+    const folder = getMemoryFiles().folders.find(f => f.name === 'skills')!;
+    await createMemoryFile(folder.id, 'btc-short-familya-avoid.md', `---
+status: confirmed
+kind: avoid
+coin: BTCUSDT
+direction: Short
+family: Family A
+wins: 2
+losses: 5
+${extra}tradeIds: a,b,c,d,e,f,g
+---
+
+# Avoid BTCUSDT Short Family A
+
+**Procedure:** Wait for the 15m reclaim.
+`, 'test-user', true);
+  };
+
+  const readyConfig = {
+    id: 'prov-a', name: 'Provider A', apiKey: 'key-a',
+    baseUrl: 'https://api.example.com/v1', apiFormat: 'chat_completions',
+    isEnabled: true, isBuiltIn: true, models: ['model-a'], selectedModel: 'model-a',
+  };
+
+  it('refines a confirmed skill via the LLM after 2 consecutive losses', async () => {
+    await seedConfirmedSkill('consecutiveLosses: 1\n');
+    loadConfigsMock.mockResolvedValue([readyConfig]);
+    quickResponseMock.mockResolvedValue(JSON.stringify({
+      name: 'Avoid BTC short without reclaim',
+      kind: 'avoid',
+      when: 'BTC short setup without a 15m reclaim candle',
+      inputs: ['BTCUSDT', 'Short', 'Family A'],
+      steps: ['Wait for the 15m reclaim', 'Confirm rising volume'],
+      validate: 'Reclaim candle closes above the level',
+      output: 'Skip the short',
+      approval: 'Never auto-size a short',
+      ifCondition: 'BTC short without a 15m reclaim and rising volume',
+      thenAction: 'skip the short until the reclaim candle closes',
+    }));
+
+    const loss = makeTrade({ id: 'loss-2' });
+    await applySkillEvidence(loss, 'test-user', [loss]);
+
+    expect(quickResponseMock).toHaveBeenCalledTimes(1);
+    const file = getMemoryFiles().files.find(f => f.name.includes('btc') && f.name.includes('avoid'))!;
+    const meta = parseSkillMarkdown(file.content)!;
+    expect(meta.ifCondition).toBe('BTC short without a 15m reclaim and rising volume');
+    expect(meta.thenAction).toBe('skip the short until the reclaim candle closes');
+    // The refined skill starts a fresh streak; evidence still landed.
+    expect(meta.consecutiveLosses).toBe(0);
+    expect(meta.losses).toBe(6);
+  });
+
+  it('does not refine on the first consecutive loss', async () => {
+    await seedConfirmedSkill();
+    loadConfigsMock.mockResolvedValue([readyConfig]);
+
+    await applySkillEvidence(makeTrade({ id: 'loss-1' }), 'test-user');
+
+    expect(quickResponseMock).not.toHaveBeenCalled();
+    const file = getMemoryFiles().files.find(f => f.name.includes('btc') && f.name.includes('avoid'))!;
+    expect(parseSkillMarkdown(file.content)!.consecutiveLosses).toBe(1);
+  });
+
+  it('resets the consecutive-loss streak on a WIN without an LLM call', async () => {
+    await seedConfirmedSkill('consecutiveLosses: 1\n');
+    loadConfigsMock.mockResolvedValue([readyConfig]);
+
+    await applySkillEvidence(makeTrade({ id: 'win-1', outcome: TradeOutcome.WIN }), 'test-user');
+
+    expect(quickResponseMock).not.toHaveBeenCalled();
+    const file = getMemoryFiles().files.find(f => f.name.includes('btc') && f.name.includes('avoid'))!;
+    const meta = parseSkillMarkdown(file.content)!;
+    expect(meta.consecutiveLosses).toBe(0);
+    expect(meta.wins).toBe(3);
+  });
+
+  it('keeps the skill untouched when the refinement LLM call fails', async () => {
+    await seedConfirmedSkill('consecutiveLosses: 1\n');
+    loadConfigsMock.mockResolvedValue([readyConfig]);
+    quickResponseMock.mockRejectedValue(new Error('provider down'));
+
+    await applySkillEvidence(makeTrade({ id: 'loss-2' }), 'test-user');
+
+    const file = getMemoryFiles().files.find(f => f.name.includes('btc') && f.name.includes('avoid'))!;
+    const meta = parseSkillMarkdown(file.content)!;
+    expect(meta.body).toContain('Wait for the 15m reclaim');
+    // Evidence landed even though refinement failed.
+    expect(meta.losses).toBe(6);
+  });
+
+  it('exports the refinement threshold constant', () => {
+    expect(REFINE_AFTER_CONSECUTIVE_LOSSES).toBe(2);
   });
 
   it('retrieves a matching skill and ranging playbook for the setup', async () => {

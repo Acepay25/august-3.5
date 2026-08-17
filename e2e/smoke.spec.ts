@@ -1,11 +1,13 @@
 import { test, expect } from '@playwright/test';
 
-const seedWorkspace = async (page: import('@playwright/test').Page, name = 'Smoke Workspace', withAnalysis = false): Promise<void> => {
-    // Seed the web profile store before React boots. This keeps navigation
-    // tests independent from the slow, asynchronous first-run initialization
-    // path while the dedicated boot test still covers the profile picker.
+/**
+ * Seed the web profile store before React boots. This keeps navigation
+ * tests independent from the slow, asynchronous first-run initialization
+ * path while the dedicated boot test still covers the profile picker.
+ */
+const seedMessages = async (page: import('@playwright/test').Page, username: string, messages: Record<string, unknown>[]): Promise<void> => {
     await page.goto('/favicon.ico');
-    await page.evaluate(async ({ username, withAnalysis }) => {
+    await page.evaluate(async ({ username, messages }) => {
         localStorage.clear();
         sessionStorage.clear();
         sessionStorage.setItem('activeUsername', username);
@@ -19,26 +21,6 @@ const seedWorkspace = async (page: import('@playwright/test').Page, name = 'Smok
             request.onsuccess = () => resolve(request.result);
             request.onerror = () => reject(request.error);
         });
-        const messages = withAnalysis ? [{
-            id: 'e2e-ai',
-            role: 'ai',
-            text: 'Setup',
-            createdAt: new Date().toISOString(),
-            outcome: 'PENDING',
-                    analysis: {
-                        coinName: 'BTCUSDT',
-                        direction: 'Long',
-                        confidence: 'Medium',
-                        probability: 60,
-                        strategy: 'e2e',
-                        activeStrategies: [],
-                        historicalCorrelation: '',
-                        marketConditions: { pattern: '', candleBehavior: '', timeframeAlignment: '', rsi: '', macd: '', sentiment: '' },
-                        entryPoints: [{ price: '100', description: 'e' }],
-                        stopLoss: '90',
-                        takeProfit: [{ price: '120' }],
-                    },
-        }] : [];
         const transaction = db.transaction('userProfiles', 'readwrite');
         transaction.objectStore('userProfiles').put({
             username,
@@ -63,11 +45,71 @@ const seedWorkspace = async (page: import('@playwright/test').Page, name = 'Smok
             transaction.onerror = () => reject(transaction.error);
         });
         db.close();
-    }, { username: name, withAnalysis });
+    }, { username, messages });
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
     await expect(page.locator('#splash')).toHaveCount(0, { timeout: 15_000 });
     await expect(page.getByRole('dialog', { name: 'User profile selection' })).toHaveCount(0, { timeout: 15_000 });
+};
+
+const floorMessage = (overrides: Record<string, unknown> = {}): Record<string, unknown> => ({
+    id: 'e2e-floor',
+    role: 'ai',
+    text: '',
+    createdAt: new Date().toISOString(),
+    isDebating: true,
+    ensembleProgress: {
+        analysts: [
+            { key: 'analyst-a', providerId: 'a', providerName: 'Model A', modelId: 'a-model', modelName: 'A', displayName: 'Model A', status: 'analyzing', reasoning: 'Checking the opening structure.' },
+            { key: 'analyst-b', providerId: 'b', providerName: 'Model B', modelId: 'b-model', modelName: 'B', displayName: 'Model B', status: 'analyzing', reasoning: 'Comparing the supplied levels.' },
+        ],
+        moderator: { status: 'reviewing' },
+    },
+    reasoningProcesses: { moderator: 'Waiting for the opening evidence.' },
+    activeDebateSpeakers: { Moderator: 1, 'Model A': 1, 'Model B': 1 },
+    ...overrides,
+});
+
+const analysisMessage = (): Record<string, unknown> => ({
+    id: 'e2e-ai',
+    role: 'ai',
+    text: 'Setup',
+    createdAt: new Date().toISOString(),
+    outcome: 'PENDING',
+    analysis: {
+        coinName: 'BTCUSDT',
+        direction: 'Long',
+        confidence: 'Medium',
+        probability: 60,
+        strategy: 'e2e',
+        activeStrategies: [],
+        historicalCorrelation: '',
+        marketConditions: { pattern: '', candleBehavior: '', timeframeAlignment: '', rsi: '', macd: '', sentiment: '' },
+        entryPoints: [{ price: '100', description: 'e' }],
+        stopLoss: '90',
+        takeProfit: [{ price: '120' }],
+        originalConfidence: 'High',
+        validationWarnings: ['CALIBRATION ADJUSTMENT: High → Medium'],
+    },
+    runStats: {
+        startedAt: new Date(Date.now() - 2500).toISOString(),
+        finishedAt: new Date().toISOString(),
+        durationMs: 2500,
+        analystCount: 3,
+    },
+    debateTurns: [
+        { speaker: 'Analyst A', round: 1, text: 'Long thesis.', createdAt: new Date().toISOString() },
+        { speaker: 'Moderator', round: 2, text: 'Verdict review.', createdAt: new Date().toISOString() },
+    ],
+});
+
+const seedWorkspace = async (page: import('@playwright/test').Page, name = 'Smoke Workspace', withAnalysis = false, withFloor = false): Promise<void> => {
+    const messages = withFloor
+        ? [floorMessage()]
+        : withAnalysis
+            ? [analysisMessage()]
+            : [];
+    await seedMessages(page, name, messages);
 };
 
 /**
@@ -118,6 +160,114 @@ test('seeded analysis can log a WIN through the capture dialog', async ({ page }
     await page.locator('#pnl-amount').fill('25');
     await page.getByRole('button', { name: /Log without data capture/i }).click();
     await expect(page.getByRole('dialog', { name: 'Capture trade data' })).toHaveCount(0, { timeout: 10_000 });
+});
+
+test('seeded analysis exposes an inspectable analysis trace', async ({ page }) => {
+    await seedWorkspace(page, 'Trace Workspace', true);
+    await expect(page.getByText('BTCUSDT')).toBeVisible({ timeout: 15_000 });
+    const trace = page.getByText(/Analysis trace ·/i);
+    await expect(trace).toBeVisible();
+    await trace.click();
+    await expect(page.getByText('Confidence adjusted', { exact: true })).toBeVisible();
+    await expect(page.getByText(/2 public debate turns attached/i)).toBeVisible();
+});
+
+test('Floor shows analyst and moderator thinking before public text exists', async ({ page }) => {
+    await seedWorkspace(page, 'Floor Workspace', false, true);
+    const floor = page.getByLabel('Floor');
+    await expect(floor).toBeVisible({ timeout: 15_000 });
+    await expect(floor).toContainText('Waiting for the opening evidence.');
+    await expect(floor.locator('.debate-stage-bubble')).toHaveCount(3);
+});
+
+test('Floor keeps the moderator to one bubble: public speech wins over thinking', async ({ page }) => {
+    await seedMessages(page, 'Floor Single Bubble Workspace', [floorMessage({
+        debateTurns: [{ speaker: 'Moderator', round: 2, text: 'I want your strongest counter, please.' }],
+    })]);
+    const floor = page.getByLabel('Floor');
+    await expect(floor).toBeVisible({ timeout: 15_000 });
+
+    // One bubble per seat: two analyst thought bubbles + one moderator balloon.
+    await expect(floor.locator('.debate-stage-bubble')).toHaveCount(3);
+    const moderatorBubble = page.getByRole('button', { name: 'Open Moderator analysis' }).locator('.debate-stage-bubble');
+    await expect(moderatorBubble).toHaveCount(1);
+    await expect(moderatorBubble).toHaveClass(/debate-stage-balloon/);
+    await expect(moderatorBubble).toContainText('I want your strongest counter, please.');
+
+    // The thinking trace stays in the thought channel — no second bubble.
+    await expect(moderatorBubble).not.toContainText('Waiting for the opening evidence.');
+    await expect(floor.locator('.debate-stage-thought')).toHaveCount(2);
+});
+
+test('Floor bubble tickers rotate to the newest sentence and reveal it fully', async ({ page }) => {
+    await seedMessages(page, 'Floor Ticker Workspace', [floorMessage({
+        debateTurns: [{ speaker: 'Moderator', round: 2, text: 'The reclaim failed. The sweep is shallow. Wait for the close above 95,500.' }],
+    })]);
+    const ticker = page.getByRole('button', { name: 'Open Moderator analysis' }).locator('.debate-stage-ticker');
+    await expect(ticker).toBeVisible({ timeout: 15_000 });
+
+    // The ticker bounds the bubble to the newest sentence (no stale rotation)
+    // and reveals the full sentence instead of freezing at the width limit.
+    await expect.poll(() => ticker.getAttribute('aria-label'), { timeout: 5_000 })
+        .toBe('Wait for the close above 95,500.');
+    await expect(ticker).not.toContainText('The reclaim failed');
+});
+
+test('final verdict stays separate from the moderator thinking lane', async ({ page }) => {
+    await seedMessages(page, 'Floor Verdict Workspace', [floorMessage({
+        debateTurns: [{ speaker: 'Moderator', round: 4, text: 'FINAL TRADE PLAN: Long BTCUSDT.' }],
+        reasoningProcesses: { moderator: 'Weighing the sweep against the failed retest.' },
+        activeDebateSpeakers: { Moderator: 1 },
+        ensembleProgress: {
+            analysts: [
+                { key: 'analyst-a', providerId: 'a', providerName: 'Model A', modelId: 'a-model', modelName: 'A', displayName: 'Model A', status: 'complete', reasoning: 'Alpha sees support holding at 95k.', finalOutput: 'Long the reclaim.' },
+                { key: 'analyst-b', providerId: 'b', providerName: 'Model B', modelId: 'b-model', modelName: 'B', displayName: 'Model B', status: 'complete', reasoning: 'Beta sees the sweep failing at 95k.', finalOutput: 'Short the sweep.' },
+            ],
+            moderator: { status: 'reviewing' },
+        },
+    })]);
+    const moderatorBubble = page.getByRole('button', { name: 'Open Moderator analysis' }).locator('.debate-stage-bubble');
+    await expect(moderatorBubble).toBeVisible({ timeout: 15_000 });
+
+    // Public verdict in the speech balloon only…
+    await expect(moderatorBubble).toContainText('Long BTCUSDT');
+    await expect(moderatorBubble).not.toContainText('Weighing the sweep');
+    // …and the thinking lane survives in the thought channel, never mixed in.
+    await expect(moderatorBubble).toHaveAttribute('data-thought', /Weighing the sweep/);
+    await expect(moderatorBubble).not.toHaveAttribute('data-thought', /FINAL TRADE PLAN/);
+});
+
+test('analyst identity never crosses seats in the Floor', async ({ page }) => {
+    await seedMessages(page, 'Floor Seats Workspace', [floorMessage({
+        ensembleProgress: {
+            analysts: [
+                { key: 'analyst-a', providerId: 'a', providerName: 'Model A', modelId: 'a-model', modelName: 'A', displayName: 'Model A', status: 'analyzing', reasoning: 'Alpha sees support holding at 95k.' },
+                { key: 'analyst-b', providerId: 'b', providerName: 'Model B', modelId: 'b-model', modelName: 'B', displayName: 'Model B', status: 'analyzing', reasoning: 'Beta sees the sweep failing at 95k.' },
+            ],
+            moderator: { status: 'waiting' },
+        },
+        reasoningProcesses: {},
+        activeDebateSpeakers: { 'Model A': 1, 'Model B': 1 },
+    })]);
+    const floor = page.getByLabel('Floor');
+    await expect(floor).toBeVisible({ timeout: 15_000 });
+
+    // Stage bubbles carry only their own seat's reasoning.
+    const actorA = page.getByRole('button', { name: 'Open Model A analysis' });
+    await expect(actorA.locator('.debate-stage-thought')).toContainText('Alpha sees support holding at 95k.');
+    await expect(actorA.locator('.debate-stage-thought')).not.toContainText('Beta sees');
+
+    // Seat transcripts do not leak the neighbouring analyst's reasoning.
+    await actorA.click();
+    const seatA = page.getByRole('dialog', { name: 'Model A analysis' });
+    await expect(seatA).toContainText('Alpha sees support holding at 95k.');
+    await expect(seatA).not.toContainText('Beta sees');
+    await page.getByLabel('Close Model A analysis').click();
+
+    await page.getByRole('button', { name: 'Open Model B analysis' }).click();
+    const seatB = page.getByRole('dialog', { name: 'Model B analysis' });
+    await expect(seatB).toContainText('Beta sees the sweep failing at 95k.');
+    await expect(seatB).not.toContainText('Alpha sees');
 });
 
 test('journal and live market are reachable as labelled dialogs', async ({ page }) => {

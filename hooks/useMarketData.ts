@@ -109,10 +109,14 @@ export function useMarketData(isHybridIntelligenceEnabled: boolean, isEnsembleEn
     // Check Binance API connection when Hybrid Intelligence is enabled
     useEffect(() => {
         let intervalId: NodeJS.Timeout | null = null;
+        let retryTimeoutId: ReturnType<typeof setTimeout> | null = null;
+        let disposed = false;
         let retryCount = 0;
 
+        const isEnabled = (): boolean => !disposed && isHybridIntelligenceEnabled && isEnsembleEnabled;
+
         const checkConnection = async () => {
-            if (isHybridIntelligenceEnabled && isEnsembleEnabled) {
+            if (isEnabled()) {
                 // Only show "connecting" if we are currently disconnected or in error state
                 // This prevents flickering "connecting..." when we are already connected
                 setHybridConnectionStatus(prev => (prev === 'connected' ? 'connected' : 'connecting'));
@@ -120,6 +124,7 @@ export function useMarketData(isHybridIntelligenceEnabled: boolean, isEnsembleEn
                 try {
                     const isConnected = await pingBinanceAPI();
 
+                    if (!isEnabled()) return;
                     if (isConnected) {
                         setHybridConnectionStatus('connected');
                         retryCount = 0; // Reset retries on success
@@ -128,12 +133,13 @@ export function useMarketData(isHybridIntelligenceEnabled: boolean, isEnsembleEn
                         if (retryCount < 1) {
                             retryCount++;
                             console.log('[Hybrid Intelligence] Connection check failed, retrying silently...');
-                            setTimeout(checkConnection, 1000); // Quick retry
+                            retryTimeoutId = setTimeout(checkConnection, 1000); // Quick retry
                         } else {
                             setHybridConnectionStatus('error');
                         }
                     }
                 } catch {
+                    if (!isEnabled()) return;
                     setHybridConnectionStatus('error');
                 }
             } else {
@@ -163,10 +169,13 @@ export function useMarketData(isHybridIntelligenceEnabled: boolean, isEnsembleEn
             document.addEventListener('visibilitychange', handleVisibilityChange);
 
             return () => {
+                disposed = true;
                 if (intervalId) clearInterval(intervalId);
+                if (retryTimeoutId) clearTimeout(retryTimeoutId);
                 document.removeEventListener('visibilitychange', handleVisibilityChange);
             };
         } else {
+            disposed = true;
             setHybridConnectionStatus('disconnected');
         }
     }, [isHybridIntelligenceEnabled, isEnsembleEnabled]);

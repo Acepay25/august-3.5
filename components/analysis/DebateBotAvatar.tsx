@@ -120,6 +120,7 @@ export const DebateBotAvatar: React.FC<DebateBotAvatarProps> = ({
             {speaking && (
                 <span className="debate-bot-rings">
                     <span className="debate-bot-ring" />
+                    <span className="debate-bot-ring debate-bot-ring-2" />
                 </span>
             )}
             <span className="debate-bot-body">
@@ -128,7 +129,15 @@ export const DebateBotAvatar: React.FC<DebateBotAvatarProps> = ({
                         <span className="debate-bot-eye" />
                         <span className="debate-bot-eye" />
                     </span>
-                    <span className="debate-bot-mouth" />
+                    {speaking ? (
+                        <span className="debate-bot-voice" aria-hidden="true">
+                            <span className="debate-bot-voice-bar" />
+                            <span className="debate-bot-voice-bar" />
+                            <span className="debate-bot-voice-bar" />
+                        </span>
+                    ) : (
+                        <span className="debate-bot-mouth" />
+                    )}
                 </span>
             </span>
             {thinking && (

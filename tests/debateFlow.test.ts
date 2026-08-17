@@ -20,6 +20,7 @@ vi.mock('../services/providers/GenericProviderService', () => ({
     toolCalls: [],
     assistantMessage: { role: 'assistant', content: '' },
   })) as any,
+  warmProviderConnection: vi.fn(),
 }));
 
 import {
@@ -240,7 +241,10 @@ describe('conductRealDebate (real inter-model debate)', () => {
     result: {
       thoughtProcess: `${name} internal thinking`,
       finalOutput: `${name} opening statement: long bias on breakout.`,
-      analysis,
+      // Seats after the first carry a confidence spread so the openings are
+      // realistically divergent — the clarification cycle only runs when the
+      // analysts do not fully agree (divergence score >= 20).
+      analysis: /Two|Three/.test(name) ? { ...analysis, confidence: 'Medium' as const } : analysis,
     },
   });
 
@@ -326,6 +330,88 @@ describe('conductRealDebate (real inter-model debate)', () => {
     // round and can never merge with the questions turn.
     const rounds = [...new Set(events.map(e => e.round))];
     expect(rounds).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it('skips the clarification cycle when the openings fully agree (divergence 0)', async () => {
+    const calls = mockStreams();
+    // Identical analyses → divergence score 0, no direction/multiple split,
+    // no echo-chamber flag: clarification is not worth a full round.
+    const alignedAnalyst = (id: string, name: string, model: string) => ({
+      provider: { config: { ...config, id, name, models: [model], selectedModel: model }, name, model, thoughtsKey: `${id}:${model}` },
+      result: { thoughtProcess: `${name} internal thinking`, finalOutput: `${name} opening statement: long bias on breakout.`, analysis },
+    });
+    const events = await collectEvents(conductRealDebate(
+      [alignedAnalyst('prov-a', 'Analyst One', 'model-a'), alignedAnalyst('prov-b', 'Analyst Two', 'model-b')],
+      'Analyze BTCUSDT',
+      null, config, 'model-a',
+    ));
+
+    // 2 rebuttal rounds × 2 analysts + verdict — NO clarification questions.
+    expect(calls.length).toBe(2 * REAL_DEBATE_RESPONSE_ROUNDS + 1);
+    expect(calls.some(c => c.user.includes('CLARIFICATION ROUND'))).toBe(false);
+    expect(events.some(e => e.speaker === 'System' && /Openings aligned/i.test(e.text))).toBe(true);
+    // The verdict still lands.
+    expect(events.some(e => e.speaker === 'Moderator')).toBe(true);
+  });
+
+  it("speculatively starts a fast seat's next rebuttal before the slowest seat finishes", async () => {
+    const calls: { system: string; user: string }[] = [];
+    // Object holder so TS doesn't narrow the resolver to never across closures.
+    const slowGate: { release: (() => void) | null } = { release: null };
+    const slowBlocked = new Promise<void>(resolve => { slowGate.release = resolve; });
+    streamMock.mockImplementation(async function* (...args: any[]) {
+      const messages = args[1] as { role: string; content: string }[];
+      const system = messages[0].content;
+      const user = messages[1].content;
+      calls.push({ system, user });
+      if (user.includes('CLARIFICATION ROUND')) { yield '<CLARIFICATION_DONE>'; return; }
+      if (user.includes('CLARIFICATION JUDGMENT')) { yield '<CLARIFICATION_SATISFIED>'; return; }
+      if (system.includes('debate moderator')) {
+        yield '</DEBATE_END>\n' + MARKDOWN_PLAN('Long', 'Medium', 60);
+        return;
+      }
+      // The slow seat stalls on its Round 2 rebuttal until the test releases it.
+      // (The "Round N rebuttal" marker lives in the Floor orientation block,
+      // which is part of the USER message.)
+      if (isFloorSeat(system, 'Analyst Two') && /Round 2 rebuttal/.test(user)) {
+        await slowBlocked;
+      }
+      const round = /Round (\d+) rebuttal/.exec(user)?.[1] ?? '?';
+      yield `rebuttal-r${round}`;
+    });
+
+    const gen = conductRealDebate(
+      [realAnalyst('prov-a', 'Analyst One', 'model-a'), realAnalyst('prov-b', 'Analyst Two', 'model-b')],
+      'Analyze BTCUSDT',
+      null, config, 'model-a',
+      undefined, [], undefined, undefined, undefined, undefined, null, undefined,
+      new AbortController().signal,
+    );
+
+    // Drain (manual iteration — a for-await break would close the generator)
+    // until the fast seat's Round 2 rebuttal has fully arrived.
+    const events: RealDebateTurnEvent[] = [];
+    for (let i = 0; i < 50; i++) {
+      const result = await gen.next();
+      if (result.done) break;
+      events.push(result.value);
+      if (result.value.speaker === 'Analyst One' && result.value.round === 2 && result.value.text.includes('rebuttal-r2')) break;
+    }
+    expect(events.some(e => e.speaker === 'Analyst One' && e.round === 2)).toBe(true);
+
+    // One more pump step settles the fast seat — its Round 3 call must launch
+    // while the slow seat is STILL blocked in Round 2 (no round barrier).
+    const next = await gen.next();
+    if (!next.done) events.push(next.value);
+    expect(calls.some(c => isFloorSeat(c.system, 'Analyst One') && /Round 3 rebuttal/.test(c.user))).toBe(true);
+    expect(calls.some(c => isFloorSeat(c.system, 'Analyst Two') && /Round 3 rebuttal/.test(c.user))).toBe(false);
+
+    // Release the slow seat — the debate completes and the verdict lands.
+    slowGate.release?.();
+    const rest = await collectEvents(gen);
+    events.push(...rest);
+    expect(events.some(e => e.speaker === 'Analyst Two' && e.round === 2)).toBe(true);
+    expect(events.some(e => e.speaker === 'Moderator')).toBe(true);
   });
 
   it('continues the debate when one analyst fails a rebuttal round', async () => {
@@ -1134,7 +1220,10 @@ describe('conductRealDebate — transient-failure retry (streamWithTransientRetr
     result: {
       thoughtProcess: `${name} internal thinking`,
       finalOutput: `${name} opening statement: long bias on breakout.`,
-      analysis,
+      // Seats after the first carry a confidence spread so the openings are
+      // realistically divergent — the clarification cycle only runs when the
+      // analysts do not fully agree (divergence score >= 20).
+      analysis: /Two|Three/.test(name) ? { ...analysis, confidence: 'Medium' as const } : analysis,
     },
   });
 

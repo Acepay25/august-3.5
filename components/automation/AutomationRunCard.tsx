@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { AutomationRun } from '../../types/automation';
 import { ChevronDownIcon, LoadingIcon } from '../shared/Icons';
-import MarkdownRenderer from '../shared/MarkdownRenderer';
+import MarkdownContent from '../shared/MarkdownContent';
 
 /** Minimal view of the stored hybrid snapshot (HybridDataPacket). */
 interface HybridSnapshot {
@@ -101,7 +101,7 @@ const AutomationRunCard: React.FC<{
                 )}
 
                 <div className="prose-sm">
-                    <MarkdownRenderer content={markdown} />
+                    <MarkdownContent content={markdown} />
                 </div>
 
                 {/* Minimal prose toggles — reasoning and debate only (no JSON) */}

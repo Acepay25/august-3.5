@@ -663,7 +663,7 @@ Please investigate this discrepancy in your analysis.
                                 tradeId: closed.id,
                                 coin: closed.analysis?.coinName,
                                 crafted,
-                            });
+                            }, notebookUser);
                         }
                     }
                     await syncClosedTradeToNotebook(closed, loggedTradesRef.current, notebookUser);

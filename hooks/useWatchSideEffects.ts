@@ -15,6 +15,7 @@ interface WatchSideEffectsArgs {
         warning: (title: string, message?: string) => void;
     };
     confirmAutopilot: React.MutableRefObject<(messageId: string) => void>;
+    activeUsername?: string | null;
 }
 
 /** Autopilot ticks, watched auto-log with undo, and ticket expiry episodes. */
@@ -24,6 +25,7 @@ export const useWatchSideEffects = ({
     setAutopilotResolutions,
     toast,
     confirmAutopilot,
+    activeUsername,
 }: WatchSideEffectsArgs): void => {
     const pendingTimers = useRef<Map<string, number>>(new Map());
     const expiredIds = useRef<Set<string>>(new Set());
@@ -33,7 +35,7 @@ export const useWatchSideEffects = ({
             setAutopilotResolutions(prev => ({ ...prev, [messageId]: resolution }));
             const watched = messagesRef.current.find(m => m.id === messageId)?.watched;
             const coin = messagesRef.current.find(m => m.id === messageId)?.analysis?.coinName;
-            const policy = autoJournalPolicyFor(coin);
+            const policy = autoJournalPolicyFor(coin, activeUsername || undefined);
             if (watched && policy === 'deny') return;
             if (watched && policy === 'always') {
                 confirmAutopilot.current(messageId);
@@ -76,7 +78,7 @@ export const useWatchSideEffects = ({
             unsubscribe();
             unsubscribeTicks();
         };
-    }, [messagesRef, setAutopilotResolutions, setConversationHistory, toast, confirmAutopilot]);
+    }, [messagesRef, setAutopilotResolutions, setConversationHistory, toast, confirmAutopilot, activeUsername]);
 
     useEffect(() => {
         const scan = (): void => {

@@ -8,7 +8,7 @@ import {
 } from '../types';
 
 import { ProviderConfig } from '../types/provider';
-import { analyzeTradingView, getQuickResponse } from '../services/providers/GenericAnalysisService';
+import { analyzeTradingView, getQuickResponse, streamQuickResponse } from '../services/providers/GenericAnalysisService';
 import * as ensembleService from '../services/providers/ensembleService';
 
 // Analysis / validation / backtesting services
@@ -66,11 +66,15 @@ import { applyNotebookSkillsToAnalysis, confirmedAvoidForSetup, titleFromMeta } 
 import { ANALYST_ROLE_DEFINITIONS, getLensPromptForStyle, getRoleForProvider, EnsembleModelSelection } from '../services/ui/AnalystLensService';
 import { buildHybridEnvelope, buildOcrEnvelope, envelopeKindForRole } from '../utils/debateEnvelopes';
 import { buildRecommendationContract } from '../utils/recommendationContract';
+import { maybeQueueVerdictSkillDraft } from '../utils/verdictSkillDraft';
+import { parseProvisionalVerdict } from '../utils/provisionalVerdict';
 import { debateTurnsToRoundTexts, lastCompletedRound, laneDraftsFromTurns, reconstructOpenings } from '../utils/debateResume';
+import { parseStructuredAutoplayTranscript } from '../utils/debateTranscript';
 import { parseComposerIntent, formatComposerSteer } from '../utils/composerMentions';
 import { parseKeptAnalyst } from '../utils/keptAnalyst';
 import { buildLevelCitations } from '../utils/levelEvidence';
 import { enforceUngroundedLevels } from '../utils/ungroundedGate';
+import { rescueSoftAvoid } from '../utils/avoidReason';
 import { applyHybridChartDrift } from '../utils/hybridChartDrift';
 import { computeContractSize } from '../utils/ticketSize';
 import { getHarnessSettings } from '../utils/harnessSettings';
@@ -407,6 +411,27 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         }, conversationId);
     });
 
+    // ─── Progressive verdict ───────────────────────────────────────────────
+    // While the moderator is still WRITING the final verdict, a complete
+    // trade plan often already exists in the stream. This throttled writer
+    // publishes it as `provisionalAnalysis` so the TradingSignalCard fills
+    // in live instead of appearing only after the debate concludes. The
+    // final commit replaces it with the authoritative `analysis`.
+    const throttledProvisionalVerdict = useRafThrottle((
+        conversationId: string | null,
+        debateMessageId: string,
+        provisional: TradeAnalysis | undefined
+    ) => {
+        updateMessages(prev => {
+            const messageIndex = prev.findIndex(m => m.id === debateMessageId);
+            if (messageIndex === -1) return prev;
+            if (prev[messageIndex].analysis) return prev; // final verdict already committed
+            const newMessages = [...prev];
+            newMessages[messageIndex] = { ...prev[messageIndex], provisionalAnalysis: provisional };
+            return newMessages;
+        }, conversationId);
+    });
+
     // ─── RAF-throttled LIVE reasoning updates ─────────────────────────────
     // The analyst onReasoning callback fires on EVERY streamed reasoning
     // token (20-100/s per analyst). Rebuilding the message array per token
@@ -430,6 +455,35 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     analysts: (current.ensembleProgress?.analysts ?? []).map(analyst =>
                         analyst.key === thoughtsKey ? { ...analyst, reasoning } : analyst),
                 },
+            };
+            const newMessages = [...prev];
+            newMessages[messageIndex] = next;
+            return newMessages;
+        }, conversationId);
+    });
+
+    // ─── RAF-throttled CASUAL-CHAT streaming updates ──────────────────────
+    // Casual replies used to appear all at once after the full response
+    // resolved. This streams visible deltas into the bubble one frame at a
+    // time (DeepSeek-style perceived speed). The latest accumulated text +
+    // reasoning win per frame; the final flush() commits the settled state.
+    const throttledCasualStream = useRafThrottle((
+        conversationId: string | null,
+        messageId: string,
+        text: string,
+        thinking: string,
+        providerId: string,
+        streaming: boolean
+    ) => {
+        updateMessages(prev => {
+            const messageIndex = prev.findIndex(m => m.id === messageId);
+            if (messageIndex === -1) return prev;
+            const current = prev[messageIndex];
+            const next = {
+                ...current,
+                text,
+                isStreaming: streaming,
+                thoughtProcesses: thinking ? { [providerId]: thinking } : current.thoughtProcesses,
             };
             const newMessages = [...prev];
             newMessages[messageIndex] = next;
@@ -980,6 +1034,10 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         }
 
         let promptLane: 'live' | 'control' = 'live';
+        // Id of the live-streaming casual-chat bubble (if this run is a casual
+        // reply) so the catch block can settle it on cancel/error instead of
+        // leaving a stuck isStreaming placeholder.
+        let casualMessageId: string | null = null;
         try {
             promptLane = beginPromptLane();
             const currentMessages = isAutomationRun
@@ -1384,6 +1442,10 @@ ${reflectionBlock}`
                     // ========== ACCURACY VALIDATION GATE ==========
                     // Always run validation gate to ensure quality checks
                     // The gate will handle gracefully when hybridData is null
+                    // Direction captured before the gate so a rescued soft
+                    // Avoid can restore it (Avoid forces Neutral below).
+                    const directionBeforeValidation = finalAnalysis.direction;
+                    let validationAdjustedConfidence: 'High' | 'Medium' | 'Low' | 'Avoid' | undefined;
                     try {
                         const validationResult = runValidationGate({
                             analysis: finalAnalysis,
@@ -1395,6 +1457,7 @@ ${reflectionBlock}`
 
                         // Store original confidence if adjusted
                         if (validationResult.confidenceWasAdjusted) {
+                            validationAdjustedConfidence = validationResult.adjustedConfidence;
                             finalAnalysis.originalConfidence = validationResult.originalConfidence;
                             finalAnalysis.confidence = validationResult.adjustedConfidence;
                             if (finalAnalysis.confidence === 'Avoid') {
@@ -1577,6 +1640,20 @@ ${reflectionBlock}`
                     finalAnalysis.levelCitations = buildLevelCitations(finalAnalysis);
                     Object.assign(finalAnalysis, enforceUngroundedLevels(finalAnalysis));
                     Object.assign(finalAnalysis, applyHybridChartDrift(finalAnalysis, freshHybridData || currentHybridData));
+                    // ========== SOFT AVOID RESCUE ==========
+                    // One weak rule must not collapse a valid Low/Medium setup
+                    // into Avoid. Floor soft Avoids back to Low (restoring the
+                    // direction the veto neutralized). Model-declared Avoids,
+                    // hard blockers (gate fail, ungrounded levels, R:R < 1:1,
+                    // hard validation), and the Bayesian calibration Avoid cap
+                    // all stay Avoid.
+                    if (finalAnalysis.confidence === 'Avoid' && String(bayesianConfidenceCap ?? '').toLowerCase() !== 'avoid') {
+                        rescueSoftAvoid(finalAnalysis, {
+                            directionBefore: directionBeforeValidation,
+                            modelDeclaredAvoid: validationAdjustedConfidence !== 'Avoid',
+                        });
+                    }
+                    // ========== END SOFT AVOID RESCUE ==========
                     const sized = computeContractSize(
                         finalAnalysis,
                         getHarnessSettings().equityUsd,
@@ -2406,7 +2483,10 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                             }
 
                             const currentTurns: DebateTurn[] = [];
-                            const matches = [...debateContent.matchAll(turnRegex)];
+                            const structuredTurns = parseStructuredAutoplayTranscript(debateContent);
+                            const matches = structuredTurns.length > 0
+                                ? []
+                                : [...debateContent.matchAll(turnRegex)];
                             // Autoplayed transcripts carry no explicit rounds —
                             // derive them: each moderator turn starts a new
                             // round, so the messenger chat keeps its round
@@ -2414,12 +2494,24 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                             // the verdict treatment. Prefix-stable: earlier
                             // turns never change as the stream grows.
                             let autoplayRound = 0;
-                            for (const m of matches) {
-                                let speaker = m[1].trim();
+                            const parsedTurns = structuredTurns.length > 0
+                                ? structuredTurns.map(turn => ({
+                                    speaker: turn.speaker,
+                                    round: turn.round,
+                                    text: turn.text,
+                                }))
+                                : matches.map(m => ({
+                                    speaker: m[1].trim(),
+                                    round: undefined,
+                                    text: m[2].trim(),
+                                }));
+                            for (const parsed of parsedTurns) {
+                                let speaker = parsed.speaker.trim();
                                 if (speaker === "Master Strategist") speaker = "Moderator";
                                 speaker = speaker.charAt(0).toUpperCase() + speaker.slice(1);
-                                if (speaker === 'Moderator') autoplayRound++;
-                                const peeledTurn = peelRawTurn(m[2].trim());
+                                if (parsed.round !== undefined) autoplayRound = parsed.round;
+                                else if (speaker === 'Moderator') autoplayRound++;
+                                const peeledTurn = peelRawTurn(parsed.text);
                                 currentTurns.push({
                                     speaker: speaker as DebateTurn['speaker'],
                                     round: autoplayRound > 0 ? autoplayRound : undefined,
@@ -2432,7 +2524,13 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                             // </DEBATE_END> (no "Speaker:" prefix), so the turn
                             // regex can't capture it — surface it as the final
                             // moderator synthesis instead of dropping it.
-                            if (!synthesisContent && matches.length > 0) {
+                            if (!synthesisContent && structuredTurns.length > 0) {
+                                const lastTurnEnd = debateContent.toLowerCase().lastIndexOf('</turn>');
+                                const trailing = lastTurnEnd >= 0 ? debateContent.slice(lastTurnEnd + '</turn>'.length) : '';
+                                if (trailing.trim()) {
+                                    synthesisContent = trailing.trim();
+                                }
+                            } else if (!synthesisContent && matches.length > 0) {
                                 const lastMatch = matches[matches.length - 1];
                                 const trailing = debateContent.slice((lastMatch.index ?? 0) + lastMatch[0].length);
                                 if (trailing.trim()) {
@@ -2514,6 +2612,30 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                         };
                         rebuildDebateTurnsRef.current = rebuildDebateTurns;
 
+                        // ─── Progressive verdict ───────────────────────────────
+                        // Re-parse the moderator's stream as it grows so the
+                        // TradingSignalCard fills while the verdict is still
+                        // being written. Guarded by a growth threshold so the
+                        // parser doesn't run on every token; the authoritative
+                        // parse still runs once the debate concludes.
+                        let progressiveParsedLen = 0;
+                        let lastProvisionalJson = '';
+                        const tryProgressiveVerdict = (): void => {
+                            if (moderatorRound <= 0) return;
+                            const hasEndMarker = /<\/?DEBATE_END>/i.test(fullResponseText);
+                            if (!hasEndMarker && fullResponseText.length - progressiveParsedLen < 160) return;
+                            progressiveParsedLen = fullResponseText.length;
+                            const provisional = parseProvisionalVerdict(
+                                fullResponseText,
+                                turnTexts[`${moderatorRound}::Moderator`] || '',
+                            );
+                            if (!provisional) return;
+                            const json = JSON.stringify(provisional);
+                            if (json === lastProvisionalJson) return;
+                            lastProvisionalJson = json;
+                            throttledProvisionalVerdict(requestConversationId, debateMessageId, provisional);
+                        };
+
                         for await (const event of debateStream as AsyncGenerator<ensembleService.RealDebateTurnEvent, void, unknown>) {
                             if (!isCurrentRequest()) assertCurrentRequest();
                             if (!event || typeof event.text !== 'string') continue;
@@ -2546,6 +2668,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                             if (event.speaker === 'Moderator') {
                                 fullResponseText += event.text;
                                 moderatorRound = event.round;
+                                tryProgressiveVerdict();
                             }
 
                             rebuildDebateTurns();
@@ -2573,6 +2696,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                     // Flush the final pending update synchronously so the
                     // last chunk's state is committed before downstream parsing.
                     throttledDebateUpdate.flush();
+                    throttledProvisionalVerdict.flush();
                     if (!isCurrentRequest()) assertCurrentRequest();
 
                     let finalAnalysis: TradeAnalysis;
@@ -2776,6 +2900,9 @@ ${accuracyVerificationNote}`
                                 : `The ensemble has concluded its debate.`,
                             analysis: processedAnalysis,
                             outcome: TradeOutcome.PENDING,
+                            // The authoritative verdict replaces the provisional
+                            // card that streamed while the moderator wrote.
+                            provisionalAnalysis: undefined,
                             debateTurns: existingMessage.debateTurns,
                             thoughtProcesses: { ...thoughtMap },
                             reasoningProcesses: { ...reasoningMapRef.current },
@@ -2886,6 +3013,22 @@ ${accuracyVerificationNote}`
                     );
                     if (!isAutomationRun) {
                         setHighlightedAnalysisId(debateMessageId);
+                    }
+
+                    // Verdict → skill draft: when the moderator cites a pattern
+                    // the notebook does not know yet, queue a draft for the
+                    // approval inbox (deterministic — no LLM call). Interactive
+                    // runs only; automation runs must not spam drafts.
+                    if (!isAutomationRun && runEnsembleEnabled) {
+                        try {
+                            maybeQueueVerdictSkillDraft(
+                                debateMessageId,
+                                processedAnalysis ?? finalAnalysis,
+                                localStorage.getItem('last_active_user') || 'default',
+                            );
+                        } catch (draftError) {
+                            console.warn('[SkillDraft] Verdict draft queue failed (non-fatal):', draftError);
+                        }
                     }
 
                     // Automation run: deliver the completed card to the caller
@@ -3138,14 +3281,34 @@ ${accuracyVerificationNote}`
                 setLoadingMessage("Thinking...");
                 setIsAnalysisInProgress(true);
                 startStep('analysis');
+                // Stream the reply into the bubble as it generates (DeepSeek-style
+                // perceived speed) instead of appending it once after completion.
+                const streamingMessageId = `ai-${Date.now()}`;
+                casualMessageId = streamingMessageId;
+                updateRequestMessages(prev => [...prev, {
+                    id: streamingMessageId,
+                    role: MessageRole.AI,
+                    text: '',
+                    createdAt: new Date().toISOString(),
+                    modelsUsed: { [provider.config.id]: provider.model },
+                    isStreaming: true,
+                }]);
                 let reasoningContent = '';
-                const responseText = await getQuickResponse(
+                let visibleContent = '';
+                const responseText = await streamQuickResponse(
                     provider.config,
                     promptToSend,
                     currentMessages,
                     undefined,
                     currentAbortController.signal,
-                    reasoning => { reasoningContent += reasoning; }
+                    reasoning => {
+                        reasoningContent += reasoning;
+                        throttledCasualStream(requestConversationId, streamingMessageId, visibleContent, reasoningContent, provider.config.id, true);
+                    },
+                    delta => {
+                        visibleContent += delta;
+                        throttledCasualStream(requestConversationId, streamingMessageId, visibleContent, reasoningContent, provider.config.id, true);
+                    },
                 );
                 if (!isCurrentRequest()) assertCurrentRequest();
                 // Split before display: native CoT and any leaked scratchpad
@@ -3154,14 +3317,14 @@ ${accuracyVerificationNote}`
                 // Casual chat is a single-model conversation. Do not store the
                 // answer as an individual insight; that creates an oversized
                 // "Individual AI Insights" section under ordinary replies.
-                updateRequestMessages(prev => [...prev, {
-                    id: `ai-${Date.now()}`,
-                    role: MessageRole.AI,
+                updateMessages(prev => prev.map(m => m.id === streamingMessageId ? {
+                    ...m,
                     text: casualSplit.output,
-                    createdAt: new Date().toISOString(),
+                    isStreaming: false,
                     modelsUsed: { [provider.config.id]: provider.model },
                     thoughtProcesses: casualSplit.thinking ? { [provider.config.id]: casualSplit.thinking } : undefined,
-                }]);
+                } : m), requestConversationId);
+                throttledCasualStream.flush();
             }
         } catch (error: any) {
             // Runs for BOTH errors and user cancels. Previously the
@@ -3182,6 +3345,12 @@ ${accuracyVerificationNote}`
             // never wipe a debate that already produced turns. A bare
             // placeholder (no turns yet) is still removed.
             updateRequestMessages(prev => prev.map(m => {
+                // A live-streaming casual bubble must settle on cancel/error —
+                // keep whatever text already arrived, drop the streaming flag.
+                if (casualMessageId && m.id === casualMessageId) {
+                    if (!m.text.trim()) return null;
+                    return { ...m, isStreaming: false };
+                }
                 if (m.id === ensemblePlaceholder?.id && m.ensembleProgress) {
                     return {
                         ...m,
@@ -3201,6 +3370,9 @@ ${accuracyVerificationNote}`
                     isDebating: false,
                     activeDebateSpeakers: {},
                     replacementOffer: undefined,
+                    // An interrupted verdict may be incomplete — never leave a
+                    // provisional card standing in for a final one.
+                    provisionalAnalysis: undefined,
                     text: cancelled ? 'The analysis was cancelled.' : 'The debate was interrupted by an error before the moderator could issue a final verdict.',
                 };
             }).filter((m): m is Message => m !== null));

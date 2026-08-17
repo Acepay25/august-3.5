@@ -49,6 +49,59 @@ export interface DeskToolResult {
 
 export const MAX_DESK_TOOL_ROUNDS = 3;
 
+/**
+ * Per-run tool cache — every Floor seat gets the same desk tools, so a debate
+ * can call get_price_snapshot / get_derivatives once per seat per turn. Market
+ * data this fresh is identical for 30s; serve repeat calls from cache instead
+ * of re-hitting the exchange (zero extra network calls, faster tool rounds).
+ */
+export const TOOL_CACHE_TTL_MS = 30_000;
+const toolCache = new Map<string, { at: number; content: string }>();
+
+const toolCacheKey = (call: DeskToolCall): string =>
+    `${call.name}:${JSON.stringify(call.arguments ?? {}, Object.keys(call.arguments ?? {}).sort())}`;
+
+export const clearDeskToolCache = (): void => {
+    toolCache.clear();
+};
+
+/** Hard cap on one tool result's injected size — tool output goes into every
+ *  subsequent prompt, so a runaway payload compounds across the whole debate. */
+export const MAX_TOOL_CONTENT_CHARS = 2400;
+
+/**
+ * Tool-result budget: shrink the array fields models actually skim (walls,
+ * liquidation events) to their top entries by size, then hard-cap the total.
+ * Keeps the JSON shape intact so prompts that reference fields stay valid.
+ */
+export const budgetToolContent = (name: string, content: string): string => {
+    let out = content;
+    if (name === 'get_order_book' || name === 'get_liquidations') {
+        try {
+            const parsed = JSON.parse(out) as Record<string, unknown>;
+            const topByUsd = (arr: unknown, n: number): unknown =>
+                Array.isArray(arr)
+                    ? [...arr]
+                        .sort((a, b) => (Number((b as { usdValue?: unknown })?.usdValue) || 0) - (Number((a as { usdValue?: unknown })?.usdValue) || 0))
+                        .slice(0, n)
+                    : arr;
+            if (name === 'get_order_book') {
+                parsed.buyWalls = topByUsd(parsed.buyWalls, 5);
+                parsed.sellWalls = topByUsd(parsed.sellWalls, 5);
+            } else {
+                parsed.recentEvents = Array.isArray(parsed.recentEvents) ? parsed.recentEvents.slice(0, 10) : parsed.recentEvents;
+            }
+            out = JSON.stringify(parsed, null, 2);
+        } catch {
+            // Not JSON (error text) — fall through to the char cap.
+        }
+    }
+    if (out.length > MAX_TOOL_CONTENT_CHARS) {
+        out = `${out.slice(0, MAX_TOOL_CONTENT_CHARS)}\n…[truncated]`;
+    }
+    return out;
+};
+
 const asString = (value: unknown, fallback = ''): string =>
     typeof value === 'string' && value.trim() ? value.trim() : fallback;
 
@@ -348,6 +401,13 @@ export async function executeDeskTool(
     context: { defaultSymbol?: string | null; signal?: AbortSignal } = {},
 ): Promise<DeskToolResult> {
     const fallback = context.defaultSymbol || 'BTCUSDT';
+    // Repeat calls within the TTL (every seat asks the same desk) are served
+    // from cache — identical market data, zero extra network round-trips.
+    const cacheKey = toolCacheKey(call);
+    const cached = toolCache.get(cacheKey);
+    if (cached && Date.now() - cached.at < TOOL_CACHE_TTL_MS) {
+        return { toolCallId: call.id, name: call.name, ok: true, content: cached.content };
+    }
     try {
         let content: string;
         switch (call.name) {
@@ -379,6 +439,8 @@ export async function executeDeskTool(
                 content = `Unknown tool: ${call.name}`;
                 return { toolCallId: call.id, name: call.name, ok: false, content };
         }
+        content = budgetToolContent(call.name, content);
+        toolCache.set(cacheKey, { at: Date.now(), content });
         return { toolCallId: call.id, name: call.name, ok: true, content };
     } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
@@ -403,7 +465,7 @@ export function parseOpenAIToolCalls(message: unknown): DeskToolCall[] {
     const msg = message as { tool_calls?: Array<{ id?: string; function?: { name?: string; arguments?: string } }> } | null;
     if (!msg?.tool_calls?.length) return [];
     return msg.tool_calls.map((tc, i) => {
-        let args: Record<string, unknown> = {};
+        let args: Record<string, unknown>;
         try {
             args = tc.function?.arguments ? JSON.parse(tc.function.arguments) : {};
         } catch {
@@ -440,7 +502,7 @@ export function parseTextToolCalls(text: string): DeskToolCall[] {
     let match: RegExpExecArray | null;
     let i = 0;
     while ((match = re.exec(text)) && calls.length < 4) {
-        let args: Record<string, unknown> = {};
+        let args: Record<string, unknown>;
         const raw = match[2].trim();
         try {
             args = raw ? JSON.parse(raw) : {};
