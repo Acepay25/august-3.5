@@ -276,6 +276,40 @@ export function normalizeBaseUrl(url: string, format: string): string {
     return clean;
 }
 
+/**
+ * Warm a provider's connection before it is actually needed (perceived speed).
+ * Fires a cheap no-cors HEAD at the provider origin so the browser completes
+ * DNS + TCP + TLS and keeps the socket in its connection pool. When the real
+ * verdict/analysis request lands moments later, it reuses the warm socket and
+ * skips the handshake latency. Never throws, never consumes tokens, and is a
+ * no-op on Electron (main process owns its own sockets) and on the localhost
+ * dev proxy (already same-origin warm).
+ */
+export function warmProviderConnection(config: ProviderConfig): void {
+    try {
+        if (typeof window === 'undefined' || typeof fetch !== 'function') return;
+        const electronAPI = (window as { electronAPI?: { isElectron?: boolean } }).electronAPI;
+        if (electronAPI?.isElectron) return;
+        const host = window.location.hostname;
+        if (host === 'localhost' || host === '127.0.0.1') return;
+        const base = normalizeBaseUrl(config.baseUrl, config.apiFormat);
+        if (!base) return;
+        let origin: string;
+        try {
+            origin = new URL(base).origin;
+        } catch {
+            return;
+        }
+        const controller = new AbortController();
+        const timer = window.setTimeout(() => controller.abort(), 3000);
+        fetch(origin, { method: 'HEAD', mode: 'no-cors', signal: controller.signal })
+            .catch(() => undefined)
+            .finally(() => window.clearTimeout(timer));
+    } catch {
+        // Warm-up is best-effort; never surface an error.
+    }
+}
+
 // ─── Client Factory ─────────────────────────────────────────────────────────
 
 /**
@@ -370,7 +404,7 @@ async function chatCompletionsTurn(
     if (reasoning.trim()) options?.onReasoning?.(reasoning.trim());
     reportUsage(config, response, options);
     const toolCalls = (message?.tool_calls || []).map((tc: any, i: number) => {
-        let args: Record<string, unknown> = {};
+        let args: Record<string, unknown>;
         try {
             args = tc?.function?.arguments ? JSON.parse(tc.function.arguments) : {};
         } catch {
@@ -976,7 +1010,7 @@ export async function sendChatTurn(
                         if (result.status !== undefined) (error as any).status = result.status;
                         throw error;
                     }
-                    let data: any = {};
+                    let data: any;
                     try {
                         data = result.body ? JSON.parse(result.body) : {};
                     } catch (e) {
@@ -993,7 +1027,7 @@ export async function sendChatTurn(
                         if (reasoning.trim()) options?.onReasoning?.(reasoning.trim());
                         reportUsage(effectiveConfig, data, options);
                         const toolCalls = (message.tool_calls || []).map((tc: any, i: number) => {
-                            let args: Record<string, unknown> = {};
+                            let args: Record<string, unknown>;
                             try {
                                 args = tc?.function?.arguments ? JSON.parse(tc.function.arguments) : {};
                             } catch {
@@ -1017,7 +1051,7 @@ export async function sendChatTurn(
                         } satisfies ChatTurnResult;
                     }
                     // Non-chat_completions via proxy: text only.
-                    let text = '';
+                    let text: string;
                     let reasoning = result.reasoning || '';
                     if (effectiveConfig.apiFormat === 'messages') {
                         text = Array.isArray(data.content) ? data.content.filter((block: any) => block?.type === 'text').map((block: any) => block.text).join('\n') : data.text || '';

@@ -33,7 +33,9 @@ describe('TradingSignalCard', () => {
     it('renders colored levels without a duplicate plan list', () => {
         render(<TradingSignalCard analysis={analysis()} />);
         expect(screen.getAllByText('No trade').length).toBeGreaterThanOrEqual(1);
-        expect(screen.getByText(/Skip this setup/)).toBeDefined();
+        // The structured Why Avoid? panel explains the hard blocker (R:R below 1:1).
+        expect(screen.getByText('Why Avoid?')).toBeDefined();
+        expect(screen.getByText(/1:1 viability floor/)).toBeDefined();
         expect(screen.getByText('63,710')).toBeDefined();
         expect(screen.getByText('64,510')).toBeDefined();
         expect(screen.getByText('63,210')).toBeDefined();

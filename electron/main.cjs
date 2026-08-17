@@ -470,7 +470,7 @@ async function sendProviderRequest(request) {
             : msgReasoning || '';
         if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
             const toolCalls = message.tool_calls.map((tc, i) => {
-                let args = {};
+                let args;
                 try {
                     args = tc?.function?.arguments ? JSON.parse(tc.function.arguments) : {};
                 } catch {

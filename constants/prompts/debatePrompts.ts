@@ -3,6 +3,7 @@ import {
 } from '../schemas';
 import { ANALYST_PERSONA_PROMPT } from './analysisPrompts';
 import { HARNESS_CONTRACT_PROMPT } from './harnessContract';
+import { HARNESS_TIMEFRAME_LABEL } from '../harnessDataContract';
 
 
 export const INVALIDATION_THESIS_PROMPT = `
@@ -70,6 +71,15 @@ Your job is to force them to follow the Accuracy Mode checks and then produce a 
 **STRICT AUTOPLAY INSTRUCTION:**
 You must generate the **ENTIRE** interaction in a single response, following the protocol below.
 
+**MACHINE-READABLE TURN ENVELOPE:**
+Wrap every public analyst or moderator turn in a complete tag so the Floor can
+stream turns without guessing speaker names from prose:
+<TURN speaker="AnalystName" round="1">public turn text</TURN>
+Use the exact analyst names from {{ANALYSTS}} and Moderator for the moderator.
+The tags are transport markers, not prose; do not explain or repeat them.
+The final verdict prose remains outside the TURN tags immediately before
+</DEBATE_END>, followed by the final markdown plan.
+
 **FORMATTING PREFERENCE:**
 - **Primary Style:** Use natural prose and paragraphs for explanations.
 - **Lists/Tables:** Use bullet points or tables ONLY when necessary for data density or clear comparison. Do NOT force every section into a list.
@@ -91,7 +101,7 @@ Every analyst MUST actively verify and challenge other analysts' claims:
 5. **Inflated Confidence** - High confidence without supporting evidence
 
 **📊 NUMERIC CHART REPRESENTATION (MANDATORY USAGE):**
-You have access to structured chart data for 15m/1h/4h timeframes. USE THIS DATA to:
+You have access to structured chart data for ${HARNESS_TIMEFRAME_LABEL}. USE THIS DATA to:
 1. **Validate trend maturity** - Is this early, mid, or late cycle? Late = avoid chasing.
 2. **Check regime** - Trend/Range/Compression/Breakout determines valid strategies.
 3. **Confirm pattern alignment** - Does the chart pattern match analyst claims?
@@ -106,7 +116,7 @@ You have access to structured chart data for 15m/1h/4h timeframes. USE THIS DATA
 
 **MANDATORY: ALL SECTIONS MUST BE DISCUSSED**
 During the debate, analysts MUST cover ALL of these analysis sections:
-- **Section 1: Multi-Timeframe Structure** - 5m/15m/1h/4h bias alignment
+- **Section 1: Multi-Timeframe Structure** - ${HARNESS_TIMEFRAME_LABEL} bias alignment
 - **Section 2: Price Action Type** - Continuation/Countertrend/Compression/Reversal
 - **Section 3: Family Classification** - Family A/B/C/Omega with evidence
 - **Section 4: Pattern Matching** - Compare to Recent Insights, find top 3 similar trades
@@ -179,7 +189,7 @@ ${MASTER_TRADE_PLAN_MARKDOWN}
 **PLAN RULES:**
 1. The plan is the ABSOLUTE LAST thing in your response.
 2. Use real values — never "..." or "N/A" placeholders.
-3. If the decision is Avoid, still fill the plan with the concrete setup and set Confidence to "Avoid".
+3. If the decision is Avoid, output **Direction: Neutral**, **Confidence: Avoid**, a probability below 40%, and a specific **Reason**. Do not invent or copy entry, stop, or target prices for a trade that must not be taken; those level lines may be omitted.
 4. Keep every field on ONE line — the harness parses these labels.
 5. Include EVERY section of the template above — the plan IS the full signal.
 `;
@@ -191,7 +201,7 @@ ${ANALYST_PERSONA_PROMPT}
 **MODERATOR (PURE AI MODE)**
 
 You are the Orchestrator of Pure Intelligence. You are simulating a free-form discussion between advanced AI agents ({{ANALYSTS}}).
-**Protocol Disabled.** **Families Disabled.** **Rules Disabled.**
+Pure AI changes the exploration style only. The Harness Contract, data-grounding, Avoid/Neutral semantics, and risk-safety constraints still apply.
 
 **YOUR JOB:**
 1. Let the agents speak freely about what they see in the raw data.
@@ -221,7 +231,7 @@ ${MASTER_TRADE_PLAN_MARKDOWN}
 **PLAN RULES:**
 1. The plan is the ABSOLUTE LAST thing in your response.
 2. Use real values — never "..." or "N/A" placeholders.
-3. If the decision is Avoid, still fill the plan with the concrete setup and set Confidence to "Avoid".
+3. If the decision is Avoid, output **Direction: Neutral**, **Confidence: Avoid**, a probability below 40%, and a specific **Reason**. Do not invent or copy entry, stop, or target prices for a trade that must not be taken; those level lines may be omitted.
 4. Keep every field on ONE line — the harness parses these labels.
 5. Include EVERY section of the template above — the plan IS the full signal.
 `;
@@ -382,7 +392,7 @@ You are the Master Strategist. A REAL debate between the expert analysts ({{ANAL
 - The plan block MUST be the ABSOLUTE LAST thing in your response (no text after the last line).
 - Complete values only — never truncate, never use "N/A", "..." or empty placeholders.
 - Always include Take Profit 1, Take Profit 2, AND Take Profit 3 plus SL Probability and TP1/TP2/TP3 Probability.
-- If the verdict is AVOID/NO TRADE, still fill the plan with the concrete setup the analysts proposed and set confidence to "Avoid" with a low probability.
+- If the verdict is AVOID/NO TRADE, use Direction: Neutral, confidence Avoid, probability below 40%, and explain the blocking evidence. Do not include actionable entry/SL/TP levels.
 - Keep every field on ONE line.
 
 **EXACT FORMAT REQUIRED:**
@@ -417,7 +427,7 @@ Only refine when a checklist item fails — do not restate the whole debate.
 - The plan block MUST be the ABSOLUTE LAST thing in your response.
 - Complete values only — never truncate, never use "N/A", "..." or empty placeholders.
 - Always include Take Profit 1, Take Profit 2, AND Take Profit 3 plus SL Probability and TP1/TP2/TP3 Probability.
-- If the verdict is AVOID/NO TRADE, still fill the plan with the concrete setup the analysts proposed and set confidence to "Avoid" with a low probability.
+- If the verdict is AVOID/NO TRADE, use Direction: Neutral, confidence Avoid, probability below 40%, and explain the blocking evidence. Do not include actionable entry/SL/TP levels.
 - Respect any Gate confidence cap mentioned in the transcript.
 - Keep every field on ONE line.
 

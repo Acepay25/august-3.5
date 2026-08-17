@@ -8,6 +8,7 @@
  */
 
 import { LoggedTrade, MemoryFile, TradeOutcome } from '../../types';
+import { ProviderConfig } from '../../types/provider';
 import {
     appendDiaryEntry,
     createMemoryFile,
@@ -22,9 +23,11 @@ import {
 import { formatSkillProcedure, parseIfThenClauses, skillHitRate } from '../../utils/ifThenSkill';
 import { maybePinWinningPromptLane } from '../../utils/promptVersionStats';
 import { CraftedSkill } from '../../schemas/learning';
-import { formatCraftedSkillBody } from './SkillCraftService';
+import { formatCraftedSkillBody, refineSkillFromLosses } from './SkillCraftService';
 import { listSkillDrafts } from '../../utils/skillDrafts';
 import { tradeAdmitsTechnicalStrategyRule } from '../../utils/rootCause';
+import { loadProviderConfigs, getReadyProviders } from '../infrastructure/ProviderConfigService';
+import { getFirstReadyProvider } from '../../utils/providerUtils';
 
 export type SkillStatus = 'candidate' | 'confirmed' | 'retired';
 export type SkillKind = 'repeat' | 'avoid';
@@ -38,6 +41,10 @@ export interface SkillMeta {
     regime?: string;
     wins: number;
     losses: number;
+    /** Running count of consecutive LOSS outcomes (reset by any WIN). A
+     *  confirmed skill that reaches REFINE_AFTER_CONSECUTIVE_LOSSES gets an
+     *  LLM refinement pass instead of silently bleeding. */
+    consecutiveLosses: number;
     tradeIds: string[];
     ifCondition?: string;
     thenAction?: string;
@@ -47,6 +54,8 @@ export interface SkillMeta {
 export const MIN_CLUSTER_FOR_SKILL = 3;
 export const MIN_SAMPLE_CONFIRMED = 5;
 export const MIN_SAMPLE_RETIRE = 6;
+/** Consecutive losses on a CONFIRMED skill before the LLM refinement pass. */
+export const REFINE_AFTER_CONSECUTIVE_LOSSES = 2;
 
 const folderName = (folderId: string): string =>
     getMemoryFiles().folders.find(f => f.id === folderId)?.name ?? '';
@@ -84,6 +93,7 @@ export const parseSkillMarkdown = (content: string): SkillMeta | null => {
         regime: pick('regime'),
         wins: num('wins'),
         losses: num('losses'),
+        consecutiveLosses: num('consecutiveLosses'),
         tradeIds,
         ifCondition: pick('ifCondition'),
         thenAction: pick('thenAction'),
@@ -121,6 +131,7 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
         `wins: ${meta.wins}`,
         `losses: ${meta.losses}`,
         `sample: ${meta.wins + meta.losses}`,
+        ...(meta.consecutiveLosses > 0 ? [`consecutiveLosses: ${meta.consecutiveLosses}`] : []),
         ...(meta.ifCondition ? [`ifCondition: ${meta.ifCondition.replace(/\n/g, ' ')}`] : []),
         ...(meta.thenAction ? [`thenAction: ${meta.thenAction.replace(/\n/g, ' ')}`] : []),
         `tradeIds: ${meta.tradeIds.slice(-20).join(',')}`,
@@ -192,9 +203,12 @@ const clusterKey = (trade: LoggedTrade): string => {
 };
 
 /**
- * After a closed trade, bump wins/losses on every matching skill.
+ * After a closed trade, bump wins/losses on every matching skill. A WIN
+ * resets the consecutive-loss streak; a confirmed skill that reaches
+ * REFINE_AFTER_CONSECUTIVE_LOSSES gets an LLM refinement pass (tightened
+ * trigger) instead of silently bleeding.
  */
-export const applySkillEvidence = async (trade: LoggedTrade, username: string): Promise<void> => {
+export const applySkillEvidence = async (trade: LoggedTrade, username: string, allTrades?: LoggedTrade[]): Promise<void> => {
     if (trade.outcome !== TradeOutcome.WIN && trade.outcome !== TradeOutcome.LOSS) return;
     if (!tradeAdmitsTechnicalStrategyRule(trade)) return;
     await ensureHarnessFolders(username);
@@ -209,14 +223,69 @@ export const applySkillEvidence = async (trade: LoggedTrade, username: string): 
         const meta = parseSkillMarkdown(file.content);
         if (!meta || !file.enabled || !skillMatchesSetup(meta, setup)) continue;
         if (meta.tradeIds.includes(trade.id)) continue;
-        if (trade.outcome === TradeOutcome.WIN) meta.wins += 1;
-        else meta.losses += 1;
+        if (trade.outcome === TradeOutcome.WIN) {
+            meta.wins += 1;
+            meta.consecutiveLosses = 0;
+        } else {
+            meta.losses += 1;
+            meta.consecutiveLosses += 1;
+        }
         meta.tradeIds = [...meta.tradeIds, trade.id];
         meta.status = deriveStatus(meta);
         await updateMemoryFile(file.id, {
             content: serializeSkill(meta, titleFromMeta(meta)),
             enabled: meta.status !== 'retired',
         }, username);
+        if (trade.outcome === TradeOutcome.LOSS
+            && meta.status === 'confirmed'
+            && meta.consecutiveLosses >= REFINE_AFTER_CONSECUTIVE_LOSSES) {
+            await maybeRefineSkill(file.id, allTrades ?? [trade], username);
+        }
+    }
+};
+
+/**
+ * Self-improving skills: hand a confirmed skill that keeps losing back to
+ * the model with the losing post-mortems so the trigger/procedure is
+ * tightened. Best-effort — any failure keeps the existing skill untouched.
+ * The refined skill starts a fresh consecutive-loss streak.
+ */
+const maybeRefineSkill = async (fileId: string, allTrades: LoggedTrade[], username: string): Promise<void> => {
+    try {
+        const configs = await loadProviderConfigs();
+        const config = getFirstReadyProvider(getReadyProviders(configs));
+        if (!config) return;
+        const file = getMemoryFiles().files.find(f => f.id === fileId);
+        const meta = file ? parseSkillMarkdown(file.content) : null;
+        if (!meta) return;
+        const losingTrades = allTrades
+            .filter(t => t.outcome === TradeOutcome.LOSS && meta.tradeIds.includes(t.id))
+            .slice(-4);
+        const refined = await refineSkillFromLosses({
+            title: titleFromMeta(meta),
+            kind: meta.kind,
+            ifCondition: meta.ifCondition,
+            thenAction: meta.thenAction,
+            body: meta.body,
+            wins: meta.wins,
+            losses: meta.losses,
+        }, losingTrades, config);
+        if (!refined) return;
+        // Re-read after the LLM round-trip — evidence may have landed meanwhile.
+        const latestFile = getMemoryFiles().files.find(f => f.id === fileId);
+        const latest = latestFile ? parseSkillMarkdown(latestFile.content) : null;
+        if (!latest) return;
+        latest.kind = refined.kind;
+        latest.ifCondition = refined.ifCondition;
+        latest.thenAction = refined.thenAction;
+        latest.body = formatCraftedSkillBody(refined);
+        latest.consecutiveLosses = 0;
+        await updateMemoryFile(fileId, {
+            content: serializeSkill(latest, refined.name || titleFromMeta(latest)),
+            enabled: latest.status !== 'retired',
+        }, username);
+    } catch (e) {
+        console.warn('[SkillMemory] Refinement pass failed (skill kept):', e);
     }
 };
 
@@ -253,6 +322,10 @@ export const maybeUpsertSkill = async (
 
     const wins = cluster.filter(t => t.outcome === TradeOutcome.WIN).length;
     const losses = cluster.filter(t => t.outcome === TradeOutcome.LOSS).length;
+    // Trailing-loss streak (cluster sorted oldest → newest).
+    const ordered = [...cluster].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+    let streak = 0;
+    for (let i = ordered.length - 1; i >= 0 && ordered[i].outcome === TradeOutcome.LOSS; i--) streak++;
     const kind: SkillKind = losses >= wins ? 'avoid' : 'repeat';
     const clause = parseIfThenClauses(trade.postMortem ?? '')[0];
     const lesson = clause
@@ -270,6 +343,7 @@ export const maybeUpsertSkill = async (
         regime: trade.marketRegime,
         wins,
         losses,
+        consecutiveLosses: streak,
         tradeIds: cluster.map(t => t.id),
         ifCondition: clause?.ifCondition,
         thenAction: clause?.thenAction,
@@ -335,6 +409,7 @@ export const ingestCraftedSkill = async (
         regime: trade.marketRegime,
         wins: trade.outcome === TradeOutcome.WIN ? 1 : 0,
         losses: trade.outcome === TradeOutcome.LOSS ? 1 : 0,
+        consecutiveLosses: trade.outcome === TradeOutcome.LOSS ? 1 : 0,
         tradeIds: [trade.id],
         ifCondition: crafted.ifCondition,
         thenAction: crafted.thenAction,
@@ -345,10 +420,44 @@ export const ingestCraftedSkill = async (
     await createMemoryFile(folder.id, `${slug}.md`, serializeSkill(meta, crafted.name || titleFromMeta(meta)), username, true);
 };
 
+/**
+ * Ingest a user-approved skill draft that has NO closed trade behind it
+ * (verdict-sourced drafts). Starts as a zero-evidence candidate — it must
+ * earn wins/losses through applySkillEvidence before it can confirm.
+ */
+export const ingestCraftedSkillFromDraft = async (
+    crafted: CraftedSkill,
+    coin: string | undefined,
+    username: string,
+): Promise<void> => {
+    await ensureHarnessFolders(username);
+    const folder = getMemoryFiles().folders.find(f => f.name === 'skills');
+    if (!folder) return;
+    const existing = getMemoryFiles().files.filter(isSkillFile).find(f => {
+        const meta = parseSkillMarkdown(f.content);
+        return meta?.ifCondition?.toLowerCase() === crafted.ifCondition.toLowerCase();
+    });
+    if (existing) return; // already learned — never duplicate a trigger
+    const meta: SkillMeta = {
+        status: 'candidate',
+        kind: crafted.kind,
+        coin,
+        wins: 0,
+        losses: 0,
+        consecutiveLosses: 0,
+        tradeIds: [],
+        ifCondition: crafted.ifCondition,
+        thenAction: crafted.thenAction,
+        body: formatCraftedSkillBody(crafted),
+    };
+    const slug = slugifyName(crafted.name) || slugifyName([coin, crafted.kind].filter(Boolean).join(' ')) || 'skill';
+    await createMemoryFile(folder.id, `${slug}.md`, serializeSkill(meta, crafted.name || titleFromMeta(meta)), username, true);
+};
+
 export const ingestIfThenFromTrade = async (trade: LoggedTrade, username: string): Promise<void> => {
     if (trade.outcome !== TradeOutcome.WIN && trade.outcome !== TradeOutcome.LOSS) return;
     if (!tradeAdmitsTechnicalStrategyRule(trade)) return;
-    if (listSkillDrafts().some(d => d.tradeId === trade.id)) return;
+    if (listSkillDrafts(username).some(d => d.tradeId === trade.id)) return;
     const clauses = parseIfThenClauses(trade.postMortem ?? '');
     if (clauses.length === 0) return;
     await ensureHarnessFolders(username);
@@ -389,6 +498,7 @@ export const ingestIfThenFromTrade = async (trade: LoggedTrade, username: string
             regime: trade.marketRegime,
             wins: trade.outcome === TradeOutcome.WIN ? 1 : 0,
             losses: trade.outcome === TradeOutcome.LOSS ? 1 : 0,
+            consecutiveLosses: trade.outcome === TradeOutcome.LOSS ? 1 : 0,
             tradeIds: [trade.id],
             ifCondition: clause.ifCondition,
             thenAction: clause.thenAction,
@@ -456,7 +566,7 @@ export const syncClosedTradeToNotebook = async (
 ): Promise<void> => {
     await appendDiaryEntry(trade, username);
     await syncRecurringMistakes(allTrades, username);
-    await applySkillEvidence(trade, username);
+    await applySkillEvidence(trade, username, allTrades);
     await ingestIfThenFromTrade(trade, username);
     await maybeUpsertSkill(trade, allTrades, username);
     await consolidateSkills(username);

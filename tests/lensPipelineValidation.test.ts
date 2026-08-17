@@ -30,6 +30,7 @@ vi.mock('../services/providers/GenericProviderService', () => ({
         toolCalls: [],
         assistantMessage: { role: 'assistant', content: '' },
     })) as any,
+    warmProviderConnection: vi.fn(),
 }));
 
 import { analyzeTradingView } from '../services/providers/GenericAnalysisService';

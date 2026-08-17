@@ -95,6 +95,7 @@ import {
     generateNumericChartData,
     generateChartPromptInjection
 } from './NumericChartService';
+import { HARNESS_TIMEFRAMES, HarnessTimeframe } from '../../constants/harnessDataContract';
 
 /**
  * Enhanced Hybrid Data Packet with all new data sources
@@ -105,7 +106,7 @@ import {
  * 5m was dropped — it was the noisiest signal in the payload — and 1d added
  * the macro context the injection previously lacked entirely.
  */
-export type HybridTimeframe = '15m' | '1h' | '4h' | '1d';
+export type HybridTimeframe = HarnessTimeframe;
 
 export interface HybridDataPacket {
     symbol: string;
@@ -354,7 +355,7 @@ export const fetchHybridData = async (symbol: string): Promise<HybridDataPacket>
 
     const unavailableSources: string[] = [];
     if (!snapshot.availability.marketData) unavailableSources.push('current market ticker');
-    for (const timeframe of ['15m', '1h', '4h', '1d'] as const) {
+    for (const timeframe of HARNESS_TIMEFRAMES) {
         if (!snapshot.availability.klines[timeframe]) unavailableSources.push(`${timeframe} candles`);
     }
     if (!snapshot.availability.fundingRate) unavailableSources.push('funding rate');
@@ -1383,4 +1384,3 @@ const buildMonteCarloConfig = (
 export const getMonteCarloInjection = (result: MonteCarloResult): string => {
     return generateMonteCarloPromptInjection(result);
 };
-

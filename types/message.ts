@@ -171,6 +171,14 @@ export interface Message {
 
   isDebating?: boolean; // Flag for showing the debate UI
   debateTurns?: DebateTurn[]; // Holds the live debate conversation
+  /** True while a single-model reply is actively streaming into the bubble.
+   *  Cleared when the stream settles — drives live markdown rendering and the
+   *  Thinking row's running state (DeepSeek-style perceived speed). */
+  isStreaming?: boolean;
+  /** Provisional verdict parsed from the moderator's stream WHILE it is still
+   *  writing (progressive rendering). Replaced by the final `analysis` when
+   *  the debate concludes — never persisted as the source of truth. */
+  provisionalAnalysis?: TradeAnalysis;
   /** Transient speaker -> round map for the live debate indicator. */
   activeDebateSpeakers?: Record<string, number>;
   /** Transient pre-debate analyst outputs and moderator waiting state. */

@@ -542,6 +542,7 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
                         caption={turnCaption}
                         onOpenActor={setOpenSeatId}
                         suppressBubbles={Boolean(openSeat)}
+                        live={isLive}
                     />
                     {openSeat && (
                         <div

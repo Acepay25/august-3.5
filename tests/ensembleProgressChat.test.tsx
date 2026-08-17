@@ -574,4 +574,32 @@ Deconstruct the Context: Entry 63694 SL 63420.`;
         expect(actor?.classList.contains('is-thinking')).toBe(false);
         expect(container.querySelector('.debate-stage-balloon')).toBeDefined();
     });
+
+    it('types a growing streamed sentence smoothly instead of restarting the ticker', async () => {
+        const progress = makeProgress([
+            makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'analyzing' }),
+        ]);
+        const renderFloor = (speech: string) => (
+            <EnsembleProgressChat
+                progress={progress}
+                isLive
+                activeDebateSpeakers={{ 'Analyst A': 1 }}
+                debateTurns={[{
+                    speaker: 'Analyst A',
+                    text: speech,
+                    round: 1,
+                }]}
+            />
+        );
+        const { container, rerender } = render(renderFloor('Long the breakout.'));
+        const ticker = container.querySelector('.debate-stage-ticker');
+        expect(ticker).toBeDefined();
+        // The bubble retains the old prefix while the new sentence reveals —
+        // never blanks to 'Thinking' in between.
+        rerender(renderFloor('Long the breakout, stop below support.'));
+        await waitFor(() => {
+            expect(container.querySelector('.debate-stage-ticker')?.textContent).toBe('Long the breakout, stop below support.');
+        }, { timeout: 2000 });
+        expect(container.querySelector('.debate-stage-ticker')?.textContent).not.toContain('Thinking');
+    });
 });

@@ -8,11 +8,17 @@ export interface SkillDraft {
     createdAt: string;
 }
 
-const KEY = 'skill_drafts_v1';
+const KEY_PREFIX = 'skill_drafts_v1';
+const LEGACY_KEY = KEY_PREFIX;
 
-const read = (): SkillDraft[] => {
+const storageKey = (username?: string): string =>
+    `${KEY_PREFIX}:${(username || 'default').trim() || 'default'}`;
+
+const read = (username?: string): SkillDraft[] => {
     try {
-        const raw = localStorage.getItem(KEY);
+        const scopedKey = storageKey(username);
+        const raw = localStorage.getItem(scopedKey)
+            ?? (!username ? localStorage.getItem(LEGACY_KEY) : null);
         const parsed = raw ? JSON.parse(raw) : [];
         return Array.isArray(parsed) ? parsed : [];
     } catch {
@@ -20,30 +26,30 @@ const read = (): SkillDraft[] => {
     }
 };
 
-const write = (drafts: SkillDraft[]): void => {
+const write = (drafts: SkillDraft[], username?: string): void => {
     try {
-        localStorage.setItem(KEY, JSON.stringify(drafts.slice(-20)));
+        localStorage.setItem(storageKey(username), JSON.stringify(drafts.slice(-20)));
         if (typeof window !== 'undefined') window.dispatchEvent(new Event('august-skill-drafts'));
     } catch { /* ignore */ }
 };
 
-export const listSkillDrafts = (): SkillDraft[] =>
-    typeof localStorage === 'undefined' ? [] : read();
+export const listSkillDrafts = (username?: string): SkillDraft[] =>
+    typeof localStorage === 'undefined' ? [] : read(username);
 
-export const queueSkillDraft = (draft: Omit<SkillDraft, 'id' | 'createdAt'>): SkillDraft => {
+export const queueSkillDraft = (draft: Omit<SkillDraft, 'id' | 'createdAt'>, username?: string): SkillDraft => {
     const next: SkillDraft = {
         ...draft,
         id: `sk-${Date.now()}`,
         createdAt: new Date().toISOString(),
     };
-    const rest = listSkillDrafts().filter(d => d.tradeId !== draft.tradeId);
-    write([...rest, next]);
+    const rest = listSkillDrafts(username).filter(d => d.tradeId !== draft.tradeId);
+    write([...rest, next], username);
     return next;
 };
 
-export const takeSkillDraft = (id: string): SkillDraft | null => {
-    const drafts = listSkillDrafts();
+export const takeSkillDraft = (id: string, username?: string): SkillDraft | null => {
+    const drafts = listSkillDrafts(username);
     const hit = drafts.find(d => d.id === id) ?? null;
-    write(drafts.filter(d => d.id !== id));
+    write(drafts.filter(d => d.id !== id), username);
     return hit;
 };

@@ -20,6 +20,7 @@ import {
 } from '../learning/PatternMemorySynthesisService';
 import { LoggedTrade, TradeOutcome } from '../../types';
 import { GATE_SCAN_PROMPT, MASTER_ANALYSIS_PROMPT } from '../../constants/prompts';
+import { HARNESS_TIMEFRAMES, HarnessTimeframe } from '../../constants/harnessDataContract';
 
 // ============================================================================
 // TYPES
@@ -30,12 +31,7 @@ export type FamilyType = 'A' | 'B' | 'C' | 'Omega';
 export interface GateInput {
     symbol: string;
     marketData: MarketData;
-    indicators: {
-        '5m': TechnicalIndicators | null;
-        '15m': TechnicalIndicators | null;
-        '1h': TechnicalIndicators | null;
-        '4h': TechnicalIndicators | null;
-    };
+    indicators: Record<HarnessTimeframe, TechnicalIndicators | null>;
     tradeHistory: LoggedTrade[];
 }
 
@@ -129,9 +125,7 @@ export function runProgrammaticGate(input: GateInput): GateOutput {
 
     // ====== CHECK 1: DATA INTEGRITY ======
     const missingTimeframes: string[] = [];
-    const timeframes = ['5m', '15m', '1h', '4h'] as const;
-
-    for (const tf of timeframes) {
+    for (const tf of HARNESS_TIMEFRAMES) {
         if (!indicators[tf]) {
             missingTimeframes.push(tf);
         }
@@ -475,15 +469,14 @@ export async function fetchGateInputData(
         }
 
         // Fetch OHLCV for each timeframe and calculate indicators
-        const timeframes = ['5m', '15m', '1h', '4h'] as const;
         const indicators: GateInput['indicators'] = {
-            '5m': null,
             '15m': null,
             '1h': null,
-            '4h': null
+            '4h': null,
+            '1d': null,
         };
 
-        for (const tf of timeframes) {
+        for (const tf of HARNESS_TIMEFRAMES) {
             try {
                 const klines = await fetchOHLCV(symbol, tf, 100);
                 if (klines && klines.length >= 20) {

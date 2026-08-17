@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { recalculateAnalysisMetrics, leveragedMovePercent, parseProseTradePlan, parseMarkdownTradePlan, tradePlanToAnalysis, stripPlanTags, buildAnalysisMarkdown, buildSupplementMarkdown, buildTradingSignalMarkdown, resolveLevelHitOdds, extractSignalStrategyText, looksLikeModeratorVerdictDump, explainSignalConfidence, signalDirectionLabel, explainNoTrade, isBindingMarkdownPlan } from '../utils/analysisUtils';
+import { recalculateAnalysisMetrics, leveragedMovePercent, parseProseTradePlan, parseMarkdownTradePlan, tradePlanToAnalysis, stripPlanTags, buildAnalysisMarkdown, buildSupplementMarkdown, buildTradingSignalMarkdown, resolveLevelHitOdds, extractSignalStrategyText, looksLikeModeratorVerdictDump, explainSignalConfidence, signalDirectionLabel, explainNoTrade, isBindingMarkdownPlan, extractModeratorThinking } from '../utils/analysisUtils';
 import { MASTER_TRADE_PLAN_MARKDOWN } from '../constants/schemas';
 
 describe('analysisUtils', () => {
@@ -641,6 +641,30 @@ Confidence: High. The sweep-reclaim pattern aligns across 15m and 1h.`;
     it('explains No trade as skip, not a Buy/Sell', () => {
       expect(explainNoTrade({ confidence: 'Avoid' })).toMatch(/no trade to take/i);
       expect(explainNoTrade({ direction: 'Neutral', confidence: 'Medium' })).toMatch(/no directional edge/i);
+    });
+  });
+
+  describe('extractModeratorThinking (bubble Thinking row for ensemble messages)', () => {
+    it('merges the moderator reasoning lanes regardless of key casing', () => {
+      const merged = extractModeratorThinking(
+        { moderator: 'Weighing the sweep.' },
+        { Moderator: 'Checked the funding.' },
+      );
+      expect(merged).toContain('Weighing the sweep.');
+      expect(merged).toContain('Checked the funding.');
+    });
+
+    it('dedupes identical lanes so the trace is not repeated', () => {
+      const merged = extractModeratorThinking(
+        { moderator: 'Same trace.' },
+        { Moderator: 'Same trace.' },
+      );
+      expect(merged).toBe('Same trace.');
+    });
+
+    it('returns empty when no moderator lane exists', () => {
+      expect(extractModeratorThinking({ 'analyst-a': 'not the moderator' }, {})).toBe('');
+      expect(extractModeratorThinking(undefined, undefined)).toBe('');
     });
   });
 });

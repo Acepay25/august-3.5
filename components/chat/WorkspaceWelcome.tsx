@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { LoggedTrade, TradeAnalysis, TradeOutcome } from '../../types';
 import { calculateOverallStats, calculateStreakData } from '../../utils/dashboardUtils';
-import MarkdownRenderer from '../shared/MarkdownRenderer';
+import MarkdownContent from '../shared/MarkdownContent';
 
 export interface WorkspaceWelcomeProps {
     username: string | null;
@@ -100,7 +100,7 @@ const WorkspaceWelcome: React.FC<WorkspaceWelcomeProps> = ({
                     <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500">Trading workspace</span>
                 </div>
                 <div className="prose-sm">
-                    <MarkdownRenderer content={markdown} />
+                    <MarkdownContent content={markdown} />
                 </div>
             </div>
 

@@ -20,6 +20,8 @@ interface DebateStageProps {
     caption?: string;
     onOpenActor?: (id: string) => void;
     suppressBubbles?: boolean;
+    /** Live debate in progress — shows a pulse dot on the caption. */
+    live?: boolean;
 }
 
 interface Flight {
@@ -88,7 +90,7 @@ const StageTicker: React.FC<StageTickerProps> = ({ text, fallback = '', max = 72
  * snippets, replies that fly sender → receiver. Click a seat to open its
  * chat modal.
  */
-export const DebateStage: React.FC<DebateStageProps> = ({ actors, caption, onOpenActor, suppressBubbles = false }) => {
+export const DebateStage: React.FC<DebateStageProps> = ({ actors, caption, onOpenActor, suppressBubbles = false, live = false }) => {
     const sceneRef = useRef<HTMLDivElement>(null);
     const actorRefs = useRef<Map<string, HTMLElement>>(new Map());
     const flownRef = useRef<Set<string>>(new Set());
@@ -246,7 +248,10 @@ export const DebateStage: React.FC<DebateStageProps> = ({ actors, caption, onOpe
                 )}
             </div>
             {caption ? (
-                <p className="debate-stage-caption" aria-live="polite">{caption}</p>
+                <p className="debate-stage-caption" aria-live="polite">
+                    {live && <span className="debate-stage-caption-dot" aria-hidden="true" />}
+                    {caption}
+                </p>
             ) : null}
         </div>
     );

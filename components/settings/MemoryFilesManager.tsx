@@ -4,7 +4,7 @@ import { ProviderConfig } from '../../types/provider';
 import { useToastActions } from '../shared/Toast';
 import { useConfirmDialog } from '../shared/ConfirmDialog';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
-import MarkdownRenderer from '../shared/MarkdownRenderer';
+import MarkdownContent from '../shared/MarkdownContent';
 import { FileTextIcon, ChevronRightIcon, ChevronLeftIcon, FolderIcon } from '../shared/Icons';
 import { Sparkles, Loader2 } from 'lucide-react';
 import { runNotebookReview } from '../../services/learning/MemoryReviewService';
@@ -337,7 +337,7 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                             </div>
                         ) : suggestionsFile?.content.trim() ? (
                             <div className="flex-1 overflow-y-auto custom-scrollbar px-8 py-8 lg:px-10 lg:py-10">
-                                <MarkdownRenderer content={suggestionsFile.content} className="text-[15px] leading-8" />
+                                <MarkdownContent content={suggestionsFile.content} className="text-[15px] leading-8" />
                             </div>
                         ) : (
                             <p className="text-sm text-zinc-500 text-center py-16 px-8">
@@ -393,7 +393,7 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                     <div className="flex-1 min-h-[320px] rounded-xl border border-zinc-800 bg-zinc-900 overflow-hidden flex flex-col">
                         {isPreview ? (
                             <div className="flex-1 overflow-y-auto custom-scrollbar px-8 py-8 lg:px-10 lg:py-10">
-                                <MarkdownRenderer content={draft || '(empty file)'} className="text-[15px] leading-8" />
+                                <MarkdownContent content={draft || '(empty file)'} className="text-[15px] leading-8" />
                             </div>
                         ) : (
                             <textarea

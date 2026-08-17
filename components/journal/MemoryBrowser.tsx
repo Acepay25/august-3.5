@@ -10,7 +10,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { MemoryFile, MemoryFolder } from '../../types';
 import { initMemoryFiles, getMemoryFiles } from '../../services/learning/MemoryFilesService';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
-import MarkdownRenderer from '../shared/MarkdownRenderer';
+import MarkdownContent from '../shared/MarkdownContent';
 import {
     ChevronLeftIcon,
     ChevronRightIcon,
@@ -314,7 +314,7 @@ const MemoryBrowser: React.FC<MemoryBrowserProps> = ({
                     {/* Rendered content */}
                     {selectedFile.content ? (
                         <div className="p-4 bg-zinc-900 rounded-xl border border-white/5">
-                            <MarkdownRenderer content={selectedFile.content} />
+                            <MarkdownContent content={selectedFile.content} />
                         </div>
                     ) : (
                         <div className="text-xs text-zinc-600 italic text-center py-8">

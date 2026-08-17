@@ -325,11 +325,19 @@ export default defineConfig(() => {
           // subpaths) escaped the vendor chunk and got hoisted into index —
           // the exact shared-module problem the old comment described.
           manualChunks(id) {
-            if (id.includes('node_modules/react-dom') || id.includes('node_modules/react') || id.includes('node_modules/scheduler') || id.includes('node_modules/react-virtuoso')) {
+            // Package-precise match: a bare `node_modules/react` substring
+            // also catches react-markdown / react-virtuoso / react-* cousins
+            // and drags them into the eager vendor chunk. Match the package
+            // dir boundary instead.
+            if (/node_modules\/(?:react|react-dom|scheduler)(?:\/|$)/.test(id) || id.includes('node_modules/react-virtuoso')) {
               return 'vendor-react';
             }
             if (id.includes('node_modules/openai')) return 'vendor-ai';
             if (id.includes('node_modules/technicalindicators')) return 'vendor-crypto';
+            // zod is imported eagerly by the schema boundaries, but it changes
+            // rarely — its own chunk keeps it out of the app-code hash so
+            // schema tweaks don't invalidate the cached parsing bytes.
+            if (id.includes('node_modules/zod')) return 'vendor-parsing';
             // NOTE: recharts + lightweight-charts intentionally have NO manual
             // chunk. A fixed 'vendor-charts' entry made rollup link the charts
             // chunk into vendor-react (shared-module hoisting), which put a

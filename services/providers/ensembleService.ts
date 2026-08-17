@@ -1,8 +1,8 @@
 
 import { TradeAnalysis, Message, TradeOutcome, AccuracySubMode, LoggedTrade, AnalystLensConfig, AnalystRole, AnalystConsensus } from '../../types';
 import { ProviderConfig } from '../../types/provider';
-import { ChatMessage } from './GenericProviderService';
-import { streamChatWithDeskTools, resolveDefaultSymbol } from '../analysis/DeskToolsService';
+import { ChatMessage, warmProviderConnection } from './GenericProviderService';
+import { streamChatWithDeskTools, resolveDefaultSymbol, clearDeskToolCache } from '../analysis/DeskToolsService';
 import { TASK_BUDGETS } from './taskBudgets';
 import { getPrompt } from '../infrastructure/PromptOverrideService';
 
@@ -60,6 +60,7 @@ import type { GateOutput } from '../validation/GateKeeperService';
 import GlobalLearningService from '../learning/GlobalLearningService';
 import { getBayesianCalibratedConfidence, ConfidenceLevel } from '../validation/ConfidenceCalibrationService';
 import { ConfidenceCalibration } from '../../types';
+import { HARNESS_TIMEFRAME_LABEL } from '../../constants/harnessDataContract';
 
 // =============================================================================
 // DUAL SCENARIO EVALUATION PROTOCOL
@@ -1494,7 +1495,7 @@ export const conductTwoWayDebate = async function* (
       Every analyst MUST answer: "Which of the Recent Insights is most similar to this setup, and what was the outcome?"
       ` : `
       During the debate, analysts MUST cover ALL of these analysis sections:
-      - **Section 1: Multi-Timeframe Structure** - 5m/15m/1h/4h bias alignment
+      - **Section 1: Multi-Timeframe Structure** - ${HARNESS_TIMEFRAME_LABEL} bias alignment
       - **Section 2: Price Action Type** - Continuation/Countertrend/Compression/Reversal
       - **Section 3: Family Classification** - Family A/B/C/Omega with evidence
       - **Section 4: Pattern Matching** - Compare to Recent Insights, find top 3 similar trades
@@ -1526,15 +1527,15 @@ export const conductTwoWayDebate = async function* (
       **TRADE SETUP GRADE SCALE → CONFIDENCE MAPPING (MANDATORY):**
       | Grade | Confidence % | Criteria |
       |-------|--------------|----------|
-      | **A** | 80-95% | R:R ≥ 2.0, All 7 sections covered, HTF+LTF aligned, Pattern Memory MATCH, Volume confirmed |
-      | **B** | 70-79% | R:R ≥ 1.5, 6+ sections covered, Minor HTF conflict only |
-      | **C** | 55-69% | R:R ≥ 1.2, Some sections weak, Unclear invalidation |
+      | **A** | 70%+ | R:R ≥ 2.0, the evidence supports a High confidence call, HTF+LTF aligned, Pattern Memory MATCH, Volume confirmed |
+      | **B** | 55-69% | R:R ≥ 1.5, the evidence supports Medium confidence, with no unresolved hard conflict |
+      | **C** | 40-54% | R:R ≥ 1.2, Some sections weak, Unclear invalidation |
       | **D** | 40-54% | R:R < 1.2, Missing sections, HTF conflict, Pattern Memory FAIL |
       | **F** | <40% / AVOID | No clear setup, High risk, Multiple red flags |
       
       **⚠️ ANTI-HALLUCINATION RULE (CRITICAL):**
       - You MUST NOT assign confidence ≥70% unless ALL of the following are TRUE:
-        1. All 7 sections (or Lens roles) were thoroughly discussed and verified
+        1. All required sections (or Lens roles) were thoroughly discussed and verified
         2. At least 3 timeframes align with the direction
         3. R:R ratio is mathematically calculated and ≥1.2
         4. Specific price levels for Entry/SL/TP are stated
@@ -1614,7 +1615,7 @@ export const conductTwoWayDebate = async function* (
               - "Does the wick bias and volume trend support or contradict your direction?"
           *   ${analyst1Name}: Chart validation (max 60 words) — must reference trend, regime, pattern
           *   ${analyst2Name}: Chart validation (max 60 words) — agree/disagree (respond concisely)
-          *   Moderator: "MTF Alignment Check: Are 4H-1H aligned? Are 15M-5M aligned? If divergent, reduce confidence."
+          *   Moderator: "MTF Alignment Check: Are 4H-1H aligned? Are 1H-15M aligned? If divergent, reduce confidence."
           *   **CRITICAL:** If chart data contradicts thesis, analysts MUST acknowledge and explain why they proceed.
       
       5.5 **ROUND 5.5: DUAL SCENARIO EVALUATION (MANDATORY - DO NOT SKIP)**
@@ -2022,7 +2023,7 @@ During the debate, analysts MUST cover ALL of these role-specific areas:
 Every analyst MUST answer: "Which of the Recent Insights is most similar to this setup, and what was the outcome?"
 ` : `
 During the debate, analysts MUST cover ALL of these analysis sections:
-- **Section 1: Multi-Timeframe Structure** - 5m/15m/1h/4h bias alignment
+- **Section 1: Multi-Timeframe Structure** - ${HARNESS_TIMEFRAME_LABEL} bias alignment
 - **Section 2: Price Action Type** - Continuation/Countertrend/Compression/Reversal
 - **Section 3: Family Classification** - Family A/B/C/Omega with evidence
 - **Section 4: Pattern Matching** - Compare to Recent Insights, find top 3 similar trades
@@ -2045,7 +2046,7 @@ Strictly enforce "Market Classification Families" (A, B, C, Omega).
 ${getPrompt('analysis.families', TRADING_FAMILIES_PROMPT)}
 
  **MANDATORY RISK/REWARD RULE:**
-Final trade MUST offer R:R of at least 1:1.2. If RR < 1.2, mark as **CONDITIONAL**.
+An actionable trade should offer R:R of at least 1:1.2. If RR < 1.2, mark it **CONDITIONAL** or **AVOID**; never force levels into a no-trade verdict.
 ---------------------------------------------------------
 
 ##  CONSOLIDATED 7-ROUND DEBATE PROTOCOL
@@ -2053,15 +2054,15 @@ Final trade MUST offer R:R of at least 1:1.2. If RR < 1.2, mark as **CONDITIONAL
 **TRADE SETUP GRADE SCALE → CONFIDENCE MAPPING (MANDATORY):**
 | Grade | Confidence % | Criteria |
 |-------|--------------|----------|
-| **A** | 80-95% | R:R ≥ 2.0, All 8 sections covered, HTF+LTF aligned, Pattern Memory MATCH, Volume confirmed |
-| **B** | 70-79% | R:R ≥ 1.5, 6+ sections covered, Minor HTF conflict only |
-| **C** | 55-69% | R:R ≥ 1.2, Some sections weak, Unclear invalidation |
+| **A** | 70%+ | R:R ≥ 2.0, the evidence supports a High confidence call, HTF+LTF aligned, Pattern Memory MATCH, Volume confirmed |
+| **B** | 55-69% | R:R ≥ 1.5, the evidence supports Medium confidence, with no unresolved hard conflict |
+| **C** | 40-54% | R:R ≥ 1.2, Some sections weak, Unclear invalidation |
 | **D** | 40-54% | R:R < 1.2, Missing sections, HTF conflict, Pattern Memory FAIL |
 | **F** | <40% / AVOID | No clear setup, High risk, Multiple red flags |
 
 **⚠️ ANTI-HALLUCINATION RULE (CRITICAL):**
 - You MUST NOT assign confidence ≥70% unless ALL of the following are TRUE:
-  1. All 8 sections (or Lens roles) were thoroughly discussed and verified
+  1. All required sections (or Lens roles) were thoroughly discussed and verified
   6. Numeric Chart Analysis was completed (trend maturity, regime, pattern validation)
   2. At least 3 timeframes align with the direction
   3. R:R ratio is mathematically calculated and ≥1.2
@@ -2179,7 +2180,7 @@ ${analyst1Name}, explain how your thesis aligns with OR addresses these Gate fin
 **${analyst1Name}:** Chart validation (max 50 words) — must reference trend, regime, pattern
 **${analyst2Name}:** Chart validation (max 50 words) — agree/disagree with chart interpretation
 **${analyst3Name}:** Chart validation (max 50 words) — synthesize chart data consensus
-**Moderator:** "MTF Alignment Check: 4H-1H aligned? 15M-5M aligned? If divergent, reduce confidence."
+**Moderator:** "MTF Alignment Check: 4H-1H aligned? 1H-15M aligned? If divergent, reduce confidence."
 **CRITICAL:** If chart data contradicts thesis, analysts MUST acknowledge and explain.
 
 ---
@@ -2244,11 +2245,11 @@ Immediately after </DEBATE_END>, write:
 
 **CRITICAL:** Your verdict must reflect the WEIGHT OF EVIDENCE from all 3 analysts, not just the majority.
 
-**Direction:** [Long / Short / Avoid]
-**Entry Zone:** [Specific Price Range]
-**Stop Loss:** [Specific Price]
-**Take Profit:** [Target 1, Target 2]
-**Estimated R:R:** [Value]
+**Direction:** [Long / Short / Neutral]
+**Entry Zone:** [Specific Price Range, or omit for Avoid]
+**Stop Loss:** [Specific Price, or omit for Avoid]
+**Take Profit:** [Target 1, Target 2, or omit for Avoid]
+**Estimated R:R:** [Value, or N/A for Avoid]
 **Confidence:** [High/Medium/Low/Avoid] (Probability: XX%)
 **Validity Window:** [Xh Ym] — [Brief reasoning why this duration]
 
@@ -2672,6 +2673,10 @@ export const conductRealDebate = async function* (
         throw new Error(`Real debate requires at least 2 analysts (${analysts.length} provided).`);
     }
 
+    // Fresh desk-tool cache per debate — the 30s TTL dedupes calls WITHIN a
+    // run, but a new run must never read the previous run's market snapshot.
+    clearDeskToolCache();
+
     // Per-stream timeouts multiply with retries; without a global budget a
     // stuck analyst can hold a round open for minutes. Deadline bounds the
     // whole debate so the user always gets a verdict.
@@ -2703,9 +2708,10 @@ export const conductRealDebate = async function* (
     // context) reads THIS, never the original `analysts` array — a replacement
     // provider must be re-callable and visible to the moderator.
     const debateRoster: RealDebateAnalyst[] = [...analysts];
-    // Analysts that dropped mid-round (stream failure) — their partial text is
-    // purged from the transcript and a visible notice is emitted.
-    const droppedThisRound = new Set<string>();
+    // Analysts whose stream failed mid-debate — their partial text is purged
+    // from the transcript and a visible notice is emitted. Late deltas from a
+    // dropped seat are discarded for the rest of the debate.
+    const droppedNames = new Set<string>();
     // Speaker labels the moderator may use when addressing analysts: provider
     // names plus lens role short names (Macro / Technical / Risk). Used to
     // split the clarification question block per analyst. Rebuilt when a
@@ -2756,6 +2762,25 @@ export const conductRealDebate = async function* (
     }
     const lastDone = resumeState?.lastCompletedRound ?? 0;
 
+    // Pre-debate divergence from the analysts' own results (the round-1
+    // openings are derived from exactly these). When the openings strongly
+    // agree there is nothing for the clarification cycle to resolve — skipping
+    // it saves a full moderator-questions + parallel-answers + judgment round.
+    // Echo-chamber risk is handled separately by the synthetic-dissent protocol.
+    const openingDivergence = analyzePreDebateDivergence(
+        analysts.map(a => a.result),
+        names,
+    );
+    // Clarification is worth its cost only when the openings actually disagree
+    // (direction/confidence/entry spread). Full agreement skips a whole
+    // moderator-questions + parallel-answers + judgment round. Echo-chamber
+    // risk (score < 15) is deliberately NOT a reason to run clarification —
+    // it is handled by the synthetic-dissent protocol injected into the
+    // moderator's verdict prompt instead.
+    const clarificationWorthRunning = openingDivergence.score >= 20
+        || openingDivergence.divergenceType === 'direction'
+        || openingDivergence.divergenceType === 'multiple';
+
     /** Inject a replacement analyst that joins the debate from the next phase.
      *  Its position is seeded at `dropRound` (its fresh analysis, streamed as
      *  a visible turn) so the next rebuttal round / clarification treats it as
@@ -2801,201 +2826,247 @@ export const conductRealDebate = async function* (
     }
     const skipRebuttals = pre.action === 'skip_to_verdict' || lastDone >= totalRounds;
     const rebuttalStart = Math.max(2, lastDone + 1);
-    for (let round = rebuttalStart; round <= totalRounds; round++) {
-        if (skipRebuttals) break;
-        if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-
-        // Global budget: skip remaining rebuttals and head to the verdict.
+    // Warm the moderator's connection while the analysts rebut — the verdict
+    // call then reuses the pooled socket and skips DNS/TCP/TLS handshake
+    // latency. Best-effort, no-op on Electron/localhost.
+    warmProviderConnection(moderatorConfig);
+    // ─── REBUTTAL PUMP (per-seat speculative scheduling) ───────────────────
+    // Each seat's round N+1 fires the moment that seat's round-N turn
+    // settles — a fast seat no longer idles waiting for the slowest seat
+    // before starting its next rebuttal. A rebuttal's input is the diff
+    // packet against whatever peer positions exist at launch time (peers
+    // still writing are simply absent from the packet), so the pump stays
+    // correct without a round barrier. Drops, replacements, steering, and
+    // budget checks keep their previous semantics.
+    const pendingDrops: { name: string; round: number }[] = [];
+    const seatRound = new Map<string, number>();
+    for (const name of activeAnalystNames) seatRound.set(name, Math.max(1, lastDone));
+    let budgetNoticeEmitted = false;
+    const budgetExhausted = (): boolean => {
+        if (budgetNoticeEmitted) return true;
         if (Date.now() > deadline) {
-            yield { speaker: 'System', round, text: 'Debate time budget reached — skipping remaining rebuttal rounds and proceeding to the verdict.' };
-            break;
+            budgetNoticeEmitted = true;
+            return true;
         }
         if (shouldSkipRemaining?.()) {
-            emitLog('budget', 'USD cost cap reached — skipping remaining rebuttals.', round);
-            yield { speaker: 'System', round, text: 'Debate cost cap reached — skipping remaining rebuttal rounds and proceeding to the verdict.' };
-            break;
+            emitLog('budget', 'USD cost cap reached — skipping remaining rebuttals.');
+            budgetNoticeEmitted = true;
+            return true;
         }
+        return false;
+    };
 
-        const steeringNote = takeSteering(round);
-        if (steeringNote) {
-            yield { speaker: 'System', round, text: `User steering: ${steeringNote}` };
-        }
-        emitLog('round', `Rebuttal round ${round}`, round);
+    const buildRebuttalTask = (analyst: RealDebateAnalyst, round: number, steeringNote: string) => {
+        const ownPosition = roundTexts[analyst.provider.name]?.[round - 1];
+        const otherOpenings = debateRoster
+            .filter(o => o.provider.name !== analyst.provider.name && roundTexts[o.provider.name]?.[round - 1])
+            .map(o => ({ name: o.provider.name, text: roundTexts[o.provider.name][round - 1] }));
+        const others = otherOpenings.length > 0
+            ? buildRebuttalDiffPacket(analyst.provider.name, ownPosition, otherOpenings)
+            : 'No other analyst has spoken yet.';
 
-        // Context is snapshotted BEFORE the round starts, so every analyst
-        // responds to the others' previous round — never to themselves.
-        const tasks = debateRoster
-            .filter(a => activeAnalystNames.has(a.provider.name) && roundTexts[a.provider.name]?.[round - 1] && !roundTexts[a.provider.name]?.[round])
-            .map((analyst) => {
-                const ownPosition = roundTexts[analyst.provider.name]?.[round - 1];
-                const otherOpenings = debateRoster
-                    .filter(o => o.provider.name !== analyst.provider.name && roundTexts[o.provider.name]?.[round - 1])
-                    .map(o => ({ name: o.provider.name, text: roundTexts[o.provider.name][round - 1] }));
-                const others = otherOpenings.length > 0
-                    ? buildRebuttalDiffPacket(analyst.provider.name, ownPosition, otherOpenings)
-                    : 'No other analyst has spoken yet.';
-
-                // The lens persona must survive into the rebuttal rounds —
-                // a generic "expert trading analyst" instruction let
-                // specialists drift to general analysis mid-debate.
-                const rolePrefix = lensConfig?.enabled
-                    ? getLensPromptForStyle(
-                        analyst.provider.thoughtsKey,
-                        lensConfig.assignments,
-                        lensConfig.tradingStyle === 'auto' ? 'swing' : lensConfig.tradingStyle
-                    )
-                    : '';
-                const otherAnalystNames = debateRoster
-                    .map(o => o.provider.name)
-                    .filter(n => n !== analyst.provider.name);
-                const systemPrompt = (rolePrefix ? `${rolePrefix}\n\n` : '')
-                    + fillPromptPlaceholders(getPrompt('debate.rebuttal', DEBATE_RESPONSE_PROMPT), {
-                        NAME: analyst.provider.name,
-                        ROUND: String(round),
-                        OTHERS: otherAnalystNames.join(', ') || 'none',
-                    });
-                // Snapshot the live price ONCE per round so every analyst in
-                // the parallel batch sees the SAME current price.
-                const livePriceBlock = buildLivePriceRefreshBlock(getLivePrice?.() ?? null, `before Round ${round}`);
-                const snapshotRows = debateRoster
-                    .filter(o => roundTexts[o.provider.name]?.[round - 1])
-                    .map(o => extractDebateLevels(o.provider.name, roundTexts[o.provider.name][round - 1]));
-                const levelsSnap = formatDebateLevelsTable(snapshotRows);
-                const userContent =
-                    `${buildFloorOrientation({
-                        selfName: analyst.provider.name,
-                        otherAnalysts: otherAnalystNames,
-                        turn: 'rebuttal',
-                        round,
-                    })}\n\n` +
-                    `**TRADER REQUEST (Round 1 context only — already answered):**\n${truncateTextToTokens(userPrompt, 120)}\n\n` +
-                    (levelsSnap ? `**LEVELS SNAPSHOT:**\n${levelsSnap}\n\n` : '') +
-                    `${others}\n\n` +
-                    `Respond now with your rebuttal for Round ${round}.` +
-                    (steeringNote ? `\n\n**USER STEERING (queued mid-debate — follow this):**\n${steeringNote}` : '') +
-                    livePriceBlock;
-
-                const messages: ChatMessage[] = [
-                    { role: 'system', content: systemPrompt },
-                    { role: 'user', content: userContent },
-                ];
-
-                return {
-                    name: analyst.provider.name,
-                    thoughtsKey: analyst.provider.thoughtsKey,
-                    run: async (emit: (delta: string) => void) => {
-                        // Bounded retry: a transient 429/network blip before
-                        // any output must not permanently drop the analyst
-                        // (the drop path asks the user to pick a replacement).
-                    await streamWithTransientRetry(
-                        () => streamChatWithDeskTools(analyst.provider.config, messages, {
-                            temperature: 0.35,
-                            signal,
-                            maxTokens: TASK_BUDGETS.rebuttal,
-                            onReasoning: (reasoning: string) => onAnalystReasoning?.(analyst.provider.name, reasoning, round),
-                            defaultSymbol: resolveDefaultSymbol(userPrompt),
-                            afterToolsNudge: 'Tool results are above. Write your rebuttal Floor turn now. No JSON, no tool tags.',
-                        }),
-                        emit,
-                        `${analyst.provider.name} Round ${round} rebuttal`,
-                    );
-                    },
-                };
+        // The lens persona must survive into the rebuttal rounds —
+        // a generic "expert trading analyst" instruction let
+        // specialists drift to general analysis mid-debate.
+        const rolePrefix = lensConfig?.enabled
+            ? getLensPromptForStyle(
+                analyst.provider.thoughtsKey,
+                lensConfig.assignments,
+                lensConfig.tradingStyle === 'auto' ? 'swing' : lensConfig.tradingStyle
+            )
+            : '';
+        const otherAnalystNames = debateRoster
+            .map(o => o.provider.name)
+            .filter(n => n !== analyst.provider.name);
+        const systemPrompt = (rolePrefix ? `${rolePrefix}\n\n` : '')
+            + fillPromptPlaceholders(getPrompt('debate.rebuttal', DEBATE_RESPONSE_PROMPT), {
+                NAME: analyst.provider.name,
+                ROUND: String(round),
+                OTHERS: otherAnalystNames.join(', ') || 'none',
             });
+        // Snapshot the live price at launch so the rebuttal sees the current
+        // market (each seat launches at its own settle time).
+        const livePriceBlock = buildLivePriceRefreshBlock(getLivePrice?.() ?? null, `before Round ${round}`);
+        const snapshotRows = debateRoster
+            .filter(o => roundTexts[o.provider.name]?.[round - 1])
+            .map(o => extractDebateLevels(o.provider.name, roundTexts[o.provider.name][round - 1]));
+        const levelsSnap = formatDebateLevelsTable(snapshotRows);
+        const userContent =
+            `${buildFloorOrientation({
+                selfName: analyst.provider.name,
+                otherAnalysts: otherAnalystNames,
+                turn: 'rebuttal',
+                round,
+            })}\n\n` +
+            `**TRADER REQUEST (Round 1 context only — already answered):**\n${truncateTextToTokens(userPrompt, 120)}\n\n` +
+            (levelsSnap ? `**LEVELS SNAPSHOT:**\n${levelsSnap}\n\n` : '') +
+            `${others}\n\n` +
+            `Respond now with your rebuttal for Round ${round}.` +
+            (steeringNote ? `\n\n**USER STEERING (queued mid-debate — follow this):**\n${steeringNote}` : '') +
+            livePriceBlock;
 
-        if (tasks.length === 0) break; // nobody left in the debate
+        const messages: ChatMessage[] = [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userContent },
+        ];
 
-        // Stream every rebuttal of this round concurrently, coalescing the
-        // deltas through a small queue so the generator can yield as fast as
-        // each provider responds (rounds stay parallel; rounds are sequential).
-        const queue: { name: string; delta: string; kind?: 'text' | 'reasoning' }[] = [];
-        let notify: (() => void) | null = null;
-        let finished = 0;
-        const total = tasks.length;
-
-        const push = (name: string, delta: string) => {
-            queue.push({ name, delta });
-            if (notify) { const n = notify; notify = null; n(); }
+        return {
+            name: analyst.provider.name,
+            round,
+            run: async (emit: (delta: string) => void) => {
+                // Bounded retry: a transient 429/network blip before
+                // any output must not permanently drop the analyst
+                // (the drop path asks the user to pick a replacement).
+                await streamWithTransientRetry(
+                    () => streamChatWithDeskTools(analyst.provider.config, messages, {
+                        temperature: 0.35,
+                        signal,
+                        maxTokens: TASK_BUDGETS.rebuttal,
+                        onReasoning: (reasoning: string) => onAnalystReasoning?.(analyst.provider.name, reasoning, round),
+                        defaultSymbol: resolveDefaultSymbol(userPrompt),
+                        afterToolsNudge: 'Tool results are above. Write your rebuttal Floor turn now. No JSON, no tool tags.',
+                    }),
+                    emit,
+                    `${analyst.provider.name} Round ${round} rebuttal`,
+                );
+            },
         };
+    };
 
-        // Mark every active speaker of this round as streaming BEFORE the
-        // tasks launch — a provider that finishes in 50ms never appears as
-        // active otherwise.
-        for (const task of tasks) onSpeakerStatus?.(task.name, round, true);
+    type PumpItem =
+        | { kind: 'delta'; name: string; round: number; text: string }
+        | { kind: 'done'; name: string; round: number }
+        | { kind: 'drop'; name: string; round: number };
+    const pumpQueue: PumpItem[] = [];
+    let pumpNotify: (() => void) | null = null;
+    const pumpPush = (item: PumpItem): void => {
+        pumpQueue.push(item);
+        if (pumpNotify) { const n = pumpNotify; pumpNotify = null; n(); }
+    };
+    const inflight = new Set<string>();
 
-        for (const task of tasks) {
-            task.run(delta => push(task.name, delta))
-                .catch((e: any) => {
-                    const isAbort = e?.name === 'AbortError' || e?.code === 'ABORT_ERR' || e?.name === 'TimeoutError';
-                    if (!isAbort) {
-                        console.warn(`[RealDebate] ${task.name} failed Round ${round}:`, e?.message || e);
-                        // Analyst drops out of the debate — remaining rounds continue.
-                        activeAnalystNames.delete(task.name);
-                        // Purge any partial text already accumulated this round so
-                        // the clarification/verdict transcripts never treat a
-                        // failed turn as a complete position.
-                        if (roundTexts[task.name]) delete roundTexts[task.name][round];
-                        droppedThisRound.add(task.name);
-                    }
-                })
-                .finally(() => {
-                    finished++;
-                    push('__done__', '');
-                });
+    const launchSeat = (analyst: RealDebateAnalyst, round: number): void => {
+        const steeringNote = takeSteering(round);
+        if (steeringNote) pumpPush({ kind: 'delta', name: 'System', round, text: `User steering: ${steeringNote}` });
+        emitLog('round', `Rebuttal round ${round}`, round, analyst.provider.name);
+        inflight.add(analyst.provider.name);
+        onSpeakerStatus?.(analyst.provider.name, round, true);
+        const task = buildRebuttalTask(analyst, round, steeringNote);
+        task.run(delta => pumpPush({ kind: 'delta', name: analyst.provider.name, round, text: delta }))
+            .catch((e: any) => {
+                const isAbort = e?.name === 'AbortError' || e?.code === 'ABORT_ERR' || e?.name === 'TimeoutError';
+                if (!isAbort) {
+                    console.warn(`[RealDebate] ${analyst.provider.name} failed Round ${round}:`, e?.message || e);
+                    // Analyst drops out of the debate — remaining rounds continue.
+                    activeAnalystNames.delete(analyst.provider.name);
+                    seatRound.delete(analyst.provider.name);
+                    // Purge any partial text already accumulated this round so
+                    // the clarification/verdict transcripts never treat a
+                    // failed turn as a complete position.
+                    if (roundTexts[analyst.provider.name]) delete roundTexts[analyst.provider.name][round];
+                    droppedNames.add(analyst.provider.name);
+                    pumpPush({ kind: 'drop', name: analyst.provider.name, round });
+                }
+            })
+            .finally(() => {
+                inflight.delete(analyst.provider.name);
+                onSpeakerStatus?.(analyst.provider.name, round, false);
+                pumpPush({ kind: 'done', name: analyst.provider.name, round });
+            });
+    };
+
+    const scheduleReadySeats = (): void => {
+        for (const analyst of debateRoster) {
+            const name = analyst.provider.name;
+            if (!activeAnalystNames.has(name) || droppedNames.has(name) || inflight.has(name)) continue;
+            const current = seatRound.get(name) ?? 0;
+            const next = current + 1;
+            if (next < rebuttalStart || next > totalRounds) continue;
+            if (!roundTexts[name]?.[next - 1] || roundTexts[name]?.[next]) continue;
+            if (budgetExhausted()) continue;
+            seatRound.set(name, next);
+            launchSeat(analyst, next);
         }
+    };
 
-        while (finished < total || queue.length > 0) {
-            if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-            if (queue.length === 0) {
-                await new Promise<void>(resolve => { notify = resolve; });
-                continue;
-            }
-            const item = queue.shift()!;
-            if (item.name === '__done__') continue;
-            // Deltas arriving after the drop are discarded (partial text was
-            // already purged in the catch) — still yielded nothing further.
-            if (droppedThisRound.has(item.name)) continue;
-            roundTexts[item.name][round] = (roundTexts[item.name][round] || '') + item.delta;
-            yield { speaker: item.name, round, text: item.delta };
-        }
-        for (const task of tasks) onSpeakerStatus?.(task.name, round, false);
-
-        // Visible drop-out notice — the consumer renders 'System' turns as
-        // notices in the debate chat instead of a silent console.warn.
-        for (const name of droppedThisRound) {
+    // Drop notices + the bounded replacement wait run between pump drains so
+    // the debate visibly suspends while the user picks a replacement.
+    const drainDrops = async function* (): AsyncGenerator<RealDebateTurnEvent> {
+        while (pendingDrops.length > 0) {
+            const { name, round } = pendingDrops.shift()!;
             yield { speaker: 'System', round, text: `${name} dropped out during Round ${round} (provider stream failed) — the debate continues without them.` };
             emitLog('drop', `${name} dropped`, round, name);
-        }
-        // Mid-debate replacement: the debate suspends (bounded by
-        // replacementTimeoutMs) while the consumer asks the user for a fresh
-        // analyst to step in for each dropped speaker. Injected replacements
-        // join the remaining rebuttal rounds (and any clarifications).
-        if (onReplacementRequested && droppedThisRound.size > 0) {
-            for (const droppedName of droppedThisRound) {
-                if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-                const waitResult = await awaitReplacementWithTimeout(
-                    onReplacementRequested(droppedName, round),
-                    signal,
-                    replacementTimeoutMs ?? DEBATE_REPLACEMENT_WAIT_MS,
-                );
-                if (waitResult.status === 'timedOut') {
-                    // Consumer's offer is still pending — emit the marker so
-                    // it abandons the wait; a late click must never inject a
-                    // phantom analyst into a debate that already moved on.
-                    yield { speaker: 'System', round, text: `<REPLACEMENT_TIMEOUT> No replacement selected for ${droppedName} within the wait window — the debate continues without them.` };
-                    continue;
-                }
-                const replacement = waitResult.value;
-                if (replacement && !activeAnalystNames.has(replacement.provider.name)) {
-                    injectReplacement(replacement, round);
-                    yield { speaker: 'System', round, text: `${droppedName} was replaced by ${replacement.provider.name} — ${replacement.provider.name} joins the debate from Round ${round + 1}.` };
-                    const { opening, thinking } = openingFromResult(replacement.result);
-                    if (thinking) onAnalystReasoning?.(replacement.provider.name, thinking, round);
-                    if (opening) yield { speaker: replacement.provider.name, round, text: opening };
-                }
+            if (!onReplacementRequested) continue;
+            if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+            const waitResult = await awaitReplacementWithTimeout(
+                onReplacementRequested(name, round),
+                signal,
+                replacementTimeoutMs ?? DEBATE_REPLACEMENT_WAIT_MS,
+            );
+            if (waitResult.status === 'timedOut') {
+                // Consumer's offer is still pending — emit the marker so
+                // it abandons the wait; a late click must never inject a
+                // phantom analyst into a debate that already moved on.
+                yield { speaker: 'System', round, text: `<REPLACEMENT_TIMEOUT> No replacement selected for ${name} within the wait window — the debate continues without them.` };
+                continue;
+            }
+            const replacement = waitResult.value;
+            if (replacement && !activeAnalystNames.has(replacement.provider.name)) {
+                injectReplacement(replacement, round);
+                seatRound.set(replacement.provider.name, round);
+                yield { speaker: 'System', round, text: `${name} was replaced by ${replacement.provider.name} — ${replacement.provider.name} joins the debate from Round ${round + 1}.` };
+                const { opening, thinking } = openingFromResult(replacement.result);
+                if (thinking) onAnalystReasoning?.(replacement.provider.name, thinking, round);
+                if (opening) yield { speaker: replacement.provider.name, round, text: opening };
             }
         }
-        droppedThisRound.clear();
+    };
+
+    if (!skipRebuttals) {
+        scheduleReadySeats();
+        while (inflight.size > 0 || pumpQueue.length > 0 || pendingDrops.length > 0) {
+            if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+            if (pumpQueue.length === 0) {
+                if (pendingDrops.length > 0) {
+                    yield* drainDrops();
+                    scheduleReadySeats();
+                    continue;
+                }
+                if (inflight.size === 0) break;
+                await new Promise<void>(resolve => { pumpNotify = resolve; });
+                continue;
+            }
+            const item = pumpQueue.shift()!;
+            if (item.kind === 'drop') {
+                pendingDrops.push({ name: item.name, round: item.round });
+                continue;
+            }
+            if (item.kind === 'done') {
+                // A settled seat immediately schedules its next rebuttal —
+                // the pump never waits for the slowest seat.
+                scheduleReadySeats();
+                continue;
+            }
+            if (item.name === 'System') {
+                yield { speaker: 'System', round: item.round, text: item.text };
+                continue;
+            }
+            // Deltas arriving after the drop are discarded (partial text was
+            // already purged in the catch) — nothing further is yielded.
+            if (droppedNames.has(item.name)) continue;
+            roundTexts[item.name][item.round] = (roundTexts[item.name][item.round] || '') + item.text;
+            yield { speaker: item.name, round: item.round, text: item.text };
+        }
+        if (budgetNoticeEmitted) {
+            const noticeRound = Math.max(rebuttalStart, Math.min(totalRounds, Math.max(1, ...[...seatRound.values()])));
+            yield {
+                speaker: 'System',
+                round: noticeRound,
+                text: shouldSkipRemaining?.()
+                    ? 'Debate cost cap reached — skipping remaining rebuttal rounds and proceeding to the verdict.'
+                    : 'Debate time budget reached — skipping remaining rebuttal rounds and proceeding to the verdict.',
+            };
+        }
     }
 
     // --- CLARIFICATION LOOP ---
@@ -3013,8 +3084,12 @@ export const conductRealDebate = async function* (
     let lastRebuttalRound = skipRebuttals ? Math.max(1, lastDone) : totalRounds;
 
     const skipClarification = lastDone > totalRounds + 1;
+    if (!skipRebuttals && !skipClarification && !clarificationWorthRunning) {
+        emitLog('episode', `Openings aligned (divergence ${openingDivergence.score}) — skipping clarification.`, lastRebuttalRound);
+        yield { speaker: 'System', round: lastRebuttalRound, text: `Openings aligned (divergence score ${openingDivergence.score}) — skipping clarification and proceeding to the verdict.` };
+    }
     for (let cycle = 1; cycle <= MAX_CLARIFICATION_CYCLES; cycle++) {
-        if (skipRebuttals || skipClarification) break;
+        if (skipRebuttals || skipClarification || !clarificationWorthRunning) break;
         if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
         // Global budget: skip clarification and proceed to the verdict.
@@ -3157,6 +3232,7 @@ export const conductRealDebate = async function* (
             answerQueue.push({ name, delta });
             if (answerNotify) { const n = answerNotify; answerNotify = null; n(); }
         };
+        const droppedThisCycle = new Set<string>();
         for (const task of answerTasks) {
             task.run(delta => answerPush(task.name, delta))
                 .catch((e: any) => {
@@ -3166,7 +3242,8 @@ export const conductRealDebate = async function* (
                         // Drop-out semantics mirror the rebuttal rounds.
                         activeAnalystNames.delete(task.name);
                         if (roundTexts[task.name]) delete roundTexts[task.name][answerRound];
-                        droppedThisRound.add(task.name);
+                        droppedNames.add(task.name);
+                        droppedThisCycle.add(task.name);
                     }
                 })
                 .finally(() => {
@@ -3182,21 +3259,21 @@ export const conductRealDebate = async function* (
             }
             const item = answerQueue.shift()!;
             if (item.name === '__done__') continue;
-            if (droppedThisRound.has(item.name)) continue;
+            if (droppedThisCycle.has(item.name)) continue;
             roundTexts[item.name][answerRound] = (roundTexts[item.name][answerRound] || '') + item.delta;
             yield { speaker: item.name, round: answerRound, text: item.delta };
         }
         for (const task of answerTasks) {
             onSpeakerStatus?.(task.name, answerRound, false);
         }
-        for (const name of droppedThisRound) {
+        for (const name of droppedThisCycle) {
             yield { speaker: 'System', round: answerRound, text: `${name} dropped out while answering the clarification question (provider stream failed).` };
         }
         // Same replacement hook as the rebuttal rounds: an analyst that dies
         // during clarification can be swapped for a fresh one that participates
         // in any remaining clarification cycles and the verdict.
-        if (onReplacementRequested && droppedThisRound.size > 0) {
-            for (const droppedName of droppedThisRound) {
+        if (onReplacementRequested && droppedThisCycle.size > 0) {
+            for (const droppedName of droppedThisCycle) {
                 if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
                 const waitResult = await awaitReplacementWithTimeout(
                     onReplacementRequested(droppedName, answerRound),
@@ -3217,7 +3294,6 @@ export const conductRealDebate = async function* (
                 }
             }
         }
-        droppedThisRound.clear();
 
         // -- Cap: on cycle 3 there is no judgment — proceed to verdict --
         if (cycle === MAX_CLARIFICATION_CYCLES) {

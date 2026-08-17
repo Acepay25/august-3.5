@@ -64,3 +64,6 @@ coverage/
 
 # Regenerable hybrid-injection diagnostic dump
 hybrid-injection-dump.txt
+
+# Agent tool caches
+.eve/

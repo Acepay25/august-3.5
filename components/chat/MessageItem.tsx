@@ -3,16 +3,19 @@ import React from 'react';
 import { Message, MessageRole, TradeOutcome, SavedAnalysis, Conversation, ConfidenceCalibration, AnalystLensConfig, TradeAnalysis } from '../../types';
 import { ChevronDownIcon, LinkIcon, CheckIcon } from '../shared/Icons';
 import MarkdownContent from '../shared/MarkdownContent';
+import StreamingMarkdown from '../shared/StreamingMarkdown';
 import ReasoningRow from '../shared/ReasoningRow';
 import LiveMarketDataView from '../market/LiveMarketDataView';
 import EnsembleProgressChat from '../analysis/EnsembleProgressChat';
 import DebateSummary from '../analysis/DebateSummary';
 import TradingSignalCard from '../analysis/TradingSignalCard';
 import DebateRunLog from '../analysis/DebateRunLog';
+import AnalysisTracePanel from '../analysis/AnalysisTracePanel';
 import AnalysisDetails from './AnalysisDetails';
 import SetupLifecycleCard from '../analysis/SetupLifecycleCard';
 import TodayReassessmentPanel from './TodayReassessmentPanel';
-import { buildSupplementMarkdown } from '../../utils/analysisUtils';
+import { buildSupplementMarkdown, extractFinalVerdictText, extractModeratorThinking } from '../../utils/analysisUtils';
+import { extractAndStripThinkBlocks } from '../../utils/thinkingSplit';
 import { debateFloorProgress } from '../../utils/debateFloor';
 import { formatModelDisplayName } from '../../utils/providerUtils';
 import { AutopilotResolution } from '../../services/ui/OutcomeAutopilotService';
@@ -171,9 +174,18 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
     // Inline edit of a sent user message (history correction).
     const [editingMessageId, setEditingMessageId] = React.useState<string | null>(null);
     const [editDraft, setEditDraft] = React.useState('');
+    // Track whether this bubble streamed live — once text has been revealed
+    // incrementally, the settle must not replay the SmoothText animation.
+    const wasStreamingRef = React.useRef(false);
+    if (message.isStreaming) wasStreamingRef.current = true;
+    // Peel any think-tag scaffolding out of the stored text at render time so
+    // it never shows in the bubble; the peeled CoT joins the Thinking row.
+    const peeled = extractAndStripThinkBlocks(message.text);
+    const leakedThinking = peeled.leaked;
     const thinkingEntries = Object.entries({
         ...(message.thoughtProcesses ?? {}),
         ...(message.reasoningProcesses ?? {}),
+        ...(leakedThinking ? { __leaked: leakedThinking } : {}),
     }).filter(([, content]) => Boolean(content));
     // Ensemble reasoning is presented in the analyst progress/output card.
     // Do not duplicate it in the generic chat-level Thinking disclosure.
@@ -186,12 +198,23 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
     const floorProgress = debateFloorProgress(message);
     const showFloor = Boolean(floorProgress);
 
+    // Ensemble messages route their reasoning through the Floor surface, but the
+    // moderator's chain-of-thought and the final verdict prose should still be
+    // visible in the chat area — not only inside the seat modal.
+    const moderatorThinking = extractModeratorThinking(message.reasoningProcesses, message.thoughtProcesses);
+    const verdictProse = React.useMemo(
+        () => (message.analysis || !message.isDebating
+            ? extractFinalVerdictText(debateTurns, message.analysis?.strategy)
+            : ''),
+        [debateTurns, message.analysis, message.isDebating],
+    );
+
     // Extract embedded Live Market JSON if present
     const liveMarketMatch = message.text.match(/\*\*LIVE MARKET DATA\*\*\s*```json\s*([\s\S]*?)\s*```/);
     const liveMarketJson = liveMarketMatch ? liveMarketMatch[1] : null;
 
     // Clean text to hide JSON blocks from view
-    let displayContent = message.text;
+    let displayContent = peeled.visible;
 
     // Hide Live Market Data JSON block if component is rendering it
     if (liveMarketJson) {
@@ -313,6 +336,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     <ReasoningRow
                                         thinking={thinkingEntries.map(([, content]) => content).join('\n\n')}
                                         label={thinkingEntries.length > 1 ? `Thinking · ${thinkingEntries.length} traces` : 'Thinking'}
+                                        running={!!message.isStreaming}
                                     />
                                 </div>
                             )}
@@ -330,6 +354,55 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     reasoningProcesses={message.reasoningProcesses}
                                     runStats={message.runStats}
                                 />
+                            )}
+
+                            {/* Ensemble reasoning in the bubble: the moderator's
+                                chain-of-thought streams in a Thinking row, and the
+                                final verdict prose renders in the chat area once the
+                                debate settles. Analyst thinking stays in the Floor's
+                                seat modals to avoid duplication. */}
+                            {isEnsembleMessage && !message.isPostMortem && moderatorThinking && (
+                                <div className="mt-3 mb-4">
+                                    <ReasoningRow
+                                        thinking={moderatorThinking}
+                                        label="Moderator thinking"
+                                        running={!!message.isDebating && !message.analysis}
+                                    />
+                                </div>
+                            )}
+                            {isEnsembleMessage && !message.isPostMortem && verdictProse && !message.isDebating && (
+                                <div className="mb-4">
+                                    <div className="mb-2 flex items-center justify-between gap-2">
+                                        <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
+                                            Final output
+                                        </div>
+                                    </div>
+                                    <div className="prose prose-invert max-w-none leading-[1.65] overflow-x-auto min-w-0 text-zinc-200" style={{ fontSize: '15px' }}>
+                                        <MarkdownContent content={verdictProse} className="text-zinc-200" />
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Progressive verdict: while the moderator is still
+                                writing, a complete plan already parsed from the
+                                stream fills the signal card live. No action
+                                buttons — the final verdict replaces this card. */}
+                            {isEnsembleMessage && !message.analysis && message.isDebating && message.provisionalAnalysis && (
+                                <div className="mb-4">
+                                    <div className="mb-2 flex items-center gap-2">
+                                        <span className="streaming-dots" aria-hidden="true"><span /><span /><span /></span>
+                                        <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
+                                            Verdict drafting
+                                        </div>
+                                    </div>
+                                    <div className="ui-panel">
+                                        <TradingSignalCard
+                                            analysis={message.provisionalAnalysis}
+                                            isLatest={false}
+                                            bare
+                                        />
+                                    </div>
+                                </div>
                             )}
 
                             {liveMarketJson && (
@@ -382,7 +455,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 </div>
                             )}
 
-                            {message.role === MessageRole.AI && !message.analysis && displayContent.trim() && !message.isDebating && !message.ensembleProgress && (
+                            {message.role === MessageRole.AI && !message.analysis && displayContent.trim() && !message.isDebating && !message.ensembleProgress && !isEnsembleMessage && (
                                 <div className="mb-2 flex items-center justify-between gap-2">
                                     <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
                                         Final output
@@ -428,12 +501,14 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     supplementMarkdown={supplementMarkdown}
                                     ensembleNote={ensembleNote}
                                     calibration={confidenceCalibration}
+                                    modelsUsed={message.modelsUsed}
                                     priorAnalysis={context.priorAnalysisById?.[message.id]}
                                     promptLane={message.runStats?.promptLane}
                                     onFollowUp={context.onFollowUpTicket ? (text) => context.onFollowUpTicket!(message.id, text) : undefined}
                                     leverage={leverage}
                                     bare
                                 />
+                                <AnalysisTracePanel message={message} />
                                 </div>
                                 <SetupLifecycleCard
                                     analysis={message.analysis}
@@ -470,7 +545,17 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 </div>
                             ) : (message.isDebating || message.ensembleProgress) ? null : (
                                 <div className="prose prose-invert max-w-none whitespace-pre-wrap leading-[1.65] overflow-x-auto min-w-0 text-zinc-200" style={{ fontSize: '15px' }}>
-                                    <SmoothText text={displayContent} animate={message.role === MessageRole.AI && context.latestMessageId === message.id && !message.analysis} />
+                                    {message.isStreaming ? (
+                                        displayContent.trim() ? (
+                                            <StreamingMarkdown text={displayContent} live className="text-zinc-200" />
+                                        ) : (
+                                            <span className="streaming-dots" aria-label="Generating">
+                                                <span /><span /><span />
+                                            </span>
+                                        )
+                                    ) : (
+                                        <SmoothText text={displayContent} animate={message.role === MessageRole.AI && context.latestMessageId === message.id && !message.analysis && !wasStreamingRef.current} />
+                                    )}
                                 </div>
                             )}
 

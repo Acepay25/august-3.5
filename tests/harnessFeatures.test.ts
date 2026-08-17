@@ -21,8 +21,23 @@ import { parseIfThenClauses } from '../utils/ifThenSkill';
 import { applyHybridChartDrift } from '../utils/hybridChartDrift';
 import { parseCraftedSkill } from '../schemas/learning';
 import { formatCraftedSkillBody } from '../services/learning/SkillCraftService';
+import { parseStructuredAutoplayTranscript } from '../utils/debateTranscript';
+import { listSkillDrafts, queueSkillDraft } from '../utils/skillDrafts';
+import { buildAnalysisTrace } from '../utils/analysisTrace';
 
 describe('harness envelopes', () => {
+    it('parses complete structured autoplay turns without guessing speaker names', () => {
+        const turns = parseStructuredAutoplayTranscript(
+            '<TURN speaker="Model A" round="1">Long thesis.</TURN><TURN speaker="Moderator" round="2">Challenge.</TURN><TURN speaker="Model B">Response.</TURN>'
+        );
+        expect(turns).toEqual([
+            { speaker: 'Model A', round: 1, text: 'Long thesis.' },
+            { speaker: 'Moderator', round: 2, text: 'Challenge.' },
+            { speaker: 'Model B', round: undefined, text: 'Response.' },
+        ]);
+        expect(parseStructuredAutoplayTranscript('<TURN speaker="Model A">unfinished')).toEqual([]);
+    });
+
     it('maps lens roles to isolated kinds', () => {
         expect(envelopeKindForRole(AnalystRole.MACRO_VOLATILITY)).toBe('macro');
         expect(envelopeKindForRole(AnalystRole.TECHNICAL_ANALYST)).toBe('technical');
@@ -282,6 +297,73 @@ describe('run gantt', () => {
     });
 });
 
+describe('analysis trace', () => {
+    it('exposes the observable gate, transcript, adjustment, and verdict stages', () => {
+        const events = buildAnalysisTrace({
+            id: 'trace', role: MessageRole.AI, text: '', createdAt: '2026-01-01T00:00:00.000Z',
+            runStats: { startedAt: '2026-01-01T00:00:00.000Z', finishedAt: '2026-01-01T00:00:01.000Z', durationMs: 1000 },
+            debateTurns: [{ speaker: 'Moderator', round: 1, text: 'Review.' }],
+            analysis: {
+                direction: 'Neutral', confidence: 'Avoid', probability: 30,
+                originalConfidence: 'Low', validationWarnings: ['CALIBRATION ADJUSTMENT: Low → Avoid'],
+                gateResult: { passed: true, confidenceCap: 0.6, warnings: [], insights: [] },
+            } as any,
+        });
+        expect(events.map(event => event.label)).toEqual(expect.arrayContaining([
+            'Run started', 'Gate passed', 'Transcript parsed', 'Confidence adjusted', 'Decision rule', 'Verdict rendered',
+        ]));
+    });
+
+    it('renders per-analyst rows with error/complete/thinking tones', () => {
+        const events = buildAnalysisTrace({
+            id: 'trace', role: MessageRole.AI, text: '', createdAt: '',
+            ensembleProgress: {
+                analysts: [
+                    { key: 'a', displayName: 'Model A', status: 'error', error: 'provider refused' },
+                    { key: 'b', displayName: 'Model B', status: 'complete', finalOutput: 'call' },
+                    { key: 'c', displayName: 'Model C', status: 'analyzing', reasoning: 'weighing' },
+                ],
+                moderator: { status: 'waiting' },
+            },
+        } as any);
+        const rows = events.filter(event => event.id.includes('analyst-'));
+        expect(rows).toHaveLength(3);
+        expect(rows[0]?.label).toBe('Model A');
+        expect(rows[0]?.detail).toBe('provider refused');
+        expect(rows[0]?.tone).toBe('blocked');
+        expect(rows[1]?.detail).toBe('Public output received');
+        expect(rows[1]?.tone).toBe('good');
+        expect(rows[2]?.detail).toBe('Reasoning received');
+        expect(rows[2]?.tone).toBe('neutral');
+    });
+
+    it('renders debate run-log steps and flags gate blocks and confidence caps', () => {
+        const events = buildAnalysisTrace({
+            id: 'trace', role: MessageRole.AI, text: '', createdAt: '',
+            debateRunLog: [
+                { at: 't1', kind: 'pre_step', detail: 'rebuttals' },
+                { at: 't2', kind: 'round', speaker: 'Model A', detail: 'opening' },
+                { at: 't3', kind: 'gate', detail: 'confidence cap applied' },
+                { at: 't4', kind: 'gate', detail: 'veto: pattern memory' },
+            ],
+        } as any);
+        const log = events.filter(event => event.id.includes('log-'));
+        expect(log).toHaveLength(4);
+        expect(log[0]?.label).toBe('Pipeline step');
+        expect(log[1]?.label).toBe('round');
+        expect(log[1]?.detail).toContain('Model A');
+        expect(log[2]?.tone).toBe('blocked');
+        expect(log[3]?.tone).toBe('blocked');
+    });
+
+    it('falls back to a neutral no-trace row for legacy messages', () => {
+        const events = buildAnalysisTrace({ id: 'old', role: MessageRole.AI, text: '', createdAt: '' });
+        expect(events).toHaveLength(1);
+        expect(events[0]?.label).toBe('No trace data');
+        expect(events[0]?.tone).toBe('neutral');
+    });
+});
+
 describe('composer mentions', () => {
     it('parses @lanes and /skills then formats a steer line', () => {
         const intent = parseComposerIntent('@Macro /fade-wick BTC 4h');
@@ -315,6 +397,29 @@ describe('approval inbox', () => {
         expect(autoJournalPolicyFor('ETH')).toBe('always');
         setAutoJournalRule('eth', 'ask');
         expect(autoJournalPolicyFor('ETH')).toBe('ask');
+    });
+
+    it('keeps approval policies and skill drafts isolated by workspace', () => {
+        setAutoJournalRule('sol', 'always', 'alice');
+        expect(autoJournalPolicyFor('SOL', 'alice')).toBe('always');
+        expect(autoJournalPolicyFor('SOL', 'bob')).toBe('ask');
+        setAutoJournalRule('sol', 'ask', 'alice');
+
+        const crafted = {
+            name: 'isolated skill',
+            kind: 'avoid' as const,
+            when: 'the setup matches',
+            inputs: ['SOL'],
+            steps: ['wait'],
+            validate: 'confirmation',
+            output: 'avoid',
+            approval: 'human',
+            ifCondition: 'the setup matches',
+            thenAction: 'wait',
+        };
+        queueSkillDraft({ tradeId: 'trade-alice', crafted }, 'alice');
+        expect(listSkillDrafts('alice').some(d => d.tradeId === 'trade-alice')).toBe(true);
+        expect(listSkillDrafts('bob').some(d => d.tradeId === 'trade-alice')).toBe(false);
     });
 });
 

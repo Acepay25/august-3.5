@@ -10,6 +10,8 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { AIProvider, LevelProbabilities } from '../../types';
 import { getUnderperformerStatus, generateUnderperformerFeedback } from '../../services/learning/UnderperformerFeedbackService';
 import {
@@ -81,6 +83,8 @@ const AdvancedAnalyticsSidePanel: React.FC<AdvancedAnalyticsSidePanelProps> = ({
         setIsOpen(false);
         onClose?.();
     };
+    const dialogRef = useFocusTrap<HTMLDivElement>(isOpen);
+    useEscapeClose(isOpen, handleClose);
 
     const [underperformerData, setUnderperformerData] = useState<{
         provider: AIProvider;
@@ -119,8 +123,14 @@ const AdvancedAnalyticsSidePanel: React.FC<AdvancedAnalyticsSidePanelProps> = ({
         <>
             {/* Modern Side Panel */}
             <div
+                ref={dialogRef}
+                role="dialog"
+                aria-modal="true"
+                aria-label="Advanced analytics"
+                aria-hidden={!isOpen}
+                inert={!isOpen}
                 className={`status-surface fixed right-0 top-0 h-full w-80 sm:w-[340px] transform transition-all duration-500 ease-out z-30 ${isOpen ? 'translate-x-0' : 'translate-x-full'
-                    }`}
+                    } ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}
             >
                 {/* Glassmorphic Background */}
                 <div className="absolute inset-0 bg-zinc-900 border-l border-white/[0.08]" />

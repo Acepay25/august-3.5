@@ -63,7 +63,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
 
     useEffect(() => {
         loadData();
-        const interval = setInterval(loadData, 5000); // Poll for queue updates
+        const interval = setInterval(loadData, 30000); // Refresh background metrics without a 5s polling loop
         return () => clearInterval(interval);
     }, []);
 
