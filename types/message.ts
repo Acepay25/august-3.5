@@ -18,6 +18,12 @@ export interface DebateTurn {
   round?: number;
   /** When this turn started streaming (real debates only) — powers replay. */
   createdAt?: string;
+  /** Per-turn speed metrics (DeepSeek-style): time to first token and
+   *  output rate. Present on live-debate turns once measurable. */
+  metrics?: {
+    ttftMs?: number;
+    tokensPerSec?: number;
+  };
 }
 
 export interface Kline {
@@ -179,8 +185,21 @@ export interface Message {
    *  writing (progressive rendering). Replaced by the final `analysis` when
    *  the debate concludes — never persisted as the source of truth. */
   provisionalAnalysis?: TradeAnalysis;
+  /** Partial labeled plan fields seen so far in the moderator's stream —
+   *  skeleton-fills the verdict card before the plan is binding. */
+  provisionalPlanFields?: {
+    coin?: string;
+    direction?: string;
+    entry?: string;
+    stopLoss?: string;
+    takeProfits?: string[];
+    confidence?: string;
+  };
   /** Transient speaker -> round map for the live debate indicator. */
   activeDebateSpeakers?: Record<string, number>;
+  /** Transient live desk-tool chips: speaker -> latest tool line ("calling
+   *  order book…" / "buy wall $1.2M @ 94.8k"). Cleared when the debate ends. */
+  liveToolEvents?: Record<string, string>;
   /** Transient pre-debate analyst outputs and moderator waiting state. */
   ensembleProgress?: EnsembleProgress;
 
@@ -248,7 +267,7 @@ export interface DebateCheckpoint {
   laneDrafts?: Record<string, { round: number; text: string }>;
 }
 
-export type DebateRunEventKind = 'round' | 'episode' | 'gate' | 'steer' | 'drop' | 'pre_step' | 'verdict' | 'resume' | 'budget';
+export type DebateRunEventKind = 'round' | 'episode' | 'gate' | 'steer' | 'drop' | 'pre_step' | 'verdict' | 'resume' | 'budget' | 'tool';
 
 export interface DebateRunEvent {
   at: string;

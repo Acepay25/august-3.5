@@ -4,6 +4,7 @@ import ReasoningRow from '../shared/ReasoningRow';
 import StreamingMarkdown from '../shared/StreamingMarkdown';
 import { formatModelDisplayName, formatSeatLabel } from '../../utils/providerUtils';
 import { buildAnalystGantt, lastThoughtSnippet } from '../../utils/runGantt';
+import { computeFloorLean } from '../../utils/floorLean';
 import { splitThinkingFromOutput, looksLikePublicAnswer, looksLikeScratchpad, looksLikeTradeOutput } from '../../utils/thinkingSplit';
 import { DebateBotAvatar } from './DebateBotAvatar';
 import { DebateStage, DebateStageActor } from './DebateStage';
@@ -17,6 +18,8 @@ interface EnsembleProgressChatProps {
     onRetryAnalyst?: (analystKey: string) => void;
     debateTurns?: DebateTurn[];
     activeDebateSpeakers?: Record<string, number>;
+    /** Live desk-tool chips keyed by speaker (provider display name). */
+    liveToolEvents?: Record<string, string>;
     reasoningProcesses?: Record<string, string>;
     runStats?: RunStats;
 }
@@ -68,6 +71,8 @@ interface SeatBlock {
     live?: boolean;
     round?: number;
     thinking?: string;
+    /** Per-turn speed metrics (TTFT + output rate) once the turn settles. */
+    metrics?: { ttftMs?: number; tokensPerSec?: number };
 }
 
 interface SeatView {
@@ -131,6 +136,13 @@ const ReplyBlock: React.FC<{ block: SeatBlock; fallbackThinking?: string }> = ({
                 <p className="mb-1 text-[11px] text-zinc-500">Final output</p>
             )}
             <FadeStream text={text} live={block.live} className="text-sm leading-6 text-zinc-200" />
+            {!block.live && block.metrics && (block.metrics.ttftMs !== undefined || block.metrics.tokensPerSec !== undefined) && (
+                <p className="mt-1.5 text-[10px] tabular-nums text-zinc-600">
+                    {block.metrics.ttftMs !== undefined && `first token ${(block.metrics.ttftMs / 1000).toFixed(1)}s`}
+                    {block.metrics.ttftMs !== undefined && block.metrics.tokensPerSec !== undefined && ' · '}
+                    {block.metrics.tokensPerSec !== undefined && `${block.metrics.tokensPerSec} tok/s`}
+                </p>
+            )}
         </div>
     );
 };
@@ -238,6 +250,7 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
     onRetryAnalyst,
     debateTurns = [],
     activeDebateSpeakers = {},
+    liveToolEvents = {},
     reasoningProcesses = {},
     runStats,
 }) => {
@@ -248,6 +261,8 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
     const openingsDone = debateTurns.some(t => t.round === 1);
     const rebuttalStarted = debateTurns.some(t => (t.round ?? 0) >= 2);
     const verdictLive = modLive && rebuttalStarted && !anyAnalystLive;
+    // Pre-verdict floor lean — where the seats stand right now (live tally).
+    const floorLean = useMemo(() => computeFloorLean(debateTurns), [debateTurns]);
     const phase = verdictLive || progress.moderator.status === 'reviewing' && openingsDone
         ? (rebuttalStarted ? 'Verdict' : 'Openings')
         : rebuttalStarted
@@ -266,10 +281,10 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
             if (!split.output && !split.thinking) return [];
             const round = turn.round && turn.round > 0 ? turn.round : index + 1;
             if (!split.output) {
-                return [{ id: `mod-${index}`, replyTo: undefined, text: '', live, round, thinking: split.thinking }];
+                return [{ id: `mod-${index}`, replyTo: undefined, text: '', live, round, thinking: split.thinking, metrics: turn.metrics }];
             }
             if (parts.length === 0) {
-                return [{ id: `mod-${index}`, replyTo: undefined, text: split.output, live, round, thinking: split.thinking }];
+                return [{ id: `mod-${index}`, replyTo: undefined, text: split.output, live, round, thinking: split.thinking, metrics: turn.metrics }];
             }
             return parts.map((part, partIndex) => ({
                 id: `mod-${index}-${partIndex}`,
@@ -278,6 +293,7 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
                 live,
                 round,
                 thinking: partIndex === 0 ? split.thinking : undefined,
+                metrics: partIndex === 0 ? turn.metrics : undefined,
             }));
         });
         const streamed = (reasoningProcesses.moderator || reasoningProcesses.Moderator || '').trim();
@@ -327,7 +343,18 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
                     : liveAnalyst
                         ? `${formatSeatLabel(liveAnalyst.displayName)} is thinking`
                         : 'Waiting for the next turn';
-    const stageActors = useMemo((): DebateStageActor[] => [
+    const stageActors = useMemo((): DebateStageActor[] => {
+        // Live desk-tool chip for a seat — only while the seat is active, so
+        // a finished turn never shows a stale "calling order book…" line.
+        const toolChipFor = (names: string[], live: boolean): string | undefined => {
+            if (!live) return undefined;
+            for (const name of names) {
+                const line = liveToolEvents[name];
+                if (line) return line;
+            }
+            return undefined;
+        };
+        return [
         {
             id: 'moderator',
             name: 'Moderator',
@@ -342,6 +369,7 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
             replies: moderatorBlocks
                 .filter(block => block.replyTo && block.text.trim() && (!modLive || block.live))
                 .map(block => ({ id: block.id, target: block.replyTo || '', text: block.text })),
+            toolChip: toolChipFor(['Moderator'], modLive),
         },
         ...progress.analysts.map((analyst): DebateStageActor => {
             const answering = Boolean(activeDebateSpeakers[analyst.displayName] || activeDebateSpeakers[analyst.providerName]);
@@ -384,11 +412,14 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
                         text: replyText,
                     }]
                     : undefined,
+                toolChip: toolChipFor([analyst.displayName, analyst.providerName], live),
             };
         }),
-    ], [
+        ];
+    }, [
         activeDebateSpeakers,
         debateTurns,
+        liveToolEvents,
         modLive,
         modThinking,
         modSpeaking,
@@ -440,6 +471,7 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
                     thinking: split.thinking,
                     live: live && answering && index === speakerTurns.length - 1,
                     round: turn.round && turn.round > 0 ? turn.round : index + 1,
+                    metrics: turn.metrics,
                 };
             });
             const blocks: SeatBlock[] = [
@@ -530,6 +562,22 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
                         </span>
                     </React.Fragment>
                 ))}
+                {isLive && floorLean.lean && (
+                    <span className="floor-lean" title={`Floor lean: ${floorLean.long} long · ${floorLean.short} short${floorLean.neutral ? ` · ${floorLean.neutral} neutral` : ''}`}>
+                        <span className="floor-lean-label">lean</span>
+                        <span className="floor-lean-bar" aria-hidden="true">
+                            <span
+                                className="floor-lean-fill floor-lean-fill-long"
+                                style={{ width: `${(floorLean.long / Math.max(1, floorLean.declared)) * 100}%` }}
+                            />
+                            <span
+                                className="floor-lean-fill floor-lean-fill-short"
+                                style={{ width: `${(floorLean.short / Math.max(1, floorLean.declared)) * 100}%` }}
+                            />
+                        </span>
+                        <span className="floor-lean-value">{floorLean.lean}</span>
+                    </span>
+                )}
                 {isLive && (
                     <span className="ml-auto text-zinc-600">{progress.analysts.length} seats</span>
                 )}

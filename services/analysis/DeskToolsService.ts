@@ -102,6 +102,59 @@ export const budgetToolContent = (name: string, content: string): string => {
     return out;
 };
 
+/** Human-friendly tool labels for the live Floor chips. */
+const TOOL_LABELS: Record<string, string> = {
+    web_search: 'web search',
+    get_derivatives: 'derivatives',
+    get_order_book: 'order book',
+    get_liquidations: 'liquidations',
+    get_btc_context: 'BTC context',
+    get_session_context: 'session',
+    get_price_snapshot: 'price snapshot',
+};
+
+export const toolLabel = (name: string): string => TOOL_LABELS[name] ?? name.replace(/_/g, ' ');
+
+/** One-line digest of a tool result for the Floor chip's done state. */
+export const digestToolResult = (name: string, ok: boolean, content: string): string => {
+    if (!ok) return `${toolLabel(name)} failed`;
+    try {
+        const parsed = JSON.parse(content) as Record<string, unknown>;
+        if (name === 'get_order_book') {
+            const top = (arr: unknown): { price?: unknown; usdValue?: unknown } | null =>
+                Array.isArray(arr) && arr.length > 0
+                    ? [...arr].sort((a, b) => (Number((b as { usdValue?: unknown })?.usdValue) || 0) - (Number((a as { usdValue?: unknown })?.usdValue) || 0))[0] as { price?: unknown; usdValue?: unknown }
+                    : null;
+            const buy = top(parsed.buyWalls);
+            const sell = top(parsed.sellWalls);
+            const fmt = (w: { price?: unknown; usdValue?: unknown } | null): string =>
+                w ? `$${Math.round(Number(w.usdValue) / 1000)}k @ ${Number(w.price).toLocaleString()}` : '—';
+            return `buy wall ${fmt(buy)} · sell wall ${fmt(sell)}`;
+        }
+        if (name === 'get_liquidations') {
+            const events = Array.isArray(parsed.recentEvents) ? parsed.recentEvents : [];
+            const totalUsd = events.reduce((s, e) => s + (Number((e as { usdValue?: unknown })?.usdValue) || 0), 0);
+            return `${events.length} recent events · $${Math.round(totalUsd / 1000)}k`;
+        }
+        if (name === 'get_derivatives') {
+            const funding = parsed.fundingRate ?? parsed.funding;
+            const oi = parsed.openInterest ?? parsed.openInterestUsd;
+            const bits = [
+                funding != null ? `funding ${Number(funding).toFixed(4)}` : '',
+                oi != null ? `OI $${Math.round(Number(oi) / 1e6)}M` : '',
+            ].filter(Boolean);
+            return bits.length > 0 ? bits.join(' · ') : `${toolLabel(name)} ok`;
+        }
+        if (name === 'get_price_snapshot') {
+            const price = parsed.lastPrice ?? parsed.price ?? parsed.close;
+            return price != null ? `price ${Number(price).toLocaleString()}` : `${toolLabel(name)} ok`;
+        }
+    } catch {
+        // Not JSON — fall through to the generic line.
+    }
+    return `${toolLabel(name)} ok`;
+};
+
 const asString = (value: unknown, fallback = ''): string =>
     typeof value === 'string' && value.trim() ? value.trim() : fallback;
 
@@ -610,13 +663,13 @@ export async function runDeskToolLoop(params: {
 
         // Cap parallel tools per round.
         calls = calls.slice(0, 3);
-        onToolEvent?.(calls.map(c => `Calling ${c.name}…`).join(' · '));
+        onToolEvent?.(calls.map(c => `calling ${toolLabel(c.name)}…`).join(' · '));
         const results = await executeDeskTools(calls, {
             defaultSymbol,
             signal: options?.signal,
         });
         usedTools.push(...results.map(r => r.name));
-        onToolEvent?.(results.map(r => `${r.name}: ${r.ok ? 'ok' : 'failed'}`).join(' · '));
+        onToolEvent?.(results.map(r => digestToolResult(r.name, r.ok, r.content)).join(' · '));
 
         if (nativeTools && turn.assistantMessage?.tool_calls?.length) {
             messages.push(turn.assistantMessage);
@@ -647,6 +700,9 @@ export interface StreamWithDeskToolsOptions extends ChatRequestOptions {
     enabled?: boolean;
     /** Final-turn nudge after tools ran. */
     afterToolsNudge?: string;
+    /** Live tool-call visibility (Floor chips) — fires before and after each
+     *  tool round with a short human-readable line. */
+    onToolEvent?: (line: string) => void;
 }
 
 function withDeskToolsSystemPrompt(messages: ChatMessage[], nativeTools: boolean): ChatMessage[] {
@@ -689,6 +745,7 @@ export async function* streamChatWithDeskTools(
         defaultSymbol,
         afterToolsNudge,
         enabled: _enabled,
+        onToolEvent,
         ...chatOptions
     } = options || {};
 
@@ -701,7 +758,10 @@ export async function* streamChatWithDeskTools(
         options: chatOptions,
         defaultSymbol,
         nativeTools,
-        onToolEvent: (line) => options?.onReasoning?.(`\n[Desk tools] ${line}\n`),
+        onToolEvent: (line) => {
+            onToolEvent?.(line);
+            options?.onReasoning?.(`\n[Desk tools] ${line}\n`);
+        },
     });
 
     if (loop.usedTools.length === 0 && loop.finalText.trim()) {

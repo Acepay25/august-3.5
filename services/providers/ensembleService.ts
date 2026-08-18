@@ -26,7 +26,7 @@ import {
 import { DUAL_SCENARIO_JSON_SCHEMA, MASTER_TRADE_PLAN_MARKDOWN } from '../../constants/schemas';
 import { parseLiveMarketData } from '../../utils/liveMarketParser';
 import { truncateTextToTokens, parsePrice, parseMarkdownTradePlan } from '../../utils/analysisUtils';
-import { extractDebateLevels, formatDebateLevelsTable } from '../../utils/debateLevels';
+import { extractDebateLevels, formatDebateLevelsTable, summarizeFinalPositions } from '../../utils/debateLevels';
 import { stripLeakedScratchpad } from '../../utils/thinkingSplit';
 import { buildRebuttalDiffPacket } from '../../utils/debateDiff';
 import { compactDebateEpisode } from '../../utils/debateEpisodes';
@@ -283,6 +283,7 @@ const getModeratorAnalysisStream = async function* (
     signal?: AbortSignal,
     onReasoning?: (reasoning: string) => void,
     defaultSymbol?: string | null,
+    onToolEvent?: (line: string) => void,
 ): AsyncGenerator<string> {
     const effectiveConfig: ProviderConfig = { ...config, selectedModel: model || config.selectedModel };
     const messages: ChatMessage[] = [
@@ -301,6 +302,7 @@ const getModeratorAnalysisStream = async function* (
             maxTokens: 12288,
             signal,
             onReasoning,
+            onToolEvent,
             defaultSymbol: defaultSymbol ?? resolveDefaultSymbol(prompt),
             afterToolsNudge: 'Tool results are above. Continue the moderator turn now. If this is the final verdict, end with the labeled FINAL TRADE PLAN markdown. No JSON, no tool tags.',
         })) {
@@ -2439,6 +2441,9 @@ export interface RealDebateTurnEvent {
     text: string;
     /** Native CoT for THIS turn only (reasoning side-channel). */
     reasoning?: string;
+    /** When the underlying provider call was LAUNCHED (first delta carries
+     *  it) — lets the consumer compute real time-to-first-token. */
+    startedAt?: string;
 }
 
 /**
@@ -2667,6 +2672,11 @@ export const conductRealDebate = async function* (
     resumeState?: { lastCompletedRound: number; seedRoundTexts?: Record<string, string[]>; laneDrafts?: Record<string, { round: number; text: string }> },
     /** When true, skip remaining rebuttals (USD budget). */
     shouldSkipRemaining?: () => boolean,
+    /** Live desk-tool visibility — fires when a seat calls/finishes a tool so
+     *  the Floor can show chips instead of a silent bot. */
+    onToolEvent?: (speaker: string, round: number, line: string) => void,
+    /** Debate template (Risk-only pass): skip rebuttals, straight to verdict. */
+    forceSkipRebuttals?: boolean,
 ): AsyncGenerator<RealDebateTurnEvent, void, unknown> {
 
     if (analysts.length < 2) {
@@ -2824,7 +2834,7 @@ export const conductRealDebate = async function* (
         emitLog('pre_step', pre.inject.slice(0, 280), 2);
         yield { speaker: 'System', round: 2, text: pre.inject };
     }
-    const skipRebuttals = pre.action === 'skip_to_verdict' || lastDone >= totalRounds;
+    const skipRebuttals = pre.action === 'skip_to_verdict' || lastDone >= totalRounds || Boolean(forceSkipRebuttals);
     const rebuttalStart = Math.max(2, lastDone + 1);
     // Warm the moderator's connection while the analysts rebut — the verdict
     // call then reuses the pooled socket and skips DNS/TCP/TLS handshake
@@ -2923,6 +2933,10 @@ export const conductRealDebate = async function* (
                         signal,
                         maxTokens: TASK_BUDGETS.rebuttal,
                         onReasoning: (reasoning: string) => onAnalystReasoning?.(analyst.provider.name, reasoning, round),
+                        onToolEvent: (line: string) => {
+                            emitLog('tool', line, round, analyst.provider.name);
+                            onToolEvent?.(analyst.provider.name, round, line);
+                        },
                         defaultSymbol: resolveDefaultSymbol(userPrompt),
                         afterToolsNudge: 'Tool results are above. Write your rebuttal Floor turn now. No JSON, no tool tags.',
                     }),
@@ -2934,7 +2948,7 @@ export const conductRealDebate = async function* (
     };
 
     type PumpItem =
-        | { kind: 'delta'; name: string; round: number; text: string }
+        | { kind: 'delta'; name: string; round: number; text: string; startedAt?: string }
         | { kind: 'done'; name: string; round: number }
         | { kind: 'drop'; name: string; round: number };
     const pumpQueue: PumpItem[] = [];
@@ -2952,7 +2966,14 @@ export const conductRealDebate = async function* (
         inflight.add(analyst.provider.name);
         onSpeakerStatus?.(analyst.provider.name, round, true);
         const task = buildRebuttalTask(analyst, round, steeringNote);
-        task.run(delta => pumpPush({ kind: 'delta', name: analyst.provider.name, round, text: delta }))
+        // TTFT metric: the launch timestamp rides the FIRST delta so the
+        // consumer can measure real time-to-first-token per turn.
+        const startedAt = new Date().toISOString();
+        let firstDelta = true;
+        task.run(delta => {
+            pumpPush({ kind: 'delta', name: analyst.provider.name, round, text: delta, startedAt: firstDelta ? startedAt : undefined });
+            firstDelta = false;
+        })
             .catch((e: any) => {
                 const isAbort = e?.name === 'AbortError' || e?.code === 'ABORT_ERR' || e?.name === 'TimeoutError';
                 if (!isAbort) {
@@ -3055,7 +3076,7 @@ export const conductRealDebate = async function* (
             // already purged in the catch) — nothing further is yielded.
             if (droppedNames.has(item.name)) continue;
             roundTexts[item.name][item.round] = (roundTexts[item.name][item.round] || '') + item.text;
-            yield { speaker: item.name, round: item.round, text: item.text };
+            yield { speaker: item.name, round: item.round, text: item.text, startedAt: item.startedAt };
         }
         if (budgetNoticeEmitted) {
             const noticeRound = Math.max(rebuttalStart, Math.min(totalRounds, Math.max(1, ...[...seatRound.values()])));
@@ -3084,12 +3105,24 @@ export const conductRealDebate = async function* (
     let lastRebuttalRound = skipRebuttals ? Math.max(1, lastDone) : totalRounds;
 
     const skipClarification = lastDone > totalRounds + 1;
+    // Smarter skip #2: even when the OPENINGS diverged, the rebuttal rounds
+    // may have converged the floor (same direction + tight entry spread).
+    // Nothing is left to clarify — go straight to the verdict.
+    const finalPositions = summarizeFinalPositions(roundTexts, names);
+    const floorConverged = finalPositions.convergedDirection
+        && finalPositions.entrySpreadPct !== null
+        && finalPositions.entrySpreadPct <= 0.5;
+    if (!skipRebuttals && !skipClarification && clarificationWorthRunning && floorConverged) {
+        emitLog('episode', `Floor converged during rebuttals (entry spread ${finalPositions.entrySpreadPct!.toFixed(2)}%) — skipping clarification.`, lastRebuttalRound);
+        yield { speaker: 'System', round: lastRebuttalRound, text: `Floor converged during rebuttals (entry spread ${finalPositions.entrySpreadPct!.toFixed(2)}%) — skipping clarification and proceeding to the verdict.` };
+    }
+    const runClarification = clarificationWorthRunning && !floorConverged;
     if (!skipRebuttals && !skipClarification && !clarificationWorthRunning) {
         emitLog('episode', `Openings aligned (divergence ${openingDivergence.score}) — skipping clarification.`, lastRebuttalRound);
         yield { speaker: 'System', round: lastRebuttalRound, text: `Openings aligned (divergence score ${openingDivergence.score}) — skipping clarification and proceeding to the verdict.` };
     }
     for (let cycle = 1; cycle <= MAX_CLARIFICATION_CYCLES; cycle++) {
-        if (skipRebuttals || skipClarification || !clarificationWorthRunning) break;
+        if (skipRebuttals || skipClarification || !runClarification) break;
         if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
         // Global budget: skip clarification and proceed to the verdict.
@@ -3119,6 +3152,10 @@ export const conductRealDebate = async function* (
                 signal,
                 moderatorReasoningFor(questionRound),
                 resolveDefaultSymbol(userPrompt),
+                (line: string) => {
+                    emitLog('tool', line, questionRound, 'Moderator');
+                    onToolEvent?.('Moderator', questionRound, line);
+                },
             )) {
                 if (chunk) {
                     questionText += chunk;
@@ -3211,6 +3248,10 @@ export const conductRealDebate = async function* (
                             signal,
                             maxTokens: TASK_BUDGETS.clarification,
                             onReasoning: (reasoning: string) => onAnalystReasoning?.(analyst.provider.name, reasoning, answerRound),
+                            onToolEvent: (line: string) => {
+                                emitLog('tool', line, answerRound, analyst.provider.name);
+                                onToolEvent?.(analyst.provider.name, answerRound, line);
+                            },
                             defaultSymbol: resolveDefaultSymbol(userPrompt),
                             afterToolsNudge: 'Tool results are above. Answer the Moderator now. No JSON, no tool tags.',
                         }),
@@ -3319,6 +3360,10 @@ export const conductRealDebate = async function* (
                 signal,
                 undefined,
                 resolveDefaultSymbol(userPrompt),
+                (line: string) => {
+                    emitLog('tool', line, judgmentRound, 'Moderator');
+                    onToolEvent?.('Moderator', judgmentRound, line);
+                },
             )) {
                 if (chunk) judgmentText += chunk;
             }
@@ -3416,6 +3461,9 @@ export const conductRealDebate = async function* (
     const moderatorPrompt = [
         getPrompt('debate.final_verdict', MODERATOR_FINAL_VERDICT_PROMPT).replace('{{ANALYSTS}}', names.join(', ')),
         `\n\n**THE DEBATE TRANSCRIPT (EPISODES):**\n${transcriptBlock}`,
+        // Final-stance divergence summary — recomputed AFTER clarification so
+        // the moderator sees where each seat LANDED, not just the openings.
+        `\n\n${summarizeFinalPositions(roundTexts, names).block}`,
         `\n\n**TRADING REQUEST:**\n${truncateTextToTokens(userPrompt, 350)}`,
         steerVerdict ? `\n\n**USER STEERING (queued mid-debate — follow this):**\n${steerVerdict}` : '',
         marketDataOverride,
@@ -3455,7 +3503,10 @@ export const conductRealDebate = async function* (
         let moderatorText = '';
         let streamFailed = false;
         try {
-            for await (const chunk of getModeratorAnalysisStream(moderatorConfig, moderatorModel, attempts[attempt], signal, moderatorReasoningFor(finalRound), resolveDefaultSymbol(userPrompt))) {
+            for await (const chunk of getModeratorAnalysisStream(moderatorConfig, moderatorModel, attempts[attempt], signal, moderatorReasoningFor(finalRound), resolveDefaultSymbol(userPrompt), (line: string) => {
+                emitLog('tool', line, finalRound, 'Moderator');
+                onToolEvent?.('Moderator', finalRound, line);
+            })) {
                 if (chunk) {
                     moderatorText += chunk;
                     yield { speaker: 'Moderator', round: finalRound, text: chunk };

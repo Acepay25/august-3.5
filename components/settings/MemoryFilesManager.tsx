@@ -8,7 +8,7 @@ import MarkdownContent from '../shared/MarkdownContent';
 import { FileTextIcon, ChevronRightIcon, ChevronLeftIcon, FolderIcon } from '../shared/Icons';
 import { Sparkles, Loader2 } from 'lucide-react';
 import { runNotebookReview } from '../../services/learning/MemoryReviewService';
-import { listSkills, setSkillStatus } from '../../services/learning/SkillMemoryService';
+import { listSkills, setSkillStatus, SkillMeta } from '../../services/learning/SkillMemoryService';
 import {
     initMemoryFiles,
     getMemoryFiles,
@@ -30,6 +30,64 @@ interface MemoryFilesManagerProps {
     memorySettings?: React.ReactNode;
     memoryConfig?: ProviderConfig | null;
 }
+
+/**
+ * One skill row: score + a "refined" badge when the last LLM refinement
+ * pass rewrote the trigger. Expanding shows the before/after evidence diff.
+ */
+const SkillRow: React.FC<{ name: string; meta: SkillMeta; onRetire: () => void }> = ({ name, meta, onRetire }) => {
+    const [showDiff, setShowDiff] = useState(false);
+    const refined = Boolean(meta.previousVersion && meta.refinedAt);
+    return (
+        <div className="text-[12px] text-zinc-300">
+            <div className="flex items-center gap-2">
+                <span className="min-w-0 flex-1 truncate">{name}</span>
+                {refined && (
+                    <button
+                        type="button"
+                        className="shrink-0 rounded border border-white/10 bg-zinc-800/60 px-1.5 py-0.5 text-[10px] text-zinc-400 hover:text-zinc-200"
+                        title={`Refined ${new Date(meta.refinedAt!).toLocaleString()} — show what changed`}
+                        onClick={() => setShowDiff(v => !v)}
+                    >
+                        refined
+                    </button>
+                )}
+                <span className="shrink-0 text-zinc-500">{meta.status} · {meta.kind} · {meta.wins}W/{meta.losses}L</span>
+                {meta.status !== 'retired' && (
+                    <button
+                        type="button"
+                        className="shrink-0 text-[11px] text-zinc-500 hover:text-zinc-200"
+                        onClick={onRetire}
+                    >
+                        Retire
+                    </button>
+                )}
+            </div>
+            {showDiff && meta.previousVersion && (
+                <div className="mt-1 space-y-1 rounded-lg border border-white/5 bg-zinc-950/60 p-2 font-mono text-[11px] leading-5">
+                    <p className="text-zinc-500">
+                        Refined {new Date(meta.refinedAt!).toLocaleString()} after {meta.consecutiveLosses === 0 ? 'consecutive losses' : `${meta.consecutiveLosses} consecutive losses`}
+                    </p>
+                    {meta.previousVersion.ifCondition !== meta.ifCondition && (
+                        <div>
+                            <p className="text-zinc-600 line-through">IF {meta.previousVersion.ifCondition || '—'}</p>
+                            <p className="text-zinc-200">IF {meta.ifCondition || '—'}</p>
+                        </div>
+                    )}
+                    {meta.previousVersion.thenAction !== meta.thenAction && (
+                        <div>
+                            <p className="text-zinc-600 line-through">THEN {meta.previousVersion.thenAction || '—'}</p>
+                            <p className="text-zinc-200">THEN {meta.thenAction || '—'}</p>
+                        </div>
+                    )}
+                    {meta.previousVersion.kind !== meta.kind && (
+                        <p className="text-zinc-400">kind: {meta.previousVersion.kind} → {meta.kind}</p>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};
 
 /**
  * Settings → Memory: folders of markdown files the model can READ.
@@ -276,19 +334,12 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                     <p className="text-[11px] uppercase tracking-wider text-zinc-500 mb-2">Skills</p>
                     <div className="max-h-40 space-y-1 overflow-y-auto custom-scrollbar">
                         {skills.map(({ file, meta }) => (
-                            <div key={file.id} className="flex items-center gap-2 text-[12px] text-zinc-300">
-                                <span className="min-w-0 flex-1 truncate">{file.name.replace(/\.md$/i, '')}</span>
-                                <span className="shrink-0 text-zinc-500">{meta.status} · {meta.kind} · {meta.wins}W/{meta.losses}L</span>
-                                {meta.status !== 'retired' && (
-                                    <button
-                                        type="button"
-                                        className="shrink-0 text-[11px] text-zinc-500 hover:text-zinc-200"
-                                        onClick={() => { void setSkillStatus(file.id, 'retired', activeUser).then(refresh); }}
-                                    >
-                                        Retire
-                                    </button>
-                                )}
-                            </div>
+                            <SkillRow
+                                key={file.id}
+                                name={file.name.replace(/\.md$/i, '')}
+                                meta={meta}
+                                onRetire={() => { void setSkillStatus(file.id, 'retired', activeUser).then(refresh); }}
+                            />
                         ))}
                     </div>
                 </div>

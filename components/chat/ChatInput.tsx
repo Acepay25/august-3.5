@@ -13,6 +13,7 @@ import ModelPicker from '../shared/ModelPicker';
 import InjectionContextBar, { InjectionChipKind } from './InjectionContextBar';
 
 import { parseComposerIntent } from '../../utils/composerMentions';
+import { DEBATE_TEMPLATES, debateTemplateMarker } from '../../utils/debateTemplates';
 import { formatModelDisplayName } from '../../utils/providerUtils';
 import { listSkillSlugs } from '../../services/learning/SkillMemoryService';
 
@@ -155,10 +156,25 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
             if (event.key !== 'Escape') return;
             setIsLeverageDropdownOpen(false);
             setIsTeamModalOpen(false);
+            // Esc stops an active run (same as the Stop button).
+            if (isAnalysisInProgress) handleCancelAnalysis();
+        };
+        // "/" focuses the composer from anywhere (unless already typing).
+        const handleSlash = (event: KeyboardEvent) => {
+            if (event.key !== '/' || event.ctrlKey || event.metaKey || event.altKey) return;
+            const target = event.target as HTMLElement | null;
+            const tag = target?.tagName;
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return;
+            event.preventDefault();
+            document.getElementById('chat-composer')?.focus();
         };
         document.addEventListener('keydown', handleEscape);
-        return () => document.removeEventListener('keydown', handleEscape);
-    }, [setIsLeverageDropdownOpen]);
+        document.addEventListener('keydown', handleSlash);
+        return () => {
+            document.removeEventListener('keydown', handleEscape);
+            document.removeEventListener('keydown', handleSlash);
+        };
+    }, [setIsLeverageDropdownOpen, isAnalysisInProgress, handleCancelAnalysis]);
 
     // Charts can only be analyzed in ensemble mode.
     const uploadDisabled = isImageUploadDisabled || !isEnsembleEnabled;
@@ -314,6 +330,27 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                     {tag}
                                 </button>
                             )) : null}
+                            {isEnsembleEnabled ? DEBATE_TEMPLATES.map(template => {
+                                const marker = debateTemplateMarker(template.id);
+                                const active = input.includes(marker);
+                                return (
+                                    <button
+                                        key={template.id}
+                                        type="button"
+                                        title={template.hint}
+                                        className={`rounded-md border px-1.5 py-0.5 text-[10px] transition-colors ${
+                                            active
+                                                ? 'border-zinc-400/40 bg-zinc-800 text-zinc-200'
+                                                : 'border-white/10 text-zinc-500 hover:text-zinc-200'
+                                        }`}
+                                        onClick={() => setInput(active
+                                            ? input.split(marker).join('').replace(/\s+/g, ' ').trim()
+                                            : `${marker} ${input}`.trim())}
+                                    >
+                                        {template.label}
+                                    </button>
+                                );
+                            }) : null}
                             {listSkillSlugs().slice(0, 4).map(slug => (
                                 <button
                                     key={slug}

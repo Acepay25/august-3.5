@@ -13,6 +13,8 @@ export interface DebateStageActor {
     speech?: string;
     replyTo?: string;
     replies?: Array<{ id: string; target: string; text: string }>;
+    /** Live desk-tool chip ("calling order book…" / result digest). */
+    toolChip?: string;
 }
 
 interface DebateStageProps {
@@ -225,6 +227,12 @@ export const DebateStage: React.FC<DebateStageProps> = ({ actors, caption, onOpe
                                     <span className="debate-stage-sent">sent!</span>
                                 )}
                                 <span className="debate-stage-name">{actor.name}</span>
+                                {actor.toolChip && (
+                                    <span className="debate-stage-tool-chip" title={actor.toolChip}>
+                                        <span className="debate-stage-tool-dot" aria-hidden="true" />
+                                        {actor.toolChip}
+                                    </span>
+                                )}
                             </button>
                         );
                     })}
