@@ -324,8 +324,23 @@ body {
 }
 .streaming-dots span:nth-child(2) { animation-delay: 0.16s; }
 .streaming-dots span:nth-child(3) { animation-delay: 0.32s; }
+/* Blinking caret at the end of a replayed/streamed turn. */
+.streaming-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: #d4d4d8;
+  animation: streaming-caret-blink 0.9s steps(1) infinite;
+}
+@keyframes streaming-caret-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
 @media (prefers-reduced-motion: reduce) {
   .streaming-dots span { animation: none; opacity: 0.6; }
+  .streaming-caret { animation: none; opacity: 0.7; }
 }
 @keyframes reasoning-caret-blink {
   0%, 100% { opacity: 1; }
@@ -517,6 +532,105 @@ body {
   color: #6f6f78;
   text-align: center;
   transition: color 0.3s ease, border-color 0.3s ease;
+}
+/* Live desk-tool chip — shows what the seat is looking up so a tool round
+   never reads as a frozen bot. */
+.debate-stage-tool-chip {
+  margin-top: 4px;
+  max-width: 9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(30, 30, 33, 0.92);
+  font-size: 9px;
+  letter-spacing: 0.02em;
+  color: #c7c7cd;
+  animation: tool-chip-in 0.25s ease;
+}
+.debate-stage-tool-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: #e4e4e7;
+  flex-shrink: 0;
+  animation: tool-chip-pulse 1s ease-in-out infinite;
+}
+@keyframes tool-chip-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes tool-chip-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+/* Pre-verdict floor lean — live tally of where the seats stand. Monochrome:
+   long fill is solid, short fill is hatched/dimmer. */
+.floor-lean {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.1rem 0.45rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  font-size: 10px;
+  color: #a1a1aa;
+  animation: tool-chip-in 0.25s ease-out;
+}
+.floor-lean-label {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #71717a;
+}
+.floor-lean-bar {
+  display: inline-flex;
+  width: 3.5rem;
+  height: 0.3rem;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.06);
+}
+.floor-lean-fill {
+  height: 100%;
+  transition: width 0.4s ease;
+}
+.floor-lean-fill-long {
+  background: #e4e4e7;
+}
+.floor-lean-fill-short {
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(228, 228, 231, 0.55) 0 2px,
+    rgba(228, 228, 231, 0.2) 2px 4px
+  );
+}
+.floor-lean-value {
+  color: #e4e4e7;
+  font-weight: 600;
+}
+/* Skeleton-fill verdict card — unfilled rows shimmer while the moderator
+   is still writing the plan. */
+.verdict-skeleton-bar {
+  display: inline-block;
+  width: 5.5rem;
+  height: 0.7rem;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.06) 25%, rgba(255, 255, 255, 0.14) 50%, rgba(255, 255, 255, 0.06) 75%);
+  background-size: 200% 100%;
+  animation: verdict-skeleton-shimmer 1.4s ease-in-out infinite;
+}
+.verdict-skeleton-bar-sm {
+  width: 3.25rem;
+  height: 0.6rem;
+}
+@keyframes verdict-skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 .debate-stage-actor.is-live,
 .debate-stage-actor.is-thinking,
@@ -1001,13 +1115,18 @@ body {
   .debate-stage-packet,
   .debate-stage-sent,
   .debate-stage-caption-dot,
+  .debate-stage-tool-chip,
+  .debate-stage-tool-dot,
+  .floor-lean,
+  .verdict-skeleton-bar,
   .debate-speech {
     animation: none !important;
   }
   .debate-stage-actor,
   .debate-stage-name,
   .debate-stage-actor::after,
-  .debate-bot-shadow {
+  .debate-bot-shadow,
+  .floor-lean-fill {
     transition: none !important;
   }
 }

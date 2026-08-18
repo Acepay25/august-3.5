@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { DebateTurn, TradeAnalysis, ConfidenceCalibration } from '../../types';
+import { DebateTurn, TradeAnalysis, ConfidenceCalibration, RunStats } from '../../types';
 import MarkdownContent from '../shared/MarkdownContent';
 import ConsensusPanel from './ConsensusPanel';
 import { explainSignalConfidence, extractSignalStrategyText, formatInvalidationLine, isNoTradeSignal, resolveLevelHitOdds, signalDirectionLabel, leveragedMovePercent } from '../../utils/analysisUtils';
@@ -11,6 +11,7 @@ import { computeContractSize, computeLiquidationBuffer } from '../../utils/ticke
 import { getHarnessSettings, saveHarnessSettings } from '../../utils/harnessSettings';
 import { ticketExpiryLine } from '../../utils/paperPnl';
 import { buildTicketSheet } from '../../utils/analysisReport';
+import { useWeeklyUsage } from '../../hooks/useWeeklyUsage';
 
 interface TradingSignalCardProps {
     analysis: TradeAnalysis;
@@ -24,6 +25,8 @@ interface TradingSignalCardProps {
     bare?: boolean;
     priorAnalysis?: TradeAnalysis | null;
     promptLane?: 'live' | 'control';
+    /** Run ledger — powers the cost-per-verdict badge. */
+    runStats?: RunStats;
     leverage?: number;
     onFollowUp?: (text: string) => void;
 }
@@ -113,6 +116,7 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
     modelsUsed,
     bare = false,
     priorAnalysis,
+    runStats,
     leverage,
     onFollowUp,
 }) => {
@@ -209,6 +213,17 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
         return () => window.clearInterval(id);
     }, [analysis.createdAt, analysis.validityDurationMinutes]);
     const validityLine = ticketExpiryLine(analysis, nowMs)?.line || '';
+    const hasCost = (runStats?.costUsd ?? 0) > 0;
+    const weeklyUsage = useWeeklyUsage(hasCost);
+    const costBadge = useMemo(() => {
+        const cost = runStats?.costUsd;
+        if (cost === undefined || cost <= 0) return null;
+        const weekCost = weeklyUsage?.costUsd ?? 0;
+        const title = weekCost > 0
+            ? `This verdict $${cost.toFixed(3)} · last 7 days $${weekCost.toFixed(3)} (${weeklyUsage?.runs ?? 0} runs)`
+            : `This verdict $${cost.toFixed(3)}`;
+        return { label: `$${cost.toFixed(3)}`, title };
+    }, [runStats?.costUsd, weeklyUsage]);
     const priorLine = useMemo(() => {
         if (!priorAnalysis) return '';
         const bits: string[] = [];
@@ -251,6 +266,14 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
                 )}
                 {validityLine && <span className="text-xs text-zinc-500">{validityLine}</span>}
                 {gateLine && <span className="text-xs text-zinc-500">{gateLine}</span>}
+                {costBadge && (
+                    <span
+                        className="inline-flex items-center rounded border border-white/10 bg-zinc-800/60 px-1.5 py-0.5 text-[10px] tabular-nums text-zinc-400"
+                        title={costBadge.title}
+                    >
+                        {costBadge.label}
+                    </span>
+                )}
                 <div className="ml-auto flex shrink-0 items-center gap-2">
                     <button
                         type="button"

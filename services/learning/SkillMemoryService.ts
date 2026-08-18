@@ -49,6 +49,11 @@ export interface SkillMeta {
     ifCondition?: string;
     thenAction?: string;
     body: string;
+    /** ISO timestamp of the last LLM refinement pass, if any. */
+    refinedAt?: string;
+    /** Trigger/action snapshot taken BEFORE the last refinement — the
+     *  evidence diff shown in the notebook so a rewrite is auditable. */
+    previousVersion?: { kind: SkillKind; ifCondition?: string; thenAction?: string };
 }
 
 export const MIN_CLUSTER_FOR_SKILL = 3;
@@ -84,6 +89,20 @@ export const parseSkillMarkdown = (content: string): SkillMeta | null => {
     const status: SkillStatus = statusRaw === 'confirmed' || statusRaw === 'retired' ? statusRaw : 'candidate';
     const kind: SkillKind = (pick('kind') || '').toLowerCase() === 'repeat' ? 'repeat' : 'avoid';
     const tradeIds = (pick('tradeIds') || '').split(',').map(s => s.trim()).filter(Boolean);
+    let previousVersion: SkillMeta['previousVersion'];
+    const prevRaw = pick('previousVersion');
+    if (prevRaw) {
+        try {
+            const parsed = JSON.parse(prevRaw) as { kind?: string; ifCondition?: string; thenAction?: string };
+            previousVersion = {
+                kind: parsed.kind === 'repeat' ? 'repeat' : 'avoid',
+                ifCondition: typeof parsed.ifCondition === 'string' ? parsed.ifCondition : undefined,
+                thenAction: typeof parsed.thenAction === 'string' ? parsed.thenAction : undefined,
+            };
+        } catch {
+            previousVersion = undefined;
+        }
+    }
     return {
         status,
         kind,
@@ -98,6 +117,8 @@ export const parseSkillMarkdown = (content: string): SkillMeta | null => {
         ifCondition: pick('ifCondition'),
         thenAction: pick('thenAction'),
         body,
+        refinedAt: pick('refinedAt'),
+        previousVersion,
     };
 };
 
@@ -134,6 +155,8 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
         ...(meta.consecutiveLosses > 0 ? [`consecutiveLosses: ${meta.consecutiveLosses}`] : []),
         ...(meta.ifCondition ? [`ifCondition: ${meta.ifCondition.replace(/\n/g, ' ')}`] : []),
         ...(meta.thenAction ? [`thenAction: ${meta.thenAction.replace(/\n/g, ' ')}`] : []),
+        ...(meta.refinedAt ? [`refinedAt: ${meta.refinedAt}`] : []),
+        ...(meta.previousVersion ? [`previousVersion: ${JSON.stringify(meta.previousVersion)}`] : []),
         `tradeIds: ${meta.tradeIds.slice(-20).join(',')}`,
         '---',
         '',
@@ -275,11 +298,17 @@ const maybeRefineSkill = async (fileId: string, allTrades: LoggedTrade[], userna
         const latestFile = getMemoryFiles().files.find(f => f.id === fileId);
         const latest = latestFile ? parseSkillMarkdown(latestFile.content) : null;
         if (!latest) return;
+        latest.previousVersion = {
+            kind: latest.kind,
+            ifCondition: latest.ifCondition,
+            thenAction: latest.thenAction,
+        };
         latest.kind = refined.kind;
         latest.ifCondition = refined.ifCondition;
         latest.thenAction = refined.thenAction;
         latest.body = formatCraftedSkillBody(refined);
         latest.consecutiveLosses = 0;
+        latest.refinedAt = new Date().toISOString();
         await updateMemoryFile(fileId, {
             content: serializeSkill(latest, refined.name || titleFromMeta(latest)),
             enabled: latest.status !== 'retired',

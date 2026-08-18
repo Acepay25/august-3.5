@@ -9,6 +9,8 @@ import LiveMarketDataView from '../market/LiveMarketDataView';
 import EnsembleProgressChat from '../analysis/EnsembleProgressChat';
 import DebateSummary from '../analysis/DebateSummary';
 import TradingSignalCard from '../analysis/TradingSignalCard';
+import VerdictSkeletonCard from '../analysis/VerdictSkeletonCard';
+import DebateReplay from '../analysis/DebateReplay';
 import DebateRunLog from '../analysis/DebateRunLog';
 import AnalysisTracePanel from '../analysis/AnalysisTracePanel';
 import AnalysisDetails from './AnalysisDetails';
@@ -174,6 +176,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
     // Inline edit of a sent user message (history correction).
     const [editingMessageId, setEditingMessageId] = React.useState<string | null>(null);
     const [editDraft, setEditDraft] = React.useState('');
+    const [isReplayOpen, setIsReplayOpen] = React.useState(false);
     // Track whether this bubble streamed live — once text has been revealed
     // incrementally, the settle must not replay the SmoothText animation.
     const wasStreamingRef = React.useRef(false);
@@ -202,12 +205,17 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
     // moderator's chain-of-thought and the final verdict prose should still be
     // visible in the chat area — not only inside the seat modal.
     const moderatorThinking = extractModeratorThinking(message.reasoningProcesses, message.thoughtProcesses);
-    const verdictProse = React.useMemo(
-        () => (message.analysis || !message.isDebating
-            ? extractFinalVerdictText(debateTurns, message.analysis?.strategy)
-            : ''),
-        [debateTurns, message.analysis, message.isDebating],
-    );
+    const verdictProse = React.useMemo(() => {
+        if (message.analysis || !message.isDebating) {
+            return extractFinalVerdictText(debateTurns, message.analysis?.strategy);
+        }
+        // Live: once plan fields start landing, the moderator's current turn
+        // IS the verdict (clarification questions never carry a plan) — stream
+        // its prose in the chat area while it is still being written.
+        if (!message.provisionalAnalysis && !message.provisionalPlanFields) return '';
+        const modTurns = debateTurns.filter(t => t.speaker === 'Moderator' && t.text.trim());
+        return modTurns[modTurns.length - 1]?.text ?? '';
+    }, [debateTurns, message.analysis, message.isDebating, message.provisionalAnalysis, message.provisionalPlanFields]);
 
     // Extract embedded Live Market JSON if present
     const liveMarketMatch = message.text.match(/\*\*LIVE MARKET DATA\*\*\s*```json\s*([\s\S]*?)\s*```/);
@@ -351,6 +359,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     onRetryAnalyst={onReRunAnalysis ? () => onReRunAnalysis(message.id) : undefined}
                                     debateTurns={debateTurns}
                                     activeDebateSpeakers={message.activeDebateSpeakers}
+                                    liveToolEvents={message.liveToolEvents}
                                     reasoningProcesses={message.reasoningProcesses}
                                     runStats={message.runStats}
                                 />
@@ -370,7 +379,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     />
                                 </div>
                             )}
-                            {isEnsembleMessage && !message.isPostMortem && verdictProse && !message.isDebating && (
+                            {isEnsembleMessage && !message.isPostMortem && verdictProse && (
                                 <div className="mb-4">
                                     <div className="mb-2 flex items-center justify-between gap-2">
                                         <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
@@ -378,7 +387,11 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                         </div>
                                     </div>
                                     <div className="prose prose-invert max-w-none leading-[1.65] overflow-x-auto min-w-0 text-zinc-200" style={{ fontSize: '15px' }}>
-                                        <MarkdownContent content={verdictProse} className="text-zinc-200" />
+                                        {message.isDebating ? (
+                                            <StreamingMarkdown text={verdictProse} live className="text-zinc-200" />
+                                        ) : (
+                                            <MarkdownContent content={verdictProse} className="text-zinc-200" />
+                                        )}
                                     </div>
                                 </div>
                             )}
@@ -386,8 +399,10 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                             {/* Progressive verdict: while the moderator is still
                                 writing, a complete plan already parsed from the
                                 stream fills the signal card live. No action
-                                buttons — the final verdict replaces this card. */}
-                            {isEnsembleMessage && !message.analysis && message.isDebating && message.provisionalAnalysis && (
+                                buttons — the final verdict replaces this card.
+                                Before the plan binds, a skeleton card fills in
+                                line by line as the labeled fields land. */}
+                            {isEnsembleMessage && !message.analysis && message.isDebating && (message.provisionalAnalysis || message.provisionalPlanFields) && (
                                 <div className="mb-4">
                                     <div className="mb-2 flex items-center gap-2">
                                         <span className="streaming-dots" aria-hidden="true"><span /><span /><span /></span>
@@ -395,13 +410,17 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                             Verdict drafting
                                         </div>
                                     </div>
-                                    <div className="ui-panel">
-                                        <TradingSignalCard
-                                            analysis={message.provisionalAnalysis}
-                                            isLatest={false}
-                                            bare
-                                        />
-                                    </div>
+                                    {message.provisionalAnalysis ? (
+                                        <div className="ui-panel">
+                                            <TradingSignalCard
+                                                analysis={message.provisionalAnalysis}
+                                                isLatest={false}
+                                                bare
+                                            />
+                                        </div>
+                                    ) : (
+                                        <VerdictSkeletonCard fields={message.provisionalPlanFields!} />
+                                    )}
                                 </div>
                             )}
 
@@ -492,6 +511,22 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                             ) : message.analysis ? (
                                 <div className="ui-panel">
                                 <DebateSummary debateTurns={debateTurns} analysis={message.analysis} />
+                                {debateTurns.length > 0 && (
+                                    <div className="flex items-center justify-end border-b border-white/5 px-4 py-1.5">
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsReplayOpen(open => !open)}
+                                            className="rounded border border-white/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-zinc-500 transition-colors hover:text-zinc-200"
+                                        >
+                                            {isReplayOpen ? 'Hide replay' : 'Replay debate'}
+                                        </button>
+                                    </div>
+                                )}
+                                {isReplayOpen && debateTurns.length > 0 && (
+                                    <div className="border-b border-white/5 px-4 py-3">
+                                        <DebateReplay turns={debateTurns} onClose={() => setIsReplayOpen(false)} />
+                                    </div>
+                                )}
                                 <div className="border-t border-white/5">
                                 <TradingSignalCard
                                     analysis={message.analysis}
@@ -504,6 +539,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     modelsUsed={message.modelsUsed}
                                     priorAnalysis={context.priorAnalysisById?.[message.id]}
                                     promptLane={message.runStats?.promptLane}
+                                    runStats={message.runStats}
                                     onFollowUp={context.onFollowUpTicket ? (text) => context.onFollowUpTicket!(message.id, text) : undefined}
                                     leverage={leverage}
                                     bare

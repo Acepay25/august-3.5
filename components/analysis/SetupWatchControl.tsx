@@ -71,6 +71,35 @@ const SetupWatchControl: React.FC<SetupWatchControlProps> = ({ analysis, message
     const isLevelValid = triggerType !== 'PCT_MOVE' && levelNum > 0;
     const isMoveValid = triggerType === 'PCT_MOVE' && pctNum > 0 && currentPrice != null;
 
+    const entryLevel = canonicalParsePrice(analysis.entryPoints?.[0]?.price || '');
+    const stopLevel = canonicalParsePrice(analysis.stopLoss || '');
+
+    /** Pick the crossing direction for a level: compare against the live
+     *  price when known, else fall back to the setup's direction (a Long
+     *  stop sits below, a Long entry above, and vice versa for Shorts). */
+    const triggerForLevel = (level: number, isStop: boolean): SetupWatchTriggerType => {
+        if (currentPrice != null && currentPrice > 0) {
+            return level >= currentPrice ? 'PRICE_ABOVE' : 'PRICE_BELOW';
+        }
+        if (isStop) return analysis.direction === 'Short' ? 'PRICE_ABOVE' : 'PRICE_BELOW';
+        return analysis.direction === 'Short' ? 'PRICE_BELOW' : 'PRICE_ABOVE';
+    };
+
+    /** One-tap auto-recheck: arm a watch directly at the plan's entry or
+     *  stop level — no popover input needed. */
+    const armAtLevel = (level: number, isStop: boolean): void => {
+        if (!(level > 0)) return;
+        SetupWatchService.createWatch({
+            messageId,
+            coinName: analysis.coinName || 'UNKNOWN',
+            triggerType: triggerForLevel(level, isStop),
+            priceLevel: level,
+            referencePrice: currentPrice ?? level,
+            direction: analysis.direction === 'Long' || analysis.direction === 'Short' ? analysis.direction : undefined,
+        });
+        setOpen(false);
+    };
+
     const handleCreate = () => {
         if (!isLevelValid && !isMoveValid) return;
         SetupWatchService.createWatch({
@@ -138,6 +167,29 @@ const SetupWatchControl: React.FC<SetupWatchControlProps> = ({ analysis, message
                     <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-2">
                         Re-debate when…
                     </div>
+                    {/* One-tap presets at the plan's own levels */}
+                    {(entryLevel > 0 || stopLevel > 0) && (
+                        <div className="flex gap-1 mb-2">
+                            {entryLevel > 0 && (
+                                <button
+                                    onClick={() => armAtLevel(entryLevel, false)}
+                                    title={`Auto-recheck when price reaches the entry at ${fmtPrice(entryLevel)}`}
+                                    className="flex-1 px-2 py-1.5 rounded-md border border-white/10 bg-zinc-700/60 text-[10px] font-bold uppercase tracking-wider text-zinc-300 hover:text-zinc-100 hover:border-white/25 transition-colors"
+                                >
+                                    At entry {fmtPrice(entryLevel)}
+                                </button>
+                            )}
+                            {stopLevel > 0 && (
+                                <button
+                                    onClick={() => armAtLevel(stopLevel, true)}
+                                    title={`Auto-recheck when price reaches the stop at ${fmtPrice(stopLevel)}`}
+                                    className="flex-1 px-2 py-1.5 rounded-md border border-white/10 bg-zinc-700/60 text-[10px] font-bold uppercase tracking-wider text-zinc-300 hover:text-zinc-100 hover:border-white/25 transition-colors"
+                                >
+                                    At stop {fmtPrice(stopLevel)}
+                                </button>
+                            )}
+                        </div>
+                    )}
                     {/* Trigger type selector */}
                     <div className="flex gap-1 mb-2">
                         {TRIGGER_TYPES.map(t => (

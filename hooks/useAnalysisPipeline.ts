@@ -35,6 +35,7 @@ import { buildModelIdToName, isProviderReady } from '../utils/providerUtils';
 import { DEFAULT_LEVERAGE } from '../utils/conversationUtils';
 import { loadLearningRules } from '../services/learning/LearningRulesService';
 import { buildDecisionReflectionContext } from '../services/learning/DecisionReflectionService';
+import { buildCoinLessonsBlock } from '../utils/postMortemLessons';
 import { getEnabledStrategiesText } from '../services/infrastructure/StrategyService';
 import { StructuredRule } from '../types';
 import { COMMON_WORDS } from '../constants/commonWords';
@@ -67,7 +68,8 @@ import { ANALYST_ROLE_DEFINITIONS, getLensPromptForStyle, getRoleForProvider, En
 import { buildHybridEnvelope, buildOcrEnvelope, envelopeKindForRole } from '../utils/debateEnvelopes';
 import { buildRecommendationContract } from '../utils/recommendationContract';
 import { maybeQueueVerdictSkillDraft } from '../utils/verdictSkillDraft';
-import { parseProvisionalVerdict } from '../utils/provisionalVerdict';
+import { parseProvisionalVerdict, parsePartialVerdictFields } from '../utils/provisionalVerdict';
+import { extractDebateTemplate, DebateTemplate } from '../utils/debateTemplates';
 import { debateTurnsToRoundTexts, lastCompletedRound, laneDraftsFromTurns, reconstructOpenings } from '../utils/debateResume';
 import { parseStructuredAutoplayTranscript } from '../utils/debateTranscript';
 import { parseComposerIntent, formatComposerSteer } from '../utils/composerMentions';
@@ -393,6 +395,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 thoughtProcesses: thoughtMap,
                 reasoningProcesses: reasoningMap,
                 activeDebateSpeakers: { ...activeSpeakers },
+                liveToolEvents: { ...liveToolEventsRef.current },
                 debateRunLog: [...debateRunLogRef.current],
                 debateCheckpoint: currentTurns.length > 0 ? (() => {
                     const analystNames = [...new Set(currentTurns.filter(t => t.speaker !== 'System' && t.speaker !== 'Moderator').map(t => t.speaker))];
@@ -420,14 +423,19 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     const throttledProvisionalVerdict = useRafThrottle((
         conversationId: string | null,
         debateMessageId: string,
-        provisional: TradeAnalysis | undefined
+        provisional: TradeAnalysis | undefined,
+        planFields: Message['provisionalPlanFields']
     ) => {
         updateMessages(prev => {
             const messageIndex = prev.findIndex(m => m.id === debateMessageId);
             if (messageIndex === -1) return prev;
             if (prev[messageIndex].analysis) return prev; // final verdict already committed
             const newMessages = [...prev];
-            newMessages[messageIndex] = { ...prev[messageIndex], provisionalAnalysis: provisional };
+            newMessages[messageIndex] = {
+                ...prev[messageIndex],
+                provisionalAnalysis: provisional,
+                provisionalPlanFields: planFields,
+            };
             return newMessages;
         }, conversationId);
     });
@@ -507,6 +515,9 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     // rounds begin.
     const openingTextRef = useRef<Record<string, string>>({});
     const activeDebateSpeakersRef = useRef<Record<string, number>>({});
+    // Live desk-tool chips: speaker -> latest tool line. Transient — cleared
+    // when the debate concludes (never persisted).
+    const liveToolEventsRef = useRef<Record<string, string>>({});
     const debateTurnsRef = useRef<DebateTurn[]>([]);
     const debateRunLogRef = useRef<DebateRunEvent[]>([]);
     const steeringQueueRef = useRef<string[]>([]);
@@ -765,6 +776,16 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             effectiveInput = customPrompt;
         } else if (typeof input === 'string') {
             effectiveInput = input;
+        }
+        // Debate template marker ([[Scalp check]] etc.) — extract before the
+        // composer-intent parse so the marker never reaches the models.
+        let runDebateTemplate: DebateTemplate | null = null;
+        {
+            const extracted = extractDebateTemplate(effectiveInput);
+            if (extracted.template) {
+                runDebateTemplate = extracted.template;
+                effectiveInput = extracted.cleanText;
+            }
         }
         if (effectiveInput.trim()) {
             const intent = parseComposerIntent(effectiveInput);
@@ -1047,7 +1068,12 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 ? options?.automation?.conversation.threadSummary
                 : activeConversation?.threadSummary;
             const memoryToInject = isGlobalMemoryEnabled ? globalMemory : undefined;
-            const instructionsToUse = getActiveCustomInstructions();
+            // Debate template steering rides the custom instructions so every
+            // seat + the moderator see the framing (Scalp / Swing / Devil's
+            // advocate / Risk-only).
+            const instructionsToUse = runDebateTemplate
+                ? [getActiveCustomInstructions(), runDebateTemplate.steering].filter(Boolean).join('\n\n')
+                : getActiveCustomInstructions();
 
             // These steps describe the ensemble analysis pipeline only. Casual
             // chat must not render analysis/fetching progress at all.
@@ -1307,6 +1333,20 @@ ${reflectionBlock}`
                         : reflectionBlock;
                 }
             } catch { /* reflection is best-effort */ }
+
+            // POST-MORTEM LESSONS FOR THIS COIN: the reflection block above
+            // carries raw post-mortem snippets; this adds the EXTRACTED lesson
+            // line per closed trade on the same coin so the floor does not
+            // repeat a mistake it already paid for. Zero AI cost.
+            try {
+                const coinLessonsBlock = buildCoinLessonsBlock(loggedTrades, detectedLearningCoin || detectedSymbol || undefined);
+                if (coinLessonsBlock) {
+                    enhancedPrompt = `${coinLessonsBlock}\n\n${enhancedPrompt}`;
+                    moderatorLearningContext = moderatorLearningContext
+                        ? `${moderatorLearningContext}\n\n${coinLessonsBlock}`
+                        : coinLessonsBlock;
+                }
+            } catch { /* coin lessons are best-effort */ }
 
             let gateInjection = '';
             let capturedGateResult: GateOutput | null = null; // Local variable to avoid state closure issue
@@ -1688,6 +1728,7 @@ ${reflectionBlock}`
                     turnReasoningRef.current = {};
                     openingTextRef.current = {};
                     activeDebateSpeakersRef.current = {};
+                    liveToolEventsRef.current = {};
                     const resumeSeeds = canResume && resumeTarget ? reconstructOpenings(resumeTarget.debateTurns || []) : [];
                     const useResume = resumeSeeds.filter(s => enabledProviders.some(p => p.name === s.name)).length >= 2;
                     if (useResume && resumeTarget) {
@@ -2413,6 +2454,21 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 }
                                 return spent >= cap;
                             },
+                            // Live desk-tool chips — the Floor shows what each
+                            // seat is looking up instead of a silent bot.
+                            (speaker: string, _round: number, line: string) => {
+                                liveToolEventsRef.current[speaker] = line;
+                                throttledDebateUpdate(
+                                    requestConversationId,
+                                    debateMessageId,
+                                    debateTurnsRef.current,
+                                    thoughtMap,
+                                    reasoningMapRef.current,
+                                    activeDebateSpeakersRef.current,
+                                );
+                            },
+                            // Risk-only template: straight to the verdict.
+                            runDebateTemplate?.skipToVerdict,
                         );
                     }
 
@@ -2557,6 +2613,10 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                         // round) instead of a transcript to regex-parse.
                         const turnTexts: Record<string, string> = {}; // `${round}::${speaker}` → accumulated text
                         const turnTimes: Record<string, string> = {};   // first-delta timestamp per turn (replay)
+                        // Per-turn speed metrics: provider-call launch time
+                        // (rides the first delta) + last-delta time.
+                        const turnLaunchTimes: Record<string, number> = {};
+                        const turnLastDeltaAt: Record<string, number> = {};
                         let moderatorRound = 0;
 
                         const peelDebateTurn = (speaker: string, raw: string, key: string): { text: string; reasoning?: string } => {
@@ -2596,12 +2656,31 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                             .trim()
                                         : text.trim();
                                     const peeled = peelDebateTurn(speaker, cleanedText, k);
+                                    // Per-turn speed metrics (DeepSeek-style):
+                                    // TTFT from provider-launch → first delta,
+                                    // output rate from first → last delta.
+                                    const launch = turnLaunchTimes[k];
+                                    const firstAt = turnTimes[k] ? Date.parse(turnTimes[k]) : NaN;
+                                    const lastAt = turnLastDeltaAt[k];
+                                    const ttftMs = launch && Number.isFinite(firstAt) && firstAt >= launch
+                                        ? Math.max(0, firstAt - launch)
+                                        : undefined;
+                                    const chars = (turnTexts[k] || '').length;
+                                    const streamSec = Number.isFinite(firstAt) && lastAt && lastAt > firstAt
+                                        ? (lastAt - firstAt) / 1000
+                                        : 0;
+                                    const tokensPerSec = streamSec >= 0.5 && chars > 0
+                                        ? Math.round(chars / 4 / streamSec)
+                                        : undefined;
                                     return {
                                         speaker,
                                         round: parseInt(k.slice(0, sep), 10) || undefined,
                                         createdAt: turnTimes[k],
                                         text: peeled.text,
                                         reasoning: peeled.reasoning,
+                                        metrics: ttftMs !== undefined || tokensPerSec !== undefined
+                                            ? { ttftMs, tokensPerSec }
+                                            : undefined,
                                     };
                                 })
                                 .filter(turn => Boolean(turn.text) || Boolean(turn.reasoning))
@@ -2625,15 +2704,15 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                             const hasEndMarker = /<\/?DEBATE_END>/i.test(fullResponseText);
                             if (!hasEndMarker && fullResponseText.length - progressiveParsedLen < 160) return;
                             progressiveParsedLen = fullResponseText.length;
-                            const provisional = parseProvisionalVerdict(
-                                fullResponseText,
-                                turnTexts[`${moderatorRound}::Moderator`] || '',
-                            );
-                            if (!provisional) return;
-                            const json = JSON.stringify(provisional);
+                            const moderatorTurn = turnTexts[`${moderatorRound}::Moderator`] || '';
+                            const provisional = parseProvisionalVerdict(fullResponseText, moderatorTurn);
+                            // Skeleton-fill: publish whatever labeled fields have
+                            // arrived so far, even before the plan is binding.
+                            const planFields = parsePartialVerdictFields(fullResponseText, moderatorTurn) ?? undefined;
+                            const json = JSON.stringify({ provisional, planFields });
                             if (json === lastProvisionalJson) return;
                             lastProvisionalJson = json;
-                            throttledProvisionalVerdict(requestConversationId, debateMessageId, provisional);
+                            throttledProvisionalVerdict(requestConversationId, debateMessageId, provisional ?? undefined, planFields);
                         };
 
                         for await (const event of debateStream as AsyncGenerator<ensembleService.RealDebateTurnEvent, void, unknown>) {
@@ -2651,6 +2730,8 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 // attempt's start time or chain-of-thought).
                                 turnTexts[key] = '';
                                 delete turnTimes[key];
+                                delete turnLaunchTimes[key];
+                                delete turnLastDeltaAt[key];
                                 delete turnReasoningRef.current[key];
                                 continue;
                             }
@@ -2664,6 +2745,10 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 if (pending) handleReplacementChoice(pending.messageId, null);
                             }
                             if (!turnTimes[key]) turnTimes[key] = new Date().toISOString();
+                            if (event.startedAt && !turnLaunchTimes[key]) {
+                                turnLaunchTimes[key] = Date.parse(event.startedAt);
+                            }
+                            turnLastDeltaAt[key] = Date.now();
                             turnTexts[key] = (turnTexts[key] || '') + event.text;
                             if (event.speaker === 'Moderator') {
                                 fullResponseText += event.text;
@@ -2903,6 +2988,10 @@ ${accuracyVerificationNote}`
                             // The authoritative verdict replaces the provisional
                             // card that streamed while the moderator wrote.
                             provisionalAnalysis: undefined,
+                            provisionalPlanFields: undefined,
+                            // Tool chips are live-only — the settled card keeps
+                            // the permanent run log instead.
+                            liveToolEvents: undefined,
                             debateTurns: existingMessage.debateTurns,
                             thoughtProcesses: { ...thoughtMap },
                             reasoningProcesses: { ...reasoningMapRef.current },
@@ -3356,6 +3445,7 @@ ${accuracyVerificationNote}`
                         ...m,
                         isDebating: false,
                         activeDebateSpeakers: {},
+                        liveToolEvents: undefined,
                         text: cancelled ? 'The analysis was cancelled.' : 'The ensemble could not continue before the debate started.',
                         ensembleProgress: {
                             ...m.ensembleProgress,
@@ -3369,10 +3459,12 @@ ${accuracyVerificationNote}`
                     ...m,
                     isDebating: false,
                     activeDebateSpeakers: {},
+                    liveToolEvents: undefined,
                     replacementOffer: undefined,
                     // An interrupted verdict may be incomplete — never leave a
                     // provisional card standing in for a final one.
                     provisionalAnalysis: undefined,
+                    provisionalPlanFields: undefined,
                     text: cancelled ? 'The analysis was cancelled.' : 'The debate was interrupted by an error before the moderator could issue a final verdict.',
                 };
             }).filter((m): m is Message => m !== null));
