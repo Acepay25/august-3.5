@@ -1,15 +1,14 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React from 'react';
 
 export interface DebateBotAvatarProps {
     name: string;
-    /** Stable key for body color — prefer model id so the same model stays the same hue. */
     toneKey?: string;
     live?: boolean;
     thinking?: boolean;
     speaking?: boolean;
-    /** -1 look left, 0 default (up-right), 1 look right */
     look?: number;
     size?: number;
+    avatarUrl?: string;
 }
 
 const hashName = (name: string): number => {
@@ -18,49 +17,6 @@ const hashName = (name: string): number => {
     return Math.abs(h);
 };
 
-/* Parametric thinking orbit (Hermes-style): each model gets its own math
-   curve — rose / lemniscate / lissajous — sampled once into an SVG path. A
-   short particle trail traces it while the bot thinks. Motion follows state:
-   the orbit only exists in the thinking state. */
-const ORBIT_SIZE = 64;
-const ORBIT_C = ORBIT_SIZE / 2;
-const ORBIT_AMP = 26;
-const ORBIT_DUR = 3.6;
-
-type CurveFn = (t: number) => { x: number; y: number };
-
-const CURVES: Record<string, CurveFn> = {
-    rose: t => {
-        const r = Math.cos(3 * t);
-        return { x: r * Math.cos(t), y: r * Math.sin(t) };
-    },
-    lemniscate: t => {
-        const d = 1 + Math.sin(t) * Math.sin(t);
-        return { x: Math.cos(t) / d, y: (1.8 * Math.sin(t) * Math.cos(t)) / d };
-    },
-    lissajous: t => ({ x: Math.sin(2 * t), y: Math.sin(3 * t) }),
-};
-
-const sampleCurvePath = (fn: CurveFn): string => {
-    const parts: string[] = [];
-    const steps = 72;
-    for (let i = 0; i <= steps; i += 1) {
-        const t = (i / steps) * Math.PI * 2;
-        const { x, y } = fn(t);
-        const px = (ORBIT_C + x * ORBIT_AMP).toFixed(2);
-        const py = (ORBIT_C + y * ORBIT_AMP).toFixed(2);
-        parts.push(`${i === 0 ? 'M' : 'L'}${px},${py}`);
-    }
-    return `${parts.join(' ')} Z`;
-};
-
-const ORBIT_NAMES = Object.keys(CURVES);
-const ORBIT_PATHS: Record<string, string> = {};
-for (const name of ORBIT_NAMES) ORBIT_PATHS[name] = sampleCurvePath(CURVES[name]);
-
-const orbitPathForSeed = (seed: number): string => ORBIT_PATHS[ORBIT_NAMES[seed % ORBIT_NAMES.length]];
-
-/** Dark fills so the white pill eyes stay high-contrast, one tint per model. */
 const BOT_FILLS = [
     '#111111',
     '#1e3a5f',
@@ -77,123 +33,44 @@ export const botFillForKey = (key: string): string => {
     return BOT_FILLS[hashName(key) % BOT_FILLS.length];
 };
 
-/**
- * Grok-style circular bot: solid disc, two white pill eyes, a small mouth.
- * Idle bobs, blinks and glances; thinking tilts and scans with rising orbs;
- * speaking pulses sonar rings and flaps the mouth.
- */
 export const DebateBotAvatar: React.FC<DebateBotAvatarProps> = ({
     name,
     toneKey,
     live = false,
     thinking = false,
     speaking = false,
-    look = 0,
-    size = 56,
+    size = 36,
+    avatarUrl,
 }) => {
-    const seed = hashName(toneKey || name || '?');
-    const orbitPath = orbitPathForSeed(seed);
+    const fill = botFillForKey(toneKey || name || '?');
+    const initial = (name.trim()[0] || '?').toUpperCase();
+    const stateClass = speaking ? 'is-speaking' : thinking ? 'is-thinking' : live ? 'is-live' : '';
     const style = {
-        '--bot-size': `${size}px`,
-        '--bot-fill': botFillForKey(toneKey || name || '?'),
-        '--look': String(look),
-        '--bob-delay': `${seed % 1100}ms`,
-        '--gaze-delay': `${(seed * 7) % 1600}ms`,
-        '--blink-delay': `${(seed * 13) % 2600}ms`,
-        '--flap-delay': `${(seed * 5) % 180}ms`,
-        '--ring-delay': `${seed % 350}ms`,
+        width: size,
+        height: size,
+        background: fill,
+        borderColor: speaking ? 'rgba(255,255,255,0.28)' : live || thinking ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.08)',
     } as React.CSSProperties;
 
-    // Live "thought for Ns" timer (Grok: the clock stops the instant the answer
-    // starts). Decorative only — the accessible readout lives in ReasoningRow.
-    const thoughtStartRef = useRef<number | null>(thinking ? performance.now() : null);
-    const prevThinkingRef = useRef(thinking);
-    const [thoughtS, setThoughtS] = useState(0);
-
-    useEffect(() => {
-        const wasThinking = prevThinkingRef.current;
-        prevThinkingRef.current = thinking;
-        if (thinking && !wasThinking) {
-            thoughtStartRef.current = performance.now();
-            setThoughtS(0);
-        } else if (!thinking && wasThinking) {
-            thoughtStartRef.current = null;
-        }
-    }, [thinking]);
-
-    useEffect(() => {
-        if (!thinking) return undefined;
-        const id = setInterval(() => {
-            if (thoughtStartRef.current !== null) {
-                setThoughtS((performance.now() - thoughtStartRef.current) / 1000);
-            }
-        }, 100);
-        return () => clearInterval(id);
-    }, [thinking]);
+    if (avatarUrl) {
+        return (
+            <span className={`bot-avatar ${stateClass}`} style={style} aria-hidden="true">
+                <img
+                    src={avatarUrl}
+                    alt=""
+                    className="h-full w-full rounded-full object-cover"
+                    onError={e => {
+                        (e.currentTarget as HTMLImageElement).style.display = 'none';
+                    }}
+                />
+                <span className="bot-avatar-fallback">{initial}</span>
+            </span>
+        );
+    }
 
     return (
-        <span
-            className={[
-                'debate-bot',
-                live ? 'is-live' : '',
-                thinking ? 'is-thinking' : '',
-                speaking ? 'is-speaking' : '',
-            ].filter(Boolean).join(' ')}
-            style={style}
-            aria-hidden="true"
-            title={name}
-        >
-            <span className="debate-bot-shadow" />
-            {thinking && (
-                <span className="debate-bot-thought-time" aria-hidden="true">
-                    {thoughtS.toFixed(1)}s
-                </span>
-            )}
-            {speaking && (
-                <span className="debate-bot-rings">
-                    <span className="debate-bot-ring" />
-                    <span className="debate-bot-ring debate-bot-ring-2" />
-                </span>
-            )}
-            {thinking && !speaking && (
-                <span className="debate-bot-rings debate-bot-think-rings">
-                    <span className="debate-bot-ring" />
-                </span>
-            )}
-            <span className="debate-bot-body">
-                <span className="debate-bot-face">
-                    <span className="debate-bot-eyes">
-                        <span className="debate-bot-eye" />
-                        <span className="debate-bot-eye" />
-                    </span>
-                    {speaking ? (
-                        <span className="debate-bot-voice" aria-hidden="true">
-                            <span className="debate-bot-voice-bar" />
-                            <span className="debate-bot-voice-bar" />
-                            <span className="debate-bot-voice-bar" />
-                        </span>
-                    ) : (
-                        <span className="debate-bot-mouth" />
-                    )}
-                </span>
-            </span>
-            {thinking && (
-                <span className="debate-bot-orbit" aria-hidden="true">
-                    {[0, 1, 2].map(i => (
-                        <span
-                            key={i}
-                            className="debate-bot-orbit-dot"
-                            style={{
-                                offsetPath: `path("${orbitPath}")`,
-                                animationDelay: `${((-i * ORBIT_DUR) / 3).toFixed(2)}s`,
-                                width: `${6 - i}px`,
-                                height: `${6 - i}px`,
-                                opacity: 1 - i * 0.28,
-                            }}
-                        />
-                    ))}
-                </span>
-            )}
+        <span className={`bot-avatar ${stateClass}`} style={style} aria-hidden="true" title={name}>
+            {initial}
         </span>
     );
 };

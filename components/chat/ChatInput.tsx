@@ -151,15 +151,27 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
     centered = false,
 }) => {
     const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
+    const [mentionOpen, setMentionOpen] = useState(false);
+    const mentionCandidates = React.useMemo(() => {
+        if (!isEnsembleEnabled) return [] as string[];
+        if (lensConfig.enabled) {
+            const map: Record<string, string> = {
+                [AnalystRole.MACRO_VOLATILITY]: '@Macro',
+                [AnalystRole.TECHNICAL_ANALYST]: '@Technical',
+                [AnalystRole.RISK_EXECUTION]: '@Risk',
+            };
+            return LENS_ROSTER_ROLES.map(r => map[r]).filter(Boolean);
+        }
+        return (ensembleModelSelection || []).slice(0, 3).map((_, i) => ['@Macro', '@Technical', '@Risk'][i]).filter(Boolean) as string[];
+    }, [isEnsembleEnabled, lensConfig.enabled, ensembleModelSelection]);
     React.useEffect(() => {
         const handleEscape = (event: KeyboardEvent) => {
             if (event.key !== 'Escape') return;
+            if (mentionOpen) { setMentionOpen(false); return; }
             setIsLeverageDropdownOpen(false);
             setIsTeamModalOpen(false);
-            // Esc stops an active run (same as the Stop button).
             if (isAnalysisInProgress) handleCancelAnalysis();
         };
-        // "/" focuses the composer from anywhere (unless already typing).
         const handleSlash = (event: KeyboardEvent) => {
             if (event.key !== '/' || event.ctrlKey || event.metaKey || event.altKey) return;
             const target = event.target as HTMLElement | null;
@@ -174,7 +186,12 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
             document.removeEventListener('keydown', handleEscape);
             document.removeEventListener('keydown', handleSlash);
         };
-    }, [setIsLeverageDropdownOpen, isAnalysisInProgress, handleCancelAnalysis]);
+    }, [setIsLeverageDropdownOpen, isAnalysisInProgress, handleCancelAnalysis, mentionOpen]);
+    React.useEffect(() => {
+        if (!isEnsembleEnabled || isAnalysisInProgress) setMentionOpen(false);
+        else if (input.includes('@') && mentionCandidates.length > 0) setMentionOpen(true);
+        else setMentionOpen(false);
+    }, [input, isEnsembleEnabled, isAnalysisInProgress, mentionCandidates.length]);
 
     // Charts can only be analyzed in ensemble mode.
     const uploadDisabled = isImageUploadDisabled || !isEnsembleEnabled;
@@ -300,20 +317,39 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                         </div>
                     )}
 
+                    {mentionOpen && mentionCandidates.length > 0 && (
+                        <div className="mb-1.5 flex flex-wrap gap-1 rounded-md border border-white/10 bg-zinc-900 px-2 py-1.5">
+                            <span className="mr-1 text-[10px] uppercase tracking-widest text-zinc-500">Mention</span>
+                            {mentionCandidates.map(tag => (
+                                <button
+                                    key={tag}
+                                    type="button"
+                                    className="rounded-md bg-zinc-800 px-1.5 py-0.5 text-[11px] text-zinc-300 hover:bg-zinc-700"
+                                    onClick={() => {
+                                        const atIdx = input.lastIndexOf('@');
+                                        const before = atIdx >= 0 ? input.slice(0, atIdx) : input;
+                                        const after = atIdx >= 0 ? input.slice(atIdx).replace(/^@\w*/, '') : '';
+                                        setInput(`${before}${tag} ${after}`.replace(/\s+/g, ' ').trimStart());
+                                        setMentionOpen(false);
+                                        document.getElementById('chat-composer')?.focus();
+                                    }}
+                                >
+                                    {tag}
+                                </button>
+                            ))}
+                            <button type="button" className="ml-auto text-[10px] text-zinc-500 hover:text-zinc-300" onClick={() => setMentionOpen(false)}>Dismiss</button>
+                        </div>
+                    )}
                     {/* Main Input Row */}
                     <div className="flex items-end gap-2">
                         <textarea
                             id="chat-composer"
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
-                            // Enter sends (Shift+Enter = newline); Ctrl/Cmd+Enter
-                            // also sends as an alternative.
-                            onKeyDown={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && (!e.shiftKey || e.ctrlKey || e.metaKey) ? (e.preventDefault(), handleSendMessage()) : null}
+                            onKeyDown={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && (!e.shiftKey || e.ctrlKey || e.metaKey) ? (e.preventDefault(), handleSendMessage()) : undefined}
                             placeholder={isAnalysisInProgress ? 'Add a note for the next debate step…' : images.length > 0 ? 'Analyze charts...' : 'Write a message...'}
                             className="flex-1 min-w-0 bg-transparent px-2 py-1.5 text-base text-white placeholder-zinc-500 outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 min-h-[36px] max-h-24 resize-none leading-snug"
                             rows={1}
-                            // Always typeable — sending (not typing) is what
-                            // requires a ready provider.
                             disabled={isRateLimited}
                             style={{ overflow: 'hidden' }}
                         />

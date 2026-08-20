@@ -47,6 +47,7 @@ interface HeaderProps {
     onOpenWatchList?: () => void;
     watchOpenCount?: number;
     watchOpenR?: string;
+    onOpenBotManager?: () => void;
     onOpenApprovals?: () => void;
     approvalCount?: number;
 }
@@ -84,6 +85,7 @@ export const Header: React.FC<HeaderProps> = memo(({
     onOpenWatchList,
     watchOpenCount = 0,
     watchOpenR,
+    onOpenBotManager,
     onOpenApprovals,
     approvalCount = 0,
 }) => {

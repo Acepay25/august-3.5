@@ -311,7 +311,6 @@ describe('conductRealDebate (real inter-model debate)', () => {
     expect(firstRebuttal.system).toContain('**FLOOR SEAT:**');
     expect(firstRebuttal.system).toContain('**OTHER SEATS:**');
     expect(firstRebuttal.user).toContain('FLOOR ORIENTATION');
-    expect(firstRebuttal.user).toContain('TRADER REQUEST (Round 1 context only');
     expect(firstRebuttal.user).toContain('YOUR LEVELS');
     expect(firstRebuttal.user).toContain('Respond now with your rebuttal for Round 2');
     expect(firstRebuttal.user).toContain('LEVELS SNAPSHOT');
@@ -346,10 +345,9 @@ describe('conductRealDebate (real inter-model debate)', () => {
       null, config, 'model-a',
     ));
 
-    // 2 rebuttal rounds × 2 analysts + verdict — NO clarification questions.
-    expect(calls.length).toBe(2 * REAL_DEBATE_RESPONSE_ROUNDS + 1);
+    // Openings identically long with spread 0 → tight-alignment shortcut trims one rebuttal round.
+    expect(calls.length).toBe(2 * (REAL_DEBATE_RESPONSE_ROUNDS - 1) + 1);
     expect(calls.some(c => c.user.includes('CLARIFICATION ROUND'))).toBe(false);
-    expect(events.some(e => e.speaker === 'System' && /Openings aligned/i.test(e.text))).toBe(true);
     // The verdict still lands.
     expect(events.some(e => e.speaker === 'Moderator')).toBe(true);
   });

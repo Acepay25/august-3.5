@@ -10,6 +10,7 @@ import { ArrowUpIcon, ArrowDownIcon, CloseIcon, LoadingIcon, EyeIcon, BrainIcon,
 import HybridDataPanel from '../analysis/HybridDataPanel';
 import ImageViewerModal from '../modals/ImageViewerModal';
 import AnalysisProgress from '../analysis/AnalysisProgress';
+import DebatePlanRail from '../analysis/DebatePlanRail';
 import WorkspaceWelcome, { WorkspaceWelcomeProps } from './WorkspaceWelcome';
 
 // Hoisted list components to prevent re-creation on each render
@@ -568,14 +569,17 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 <div className="absolute bottom-[calc(env(safe-area-inset-bottom)+8rem)] sm:bottom-[calc(env(safe-area-inset-bottom)+8.5rem)] left-0 right-0 p-2 sm:p-4 pointer-events-none z-10 lg:hidden">
                     <div className="max-w-4xl mx-auto pointer-events-auto lg:max-w-none">
                         {analysisSteps && analysisSteps.length > 0 ? (
-                            <AnalysisProgress
-                                steps={analysisSteps}
-                                isActive={!!loadingMessage || isAnalysisInProgress}
-                                onCancel={handleCancelAnalysis}
-                                isPostMortem={isPostMortemInProgress}
-                                isPostMortemInProgress={isPostMortemInProgress}
-                                onOpenPostMortem={() => setIsLivePostMortemVisible(true)}
-                            />
+                            <>
+                                <DebatePlanRail steps={analysisSteps.map(s => ({ id: s.id, title: s.title, status: s.status === 'running' ? 'running' : s.status === 'complete' ? 'done' : s.status === 'error' ? 'error' : 'pending' }))} />
+                                <AnalysisProgress
+                                    steps={analysisSteps}
+                                    isActive={!!loadingMessage || isAnalysisInProgress}
+                                    onCancel={handleCancelAnalysis}
+                                    isPostMortem={isPostMortemInProgress}
+                                    isPostMortemInProgress={isPostMortemInProgress}
+                                    onOpenPostMortem={() => setIsLivePostMortemVisible(true)}
+                                />
+                            </>
                         ) : (
                             /* Fallback: original spinner overlay when no step data */
                                 <div className="flex flex-col items-center justify-center p-6 glass rounded-2xl shadow-[0_0_50px_-12px_rgba(176, 176, 182,0.2)] animate-fade-in border-t border-white/10">

@@ -619,6 +619,7 @@ export async function runDeskToolLoop(params: {
     defaultSymbol?: string | null;
     onToolEvent?: (line: string) => void;
     nativeTools?: boolean;
+    allowedTools?: string[];
 }): Promise<DeskToolLoopResult> {
     const {
         config,
@@ -627,6 +628,7 @@ export async function runDeskToolLoop(params: {
         defaultSymbol,
         onToolEvent,
         nativeTools = config.apiFormat === 'chat_completions',
+        allowedTools,
     } = params;
     const messages = [...params.messages];
     const usedTools: string[] = [];
@@ -634,9 +636,14 @@ export async function runDeskToolLoop(params: {
     let reasoning = '';
 
     for (let round = 0; round < MAX_DESK_TOOL_ROUNDS; round++) {
+        const effectiveTools = nativeTools
+            ? (allowedTools && allowedTools.length > 0
+                ? DESK_TOOL_DEFINITIONS.filter(d => allowedTools.includes(d.function.name))
+                : DESK_TOOL_DEFINITIONS)
+            : undefined;
         const turn = await sendTurn(config, messages, {
             ...options,
-            tools: nativeTools ? DESK_TOOL_DEFINITIONS : undefined,
+            tools: effectiveTools,
             toolChoice: nativeTools ? 'auto' : undefined,
             // Tool rounds stay shorter than the final analysis stream.
             maxTokens: Math.min(options?.maxTokens ?? 4096, 4096),
@@ -703,6 +710,7 @@ export interface StreamWithDeskToolsOptions extends ChatRequestOptions {
     /** Live tool-call visibility (Floor chips) — fires before and after each
      *  tool round with a short human-readable line. */
     onToolEvent?: (line: string) => void;
+    allowedTools?: string[];
 }
 
 function withDeskToolsSystemPrompt(messages: ChatMessage[], nativeTools: boolean): ChatMessage[] {
@@ -746,6 +754,7 @@ export async function* streamChatWithDeskTools(
         afterToolsNudge,
         enabled: _enabled,
         onToolEvent,
+        allowedTools,
         ...chatOptions
     } = options || {};
 
@@ -758,6 +767,7 @@ export async function* streamChatWithDeskTools(
         options: chatOptions,
         defaultSymbol,
         nativeTools,
+        allowedTools,
         onToolEvent: (line) => {
             onToolEvent?.(line);
             options?.onReasoning?.(`\n[Desk tools] ${line}\n`);
