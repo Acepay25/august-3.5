@@ -9,6 +9,8 @@ import { summarizeSimilarSetups, COLD_START_MIN } from '../../services/learning/
 import { computeEvidenceQualityStats } from '../../utils/analysisQuality';
 import { summarizePromptVersions, summarizePromptLanes } from '../../utils/promptVersionStats';
 import { listSkills } from '../../services/learning/SkillMemoryService';
+import { WriteApprovalGate, PendingRuleItem } from '../../services/learning/WriteApprovalGate';
+import { buildMemoryGraph } from '../../services/learning/MemoryGraph';
 import { EmptyState } from '../ui/EmptyState';
 
 interface LearningDashboardProps {
@@ -121,6 +123,54 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
     const promptVersions = useMemo(() => summarizePromptVersions(closedWindowed), [closedWindowed]);
     const promptLanes = useMemo(() => summarizePromptLanes(closedWindowed), [closedWindowed]);
     const notebookSkills = useMemo(() => listSkills(), [notebook]);
+
+    // Write-approval gate: opt-in trust gate for auto-learned rules.
+    const [writeApproval, setWriteApproval] = useState<boolean>(false);
+    const [pendingRules, setPendingRules] = useState<PendingRuleItem[]>([]);
+    useEffect(() => {
+        let cancelled = false;
+        WriteApprovalGate.isEnabled().then(v => { if (!cancelled) setWriteApproval(v); });
+        WriteApprovalGate.getPending().then(p => { if (!cancelled) setPendingRules(p); });
+        return () => { cancelled = true; };
+    }, []);
+    const refreshPending = async () => setPendingRules(await WriteApprovalGate.getPending());
+    const runAndRefresh = async (op: () => Promise<unknown>) => {
+        try {
+            await op();
+        } catch (e) {
+            console.warn('[LearningDashboard] write-approval action failed:', e);
+        }
+        try {
+            await refreshPending();
+        } catch {
+            /* list refresh is best-effort */
+        }
+    };
+    const toggleWriteApproval = async () => {
+        const next = !writeApproval;
+        setWriteApproval(next);
+        try {
+            await WriteApprovalGate.setEnabled(next);
+        } catch (e) {
+            console.warn('[LearningDashboard] failed to persist write-approval flag:', e);
+            setWriteApproval(!next); // roll back optimistic state
+        }
+    };
+    const approvePending = (id: string) => runAndRefresh(() => WriteApprovalGate.approve(id));
+    const rejectPending = (id: string) => runAndRefresh(() => WriteApprovalGate.reject(id));
+    const approveAllPending = () => runAndRefresh(() => WriteApprovalGate.approveAll());
+    const rejectAllPending = () => runAndRefresh(() => WriteApprovalGate.rejectAll());
+
+    // Memory Graph — build the typed memory graph and offer All / Used / Learned views.
+    const [graphTab, setGraphTab] = useState<'all' | 'used' | 'learned'>('all');
+    const memoryGraph = useMemo(() => buildMemoryGraph(undefined, closedWindowed), [closedWindowed, notebook]);
+    const graphKinds = useMemo(() => {
+        const m = new Map<string, number>();
+        for (const n of memoryGraph.nodes.values()) m.set(n.kind, (m.get(n.kind) ?? 0) + 1);
+        return m;
+    }, [memoryGraph]);
+    const usedRules = useMemo(() => learnedRules.filter(r => (r.useCount ?? 0) > 0), [learnedRules]);
+    const learnedSkills = useMemo(() => notebookSkills.filter(s => s.meta.wins + s.meta.losses > 0 || s.meta.status === 'confirmed'), [notebookSkills]);
 
     // Pool stats: setups indexed + avg matches per query (sampled for cost)
     // + how many queries hit the cold-start flag.
@@ -341,6 +391,137 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
         </div>
     );
 
+    // ─── Write-approval gate: staged rules awaiting review ───────────────
+    const pendingRulesSection = (
+        <div className="bg-zinc-800 rounded-xl border border-white/5 p-3 sm:p-4">
+            <div className="flex items-center justify-between gap-2 flex-wrap mb-2 sm:mb-3">
+                <h4 className="text-[10px] sm:text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                    🔒 Learning write-approval
+                </h4>
+                <button
+                    onClick={toggleWriteApproval}
+                    className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider border transition-colors ${
+                        writeApproval ? 'bg-cyan-500/20 border-cyan-500/30 text-cyan-400' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'
+                    }`}
+                >
+                    {writeApproval ? 'ON — staged' : 'OFF — auto-save'}
+                </button>
+            </div>
+            <p className="text-[10px] text-zinc-600 mb-2">
+                {writeApproval
+                    ? 'New IF/THEN rules extracted from post-mortems are staged here for review instead of being saved automatically.'
+                    : 'Auto-learned IF/THEN rules are saved directly. Turn ON to review each new rule before it is persisted. (Pending rules are not auto-committed when you turn this OFF.)'}
+            </p>
+            {pendingRules.length === 0 ? (
+                <p className="text-xs text-zinc-600 italic">No pending rules.</p>
+            ) : (
+                <div className="space-y-1.5">
+                    {pendingRules.map(item => (
+                        <div key={item.id} className="rounded-lg border border-white/5 bg-zinc-950/50 px-2.5 py-2">
+                            <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                    <p className="text-xs text-zinc-300">
+                                        <span className="text-zinc-500 font-mono">IF</span> {item.rule.ifCondition}
+                                    </p>
+                                    <p className="text-xs text-zinc-400 mt-0.5">
+                                        <span className="text-zinc-500 font-mono">THEN</span> {item.rule.thenAction}
+                                    </p>
+                                    <p className="text-[9px] text-zinc-600 mt-1 font-mono">
+                                        {item.rule.outcome === 'LOSS' ? '⚠️ from LOSS' : '✅ from WIN'}
+                                        {item.rule.coin ? ` · ${item.rule.coin}` : ''}
+                                        {item.source ? ` · ${item.source}` : ''}
+                                    </p>
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0">
+                                    <button onClick={() => approvePending(item.id)} className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 hover:bg-emerald-500/25 transition-colors">Approve</button>
+                                    <button onClick={() => rejectPending(item.id)} className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-rose-500/15 text-rose-400 border border-rose-500/25 hover:bg-rose-500/25 transition-colors">Reject</button>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                    <div className="flex items-center gap-2 pt-1">
+                        <button onClick={approveAllPending} className="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 hover:bg-emerald-500/25 transition-colors">Approve all</button>
+                        <button onClick={rejectAllPending} className="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider bg-rose-500/15 text-rose-400 border border-rose-500/25 hover:bg-rose-500/25 transition-colors">Reject all</button>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+
+    // ─── Memory Graph panel: All / Used / Learned ───────────────────────
+    const KIND_LABELS: Record<string, string> = {
+        identity: 'Profile', skill: 'Skill', rule: 'Rule', note: 'Note',
+        trade: 'Trade', rootCause: 'Root cause', setup: 'Setup dim',
+    };
+    const memoryGraphSection = (
+        <div className="bg-zinc-800 rounded-xl border border-white/5 p-3 sm:p-4">
+            <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
+                <h4 className="text-[10px] sm:text-xs font-bold text-zinc-500 uppercase tracking-wider">🧠 Memory Graph</h4>
+                <div className="flex items-center gap-1">
+                    {(['all', 'used', 'learned'] as const).map(t => (
+                        <button key={t} onClick={() => setGraphTab(t)}
+                            className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border transition-colors ${graphTab === t ? 'bg-cyan-500/20 border-cyan-500/30 text-cyan-400' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'}`}>
+                            {t}
+                        </button>
+                    ))}
+                </div>
+            </div>
+            <p className="text-[10px] text-zinc-600 mb-2 font-mono">
+                {memoryGraph.nodes.size} nodes · {memoryGraph.edges.length} edges
+                {' · '}{[...graphKinds.entries()].map(([k, v]) => `${k} ${v}`).join(' · ')}
+            </p>
+            {graphTab === 'all' && (
+                <div className="space-y-1.5">
+                    {[...graphKinds.entries()].map(([kind, count]) => {
+                        const samples = [...memoryGraph.nodes.values()].filter(n => n.kind === kind).slice(0, 4);
+                        return (
+                            <div key={kind} className="rounded-lg border border-white/5 bg-zinc-950/50 px-2.5 py-1.5 flex items-center justify-between gap-2">
+                                <span className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold shrink-0">{KIND_LABELS[kind] ?? kind}</span>
+                                <span className="text-[10px] text-zinc-600 truncate min-w-0">{samples.map(s => s.label).join(' · ')}</span>
+                                <span className="text-[10px] font-mono text-zinc-400 shrink-0">{count}</span>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+            {graphTab === 'used' && (
+                usedRules.length === 0 && learnedSkills.length === 0
+                    ? <p className="text-xs text-zinc-600 italic">Nothing used yet — rules/skills appear here once injected into an analysis.</p>
+                    : <div className="space-y-1.5">
+                        {usedRules.slice(0, 6).map(r => (
+                            <div key={r.id} className="rounded-lg border border-white/5 bg-zinc-950/50 px-2.5 py-1.5 text-[11px]">
+                                <span className="text-zinc-500 font-mono">IF</span> <span className="text-zinc-300">{r.ifCondition}</span>
+                                <span className="text-zinc-500"> · used ×{r.useCount}</span>
+                            </div>
+                        ))}
+                        {learnedSkills.slice(0, 6).map(s => (
+                            <div key={s.file.id} className="rounded-lg border border-white/5 bg-zinc-950/50 px-2.5 py-1.5 text-[11px]">
+                                <span className="text-zinc-500 font-mono">{s.meta.kind}</span> <span className="text-zinc-300">{s.file.name.replace(/\.md$/i, '')}</span>
+                                <span className="text-zinc-500"> · {s.meta.wins}/{s.meta.losses}</span>
+                            </div>
+                        ))}
+                    </div>
+            )}
+            {graphTab === 'learned' && (
+                learnedRules.length === 0 && notebookSkills.length === 0
+                    ? <p className="text-xs text-zinc-600 italic">Nothing learned yet — close trades with post-mortems to grow rule/skill memory.</p>
+                    : <div className="space-y-1.5">
+                        {learnedRules.slice(0, 8).map(r => (
+                            <div key={r.id} className="rounded-lg border border-white/5 bg-zinc-950/50 px-2.5 py-1.5 text-[11px]">
+                                <span className="text-zinc-500 font-mono">IF</span> <span className="text-zinc-300">{r.ifCondition}</span>
+                                <span className="text-zinc-500"> → </span><span className="text-zinc-400">{r.thenAction}</span>
+                            </div>
+                        ))}
+                        {notebookSkills.slice(0, 6).map(s => (
+                            <div key={s.file.id} className="rounded-lg border border-white/5 bg-zinc-950/50 px-2.5 py-1.5 text-[11px]">
+                                <span className="text-zinc-500 font-mono">{s.meta.kind}</span> <span className="text-zinc-300">{s.file.name.replace(/\.md$/i, '')}</span>
+                            </div>
+                        ))}
+                    </div>
+            )}
+        </div>
+    );
+
     // ─── Harness accuracy section (②): pool stats, drawdown, leaderboard ──
     const harnessSection = (
         <div className="space-y-3 sm:space-y-4">
@@ -462,6 +643,8 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
     if (profile.totalAnalyzedTrades < 3) {
         return (
             <div className="space-y-4 p-3 sm:p-4 overflow-y-auto custom-scrollbar">
+                {pendingRulesSection}
+                {memoryGraphSection}
                 {harnessSection}
                 {notebookSection}
                 {lessonsSection}
@@ -477,6 +660,8 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
 
     return (
         <div className="space-y-4 sm:space-y-6 p-3 sm:p-4 overflow-y-auto custom-scrollbar">
+            {pendingRulesSection}
+            {memoryGraphSection}
             {harnessSection}
             {notebookSection}
             {lessonsSection}

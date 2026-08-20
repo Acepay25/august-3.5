@@ -259,6 +259,13 @@ export interface AnalyzeTradingViewParams {
      */
     systemPromptOverride?: string;
     signal?: AbortSignal;
+    /**
+     * Sampling temperature. Defaults to 0.35 (pro-trader determinism) when
+     * omitted. The ensemble raises this per-seat when Lenses are OFF so the
+     * three analysts sharing one prompt sample differently instead of
+     * collapsing to near-identical output.
+     */
+    temperature?: number;
     onReasoning?: (reasoning: string) => void;
     /** Visible content deltas as they stream — lets the Floor show the
      *  answer (and any untagged thinking) forming live, not just at the end. */
@@ -273,7 +280,7 @@ export async function analyzeTradingView(
         prompt, images, imageSummaries, chatHistory, finalTradeSummary, recentInsights,
         activeFrameworks, globalMemory, threadSummary, subMode, customInstructions,
         isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI,
-        rolePrompt, systemPromptOverride, userStrategies, signal, onReasoning, onPartialOutput,
+        rolePrompt, systemPromptOverride, userStrategies, signal, temperature, onReasoning, onPartialOutput,
     } = params;
 
     const modelName = config.selectedModel;
@@ -459,9 +466,11 @@ export async function analyzeTradingView(
     }
 
     // --- CALL THE GENERIC CLIENT (optional desk-tools loop, then stream) ---
-    // Temperature: 0.35 — pro-trader discipline wants determinism; the three
-    // analysts still differ because their PROMPTS differ, not because of dice.
-    const options: ChatRequestOptions = { jsonMode: false, maxTokens: TASK_BUDGETS.analysis, temperature: 0.35, signal, onReasoning };
+    // Temperature: 0.35 default — pro-trader discipline wants determinism
+    // when each seat carries a distinct persona. The ensemble passes a
+    // per-seat temperature (0.55–0.85) when Lenses are OFF so three seats
+    // sharing one prompt still sample independently.
+    const options: ChatRequestOptions = { jsonMode: false, maxTokens: TASK_BUDGETS.analysis, temperature: temperature ?? 0.35, signal, onReasoning };
     let responseText = '';
     let reasoningAccumulated = '';
     try {

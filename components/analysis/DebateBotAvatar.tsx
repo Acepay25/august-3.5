@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 export interface DebateBotAvatarProps {
     name: string;
@@ -25,7 +25,7 @@ const hashName = (name: string): number => {
 const ORBIT_SIZE = 64;
 const ORBIT_C = ORBIT_SIZE / 2;
 const ORBIT_AMP = 26;
-const ORBIT_DUR = 4.8;
+const ORBIT_DUR = 3.6;
 
 type CurveFn = (t: number) => { x: number; y: number };
 
@@ -104,6 +104,33 @@ export const DebateBotAvatar: React.FC<DebateBotAvatarProps> = ({
         '--ring-delay': `${seed % 350}ms`,
     } as React.CSSProperties;
 
+    // Live "thought for Ns" timer (Grok: the clock stops the instant the answer
+    // starts). Decorative only — the accessible readout lives in ReasoningRow.
+    const thoughtStartRef = useRef<number | null>(thinking ? performance.now() : null);
+    const prevThinkingRef = useRef(thinking);
+    const [thoughtS, setThoughtS] = useState(0);
+
+    useEffect(() => {
+        const wasThinking = prevThinkingRef.current;
+        prevThinkingRef.current = thinking;
+        if (thinking && !wasThinking) {
+            thoughtStartRef.current = performance.now();
+            setThoughtS(0);
+        } else if (!thinking && wasThinking) {
+            thoughtStartRef.current = null;
+        }
+    }, [thinking]);
+
+    useEffect(() => {
+        if (!thinking) return undefined;
+        const id = setInterval(() => {
+            if (thoughtStartRef.current !== null) {
+                setThoughtS((performance.now() - thoughtStartRef.current) / 1000);
+            }
+        }, 100);
+        return () => clearInterval(id);
+    }, [thinking]);
+
     return (
         <span
             className={[
@@ -117,10 +144,20 @@ export const DebateBotAvatar: React.FC<DebateBotAvatarProps> = ({
             title={name}
         >
             <span className="debate-bot-shadow" />
+            {thinking && (
+                <span className="debate-bot-thought-time" aria-hidden="true">
+                    {thoughtS.toFixed(1)}s
+                </span>
+            )}
             {speaking && (
                 <span className="debate-bot-rings">
                     <span className="debate-bot-ring" />
                     <span className="debate-bot-ring debate-bot-ring-2" />
+                </span>
+            )}
+            {thinking && !speaking && (
+                <span className="debate-bot-rings debate-bot-think-rings">
+                    <span className="debate-bot-ring" />
                 </span>
             )}
             <span className="debate-bot-body">

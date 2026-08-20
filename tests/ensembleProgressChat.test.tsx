@@ -34,7 +34,13 @@ const makeProgress = (analysts: EnsembleAnalystProgress[] = []): EnsembleProgres
     moderator: { status: 'waiting' },
 });
 
+// The seat modal lives on the stage view; the default view is the flat thread.
+const switchToStage = (): void => {
+    fireEvent.click(screen.getByRole('button', { name: 'Stage' }));
+};
+
 const openSeat = (name: string): void => {
+    switchToStage();
     fireEvent.click(screen.getByLabelText(`Open ${name} analysis`));
 };
 
@@ -98,6 +104,7 @@ describe('EnsembleProgressChat', () => {
                 activeDebateSpeakers={{ Moderator: 2 }}
             />,
         );
+        switchToStage();
         const moderatorThought = container.querySelector('[data-thought]');
         expect(moderatorThought?.getAttribute('data-thought')).toBe('Thinking');
         expect(container.querySelector('[aria-label="Open Moderator analysis"]')?.className).toMatch(/is-thinking/);
@@ -201,17 +208,24 @@ describe('EnsembleProgressChat', () => {
             makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'analyzing', reasoning: 'Weigh the sweep.' }),
         ]);
         const { container } = render(<EnsembleProgressChat progress={progress} isLive />);
+        switchToStage();
         fireEvent.click(container.querySelector('.debate-stage-thought') as HTMLElement);
         expect(screen.getByRole('dialog', { name: 'Analyst A analysis' })).toBeDefined();
         fireEvent.click(screen.getByLabelText('Collapse Analyst A analysis'));
         expect(screen.queryByRole('dialog', { name: 'Analyst A analysis' })).toBeNull();
     });
 
-    it('keeps the stage as the only seat list', () => {
+    it('defaults to the flat thread view and keeps the stage behind a toggle', () => {
         const progress = makeProgress([
             makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'complete' }),
         ]);
         render(<EnsembleProgressChat progress={progress} />);
+        // Default: flat thread, no animated stage, no expand/collapse controls.
+        expect(screen.getByText('Analyst A')).toBeDefined();
+        expect(document.querySelector('.debate-thread')).toBeDefined();
+        expect(document.querySelector('.debate-stage')).toBeNull();
+        // The stage (and its seat-modal trigger) is opt-in.
+        switchToStage();
         expect(screen.getByLabelText('Open Analyst A analysis')).toBeDefined();
         expect(screen.queryByLabelText('Expand Analyst A analysis')).toBeNull();
         expect(screen.queryByLabelText('Collapse Analyst A analysis')).toBeNull();
@@ -303,6 +317,7 @@ describe('EnsembleProgressChat', () => {
                 reasoningProcesses={{ moderator: 'Weigh size before asking about entry.' }}
             />,
         );
+        switchToStage();
         expect(container.querySelector('[data-thought]')?.getAttribute('data-thought')).toMatch(/Weigh size/);
         openSeat('Moderator');
         expect(screen.getByText(/Weigh size before asking about entry/).closest('details')).toBeDefined();
@@ -327,6 +342,7 @@ describe('EnsembleProgressChat', () => {
                 }]}
             />,
         );
+        switchToStage();
         expect(container.querySelector('[data-thought]')?.getAttribute('data-thought')).toMatch(/Weigh size/);
         await waitFor(() => {
             expect(container.querySelector('.debate-stage-packet')?.getAttribute('data-packet')).toMatch(/Fix the entry/i);
@@ -444,6 +460,7 @@ Deconstruct the Context: Entry 63694 SL 63420.`;
             makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'analyzing', reasoning: 'Weigh the sweep.' }),
         ]);
         const { container } = render(<EnsembleProgressChat progress={progress} isLive />);
+        switchToStage();
         expect(container.querySelector('.debate-stage')).toBeDefined();
         expect(container.querySelectorAll('.debate-bot').length).toBeGreaterThan(1);
         const fills = [...container.querySelectorAll('.debate-bot')].map(
@@ -492,6 +509,7 @@ Deconstruct the Context: Entry 63694 SL 63420.`;
                 }]}
             />,
         );
+        switchToStage();
         await waitFor(() => {
             expect(container.querySelector('.debate-stage-packet')?.getAttribute('data-packet')).toMatch(/fade the wick/i);
         });
@@ -519,6 +537,7 @@ Deconstruct the Context: Entry 63694 SL 63420.`;
                 }]}
             />,
         );
+        switchToStage();
         fireEvent.click(container.querySelector('.debate-stage-balloon') as HTMLElement);
         expect(screen.getByRole('dialog', { name: 'Analyst A analysis' })).toBeDefined();
     });
@@ -546,6 +565,7 @@ Deconstruct the Context: Entry 63694 SL 63420.`;
                 }]}
             />,
         );
+        switchToStage();
         const actor = container.querySelector('button[aria-label="Open Analyst A analysis"]');
         expect(actor?.classList.contains('is-thinking')).toBe(true);
         expect(actor?.classList.contains('is-speaking')).toBe(false);
@@ -569,6 +589,7 @@ Deconstruct the Context: Entry 63694 SL 63420.`;
                 }]}
             />,
         );
+        switchToStage();
         const actor = container.querySelector('button[aria-label="Open Analyst A analysis"]');
         expect(actor?.classList.contains('is-speaking')).toBe(true);
         expect(actor?.classList.contains('is-thinking')).toBe(false);
@@ -592,6 +613,7 @@ Deconstruct the Context: Entry 63694 SL 63420.`;
             />
         );
         const { container, rerender } = render(renderFloor('Long the breakout.'));
+        switchToStage();
         const ticker = container.querySelector('.debate-stage-ticker');
         expect(ticker).toBeDefined();
         // The bubble retains the old prefix while the new sentence reveals —

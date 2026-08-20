@@ -117,7 +117,7 @@ const SmoothText: React.FC<{ text: string; animate: boolean }> = ({ text, animat
         let currentLength = 0;
         const step = () => {
             if (cancelled) return;
-            const nextLength = Math.min(text.length, currentLength + Math.max(4, Math.ceil(text.length / 180)));
+            const nextLength = Math.min(text.length, currentLength + Math.max(6, Math.ceil(text.length / 90)));
             currentLength = nextLength;
             setVisibleText(text.slice(0, nextLength));
             if (nextLength < text.length) frame = window.setTimeout(step, 16);

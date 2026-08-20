@@ -18,6 +18,7 @@ import {
     loadLearningRules,
     saveLearningRules
 } from '../learning/LearningRulesService';
+import { WriteApprovalGate } from '../learning/WriteApprovalGate';
 import { ingestIfThenFromTrade } from '../learning/SkillMemoryService';
 import { addRulesFromPostMortem } from '../validation/InvalidationRuleService';
 
@@ -201,10 +202,23 @@ class JobQueueService {
         const updatedStorage = processPostMortemForLearning(storage, trade);
 
         // Only save if rules changed (optimization)
+        let rulesCount = updatedStorage.rules.length;
         if (updatedStorage.rules.length !== storage.rules.length ||
             updatedStorage.lastUpdated !== storage.lastUpdated) {
-            saveLearningRules(updatedStorage);
-            console.log(`[JobQueue] Saved new learning rules.`);
+            // Write-approval gate: when enabled, newly extracted rules are
+            // staged for review instead of auto-persisted.
+            const originalIds = new Set(storage.rules.map(r => r.id));
+            const newRules = updatedStorage.rules.filter(r => !originalIds.has(r.id));
+            const gateEnabled = await WriteApprovalGate.isEnabled();
+            if (gateEnabled && newRules.length > 0) {
+                const staged = await WriteApprovalGate.stageRules(newRules, 'regex');
+                rulesCount = storage.rules.length; // active store unchanged when staging
+                console.log(`[JobQueue] Write-approval ON: staged ${staged} new rules for review.`);
+            } else {
+                saveLearningRules(updatedStorage);
+                rulesCount = updatedStorage.rules.length;
+                console.log(`[JobQueue] Saved new learning rules.`);
+            }
         }
 
         const notebookUser = (typeof localStorage !== 'undefined' && localStorage.getItem('last_active_user')) || 'default';
@@ -222,7 +236,7 @@ class JobQueueService {
             }
         }
 
-        return { rulesCount: updatedStorage.rules.length };
+        return { rulesCount };
     }
 
     private notifyListeners(job: Job) {

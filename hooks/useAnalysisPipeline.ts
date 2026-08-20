@@ -240,6 +240,15 @@ const MAX_INITIAL_ANALYSIS_RETRIES = 1;
  * the full call (a partial stream is discarded, never resumed), so a
  * genuinely failing provider still surfaces its error.
  */
+/** Stable per-seat temperature (0.55–0.85) so Normal-mode ensemble seats that
+ *  share one prompt sample differently. Deterministic per key — not random —
+ *  so a seat keeps the same temperature across re-runs/replacements. */
+const seatTemperature = (key: string): number => {
+    let h = 0;
+    for (let i = 0; i < key.length; i += 1) h = (h * 31 + key.charCodeAt(i)) | 0;
+    return 0.55 + (Math.abs(h) % 4) * 0.1;
+};
+
 async function analyzeTradingViewWithTransientRetry(
     config: ProviderConfig,
     params: Parameters<typeof analyzeTradingView>[1],
@@ -321,6 +330,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         isMemoryEnabledInPureAI: boolean;
         rolePrompt: string | undefined;
         systemPromptOverride: string | undefined;
+        /** Per-seat sampling temperature (ensemble Normal mode). */
+        temperature?: number;
         /** Summaries of user-uploaded strategy books (Settings → Strategies). */
         userStrategies: string | undefined;
         onReasoning: (reasoning: string) => void;
@@ -365,6 +376,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             signal,
             systemPromptOverride: params.systemPromptOverride,
             userStrategies: params.userStrategies,
+            temperature: params.temperature,
             onReasoning: params.onReasoning,
             onPartialOutput: params.onPartialOutput,
         });
@@ -878,6 +890,16 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 }
                 if (!hasCompleteAnalystAssignments) {
                     toast.warning('Distinct analyst models required', 'Each analyst role must use a different model. The same provider is allowed.');
+                    return;
+                }
+            } else if (enabledProviders.length > 1) {
+                // Normal mode (Lenses OFF): the same provider+model may not
+                // occupy two seats — identical prompts through an identical
+                // model produce identical output (the "three AIs say the same
+                // thing" symptom). Block it up front.
+                const seatIdentities = enabledProviders.map(p => `${p.config.id}::${p.model}`);
+                if (new Set(seatIdentities).size !== seatIdentities.length) {
+                    toast.warning('Distinct debate models required', 'Two or more debate slots use the same model. Pick different models in the Team picker so the analysts don\u2019t return identical output.');
                     return;
                 }
             }
@@ -1787,6 +1809,13 @@ ${reflectionBlock}`
                         systemPromptOverride: runLensConfig.enabled ? undefined : (customEnsemblePrompt || undefined),
                         // User-uploaded strategy summaries (Settings → Strategies).
                         userStrategies: strategiesBlock || undefined,
+                        // Per-seat temperature: Lenses ON → each seat has a
+                        // distinct persona (prompts already differ), so keep
+                        // the disciplined default. Lenses OFF → the three
+                        // seats share one prompt, so a stable per-seat
+                        // temperature keeps them genuinely independent
+                        // instead of near-identical at 0.35.
+                        temperature: runLensConfig.enabled ? undefined : seatTemperature(provider.thoughtsKey || provider.name),
                         // Streamed chain-of-thought deltas accumulate — the
                         // latest full string is pushed to the live cards.
                         onReasoning: (reasoning: string) => {
@@ -1878,8 +1907,13 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 buildHybridEnvelope(freshHybridData, envelopeKind),
                                 buildOcrEnvelope(summaries, envelopeKind),
                             ].filter(Boolean).join('\n\n');
+                            const seatMandates = [
+                                'market structure, trend context, and the dominant directional bias — anchor on higher-timeframe structure first',
+                                'entry mechanics, key levels, and confirmation triggers — pinpoint the entry, stop, and take-profit levels',
+                                'risk, invalidation, and failure scenarios — stress-test the trade and argue where it breaks',
+                            ];
                             const independentSeatInstruction = !runLensConfig.enabled
-                                ? `\n\n**INDEPENDENT ANALYST SEAT ${analystIndex + 1}:** Recompute this chart independently. Do not copy a stock reasoning script or assume another seat's conclusion. Prioritize ${analystIndex === 0 ? 'market structure and directional context' : analystIndex === 1 ? 'entry mechanics, levels, and confirmation' : 'risk, invalidation, and failure scenarios'} and use your own wording.`
+                                ? `\n\n**INDEPENDENT ANALYST SEAT ${analystIndex + 1}:** You are one of several independent analysts looking at the same chart. Recompute it from scratch — do not copy another seat's conclusion or a stock script. Your specialty: ${seatMandates[analystIndex % seatMandates.length]}. Form your own view in your own words; where your read differs from the other seats, say so explicitly.`
                                 : '';
                             return runAnalyzeTradingView(
                                 provider.config,

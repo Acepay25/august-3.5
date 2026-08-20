@@ -1,4 +1,20 @@
 /**
+ * ⚠️ DEPRECATED / RETIRED — DO NOT USE (2026-08-20)
+ *
+ * The AI response cache has been retired. No code on the analysis or debate
+ * path reads or writes it: `cacheResponse` / `getCachedResponse` /
+ * `cacheContext` / `getCachedContext` / `getImageHash` have zero callers in
+ * production (verified by a repo-wide import sweep). The only remaining
+ * consumers were `clearAllCaches` in App.tsx (removed) and the legacy test
+ * suite. This module is kept only so that test file still compiles; treat it
+ * as non-existent and never import it into new code.
+ *
+ * Only TOOL/DATA caches remain, intentionally: DeskToolsService (30s TTL),
+ * MarketDataService, KlineService, CorrelationRiskService. Market data and
+ * OCR/image summaries are handled outside this file.
+ */
+
+/**
  * AI Response Cache
  *
  * Caches assembled prompt contexts and AI responses to avoid redundant
