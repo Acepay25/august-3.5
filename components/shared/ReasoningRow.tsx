@@ -42,14 +42,30 @@ const ReasoningRow: React.FC<ReasoningRowProps> = ({
     const clipRef = useRef<HTMLSpanElement>(null);
     const bodyRef = useRef<HTMLDivElement>(null);
     const wasRunningRef = useRef(running);
+    // Clock starts at mount if the row is already streaming (live message), so
+    // the settle can still report a "Thought for Ns" duration.
+    const startedAtRef = useRef<number | null>(running ? Date.now() : null);
+    const [durationMs, setDurationMs] = useState<number | null>(null);
     const trimmed = thinking.trim();
 
     // Follow the live state: expand when the stream starts (the thinking must
     // be SEEN generating), snap back to the collapsed one-line summary when it
-    // settles — the expanded trace is for watching the run, not history.
+    // settles — the expanded trace is for watching the run, not history. Also
+    // time the thinking span so the collapsed row can show "Thought for Ns"
+    // (the DeepSeek / o-series convention).
     useEffect(() => {
-        if (running && !wasRunningRef.current) setOpen(true);
-        if (wasRunningRef.current && !running) setOpen(false);
+        if (running && !wasRunningRef.current) {
+            setOpen(true);
+            startedAtRef.current = Date.now();
+            setDurationMs(null);
+        }
+        if (wasRunningRef.current && !running) {
+            setOpen(false);
+            if (startedAtRef.current !== null) {
+                setDurationMs(Date.now() - startedAtRef.current);
+                startedAtRef.current = null;
+            }
+        }
         wasRunningRef.current = running;
     }, [running]);
 
@@ -93,6 +109,11 @@ const ReasoningRow: React.FC<ReasoningRowProps> = ({
                     <path d="M6.4 13.2h3.2M7 14.5h2" strokeLinecap="round" />
                 </svg>
                 <span className="reasoning-row-label">{label}</span>
+                {durationMs !== null && (
+                    <span className="reasoning-row-meta" aria-label={`${(durationMs / 1000).toFixed(1)} seconds`}>
+                        · {(durationMs / 1000).toFixed(1)}s
+                    </span>
+                )}
                 {running && (
                     <span className="reasoning-row-dots" aria-hidden="true">
                         <span /><span /><span />

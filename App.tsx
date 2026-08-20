@@ -106,7 +106,6 @@ import { OutcomeAutopilotService, AutopilotResolution } from './services/ui/Outc
 import { useWatchSideEffects } from './hooks/useWatchSideEffects';
 import { getThinkingTradeId, updateThinkingOutcome, deleteThinkingByTrade } from './services/infrastructure/ThinkingStoreService';
 import { removeRulesForTrades } from './services/learning/LearningRulesService';
-import { clearAllCaches } from './services/infrastructure/responseCache';
 import { initNativeStatusBar } from './services/infrastructure/NativeStatusBar';
 import { initConfluenceService, syncConfluenceFromTradeLog } from './services/analysis/TimeframeConfluenceService';
 import { initPatternMemoryService, setAttributedInsightsUser } from './services/learning/PatternMemorySynthesisService';
@@ -1037,10 +1036,10 @@ const App: React.FC = () => {
     // is a no-op.)
     const previousUsernameRef = useRef<string | null>(activeUsernameRef.current);
     useEffect(() => {
-        // Remove response-cache records written by older builds. Analysis no
-        // longer reads or writes this cache, but clearing it avoids leaving
-        // stale AI responses in the user's local IndexedDB.
-        void clearAllCaches();
+        // Legacy migration: delete the AI response-cache IndexedDB left by
+        // older builds. Analysis never reads or writes an AI response cache —
+        // only tool/data caches (market data, kline, desk tools) remain.
+        try { indexedDB.deleteDatabase('august-cache'); } catch { /* no-op */ }
     }, []);
     useEffect(() => {
         const previous = previousUsernameRef.current;
@@ -1049,10 +1048,9 @@ const App: React.FC = () => {
             // P1-9: Stop the old user's backup scheduler; loadUserData starts
             // a fresh one for the new user.
             if (previous !== null) stopAutoBackup();
-            // P1-4: Clear the AI response cache (memory + persisted layers)
-            // so one user's cached analyses are never served to another user.
-            clearAllCaches();
-            console.log('[App] Cleared response cache on user switch');
+            // No AI response cache exists to clear (removed). Only tool/data
+            // caches remain, which are in-memory and never persist across
+            // users or reloads.
         }
         previousUsernameRef.current = current;
     }, [activeUsername]);

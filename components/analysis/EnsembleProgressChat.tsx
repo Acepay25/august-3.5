@@ -6,6 +6,7 @@ import { formatModelDisplayName, formatSeatLabel } from '../../utils/providerUti
 import { buildAnalystGantt, lastThoughtSnippet } from '../../utils/runGantt';
 import { computeFloorLean } from '../../utils/floorLean';
 import { splitThinkingFromOutput, looksLikePublicAnswer, looksLikeScratchpad, looksLikeTradeOutput } from '../../utils/thinkingSplit';
+import { loadPerformanceData } from '../../services/backtesting/ModelPerformanceService';
 import { DebateBotAvatar } from './DebateBotAvatar';
 import { DebateStage, DebateStageActor } from './DebateStage';
 
@@ -85,6 +86,7 @@ interface SeatView {
     thinking: string;
     blocks: SeatBlock[];
     usage?: string;
+    trackRecord?: string;
     retryKey?: string;
     error?: string;
     toneKey: string;
@@ -268,6 +270,7 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
         : rebuttalStarted
             ? 'Rebuttals'
             : 'Openings';
+    const maxRound = debateTurns.reduce((m, t) => Math.max(m, t.round ?? 0), 0);
 
     const { moderatorBlocks, moderatorThinking } = useMemo(() => {
         const turns = debateTurns.filter(t => t.speaker === 'Moderator');
@@ -311,6 +314,9 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
 
     const [floorOpen, setFloorOpen] = useState(true);
     const [openSeatId, setOpenSeatId] = useState<string | null>(null);
+    // Simplicity-first: default to a flat roster + shared thread; the animated
+    // stage is an opt-in ("Stage") for anyone who wants it.
+    const [view, setView] = useState<'thread' | 'stage'>('thread');
     const liveAnalyst = progress.analysts.find(a =>
         a.status === 'analyzing' || Boolean(activeDebateSpeakers[a.displayName] || activeDebateSpeakers[a.providerName])
     );
@@ -430,6 +436,11 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
     ]);
 
     const seats = useMemo((): SeatView[] => {
+        // Read the performance cache fresh on every recompute (not a one-time
+        // [] memo): loadPerformanceData() may be an empty map until
+        // initModelPerformanceService() resolves, so a mount-time snapshot
+        // would stay empty for the whole debate.
+        const perfData = loadPerformanceData();
         const moderatorTokens = (runStats?.promptTokens ?? 0) + (runStats?.completionTokens ?? 0);
         const moderator: SeatView = {
             id: 'moderator',
@@ -496,6 +507,10 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
             const tokens = ledger
                 ? (ledger.promptTokens ?? 0) + (ledger.completionTokens ?? 0) || Math.round((ledger.charsOut ?? 0) / 4)
                 : 0;
+            const perf = perfData[analyst.providerId] || perfData[analyst.providerName];
+            const trackRecord = perf && typeof perf.overallStats?.winRate === 'number' && (perf.overallStats.total ?? 0) >= 3
+                ? `${perf.overallStats.winRate.toFixed(0)}% wr`
+                : undefined;
             return {
                 id: analyst.key,
                 title,
@@ -506,6 +521,7 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
                 thinking,
                 blocks,
                 usage: tokens > 0 ? `${tokens.toLocaleString()} tok` : undefined,
+                trackRecord,
                 retryKey: analyst.status === 'error' ? analyst.key : undefined,
                 error: analyst.error,
                 toneKey: analyst.modelId || analyst.modelName || analyst.displayName,
@@ -526,6 +542,9 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
     ]);
 
     const openSeat = seats.find(seat => seat.id === openSeatId) ?? null;
+    const totalTokens = (runStats?.promptTokens ?? 0) + (runStats?.completionTokens ?? 0);
+    const analystSeats = seats.filter(seat => seat.id !== 'moderator');
+    const respondingCount = analystSeats.filter(seat => seat.live).length;
 
     useEffect(() => {
         if (!openSeatId) return;
@@ -562,6 +581,9 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
                         </span>
                     </React.Fragment>
                 ))}
+                {rebuttalStarted && maxRound >= 2 && (
+                    <span className="text-zinc-500">Round {Math.min(maxRound, 3)}/3</span>
+                )}
                 {isLive && floorLean.lean && (
                     <span className="floor-lean" title={`Floor lean: ${floorLean.long} long · ${floorLean.short} short${floorLean.neutral ? ` · ${floorLean.neutral} neutral` : ''}`}>
                         <span className="floor-lean-label">lean</span>
@@ -578,20 +600,71 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
                         <span className="floor-lean-value">{floorLean.lean}</span>
                     </span>
                 )}
-                {isLive && (
-                    <span className="ml-auto text-zinc-600">{progress.analysts.length} seats</span>
-                )}
+                <span className="ml-auto flex items-center gap-x-2">
+                    {isLive && respondingCount > 0 && (
+                        <span className="text-zinc-500">
+                            {respondingCount}/{analystSeats.length} responding
+                        </span>
+                    )}
+                    {isLive && (
+                        <span
+                            className="text-zinc-600"
+                            title={
+                                totalTokens > 0
+                                    ? `${progress.analysts.length} seats · ${(runStats?.promptTokens ?? 0).toLocaleString()} prompt + ${(runStats?.completionTokens ?? 0).toLocaleString()} completion tokens`
+                                    : `${progress.analysts.length} seats`
+                            }
+                        >
+                            {progress.analysts.length} seats{totalTokens > 0 ? ` · ~${totalTokens.toLocaleString()} tok` : ''}
+                        </span>
+                    )}
+                    <span className="flex items-center gap-x-0.5">
+                        {(['thread', 'stage'] as const).map(v => (
+                            <button
+                                key={v}
+                                type="button"
+                                onClick={() => setView(v)}
+                                className={`rounded px-1.5 py-0.5 ${view === v ? 'text-zinc-200' : 'text-zinc-600 hover:text-zinc-300'}`}
+                                aria-pressed={view === v}
+                            >
+                                {v === 'thread' ? 'Thread' : 'Stage'}
+                            </button>
+                        ))}
+                    </span>
+                </span>
             </div>
 
             {floorOpen && (
                 <div className="debate-floor-body">
-                    <DebateStage
-                        actors={stageActors}
-                        caption={turnCaption}
-                        onOpenActor={setOpenSeatId}
-                        suppressBubbles={Boolean(openSeat)}
-                        live={isLive}
-                    />
+                    {view === 'stage' ? (
+                        <DebateStage
+                            actors={stageActors}
+                            caption={turnCaption}
+                            onOpenActor={setOpenSeatId}
+                            suppressBubbles={Boolean(openSeat)}
+                            live={isLive}
+                        />
+                    ) : (
+                        <div className="debate-thread custom-scrollbar">
+                            {seats.map(seat => (
+                                <div key={seat.id} className="debate-thread-seat">
+                                    <div className="debate-thread-seat-head">
+                                        <span className="debate-thread-seat-name">{seat.title}</span>
+                                        <span className="debate-thread-seat-meta">
+                                            {[seat.modelName, seat.trackRecord, seat.status, seat.usage].filter(Boolean).join(' · ')}
+                                        </span>
+                                    </div>
+                                    <SeatTranscript
+                                        title={seat.title}
+                                        live={seat.live}
+                                        thinking={seat.thinking}
+                                        blocks={seat.blocks}
+                                        error={seat.error}
+                                    />
+                                </div>
+                            ))}
+                        </div>
+                    )}
                     {openSeat && (
                         <div
                             className="debate-seat-modal"

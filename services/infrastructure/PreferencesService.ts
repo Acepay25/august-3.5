@@ -39,6 +39,8 @@ export const PREF_KEYS = {
     POST_MORTEM_INSIGHTS: 'post_mortem_insights',
     CONFLUENCE_STATS: 'confluence_historical_stats',
     ATTRIBUTED_INSIGHTS: 'attributed_insights_kb',
+    LEARNING_WRITE_APPROVAL: 'learning_write_approval',
+    LEARNING_PENDING_RULES: 'learning_pending_rules_v1',
 
     // Alerts
     PRICE_ALERTS: 'price_alerts',

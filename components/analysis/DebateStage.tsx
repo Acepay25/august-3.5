@@ -165,7 +165,7 @@ export const DebateStage: React.FC<DebateStageProps> = ({ actors, caption, onOpe
     }, [sentId]);
 
     return (
-        <div className="debate-stage">
+        <div className={`debate-stage ${live ? 'is-live' : ''}`}>
             <div className="debate-stage-scene" ref={sceneRef}>
                 <div className="debate-stage-backdrop" aria-hidden="true">
                     <span className="debate-stage-grid" />
