@@ -47,6 +47,7 @@ interface SidebarContentProps {
     onOpenSettings: () => void;
     onDeleteConversation: (id: string) => void;
     onDeleteConversations?: (ids: string[]) => Promise<boolean> | boolean;
+    onOpenBotManager?: () => void;
     // Automations — scheduled analyses. The section lists them inline; a
     // click opens the automation's own card feed.
     automations?: AutomationConfig[];
@@ -75,6 +76,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
     onOpenSettings,
     onDeleteConversation,
     onDeleteConversations,
+    onOpenBotManager,
     automations = [],
     onOpenAutomation,
     onCreateAutomation,
@@ -166,6 +168,9 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                         <NavRow collapsed={collapsed} icon={<CodeIcon className="h-4 w-4" />} label="View Vision Data" onClick={act(onOpenVisionData)} />
                     )}
                     <NavRow collapsed={collapsed} icon={<BookmarkIcon className="h-4 w-4" />} label="Trading Journal" onClick={act(onOpenJournal)} />
+                    {onOpenBotManager && (
+                        <NavRow collapsed={collapsed} icon={<ActivityIcon className="h-4 w-4" />} label="Bots" onClick={act(onOpenBotManager)} />
+                    )}
                     {onOpenWatchList && (
                         <NavRow collapsed={collapsed} icon={<EyeIcon className="h-4 w-4" />} label="Watch list" onClick={act(onOpenWatchList)} />
                     )}

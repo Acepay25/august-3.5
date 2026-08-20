@@ -12,6 +12,8 @@ import { runNotebookReview } from './services/learning/MemoryReviewService';
 import { computeRegimeProviderStats } from './services/learning/SetupMemoryService';
 import { ANALYST_ROLE_DEFINITIONS } from './services/ui/AnalystLensService';
 import { AnalystRole } from './types/enums';
+import { BotRegistry } from './services/bots/BotRegistry';
+import { defaultToolsForRole } from './types/bot';
 import { ProbabilityEngineService } from './services/analysis/ProbabilityEngineService';
 
 
@@ -33,6 +35,7 @@ import { useCatalogReconcile } from './hooks/useCatalogReconcile';
 import AutomationView from './components/automation/AutomationView';
 import AutomationEditorModal, { ModelOption } from './components/automation/AutomationEditorModal';
 import { ChevronLeftIcon, ChevronRightIcon } from './components/shared/Icons';
+import BotManagerDrawer from './components/bots/BotManagerDrawer';
 
 // P1-6: Lazy-load heavy, conditionally-rendered components so the initial
 // bundle is much smaller. Previously the entire app was one ~1.73 MB chunk.
@@ -163,6 +166,7 @@ const App: React.FC = () => {
     } = useUIState();
     const [isWatchListVisible, setIsWatchListVisible] = useState(false);
     const [isApprovalInboxVisible, setIsApprovalInboxVisible] = useState(false);
+    const [isBotManagerVisible, setIsBotManagerVisible] = useState(false);
     const applyingHashRef = useRef(false);
 
     // Settings initial tab — set by handleOpenJournal to open Settings → Journal directly
@@ -1711,6 +1715,41 @@ const App: React.FC = () => {
         ensembleModelSelection,
         handleSetEnsembleModelSelection,
     });
+
+    useEffect(() => {
+        if (!providerConfigsLoaded) return;
+        void (async () => {
+            const existing = await BotRegistry.list();
+            if (existing.length > 0) return;
+            const fallback: Array<{ providerId: string; model: string; role: AnalystRole; name: string }> = [];
+            if (lensConfig.enabled) {
+                const roleNames: Record<string, string> = {
+                    [AnalystRole.MACRO_VOLATILITY]: 'Macro',
+                    [AnalystRole.TECHNICAL_ANALYST]: 'Technical',
+                    [AnalystRole.RISK_EXECUTION]: 'Risk',
+                };
+                for (const a of lensConfig.assignments) {
+                    if (!a.assignedProvider || !a.role) continue;
+                    const provider = providerConfigs.find(p => p.id === a.assignedProvider);
+                    const model = a.assignedModel || provider?.selectedModel || provider?.models[0];
+                    if (!provider || !model) continue;
+                    fallback.push({ providerId: provider.id, model, role: a.role, name: roleNames[a.role] || provider.name });
+                }
+            }
+            if (fallback.length === 0) {
+                const names = ['Macro', 'Technical', 'Risk'];
+                const roles = [AnalystRole.MACRO_VOLATILITY, AnalystRole.TECHNICAL_ANALYST, AnalystRole.RISK_EXECUTION];
+                for (let i = 0; i < Math.min(3, ensembleModelSelection.length); i++) {
+                    const e = ensembleModelSelection[i];
+                    if (!e?.providerId || !e.model) continue;
+                    fallback.push({ providerId: e.providerId, model: e.model, role: roles[i], name: names[i] });
+                }
+            }
+            if (fallback.length > 0) {
+                await BotRegistry.seedIfEmpty(fallback);
+            }
+        })();
+    }, [providerConfigsLoaded, providerConfigs, lensConfig, ensembleModelSelection]);
 
     // Quota flagging UI never materialized (the old quotaExceededModels state
     // was set but never read by any component) — keep the callback for the
@@ -3363,6 +3402,7 @@ const App: React.FC = () => {
                         onOpenLiveMarket={handleOpenLiveMarket}
                         onOpenVisionData={() => setIsVisionDataVisible(true)}
                         onOpenJournal={handleOpenJournal}
+                        onOpenBotManager={() => setIsBotManagerVisible(true)}
                         onOpenWatchList={() => setIsWatchListVisible(true)}
                         onOpenSettings={() => setIsSettingsMenuVisible(true)}
                         automations={automations.configs}
@@ -3555,6 +3595,7 @@ const App: React.FC = () => {
                     />
                 </React.Suspense>
             )}
+            <BotManagerDrawer open={isBotManagerVisible} onClose={() => setIsBotManagerVisible(false)} />
         </div>
         </React.Suspense>
     );

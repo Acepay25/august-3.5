@@ -47,6 +47,7 @@ export const PREF_KEYS = {
     SETUP_WATCHES: 'setup_watches',
     OUTCOME_AUTOPILOT_STATE: 'outcome_autopilot_state',
 
+    BOTS: 'bots_v1',
     // Data integrity
     LAST_TRADE_COUNT: 'last_trade_count',
     LAST_SESSION: 'last_session',

@@ -10,6 +10,9 @@ import {
 import { ProviderConfig } from '../types/provider';
 import { analyzeTradingView, getQuickResponse, streamQuickResponse } from '../services/providers/GenericAnalysisService';
 import * as ensembleService from '../services/providers/ensembleService';
+import { BotRegistry } from '../services/bots/BotRegistry';
+import { defaultToolsForRole } from '../types/bot';
+import { AnalystRole } from '../types/enums';
 
 // Analysis / validation / backtesting services
 import { tryFetchHybridDataFromPromptWithCalibration, generateHybridPromptInjection, HybridDataPacket, runMonteCarloForSetupAsync } from '../services/analysis/HybridIntelligenceService';
@@ -2362,6 +2365,29 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 : m));
                             return record;
                         };
+                        // Per-bot prompt/tool overrides + centralized market snapshot for the debate.
+                        let botByThoughtsKey: Record<string, import('../types/bot').HermesBot> | undefined;
+                        let centralizedSnapshot: string | undefined;
+                        try {
+                            const bots = await BotRegistry.list();
+                            if (bots.length > 0) {
+                                botByThoughtsKey = {};
+                                for (const p of fulfilledAnalysts) {
+                                    const match = bots.find(b => b.providerId === p.provider.config.id && b.model === p.provider.model)
+                                        || bots.find(b => b.providerId === p.provider.config.id);
+                                    if (match) botByThoughtsKey[p.provider.thoughtsKey] = match;
+                                }
+                                if (Object.keys(botByThoughtsKey).length === 0) botByThoughtsKey = undefined;
+                            }
+                        } catch { /* best-effort */ }
+                        if (hybridDataInjection) {
+                            centralizedSnapshot = hybridDataInjection.slice(0, 1800);
+                        } else if (freshHybridData) {
+                            try {
+                                const { generateHybridPromptInjection } = await import('../services/analysis/HybridIntelligenceService');
+                                centralizedSnapshot = generateHybridPromptInjection(freshHybridData as any).slice(0, 1800);
+                            } catch { /* ignore */ }
+                        }
                         debateStream = ensembleService.conductRealDebate(
                                 fulfilledAnalysts.map(a => ({
                                     provider: a.provider,
@@ -2503,6 +2529,8 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                             },
                             // Risk-only template: straight to the verdict.
                             runDebateTemplate?.skipToVerdict,
+                            botByThoughtsKey,
+                            centralizedSnapshot,
                         );
                     }
 

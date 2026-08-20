@@ -45,6 +45,22 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
       'no-console': 'off', // App uses console extensively; migrate to logger incrementally
+      'no-restricted-imports': ['error', {
+        paths: [
+          { name: './services/infrastructure/responseCache', message: 'AI response cache is retired — use tool/data caches only (DeskToolsService, MarketDataService, KlineService).' },
+          { name: './services/infrastructure/persistentCache', message: 'Persistent AI cache is retired — do not import outside tests.' },
+          { name: '../services/infrastructure/responseCache', message: 'AI response cache is retired — use tool/data caches only.' },
+          { name: '../services/infrastructure/persistentCache', message: 'Persistent AI cache is retired — do not import outside tests.' },
+          { name: '../../services/infrastructure/responseCache', message: 'AI response cache is retired — use tool/data caches only.' },
+          { name: '../../services/infrastructure/persistentCache', message: 'Persistent AI cache is retired — do not import outside tests.' },
+        ],
+      }],
+    },
+  },
+  {
+    files: ['tests/**/*', 'services/infrastructure/responseCache.ts', 'services/infrastructure/persistentCache.ts'],
+    rules: {
+      'no-restricted-imports': 'off',
     },
   },
 );

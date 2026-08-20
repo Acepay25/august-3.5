@@ -3,6 +3,7 @@ import { TradeAnalysis, Message, TradeOutcome, AccuracySubMode, LoggedTrade, Ana
 import { ProviderConfig } from '../../types/provider';
 import { ChatMessage, warmProviderConnection } from './GenericProviderService';
 import { streamChatWithDeskTools, resolveDefaultSymbol, clearDeskToolCache } from '../analysis/DeskToolsService';
+import type { HermesBot } from '../../types/bot';
 import { TASK_BUDGETS } from './taskBudgets';
 import { getPrompt } from '../infrastructure/PromptOverrideService';
 
@@ -2677,6 +2678,9 @@ export const conductRealDebate = async function* (
     onToolEvent?: (speaker: string, round: number, line: string) => void,
     /** Debate template (Risk-only pass): skip rebuttals, straight to verdict. */
     forceSkipRebuttals?: boolean,
+    botByThoughtsKey?: Record<string, HermesBot>,
+    /** Pre-fetched market snapshot injected to all seats to avoid N× tool calls. */
+    centralizedSnapshot?: string,
 ): AsyncGenerator<RealDebateTurnEvent, void, unknown> {
 
     if (analysts.length < 2) {
@@ -2827,8 +2831,41 @@ export const conductRealDebate = async function* (
         yield { speaker: 'System', round: lastDone, text: `Resuming debate after round ${lastDone}.` };
     }
 
+    // Consensus shortcut: when openings already agree tightly, the final rebuttal adds little — skip it and go to verdict sooner.
+    let totalRounds = REAL_DEBATE_RESPONSE_ROUNDS + 1;
+    try {
+        const dirs = analysts.map(a => (a.result.analysis.direction || '').toLowerCase());
+        const sameDir = dirs.length >= 2 && dirs.every(d => d === dirs[0] && (d === 'long' || d === 'short'));
+        const entries = analysts.map(a => {
+            const raw = a.result.analysis.entryPoints?.[0]?.price;
+            const n = typeof raw === 'string' ? parsePrice(raw as string) : (raw as number);
+            return Number.isFinite(n) ? Number(n) : NaN;
+        }).filter(n => !isNaN(n)) as number[];
+        let spreadPct: number | null = null;
+        if (entries.length >= 2) {
+            const sorted = [...entries].sort((a, b) => a - b);
+            const median = sorted[Math.floor(sorted.length / 2)];
+            if (median > 0) spreadPct = ((sorted[sorted.length - 1] - sorted[0]) / median) * 100;
+        }
+        if (openingDivergence.score < 15 && sameDir && spreadPct !== null && spreadPct <= 0.8) {
+            totalRounds = Math.max(2, totalRounds - 1);
+            emitLog('episode', `Openings tightly aligned (spread ${spreadPct.toFixed(2)}%) — trimming one rebuttal round.`, 2);
+        }
+    } catch { /* best-effort shortcut */ }
+
+    // Level discipline: if any opening lacks Entry/SL/TP1, flag it so the first rebuttal asks for it.
+    let missingLevelsNotice = '';
+    try {
+        const missing = analysts.filter(a => {
+            const an = a.result.analysis;
+            return !an.entryPoints?.[0]?.price || !an.stopLoss || !an.takeProfit?.[0]?.price;
+        }).map(a => a.provider.name);
+        if (missing.length > 0) {
+            missingLevelsNotice = `Missing levels: ${missing.join(', ')} — include Entry/SL/TP1 in your rebuttal.`;
+        }
+    } catch { /* ignore */ }
+
     // --- REBUTTAL ROUNDS 2..N ---
-    const totalRounds = REAL_DEBATE_RESPONSE_ROUNDS + 1;
     const pre = debatePreStep(memoryGate);
     if (pre.inject) {
         emitLog('pre_step', pre.inject.slice(0, 280), 2);
@@ -2878,13 +2915,16 @@ export const conductRealDebate = async function* (
         // The lens persona must survive into the rebuttal rounds —
         // a generic "expert trading analyst" instruction let
         // specialists drift to general analysis mid-debate.
-        const rolePrefix = lensConfig?.enabled
-            ? getLensPromptForStyle(
-                analyst.provider.thoughtsKey,
-                lensConfig.assignments,
-                lensConfig.tradingStyle === 'auto' ? 'swing' : lensConfig.tradingStyle
-            )
-            : '';
+        const bot = botByThoughtsKey?.[analyst.provider.thoughtsKey];
+        const rolePrefix = bot?.systemPromptOverride
+            ? `${bot.systemPromptOverride}${bot.personality ? `\n\n${bot.personality}` : ''}`
+            : lensConfig?.enabled
+                ? getLensPromptForStyle(
+                    analyst.provider.thoughtsKey,
+                    lensConfig.assignments,
+                    lensConfig.tradingStyle === 'auto' ? 'swing' : lensConfig.tradingStyle
+                )
+                : '';
         const otherAnalystNames = debateRoster
             .map(o => o.provider.name)
             .filter(n => n !== analyst.provider.name);
@@ -2893,7 +2933,9 @@ export const conductRealDebate = async function* (
                 NAME: analyst.provider.name,
                 ROUND: String(round),
                 OTHERS: otherAnalystNames.join(', ') || 'none',
-            });
+            }) + '\n\nIf another analyst made a strong point, address them by name (@Name).';
+        // Only inject market snapshot on the first rebuttal round to avoid re-paying the token cost every round.
+        const snapshotBlock = round === 2 && centralizedSnapshot ? `\n\n${centralizedSnapshot}` : '';
         // Snapshot the live price at launch so the rebuttal sees the current
         // market (each seat launches at its own settle time).
         const livePriceBlock = buildLivePriceRefreshBlock(getLivePrice?.() ?? null, `before Round ${round}`);
@@ -2908,12 +2950,12 @@ export const conductRealDebate = async function* (
                 turn: 'rebuttal',
                 round,
             })}\n\n` +
-            `**TRADER REQUEST (Round 1 context only — already answered):**\n${truncateTextToTokens(userPrompt, 120)}\n\n` +
-            (levelsSnap ? `**LEVELS SNAPSHOT:**\n${levelsSnap}\n\n` : '') +
             `${others}\n\n` +
+            (levelsSnap ? `**LEVELS SNAPSHOT:**\n${levelsSnap}\n\n` : '') +
             `Respond now with your rebuttal for Round ${round}.` +
             (steeringNote ? `\n\n**USER STEERING (queued mid-debate — follow this):**\n${steeringNote}` : '') +
-            livePriceBlock;
+            (missingLevelsNotice ? `\n\n${missingLevelsNotice}` : '') +
+            snapshotBlock + livePriceBlock;
 
         const messages: ChatMessage[] = [
             { role: 'system', content: systemPrompt },
@@ -2939,6 +2981,7 @@ export const conductRealDebate = async function* (
                         },
                         defaultSymbol: resolveDefaultSymbol(userPrompt),
                         afterToolsNudge: 'Tool results are above. Write your rebuttal Floor turn now. No JSON, no tool tags.',
+                        allowedTools: botByThoughtsKey?.[analyst.provider.thoughtsKey]?.enabledTools,
                     }),
                     emit,
                     `${analyst.provider.name} Round ${round} rebuttal`,

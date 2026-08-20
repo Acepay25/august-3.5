@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { DebateTurn, EnsembleAnalystProgress, EnsembleProgress, RunStats } from '../../types';
 import ReasoningRow from '../shared/ReasoningRow';
 import StreamingMarkdown from '../shared/StreamingMarkdown';
@@ -8,7 +8,6 @@ import { computeFloorLean } from '../../utils/floorLean';
 import { splitThinkingFromOutput, looksLikePublicAnswer, looksLikeScratchpad, looksLikeTradeOutput } from '../../utils/thinkingSplit';
 import { loadPerformanceData } from '../../services/backtesting/ModelPerformanceService';
 import { DebateBotAvatar } from './DebateBotAvatar';
-import { DebateStage, DebateStageActor } from './DebateStage';
 
 interface EnsembleProgressChatProps {
     progress: EnsembleProgress;
@@ -19,7 +18,6 @@ interface EnsembleProgressChatProps {
     onRetryAnalyst?: (analystKey: string) => void;
     debateTurns?: DebateTurn[];
     activeDebateSpeakers?: Record<string, number>;
-    /** Live desk-tool chips keyed by speaker (provider display name). */
     liveToolEvents?: Record<string, string>;
     reasoningProcesses?: Record<string, string>;
     runStats?: RunStats;
@@ -72,7 +70,6 @@ interface SeatBlock {
     live?: boolean;
     round?: number;
     thinking?: string;
-    /** Per-turn speed metrics (TTFT + output rate) once the turn settles. */
     metrics?: { ttftMs?: number; tokensPerSec?: number };
 }
 
@@ -104,10 +101,7 @@ const FadeStream: React.FC<{ text: string; live?: boolean; className?: string }>
     </div>
 );
 
-const ReplyBlock: React.FC<{ block: SeatBlock; fallbackThinking?: string }> = ({ block, fallbackThinking }) => {
-    // block.text is already the split public output (the seats memo peeled
-    // it once) — re-running visibleReplyFromThinking here used to blank
-    // replies that echo their scratchpad.
+const ReplyBlock: React.FC<{ block: SeatBlock; fallbackThinking?: string }> = React.memo(({ block, fallbackThinking }) => {
     const text = (block.text || '').trim();
     const thinking = block.thinking || fallbackThinking || '';
     const hideLiveScratch = Boolean(
@@ -118,25 +112,17 @@ const ReplyBlock: React.FC<{ block: SeatBlock; fallbackThinking?: string }> = ({
     );
     if (!text || hideLiveScratch) {
         if (block.live) {
-            return (
-                <p className="px-3 py-1 text-xs italic text-zinc-600">Writing</p>
-            );
+            return <p className="px-3 py-1 text-xs italic text-zinc-600">Writing</p>;
         }
         if (!thinking) return null;
-        return (
-            <p className="px-3 py-1 text-xs italic text-zinc-600">No public answer — the model only returned a scratchpad.</p>
-        );
+        return <p className="px-3 py-1 text-xs italic text-zinc-600">No public answer — the model only returned a scratchpad.</p>;
     }
     return (
         <div className="debate-speech mx-2 rounded-lg border border-white/10 bg-zinc-950/50 px-3 py-2">
             {block.replyTo && (
-                <p className="mb-1 text-[10px] font-medium uppercase tracking-widest text-zinc-500">
-                    reply to {block.replyTo}
-                </p>
+                <p className="mb-1 text-[10px] font-medium uppercase tracking-widest text-zinc-500">reply to {block.replyTo}</p>
             )}
-            {!block.live && (
-                <p className="mb-1 text-[11px] text-zinc-500">Final output</p>
-            )}
+            {!block.live && <p className="mb-1 text-[11px] text-zinc-500">Final output</p>}
             <FadeStream text={text} live={block.live} className="text-sm leading-6 text-zinc-200" />
             {!block.live && block.metrics && (block.metrics.ttftMs !== undefined || block.metrics.tokensPerSec !== undefined) && (
                 <p className="mt-1.5 text-[10px] tabular-nums text-zinc-600">
@@ -147,7 +133,8 @@ const ReplyBlock: React.FC<{ block: SeatBlock; fallbackThinking?: string }> = ({
             )}
         </div>
     );
-};
+});
+ReplyBlock.displayName = 'ReplyBlock';
 
 const ThinkingDetails: React.FC<{ text: string; live?: boolean }> = ({ text, live }) => {
     if (!text) return null;
@@ -164,7 +151,7 @@ const SeatTranscript: React.FC<{
     thinking: string;
     blocks: SeatBlock[];
     error?: string;
-}> = ({ title, live, thinking, blocks, error }) => {
+}> = React.memo(({ title, live, thinking, blocks, error }) => {
     const rounds = useMemo(() => {
         const order: number[] = [];
         const grouped = new Map<number, SeatBlock[]>();
@@ -191,8 +178,9 @@ const SeatTranscript: React.FC<{
     const currentRound = rounds[rounds.length - 1];
     const pastRounds = rounds.slice(0, -1);
     const leftoverThinking = thinking && !rounds.some(group => group.thinking && (group.thinking.includes(thinking) || thinking.includes(group.thinking)))
-        ? thinking
-        : '';
+        ? thinking : '';
+
+    const passed = live && currentRound && currentRound.blocks.length === 0 && (currentRound.round ?? 0) > 1;
 
     return (
         <div className="debate-seat-modal-chat custom-scrollbar">
@@ -207,45 +195,47 @@ const SeatTranscript: React.FC<{
                         )}
                         <ThinkingDetails text={currentRound.thinking} live={currentRound.live || live} />
                         <div className="flex flex-col gap-2">
-                            {currentRound.blocks.map(block => (
-                                <ReplyBlock
-                                    key={block.id}
-                                    block={block}
-                                    fallbackThinking={currentRound.thinking || leftoverThinking}
-                                />
-                            ))}
+                            {passed ? (
+                                <p className="px-3 py-1 text-xs italic text-zinc-600">(passed)</p>
+                            ) : (
+                                currentRound.blocks.map(block => (
+                                    <ReplyBlock key={block.id} block={block} fallbackThinking={currentRound.thinking || leftoverThinking} />
+                                ))
+                            )}
                         </div>
                     </div>
                 )}
                 {pastRounds.map(group => (
                     <details key={group.round} className="mx-2 rounded-lg border border-white/10 bg-zinc-950/30 px-3 py-2">
                         <summary className="cursor-pointer list-none text-[11px] uppercase tracking-widest text-zinc-500">
-                            {group.label}
-                            {group.blocks[0]?.text ? ` · ${lastThoughtSnippet(group.blocks[0].text, 48)}` : ''}
+                            {group.label}{group.blocks[0]?.text ? ` · ${lastThoughtSnippet(group.blocks[0].text, 48)}` : group.live ? ' · (passed)' : ''}
                         </summary>
                         <div className="mt-2 flex flex-col gap-2">
                             <ThinkingDetails text={group.thinking} />
-                            {group.blocks.map(block => (
-                                <ReplyBlock key={block.id} block={block} fallbackThinking={group.thinking} />
-                            ))}
+                            {group.blocks.length === 0 ? (
+                                <p className="px-3 py-1 text-xs italic text-zinc-600">(passed)</p>
+                            ) : (
+                                group.blocks.map(block => <ReplyBlock key={block.id} block={block} fallbackThinking={group.thinking} />)
+                            )}
                         </div>
                     </details>
                 ))}
                 {error && <p className="px-3 py-2 text-[11px] text-zinc-500">{error}</p>}
-                {blocks.every(b => !b.text.trim()) && thinking && live && (
+                {blocks.every(b => !b.text.trim()) && thinking && live && !passed && (
                     <p className="px-3 py-1 text-xs italic text-zinc-600">Writing</p>
                 )}
-                {blocks.length === 0 && !thinking && !error && (
+                {blocks.length === 0 && !thinking && !error && !passed && (
                     <p className="px-3 py-2 text-xs italic text-zinc-600">Waiting for this seat.</p>
                 )}
             </div>
         </div>
     );
-};
+});
+SeatTranscript.displayName = 'SeatTranscript';
 
 const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
     progress,
-    modelIdToName = {},
+    modelIdToName: _modelIdToName = {},
     isLive = false,
     hideSubagents = false,
     compact = false,
@@ -263,13 +253,10 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
     const openingsDone = debateTurns.some(t => t.round === 1);
     const rebuttalStarted = debateTurns.some(t => (t.round ?? 0) >= 2);
     const verdictLive = modLive && rebuttalStarted && !anyAnalystLive;
-    // Pre-verdict floor lean — where the seats stand right now (live tally).
     const floorLean = useMemo(() => computeFloorLean(debateTurns), [debateTurns]);
     const phase = verdictLive || progress.moderator.status === 'reviewing' && openingsDone
         ? (rebuttalStarted ? 'Verdict' : 'Openings')
-        : rebuttalStarted
-            ? 'Rebuttals'
-            : 'Openings';
+        : rebuttalStarted ? 'Rebuttals' : 'Openings';
     const maxRound = debateTurns.reduce((m, t) => Math.max(m, t.round ?? 0), 0);
 
     const { moderatorBlocks, moderatorThinking } = useMemo(() => {
@@ -314,133 +301,19 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
 
     const [floorOpen, setFloorOpen] = useState(true);
     const [openSeatId, setOpenSeatId] = useState<string | null>(null);
-    // Simplicity-first: default to a flat roster + shared thread; the animated
-    // stage is an opt-in ("Stage") for anyone who wants it.
-    const [view, setView] = useState<'thread' | 'stage'>('thread');
-    const liveAnalyst = progress.analysts.find(a =>
-        a.status === 'analyzing' || Boolean(activeDebateSpeakers[a.displayName] || activeDebateSpeakers[a.providerName])
-    );
-    // "Speaking" requires actual speech: an analyst whose chain-of-thought is
-    // still streaming (no output yet) is THINKING on the stage, not speaking.
-    const liveAnalystSpeech = liveAnalyst
-        ? (() => {
-            const turns = debateTurns.filter(t => t.speaker !== 'Moderator' && matchesSpeaker(t.speaker, liveAnalyst));
-            return turns[turns.length - 1]?.text?.trim() || '';
-        })()
-        : '';
-    const liveAnalystSpeaking = Boolean(
-        liveAnalyst
-        && (activeDebateSpeakers[liveAnalyst.displayName] || activeDebateSpeakers[liveAnalyst.providerName])
-        && liveAnalystSpeech,
-    );
-    // Entering the verdict round means the moderator is active, not that it
-    // has emitted public speech yet. Keep it in THINKING until visible text
-    // exists, just like the analyst seats.
-    const modSpeaking = modLive && moderatorBlocks.some(b => b.live && Boolean(b.text.trim()));
-    const modThinking = modLive && (Boolean(moderatorThinking.trim()) || !modSpeaking);
-    const turnCaption = !isLive
-        ? ''
-        : verdictLive
-            ? (modSpeaking ? 'Moderator is delivering the verdict' : 'Moderator is thinking about the verdict')
-            : modLive
-                ? (modSpeaking ? 'Moderator is speaking' : 'Moderator is thinking')
-                : liveAnalystSpeaking && liveAnalyst
-                    ? `${formatSeatLabel(liveAnalyst.displayName)} is speaking`
-                    : liveAnalyst
-                        ? `${formatSeatLabel(liveAnalyst.displayName)} is thinking`
-                        : 'Waiting for the next turn';
-    const stageActors = useMemo((): DebateStageActor[] => {
-        // Live desk-tool chip for a seat — only while the seat is active, so
-        // a finished turn never shows a stale "calling order book…" line.
-        const toolChipFor = (names: string[], live: boolean): string | undefined => {
-            if (!live) return undefined;
-            for (const name of names) {
-                const line = liveToolEvents[name];
-                if (line) return line;
-            }
-            return undefined;
-        };
-        return [
-        {
-            id: 'moderator',
-            name: 'Moderator',
-            toneKey: 'moderator',
-            live: modLive,
-            thinking: modThinking,
-            speaking: modSpeaking,
-            thought: moderatorThinking || (modLive && !modSpeaking ? 'Thinking' : ''),
-            speech: [...moderatorBlocks].reverse().find(b => b.text.trim())?.text,
-            replyTo: [...moderatorBlocks].reverse().find(b => b.live && b.replyTo)?.replyTo
-                || [...moderatorBlocks].reverse().find(b => b.replyTo)?.replyTo,
-            replies: moderatorBlocks
-                .filter(block => block.replyTo && block.text.trim() && (!modLive || block.live))
-                .map(block => ({ id: block.id, target: block.replyTo || '', text: block.text })),
-            toolChip: toolChipFor(['Moderator'], modLive),
-        },
-        ...progress.analysts.map((analyst): DebateStageActor => {
-            const answering = Boolean(activeDebateSpeakers[analyst.displayName] || activeDebateSpeakers[analyst.providerName]);
-            const live = analyst.status === 'analyzing' || answering;
-            const speakerTurns = debateTurns.filter(t => t.speaker !== 'Moderator' && matchesSpeaker(t.speaker, analyst));
-            const lastTurn = speakerTurns[speakerTurns.length - 1];
-            // finalOutput is raw provider prose — peel think tags so the
-            // balloon/packet snippet never shows scratchpad markup.
-            const replyText = lastTurn?.text
-                || (analyst.finalOutput ? splitThinkingFromOutput('', analyst.finalOutput).output : '');
-            // The bot SPEAKS only once it has output to say; while its CoT
-            // streams (analysis/openings, or a rebuttal's pre-text phase) it
-            // stays in the THINKING state — thought bubble + orbit animation.
-            const hasSpeech = Boolean(replyText.trim());
-            const speaking = answering && live && hasSpeech;
-            return {
-                id: analyst.key,
-                name: formatSeatLabel(analyst.displayName),
-                toneKey: analyst.modelId || analyst.modelName || analyst.displayName,
-                live,
-                thinking: live && !speaking,
-                speaking,
-                // Reasoning arrives keyed several ways (analyst key, display
-                // name, provider name) depending on the phase — check all of
-                // them so the stage thought bubble streams live during
-                // rebuttals/clarifications, not only the analysis phase.
-                thought: [
-                    analyst.reasoning,
-                    analyst.thoughtProcess,
-                    reasoningProcesses[analyst.key],
-                    reasoningProcesses[analyst.displayName],
-                    reasoningProcesses[analyst.providerName],
-                ].filter(Boolean).join('\n\n'),
-                speech: replyText || undefined,
-                replyTo: speakerTurns.some(t => (t.round ?? 0) > 1) ? 'Moderator' : undefined,
-                replies: speakerTurns.some(t => (t.round ?? 0) > 1) && replyText
-                    ? [{
-                        id: `${analyst.key}-${lastTurn?.round ?? 'last'}`,
-                        target: 'Moderator',
-                        text: replyText,
-                    }]
-                    : undefined,
-                toolChip: toolChipFor([analyst.displayName, analyst.providerName], live),
-            };
-        }),
-        ];
-    }, [
-        activeDebateSpeakers,
-        debateTurns,
-        liveToolEvents,
-        modLive,
-        modThinking,
-        modSpeaking,
-        moderatorBlocks,
-        moderatorThinking,
-        progress.analysts,
-        reasoningProcesses,
-    ]);
+    const [query, setQuery] = useState('');
+
+    const perfCacheRef = useRef<{ at: number; data: ReturnType<typeof loadPerformanceData> } | null>(null);
+    const getPerfData = (): ReturnType<typeof loadPerformanceData> => {
+        const now = Date.now();
+        if (perfCacheRef.current && now - perfCacheRef.current.at < 5000) return perfCacheRef.current.data;
+        const data = loadPerformanceData();
+        perfCacheRef.current = { at: now, data };
+        return data;
+    };
 
     const seats = useMemo((): SeatView[] => {
-        // Read the performance cache fresh on every recompute (not a one-time
-        // [] memo): loadPerformanceData() may be an empty map until
-        // initModelPerformanceService() resolves, so a mount-time snapshot
-        // would stay empty for the whole debate.
-        const perfData = loadPerformanceData();
+        const perfData = getPerfData();
         const moderatorTokens = (runStats?.promptTokens ?? 0) + (runStats?.completionTokens ?? 0);
         const moderator: SeatView = {
             id: 'moderator',
@@ -448,8 +321,8 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
             modelName: 'Floor',
             status: verdictLive ? 'verdict' : modLive ? 'asking' : moderatorBlocks.length > 0 ? 'posed' : 'Waiting',
             live: modLive,
-            speaking: modSpeaking,
-            thinking: moderatorThinking || (modLive && !modSpeaking ? 'Thinking' : ''),
+            speaking: moderatorBlocks.some(b => b.live && Boolean(b.text.trim())),
+            thinking: moderatorThinking || (modLive ? 'Thinking' : ''),
             blocks: moderatorBlocks,
             usage: moderatorTokens > 0 ? `${moderatorTokens.toLocaleString()} tok` : undefined,
             toneKey: 'moderator',
@@ -460,8 +333,6 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
             const speakerTurns = debateTurns.filter(t => t.speaker !== 'Moderator' && matchesSpeaker(t.speaker, analyst));
             const lastTurn = speakerTurns[speakerTurns.length - 1];
             const openingRaw = analyst.finalOutput && analyst.finalOutput !== lastTurn?.text ? analyst.finalOutput : '';
-            // Same speaking gate as the stage: no output text yet → still
-            // "thinking" in the seat header, even while the turn streams.
             const hasSpeech = Boolean((lastTurn?.text || openingRaw || '').trim());
             const streamedCot = [
                 analyst.reasoning,
@@ -472,8 +343,7 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
             ].filter(Boolean).join('\n\n');
             const openingSplit = splitThinkingFromOutput(streamedCot, openingRaw);
             const turnSplits = speakerTurns.map((turn, index) => {
-                const streamed = turn.reasoning
-                    || (index === 0 || index === speakerTurns.length - 1 ? streamedCot : '');
+                const streamed = turn.reasoning || (index === 0 || index === speakerTurns.length - 1 ? streamedCot : '');
                 const split = splitThinkingFromOutput(streamed, turn.text || '');
                 return {
                     id: `${analyst.key}-${index}`,
@@ -496,9 +366,7 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
                 ...turnSplits,
             ];
             const onBlocks = blocks.map(b => b.thinking).filter(Boolean).join('\n\n');
-            const thinking = onBlocks
-                ? ''
-                : (openingSplit.thinking || streamedCot || (live && !hasSpeech ? 'Thinking' : ''));
+            const thinking = onBlocks ? '' : (openingSplit.thinking || streamedCot || (live && !hasSpeech ? 'Thinking' : ''));
             const title = formatSeatLabel(analyst.displayName);
             const prettyModel = formatModelDisplayName(analyst.modelId || analyst.modelName);
             const ledger = runStats?.analysts?.find(a =>
@@ -509,8 +377,7 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
                 : 0;
             const perf = perfData[analyst.providerId] || perfData[analyst.providerName];
             const trackRecord = perf && typeof perf.overallStats?.winRate === 'number' && (perf.overallStats.total ?? 0) >= 3
-                ? `${perf.overallStats.winRate.toFixed(0)}% wr`
-                : undefined;
+                ? `${perf.overallStats.winRate.toFixed(0)}% wr` : undefined;
             return {
                 id: analyst.key,
                 title,
@@ -532,7 +399,6 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
         activeDebateSpeakers,
         debateTurns,
         modLive,
-        modSpeaking,
         moderatorBlocks,
         moderatorThinking,
         progress.analysts,
@@ -541,10 +407,23 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
         verdictLive,
     ]);
 
+    const filteredSeats = useMemo(() => {
+        const q = query.trim().toLowerCase();
+        if (!q) return seats;
+        return seats.filter(s => `${s.title} ${s.modelName} ${s.status}`.toLowerCase().includes(q));
+    }, [seats, query]);
+
     const openSeat = seats.find(seat => seat.id === openSeatId) ?? null;
     const totalTokens = (runStats?.promptTokens ?? 0) + (runStats?.completionTokens ?? 0);
     const analystSeats = seats.filter(seat => seat.id !== 'moderator');
     const respondingCount = analystSeats.filter(seat => seat.live).length;
+    const activeNow = useMemo(() => {
+        const entries = Object.entries(activeDebateSpeakers);
+        if (entries.length === 0) return [];
+        return entries
+            .filter(([, ts]) => Date.now() - ts < 90_000)
+            .map(([name]) => name);
+    }, [activeDebateSpeakers]);
 
     useEffect(() => {
         if (!openSeatId) return;
@@ -571,7 +450,7 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
                     className="font-medium text-zinc-300 hover:text-zinc-100"
                     aria-expanded={floorOpen}
                 >
-                    {isLive ? 'Floor' : 'Seats'}
+                    {isLive ? 'Floor' : 'Bots'}
                 </button>
                 {PHASES.map((p, i) => (
                     <React.Fragment key={p}>
@@ -588,119 +467,79 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
                     <span className="floor-lean" title={`Floor lean: ${floorLean.long} long · ${floorLean.short} short${floorLean.neutral ? ` · ${floorLean.neutral} neutral` : ''}`}>
                         <span className="floor-lean-label">lean</span>
                         <span className="floor-lean-bar" aria-hidden="true">
-                            <span
-                                className="floor-lean-fill floor-lean-fill-long"
-                                style={{ width: `${(floorLean.long / Math.max(1, floorLean.declared)) * 100}%` }}
-                            />
-                            <span
-                                className="floor-lean-fill floor-lean-fill-short"
-                                style={{ width: `${(floorLean.short / Math.max(1, floorLean.declared)) * 100}%` }}
-                            />
+                            <span className="floor-lean-fill floor-lean-fill-long" style={{ width: `${(floorLean.long / Math.max(1, floorLean.declared)) * 100}%` }} />
+                            <span className="floor-lean-fill floor-lean-fill-short" style={{ width: `${(floorLean.short / Math.max(1, floorLean.declared)) * 100}%` }} />
                         </span>
                         <span className="floor-lean-value">{floorLean.lean}</span>
                     </span>
                 )}
                 <span className="ml-auto flex items-center gap-x-2">
                     {isLive && respondingCount > 0 && (
-                        <span className="text-zinc-500">
-                            {respondingCount}/{analystSeats.length} responding
-                        </span>
+                        <span className="text-zinc-500">{respondingCount}/{analystSeats.length} responding</span>
                     )}
                     {isLive && (
                         <span
                             className="text-zinc-600"
-                            title={
-                                totalTokens > 0
-                                    ? `${progress.analysts.length} seats · ${(runStats?.promptTokens ?? 0).toLocaleString()} prompt + ${(runStats?.completionTokens ?? 0).toLocaleString()} completion tokens`
-                                    : `${progress.analysts.length} seats`
-                            }
+                            title={totalTokens > 0 ? `${progress.analysts.length} seats · ${(runStats?.promptTokens ?? 0).toLocaleString()} prompt + ${(runStats?.completionTokens ?? 0).toLocaleString()} completion` : `${progress.analysts.length} seats`}
                         >
                             {progress.analysts.length} seats{totalTokens > 0 ? ` · ~${totalTokens.toLocaleString()} tok` : ''}
                         </span>
                     )}
-                    <span className="flex items-center gap-x-0.5">
-                        {(['thread', 'stage'] as const).map(v => (
-                            <button
-                                key={v}
-                                type="button"
-                                onClick={() => setView(v)}
-                                className={`rounded px-1.5 py-0.5 ${view === v ? 'text-zinc-200' : 'text-zinc-600 hover:text-zinc-300'}`}
-                                aria-pressed={view === v}
-                            >
-                                {v === 'thread' ? 'Thread' : 'Stage'}
-                            </button>
-                        ))}
-                    </span>
                 </span>
             </div>
 
+            {isLive && activeNow.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5 border-b border-white/5 px-3 py-1.5">
+                    <span className="text-[10px] uppercase tracking-widest text-zinc-600">Active now</span>
+                    {activeNow.map(name => (
+                        <span key={name} className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] text-zinc-300">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                            {formatSeatLabel(name)}
+                        </span>
+                    ))}
+                </div>
+            )}
+
             {floorOpen && (
                 <div className="debate-floor-body">
-                    {view === 'stage' ? (
-                        <DebateStage
-                            actors={stageActors}
-                            caption={turnCaption}
-                            onOpenActor={setOpenSeatId}
-                            suppressBubbles={Boolean(openSeat)}
-                            live={isLive}
+                    <div className="flex items-center gap-2 border-b border-white/5 px-3 py-1.5">
+                        <input
+                            value={query}
+                            onChange={e => setQuery(e.target.value)}
+                            placeholder="Filter bots"
+                            className="w-40 rounded border border-white/10 bg-zinc-900 px-2 py-1 text-xs text-zinc-300 placeholder:text-zinc-600 focus:border-white/20 focus:outline-none"
                         />
-                    ) : (
-                        <div className="debate-thread custom-scrollbar">
-                            {seats.map(seat => (
-                                <div key={seat.id} className="debate-thread-seat">
-                                    <div className="debate-thread-seat-head">
-                                        <span className="debate-thread-seat-name">{seat.title}</span>
-                                        <span className="debate-thread-seat-meta">
-                                            {[seat.modelName, seat.trackRecord, seat.status, seat.usage].filter(Boolean).join(' · ')}
-                                        </span>
-                                    </div>
-                                    <SeatTranscript
-                                        title={seat.title}
-                                        live={seat.live}
-                                        thinking={seat.thinking}
-                                        blocks={seat.blocks}
-                                        error={seat.error}
-                                    />
+                    </div>
+                    <div className="debate-thread custom-scrollbar">
+                        {filteredSeats.map(seat => (
+                            <div key={seat.id} className="debate-thread-seat">
+                                <div className="debate-thread-seat-head cursor-pointer" role="button" aria-label={`Open ${seat.title} analysis`} onClick={() => setOpenSeatId(seat.id)}>
+                                    <span className="debate-thread-seat-name flex items-center gap-2">
+                                        <DebateBotAvatar name={seat.title} toneKey={seat.toneKey} live={seat.live} thinking={seat.live && !seat.speaking} speaking={seat.speaking} size={22} />
+                                        {seat.title}
+                                    </span>
+                                    <span className="debate-thread-seat-meta">
+                                        {[seat.modelName, seat.trackRecord, seat.status, seat.usage].filter(Boolean).join(' · ')}
+                                    </span>
                                 </div>
-                            ))}
-                        </div>
-                    )}
+                                <SeatTranscript title={seat.title} live={seat.live} thinking={seat.thinking} blocks={seat.blocks} error={seat.error} />
+                            </div>
+                        ))}
+                    </div>
                     {openSeat && (
-                        <div
-                            className="debate-seat-modal"
-                            role="dialog"
-                            aria-modal="true"
-                            aria-label={`${openSeat.title} analysis`}
-                        >
-                            <div
-                                className="debate-seat-modal-head"
-                                onClick={() => setOpenSeatId(null)}
-                            >
-                                <button
-                                    type="button"
-                                    className="debate-seat-modal-collapse"
-                                    onClick={() => setOpenSeatId(null)}
-                                    aria-label={`Collapse ${openSeat.title} analysis`}
-                                >
-                                    <DebateBotAvatar
-                                        name={openSeat.title}
-                                        toneKey={openSeat.toneKey}
-                                        live={openSeat.live}
-                                        thinking={openSeat.live && !openSeat.speaking}
-                                        speaking={openSeat.speaking}
-                                        size={36}
-                                    />
+                        <div className="debate-seat-modal" role="dialog" aria-modal="true" aria-label={`${openSeat.title} analysis`}>
+                            <div className="debate-seat-modal-head" onClick={() => setOpenSeatId(null)}>
+                                <button type="button" className="debate-seat-modal-collapse" onClick={() => setOpenSeatId(null)} aria-label={`Collapse ${openSeat.title} analysis`}>
+                                    <DebateBotAvatar name={openSeat.title} toneKey={openSeat.toneKey} live={openSeat.live} thinking={openSeat.live && !openSeat.speaking} speaking={openSeat.speaking} size={36} />
                                     <div className="min-w-0 flex-1">
                                         <p className="truncate text-[13px] text-zinc-200">{openSeat.title}</p>
-                                        <p className="truncate text-[11px] text-zinc-500">
-                                            {[openSeat.modelName, openSeat.status, openSeat.usage].filter(Boolean).join(' · ')}
-                                        </p>
+                                        <p className="truncate text-[11px] text-zinc-500">{[openSeat.modelName, openSeat.status, openSeat.usage].filter(Boolean).join(' · ')}</p>
                                     </div>
                                 </button>
                                 {openSeat.retryKey && onRetryAnalyst && (
                                     <button
                                         type="button"
-                                        onClick={(event) => {
+                                        onClick={event => {
                                             event.stopPropagation();
                                             onRetryAnalyst(openSeat.retryKey!);
                                         }}
@@ -709,22 +548,9 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
                                         Retry
                                     </button>
                                 )}
-                                <button
-                                    type="button"
-                                    onClick={() => setOpenSeatId(null)}
-                                    className="shrink-0 text-[11px] text-zinc-500 hover:text-zinc-200"
-                                    aria-label={`Close ${openSeat.title} analysis`}
-                                >
-                                    Close
-                                </button>
+                                <button type="button" onClick={() => setOpenSeatId(null)} className="shrink-0 text-[11px] text-zinc-500 hover:text-zinc-200" aria-label={`Close ${openSeat.title} analysis`}>Close</button>
                             </div>
-                            <SeatTranscript
-                                title={openSeat.title}
-                                live={openSeat.live}
-                                thinking={openSeat.thinking}
-                                blocks={openSeat.blocks}
-                                error={openSeat.error}
-                            />
+                            <SeatTranscript title={openSeat.title} live={openSeat.live} thinking={openSeat.thinking} blocks={openSeat.blocks} error={openSeat.error} />
                         </div>
                     )}
                     <span className="sr-only">{lanes.length} timeline lanes</span>

@@ -12,6 +12,7 @@ export interface ReasoningRowProps {
     /** Row label. */
     label?: string;
     className?: string;
+    tokens?: number;
 }
 
 const latestLine = (text: string): string => {
@@ -37,6 +38,7 @@ const ReasoningRow: React.FC<ReasoningRowProps> = ({
     defaultOpen = false,
     label = 'Thinking',
     className = '',
+    tokens,
 }) => {
     const [open, setOpen] = useState(defaultOpen);
     const clipRef = useRef<HTMLSpanElement>(null);
@@ -111,8 +113,11 @@ const ReasoningRow: React.FC<ReasoningRowProps> = ({
                 <span className="reasoning-row-label">{label}</span>
                 {durationMs !== null && (
                     <span className="reasoning-row-meta" aria-label={`${(durationMs / 1000).toFixed(1)} seconds`}>
-                        · {(durationMs / 1000).toFixed(1)}s
+                        · {(durationMs / 1000).toFixed(1)}s{tokens != null && tokens > 0 ? ` · ${tokens.toLocaleString()} tok` : ''}
                     </span>
+                )}
+                {durationMs === null && tokens != null && tokens > 0 && (
+                    <span className="reasoning-row-meta">· {tokens.toLocaleString()} tok</span>
                 )}
                 {running && (
                     <span className="reasoning-row-dots" aria-hidden="true">

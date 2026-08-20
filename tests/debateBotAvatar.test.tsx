@@ -3,35 +3,27 @@ import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
 import DebateBotAvatar, { botFillForKey } from '../components/analysis/DebateBotAvatar';
 
-describe('DebateBotAvatar (Floor bot animation states)', () => {
-    it('shows the voice equalizer while speaking instead of the idle mouth', () => {
-        const { container } = render(<DebateBotAvatar name="Seat 1" speaking />);
-        expect(container.querySelector('.debate-bot-voice')).toBeDefined();
-        expect(container.querySelectorAll('.debate-bot-voice-bar').length).toBe(3);
-        expect(container.querySelector('.debate-bot-mouth')).toBeNull();
-    });
-
-    it('shows the idle mouth when not speaking', () => {
+describe('DebateBotAvatar (flat roster)', () => {
+    it('renders an initial disc', () => {
         const { container } = render(<DebateBotAvatar name="Seat 1" />);
-        expect(container.querySelector('.debate-bot-mouth')).toBeDefined();
-        expect(container.querySelector('.debate-bot-voice')).toBeNull();
+        expect(container.querySelector('.bot-avatar')).not.toBeNull();
+        expect(container.textContent).toMatch(/S/);
     });
 
-    it('emits two offset sonar rings while speaking', () => {
-        const { container } = render(<DebateBotAvatar name="Seat 1" speaking />);
-        expect(container.querySelectorAll('.debate-bot-ring').length).toBe(2);
-        expect(container.querySelector('.debate-bot-ring-2')).toBeDefined();
-    });
-
-    it('shows the thinking orbit only in the thinking state', () => {
+    it('marks thinking and speaking states', () => {
         const thinking = render(<DebateBotAvatar name="Seat 1" thinking />);
-        expect(thinking.container.querySelector('.debate-bot-orbit')).toBeDefined();
-        const idle = render(<DebateBotAvatar name="Seat 1" />);
-        expect(idle.container.querySelector('.debate-bot-orbit')).toBeNull();
+        expect(thinking.container.querySelector('.bot-avatar.is-thinking')).not.toBeNull();
+        const speaking = render(<DebateBotAvatar name="Seat 1" speaking />);
+        expect(speaking.container.querySelector('.bot-avatar.is-speaking')).not.toBeNull();
     });
 
     it('keeps the moderator on the neutral fill', () => {
         expect(botFillForKey('Moderator')).toBe('#111111');
         expect(botFillForKey('moderator')).toBe('#111111');
+    });
+
+    it('gives distinct fills per model', () => {
+        expect(botFillForKey('gemini-2.0-flash')).not.toBe(botFillForKey('deepseek-v4-flash'));
+        expect(botFillForKey('gemini-2.0-flash')).toBe(botFillForKey('gemini-2.0-flash'));
     });
 });
