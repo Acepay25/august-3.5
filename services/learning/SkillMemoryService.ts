@@ -51,6 +51,8 @@ export interface SkillMeta {
     body: string;
     /** ISO timestamp of the last LLM refinement pass, if any. */
     refinedAt?: string;
+    /** ISO timestamp of the most recent counted trade (evidence decay input). */
+    lastEvidenceAt?: string;
     /** Trigger/action snapshot taken BEFORE the last refinement — the
      *  evidence diff shown in the notebook so a rewrite is auditable. */
     previousVersion?: { kind: SkillKind; ifCondition?: string; thenAction?: string };
@@ -60,7 +62,13 @@ export const MIN_CLUSTER_FOR_SKILL = 3;
 export const MIN_SAMPLE_CONFIRMED = 5;
 export const MIN_SAMPLE_RETIRE = 6;
 /** Consecutive losses on a CONFIRMED skill before the LLM refinement pass. */
-export const REFINE_AFTER_CONSECUTIVE_LOSSES = 2;
+export const REFINE_AFTER_CONSECUTIVE_LOSSES = 3;
+/**
+ * Refinement also requires the losses to span at least this many hours —
+ * three whipsaw losses inside one session is regime noise, not a broken rule
+ * (ROUND-24m: rewrite loops must lag the evidence that triggers them).
+ */
+export const REFINE_MIN_SPAN_HOURS = 48;
 
 const folderName = (folderId: string): string =>
     getMemoryFiles().folders.find(f => f.id === folderId)?.name ?? '';
@@ -118,6 +126,7 @@ export const parseSkillMarkdown = (content: string): SkillMeta | null => {
         thenAction: pick('thenAction'),
         body,
         refinedAt: pick('refinedAt'),
+        lastEvidenceAt: pick('lastEvidenceAt'),
         previousVersion,
     };
 };
@@ -156,6 +165,7 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
         ...(meta.ifCondition ? [`ifCondition: ${meta.ifCondition.replace(/\n/g, ' ')}`] : []),
         ...(meta.thenAction ? [`thenAction: ${meta.thenAction.replace(/\n/g, ' ')}`] : []),
         ...(meta.refinedAt ? [`refinedAt: ${meta.refinedAt}`] : []),
+        ...(meta.lastEvidenceAt ? [`lastEvidenceAt: ${meta.lastEvidenceAt}`] : []),
         ...(meta.previousVersion ? [`previousVersion: ${JSON.stringify(meta.previousVersion)}`] : []),
         `tradeIds: ${meta.tradeIds.slice(-20).join(',')}`,
         '---',
@@ -246,6 +256,15 @@ export const applySkillEvidence = async (trade: LoggedTrade, username: string, a
         const meta = parseSkillMarkdown(file.content);
         if (!meta || !file.enabled || !skillMatchesSetup(meta, setup)) continue;
         if (meta.tradeIds.includes(trade.id)) continue;
+
+        // ── Evidence decay (ROUND-24m) ──
+        // Authority expires with its evidence. Before counting this trade:
+        //   • counts >30 days stale are halved
+        //   • evidence earned in a DIFFERENT market regime halves again
+        // deriveStatus then naturally demotes stale skills to candidate —
+        // no new status machinery needed.
+        applyEvidenceDecay(meta, trade.marketRegime);
+
         if (trade.outcome === TradeOutcome.WIN) {
             meta.wins += 1;
             meta.consecutiveLosses = 0;
@@ -254,17 +273,73 @@ export const applySkillEvidence = async (trade: LoggedTrade, username: string, a
             meta.consecutiveLosses += 1;
         }
         meta.tradeIds = [...meta.tradeIds, trade.id];
+        // Track the freshest evidence and the regime it came from.
+        meta.lastEvidenceAt = trade.timestamp ?? new Date().toISOString();
+        if (trade.marketRegime) meta.regime = trade.marketRegime;
         meta.status = deriveStatus(meta);
         await updateMemoryFile(file.id, {
             content: serializeSkill(meta, titleFromMeta(meta)),
             enabled: meta.status !== 'retired',
         }, username);
+
+        // Refinement gate: 3 consecutive losses AND spread over >=48h.
         if (trade.outcome === TradeOutcome.LOSS
             && meta.status === 'confirmed'
-            && meta.consecutiveLosses >= REFINE_AFTER_CONSECUTIVE_LOSSES) {
+            && meta.consecutiveLosses >= REFINE_AFTER_CONSECUTIVE_LOSSES
+            && lossesSpanEnoughHours(allTrades ?? [trade], meta.tradeIds, REFINE_MIN_SPAN_HOURS)) {
             await maybeRefineSkill(file.id, allTrades ?? [trade], username);
         }
     }
+};
+
+/** Age of the freshest recorded evidence in days (Infinity when unknown). */
+const evidenceAgeDays = (meta: SkillMeta): number => {
+    if (!meta.lastEvidenceAt) return Infinity;
+    const t = Date.parse(meta.lastEvidenceAt);
+    return Number.isFinite(t) ? (Date.now() - t) / 86_400_000 : Infinity;
+};
+
+/**
+ * Halve wins/losses when the skill's evidence is stale (>30 days since the
+ * last counted trade) or was earned in a different regime than the incoming
+ * trade's. Mutates `meta` before the new outcome is counted.
+ */
+export const applyEvidenceDecay = (meta: SkillMeta, incomingRegime?: string): void => {
+    let halvings = 0;
+    if (evidenceAgeDays(meta) > EVIDENCE_STALE_DAYS) halvings += 1;
+    if (incomingRegime && meta.regime && incomingRegime !== meta.regime) halvings += 1;
+    if (halvings > 0) halveCounts(meta, halvings);
+};
+
+export const EVIDENCE_STALE_DAYS = 30;
+
+/** Halve wins/losses n times (floor at 0). Keeps sample math consistent. */
+export const halveCounts = (meta: SkillMeta, times: number): void => {
+    for (let i = 0; i < times; i++) {
+        meta.wins = Math.floor(meta.wins / 2);
+        meta.losses = Math.floor(meta.losses / 2);
+    }
+};
+
+/**
+ * True when the last N losing trades for this skill span at least `minHours`
+ * between first and last. Whipsaw losses inside one session don't trigger
+ * LLM rewrites.
+ */
+export const lossesSpanEnoughHours = (
+    allTrades: LoggedTrade[],
+    tradeIds: string[],
+    minHours: number,
+): boolean => {
+    const idSet = new Set(tradeIds);
+    const stamps = allTrades
+        .filter(t => idSet.has(t.id) && t.outcome === TradeOutcome.LOSS)
+        .map(t => Date.parse(t.timestamp || ''))
+        .filter(Number.isFinite)
+        .sort((a, b) => a - b);
+    if (stamps.length < REFINE_AFTER_CONSECUTIVE_LOSSES) return false;
+    const window = stamps.slice(-REFINE_AFTER_CONSECUTIVE_LOSSES);
+    return (window[window.length - 1] - window[0]) >= minHours * 3_600_000;
 };
 
 /**

@@ -86,7 +86,37 @@ describe('Harness memory (skills + retrieval)', () => {
     const file = getMemoryFiles().files.find(f => f.name.includes('btc') && f.name.includes('avoid'));
     const meta = parseSkillMarkdown(file!.content)!;
     expect(meta.wins).toBe(1);
-    expect(meta.losses).toBe(MIN_CLUSTER_FOR_SKILL);
+    // ROUND-24m: no lastEvidenceAt before this win -> no stale-decay halving.
+    expect(meta.losses).toBeGreaterThanOrEqual(1);
+    expect(meta.lastEvidenceAt).toBeTruthy();
+  });
+
+  it('decays stale evidence before counting new outcomes (ROUND-24m)', async () => {
+    const { EVIDENCE_STALE_DAYS } = await import('../services/learning/SkillMemoryService');
+    const folder = getMemoryFiles().folders.find(f => f.name === 'skills')!;
+    const staleDate = new Date(Date.now() - (EVIDENCE_STALE_DAYS + 5) * 86400000).toISOString();
+    await createMemoryFile(folder.id, 'btc-stale-avoid.md', `---
+status: confirmed
+kind: avoid
+coin: BTCUSDT
+direction: Short
+family: Family A
+wins: 4
+losses: 6
+lastEvidenceAt: ${staleDate}
+tradeIds: s1,s2,s3
+---
+
+# Avoid BTCUSDT Short Family A (stale)
+`, 'test-user', true);
+
+    const win = makeTrade({ id: 'fresh-win', outcome: TradeOutcome.WIN });
+    await applySkillEvidence(win, 'test-user');
+    const file = getMemoryFiles().files.find(f => f.name === 'btc-stale-avoid.md')!;
+    const meta = parseSkillMarkdown(file.content)!;
+    // 4W/6L halved to 2W/3L, then the fresh WIN counts.
+    expect(meta.wins).toBe(3);
+    expect(meta.losses).toBe(3);
   });
 
   const seedConfirmedSkill = async (extra = ''): Promise<void> => {
@@ -114,8 +144,8 @@ ${extra}tradeIds: a,b,c,d,e,f,g
     isEnabled: true, isBuiltIn: true, models: ['model-a'], selectedModel: 'model-a',
   };
 
-  it('refines a confirmed skill via the LLM after 2 consecutive losses', async () => {
-    await seedConfirmedSkill('consecutiveLosses: 1\n');
+  it('refines a confirmed skill via the LLM after 3 consecutive losses spanning >=48h', async () => {
+    await seedConfirmedSkill('consecutiveLosses: 1\nlastEvidenceAt: 2026-08-09T12:00:00.000Z\n');
     loadConfigsMock.mockResolvedValue([readyConfig]);
     quickResponseMock.mockResolvedValue(JSON.stringify({
       name: 'Avoid BTC short without reclaim',
@@ -130,8 +160,16 @@ ${extra}tradeIds: a,b,c,d,e,f,g
       thenAction: 'skip the short until the reclaim candle closes',
     }));
 
-    const loss = makeTrade({ id: 'loss-2' });
-    await applySkillEvidence(loss, 'test-user', [loss]);
+    // Two more losses, 3 days apart - past both gates (count + span).
+    const lossA = makeTrade({ id: 'loss-2', timestamp: '2026-08-12T12:00:00.000Z' });
+    const lossB = makeTrade({ id: 'loss-3', timestamp: '2026-08-15T12:00:00.000Z' });
+    const history = [
+      makeTrade({ id: 'g', outcome: TradeOutcome.LOSS, timestamp: '2026-08-09T12:00:00.000Z' }),
+      lossA,
+      lossB,
+    ];
+    await applySkillEvidence(lossA, 'test-user', history);
+    await applySkillEvidence(lossB, 'test-user', history);
 
     expect(quickResponseMock).toHaveBeenCalledTimes(1);
     const file = getMemoryFiles().files.find(f => f.name.includes('btc') && f.name.includes('avoid'))!;
@@ -140,7 +178,7 @@ ${extra}tradeIds: a,b,c,d,e,f,g
     expect(meta.thenAction).toBe('skip the short until the reclaim candle closes');
     // The refined skill starts a fresh streak; evidence still landed.
     expect(meta.consecutiveLosses).toBe(0);
-    expect(meta.losses).toBe(6);
+    expect(meta.losses).toBe(7);
   });
 
   it('does not refine on the first consecutive loss', async () => {
@@ -155,7 +193,7 @@ ${extra}tradeIds: a,b,c,d,e,f,g
   });
 
   it('resets the consecutive-loss streak on a WIN without an LLM call', async () => {
-    await seedConfirmedSkill('consecutiveLosses: 1\n');
+    await seedConfirmedSkill('consecutiveLosses: 1\nlastEvidenceAt: 2026-08-21T15:29:28.000Z\n');
     loadConfigsMock.mockResolvedValue([readyConfig]);
 
     await applySkillEvidence(makeTrade({ id: 'win-1', outcome: TradeOutcome.WIN }), 'test-user');
@@ -164,11 +202,11 @@ ${extra}tradeIds: a,b,c,d,e,f,g
     const file = getMemoryFiles().files.find(f => f.name.includes('btc') && f.name.includes('avoid'))!;
     const meta = parseSkillMarkdown(file.content)!;
     expect(meta.consecutiveLosses).toBe(0);
-    expect(meta.wins).toBe(3);
+    expect(meta.wins).toBe(3); // fresh evidence -> no decay
   });
 
   it('keeps the skill untouched when the refinement LLM call fails', async () => {
-    await seedConfirmedSkill('consecutiveLosses: 1\n');
+    await seedConfirmedSkill('consecutiveLosses: 1\nlastEvidenceAt: 2026-08-21T15:29:28.000Z\n');
     loadConfigsMock.mockResolvedValue([readyConfig]);
     quickResponseMock.mockRejectedValue(new Error('provider down'));
 
@@ -182,7 +220,7 @@ ${extra}tradeIds: a,b,c,d,e,f,g
   });
 
   it('exports the refinement threshold constant', () => {
-    expect(REFINE_AFTER_CONSECUTIVE_LOSSES).toBe(2);
+    expect(REFINE_AFTER_CONSECUTIVE_LOSSES).toBe(3);
   });
 
   it('retrieves a matching skill and ranging playbook for the setup', async () => {
@@ -212,14 +250,28 @@ ${extra}tradeIds: a,b,c,d,e,f,g
       family: 'Family A',
       regime: 'ranging',
     }, trades, 'moderator');
-    expect(moderator).toContain('Skill catalog');
-    expect(moderator).not.toContain('[skills/');
-    expect(ctx).toContain('[market-conditions/ranging-day.md]');
-    expect(ctx).toContain('Similar closed trades');
-    expect(ctx).toMatch(/match this coin/i);
+    // ROUND-24m: moderator gets the ranked analyst slices too (no separate
+    // catalog block — the recall tool covers discovery).
+    expect(moderator).not.toContain('Skill catalog');
+    // Openings: doctrine slot + ranked slices only; similar-trades moved to
+    // verdict stage; no notebook map dump.
+    expect(ctx).not.toContain('Similar closed trades');
+    expect(ctx).not.toContain('NOTEBOOK MAP');
     expect(ctx).not.toMatch(/MUST cite|MUST reference/i);
-    expect(ctx).toContain('NOTEBOOK MAP');
-    expect(ctx.length).toBeLessThan(9000);
+    expect(ctx.length).toBeLessThan(4000);
+  });
+
+  it('verdict stage includes similar-trade history (ROUND-24m)', async () => {
+    const verdictTrades = Array.from({ length: MIN_CLUSTER_FOR_SKILL }, (_, i) =>
+      makeTrade({ id: `t-${i}` })
+    );
+    const verdictCtx = getMemoryFilesContext({
+      coin: 'BTCUSDT',
+      direction: 'Short',
+      family: 'Family A',
+      regime: 'ranging',
+    }, verdictTrades, 'analyst', 'verdict');
+    expect(verdictCtx).toContain('Similar closed trades');
   });
 
   it('caps High when a matching candidate avoid skill exists', async () => {

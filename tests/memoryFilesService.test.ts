@@ -197,13 +197,16 @@ describe('MemoryFilesService', () => {
       expect(getMemoryFilesStats()).toEqual({ enabledCount: 0, charCount: 0 });
     });
 
-    it('includes only enabled files, with folder paths and content', async () => {
+    it('injects the ranked slices: identity, risk-rules bullets (ROUND-24m budget layout)', async () => {
       const ctx = getMemoryFilesContext();
-      expect(ctx).toContain('[rules/risk-rules.md]');
-      expect(ctx).toContain('Personal Risk Rules');
-      const ranging = findFile('ranging-day.md')!;
-      await updateMemoryFile(ranging.id, { enabled: false }, 'test-user');
-      expect(getMemoryFilesContext({ regime: 'ranging' })).not.toContain('[market-conditions/ranging-day.md]');
+      expect(ctx).toContain('[profile/memory.md]'.replace('profile/memory.md', 'rules/risk-rules.md'));
+      // risk-rules injects its bullet lines, not the instructional preamble.
+      expect(ctx).not.toContain('Personal Risk Rules');
+      // Disabling the file removes its slice.
+      const rules = findFile('risk-rules.md')!;
+      await updateMemoryFile(rules.id, { enabled: false }, 'test-user');
+      expect(getMemoryFilesContext()).not.toContain('[rules/risk-rules.md]');
+      await updateMemoryFile(rules.id, { enabled: true }, 'test-user');
     });
 
     it('orders profile files first', async () => {
@@ -212,11 +215,13 @@ describe('MemoryFilesService', () => {
       expect(ctx.indexOf('[profile/memory.md]')).toBeLessThan(ctx.indexOf('[rules/'));
     });
 
-    it('keeps matching diary content when the coin is in the query', async () => {
+    it('never injects diary content — it is raw storage (ROUND-24m)', async () => {
       await appendDiaryEntry(makeTrade(), 'test-user');
       const ctx = getMemoryFilesContext({ coin: 'BTCUSDT' });
-      expect(ctx).toContain('WIN ✅');
-      expect(ctx).toContain('Wait for the 15m reclaim before entering.');
+      expect(ctx).not.toContain('WIN ✅');
+      expect(ctx).not.toContain('Wait for the 15m reclaim before entering.');
+      // The diary file still exists on disk for doctrine/skill gates.
+      expect(findFile('BTCUSDT.md', 'trader-diary')).toBeTruthy();
     });
 
     it('does not dump the pattern-memory essay', async () => {
@@ -232,27 +237,26 @@ describe('MemoryFilesService', () => {
       expect(ctx).not.toContain('[profile/suggestions.md]');
     });
 
-    it('treats retrieved notes as optional matches, not mandatory citations', () => {
+    it('frames memory as own-knowledge with the recall pointer', () => {
       const ctx = getMemoryFilesContext();
-      expect(ctx).toMatch(/match this coin/i);
+      expect(ctx).toContain('MY MEMORY');
+      expect(ctx).toContain('recall');
       expect(ctx).not.toMatch(/MUST cite|MUST reference/i);
     });
 
-    it('always injects a notebook map so new conversations are not a blank slate', () => {
+    it('cold-start context is empty, not a map dump (recall tool covers discovery)', () => {
+      // ROUND-24m: no query → no matched skill/mistakes → only identity +
+      // risk rules. A brand-new notebook with no profile yields ''.
       const ctx = getMemoryFilesContext();
-      expect(ctx).toContain('NOTEBOOK MAP');
-      expect(ctx).toContain('market-conditions/ranging-day.md');
-      expect(ctx).toContain('**Graph**');
-      expect(ctx).toContain('ranging');
-      expect(findFile('index.md', 'profile')?.content).toContain('NOTEBOOK MAP');
+      expect(ctx).not.toContain('NOTEBOOK MAP');
+      expect(findFile('index.md', 'profile')?.content).toContain('NOTEBOOK MAP'); // map still maintained on disk
     });
 
-    it('keeps the map even when retrieving a specific coin (progressive disclosure)', async () => {
+    it('coin query pulls the ranked slices, never the diary (progressive disclosure via recall)', async () => {
       await appendDiaryEntry(makeTrade(), 'test-user');
       const ctx = getMemoryFilesContext({ coin: 'BTCUSDT' });
-      expect(ctx).toContain('NOTEBOOK MAP');
-      expect(ctx).toContain('trader-diary/BTCUSDT.md');
-      expect(ctx).toMatch(/\*\*BTCUSDT\*\*/);
+      expect(ctx).not.toContain('NOTEBOOK MAP');
+      expect(ctx).not.toContain('trader-diary/');
     });
   });
 

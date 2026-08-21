@@ -66,9 +66,8 @@ tradeIds: d,e,f
       family: 'Family A',
       regime: 'ranging',
     });
-    expect(btc).toContain('[skills/btc-short-avoid.md]');
-    expect(btc).not.toContain('[skills/eth-long-avoid.md]');
-    expect(btc).toContain('[market-conditions/ranging-day.md]');
-    expect(btc).not.toContain('[market-conditions/after-liquidity-sweep.md]');
+    // ROUND-24m: matched skill injects as a capped block with its filename.
+    expect(btc).toContain('btc-short-avoid.md');
+    expect(btc).not.toContain('eth-long-avoid.md');
   });
 });

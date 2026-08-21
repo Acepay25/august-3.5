@@ -19,6 +19,8 @@ import {
     normalizeSymbol,
 } from './MarketDataService';
 import { getSessionContext } from '../infrastructure/SessionService';
+import { handleRecallTool } from '../learning/MemoryRetrievalService';
+import type { LoggedTrade } from '../../types';
 
 export interface DeskToolDefinition {
     type: 'function';
@@ -111,6 +113,7 @@ const TOOL_LABELS: Record<string, string> = {
     get_btc_context: 'BTC context',
     get_session_context: 'session',
     get_price_snapshot: 'price snapshot',
+    recall: 'notebook recall',
 };
 
 export const toolLabel = (name: string): string => TOOL_LABELS[name] ?? name.replace(/_/g, ' ');
@@ -285,12 +288,32 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
             },
         },
     },
+    {
+        type: 'function',
+        function: {
+            name: 'recall',
+            description:
+                'Search your own trading notebook - lessons learned, IF/THEN rules, similar past trades, and your doctrine for a setup. Use when you suspect prior experience with this coin/setup or need your own loss history before arguing a stance.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    topic: {
+                        type: 'string',
+                        description: 'Setup topic, e.g. "BTC long", "ETH short liquidity sweep".',
+                    },
+                },
+                required: ['topic'],
+                additionalProperties: false,
+            },
+        },
+    },
 ];
 
 export const DESK_TOOLS_PROMPT = `
 **DESK TOOLS (available anytime on this turn)**
 You can call live tools before you speak — opening analysis, rebuttal, clarification, or moderator verdict.
 Use them for: news/macro catalysts, funding/OI crowding, order-book walls, liquidations, BTC context on alts, session timing, or a fresh price print.
+Your own trading memory is one of these tools: the recall tool searches your notebook (doctrine, rules, similar past trades) - call it when prior experience with this setup could change your stance.
 Do not call tools you do not need. Prefer 0–2 calls. After tool results arrive, write your Floor reply from the findings — no JSON, no restated tool schemas.
 `;
 
@@ -451,7 +474,7 @@ async function runPriceSnapshot(symbol: string, interval: string): Promise<strin
 
 export async function executeDeskTool(
     call: DeskToolCall,
-    context: { defaultSymbol?: string | null; signal?: AbortSignal } = {},
+    context: { defaultSymbol?: string | null; signal?: AbortSignal; trades?: LoggedTrade[] } = {},
 ): Promise<DeskToolResult> {
     const fallback = context.defaultSymbol || 'BTCUSDT';
     // Repeat calls within the TTL (every seat asks the same desk) are served
@@ -488,6 +511,12 @@ export async function executeDeskTool(
                     asString(call.arguments.interval, '1h'),
                 );
                 break;
+            case 'recall':
+                content = handleRecallTool(
+                    { topic: asString(call.arguments.topic) },
+                    context.trades,
+                );
+                break;
             default:
                 content = `Unknown tool: ${call.name}`;
                 return { toolCallId: call.id, name: call.name, ok: false, content };
@@ -508,7 +537,7 @@ export async function executeDeskTool(
 
 export async function executeDeskTools(
     calls: DeskToolCall[],
-    context: { defaultSymbol?: string | null; signal?: AbortSignal } = {},
+    context: { defaultSymbol?: string | null; signal?: AbortSignal; trades?: LoggedTrade[] } = {},
 ): Promise<DeskToolResult[]> {
     return Promise.all(calls.map(call => executeDeskTool(call, context)));
 }
@@ -620,6 +649,7 @@ export async function runDeskToolLoop(params: {
     onToolEvent?: (line: string) => void;
     nativeTools?: boolean;
     allowedTools?: string[];
+    trades?: LoggedTrade[];
 }): Promise<DeskToolLoopResult> {
     const {
         config,
@@ -629,6 +659,7 @@ export async function runDeskToolLoop(params: {
         onToolEvent,
         nativeTools = config.apiFormat === 'chat_completions',
         allowedTools,
+        trades,
     } = params;
     const messages = [...params.messages];
     const usedTools: string[] = [];
@@ -674,6 +705,7 @@ export async function runDeskToolLoop(params: {
         const results = await executeDeskTools(calls, {
             defaultSymbol,
             signal: options?.signal,
+            trades,
         });
         usedTools.push(...results.map(r => r.name));
         onToolEvent?.(results.map(r => digestToolResult(r.name, r.ok, r.content)).join(' · '));
@@ -711,6 +743,8 @@ export interface StreamWithDeskToolsOptions extends ChatRequestOptions {
      *  tool round with a short human-readable line. */
     onToolEvent?: (line: string) => void;
     allowedTools?: string[];
+    /** Closed-trade log for the `recall` notebook tool. */
+    trades?: LoggedTrade[];
 }
 
 function withDeskToolsSystemPrompt(messages: ChatMessage[], nativeTools: boolean): ChatMessage[] {
@@ -755,6 +789,7 @@ export async function* streamChatWithDeskTools(
         enabled: _enabled,
         onToolEvent,
         allowedTools,
+        trades,
         ...chatOptions
     } = options || {};
 
@@ -768,6 +803,7 @@ export async function* streamChatWithDeskTools(
         defaultSymbol,
         nativeTools,
         allowedTools,
+        trades,
         onToolEvent: (line) => {
             onToolEvent?.(line);
             options?.onReasoning?.(`\n[Desk tools] ${line}\n`);
