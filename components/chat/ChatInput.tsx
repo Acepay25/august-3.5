@@ -152,8 +152,25 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
 }) => {
     const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
     const [mentionOpen, setMentionOpen] = useState(false);
+    const [botMentionNames, setBotMentionNames] = useState<string[]>([]);
+    React.useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const key = (typeof localStorage !== 'undefined' ? localStorage.getItem('last_active_user') : null) || 'default';
+                const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(`bots_v1_${key}`) : null;
+                if (!raw) { if (!cancelled) setBotMentionNames([]); return; }
+                const data = JSON.parse(raw) as { bots?: Array<{ name?: string; hidden?: boolean }> };
+                const bots = Array.isArray(data?.bots) ? data.bots : [];
+                const names = bots.filter(b => b.name && !(b as { hidden?: boolean }).hidden).map(b => `@${String(b.name).trim().split(/\s+/)[0]}`).filter(Boolean).slice(0, 6);
+                if (!cancelled) setBotMentionNames(names);
+            } catch { if (!cancelled) setBotMentionNames([]); }
+        })();
+        return () => { cancelled = true; };
+    }, [isTeamModalOpen, mentionOpen]);
     const mentionCandidates = React.useMemo(() => {
         if (!isEnsembleEnabled) return [] as string[];
+        if (botMentionNames.length > 0) return botMentionNames;
         if (lensConfig.enabled) {
             const map: Record<string, string> = {
                 [AnalystRole.MACRO_VOLATILITY]: '@Macro',
@@ -163,7 +180,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
             return LENS_ROSTER_ROLES.map(r => map[r]).filter(Boolean);
         }
         return (ensembleModelSelection || []).slice(0, 3).map((_, i) => ['@Macro', '@Technical', '@Risk'][i]).filter(Boolean) as string[];
-    }, [isEnsembleEnabled, lensConfig.enabled, ensembleModelSelection]);
+    }, [isEnsembleEnabled, lensConfig.enabled, ensembleModelSelection, botMentionNames]);
     React.useEffect(() => {
         const handleEscape = (event: KeyboardEvent) => {
             if (event.key !== 'Escape') return;
