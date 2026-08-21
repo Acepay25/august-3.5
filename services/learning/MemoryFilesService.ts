@@ -431,7 +431,7 @@ const buildDiaryEntry = (trade: LoggedTrade): string => {
     const lesson = extractLessonFromPostMortem(trade.postMortem ?? '');
     const lines = [`${date} · ${a.coinName ?? '?'} · ${a.direction ?? '?'} · ${outcomeLabel}${pnl}`];
     lines.push(`id: ${trade.id}`);
-    if (lesson) lines.push(`Lesson: ${lesson}`);
+    if (lesson) lines.push(`What I learned: ${lesson}`);
     return lines.join('\n');
 };
 
@@ -698,13 +698,13 @@ export const syncRecurringMistakes = async (trades: LoggedTrade[], username: str
 /** Pure content builder for recurring-mistakes.md (exported for tests). */
 export const buildRecurringMistakesContent = (trades: LoggedTrade[]): string => {
     const lines: string[] = [
-        '# Recurring Mistakes (auto-synced from your trade log)',
-        '> Loss clusters of 2+ trades on the same coin + direction. Fix these first — the model reads this on every analysis.',
+        '# My Recurring Mistakes (auto-synced from my trade log)',
+        '> Loss clusters of 2+ trades on the same coin + direction. These are the setups where I keep losing — I check this list before recommending any trade.',
         '',
     ];
     const losses = trades.filter(t => t.outcome === TradeOutcome.LOSS);
     if (losses.length === 0) {
-        lines.push('No losses logged yet — this file lists your loss clusters once trades are logged.');
+        lines.push('No losses logged yet — this file lists my loss clusters once trades are logged.');
         return lines.join('\n');
     }
 
@@ -731,7 +731,7 @@ export const buildRecurringMistakesContent = (trades: LoggedTrade[]): string => 
                 ? ` avg ${(c.pnlPct.reduce((a, b) => a + b, 0) / c.pnlPct.length).toFixed(1)}%`
                 : '';
             const last = new Date(c.last).toLocaleDateString();
-            lines.push(`- ⚠️ **${c.count}× ${key}**${avgPct} — last ${last}`);
+            lines.push(`- ⚠️ **${c.count}× ${key}**${avgPct} — last ${last}. I keep losing here; I need fresh confirmation before taking this setup again.`);
         });
     }
     return lines.join('\n');

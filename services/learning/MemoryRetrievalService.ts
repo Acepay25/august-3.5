@@ -26,6 +26,24 @@ const MAX_DIARY_CHARS = 600;
 const MAX_MAP_CHARS = 1400;
 const ALWAYS_ON = new Set(['memory.md', 'risk-rules.md', 'recurring-mistakes.md']);
 
+/**
+ * The trading doctrine (profile/doctrine.md) rides with EVERY stage — it is
+ * the model's settled beliefs, not reference material. Returns '' when no
+ * doctrine has been consolidated yet.
+ */
+const doctrineBlock = (): string => {
+    try {
+        // Lazy import avoids a circular dependency (DoctrineConsolidation →
+        // MemoryFilesService → …).
+        const { readDoctrineForInjection } = require('./DoctrineConsolidationService') as
+            typeof import('./DoctrineConsolidationService');
+        const doctrine = readDoctrineForInjection();
+        return doctrine ? `**My trading doctrine (settled beliefs):**\n${doctrine}` : '';
+    } catch {
+        return '';
+    }
+};
+
 const cap = (text: string, n: number): string =>
     text.length <= n ? text : `${text.slice(0, n).trimEnd()}\n…`;
 
@@ -92,6 +110,18 @@ export interface RetrievedMemorySource {
     kind: 'identity' | 'skill' | 'playbook' | 'diary' | 'rules' | 'similar';
 }
 
+/**
+ * Debate stage selector for retrieval budgeting. Different decision points
+ * need different memory slices — injecting everything everywhere dilutes the
+ * memories that matter (models weight given context roughly equally).
+ *   opening  — patterns + similar trades (what has this setup done before)
+ *   rebuttal — rules only (tight counter-evidence, minimal tokens)
+ *   verdict  — vetoes + confidence caps + catalog (binding constraints)
+ */
+export type MemoryStage = 'opening' | 'rebuttal' | 'verdict';
+
+const STAGE_SKILL_CAP: Record<MemoryStage, number> = { opening: 2, rebuttal: 1, verdict: 2 };
+
 const kindForHit = (hit: WalkedMemoryHit): RetrievedMemorySource['kind'] => {
     if (hit.node.kind === 'identity') return 'identity';
     if (hit.node.kind === 'skill') return 'skill';
@@ -100,18 +130,22 @@ const kindForHit = (hit: WalkedMemoryHit): RetrievedMemorySource['kind'] => {
     return 'playbook';
 };
 
-const fileHits = (query?: MemoryRetrievalQuery, audience: 'analyst' | 'moderator' = 'analyst'): WalkedMemoryHit[] => {
+const fileHits = (query?: MemoryRetrievalQuery, audience: 'analyst' | 'moderator' = 'analyst', stage: MemoryStage = 'opening'): WalkedMemoryHit[] => {
     const graph = buildMemoryGraph(query, []);
     const walked = walkMemoryNeighbors(graph, query, audience);
     let skillsKept = 0;
+    const skillCap = STAGE_SKILL_CAP[stage];
     const out: WalkedMemoryHit[] = [];
     for (const hit of walked) {
         if (!hit.node.fileId) continue;
         if (hit.node.kind === 'skill') {
             if (audience === 'moderator') continue;
-            if (skillsKept >= 2) continue;
+            if (skillsKept >= skillCap) continue;
             skillsKept += 1;
         }
+        // Rebuttal stage: diary/playbook history is noise mid-argument —
+        // keep only identity + the single most relevant skill.
+        if (stage === 'rebuttal' && hit.node.kind !== 'skill' && hit.node.kind !== 'identity') continue;
         out.push(hit);
     }
     return out;
@@ -147,9 +181,10 @@ export const getMemoryFilesContext = (
     query?: MemoryRetrievalQuery,
     trades?: LoggedTrade[],
     audience: 'analyst' | 'moderator' = 'analyst',
+    stage: MemoryStage = 'opening',
 ): string => {
     const { files } = getMemoryFiles();
-    const hits = fileHits(query, audience);
+    const hits = fileHits(query, audience, stage);
 
     if (hits.length === 0 && !trades?.length) {
         const mapOnly = cap(buildNotebookMapMarkdown(), MAX_MAP_CHARS);
@@ -184,8 +219,11 @@ ${mapOnly}
     }
 
     const extras = [
+        doctrineBlock(),
         audience === 'moderator' ? skillCatalogBlock(query) : '',
-        similarTradesBlock(query, trades),
+        // Similar-trade history belongs at openings and verdicts, not
+        // mid-argument — rebuttals argue levels, not history.
+        stage !== 'rebuttal' ? similarTradesBlock(query, trades) : '',
         rulesBlock(query),
     ].filter(Boolean);
     for (const extra of extras) {

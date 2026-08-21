@@ -458,6 +458,6 @@ describe('skill craft', () => {
         });
         expect(skill?.steps).toHaveLength(3);
         expect(formatCraftedSkillBody(skill!)).toMatch(/\*\*When:\*\*/);
-        expect(formatCraftedSkillBody(skill!)).toMatch(/\*\*Steps:\*\*/);
+        expect(formatCraftedSkillBody(skill!)).toMatch(/\*\*What I do:\*\*/);
     });
 });

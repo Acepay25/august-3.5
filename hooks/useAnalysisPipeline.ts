@@ -67,7 +67,7 @@ import { generateLearningFromPrompt, isLearningEnabled } from '../services/learn
 import { generatePersonalizedInjection } from '../services/ui/PersonalizedPromptService';
 import { PriceAlertService } from '../services/ui/PriceAlertService';
 import { buildUnifiedLearningContext } from '../services/learning/UnifiedLearningBuilder';
-import { getMemoryFilesContext, writeModelNote } from '../services/learning/MemoryFilesService';
+import { getMemoryFilesContext, writeModelNote, extractLessonFromPostMortem } from '../services/learning/MemoryFilesService';
 import { listRetrievedMemorySources } from '../services/learning/MemoryRetrievalService';
 import { getBotMemoryContext } from '../services/bots/BotMemoryService';
 import { writeNotebookNoteFromRequest } from '../services/learning/NotebookWriterService';
@@ -1265,6 +1265,27 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 loggedTrades,
                 freshHybridData?.regime?.regime
             );
+
+            // Loss priming rows (B4): this setup's recent closed trades,
+            // compact — the debate seats recall their own losses on setups
+            // like this before arguing.
+            const lossPrimingRows = loggedTrades
+                .filter(t => (t.outcome === 'WIN' || t.outcome === 'LOSS')
+                    && (!detectedLearningCoin || t.analysis?.coinName?.toLowerCase() === detectedLearningCoin.toLowerCase())
+                    && (!pendingDirection || t.analysis?.direction === pendingDirection))
+                .sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''))
+                .slice(0, 6)
+                .map(t => {
+                    let lesson = '';
+                    try { lesson = extractLessonFromPostMortem(t.postMortem || ''); } catch { /* optional */ }
+                    return {
+                        outcome: t.outcome as string | undefined,
+                        keyLesson: lesson,
+                        coin: t.analysis?.coinName,
+                        direction: t.analysis?.direction,
+                        timestamp: t.timestamp,
+                    };
+                });
 
             // One context bundle for every moderator surface (autoplay debate,
             // real debate, accuracy verification, compact retry): the same
@@ -2600,6 +2621,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                             runDebateTemplate?.skipToVerdict,
                             botByThoughtsKey,
                             centralizedSnapshot,
+                            lossPrimingRows,
                         );
                     }
 

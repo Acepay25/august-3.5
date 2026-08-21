@@ -649,7 +649,23 @@ export const syncClosedTradeToNotebook = async (
     }
     await consolidateSkills(username);
     maybePinWinningPromptLane(allTrades);
+    // Doctrine consolidation: every N newly-closed trades an LLM pass
+    // rewrites profile/doctrine.md into settled first-person beliefs.
+    // Best-effort + gated on evidence count; never blocks the sync.
+    try {
+        const { consolidateDoctrine } = await import('./DoctrineConsolidationService');
+        const { getFirstReadyProvider } = await import('../../utils/providerUtils');
+        const configs = await (await import('../infrastructure/ProviderConfigService')).loadProviderConfigs();
+        const config = getFirstReadyProvider(getReadyProviders(configs));
+        if (config) {
+            const res = await consolidateDoctrine(allTrades, username, config);
+            if (res.updated) console.log('[Doctrine] Doctrine rewritten from', countClosedTrades(allTrades), 'closed trades.');
+        }
+    } catch { /* doctrine is optional — sync must not fail because of it */ }
 };
+
+const countClosedTrades = (trades: LoggedTrade[]): number =>
+    trades.filter(t => t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS).length;
 
 /**
  * Code-side skill enforcement so markdown skills actually move the signal,

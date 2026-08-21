@@ -2502,6 +2502,56 @@ const buildFloorOrientation = (opts: {
  * ("Target: 94k"), and it didn't know lens short names (every analyst then
  * fell back to the whole question block).
  */
+/**
+ * Confidence auction (B3): extract each seat's sealed `CONVICTION: <0-100>`
+ * line from its final rebuttal and build the moderator-facing distribution
+ * block. Only the Moderator sees all convictions together; seats never see
+ * each other's. Returns '' when no seat reported a conviction.
+ */
+const buildConvictionAuctionBlock = (roundTexts: Record<string, string[]>, names: string[], finalRound: number): string => {
+    const rows: { name: string; value: number }[] = [];
+    for (const name of names) {
+        const text = roundTexts[name]?.[finalRound] || '';
+        const m = text.match(/CONVICTION:\s*(\d{1,3})/i);
+        if (!m) continue;
+        const v = Math.min(100, Math.max(0, parseInt(m[1], 10)));
+        rows.push({ name, value: v });
+    }
+    if (rows.length === 0) return '';
+    const values = rows.map(r => r.value);
+    const spread = Math.max(...values) - Math.min(...values);
+    const lines = rows.map(r => `- ${r.name}: ${r.value}/100`);
+    return [
+        "**SEALED CONVICTION AUCTION (each seat's private 0-100 conviction in its own stance):**",
+        ...lines,
+        spread <= 10
+            ? `Tight distribution (spread ${spread}) — the floor genuinely agrees.`
+            : `Wide distribution (spread ${spread}) — the floor does NOT agree. If you side with an outlier, you MUST explain why it outranks the pack.`,
+    ].join('\n');
+};
+
+/**
+ * Loss priming (B4): surface this setup's historical failures as a
+ * first-person recollection so analysts argue from remembered losses instead
+ * of discovering them at verdict time. Returns '' when there are no similar
+ * losing trades.
+ */
+const buildLossPrimingBlock = (
+    trades?: { outcome?: string; keyLesson?: string; coin?: string; direction?: string; timestamp?: string }[],
+): string => {
+    if (!trades || trades.length === 0) return '';
+    const losses = trades.filter(t => t.outcome === 'LOSS').slice(0, 3);
+    if (losses.length === 0) return '';
+    const lines = losses.map(t =>
+        `- ${t.timestamp ? new Date(t.timestamp).toLocaleDateString() : 'recently'}: ${t.coin ?? 'this setup'} ${t.direction ?? ''} lost${t.keyLesson ? ` — lesson: ${t.keyLesson.slice(0, 120)}` : ''}`
+    );
+    return [
+        '**YOUR OWN LOSSES ON SETUPS LIKE THIS (recall before you answer):**',
+        ...lines,
+        'You have been here before and it cost you. Address what went wrong last time — or explain concretely why this instance is different.',
+    ].join('\n');
+};
+
 const getAnalystClarificationQuestion = (questionText: string, targetAliases: string[], allSpeakerLabels: string[]): string => {
     const targetAlt = targetAliases.map(escapeRegExp).join('|');
     const allAlt = allSpeakerLabels.map(escapeRegExp).join('|');
@@ -2681,6 +2731,9 @@ export const conductRealDebate = async function* (
     botByThoughtsKey?: Record<string, HermesBot>,
     /** Pre-fetched market snapshot injected to all seats to avoid N× tool calls. */
     centralizedSnapshot?: string,
+    /** This setup's similar closed trades (for loss priming). Compact rows —
+     *  outcome/keyLesson only, no full post-mortems. */
+    similarTrades?: { outcome?: string; keyLesson?: string; coin?: string; direction?: string; timestamp?: string }[],
 ): AsyncGenerator<RealDebateTurnEvent, void, unknown> {
 
     if (analysts.length < 2) {
@@ -2912,6 +2965,21 @@ export const conductRealDebate = async function* (
             ? buildRebuttalDiffPacket(analyst.provider.name, ownPosition, otherOpenings)
             : 'No other analyst has spoken yet.';
 
+        // ── Devil's advocate rotation (B1) ──
+        // One seat per debate is ASSIGNED the contra position for its first
+        // rebuttal, regardless of its own read — kills premature agreement.
+        // Seeded from the prompt hash so it rotates per setup, not per run.
+        // The existing synthetic-dissent protocol still covers full echo
+        // chambers; this guarantees exactly one structured counter-voice even
+        // when divergence is moderate.
+        const devilSeatIndex = (() => {
+            let h = 0;
+            for (let i = 0; i < userPrompt.length; i++) h = (h * 31 + userPrompt.charCodeAt(i)) >>> 0;
+            return h % Math.max(debateRoster.length, 1);
+        })();
+        const devilName = debateRoster[devilSeatIndex]?.provider.name;
+        const isDevilSeat = analyst.provider.name === devilName && round === rebuttalStart;
+
         // The lens persona must survive into the rebuttal rounds —
         // a generic "expert trading analyst" instruction let
         // specialists drift to general analysis mid-debate.
@@ -2952,6 +3020,16 @@ export const conductRealDebate = async function* (
             })}\n\n` +
             `${others}\n\n` +
             (levelsSnap ? `**LEVELS SNAPSHOT:**\n${levelsSnap}\n\n` : '') +
+            (buildLossPrimingBlock(similarTrades) ? buildLossPrimingBlock(similarTrades) + `\\n\\n` : '') +
+            (isDevilSeat
+                ? "**DEVIL'S ADVOCATE ASSIGNMENT (this round only):** You are assigned the CONTRA position for this round. Argue the strongest honest case AGAINST the emerging floor consensus - what invalidates it, where it fails, who is on the wrong side of the levels. You may concede afterwards, but this round your job is the counter-case. Do not strawman: use real levels and timeframes.\n\n"
+                : '') +
+            (round === rebuttalStart + 1
+                ? '**EVIDENCE ROUND:** Cite ONE concrete data point already on the table (a level, volume figure, funding rate, session context) that most supports OR most threatens your stance. No new analysis - just the evidence and why it matters in one or two sentences, then your updated Levels line.\n\n'
+                : '') +
+            (round === totalRounds
+                ? '**FINAL CONVICTION LINE (required):** End your rebuttal with exactly one line: CONVICTION: <0-100> - your private numeric conviction in your own stance after this debate. This is sealed: other seats never see it, only the Moderator sees all convictions together at the verdict.\n\n'
+                : '') +
             `Respond now with your rebuttal for Round ${round}.` +
             (steeringNote ? `\n\n**USER STEERING (queued mid-debate — follow this):**\n${steeringNote}` : '') +
             (missingLevelsNotice ? `\n\n${missingLevelsNotice}` : '') +
@@ -3507,6 +3585,7 @@ export const conductRealDebate = async function* (
         // Final-stance divergence summary — recomputed AFTER clarification so
         // the moderator sees where each seat LANDED, not just the openings.
         `\n\n${summarizeFinalPositions(roundTexts, names).block}`,
+        buildConvictionAuctionBlock(roundTexts, names, lastRebuttalRound) ? `\n\n${buildConvictionAuctionBlock(roundTexts, names, lastRebuttalRound)}` : '',
         `\n\n**TRADING REQUEST:**\n${truncateTextToTokens(userPrompt, 350)}`,
         steerVerdict ? `\n\n**USER STEERING (queued mid-debate — follow this):**\n${steerVerdict}` : '',
         marketDataOverride,

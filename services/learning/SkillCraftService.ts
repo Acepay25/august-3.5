@@ -39,14 +39,13 @@ Output ONLY JSON:
 
 export const formatCraftedSkillBody = (skill: CraftedSkill): string => [
     `**When:** ${skill.when}`,
-    `**Inputs:** ${skill.inputs.join(', ') || 'matching setup'}`,
-    '**Steps:**',
+    `**What I look at:** ${skill.inputs.join(', ') || 'matching setup'}`,
+    '**What I do:**',
     ...skill.steps.map((s, i) => `${i + 1}. ${s}`),
-    `**Validate:** ${skill.validate}`,
-    `**Return:** ${skill.output}`,
-    `**Approval:** ${skill.approval}`,
-    `**Trigger:** IF ${skill.ifCondition}`,
-    `**Procedure:** THEN ${skill.thenAction}`,
+    `**How I know it still holds:** ${skill.validate}`,
+    `**What I hand back:** ${skill.output}`,
+    `**When I ask a human:** ${skill.approval}`,
+    `**My rule:** when ${skill.ifCondition}, I ${skill.thenAction}`,
 ].join('\n');
 
 export const craftSkillFromPostMortem = async (
