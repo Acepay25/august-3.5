@@ -38,6 +38,10 @@ push_error.txt
 push_log.txt
 scan_results.txt
 tsc_errors.txt
+android/build_log*.txt
+
+# Local MCP / tool configs (machine-specific)
+config/
 
 # APK / binary artifacts
 *.apk
@@ -67,3 +71,12 @@ hybrid-injection-dump.txt
 
 # Agent tool caches
 .eve/
+.agents/
+.cluster/
+.openclaw/
+.opencode/
+HEARTBEAT.md
+IDENTITY.md
+SOUL.md
+TOOLS.md
+USER.md

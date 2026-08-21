@@ -1178,7 +1178,6 @@ const App: React.FC = () => {
     const profileSelectionStartedRef = useRef(false);
 
     const loadUserData = async (username: string) => {
-        profileSelectionStartedRef.current = true;
         handleCancelAnalysis();
         invalidatePostMortemRuns();
         setIsLoading(true);
@@ -1404,52 +1403,45 @@ const App: React.FC = () => {
         }
         setActiveUsername(username);
         sessionStorage.setItem('activeUsername', username);
-        // Tag thinking records with the active user — the writers read
-        // 'last_active_user' but nothing ever wrote it (all records landed
-        // in the 'default' bucket).
         localStorage.setItem('last_active_user', username);
+        profileSelectionStartedRef.current = true;
         setIsUserModalOpen(false);
         setHighlightedAnalysisId(null);
         setIsLoading(false);
         } catch (error) {
             console.error('App: failed to load user data', error);
-            // Ensure the app doesn't stay stuck on a loading screen
             setActiveUsername(username);
             sessionStorage.setItem('activeUsername', username);
+            profileSelectionStartedRef.current = true;
             setIsUserModalOpen(false);
             setIsLoading(false);
         }
     };
 
+    // Fresh-session workspace: must be visible even before provider configs
+    // finish loading — provider stall otherwise leaves a blank canvas.
     useEffect(() => {
-        // Wait for provider configs to load before resolving defaults like the
-        // summarization provider / memory model. getFirstReadyProvider would
-        // otherwise see an empty list on first mount (configs load async) and
-        // pin defaults to '' that never self-correct.
-        if (!providerConfigsLoaded) return;
         let isMounted = true;
-        const initializeApp = async () => {
+        const openWorkspaceIfNeeded = async (): Promise<void> => {
             try {
                 const users = await dbService.getAllUsernames();
                 if (!isMounted) return;
                 setExistingUsernames(users);
                 const sessionUser = sessionStorage.getItem('activeUsername');
                 if (sessionUser && users.includes(sessionUser)) {
-                    loadUserData(sessionUser);
+                    void loadUserData(sessionUser);
                 } else if (!profileSelectionStartedRef.current) {
                     setIsUserModalOpen(true);
                 }
             } catch (error) {
                 console.error('App: initialization failed', error);
                 if (!isMounted) return;
-                // Show the user modal even if DB init fails so the app
-                // doesn't get stuck on a blank screen.
                 if (!profileSelectionStartedRef.current) setIsUserModalOpen(true);
             }
         };
-        initializeApp();
+        void openWorkspaceIfNeeded();
         return () => { isMounted = false; };
-    }, [providerConfigsLoaded]);
+    }, []);
 
     // ─── P0-1: Save-on-unload flush ──────────────────────────────────────
     // The debounced saves below lose data if the tab closes mid-window.
@@ -3430,7 +3422,7 @@ const App: React.FC = () => {
 
             {/* Main row: persistent desktop sidebar + chat column */}
             <div className="flex-1 flex flex-row min-h-0">
-                <aside className={`hidden lg:flex flex-col ${isSidebarCollapsed ? 'w-16' : 'w-60'} shrink-0 min-h-0 border-r border-white/[0.06] bg-[#0f0f0f] transition-[width] duration-200 relative`}>
+                <aside className={`hidden lg:flex flex-col ${isSidebarCollapsed ? 'w-16' : 'w-60'} shrink-0 min-h-0 border-r border-white/[0.06] bg-zinc-950 transition-[width] duration-200 relative`}>
                     <button
                         type="button"
                         onClick={() => setIsSidebarCollapsed(prev => !prev)}

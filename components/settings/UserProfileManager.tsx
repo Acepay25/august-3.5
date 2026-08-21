@@ -16,9 +16,10 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ isVisible, onUs
   const [formError, setFormError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Esc dismisses the modal (the audit flagged this screen as a navigation
-  // dead-end — it had no way out until a profile was selected).
-  useEscapeClose(Boolean(onClose) && isVisible, () => onClose?.());
+  const isFreshBlank = isVisible && existingUsers.length === 0;
+  // Backdrop/Esc only dismiss when there is already a profile to return
+  // to — on a fresh install closing would leave a blank canvas.
+  useEscapeClose(Boolean(onClose) && isVisible && !isFreshBlank, () => onClose?.());
 
   if (!isVisible) return null;
 
@@ -63,7 +64,7 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ isVisible, onUs
   };
 
   return (
-    <div className="fixed inset-0 bg-black z-50 flex items-center justify-center p-4 animate-fade-in" role="dialog" aria-modal="true" aria-label="User profile selection" onClick={(e) => { if (e.target === e.currentTarget) onClose?.(); }}>
+    <div className="fixed inset-0 bg-black z-50 flex items-center justify-center p-4 animate-fade-in" role="dialog" aria-modal="true" aria-label="User profile selection" onClick={(e) => { if (e.target === e.currentTarget && !isFreshBlank) onClose?.(); }}>
       <div className="relative w-full max-w-md bg-zinc-900 rounded-3xl border border-white/10 shadow-2xl overflow-hidden">
           {/* Header */}
           <div className="relative px-8 py-10 text-center border-b border-white/5">

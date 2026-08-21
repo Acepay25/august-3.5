@@ -306,7 +306,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
             : 'absolute bottom-0 left-0 right-0 px-3 sm:px-4 lg:px-8 pointer-events-none z-20 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] sm:pb-[calc(env(safe-area-inset-bottom)+0.75rem)] lg:pb-4 status-surface'}>
             <div className={centered ? 'w-full' : 'chat-column pointer-events-auto'}>
                 {/* Main Input Container — ChatGPT pill */}
-                <div className="rounded-[28px] border border-white/[0.04] bg-[#2f2f2f] p-3 shadow-[0_8px_32px_rgba(0,0,0,0.4)] transition-all">
+                <div className="rounded-[28px] border border-white/[0.04] bg-zinc-800 p-3 shadow-[0_8px_32px_rgba(0,0,0,0.4)] transition-all">
 
                     {/* Image Preview */}
                     <ImagePreview images={images} onRemoveImage={removeImage} />
