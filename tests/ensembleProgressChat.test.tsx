@@ -263,6 +263,58 @@ describe('EnsembleProgressChat', () => {
         expect(screen.getByText(/Analyst A is thinking…/)).toBeDefined();
     });
 
+    it('renders the user prompt as a "You" bubble at the top of the thread', () => {
+        const progress = makeProgress([
+            makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'complete' }),
+        ]);
+        render(
+            <EnsembleProgressChat
+                progress={progress}
+                userPrompt={{ text: 'Analyze ETH 4H — long or short?', createdAt: new Date(Date.now() - 300_000).toISOString() }}
+                debateTurns={[{ speaker: 'Analyst A', text: 'Long above the reclaim.', round: 1 }]}
+            />,
+        );
+        expect(screen.getByText('You')).toBeDefined();
+        expect(screen.getByText('Analyze ETH 4H — long or short?')).toBeDefined();
+        expect(screen.getByText(/5 min ago/)).toBeDefined();
+    });
+
+    it('shows an @mention chip when the moderator addresses an analyst', () => {
+        const progress = makeProgress([
+            makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'complete' }),
+            makeAnalyst({ key: 'a2', displayName: 'Analyst B', status: 'complete' }),
+        ]);
+        render(
+            <EnsembleProgressChat
+                progress={progress}
+                debateTurns={[
+                    { speaker: 'Analyst A', text: 'Long above the reclaim.', round: 1 },
+                    { speaker: 'Moderator', text: 'Analyst A: defend your invalidation level.', round: 2 },
+                ]}
+            />,
+        );
+        expect(screen.getByText('@Analyst A')).toBeDefined();
+    });
+
+    it('sends a threaded reply through onReplyInThread', () => {
+        const onReplyInThread = vi.fn();
+        const progress = makeProgress([
+            makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'complete' }),
+        ]);
+        render(
+            <EnsembleProgressChat
+                progress={progress}
+                debateTurns={[{ speaker: 'Analyst A', text: 'Long above the reclaim.', round: 1 }]}
+                onReplyInThread={onReplyInThread}
+            />,
+        );
+        fireEvent.click(screen.getByRole('button', { name: 'Reply in thread' }));
+        const input = screen.getByPlaceholderText(/Reply in thread/);
+        fireEvent.change(input, { target: { value: '@Analyst A what invalidates this?' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Reply' }));
+        expect(onReplyInThread).toHaveBeenCalledWith('@Analyst A what invalidates this?');
+    });
+
     it('opens the seat modal from a thread row and switches to the lanes view', () => {
         const progress = makeProgress([
             makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'complete', finalOutput: 'Opening call' }),

@@ -9,6 +9,8 @@ export interface DebateBotAvatarProps {
     look?: number;
     size?: number;
     avatarUrl?: string;
+    /** Square corners (group-chat reference style) instead of the round disc. */
+    square?: boolean;
 }
 
 const hashName = (name: string): number => {
@@ -41,6 +43,7 @@ export const DebateBotAvatar: React.FC<DebateBotAvatarProps> = ({
     speaking = false,
     size = 36,
     avatarUrl,
+    square = false,
 }) => {
     const fill = botFillForKey(toneKey || name || '?');
     const initial = (name.trim()[0] || '?').toUpperCase();
@@ -49,6 +52,7 @@ export const DebateBotAvatar: React.FC<DebateBotAvatarProps> = ({
         width: size,
         height: size,
         background: fill,
+        borderRadius: square ? 6 : undefined,
         borderColor: speaking ? 'rgba(255,255,255,0.28)' : live || thinking ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.08)',
     } as React.CSSProperties;
 

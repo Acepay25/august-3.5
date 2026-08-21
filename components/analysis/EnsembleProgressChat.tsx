@@ -21,6 +21,10 @@ interface EnsembleProgressChatProps {
     liveToolEvents?: Record<string, string>;
     reasoningProcesses?: Record<string, string>;
     runStats?: RunStats;
+    /** The user prompt that started this debate — shown as the "You" bubble. */
+    userPrompt?: { text: string; createdAt?: string } | null;
+    /** Threaded follow-up (reuses the follow-up-ticket pipeline). */
+    onReplyInThread?: (text: string) => void;
 }
 
 const STATUS_TEXT: Record<EnsembleAnalystProgress['status'], string> = {
@@ -263,6 +267,10 @@ interface ThreadViewProps {
     reasoningProcesses: Record<string, string>;
     isLive: boolean;
     onOpenSeat: (seatId: string) => void;
+    /** The user prompt that started this debate — rendered as the "You" bubble. */
+    userPrompt?: { text: string; createdAt?: string } | null;
+    /** Send a threaded follow-up (reuses the follow-up-ticket pipeline). */
+    onReply?: (text: string) => void;
 }
 
 const speakerToneKey = (speaker: string, analysts: EnsembleAnalystProgress[]): string => {
@@ -318,11 +326,24 @@ const ThreadTurnRow: React.FC<{
     };
 
     const isYou = displayName.toLowerCase() === 'you';
+    // Addressing chip: rebuttals open with the targeted analyst's name —
+    // surface it as an "@Name" mention instead of a subtitle line.
+    const mentionTarget = (() => {
+        if (turn.speaker === 'Moderator' && hasText) {
+            const labels = analysts.map(a => a.displayName).filter(Boolean).sort((a, b) => b.length - a.length);
+            for (const label of labels) {
+                if (new RegExp(`^\\s*[*_~]*${label.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}[*_~]*\\s*[:—-]`, 'i').test(turn.text)) return label;
+            }
+        }
+        return undefined;
+    })();
     return (
         <>
             {showPhase && (
-                <div className="px-3 pb-1 pt-5 text-[10px] font-medium uppercase tracking-widest text-zinc-500">
-                    {roundLabel(turn.round ?? 1)}
+                <div className="mt-4 flex items-center gap-2 px-3 pb-1" aria-hidden="true">
+                    <span className="h-px flex-1 bg-white/[0.05]" />
+                    <span className="text-[10px] text-zinc-600">{roundLabel(turn.round ?? 1)}</span>
+                    <span className="h-px flex-1 bg-white/[0.05]" />
                 </div>
             )}
             <div
@@ -339,11 +360,15 @@ const ThreadTurnRow: React.FC<{
                         name={displayName}
                         toneKey={toneKey}
                         size={28}
+                        square
                         live={rowLive}
                         thinking={rowLive && !hasText}
                         speaking={rowLive && hasText}
                     />
                     <span className={`text-[13px] font-medium ${isYou ? 'text-zinc-100' : 'text-zinc-300'}`}>{displayName}</span>
+                    {mentionTarget && (
+                        <span className="rounded bg-zinc-800 px-1 py-0.5 text-[10px] font-medium text-zinc-400">@{formatSeatLabel(mentionTarget)}</span>
+                    )}
                     <span className="text-[11px] tabular-nums text-zinc-500">
                         {rowLive && !hasText ? 'typing…' : time}
                     </span>
@@ -377,9 +402,13 @@ const ThreadView: React.FC<ThreadViewProps> = ({
     reasoningProcesses,
     isLive,
     onOpenSeat,
+    userPrompt,
+    onReply,
 }) => {
     const scrollRef = useRef<HTMLDivElement>(null);
     const pinnedRef = useRef(true);
+    const [replyOpen, setReplyOpen] = useState(false);
+    const [replyText, setReplyText] = useState('');
     const signature = useMemo(
         () => turns.map(t => `${t.speaker}:${t.round ?? ''}:${t.text.length}`).join('|'),
         [turns],
@@ -393,11 +422,26 @@ const ThreadView: React.FC<ThreadViewProps> = ({
 
     let previousRound: number | undefined;
 
+    const submitReply = (): void => {
+        const text = replyText.trim();
+        if (!text || !onReply) return;
+        onReply(text);
+        setReplyText('');
+        setReplyOpen(false);
+    };
+
     return (
         <div className="flex flex-col">
             <div className="flex items-center gap-1.5 px-3 py-2 text-[12px] text-zinc-500">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-zinc-600"><path d="M6 9l6 6 6-6" /></svg>
                 Collapse thread
+                {/* Avatar stack + bot count, reference-style header cluster. */}
+                <span className="ml-auto flex items-center -space-x-1.5" aria-hidden="true">
+                    {analysts.slice(0, 4).map(a => (
+                        <DebateBotAvatar key={a.key} name={a.displayName} toneKey={a.modelId || a.modelName} size={18} square />
+                    ))}
+                </span>
+                <span className="text-[11px]">{analysts.length} bots</span>
             </div>
             <div
                 ref={scrollRef}
@@ -408,6 +452,15 @@ const ThreadView: React.FC<ThreadViewProps> = ({
                     pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
                 }}
             >
+            {userPrompt && Boolean(userPrompt.text.trim()) && (
+                <div className="mx-2 mb-2 rounded-lg bg-zinc-800/60 px-3 py-2">
+                    <div className="flex items-baseline gap-2">
+                        <span className="text-[13px] font-medium text-zinc-100">You</span>
+                        <span className="text-[11px] tabular-nums text-zinc-500">{relativeTurnTime(userPrompt.createdAt)}</span>
+                    </div>
+                    <p className="mt-0.5 whitespace-pre-wrap text-[14px] leading-6 text-zinc-300">{userPrompt.text}</p>
+                </div>
+            )}
             {turns.map((turn, index) => {
                 const showPhase = typeof turn.round === 'number'
                     && turn.speaker !== 'System'
@@ -453,7 +506,39 @@ const ThreadView: React.FC<ThreadViewProps> = ({
                 );
             })()}
             </div>
-            <div className="px-7 py-2 text-[12px] text-zinc-500">Reply in thread</div>
+            <div className="px-3 py-2">
+                {replyOpen && onReply ? (
+                    <div className="flex items-center gap-1.5">
+                        <input
+                            value={replyText}
+                            onChange={e => setReplyText(e.target.value)}
+                            onKeyDown={e => {
+                                if (e.key === 'Enter') submitReply();
+                                if (e.key === 'Escape') setReplyOpen(false);
+                            }}
+                            placeholder="Reply in thread… (@name to direct)"
+                            autoFocus
+                            className="min-w-0 flex-1 rounded-lg border border-white/10 bg-zinc-900 px-2.5 py-1 text-[12px] text-zinc-200 placeholder:text-zinc-600 focus:outline-none"
+                        />
+                        <button
+                            type="button"
+                            onClick={submitReply}
+                            disabled={!replyText.trim()}
+                            className="rounded-lg border border-white/10 px-2 py-1 text-[11px] font-medium text-zinc-300 transition-colors enabled:hover:border-white/25 disabled:text-zinc-600"
+                        >
+                            Reply
+                        </button>
+                    </div>
+                ) : (
+                    <button
+                        type="button"
+                        onClick={() => setReplyOpen(true)}
+                        className="text-[12px] text-zinc-500 transition-colors hover:text-zinc-300"
+                    >
+                        Reply in thread
+                    </button>
+                )}
+            </div>
         </div>
     );
 };
@@ -470,6 +555,8 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
     liveToolEvents = {},
     reasoningProcesses = {},
     runStats,
+    userPrompt,
+    onReplyInThread,
 }) => {
     const lanes = useMemo(() => buildAnalystGantt(progress), [progress]);
     const analystNames = progress.analysts.map(a => a.displayName);
@@ -763,6 +850,8 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
                             reasoningProcesses={reasoningProcesses}
                             isLive={isLive}
                             onOpenSeat={setOpenSeatId}
+                            userPrompt={userPrompt}
+                            onReply={onReplyInThread}
                         />
                     ) : (
                         <>

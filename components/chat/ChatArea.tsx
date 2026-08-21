@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { Message, ImageMetadata, AccuracySubMode, AnalysisStep, AnalystLensConfig, LiveThoughts, ProviderConfig } from '../../types';
+import { MessageRole } from '../../types/enums';
 import { EnsembleModelSelection } from '../../services/ui/AnalystLensService';
 import { RegimeProviderStatsMap } from '../../services/learning/SetupMemoryService';
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
@@ -309,10 +310,22 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         }
         return map;
     }, [messages]);
+    // The user prompt that started each run — the thread view renders it as
+    // the "You" bubble at the top of the debate thread.
+    const priorUserMessageById = useMemo(() => {
+        const map: Record<string, Pick<Message, 'text' | 'createdAt'>> = {};
+        let lastUser: (typeof messages)[number] | undefined;
+        for (const m of messages) {
+            if (m.role === MessageRole.USER) { lastUser = m; continue; }
+            if (lastUser) map[m.id] = { text: lastUser.text, createdAt: lastUser.createdAt };
+        }
+        return map;
+    }, [messages]);
     const enhancedContext = useMemo(() => ({
         ...chatContext,
         latestMessageId,
         priorAnalysisById,
+        priorUserMessageById,
         isSelectionMode,
         selectedMessageIds: selectedIds,
         onToggleMessageSelection: handleToggleSelection,
@@ -320,7 +333,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         onSelectMessageForProbability,
         onRetryFailedRun,
         onEditUserMessage,
-    }), [chatContext, latestMessageId, priorAnalysisById, isSelectionMode, selectedIds, handleToggleSelection, onSelectMessageForProbability, onRetryFailedRun, onEditUserMessage]);
+    }), [chatContext, latestMessageId, priorAnalysisById, priorUserMessageById, isSelectionMode, selectedIds, handleToggleSelection, onSelectMessageForProbability, onRetryFailedRun, onEditUserMessage]);
 
     // Fresh sessions start with zero messages (no hardcoded intro bubble),
     // so no intro-text substitution is needed — messages pass through as-is.
@@ -400,7 +413,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
 
     return (
         <div
-            className={`flex-1 relative min-h-0 flex flex-col bg-[#0f0f0f] transition-colors duration-500`}
+            className={`flex-1 relative min-h-0 flex flex-col bg-zinc-950 transition-colors duration-500`}
             onClick={onInteract}
             onTouchStart={onInteract}
         >
@@ -606,7 +619,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 <ChatInput {...chatInputProps} />
                 </>
             ) : messages.length === 0 ? (
-                <div className="flex flex-1 flex-col items-center justify-center bg-[#0f0f0f] px-4 py-10">
+                <div className="flex flex-1 flex-col items-center justify-center bg-zinc-950 px-4 py-10">
                     <h1 className="mb-8 text-center text-[28px] font-normal tracking-tight text-zinc-100 sm:text-[32px]">
                         What should we work on?
                     </h1>
