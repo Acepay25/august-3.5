@@ -8,7 +8,8 @@ import { initMemoryFiles, getMemoryFiles, computeTopLessons, TopLesson } from '.
 import { summarizeSimilarSetups, COLD_START_MIN } from '../../services/learning/SetupMemoryService';
 import { computeEvidenceQualityStats } from '../../utils/analysisQuality';
 import { summarizePromptVersions, summarizePromptLanes } from '../../utils/promptVersionStats';
-import { listSkills } from '../../services/learning/SkillMemoryService';
+import { listSkills, reviewSkillEffectiveness } from '../../services/learning/SkillMemoryService';
+import { getCalibrationSummaries } from '../../services/backtesting/ModelPerformanceService';
 import { WriteApprovalGate, PendingRuleItem } from '../../services/learning/WriteApprovalGate';
 import { buildMemoryGraph } from '../../services/learning/MemoryGraph';
 import { EmptyState } from '../ui/EmptyState';
@@ -123,6 +124,8 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
     const promptVersions = useMemo(() => summarizePromptVersions(closedWindowed), [closedWindowed]);
     const promptLanes = useMemo(() => summarizePromptLanes(closedWindowed), [closedWindowed]);
     const notebookSkills = useMemo(() => listSkills(), [notebook]);
+    const skillReview = useMemo(() => reviewSkillEffectiveness(), [notebook]);
+    const calibrationSummaries = useMemo(() => getCalibrationSummaries().filter(c => c.samples > 0), []);
 
     // Write-approval gate: opt-in trust gate for auto-learned rules.
     const [writeApproval, setWriteApproval] = useState<boolean>(false);
@@ -770,15 +773,40 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
                 />
                 <StatCard
                     title="Skills"
-                    items={notebookSkills.slice(0, 6).map(({ meta, file }) => ({
-                        name: file.name.replace(/\.md$/i, ''),
-                        value: meta.wins + meta.losses > 0
-                            ? `${Math.round((meta.wins / (meta.wins + meta.losses)) * 100)}%`
-                            : meta.status,
-                        subtext: `${meta.kind} · ${meta.wins}/${meta.losses}${meta.ifCondition ? ` · IF ${meta.ifCondition.slice(0, 28)}` : ''}`,
-                        color: meta.kind === 'avoid' ? 'text-zinc-400' : 'text-white',
-                    }))}
+                    items={notebookSkills.slice(0, 6).map(({ meta, file }) => {
+                        const review = skillReview.find(r => r.fileId === file.id);
+                        return {
+                            name: file.name.replace(/\.md$/i, ''),
+                            value: meta.wins + meta.losses > 0
+                                ? `${Math.round((meta.wins / (meta.wins + meta.losses)) * 100)}%`
+                                : meta.status,
+                            subtext: review
+                                ? `${review.recommendation.toUpperCase()} · ${meta.kind} · ${meta.wins}/${meta.losses}`
+                                : `${meta.kind} · ${meta.wins}/${meta.losses}${meta.ifCondition ? ` · IF ${meta.ifCondition.slice(0, 28)}` : ''}`,
+                            color: review?.recommendation === 'retire' || review?.recommendation === 'demote'
+                                ? 'text-red-400'
+                                : review?.recommendation === 'promote'
+                                    ? 'text-emerald-400'
+                                    : 'text-white',
+                        };
+                    })}
                     emptyText="Closed trades with an IF/THEN become skills"
+                />
+                <StatCard
+                    title="Model calibration (Brier)"
+                    items={calibrationSummaries.slice(0, 6).map(c => ({
+                        name: c.provider,
+                        value: c.brierScore !== null ? c.brierScore.toFixed(3) : '—',
+                        subtext: `${c.verdict === 'calibrated' ? 'calibrated' : c.verdict.replace('-', ' ')}${c.highGap !== null ? ` · High gap ${c.highGap > 0 ? '+' : ''}${c.highGap}%` : ''} (n=${c.samples})`,
+                        color: c.verdict === 'overconfident'
+                            ? 'text-red-400'
+                            : c.verdict === 'underconfident'
+                                ? 'text-yellow-500'
+                                : c.verdict === 'calibrated'
+                                    ? 'text-emerald-400'
+                                    : 'text-zinc-500',
+                    }))}
+                    emptyText="Close trades to measure whether model confidence means anything — lower Brier = better calibrated (chance ≈ 0.25)"
                 />
             </div>
 

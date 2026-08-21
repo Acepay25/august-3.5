@@ -1448,6 +1448,58 @@ export const syncConfidenceCalibrationFromTradeLog = (trades: LoggedTrade[]): vo
     console.log('[ConfidenceCalibration] Synced from trade log:', Object.keys(data.providers).length, 'providers');
 };
 
+/**
+ * Brier-score calibration summary across all providers.
+ *
+ * The Brier score is the mean squared error between declared confidence and
+ * outcome: (p - outcome)², where p = declared confidence as a probability
+ * (High=0.70, Medium=0.55, Low=0.40 — the same anchors the dashboard uses)
+ * and outcome = 1 for WIN, 0 for LOSS. Range 0..1; lower is better; 0.25 is
+ * chance for a coin-flip market. This complements win-rate stats by measuring
+ * whether a model's CONFIDENCE WORDS mean anything.
+ */
+export interface ProviderCalibrationSummary {
+    provider: string;
+    brierScore: number | null;
+    samples: number;
+    /** declared minus realized win rate at High confidence (positive = overconfident) */
+    highGap: number | null;
+    verdict: 'calibrated' | 'overconfident' | 'underconfident' | 'insufficient-data';
+}
+
+const CONFIDENCE_ANCHOR: Record<'high' | 'medium' | 'low', number> = { high: 0.7, medium: 0.55, low: 0.4 };
+
+export const getCalibrationSummaries = (): ProviderCalibrationSummary[] => {
+    const data = loadConfidenceCalibrationData();
+    return Object.entries(data.providers).map(([provider, buckets]) => {
+        let seSum = 0;
+        let samples = 0;
+        for (const key of ['high', 'medium', 'low'] as const) {
+            const b = buckets[key];
+            if (!b || b.total === 0) continue;
+            const anchor = CONFIDENCE_ANCHOR[key];
+            // Split the bucket: each win contributes (1-p)², each loss p².
+            seSum += b.wins * Math.pow(1 - anchor, 2) + (b.total - b.wins) * Math.pow(anchor, 2);
+            samples += b.total;
+        }
+        const totalWins = buckets.high.wins + buckets.medium.wins + buckets.low.wins;
+        const overallWinRate = samples > 0 ? (totalWins / samples) * 100 : 0;
+        const highTotal = buckets.high.total;
+        const highWinRate = highTotal > 0 ? (buckets.high.wins / highTotal) * 100 : null;
+        const highGap = highWinRate !== null ? Math.round((overallWinRate - highWinRate) * 10) / 10 : null;
+        const brierScore = samples > 0 ? Math.round((seSum / samples) * 10000) / 10000 : null;
+
+        let verdict: ProviderCalibrationSummary['verdict'] = 'insufficient-data';
+        if (samples >= 5 && highGap !== null && highTotal >= 3) {
+            verdict = highGap > 12 ? 'overconfident' : highGap < -12 ? 'underconfident' : 'calibrated';
+        } else if (samples >= 5) {
+            verdict = 'calibrated';
+        }
+
+        return { provider, brierScore, samples, highGap, verdict };
+    });
+};
+
 // =============================================================================
 // IMPROVEMENT 3: PROVIDER PAIR CORRELATION ANALYSIS
 // =============================================================================
