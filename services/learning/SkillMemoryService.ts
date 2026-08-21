@@ -743,3 +743,79 @@ export const confirmedAvoidForSetup = (
         .filter((m): m is SkillMeta => Boolean(m && skillMatchesSetup(m, setup)));
     return matches.find(m => m.kind === 'avoid' && m.status === 'confirmed') ?? null;
 };
+
+// ─── Skill effectiveness review ─────────────────────────────────────────────
+// Grades every skill on its realized W/L record and recommends an action.
+// This closes the loop: skills are enforced in code (applyNotebookSkillsTo-
+// Analysis), so their enforcement history must feed back into their status.
+
+export interface SkillEffectiveness {
+    fileId: string;
+    title: string;
+    kind: SkillKind;
+    status: SkillStatus;
+    wins: number;
+    losses: number;
+    hitRate: number | null;
+    consecutiveLosses: number;
+    /** What the loop should do next with this skill. */
+    recommendation: 'keep' | 'watch' | 'refine' | 'demote' | 'retire' | 'promote';
+    rationale: string;
+}
+
+export const reviewSkillEffectiveness = (): SkillEffectiveness[] => {
+    return getMemoryFiles().files
+        .map(file => {
+            const meta = enabledSkillMeta(file);
+            if (!meta) return null;
+            const sample = meta.wins + meta.losses;
+            const hitRate = skillHitRate(meta.wins, meta.losses);
+            const title = titleFromMeta(meta);
+
+            let recommendation: SkillEffectiveness['recommendation'] = 'keep';
+            let rationale: string;
+
+            if (sample === 0) {
+                rationale = 'No closed-trade evidence yet — candidate stays unenforced until it earns a record.';
+                recommendation = 'watch';
+            } else if (meta.status === 'retired') {
+                rationale = `Retired at ${meta.wins}W/${meta.losses}L — kept for the record, not enforced.`;
+                recommendation = 'retire';
+            } else if (meta.consecutiveLosses >= REFINE_AFTER_CONSECUTIVE_LOSSES && meta.status === 'confirmed') {
+                rationale = `${meta.consecutiveLosses} straight losses — trigger/procedure needs an LLM refinement pass.`;
+                recommendation = 'refine';
+            } else if (sample >= MIN_SAMPLE_RETIRE && meta.kind === 'repeat' && (hitRate ?? 100) < 40) {
+                rationale = `Repeat skill winning only ${hitRate}% over ${sample} trades — below the 40% retire bar.`;
+                recommendation = 'retire';
+            } else if (sample >= MIN_SAMPLE_RETIRE && meta.kind === 'avoid' && (hitRate ?? 0) > 60) {
+                rationale = `Avoid skill losing ${hitRate}% of matched trades — the setup is actually tradeable; retire the veto.`;
+                recommendation = 'retire';
+            } else if (meta.status === 'candidate' && sample >= MIN_SAMPLE_CONFIRMED && (hitRate ?? 0) >= 60) {
+                rationale = `Candidate holding ${hitRate}% over ${sample} trades — evidence supports confirming.`;
+                recommendation = 'promote';
+            } else if (meta.status === 'confirmed' && (hitRate ?? 100) < 50 && sample >= MIN_SAMPLE_CONFIRMED) {
+                rationale = `Confirmed but under 50% (${meta.wins}W/${meta.losses}L) — consider demoting to candidate until it recovers.`;
+                recommendation = 'demote';
+            } else if ((hitRate ?? 0) < 55) {
+                rationale = `Hit rate ${hitRate}% over ${sample} trades — keep, monitor next outcomes.`;
+                recommendation = 'watch';
+            } else {
+                rationale = `Healthy at ${hitRate}% (${meta.wins}W/${meta.losses}L).`;
+            }
+
+            return {
+                fileId: file.id,
+                title,
+                kind: meta.kind,
+                status: meta.status,
+                wins: meta.wins,
+                losses: meta.losses,
+                hitRate,
+                consecutiveLosses: meta.consecutiveLosses,
+                recommendation,
+                rationale,
+            };
+        })
+        .filter((s): s is SkillEffectiveness => s !== null)
+        .sort((a, b) => (a.hitRate ?? 2) - (b.hitRate ?? 2)); // weakest first
+};
