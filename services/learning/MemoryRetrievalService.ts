@@ -8,6 +8,7 @@
 
 import { LoggedTrade } from '../../types';
 import { getMemoryFiles, buildNotebookMapMarkdown } from './MemoryFilesService';
+import { readDoctrineForInjection } from './DoctrineConsolidationService';
 import { findRelevantTrades } from './PatternMemorySynthesisService';
 import { isSkillFile, parseSkillMarkdown, skillMatchesSetup } from './SkillMemoryService';
 import {
@@ -33,10 +34,6 @@ const ALWAYS_ON = new Set(['memory.md', 'risk-rules.md', 'recurring-mistakes.md'
  */
 const doctrineBlock = (): string => {
     try {
-        // Lazy import avoids a circular dependency (DoctrineConsolidation →
-        // MemoryFilesService → …).
-        const { readDoctrineForInjection } = require('./DoctrineConsolidationService') as
-            typeof import('./DoctrineConsolidationService');
         const doctrine = readDoctrineForInjection();
         return doctrine ? `**My trading doctrine (settled beliefs):**\n${doctrine}` : '';
     } catch {
@@ -160,6 +157,9 @@ export const listRetrievedMemorySources = (
         path: hit.node.path || hit.node.label,
         kind: kindForHit(hit),
     }));
+    if (doctrineBlock()) {
+        out.unshift({ path: 'profile/doctrine', kind: 'identity' });
+    }
     if (audience === 'moderator' && skillCatalogBlock(query)) {
         out.push({ path: 'skills/catalog', kind: 'skill' });
     }

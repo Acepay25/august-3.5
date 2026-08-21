@@ -2508,7 +2508,7 @@ const buildFloorOrientation = (opts: {
  * block. Only the Moderator sees all convictions together; seats never see
  * each other's. Returns '' when no seat reported a conviction.
  */
-const buildConvictionAuctionBlock = (roundTexts: Record<string, string[]>, names: string[], finalRound: number): string => {
+export const buildConvictionAuctionBlock = (roundTexts: Record<string, string[]>, names: string[], finalRound: number): string => {
     const rows: { name: string; value: number }[] = [];
     for (const name of names) {
         const text = roundTexts[name]?.[finalRound] || '';

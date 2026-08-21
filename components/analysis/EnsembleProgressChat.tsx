@@ -36,6 +36,25 @@ const STATUS_TEXT: Record<EnsembleAnalystProgress['status'], string> = {
 
 const PHASES = ['Openings', 'Rebuttals', 'Verdict'] as const;
 
+/**
+ * Debate-flow upgrade badges (devil's advocate / evidence round / sealed
+ * conviction). Derived from turn text — no schema change needed.
+ */
+const DEVIL_BADGE = 'Devil’s advocate';
+const EVIDENCE_BADGE = 'Evidence round';
+
+const extractConviction = (text: string): number | null => {
+    const m = text.match(/CONVICTION:\s*(\d{1,3})/i);
+    if (!m) return null;
+    return Math.min(100, Math.max(0, parseInt(m[1], 10)));
+};
+
+const isDevilTurn = (text: string): boolean =>
+    /contra position|strongest honest case against/i.test(text);
+
+const isEvidenceTurn = (text: string): boolean =>
+    /evidence round|concrete data point already on the table/i.test(text);
+
 const laneStatusText = (analyst: EnsembleAnalystProgress, answering: boolean): string => {
     if (answering) return 'speaking';
     if (analyst.status === 'analyzing') return 'thinking';
@@ -393,6 +412,20 @@ const ThreadTurnRow: React.FC<{
                     <span className={`text-[13px] font-medium ${isYou ? 'text-zinc-100' : 'text-zinc-300'}`}>{displayName}</span>
                     {mentionTarget && (
                         <span className="rounded bg-zinc-800 px-1 py-0.5 text-[10px] font-medium text-zinc-400">@{formatSeatLabel(mentionTarget)}</span>
+                    )}
+                    {!rowLive && isDevilTurn(split.output) && (
+                        <span className="rounded bg-zinc-800 px-1 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-400">{DEVIL_BADGE}</span>
+                    )}
+                    {!rowLive && isEvidenceTurn(split.output) && (
+                        <span className="rounded bg-zinc-800 px-1 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-400">{EVIDENCE_BADGE}</span>
+                    )}
+                    {!rowLive && extractConviction(split.output) !== null && (
+                        <span
+                            className="rounded bg-zinc-800 px-1 py-0.5 text-[10px] font-semibold tabular-nums text-zinc-200"
+                            title="Sealed conviction — visible to the Moderator only during the debate"
+                        >
+                            Conviction {extractConviction(split.output)}/100
+                        </span>
                     )}
                     <span className="text-[11px] tabular-nums text-zinc-500">
                         {rowLive && !hasText ? 'typing…' : time}
