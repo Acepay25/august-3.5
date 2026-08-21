@@ -60,7 +60,7 @@ const NOTEBOOK_SAVE_PATTERN = /\b(save|store|write|add|log|remember|record|put)\
 // dedupe/cache CONCURRENT near-identical requests (the three openings share
 // ~99% of their payload once the hybrid envelope is in); staggering breaks
 // the simultaneous-identical window those caches key on.
-const SEAT_LAUNCH_STAGGER_MS = 1500;
+const SEAT_LAUNCH_STAGGER_MS = 700;
 
 // Learning services
 import { generateLearningFromPrompt, isLearningEnabled } from '../services/learning/LearningPromptService';
@@ -69,6 +69,7 @@ import { PriceAlertService } from '../services/ui/PriceAlertService';
 import { buildUnifiedLearningContext } from '../services/learning/UnifiedLearningBuilder';
 import { getMemoryFilesContext, writeModelNote } from '../services/learning/MemoryFilesService';
 import { listRetrievedMemorySources } from '../services/learning/MemoryRetrievalService';
+import { getBotMemoryContext } from '../services/bots/BotMemoryService';
 import { writeNotebookNoteFromRequest } from '../services/learning/NotebookWriterService';
 import { buildSimilarSetupsContext, buildRegimeWeightingContext } from '../services/learning/SetupMemoryService';
 import { generateMandatoryPatternCheck, generatePatternMemoryEnforcementContext } from '../services/learning/PatternMemorySynthesisService';
@@ -983,28 +984,10 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             : undefined;
         const canResume = Boolean(resumeTarget && !resumeTarget.analysis && (resumeTarget.debateTurns?.length || 0) > 0);
 
-        // Ensemble requires a coin symbol when no chart is attached. A bare
-        // "hello" would otherwise spin up three models with no trade context
-        // and produce identical or empty openings.
+        // Ensemble without a chart still works — bare greetings just get a
+        // nudge toward including a coin, not a hard block.
         if (!isAutomationRun && runEnsembleEnabled && imagesToUse.length === 0 && !canResume && !extractSymbolFromPrompt(effectiveInput)) {
-            const now = Date.now();
-            updateRequestMessages(prev => [
-                ...prev,
-                {
-                    id: `user-${now}`,
-                    role: MessageRole.USER,
-                    text: originalPrompt,
-                    createdAt: new Date(now).toISOString(),
-                },
-                {
-                    id: `guide-${now + 1}`,
-                    role: MessageRole.AI,
-                    text: 'To start an analysis, include a coin symbol — e.g. **BTC**, **SOL**, **ETH**.\n\nTry: `analyze BTC`, `SOL long setup`, or `ETH short at 3200`. You can also upload a chart or pick **Live Market**.\n\nIf you just want to chat, toggle **Team** off for casual chat.',
-                    createdAt: new Date(now + 1).toISOString(),
-                },
-            ]);
-            toast.warning('Add a coin to analyze', 'Include a symbol like BTC, SOL or ETH — e.g. “analyze BTC”.');
-            return;
+            toast.warning('Tip: include a coin', 'For a full analysis add a symbol like BTC, SOL or ETH — e.g. “analyze BTC”.');
         }
 
         const userMessage: Message = {
@@ -1255,8 +1238,17 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 pattern: pendingPattern,
                 regime: freshHybridData?.regime?.regime,
             };
-            const memoryFilesContext = getMemoryFilesContext(memoryQuery, loggedTrades, 'analyst');
-            const moderatorMemoryContext = getMemoryFilesContext(memoryQuery, loggedTrades, 'moderator');
+            const botMemoryContext = (() => {
+                try {
+                    const userKey = (typeof localStorage !== 'undefined' ? localStorage.getItem('last_active_user') : null) || 'default';
+                    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(`bots_v1_${userKey}`) : null;
+                    const data = raw ? JSON.parse(raw) as { bots?: Array<{ id: string; memoryScope?: string }> } : null;
+                    const first = data?.bots?.[0];
+                    return first ? getBotMemoryContext(first.id, memoryQuery as any, (first.memoryScope as any) || 'global') : '';
+                } catch { return ''; }
+            })();
+            const memoryFilesContext = [getMemoryFilesContext(memoryQuery, loggedTrades, 'analyst'), botMemoryContext].filter(Boolean).join('\n\n---\n\n');
+            const moderatorMemoryContext = [getMemoryFilesContext(memoryQuery, loggedTrades, 'moderator'), botMemoryContext].filter(Boolean).join('\n\n---\n\n');
             const memoryRetrieved = listRetrievedMemorySources(memoryQuery, loggedTrades, 'analyst');
 
             // JOURNAL-DRIVEN ACCURACY (SetupMemoryService): before the

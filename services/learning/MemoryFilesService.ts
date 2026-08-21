@@ -52,6 +52,7 @@ const DEFAULT_FOLDERS: MemoryFolder[] = [
     { id: 'market-conditions', name: 'market-conditions', order: 2 },
     { id: 'rules', name: 'rules', order: 3 },
     { id: 'skills', name: 'skills', order: 4 },
+    { id: 'bots', name: 'bots', order: 5 },
 ];
 
 const SEED_FILES: Omit<MemoryFile, 'id' | 'createdAt' | 'updatedAt'>[] = [
@@ -309,7 +310,8 @@ ${map}
 export const createMemoryFolder = async (name: string, username: string): Promise<MemoryFolder> => {
     const clean = slugifyName(name);
     if (!clean) throw new Error('Folder name is required');
-    if (memoryCache.folders.some(f => f.name === clean)) throw new Error(`Folder "${clean}" already exists`);
+    const existing = memoryCache.folders.find(f => f.name === clean);
+    if (existing) return existing;
     const folder: MemoryFolder = { id: uid(), name: clean, order: memoryCache.folders.length };
     memoryCache.folders.push(folder);
     await persist(username);

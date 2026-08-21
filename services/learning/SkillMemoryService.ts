@@ -597,7 +597,47 @@ export const syncClosedTradeToNotebook = async (
     await syncRecurringMistakes(allTrades, username);
     await applySkillEvidence(trade, username, allTrades);
     await ingestIfThenFromTrade(trade, username);
-    await maybeUpsertSkill(trade, allTrades, username);
+    try {
+        const { evaluateSkillWorth, validateCraftedSkill } = await import('./skillWorthGate');
+        await ensureHarnessFolders(username);
+        const key = clusterKey(trade);
+        const cluster = allTrades.filter(t => (t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS) && clusterKey(t) === key);
+        if (cluster.length >= MIN_CLUSTER_FOR_SKILL) {
+            const setup = { coin: trade.analysis?.coinName, direction: trade.analysis?.direction, family: trade.analysis?.detectedPatternFamily };
+            const hasMatch = getMemoryFiles().files.filter(isSkillFile).some(f => {
+                const m = parseSkillMarkdown(f.content);
+                return m ? skillMatchesSetup(m, setup) : false;
+            });
+            if (!hasMatch) {
+                const { getFirstReadyProvider } = await import('../../utils/providerUtils');
+                const { getReadyProviders, loadProviderConfigs } = await import('../infrastructure/ProviderConfigService');
+                const configs = await loadProviderConfigs();
+                const config = getFirstReadyProvider(getReadyProviders(configs));
+                if (config) {
+                    const { getBotMemoryContext } = await import('../bots/BotMemoryService');
+                    const firstBotId = (() => {
+                        try {
+                            const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(`bots_v1_${username}`) : null;
+                            const data = raw ? JSON.parse(raw) as { bots?: Array<{ id: string }> } : null;
+                            return data?.bots?.[0]?.id || trade.id;
+                        } catch { return trade.id; }
+                    })();
+                    const botCtx = getBotMemoryContext(firstBotId, setup, 'global');
+                    const decision = await evaluateSkillWorth({ coin: setup.coin, direction: setup.direction, family: setup.family, cluster }, botCtx, config);
+                    if (decision && decision.verdict === 'create') {
+                        const err = validateCraftedSkill(decision, cluster.filter(t => t.outcome === TradeOutcome.WIN).length, cluster.filter(t => t.outcome === TradeOutcome.LOSS).length);
+                        if (!err) await maybeUpsertSkill(trade, allTrades, username);
+                    }
+                } else {
+                    await maybeUpsertSkill(trade, allTrades, username);
+                }
+            }
+        } else {
+            await maybeUpsertSkill(trade, allTrades, username);
+        }
+    } catch {
+        await maybeUpsertSkill(trade, allTrades, username);
+    }
     await consolidateSkills(username);
     maybePinWinningPromptLane(allTrades);
 };
