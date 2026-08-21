@@ -77,6 +77,8 @@ const bestMatchedSkill = (query?: MemoryRetrievalQuery): { file: ReturnType<type
         pattern: query.pattern,
         regime: typeof query.regime === 'string' ? query.regime : undefined,
     };
+    const audience = (query as MemoryRetrievalQuery & { _audience?: 'analyst' | 'moderator' })._audience;
+    void audience; // audience filtering happens in matchedSkillBlock
     const candidates: Array<{ file: ReturnType<typeof getMemoryFiles>['files'][number]; meta: SkillMeta }> = [];
     for (const file of getMemoryFiles().files) {
         if (!file.enabled || !isSkillFile(file)) continue;
@@ -111,14 +113,74 @@ const doctrineBlock = (): string => {
 };
 
 /** The single best-matched skill body, capped. */
-const matchedSkillBlock = (query?: MemoryRetrievalQuery): string => {
+/** Human-readable evidence freshness for a skill (Claude Code 'modified' pattern). */
+const evidenceFreshness = (meta: SkillMeta): string => {
+    if (!meta.lastEvidenceAt) return 'no counted evidence yet';
+    const t = Date.parse(meta.lastEvidenceAt);
+    if (!Number.isFinite(t)) return 'no counted evidence yet';
+    const days = Math.floor((Date.now() - t) / 86_400_000);
+    if (days <= 0) return 'evidence from today';
+    if (days === 1) return 'evidence from yesterday';
+    if (days <= 30) return `evidence ${days}d old`;
+    if (days <= 90) return `evidence ${Math.floor(days / 7)}w old — treat as stale`;
+    return 'evidence 3+ months old — stale, verify before relying on it';
+};
+
+/**
+ * #4 invocation control (Agent Skills frontmatter port): `audience: analyst`
+ * hides a skill from moderator-facing assembly, `audience: moderator` the
+ * reverse. Default `all`.
+ */
+const skillAudience = (meta: SkillMeta): 'all' | 'analyst' | 'moderator' =>
+    meta.audience ?? 'all';
+
+const skillAllowedFor = (meta: SkillMeta, audience: 'analyst' | 'moderator'): boolean =>
+    skillAudience(meta) === 'all' || skillAudience(meta) === audience;
+
+/**
+ * #5 dynamic context injection: skill bodies may reference ${SYMBOL} /
+ * ${REGIME} / ${DIRECTION}; substituted with the live setup at assembly
+ * time so the model reads facts, not placeholders.
+ */
+const substituteSkillContext = (text: string, query?: MemoryRetrievalQuery): string =>
+    text
+        .replace(/\$\{SYMBOL\}/g, (query?.coin ?? 'this coin').toUpperCase())
+        .replace(/\$\{REGIME\}/g, (typeof query?.regime === 'string' && query.regime) || 'the current regime')
+        .replace(/\$\{DIRECTION\}/g, (query?.direction === 'Long' || query?.direction === 'Short') ? query.direction : 'either direction');
+
+/** One-line index entry (progressive disclosure tier 1 — near-zero tokens). */
+const skillIndexLine = (name: string, meta: SkillMeta): string => {
+    const rule = meta.ifCondition
+        ? `IF ${meta.ifCondition} THEN ${meta.thenAction}`
+        : meta.body.split('\n').find(l => l.trim())?.replace(/^#+\s*/, '').slice(0, 100) || name;
+    return `${meta.kind === 'avoid' ? 'AVOID' : 'REPEAT'} [${meta.status} · ${meta.wins}W/${meta.losses}L · ${evidenceFreshness(meta)}] ${rule}`;
+};
+
+/**
+ * Matched-skill block. Openings/rebuttals get the INDEX LINE only (tier 1);
+ * verdicts get the full body (tier 2); recall serves the full body anytime.
+ */
+const matchedSkillBlock = (
+    query?: MemoryRetrievalQuery,
+    audience: 'analyst' | 'moderator' = 'analyst',
+    stage: MemoryStage = 'opening',
+): { text: string; meta: SkillMeta | null; name: string } => {
     const match = bestMatchedSkill(query);
-    if (!match) return '';
+    if (!match) return { text: '', meta: null, name: '' };
+    if (!skillAllowedFor(match.meta, audience)) return { text: '', meta: null, name: '' };
+    const header = `[skills/${match.file.name} · ${match.meta.status} · ${match.meta.wins}W/${match.meta.losses}L]`;
+    if (stage !== 'verdict') {
+        return { text: `${header}\n${skillIndexLine(match.file.name, match.meta)}`, meta: match.meta, name: match.file.name };
+    }
     const titleBits = [match.meta.kind === 'avoid' ? 'Avoid' : 'Repeat', match.meta.coin, match.meta.direction]
         .filter(Boolean).join(' ');
-    const body = match.file.content.trim();
+    const body = substituteSkillContext(match.file.content.trim(), query);
     const capped = body.length > SKILL_BLOCK_MAX ? `${body.slice(0, SKILL_BLOCK_MAX).trimEnd()}\n…` : body;
-    return `[skills/${match.file.name} · ${match.meta.status} · ${match.meta.wins}W/${match.meta.losses}L]\n${titleBits}\n${capped}`;
+    return {
+        text: `${header}\n${evidenceFreshness(match.meta)}\n${titleBits}\n${capped}`,
+        meta: match.meta,
+        name: match.file.name,
+    };
 };
 
 /**
@@ -207,12 +269,11 @@ export const listRetrievedMemorySources = (
     trades?: LoggedTrade[],
     audience: 'analyst' | 'moderator' = 'analyst',
 ): RetrievedMemorySource[] => {
-    void audience;
     const out: RetrievedMemorySource[] = [];
     if (doctrineBlock()) out.push({ path: 'profile/doctrine', kind: 'identity' });
     if (identityBlock()) out.push({ path: 'profile/memory', kind: 'identity' });
-    const skill = bestMatchedSkill(query);
-    if (skill) out.push({ path: `skills/${skill.file.name}`, kind: 'skill' });
+    const skillMatch = matchedSkillBlock(query, audience);
+    if (skillMatch.meta) out.push({ path: `skills/${skillMatch.name}`, kind: 'skill' });
     if (riskRulesBlock()) out.push({ path: 'rules/risk-rules', kind: 'rules' });
     if (uncoveredMistakeLine(query)) out.push({ path: 'rules/recurring-mistakes', kind: 'rules' });
     if (similarTradesBlock(query, trades)) out.push({ path: 'journal/similar-trades', kind: 'similar' });
@@ -246,7 +307,7 @@ export const getMemoryFilesContext = (
     };
 
     push(identityBlock());
-    push(matchedSkillBlock(query));
+    push(matchedSkillBlock(query, audience, stage).text);
     push(riskRulesBlock());
     push(uncoveredMistakeLine(query));
     if (stage === 'verdict') push(similarTradesBlock(query, trades));
@@ -302,11 +363,12 @@ export const handleRecallTool = (
 
     const skillMatch = bestMatchedSkill(query);
     if (skillMatch) {
-        const ruleLine = skillMatch.meta.ifCondition
-            ? `IF ${skillMatch.meta.ifCondition} THEN ${skillMatch.meta.thenAction}`
-            : skillMatch.meta.body.split('\n').find(l => l.trim())?.replace(/^#+\s*/, '').slice(0, 160)
-                || skillMatch.file.name.replace(/\.md$/i, '');
-        sections.push(`SKILL ${skillMatch.meta.status.toUpperCase()} (${skillMatch.meta.wins}W/${skillMatch.meta.losses}L): ${ruleLine}`);
+        // recall = pull tier: full procedure body with live substitutions.
+        const body = substituteSkillContext(skillMatch.file.content.trim(), query);
+        const capped = body.length > 700 ? `${body.slice(0, 700).trimEnd()}\n…` : body;
+        sections.push(
+            `SKILL ${skillMatch.meta.status.toUpperCase()} (${skillMatch.meta.wins}W/${skillMatch.meta.losses}L · ${evidenceFreshness(skillMatch.meta)}):\n${capped}`
+        );
     }
 
     const mistakes = uncoveredMistakeLine(query);

@@ -234,8 +234,9 @@ ${extra}tradeIds: a,b,c,d,e,f,g
       family: 'Family A',
       regime: 'ranging',
     }, trades);
+    // ROUND-25 tier-1: openings get the one-line skill index, not the body.
     expect(ctx).toContain('[skills/');
-    expect(ctx).toContain('kind: avoid');
+    expect(ctx).toMatch(/AVOID \[/);
     const sources = listRetrievedMemorySources({
       coin: 'BTCUSDT',
       direction: 'Short',

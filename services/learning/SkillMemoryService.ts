@@ -53,6 +53,11 @@ export interface SkillMeta {
     refinedAt?: string;
     /** ISO timestamp of the most recent counted trade (evidence decay input). */
     lastEvidenceAt?: string;
+    /** ISO timestamp of the last content write — freshness signal for readers. */
+    modifiedAt?: string;
+    /** Invocation control (Agent Skills frontmatter port): which debate
+     *  audience may load this skill. Default 'all'. */
+    audience?: 'analyst' | 'moderator' | 'all';
     /** Trigger/action snapshot taken BEFORE the last refinement — the
      *  evidence diff shown in the notebook so a rewrite is auditable. */
     previousVersion?: { kind: SkillKind; ifCondition?: string; thenAction?: string };
@@ -126,6 +131,11 @@ export const parseSkillMarkdown = (content: string): SkillMeta | null => {
         thenAction: pick('thenAction'),
         body,
         refinedAt: pick('refinedAt'),
+        modifiedAt: pick('modified'),
+        audience: (() => {
+            const a = pick('audience');
+            return a === 'analyst' || a === 'moderator' ? a : 'all';
+        })(),
         lastEvidenceAt: pick('lastEvidenceAt'),
         previousVersion,
     };
@@ -166,6 +176,8 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
         ...(meta.thenAction ? [`thenAction: ${meta.thenAction.replace(/\n/g, ' ')}`] : []),
         ...(meta.refinedAt ? [`refinedAt: ${meta.refinedAt}`] : []),
         ...(meta.lastEvidenceAt ? [`lastEvidenceAt: ${meta.lastEvidenceAt}`] : []),
+        `modified: ${meta.modifiedAt ?? new Date().toISOString()}`,
+        ...(meta.audience && meta.audience !== 'all' ? [`audience: ${meta.audience}`] : []),
         ...(meta.previousVersion ? [`previousVersion: ${JSON.stringify(meta.previousVersion)}`] : []),
         `tradeIds: ${meta.tradeIds.slice(-20).join(',')}`,
         '---',
@@ -275,6 +287,7 @@ export const applySkillEvidence = async (trade: LoggedTrade, username: string, a
         meta.tradeIds = [...meta.tradeIds, trade.id];
         // Track the freshest evidence and the regime it came from.
         meta.lastEvidenceAt = trade.timestamp ?? new Date().toISOString();
+        meta.modifiedAt = new Date().toISOString();
         if (trade.marketRegime) meta.regime = trade.marketRegime;
         meta.status = deriveStatus(meta);
         await updateMemoryFile(file.id, {
@@ -384,6 +397,7 @@ const maybeRefineSkill = async (fileId: string, allTrades: LoggedTrade[], userna
         latest.body = formatCraftedSkillBody(refined);
         latest.consecutiveLosses = 0;
         latest.refinedAt = new Date().toISOString();
+        latest.modifiedAt = latest.refinedAt;
         await updateMemoryFile(fileId, {
             content: serializeSkill(latest, refined.name || titleFromMeta(latest)),
             enabled: latest.status !== 'retired',
@@ -585,6 +599,7 @@ export const ingestIfThenFromTrade = async (trade: LoggedTrade, username: string
                 meta.tradeIds = [...meta.tradeIds, trade.id];
             }
             meta.thenAction = clause.thenAction;
+            meta.modifiedAt = new Date().toISOString();
             meta.body = formatSkillProcedure(clause);
             meta.status = deriveStatus(meta);
             await updateMemoryFile(existing.id, {
