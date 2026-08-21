@@ -70,6 +70,7 @@ interface SeatBlock {
     live?: boolean;
     round?: number;
     thinking?: string;
+    createdAt?: string;
     metrics?: { ttftMs?: number; tokensPerSec?: number };
 }
 
@@ -101,6 +102,21 @@ const FadeStream: React.FC<{ text: string; live?: boolean; className?: string }>
     </div>
 );
 
+/** Compact relative timestamp for thread rows ("just now", "24 sec ago", …). */
+export const relativeTurnTime = (iso?: string): string => {
+    if (!iso) return '';
+    const then = Date.parse(iso);
+    if (Number.isNaN(then)) return '';
+    const secs = Math.max(0, Math.round((Date.now() - then) / 1000));
+    if (secs < 10) return 'just now';
+    if (secs < 60) return `${secs} sec ago`;
+    const mins = Math.round(secs / 60);
+    if (mins < 60) return `${mins} min ago`;
+    const hours = Math.round(mins / 60);
+    if (hours < 24) return `${hours} hr ago`;
+    return `${Math.round(hours / 24)} d ago`;
+};
+
 const ReplyBlock: React.FC<{ block: SeatBlock; fallbackThinking?: string }> = React.memo(({ block, fallbackThinking }) => {
     const text = (block.text || '').trim();
     const thinking = block.thinking || fallbackThinking || '';
@@ -112,18 +128,18 @@ const ReplyBlock: React.FC<{ block: SeatBlock; fallbackThinking?: string }> = Re
     );
     if (!text || hideLiveScratch) {
         if (block.live) {
-            return <p className="px-3 py-1 text-xs italic text-zinc-600">Writing</p>;
+            return <p className="px-3 py-1 text-xs italic text-zinc-600">thinking…</p>;
         }
         if (!thinking) return null;
         return <p className="px-3 py-1 text-xs italic text-zinc-600">No public answer — the model only returned a scratchpad.</p>;
     }
     return (
-        <div className="debate-speech mx-2 rounded-lg border border-white/10 bg-zinc-950/50 px-3 py-2">
+        <div className="debate-speech mx-2 rounded-lg border border-white/[0.05] px-3 py-2">
             {block.replyTo && (
                 <p className="mb-1 text-[10px] font-medium uppercase tracking-widest text-zinc-500">reply to {block.replyTo}</p>
             )}
             {!block.live && <p className="mb-1 text-[11px] text-zinc-500">Final output</p>}
-            <FadeStream text={text} live={block.live} className="text-sm leading-6 text-zinc-200" />
+            <FadeStream text={text} live={block.live} className="text-[14px] leading-6 text-zinc-300" />
             {!block.live && block.metrics && (block.metrics.ttftMs !== undefined || block.metrics.tokensPerSec !== undefined) && (
                 <p className="mt-1.5 text-[10px] tabular-nums text-zinc-600">
                     {block.metrics.ttftMs !== undefined && `first token ${(block.metrics.ttftMs / 1000).toFixed(1)}s`}
@@ -223,7 +239,7 @@ const SeatTranscript: React.FC<{
                 ))}
                 {error && <p className="px-3 py-2 text-[11px] text-zinc-500">{error}</p>}
                 {blocks.every(b => !b.text.trim()) && thinking && live && !passed && (
-                    <p className="px-3 py-1 text-xs italic text-zinc-600">Writing</p>
+                    <p className="px-3 py-1 text-xs italic text-zinc-600">thinking…</p>
                 )}
                 {blocks.length === 0 && !thinking && !error && !passed && (
                     <p className="px-3 py-2 text-xs italic text-zinc-600">Waiting for this seat.</p>
@@ -233,6 +249,214 @@ const SeatTranscript: React.FC<{
     );
 });
 SeatTranscript.displayName = 'SeatTranscript';
+
+// ─── Group-chat thread view ────────────────────────────────────────────────
+// One chronological thread that reads like a group chat: avatar + name +
+// relative time per turn, plain bodies, and an italic "{name} is thinking…"
+// tail while a seat generates. Clicking a row opens that seat's full
+// transcript modal (per-seat lanes stay available via the Seats toggle).
+
+interface ThreadViewProps {
+    turns: DebateTurn[];
+    analysts: EnsembleAnalystProgress[];
+    activeDebateSpeakers: Record<string, number>;
+    reasoningProcesses: Record<string, string>;
+    isLive: boolean;
+    onOpenSeat: (seatId: string) => void;
+}
+
+const speakerToneKey = (speaker: string, analysts: EnsembleAnalystProgress[]): string => {
+    if (speaker === 'Moderator') return 'moderator';
+    const analyst = analysts.find(a => matchesSpeaker(speaker, a));
+    return analyst?.modelId || analyst?.modelName || speaker;
+};
+
+const ThreadTurnRow: React.FC<{
+    turn: DebateTurn;
+    showPhase: boolean;
+    analysts: EnsembleAnalystProgress[];
+    activeDebateSpeakers: Record<string, number>;
+    streamedModeratorCoT: string;
+    isLive: boolean;
+    onOpenSeat: (seatId: string) => void;
+}> = React.memo(({
+    turn,
+    showPhase,
+    analysts,
+    activeDebateSpeakers,
+    streamedModeratorCoT,
+    isLive,
+    onOpenSeat,
+}) => {
+    const hasText = Boolean(turn.text.trim());
+    const rowLive = isLive && (
+        activeDebateSpeakers[turn.speaker] === turn.round
+        || (turn.speaker === 'Moderator' && !hasText && Boolean(streamedModeratorCoT))
+    );
+    const rawReasoning = turn.reasoning
+        || (rowLive && turn.speaker === 'Moderator' ? streamedModeratorCoT : '');
+    const split = splitThinkingFromOutput(rawReasoning, turn.text || '');
+    const displayName = formatSeatLabel(turn.speaker);
+    const toneKey = speakerToneKey(turn.speaker, analysts);
+    const time = relativeTurnTime(turn.createdAt);
+
+    if (turn.speaker === 'System') {
+        return (
+            <div className="px-3 py-2 text-center text-[11px] italic leading-relaxed text-zinc-600">
+                {turn.text}
+            </div>
+        );
+    }
+
+    const openSeat = (): void => {
+        if (turn.speaker === 'Moderator') {
+            onOpenSeat('moderator');
+            return;
+        }
+        const analyst = analysts.find(a => matchesSpeaker(turn.speaker, a));
+        if (analyst) onOpenSeat(analyst.key);
+    };
+
+    const isYou = displayName.toLowerCase() === 'you';
+    return (
+        <>
+            {showPhase && (
+                <div className="px-3 pb-1 pt-5 text-[10px] font-medium uppercase tracking-widest text-zinc-500">
+                    {roundLabel(turn.round ?? 1)}
+                </div>
+            )}
+            <div
+                className={`group px-3 py-2 ${rowLive ? 'debate-seat-live' : ''} ${isYou ? 'mx-2 rounded-lg bg-zinc-800/60' : ''}`}
+            >
+                <div
+                    className="flex cursor-pointer items-center gap-2"
+                    role="button"
+                    aria-label={`Open ${displayName} analysis`}
+                    title={`Open ${displayName} full transcript`}
+                    onClick={openSeat}
+                >
+                    <DebateBotAvatar
+                        name={displayName}
+                        toneKey={toneKey}
+                        size={28}
+                        live={rowLive}
+                        thinking={rowLive && !hasText}
+                        speaking={rowLive && hasText}
+                    />
+                    <span className={`text-[13px] font-medium ${isYou ? 'text-zinc-100' : 'text-zinc-300'}`}>{displayName}</span>
+                    <span className="text-[11px] tabular-nums text-zinc-500">
+                        {rowLive && !hasText ? 'typing…' : time}
+                    </span>
+                </div>
+                <div className="ml-[36px] mt-1 min-w-0">
+                    {split.thinking && (
+                        <ReasoningRow
+                            thinking={split.thinking}
+                            running={rowLive && !hasText}
+                            defaultOpen={false}
+                        />
+                    )}
+                    {hasText ? (
+                        <FadeStream text={split.output} live={rowLive} className="text-[14px] leading-6 text-zinc-300" />
+                    ) : split.thinking ? null : (
+                        <p className="py-0.5 text-xs italic text-zinc-500">
+                            {rowLive ? `${displayName} is thinking…` : 'No public answer.'}
+                        </p>
+                    )}
+                </div>
+            </div>
+        </>
+    );
+});
+ThreadTurnRow.displayName = 'ThreadTurnRow';
+
+const ThreadView: React.FC<ThreadViewProps> = ({
+    turns,
+    analysts,
+    activeDebateSpeakers,
+    reasoningProcesses,
+    isLive,
+    onOpenSeat,
+}) => {
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const pinnedRef = useRef(true);
+    const signature = useMemo(
+        () => turns.map(t => `${t.speaker}:${t.round ?? ''}:${t.text.length}`).join('|'),
+        [turns],
+    );
+    const streamedModeratorCoT = (reasoningProcesses.moderator || reasoningProcesses.Moderator || '').trim();
+
+    useEffect(() => {
+        const el = scrollRef.current;
+        if (el && pinnedRef.current) el.scrollTop = el.scrollHeight;
+    }, [signature]);
+
+    let previousRound: number | undefined;
+
+    return (
+        <div className="flex flex-col">
+            <div className="flex items-center gap-1.5 px-3 py-2 text-[12px] text-zinc-500">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-zinc-600"><path d="M6 9l6 6 6-6" /></svg>
+                Collapse thread
+            </div>
+            <div
+                ref={scrollRef}
+                className="debate-chat-thread custom-scrollbar ml-3 max-h-[520px] overflow-y-auto border-l border-white/[0.06] py-1 pl-1"
+                onScroll={() => {
+                    const el = scrollRef.current;
+                    if (!el) return;
+                    pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+                }}
+            >
+            {turns.map((turn, index) => {
+                const showPhase = typeof turn.round === 'number'
+                    && turn.speaker !== 'System'
+                    && turn.round !== previousRound
+                    && (previousRound === undefined || turn.round > previousRound);
+                if (turn.speaker !== 'System' && typeof turn.round === 'number') previousRound = turn.round;
+                return (
+                    <ThreadTurnRow
+                        key={`${turn.speaker}-${turn.round ?? 'legacy'}-${index}`}
+                        turn={turn}
+                        showPhase={showPhase}
+                        analysts={analysts}
+                        activeDebateSpeakers={activeDebateSpeakers}
+                        streamedModeratorCoT={streamedModeratorCoT}
+                        isLive={isLive}
+                        onOpenSeat={onOpenSeat}
+                    />
+                );
+            })}
+            {(() => {
+                // Tail indicator — every seat currently generating without a
+                // visible streaming row gets an italic "{name} is thinking…".
+                const names: string[] = [];
+                for (const [name, round] of Object.entries(activeDebateSpeakers)) {
+                    const settled = turns.some(t => t.speaker === name && t.round === round && Boolean(t.text.trim()));
+                    if (!settled) names.push(name);
+                }
+                const anyAnalystTurns = turns.some(t => t.speaker !== 'Moderator' && t.speaker !== 'System');
+                if (!anyAnalystTurns) {
+                    for (const a of analysts) {
+                        if (a.status === 'analyzing' && !names.includes(a.displayName)) names.push(a.displayName);
+                    }
+                }
+                if (names.length === 0) return null;
+                return (
+                    <div className="px-3 pb-1 pt-2">
+                        {names.map(name => (
+                            <p key={name} className="py-0.5 text-xs italic text-zinc-500">
+                                {formatSeatLabel(name)} is thinking…
+                            </p>
+                        ))}
+                    </div>
+                );
+            })()}
+            </div>
+            <div className="px-7 py-2 text-[12px] text-zinc-500">Reply in thread</div>
+        </div>
+    );
+};
 
 const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
     progress,
@@ -272,10 +496,10 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
             if (!split.output && !split.thinking) return [];
             const round = turn.round && turn.round > 0 ? turn.round : index + 1;
             if (!split.output) {
-                return [{ id: `mod-${index}`, replyTo: undefined, text: '', live, round, thinking: split.thinking, metrics: turn.metrics }];
+                return [{ id: `mod-${index}`, replyTo: undefined, text: '', live, round, thinking: split.thinking, createdAt: turn.createdAt, metrics: turn.metrics }];
             }
             if (parts.length === 0) {
-                return [{ id: `mod-${index}`, replyTo: undefined, text: split.output, live, round, thinking: split.thinking, metrics: turn.metrics }];
+                return [{ id: `mod-${index}`, replyTo: undefined, text: split.output, live, round, thinking: split.thinking, createdAt: turn.createdAt, metrics: turn.metrics }];
             }
             return parts.map((part, partIndex) => ({
                 id: `mod-${index}-${partIndex}`,
@@ -284,6 +508,7 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
                 live,
                 round,
                 thinking: partIndex === 0 ? split.thinking : undefined,
+                createdAt: partIndex === 0 ? turn.createdAt : undefined,
                 metrics: partIndex === 0 ? turn.metrics : undefined,
             }));
         });
@@ -302,6 +527,12 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
 
     const [floorOpen, setFloorOpen] = useState(true);
     const [openSeatId, setOpenSeatId] = useState<string | null>(null);
+    // Debate rendering: chronological group-chat thread by default (like the
+    // Odin/Moses reference) once a debate has turns. Before any turn lands
+    // (openings streaming) keep the classic per-seat lanes so `Analyst A`
+    // roster tests and the live openings view stay meaningful.
+    const [view, setView] = useState<'thread' | 'seats'>('thread');
+    const effectiveView: 'thread' | 'seats' = debateTurns.length > 0 ? view : 'seats';
     const [query, setQuery] = useState('');
 
     const perfCacheRef = useRef<{ at: number; data: ReturnType<typeof loadPerformanceData> } | null>(null);
@@ -353,6 +584,7 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
                     thinking: split.thinking,
                     live: live && answering && index === speakerTurns.length - 1,
                     round: turn.round && turn.round > 0 ? turn.round : index + 1,
+                    createdAt: turn.createdAt,
                     metrics: turn.metrics,
                 };
             });
@@ -363,6 +595,7 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
                     round: 1,
                     thinking: openingSplit.thinking,
                     live: live && speakerTurns.length === 0,
+                    createdAt: lastTurn?.createdAt,
                 }] : []),
                 ...turnSplits,
             ];
@@ -475,6 +708,25 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
                     </span>
                 )}
                 <span className="ml-auto flex items-center gap-x-2">
+                    {debateTurns.length > 0 && (
+                        <span className="flex items-center rounded-md border border-white/10 p-0.5 text-[10px]">
+                            {(['thread', 'seats'] as const).map(v => (
+                                <button
+                                    key={v}
+                                    type="button"
+                                    onClick={() => setView(v)}
+                                    aria-pressed={effectiveView === v}
+                                    className={`rounded px-1.5 py-0.5 capitalize transition-colors ${
+                                        effectiveView === v
+                                            ? 'bg-zinc-800 text-zinc-200'
+                                            : 'text-zinc-500 hover:text-zinc-300'
+                                    }`}
+                                >
+                                    {v}
+                                </button>
+                            ))}
+                        </span>
+                    )}
                     {isLive && respondingCount > 0 && (
                         <span className="text-zinc-500">{respondingCount}/{analystSeats.length} responding</span>
                     )}
@@ -503,31 +755,44 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
 
             {floorOpen && (
                 <div className="debate-floor-body border-t border-white/[0.06]">
-                    <div className="flex items-center gap-2 px-1 py-2">
-                        <input
-                            value={query}
-                            onChange={e => setQuery(e.target.value)}
-                            placeholder="Filter bots"
-                            className="w-36 rounded-md bg-zinc-900/60 px-2 py-1 text-xs text-zinc-300 placeholder:text-zinc-600 focus:outline-none focus:ring-0"
+                    {effectiveView === 'thread' ? (
+                        <ThreadView
+                            turns={debateTurns}
+                            analysts={progress.analysts}
+                            activeDebateSpeakers={activeDebateSpeakers}
+                            reasoningProcesses={reasoningProcesses}
+                            isLive={isLive}
+                            onOpenSeat={setOpenSeatId}
                         />
-                        <span className="ml-auto text-[11px] text-zinc-600">{filteredSeats.length} bots</span>
-                    </div>
-                    <div className="divide-y divide-white/[0.06]">
-                        {filteredSeats.map(seat => (
-                            <div key={seat.id} className="py-1">
+                    ) : (
+                        <>
+                            <div className="flex items-center gap-2 px-1 py-2">
+                                <input
+                                    value={query}
+                                    onChange={e => setQuery(e.target.value)}
+                                    placeholder="Filter bots"
+                                    className="w-36 rounded-md bg-zinc-900/60 px-2 py-1 text-xs text-zinc-300 placeholder:text-zinc-600 focus:outline-none focus:ring-0"
+                                />
+                                <span className="ml-auto text-[11px] text-zinc-600">{filteredSeats.length} bots</span>
+                            </div>
+                            <div className="divide-y divide-white/[0.06]">
+                                {filteredSeats.map(seat => (
+                                    <div key={seat.id} className="py-1">
                                 <div className="debate-thread-seat-head cursor-pointer" role="button" aria-label={`Open ${seat.title} analysis`} onClick={() => setOpenSeatId(seat.id)}>
                                     <span className="debate-thread-seat-name flex items-center gap-2">
-                                        <DebateBotAvatar name={seat.title} toneKey={seat.toneKey} live={seat.live} thinking={seat.live && !seat.speaking} speaking={seat.speaking} size={22} />
+                                        <DebateBotAvatar name={seat.title} toneKey={seat.toneKey} live={seat.live} thinking={seat.live && !seat.speaking} speaking={seat.speaking} size={28} />
                                         {seat.title}
                                     </span>
                                     <span className="debate-thread-seat-meta">
                                         {[seat.modelName, seat.trackRecord, seat.status, seat.usage].filter(Boolean).join(' · ')}
                                     </span>
                                 </div>
-                                <SeatTranscript title={seat.title} live={seat.live} thinking={seat.thinking} blocks={seat.blocks} error={seat.error} tokens={seat.usage ? parseInt(seat.usage.replace(/[^0-9]/g, '')) || undefined : undefined} />
+                                        <SeatTranscript title={seat.title} live={seat.live} thinking={seat.thinking} blocks={seat.blocks} error={seat.error} tokens={seat.usage ? parseInt(seat.usage.replace(/[^0-9]/g, '')) || undefined : undefined} />
+                                    </div>
+                                ))}
                             </div>
-                        ))}
-                    </div>
+                        </>
+                    )}
                     {openSeat && (
                         <div className="debate-seat-modal" role="dialog" aria-modal="true" aria-label={`${openSeat.title} analysis`}>
                             <div className="debate-seat-modal-head" onClick={() => setOpenSeatId(null)}>

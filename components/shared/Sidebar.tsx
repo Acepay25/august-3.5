@@ -21,11 +21,11 @@ interface NavRowProps {
 const NavRow: React.FC<NavRowProps> = ({ icon, label, onClick, collapsed = false }) => (
     <button
         onClick={onClick}
-        className={`w-full flex items-center ${collapsed ? 'justify-center px-2' : 'gap-3 px-3'} py-2 rounded-lg text-sm text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950`}
+        className={`w-full flex items-center ${collapsed ? 'justify-center px-2' : 'gap-2.5 px-2.5'} py-1.5 rounded-lg text-[13px] text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f0f0f]`}
         title={collapsed ? label : undefined}
         aria-label={collapsed ? label : undefined}
     >
-        <span className="shrink-0">{icon}</span>
+        <span className="shrink-0 text-zinc-500">{icon}</span>
         {!collapsed && <span className="truncate">{label}</span>}
     </button>
 );
@@ -141,28 +141,27 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
     };
 
     return (
-        <div className="flex flex-col h-full min-h-0 bg-zinc-950">
-            {/* New Conversation — highlighted row (disabled in a fresh
-                session: nothing exists yet to branch from) */}
-            <div className={collapsed ? 'p-2 pb-1' : 'p-3 pb-2'}>
+        <div className="flex flex-col h-full min-h-0 bg-[#0f0f0f]">
+            {/* New Conversation — matches ChatGPT "New chat" row */}
+            <div className={collapsed ? 'p-2 pb-1' : 'px-2 pt-3 pb-2'}>
                 <button
                     onClick={act(onNewConversation)}
                     disabled={isFreshSession}
-                    className={`w-full flex items-center ${collapsed ? 'justify-center px-2' : 'gap-3 px-3'} py-2.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-sm font-medium text-zinc-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-zinc-800`}
+                    className={`w-full flex items-center ${collapsed ? 'justify-center px-2' : 'gap-2.5 px-2.5'} py-2 rounded-lg text-[13px] text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed`}
                     title={isFreshSession ? 'Start typing to begin a conversation' : 'Start a new conversation'}
                     aria-label="Start a new conversation"
                 >
-                    <PlusIcon className="h-4 w-4 text-zinc-400" />
-                    {!collapsed && 'New Conversation'}
+                    <PlusIcon className="h-4 w-4 shrink-0 text-zinc-500" />
+                    {!collapsed && <span className="truncate">New chat</span>}
                 </button>
             </div>
 
             {/* Quick actions */}
             <nav className="px-2">
-                {!collapsed && <div className="px-3 pb-1 pt-2">
-                    <span className="ui-kicker">Quick actions</span>
+                {!collapsed && <div className="px-2.5 pb-1 pt-3">
+                    <span className="text-[11px] font-medium tracking-wide text-zinc-500">Quick actions</span>
                 </div>}
-                <div className="space-y-0.5">
+                <div className="space-y-0">
                     <NavRow collapsed={collapsed} icon={<ActivityIcon className="h-4 w-4" />} label="Live Market" onClick={act(onOpenLiveMarket)} />
                     {hasVisionData && (
                         <NavRow collapsed={collapsed} icon={<CodeIcon className="h-4 w-4" />} label="View Vision Data" onClick={act(onOpenVisionData)} />
@@ -251,7 +250,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                         onChange={(e) => setSearchQuery(e.target.value)}
                         placeholder="Search conversations…"
                         aria-label="Search conversations"
-                        className="w-full rounded-lg border border-white/10 bg-zinc-900 px-2.5 py-1.5 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-white/25"
+                        className="w-full rounded-lg border border-transparent bg-transparent px-2.5 py-1.5 text-xs text-zinc-200 placeholder-zinc-600 transition-colors focus:bg-zinc-900/70 focus:border-white/10 focus:outline-none"
                     />
                 </div>
             )}
@@ -278,8 +277,8 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                         <div
                             key={conv.id}
                             className={`group w-full flex items-center ${collapsed ? 'justify-center px-2' : 'gap-2 px-3'} py-2 rounded-md text-left transition-colors ${conv.id === activeConversationId
-                                ? 'bg-zinc-800 text-zinc-100'
-                                : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/80'
+                                ? 'bg-zinc-800/60 text-zinc-100'
+                                : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/40'
                                 }`}
                         >
                             {!collapsed && isSelectionMode && (
