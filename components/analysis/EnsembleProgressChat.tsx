@@ -136,11 +136,11 @@ const ReplyBlock: React.FC<{ block: SeatBlock; fallbackThinking?: string }> = Re
 });
 ReplyBlock.displayName = 'ReplyBlock';
 
-const ThinkingDetails: React.FC<{ text: string; live?: boolean }> = ({ text, live }) => {
+const ThinkingDetails: React.FC<{ text: string; live?: boolean; tokens?: number }> = ({ text, live, tokens }) => {
     if (!text) return null;
     return (
         <div className="border-b border-white/5 px-3 py-2">
-            <ReasoningRow thinking={text} running={Boolean(live)} defaultOpen={Boolean(live)} />
+            <ReasoningRow thinking={text} running={Boolean(live)} defaultOpen={Boolean(live)} tokens={tokens} />
         </div>
     );
 };
@@ -151,7 +151,8 @@ const SeatTranscript: React.FC<{
     thinking: string;
     blocks: SeatBlock[];
     error?: string;
-}> = React.memo(({ title, live, thinking, blocks, error }) => {
+    tokens?: number;
+}> = React.memo(({ title, live, thinking, blocks, error, tokens }) => {
     const rounds = useMemo(() => {
         const order: number[] = [];
         const grouped = new Map<number, SeatBlock[]>();
@@ -184,7 +185,7 @@ const SeatTranscript: React.FC<{
 
     return (
         <div className="debate-seat-modal-chat custom-scrollbar">
-            {leftoverThinking && <ThinkingDetails text={leftoverThinking} live={live} />}
+            {leftoverThinking && <ThinkingDetails text={leftoverThinking} live={live} tokens={tokens} />}
             <div className="flex flex-col gap-2 py-1">
                 {currentRound && (
                     <div>
@@ -193,7 +194,7 @@ const SeatTranscript: React.FC<{
                                 {currentRound.label}{currentRound.live ? ' · live' : ''}
                             </p>
                         )}
-                        <ThinkingDetails text={currentRound.thinking} live={currentRound.live || live} />
+                        <ThinkingDetails text={currentRound.thinking} live={currentRound.live || live} tokens={tokens} />
                         <div className="flex flex-col gap-2">
                             {passed ? (
                                 <p className="px-3 py-1 text-xs italic text-zinc-600">(passed)</p>
@@ -211,7 +212,7 @@ const SeatTranscript: React.FC<{
                             {group.label}{group.blocks[0]?.text ? ` · ${lastThoughtSnippet(group.blocks[0].text, 48)}` : group.live ? ' · (passed)' : ''}
                         </summary>
                         <div className="mt-2 flex flex-col gap-2">
-                            <ThinkingDetails text={group.thinking} />
+                            <ThinkingDetails text={group.thinking} tokens={tokens} />
                             {group.blocks.length === 0 ? (
                                 <p className="px-3 py-1 text-xs italic text-zinc-600">(passed)</p>
                             ) : (
@@ -437,7 +438,7 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
     if (hideSubagents || progress.analysts.length === 0) return null;
 
     return (
-        <div className={`ui-panel relative ${compact ? 'mt-0 mb-4' : 'mt-4'}`} aria-label="Floor">
+        <div className={`relative ${compact ? 'mt-0 mb-2' : 'mt-6 border-t border-white/[0.06] pt-0'}`} aria-label="Floor">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-white/5 px-3 py-2 text-[11px] text-zinc-500">
                 <button
                     type="button"
@@ -501,18 +502,19 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
             )}
 
             {floorOpen && (
-                <div className="debate-floor-body">
-                    <div className="flex items-center gap-2 border-b border-white/5 px-3 py-1.5">
+                <div className="debate-floor-body border-t border-white/[0.06]">
+                    <div className="flex items-center gap-2 px-1 py-2">
                         <input
                             value={query}
                             onChange={e => setQuery(e.target.value)}
                             placeholder="Filter bots"
-                            className="w-40 rounded border border-white/10 bg-zinc-900 px-2 py-1 text-xs text-zinc-300 placeholder:text-zinc-600 focus:border-white/20 focus:outline-none"
+                            className="w-36 rounded-md bg-zinc-900/60 px-2 py-1 text-xs text-zinc-300 placeholder:text-zinc-600 focus:outline-none focus:ring-0"
                         />
+                        <span className="ml-auto text-[11px] text-zinc-600">{filteredSeats.length} bots</span>
                     </div>
-                    <div className="debate-thread custom-scrollbar">
+                    <div className="divide-y divide-white/[0.06]">
                         {filteredSeats.map(seat => (
-                            <div key={seat.id} className="debate-thread-seat">
+                            <div key={seat.id} className="py-1">
                                 <div className="debate-thread-seat-head cursor-pointer" role="button" aria-label={`Open ${seat.title} analysis`} onClick={() => setOpenSeatId(seat.id)}>
                                     <span className="debate-thread-seat-name flex items-center gap-2">
                                         <DebateBotAvatar name={seat.title} toneKey={seat.toneKey} live={seat.live} thinking={seat.live && !seat.speaking} speaking={seat.speaking} size={22} />
@@ -522,7 +524,7 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
                                         {[seat.modelName, seat.trackRecord, seat.status, seat.usage].filter(Boolean).join(' · ')}
                                     </span>
                                 </div>
-                                <SeatTranscript title={seat.title} live={seat.live} thinking={seat.thinking} blocks={seat.blocks} error={seat.error} />
+                                <SeatTranscript title={seat.title} live={seat.live} thinking={seat.thinking} blocks={seat.blocks} error={seat.error} tokens={seat.usage ? parseInt(seat.usage.replace(/[^0-9]/g, '')) || undefined : undefined} />
                             </div>
                         ))}
                     </div>
@@ -550,7 +552,7 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
                                 )}
                                 <button type="button" onClick={() => setOpenSeatId(null)} className="shrink-0 text-[11px] text-zinc-500 hover:text-zinc-200" aria-label={`Close ${openSeat.title} analysis`}>Close</button>
                             </div>
-                            <SeatTranscript title={openSeat.title} live={openSeat.live} thinking={openSeat.thinking} blocks={openSeat.blocks} error={openSeat.error} />
+                            <SeatTranscript title={openSeat.title} live={openSeat.live} thinking={openSeat.thinking} blocks={openSeat.blocks} error={openSeat.error} tokens={openSeat.usage ? parseInt(openSeat.usage.replace(/[^0-9]/g, '')) || undefined : undefined} />
                         </div>
                     )}
                     <span className="sr-only">{lanes.length} timeline lanes</span>

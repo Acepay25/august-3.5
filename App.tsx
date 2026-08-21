@@ -1751,6 +1751,57 @@ const App: React.FC = () => {
         })();
     }, [providerConfigsLoaded, providerConfigs, lensConfig, ensembleModelSelection]);
 
+    const teamBotsSyncRef = useRef<string | null>(null);
+    useEffect(() => {
+        if (!providerConfigsLoaded) return;
+        const key = JSON.stringify({ lens: lensConfig, sel: ensembleModelSelection });
+        if (teamBotsSyncRef.current === key) return;
+        teamBotsSyncRef.current = key;
+        void (async () => {
+            const bots = await BotRegistry.list();
+            if (bots.length === 0 || bots.length !== 3) return;
+            if (lensConfig.enabled) {
+                for (const a of lensConfig.assignments) {
+                    if (!a.assignedProvider || !a.role) continue;
+                    const match = bots.find(b => b.role === a.role);
+                    if (!match) continue;
+                    const provider = providerConfigs.find(p => p.id === a.assignedProvider);
+                    const model = a.assignedModel || provider?.selectedModel || provider?.models[0];
+                    if (!model || (match.providerId === a.assignedProvider && match.model === model)) continue;
+                    await BotRegistry.upsert({ ...match, providerId: a.assignedProvider, model });
+                }
+            }
+        })();
+    }, [providerConfigsLoaded, providerConfigs, lensConfig, ensembleModelSelection]);
+
+    const syncBotsFromTeam = useCallback(async (): Promise<void> => {
+        const bots = await BotRegistry.list();
+        if (bots.length === 0) return;
+        let changed = false;
+        if (lensConfig.enabled) {
+            for (const a of lensConfig.assignments) {
+                if (!a.assignedProvider || !a.role) continue;
+                const match = bots.find(b => b.role === a.role);
+                if (!match) continue;
+                const provider = providerConfigs.find(p => p.id === a.assignedProvider);
+                const model = a.assignedModel || provider?.selectedModel || provider?.models[0];
+                if (!model || (match.providerId === a.assignedProvider && match.model === model)) continue;
+                await BotRegistry.upsert({ ...match, providerId: a.assignedProvider, model });
+                changed = true;
+            }
+        } else {
+            for (let i = 0; i < Math.min(bots.length, ensembleModelSelection.length); i++) {
+                const e = ensembleModelSelection[i];
+                if (!e?.providerId || !e.model) continue;
+                const bot = bots[i];
+                if (!bot || (bot.providerId === e.providerId && bot.model === e.model)) continue;
+                await BotRegistry.upsert({ ...bot, providerId: e.providerId, model: e.model });
+                changed = true;
+            }
+        }
+        if (changed) toast.success('Bots synced from Team');
+    }, [lensConfig, ensembleModelSelection, providerConfigs, toast]);
+
     // Quota flagging UI never materialized (the old quotaExceededModels state
     // was set but never read by any component) — keep the callback for the
     // modal plumbing; quota errors surface via the OCR error state instead.
@@ -3595,7 +3646,7 @@ const App: React.FC = () => {
                     />
                 </React.Suspense>
             )}
-            <BotManagerDrawer open={isBotManagerVisible} onClose={() => setIsBotManagerVisible(false)} />
+            <BotManagerDrawer open={isBotManagerVisible} onClose={() => setIsBotManagerVisible(false)} onSyncFromTeam={syncBotsFromTeam} />
         </div>
         </React.Suspense>
     );

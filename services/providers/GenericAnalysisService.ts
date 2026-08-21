@@ -266,6 +266,7 @@ export interface AnalyzeTradingViewParams {
      * collapsing to near-identical output.
      */
     temperature?: number;
+    allowedTools?: string[];
     onReasoning?: (reasoning: string) => void;
     /** Visible content deltas as they stream — lets the Floor show the
      *  answer (and any untagged thinking) forming live, not just at the end. */
@@ -477,6 +478,7 @@ export async function analyzeTradingView(
         for await (const chunk of streamChatWithDeskTools(config, messages, {
             ...options,
             enabled: deskToolsEnabled,
+            allowedTools: params.allowedTools,
             defaultSymbol: resolveDefaultSymbol(prompt, marketDataOverride),
             afterToolsNudge: 'Tool results are above. Write the public Floor reply now from the findings. No JSON, no tool tags.',
             onReasoning: (reasoning: string) => {
