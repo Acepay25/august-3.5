@@ -51,6 +51,7 @@ const PromptManager: React.FC<PromptManagerProps> = ({ username }) => {
     const [draft, setDraft] = useState<string>('');
     const [isDirty, setIsDirty] = useState(false);
     const [isPreview, setIsPreview] = useState(false);
+    const [isDiff, setIsDiff] = useState(false);
     const [overrides, setOverrides] = useState<Record<string, string>>({});
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
@@ -254,7 +255,13 @@ const PromptManager: React.FC<PromptManagerProps> = ({ username }) => {
                         </h4>
                         <div className="flex items-center gap-2 shrink-0">
                             <button
-                                onClick={() => setIsPreview(v => !v)}
+                                onClick={() => { setIsDiff(v => !v); setIsPreview(false); }}
+                                className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${isDiff ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900'}`}
+                            >
+                                Diff
+                            </button>
+                            <button
+                                onClick={() => { setIsPreview(v => !v); setIsDiff(false); }}
                                 className="px-3 py-1.5 rounded-lg text-sm text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900 transition-colors"
                             >
                                 {isPreview ? 'Write' : 'Preview'}
@@ -285,7 +292,9 @@ const PromptManager: React.FC<PromptManagerProps> = ({ username }) => {
                         </ul>
                     )}
                     <div className="flex-1 min-h-[320px] rounded-xl border border-zinc-800 bg-zinc-900 overflow-hidden flex flex-col">
-                        {isPreview ? (
+                        {isDiff ? (
+                            <PromptDiffView baseText={selectedEntry.fallback} currentText={draft} />
+                        ) : isPreview ? (
                             <div className="flex-1 overflow-y-auto custom-scrollbar px-8 py-8 lg:px-10 lg:py-10">
                                 <MarkdownContent content={draft || '(empty prompt)'} className="text-[15px] leading-8" />
                             </div>
@@ -395,6 +404,71 @@ const PromptManager: React.FC<PromptManagerProps> = ({ username }) => {
             )}
             {ConfirmDialogComponent}
             </div>
+        </div>
+    );
+};
+
+// ─── Prompt diff viewer ─────────────────────────────────────────────────────
+// Side-by-side built-in default vs current text with changed lines marked.
+// Line-level LCS (small inputs — prompts are a few KB — so O(n·m) is fine).
+
+type DiffOp = 'same' | 'add' | 'remove';
+
+interface DiffRow {
+    op: DiffOp;
+    baseLine?: string;
+    currentLine?: string;
+}
+
+const diffLines = (base: string, current: string): DiffRow[] => {
+    const a = base.split('\n');
+    const b = current.split('\n');
+    // LCS table
+    const m = a.length, n = b.length;
+    const lcs: number[][] = Array.from({ length: m + 1 }, () => new Array<number>(n + 1).fill(0));
+    for (let i = m - 1; i >= 0; i--) {
+        for (let j = n - 1; j >= 0; j--) {
+            lcs[i][j] = a[i] === b[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+        }
+    }
+    const rows: DiffRow[] = [];
+    let i = 0, j = 0;
+    while (i < m && j < n) {
+        if (a[i] === b[j]) { rows.push({ op: 'same', baseLine: a[i], currentLine: b[j] }); i++; j++; }
+        else if (lcs[i + 1][j] >= lcs[i][j + 1]) { rows.push({ op: 'remove', baseLine: a[i] }); i++; }
+        else { rows.push({ op: 'add', currentLine: b[j] }); j++; }
+    }
+    while (i < m) { rows.push({ op: 'remove', baseLine: a[i] }); i++; }
+    while (j < n) { rows.push({ op: 'add', currentLine: b[j] }); j++; }
+    return rows;
+};
+
+const PromptDiffView: React.FC<{ baseText: string; currentText: string }> = ({ baseText, currentText }) => {
+    const rows = useMemo(() => diffLines(baseText, currentText), [baseText, currentText]);
+    const changed = rows.filter(r => r.op !== 'same').length;
+    return (
+        <div className="flex-1 overflow-y-auto custom-scrollbar text-[12px] font-mono leading-5">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-zinc-800 bg-zinc-900 px-4 py-2 text-[11px] font-sans">
+                <span className="text-zinc-500">Built-in default ← → your version</span>
+                <span className={changed > 0 ? 'text-amber-400' : 'text-zinc-500'}>
+                    {changed > 0 ? `${changed} changed line${changed === 1 ? '' : 's'}` : 'identical'}
+                </span>
+            </div>
+            {rows.map((row, index) => (
+                <div
+                    key={index}
+                    className={`grid grid-cols-2 gap-0 border-b border-white/[0.03] ${
+                        row.op === 'add' ? 'bg-emerald-500/5' : row.op === 'remove' ? 'bg-rose-500/5' : ''
+                    }`}
+                >
+                    <div className={`whitespace-pre-wrap break-words px-4 py-0.5 ${row.op === 'remove' ? 'text-rose-300' : 'text-zinc-500'} ${row.op === 'add' ? 'opacity-40' : ''}`}>
+                        {row.baseLine ?? ''}
+                    </div>
+                    <div className={`whitespace-pre-wrap break-words border-l border-white/5 px-4 py-0.5 ${row.op === 'add' ? 'text-emerald-300' : 'text-zinc-500'} ${row.op === 'remove' ? 'opacity-40' : ''}`}>
+                        {row.currentLine ?? ''}
+                    </div>
+                </div>
+            ))}
         </div>
     );
 };

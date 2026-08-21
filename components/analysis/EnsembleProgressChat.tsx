@@ -287,6 +287,10 @@ const ThreadTurnRow: React.FC<{
     streamedModeratorCoT: string;
     isLive: boolean;
     onOpenSeat: (seatId: string) => void;
+    /** Pre-fill the reply composer addressed to this speaker. */
+    onAsk?: (speaker: string) => void;
+    /** Case-insensitive needle from the thread search box (empty = off). */
+    searchQuery?: string;
 }> = React.memo(({
     turn,
     showPhase,
@@ -295,6 +299,8 @@ const ThreadTurnRow: React.FC<{
     streamedModeratorCoT,
     isLive,
     onOpenSeat,
+    onAsk,
+    searchQuery = '',
 }) => {
     const hasText = Boolean(turn.text.trim());
     const rowLive = isLive && (
@@ -326,6 +332,11 @@ const ThreadTurnRow: React.FC<{
     };
 
     const isYou = displayName.toLowerCase() === 'you';
+    // Search highlight: needle matches the speaker name or the body text.
+    const searchMatches = Boolean(searchQuery.trim()) && (
+        displayName.toLowerCase().includes(searchQuery.trim().toLowerCase())
+        || turn.text.toLowerCase().includes(searchQuery.trim().toLowerCase())
+    );
     // Addressing chip: rebuttals open with the targeted analyst's name —
     // surface it as an "@Name" mention instead of a subtitle line.
     const mentionTarget = (() => {
@@ -347,8 +358,22 @@ const ThreadTurnRow: React.FC<{
                 </div>
             )}
             <div
-                className={`group px-3 py-2 ${rowLive ? 'debate-seat-live' : ''} ${isYou ? 'mx-2 rounded-lg bg-zinc-800/60' : ''}`}
+                className={`group relative px-3 py-2 ${rowLive ? 'debate-seat-live' : ''} ${isYou ? 'mx-2 rounded-lg bg-zinc-800/60' : ''} ${searchMatches ? 'ring-1 ring-inset ring-white/20' : ''}`}
             >
+                {onAsk && !isYou && (
+                    <button
+                        type="button"
+                        aria-label={`Ask ${displayName} a follow-up`}
+                        title={`Ask ${displayName} about this turn`}
+                        onClick={e => {
+                            e.stopPropagation();
+                            onAsk(turn.speaker);
+                        }}
+                        className="absolute right-2 top-1.5 hidden rounded border border-white/10 bg-zinc-900 px-1.5 py-0.5 text-[10px] text-zinc-400 transition-colors hover:text-zinc-100 group-hover:block"
+                    >
+                        Ask
+                    </button>
+                )}
                 <div
                     className="flex cursor-pointer items-center gap-2"
                     role="button"
@@ -392,7 +417,16 @@ const ThreadTurnRow: React.FC<{
             </div>
         </>
     );
-});
+}, (a, b) => (
+    a.turn.speaker === b.turn.speaker
+    && a.turn.round === b.turn.round
+    && a.turn.text === b.turn.text
+    && (a.turn.reasoning || '') === (b.turn.reasoning || '')
+    && a.showPhase === b.showPhase
+    && a.isLive === b.isLive
+    && a.onAsk === b.onAsk
+    && a.searchQuery === b.searchQuery
+));
 ThreadTurnRow.displayName = 'ThreadTurnRow';
 
 const ThreadView: React.FC<ThreadViewProps> = ({
@@ -409,11 +443,23 @@ const ThreadView: React.FC<ThreadViewProps> = ({
     const pinnedRef = useRef(true);
     const [replyOpen, setReplyOpen] = useState(false);
     const [replyText, setReplyText] = useState('');
+    const [searchOpen, setSearchOpen] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
     const signature = useMemo(
         () => turns.map(t => `${t.speaker}:${t.round ?? ''}:${t.text.length}`).join('|'),
         [turns],
     );
     const streamedModeratorCoT = (reasoningProcesses.moderator || reasoningProcesses.Moderator || '').trim();
+    const matchCount = useMemo(() => {
+        const q = searchQuery.trim().toLowerCase();
+        if (!q) return 0;
+        return turns.filter(t =>
+            t.speaker !== 'System' && (
+                formatSeatLabel(t.speaker).toLowerCase().includes(q)
+                || t.text.toLowerCase().includes(q)
+            ),
+        ).length;
+    }, [turns, searchQuery]);
 
     useEffect(() => {
         const el = scrollRef.current;
@@ -430,6 +476,13 @@ const ThreadView: React.FC<ThreadViewProps> = ({
         setReplyOpen(false);
     };
 
+    // "Ask" on a thread row: open the composer pre-addressed to the speaker.
+    const askSpeaker = (speaker: string): void => {
+        if (!onReply) return;
+        setReplyText(`@${formatSeatLabel(speaker)} `);
+        setReplyOpen(true);
+    };
+
     return (
         <div className="flex flex-col">
             <div className="flex items-center gap-1.5 px-3 py-2 text-[12px] text-zinc-500">
@@ -442,7 +495,38 @@ const ThreadView: React.FC<ThreadViewProps> = ({
                     ))}
                 </span>
                 <span className="text-[11px]">{analysts.length} bots</span>
+                <button
+                    type="button"
+                    onClick={() => {
+                        setSearchOpen(open => !open);
+                        if (searchOpen) setSearchQuery('');
+                    }}
+                    aria-label="Search thread"
+                    title="Search thread"
+                    className={`rounded p-0.5 transition-colors ${searchOpen ? 'bg-zinc-800 text-zinc-200' : 'text-zinc-600 hover:text-zinc-300'}`}
+                >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+                </button>
             </div>
+            {searchOpen && (
+                <div className="flex items-center gap-2 px-3 pb-1.5">
+                    <input
+                        value={searchQuery}
+                        onChange={e => setSearchQuery(e.target.value)}
+                        onKeyDown={e => {
+                            if (e.key === 'Escape') { setSearchQuery(''); setSearchOpen(false); }
+                        }}
+                        placeholder="Search this debate…"
+                        autoFocus
+                        className="min-w-0 flex-1 rounded-lg border border-white/10 bg-zinc-900 px-2.5 py-1 text-[12px] text-zinc-200 placeholder:text-zinc-600 focus:outline-none"
+                    />
+                    {searchQuery.trim() && (
+                        <span className="shrink-0 text-[11px] tabular-nums text-zinc-500">
+                            {matchCount} {matchCount === 1 ? 'match' : 'matches'}
+                        </span>
+                    )}
+                </div>
+            )}
             <div
                 ref={scrollRef}
                 className="debate-chat-thread custom-scrollbar ml-3 max-h-[520px] overflow-y-auto border-l border-white/[0.06] py-1 pl-1"
@@ -477,6 +561,8 @@ const ThreadView: React.FC<ThreadViewProps> = ({
                         streamedModeratorCoT={streamedModeratorCoT}
                         isLive={isLive}
                         onOpenSeat={onOpenSeat}
+                        onAsk={onReply ? askSpeaker : undefined}
+                        searchQuery={searchQuery}
                     />
                 );
             })}
@@ -736,6 +822,13 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
 
     const openSeat = seats.find(seat => seat.id === openSeatId) ?? null;
     const totalTokens = (runStats?.promptTokens ?? 0) + (runStats?.completionTokens ?? 0);
+    // Live estimate while the debate streams: settled analyst output chars / 4
+    // (the same heuristic the run summary uses). runStats only lands at the end.
+    const liveTokenEstimate = useMemo(
+        () => progress.analysts.reduce((sum, a) => sum + Math.round(((a.finalOutput?.length ?? 0) + (a.thoughtProcess?.length ?? 0)) / 4), 0),
+        [progress.analysts],
+    );
+    const shownTokens = totalTokens > 0 ? totalTokens : liveTokenEstimate;
     const analystSeats = seats.filter(seat => seat.id !== 'moderator');
     const respondingCount = analystSeats.filter(seat => seat.live).length;
     const activeNow = useMemo(() => {
@@ -820,9 +913,11 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
                     {isLive && (
                         <span
                             className="text-zinc-600"
-                            title={totalTokens > 0 ? `${progress.analysts.length} seats · ${(runStats?.promptTokens ?? 0).toLocaleString()} prompt + ${(runStats?.completionTokens ?? 0).toLocaleString()} completion` : `${progress.analysts.length} seats`}
+                            title={totalTokens > 0
+                                ? `${progress.analysts.length} seats · ${(runStats?.promptTokens ?? 0).toLocaleString()} prompt + ${(runStats?.completionTokens ?? 0).toLocaleString()} completion`
+                                : `${progress.analysts.length} seats · live estimate from streamed output`}
                         >
-                            {progress.analysts.length} seats{totalTokens > 0 ? ` · ~${totalTokens.toLocaleString()} tok` : ''}
+                            {progress.analysts.length} seats{shownTokens > 0 ? ` · ~${shownTokens.toLocaleString()} tok${totalTokens > 0 ? '' : ' (est.)'}` : ''}
                         </span>
                     )}
                 </span>

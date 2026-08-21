@@ -17,6 +17,7 @@ import {
     createMemoryFile,
     updateMemoryFile,
     deleteMemoryFile,
+    moveMemoryFolder,
     SUGGESTIONS_FILE_NAME,
     subscribeMemoryFilesChanged,
 } from '../../services/learning/MemoryFilesService';
@@ -558,8 +559,20 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                         {folders.length === 0 ? (
                             <p className="text-sm text-zinc-500 text-center py-16">No folders yet.</p>
                         ) : (
-                            [...folders].sort((a, b) => a.order - b.order).map(folder => {
+                            [...folders].sort((a, b) => a.order - b.order).map((folder, index, sorted) => {
                                 const count = files.filter(f => f.folderId === folder.id && f.name !== SUGGESTIONS_FILE_NAME).length;
+                                const handleMove = async (direction: -1 | 1): Promise<void> => {
+                                    const target = sorted[index + direction];
+                                    if (!target) return;
+                                    try {
+                                        await moveMemoryFolder(folder.id, target.order, activeUser);
+                                        await initMemoryFiles(activeUser);
+                                        setFolders(getMemoryFiles().folders);
+                                        toast.success('Folder moved', `"${folder.name}" is now ${direction === -1 ? 'higher' : 'lower'} in the notebook.`);
+                                    } catch (e) {
+                                        toast.error('Could not move folder', e instanceof Error ? e.message : 'Unknown error');
+                                    }
+                                };
                                 return (
                                     <button
                                         key={folder.id}
@@ -569,7 +582,7 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                                             setIsCreatingFolder(false);
                                             setIsCreatingFile(false);
                                         }}
-                                        className="w-full flex items-center gap-3.5 px-4 py-3.5 border-b border-zinc-800 last:border-b-0 hover:bg-zinc-800/80 transition-colors text-left"
+                                        className="w-full flex items-center gap-3.5 px-4 py-3.5 border-b border-zinc-800 last:border-b-0 hover:bg-zinc-800/80 transition-colors text-left group/folder"
                                     >
                                         <span className="w-9 h-9 rounded-lg bg-zinc-800 border border-zinc-700/80 flex items-center justify-center shrink-0">
                                             <FolderIcon className="w-4 h-4 text-zinc-400" />
@@ -582,7 +595,29 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                                                 {count} {count === 1 ? 'file' : 'files'} · {formatFolderUpdated(folder.id)}
                                             </span>
                                         </span>
-                                        <ChevronRightIcon className="w-4 h-4 text-zinc-600 shrink-0" />
+                                        <span className="hidden group-hover/folder:flex items-center shrink-0">
+                                            <button
+                                                type="button"
+                                                aria-label={`Move ${folder.name} up`}
+                                                title="Move up"
+                                                disabled={index === 0}
+                                                onClick={e => { e.stopPropagation(); void handleMove(-1); }}
+                                                className="rounded p-1 text-zinc-500 transition-colors hover:text-zinc-200 disabled:opacity-30"
+                                            >
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 15l-6-6-6 6" /></svg>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                aria-label={`Move ${folder.name} down`}
+                                                title="Move down"
+                                                disabled={index === sorted.length - 1}
+                                                onClick={e => { e.stopPropagation(); void handleMove(1); }}
+                                                className="rounded p-1 text-zinc-500 transition-colors hover:text-zinc-200 disabled:opacity-30"
+                                            >
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6" /></svg>
+                                            </button>
+                                        </span>
+                                        <ChevronRightIcon className="w-4 h-4 text-zinc-600 shrink-0 group-hover/folder:hidden" />
                                     </button>
                                 );
                             })

@@ -627,16 +627,25 @@ export const syncClosedTradeToNotebook = async (
                     if (decision && decision.verdict === 'create') {
                         const err = validateCraftedSkill(decision, cluster.filter(t => t.outcome === TradeOutcome.WIN).length, cluster.filter(t => t.outcome === TradeOutcome.LOSS).length);
                         if (!err) await maybeUpsertSkill(trade, allTrades, username);
+                        else console.warn('[SkillMemory] Skill worth-gate rejected crafted skill:', err);
                     }
                 } else {
-                    await maybeUpsertSkill(trade, allTrades, username);
+                    // No ready provider = the gate cannot run. Fail CLOSED:
+                    // an unjudged skill is exactly what the gate exists to
+                    // prevent. The cluster stays eligible — the next closed
+                    // trade in it retries the gate once a provider is up.
+                    console.warn('[SkillMemory] Skill worth-gate skipped (no ready provider) — skill creation deferred.');
                 }
             }
-        } else {
-            await maybeUpsertSkill(trade, allTrades, username);
         }
-    } catch {
-        await maybeUpsertSkill(trade, allTrades, username);
+        // Below MIN_CLUSTER_FOR_SKILL there is no evidence to judge — that is
+        // not a bypass, just too little data. maybeUpsertSkill would return
+        // null anyway, so calling it here only risks a duplicate write path.
+    } catch (e) {
+        // Gate infrastructure failure (import, provider call, bad JSON).
+        // Fail CLOSED for the same reason: never create a skill the gate
+        // did not approve. Logged so silent degradation is visible.
+        console.warn('[SkillMemory] Skill worth-gate errored — skill creation deferred:', e);
     }
     await consolidateSkills(username);
     maybePinWinningPromptLane(allTrades);
