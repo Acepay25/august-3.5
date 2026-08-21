@@ -302,11 +302,11 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
 
     return (
         <div className={centered
-            ? 'w-full status-surface'
+            ? 'w-full'
             : 'absolute bottom-0 left-0 right-0 px-3 sm:px-4 lg:px-8 pointer-events-none z-20 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] sm:pb-[calc(env(safe-area-inset-bottom)+0.75rem)] lg:pb-4 status-surface'}>
             <div className={centered ? 'w-full' : 'chat-column pointer-events-auto'}>
-                {/* Main Input Container — compact composer */}
-                <div className="rounded-lg border border-white/10 bg-zinc-950 p-2 transition-all">
+                {/* Main Input Container — ChatGPT pill */}
+                <div className="rounded-[28px] border border-white/[0.04] bg-[#2f2f2f] p-3 shadow-[0_8px_32px_rgba(0,0,0,0.4)] transition-all">
 
                     {/* Image Preview */}
                     <ImagePreview images={images} onRemoveImage={removeImage} />
@@ -358,26 +358,26 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                         </div>
                     )}
                     {/* Main Input Row */}
-                    <div className="flex items-end gap-2">
+                    <div className="flex items-end gap-2 px-1">
                         <textarea
                             id="chat-composer"
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && (!e.shiftKey || e.ctrlKey || e.metaKey) ? (e.preventDefault(), handleSendMessage()) : undefined}
-                            placeholder={isAnalysisInProgress ? 'Add a note for the next debate step…' : images.length > 0 ? 'Analyze charts...' : 'Write a message...'}
-                            className="flex-1 min-w-0 bg-transparent px-2 py-1.5 text-base text-white placeholder-zinc-500 outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 min-h-[36px] max-h-24 resize-none leading-snug"
+                            placeholder={isAnalysisInProgress ? 'Add a note for the next debate step…' : images.length > 0 ? 'Analyze charts...' : 'Work with ChatGPT'}
+                            className="flex-1 min-w-0 bg-transparent px-2 py-2 text-[15px] text-white placeholder-zinc-400 outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 min-h-[24px] max-h-28 resize-none leading-6"
                             rows={1}
                             disabled={isRateLimited}
                             style={{ overflow: 'hidden' }}
                         />
                     </div>
                     {(isEnsembleEnabled || listSkillSlugs().length > 0) && (
-                        <div className="flex flex-wrap gap-1 px-2 pb-1">
+                        <div className="flex flex-wrap gap-x-2 gap-y-0.5 px-2 pb-1">
                             {isEnsembleEnabled ? ['@Macro', '@Technical', '@Risk'].map(tag => (
                                 <button
                                     key={tag}
                                     type="button"
-                                    className="rounded-md border border-white/10 px-1.5 py-0.5 text-[10px] text-zinc-500 hover:text-zinc-200"
+                                    className="rounded-md px-1 py-0.5 text-[10px] text-zinc-600 transition-colors hover:text-zinc-300"
                                     onClick={() => setInput(input.includes(tag) ? input : `${tag} ${input}`.trim())}
                                 >
                                     {tag}
@@ -391,10 +391,10 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                         key={template.id}
                                         type="button"
                                         title={template.hint}
-                                        className={`rounded-md border px-1.5 py-0.5 text-[10px] transition-colors ${
+                                        className={`rounded-md px-1 py-0.5 text-[10px] transition-colors ${
                                             active
-                                                ? 'border-zinc-400/40 bg-zinc-800 text-zinc-200'
-                                                : 'border-white/10 text-zinc-500 hover:text-zinc-200'
+                                                ? 'bg-zinc-800 text-zinc-200'
+                                                : 'text-zinc-600 hover:text-zinc-300'
                                         }`}
                                         onClick={() => setInput(active
                                             ? input.split(marker).join('').replace(/\s+/g, ' ').trim()
@@ -408,7 +408,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                 <button
                                     key={slug}
                                     type="button"
-                                    className="rounded-md border border-white/10 px-1.5 py-0.5 text-[10px] text-zinc-500 hover:text-zinc-200"
+                                    className="rounded-md px-1 py-0.5 text-[10px] text-zinc-600 transition-colors hover:text-zinc-300"
                                     onClick={() => setInput(`/${slug} ${parseComposerIntent(input).rest}`.trim())}
                                 >
                                     /{slug}
@@ -416,19 +416,19 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             ))}
                         </div>
                     )}
-                    <input type="file" multiple accept="image/*" ref={fileInputRef} onChange={handleImageUpload} className="hidden" disabled={uploadDisabled} />
+                     <input type="file" multiple accept="image/*" ref={fileInputRef} onChange={handleImageUpload} className="hidden" disabled={uploadDisabled} />
 
-                    {/* Bottom Toolbar — unified control row for all breakpoints */}
-                    <div className="flex flex-wrap items-center justify-between gap-1.5 pt-1 mt-1 border-t border-white/5 lg:flex-nowrap">
+                    {/* Bottom Toolbar — ChatGPT style: + left, model/mic/send right */}
+                    <div className="flex items-center justify-between gap-2 px-1 pt-2">
                         {/* Left Side: upload + action pills */}
                         <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2 flex-wrap">
                             <button
                                 onClick={() => fileInputRef.current?.click()}
-                                className={`h-9 w-9 rounded-lg transition-all shrink-0 flex items-center justify-center ${uploadDisabled ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'}`}
+                                className={`h-8 w-8 rounded-full border transition-all shrink-0 flex items-center justify-center ${uploadDisabled ? 'border-white/5 text-zinc-600 cursor-not-allowed' : 'border-white/10 text-zinc-400 hover:text-white hover:bg-zinc-800 hover:border-white/15'}`}
                                 disabled={uploadDisabled}
                                 title={isEnsembleEnabled ? 'Upload charts' : 'Open Team to analyze charts'}
                             >
-                                <PlusIcon className="h-5 w-5" />
+                                <PlusIcon className="h-4 w-4" />
                             </button>
                             {!isEnsembleEnabled && chatModelOptions.length > 0 && (
                                 <ModelPicker
@@ -447,10 +447,10 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                     setIsEnsembleEnabled(true);
                                     setIsTeamModalOpen(true);
                                 }}
-                                className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs sm:text-sm transition-colors ${
+                                className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs transition-colors ${
                                     isEnsembleEnabled
-                                        ? 'bg-zinc-800 text-zinc-100 hover:bg-zinc-700'
-                                        : 'bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800'
+                                        ? 'bg-zinc-700 text-zinc-100 hover:bg-zinc-600'
+                                        : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
                                 }`}
                                 aria-haspopup="dialog"
                                 aria-expanded={isTeamModalOpen}
@@ -475,13 +475,13 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
 
                         </div>
 
-                        {/* Right Side: leverage + send */}
+                        {/* Right Side: leverage + send — circular send like ChatGPT */}
                         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                             {/* Leverage Button */}
                             <div className="relative" ref={leverageRef}>
                                 <button
                                     onClick={() => setIsLeverageDropdownOpen(!isLeverageDropdownOpen)}
-                                    className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg transition-all text-xs sm:text-sm focus-visible:ring-2 focus-visible:ring-zinc-500 ${isLeverageDropdownOpen ? 'bg-zinc-700 text-white' : 'bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800'}`}
+                                    className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all focus-visible:ring-2 focus-visible:ring-zinc-500 ${isLeverageDropdownOpen ? 'bg-zinc-700 text-white' : 'bg-zinc-700/60 text-zinc-300 hover:bg-zinc-700 hover:text-white'}`}
                                     aria-label={`Select leverage, currently ${leverageInput}x`}
                                     aria-expanded={isLeverageDropdownOpen}
                                     aria-haspopup="menu"
@@ -525,16 +525,16 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             <button
                                 onClick={isAnalysisInProgress ? handleCancelAnalysis : handleSendMessage}
                                 disabled={isSummarizing || (!isAnalysisInProgress && ((!input.trim() && images.length === 0) || isRateLimited || !isAnyProviderEnabled))}
-                                className={`h-9 w-9 rounded-lg transition-all flex items-center justify-center shrink-0 disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-zinc-800 ${isAnalysisInProgress ? 'status-surface bg-rose-500/80 hover:bg-rose-500 text-white' : 'bg-zinc-100 text-zinc-950 hover:bg-white'}`}
+                                className={`h-8 w-8 rounded-full transition-all flex items-center justify-center shrink-0 disabled:opacity-40 disabled:cursor-not-allowed ${isAnalysisInProgress ? 'status-surface bg-rose-500 hover:bg-rose-400 text-white' : 'bg-white text-zinc-900 hover:bg-zinc-100 shadow-sm'}`}
                                 title={isAnalysisInProgress ? 'Stop generating' : 'Send'}
                                 aria-label={isAnalysisInProgress ? 'Stop generating' : 'Send message'}
                             >
-                                {isSummarizing ? <LoadingIcon className="h-5 w-5" /> : isAnalysisInProgress ? <StopIcon className="h-4 w-4" fill="currentColor" /> : <SendIcon />}
+                                {isSummarizing ? <LoadingIcon className="h-4 w-4" /> : isAnalysisInProgress ? <StopIcon className="h-3.5 w-3.5" fill="currentColor" /> : <SendIcon className="h-4 w-4" />}
                             </button>
                         </div>
                     </div>
 
-                    <div className="mt-1 flex flex-col items-end gap-1 px-1">
+                    <div className="mt-1.5 flex flex-col items-end gap-1 px-1">
                         {isEnsembleEnabled && rosterSlots.length > 0 && (
                             <button
                                 type="button"

@@ -226,3 +226,75 @@ export const buildAnalystFailureReport = (
     });
     return lines.join('\n');
 };
+
+// ─── Duplicate-generation detection ────────────────────────────────────────
+
+/** Minimal input for the duplicate check — one seat's identity + outputs. */
+export interface AnalystOutputSample {
+    name: string;
+    model: string;
+    finalOutput?: string;
+    thoughtProcess?: string;
+}
+
+/** Collapse case/whitespace/markdown noise so formatting differences don't mask an echo. */
+const normalizeForDuplicateCheck = (text: string | undefined): string =>
+    (text ?? '')
+        .toLowerCase()
+        .replace(/[*_`#>]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+/** Character trigram set for cheap Jaccard similarity. */
+const trigramSet = (s: string): Set<string> => {
+    const grams = new Set<string>();
+    for (let i = 0; i <= s.length - 3; i++) grams.add(s.slice(i, i + 3));
+    return grams;
+};
+
+/**
+ * Pair up seats whose generations are near-identical.
+ *
+ * Byte-identical (or ~identical) openings across two DIFFERENT models are not
+ * something real sampling produces — they mean an upstream gateway served one
+ * generation to several seats (free-tier routers dedupe/cache concurrent
+ * near-identical prompts, or route every `:free` SKU to one shared backend).
+ * Compares each seat's public output, falling back to its chain-of-thought
+ * when a seat only returned a scratchpad. Returns human-readable pair labels;
+ * empty when every seat generated independently.
+ */
+export const findDuplicateAnalystOutputs = (analysts: readonly AnalystOutputSample[]): string[] => {
+    // Below ~200 normalized chars there isn't enough text to judge ("Avoid."
+    // legitimately matches across seats) — skip those pairs entirely.
+    const samples = analysts
+        .map(a => {
+            const raw = a.finalOutput?.trim() ? a.finalOutput : (a.thoughtProcess ?? '');
+            const normalized = normalizeForDuplicateCheck(raw);
+            return {
+                label: `${a.name} · ${formatModelDisplayName(a.model)}`,
+                normalized,
+                grams: trigramSet(normalized),
+            };
+        })
+        .filter(s => s.normalized.length >= 200);
+
+    const pairs: string[] = [];
+    for (let i = 0; i < samples.length; i++) {
+        for (let j = i + 1; j < samples.length; j++) {
+            const a = samples[i];
+            const b = samples[j];
+            if (a.normalized === b.normalized) {
+                pairs.push(`${a.label} ⇄ ${b.label} — identical text`);
+                continue;
+            }
+            let intersection = 0;
+            for (const g of a.grams) if (b.grams.has(g)) intersection++;
+            const union = a.grams.size + b.grams.size - intersection;
+            const similarity = union === 0 ? 0 : intersection / union;
+            if (similarity >= 0.9) {
+                pairs.push(`${a.label} ⇄ ${b.label} — ${Math.round(similarity * 100)}% similar`);
+            }
+        }
+    }
+    return pairs;
+};

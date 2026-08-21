@@ -3430,7 +3430,7 @@ const App: React.FC = () => {
 
             {/* Main row: persistent desktop sidebar + chat column */}
             <div className="flex-1 flex flex-row min-h-0">
-                <aside className={`hidden lg:flex flex-col ${isSidebarCollapsed ? 'w-16' : 'w-60'} shrink-0 min-h-0 border-r border-white/10 bg-zinc-950 transition-[width] duration-200 relative`}>
+                <aside className={`hidden lg:flex flex-col ${isSidebarCollapsed ? 'w-16' : 'w-60'} shrink-0 min-h-0 border-r border-white/[0.06] bg-[#0f0f0f] transition-[width] duration-200 relative`}>
                     <button
                         type="button"
                         onClick={() => setIsSidebarCollapsed(prev => !prev)}

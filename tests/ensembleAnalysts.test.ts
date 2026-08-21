@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { ProviderConfig } from '../types/provider';
 import { AnalystLensConfig, AnalystRole } from '../types';
-import { buildEnsembleAnalysts, buildAnalystFailureReport } from '../services/ui/EnsembleAnalystService';
+import { buildEnsembleAnalysts, buildAnalystFailureReport, findDuplicateAnalystOutputs } from '../services/ui/EnsembleAnalystService';
 import type { EnsembleModelSelection } from '../services/ui/AnalystLensService';
 
 const makeProvider = (id: string, models: string[], selectedModel: string, overrides: Partial<ProviderConfig> = {}): ProviderConfig => ({
@@ -182,5 +182,48 @@ describe('buildAnalystFailureReport', () => {
     expect(plan.analysts.map(a => a.thoughtsKey)).toEqual(['prov-a:m1', 'prov-a:m1#1', 'prov-a:m1#2']);
     // Distinct names so the transcript turns never collapse into one seat.
     expect(plan.analysts.map(a => a.name)).toEqual(['prov-a · M1', 'prov-a · M1 #2', 'prov-a · M1 #3']);
+  });
+});
+
+describe('findDuplicateAnalystOutputs', () => {
+  const longText = (seed: string): string =>
+    `${seed} `.repeat(60).trim(); // ~300 chars, above the 200-char judging floor
+
+  it('flags byte-identical outputs across different models as duplicates', () => {
+    const echo = longText('The user wants me to analyze BTCUSDT as an independent analyst seat three.');
+    const pairs = findDuplicateAnalystOutputs([
+      { name: 'Kilocode', model: 'step-3.7-flash:free', thoughtProcess: echo },
+      { name: 'Kilocode', model: 'hy3:free', thoughtProcess: echo },
+      { name: 'Kilocode', model: 'nemotron:free', thoughtProcess: longText('A completely different read: price is ranging below value, sellers hold 73k.') },
+    ]);
+    expect(pairs).toHaveLength(1);
+    expect(pairs[0]).toContain('Step 3.7 Flash Free');
+    expect(pairs[0]).toContain('Hy3 Free');
+    expect(pairs[0]).toContain('identical');
+  });
+
+  it('falls back to the chain-of-thought when a seat only returned a scratchpad', () => {
+    const cot = longText('Stress-testing the trade: invalidation sits above the recent high.');
+    const pairs = findDuplicateAnalystOutputs([
+      { name: 'A', model: 'model-a', finalOutput: '', thoughtProcess: cot },
+      { name: 'B', model: 'model-b', finalOutput: '', thoughtProcess: `  ${cot.toUpperCase()}  ` },
+    ]);
+    expect(pairs).toHaveLength(1);
+  });
+
+  it('ignores short outputs that legitimately match (e.g. both seats say Avoid)', () => {
+    const pairs = findDuplicateAnalystOutputs([
+      { name: 'A', model: 'model-a', finalOutput: 'Avoid.' },
+      { name: 'B', model: 'model-b', finalOutput: 'Avoid.' },
+    ]);
+    expect(pairs).toEqual([]);
+  });
+
+  it('passes genuinely independent analyses through clean', () => {
+    const pairs = findDuplicateAnalystOutputs([
+      { name: 'A', model: 'model-a', finalOutput: longText('Long bias: reclaim of the daily pivot opens 74k into Friday.') },
+      { name: 'B', model: 'model-b', finalOutput: longText('Short bias into resistance: funding skews long, 72.9 rejects.') },
+    ]);
+    expect(pairs).toEqual([]);
   });
 });

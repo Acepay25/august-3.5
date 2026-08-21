@@ -212,14 +212,75 @@ describe('EnsembleProgressChat', () => {
             makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'complete' }),
         ]);
         render(<EnsembleProgressChat progress={progress} />);
-        // Default: flat thread, no animated stage, no expand/collapse controls.
+        // Default: flat roster, no animated stage, no expand/collapse controls.
         expect(screen.getByText('Analyst A')).toBeDefined();
-        expect(document.querySelector('.debate-thread')).toBeDefined();
+        expect(document.querySelector('.debate-floor-body')).toBeDefined();
         expect(document.querySelector('.debate-stage')).toBeNull();
         // The stage (and its seat-modal trigger) is opt-in.
         expect(screen.getByLabelText('Open Analyst A analysis')).toBeDefined();
         expect(screen.queryByLabelText('Expand Analyst A analysis')).toBeNull();
         expect(screen.queryByLabelText('Collapse Analyst A analysis')).toBeNull();
+    });
+
+    it('renders debate turns as a chronological group-chat thread by default', () => {
+        const progress = makeProgress([
+            makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'complete' }),
+            makeAnalyst({ key: 'a2', displayName: 'Analyst B', status: 'complete' }),
+        ]);
+        render(
+            <EnsembleProgressChat
+                progress={progress}
+                debateTurns={[
+                    { speaker: 'Analyst A', text: 'Long above the reclaim.', round: 1, createdAt: new Date(Date.now() - 120_000).toISOString() },
+                    { speaker: 'Analyst B', text: 'I fade it — sellers hold 73k.', round: 1, createdAt: new Date(Date.now() - 60_000).toISOString() },
+                ]}
+            />,
+        );
+        // Thread rows show speaker name + relative time + plain body.
+        expect(screen.getByText('Analyst A')).toBeDefined();
+        expect(screen.getByText('Analyst B')).toBeDefined();
+        expect(screen.getByText(/2 min ago/)).toBeDefined();
+        expect(screen.getByText(/Long above the reclaim\./)).toBeDefined();
+        expect(screen.getByText(/I fade it — sellers hold 73k\./)).toBeDefined();
+        // The per-seat lanes are hidden until the user toggles Seats.
+        expect(screen.queryByText('Filter bots')).toBeNull();
+    });
+
+    it('shows "{name} is thinking…" for a live speaker without text yet', () => {
+        const progress = makeProgress([
+            makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'analyzing' }),
+        ]);
+        render(
+            <EnsembleProgressChat
+                progress={progress}
+                isLive
+                activeDebateSpeakers={{ 'Analyst A': 2 }}
+                debateTurns={[
+                    { speaker: 'Moderator', text: 'Defend or drop the long.', round: 2 },
+                ]}
+            />,
+        );
+        expect(screen.getByText(/Analyst A is thinking…/)).toBeDefined();
+    });
+
+    it('opens the seat modal from a thread row and switches to the lanes view', () => {
+        const progress = makeProgress([
+            makeAnalyst({ key: 'a1', displayName: 'Analyst A', status: 'complete', finalOutput: 'Opening call' }),
+        ]);
+        render(
+            <EnsembleProgressChat
+                progress={progress}
+                debateTurns={[{ speaker: 'Analyst A', text: 'Opening call.', round: 1 }]}
+            />,
+        );
+        fireEvent.click(screen.getByLabelText('Open Analyst A analysis'));
+        expect(screen.getByRole('dialog', { name: 'Analyst A analysis' })).toBeDefined();
+
+        fireEvent.click(screen.getByRole('button', { name: 'seats' }));
+        expect(screen.getByPlaceholderText('Filter bots')).toBeDefined();
+        fireEvent.click(screen.getByRole('button', { name: 'thread' }));
+        // The thread row is back (the modal may still be up, hence getAll).
+        expect(screen.getAllByText(/Opening call\./).length).toBeGreaterThan(0);
     });
 
     it('does not label openings as reply-to tape', () => {
@@ -405,8 +466,11 @@ describe('EnsembleProgressChat', () => {
             />,
         );
         openSeat('Analyst A');
-        expect(screen.getAllByText('Opening call')[0].closest('.mx-2')?.textContent).toMatch(/Final output/);
-        expect(screen.getAllByText('I still fade the wick.')[0].closest('.mx-2')?.textContent).not.toMatch(/Final output/);
+        {
+          const dialog = screen.getByRole('dialog', { name: 'Analyst A analysis' });
+          expect(within(dialog).getAllByText('Opening call')[0].closest('.mx-2')?.textContent).toMatch(/Final output/);
+          expect(within(dialog).getAllByText('I still fade the wick.')[0].closest('.mx-2')?.textContent).not.toMatch(/Final output/);
+        }
     });
 
     it('parks a prompt-echo clarification dump in Thinking, not Final output', () => {

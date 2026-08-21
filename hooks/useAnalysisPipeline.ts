@@ -56,6 +56,12 @@ const devLog = (...args: unknown[]) => { if ((import.meta as any).env?.DEV) cons
 // "remember to…") never hijack a normal analysis.
 const NOTEBOOK_SAVE_PATTERN = /\b(save|store|write|add|log|remember|record|put)\b[^\n]{0,60}\b(notebook|memory|journal|diary|notes?)\b|\b(notebook|memory|journal|diary|notes?)\b[^\n]{0,60}\b(save|store|write|add|log|remember|record|put)\b/i;
 
+// Ensemble openings launch each seat this many ms apart. Free-tier gateways
+// dedupe/cache CONCURRENT near-identical requests (the three openings share
+// ~99% of their payload once the hybrid envelope is in); staggering breaks
+// the simultaneous-identical window those caches key on.
+const SEAT_LAUNCH_STAGGER_MS = 1500;
+
 // Learning services
 import { generateLearningFromPrompt, isLearningEnabled } from '../services/learning/LearningPromptService';
 import { generatePersonalizedInjection } from '../services/ui/PersonalizedPromptService';
@@ -84,7 +90,7 @@ import { applyHybridChartDrift } from '../utils/hybridChartDrift';
 import { computeContractSize } from '../utils/ticketSize';
 import { getHarnessSettings } from '../utils/harnessSettings';
 import { beginPromptLane, endPromptLane } from '../services/infrastructure/PromptOverrideService';
-import { buildEnsembleAnalysts, buildAnalystFailureReport } from '../services/ui/EnsembleAnalystService';
+import { buildEnsembleAnalysts, buildAnalystFailureReport, findDuplicateAnalystOutputs, AnalystOutputSample } from '../services/ui/EnsembleAnalystService';
 import { getEffectiveStyle } from '../services/ui/TradingStyleDetector';
 import GlobalLearningService from '../services/learning/GlobalLearningService';
 
@@ -333,6 +339,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         isMemoryEnabledInPureAI: boolean;
         rolePrompt: string | undefined;
         systemPromptOverride: string | undefined;
+        /** Per-seat independence directive — rendered into the system prompt head. */
+        seatDirective?: string;
         /** Per-seat sampling temperature (ensemble Normal mode). */
         temperature?: number;
         /** Summaries of user-uploaded strategy books (Settings → Strategies). */
@@ -378,6 +386,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             rolePrompt: params.rolePrompt,
             signal,
             systemPromptOverride: params.systemPromptOverride,
+            seatDirective: params.seatDirective,
             userStrategies: params.userStrategies,
             temperature: params.temperature,
             onReasoning: params.onReasoning,
@@ -973,6 +982,30 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             ? (messagesRef.current.find(m => m.id === options.resumeMessageId) || messages.find(m => m.id === options.resumeMessageId))
             : undefined;
         const canResume = Boolean(resumeTarget && !resumeTarget.analysis && (resumeTarget.debateTurns?.length || 0) > 0);
+
+        // Ensemble requires a coin symbol when no chart is attached. A bare
+        // "hello" would otherwise spin up three models with no trade context
+        // and produce identical or empty openings.
+        if (!isAutomationRun && runEnsembleEnabled && imagesToUse.length === 0 && !canResume && !extractSymbolFromPrompt(effectiveInput)) {
+            const now = Date.now();
+            updateRequestMessages(prev => [
+                ...prev,
+                {
+                    id: `user-${now}`,
+                    role: MessageRole.USER,
+                    text: originalPrompt,
+                    createdAt: new Date(now).toISOString(),
+                },
+                {
+                    id: `guide-${now + 1}`,
+                    role: MessageRole.AI,
+                    text: 'To start an analysis, include a coin symbol — e.g. **BTC**, **SOL**, **ETH**.\n\nTry: `analyze BTC`, `SOL long setup`, or `ETH short at 3200`. You can also upload a chart or pick **Live Market**.\n\nIf you just want to chat, toggle **Team** off for casual chat.',
+                    createdAt: new Date(now + 1).toISOString(),
+                },
+            ]);
+            toast.warning('Add a coin to analyze', 'Include a symbol like BTC, SOL or ETH — e.g. “analyze BTC”.');
+            return;
+        }
 
         const userMessage: Message = {
             id: `user-${Date.now()}`,
@@ -1892,9 +1925,25 @@ ${reflectionBlock}`
                         // deployed model improve. Non-fatal: a slow store
                         // must never delay or fail an analysis.
                         return (async () => {
+                            // Thinking-corpus read starts immediately; the
+                            // stagger below hides its latency for seats > 0.
+                            const exemplarsPromise = getThinkingExemplars(provider.thoughtsKey || provider.config.id, 1)
+                                .catch(() => []);
+                            // Staggered seat launches: free-tier gateways
+                            // dedupe/cache CONCURRENT near-identical requests
+                            // (the three openings share ~99% of their payload
+                            // once the hybrid envelope is in). Launching each
+                            // seat SEAT_LAUNCH_STAGGER_MS apart breaks the
+                            // simultaneous-identical window those caches key on.
+                            if (analystIndex > 0) {
+                                await new Promise<void>(resolve => setTimeout(resolve, SEAT_LAUNCH_STAGGER_MS * analystIndex));
+                                if (currentAbortController.signal.aborted) {
+                                    throw new DOMException('Analysis cancelled', 'AbortError');
+                                }
+                            }
                             let exemplarBlock = '';
                             try {
-                                const exemplars = await getThinkingExemplars(provider.thoughtsKey || provider.config.id, 1);
+                                const exemplars = await exemplarsPromise;
                                 if (exemplars.length > 0 && exemplars[0].reasoning.trim()) {
                                     const ex = exemplars[0];
                                     exemplarBlock = `
@@ -1915,17 +1964,22 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 'entry mechanics, key levels, and confirmation triggers — pinpoint the entry, stop, and take-profit levels',
                                 'risk, invalidation, and failure scenarios — stress-test the trade and argue where it breaks',
                             ];
-                            const independentSeatInstruction = !runLensConfig.enabled
-                                ? `\n\n**INDEPENDENT ANALYST SEAT ${analystIndex + 1}:** You are one of several independent analysts looking at the same chart. Recompute it from scratch — do not copy another seat's conclusion or a stock script. Your specialty: ${seatMandates[analystIndex % seatMandates.length]}. Form your own view in your own words; where your read differs from the other seats, say so explicitly.`
+                            // Seat differentiation lives in the SYSTEM prompt
+                            // (rendered near the front by GenericAnalysisService),
+                            // NOT as a suffix on the shared user message — a
+                            // differing tail does not break bulk/prefix-keyed
+                            // upstream prompt caches, a differing head does.
+                            const seatDirective = !runLensConfig.enabled
+                                ? `You are INDEPENDENT ANALYST SEAT ${analystIndex + 1} of several independent analysts looking at the same chart. Recompute it from scratch — do not copy another seat's conclusion or a stock script. Your specialty: ${seatMandates[analystIndex % seatMandates.length]}. Form your own view in your own words; where your read differs from the other seats, say so explicitly.`
                                 : '';
                             return runAnalyzeTradingView(
                                 provider.config,
                                 provider.model,
-                                `${envelope ? `${envelope}\n\n` : ''}${enhancedPrompt}${independentSeatInstruction}${exemplarBlock}`,
+                                `${envelope ? `${envelope}\n\n` : ''}${enhancedPrompt}${exemplarBlock}`,
                                 imageFiles,
                                 dataURLs,
                                 currentAbortController.signal,
-                                buildAnalystParams(provider),
+                                { ...buildAnalystParams(provider), seatDirective: seatDirective || undefined },
                             );
                         })()
                                  .then(result => {
@@ -1992,6 +2046,29 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 console.warn(`[Ensemble] Analyst "${enabledProviders[index]?.name || `#${index}`}" failed:`, settled.reason);
                         }
                     });
+
+                    // Duplicate-generation guard: near-identical openings across
+                    // two different models mean an upstream gateway served ONE
+                    // generation to several seats (free-tier routers dedupe/
+                    // cache concurrent near-identical prompts). Surface it —
+                    // the "debate" would otherwise argue with its own echo.
+                    const duplicatePairs = findDuplicateAnalystOutputs(
+                        settledResults.map((settled, index): AnalystOutputSample => ({
+                            name: enabledProviders[index]?.name || `Seat ${index + 1}`,
+                            model: enabledProviders[index]?.model || '',
+                            finalOutput: settled.status === 'fulfilled' ? settled.value.finalOutput : undefined,
+                            thoughtProcess: settled.status === 'fulfilled' ? settled.value.thoughtProcess : undefined,
+                        })),
+                    );
+                    if (duplicatePairs.length > 0) {
+                        console.warn(`[Ensemble] Upstream duplicated generations across seats:\n${duplicatePairs.join('\n')}`);
+                        if (!isAutomationRun) {
+                            toast.warning(
+                                'Duplicated analyst generations',
+                                `The provider returned the same text to multiple seats (${duplicatePairs[0]}). Its free tier is collapsing near-identical requests — results may not be independent.`,
+                            );
+                        }
+                    }
 
                     // Keep the opening trace visible when the debate object is
                     // created. Previously this handoff replaced the staged

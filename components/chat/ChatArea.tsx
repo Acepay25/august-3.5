@@ -400,7 +400,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
 
     return (
         <div
-            className={`flex-1 relative min-h-0 flex flex-col bg-zinc-950 transition-colors duration-500`}
+            className={`flex-1 relative min-h-0 flex flex-col bg-[#0f0f0f] transition-colors duration-500`}
             onClick={onInteract}
             onTouchStart={onInteract}
         >
@@ -453,6 +453,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 {loadingMessage || (messages.length > 0 ? `${messages.length} messages in conversation` : 'New conversation')}
             </div>
 
+            {messages.length > 0 && (
             <div
                 className="h-full w-full min-h-0"
                 onWheelCapture={(event) => lockFollowIfScrollingUp(event.deltaY)}
@@ -498,6 +499,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 }}
             />
             </div>
+            )}
 
             {/* Accuracy Mode Banner Overlay - Positioned Fixed/Absolute at top of chat area */}
             {isAccuracyModeEnabled && !isSelectionMode && (
@@ -604,22 +606,14 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 <ChatInput {...chatInputProps} />
                 </>
             ) : messages.length === 0 ? (
-                <>
-                    <div className="chat-hero-grid absolute inset-0 z-10 overflow-y-auto bg-zinc-950 pb-40">
-                        <div className={`flex min-h-full flex-col items-center px-3 py-10 sm:px-4 lg:px-8 ${homeDashboard ? 'justify-start' : 'justify-center'}`}>
-                            {homeDashboard ? (
-                                <div className="mb-6 flex w-full justify-center">
-                                    <WorkspaceWelcome {...homeDashboard} />
-                                </div>
-                            ) : (
-                                <h1 className="text-center text-3xl font-bold tracking-tight text-zinc-100 sm:text-4xl">
-                                    August 3.5 makes your trading easier.
-                                </h1>
-                            )}
-                        </div>
+                <div className="flex flex-1 flex-col items-center justify-center bg-[#0f0f0f] px-4 py-10">
+                    <h1 className="mb-8 text-center text-[28px] font-normal tracking-tight text-zinc-100 sm:text-[32px]">
+                        What should we work on?
+                    </h1>
+                    <div className="w-full max-w-[720px]">
+                        <ChatInput {...chatInputProps} centered />
                     </div>
-                    <ChatInput {...chatInputProps} />
-                </>
+                </div>
             ) : (
                 <ChatInput {...chatInputProps} />
             )}

@@ -258,6 +258,15 @@ export interface AnalyzeTradingViewParams {
      * contract sections (rules, formatting, evidence discipline) stay intact.
      */
     systemPromptOverride?: string;
+    /**
+     * Per-seat independence directive (ensemble openings, Lenses off).
+     * Rendered into the SYSTEM prompt near the front — not appended to the
+     * user message — so each seat's payload differs from its first bytes.
+     * Free-tier gateways dedupe/cache concurrent near-identical prompts keyed
+     * on the payload bulk; a differing tail at the end of a long shared user
+     * message does not break those cache keys, a differing system head does.
+     */
+    seatDirective?: string;
     signal?: AbortSignal;
     /**
      * Sampling temperature. Defaults to 0.35 (pro-trader determinism) when
@@ -281,7 +290,7 @@ export async function analyzeTradingView(
         prompt, images, imageSummaries, chatHistory, finalTradeSummary, recentInsights,
         activeFrameworks, globalMemory, threadSummary, subMode, customInstructions,
         isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI,
-        rolePrompt, systemPromptOverride, userStrategies, signal, temperature, onReasoning, onPartialOutput,
+        rolePrompt, systemPromptOverride, seatDirective, userStrategies, signal, temperature, onReasoning, onPartialOutput,
     } = params;
 
     const modelName = config.selectedModel;
@@ -333,6 +342,11 @@ export async function analyzeTradingView(
 
     // --- BUILD SYSTEM PROMPT ---
     // Contract once, then persona/job, then extras. Nested harness copies are stripped.
+    // The seat directive sits directly after the contract so seats diverge from
+    // the first bytes of the payload (see AnalyzeTradingViewParams.seatDirective).
+    const seatBlock = seatDirective
+        ? `**INDEPENDENT SEAT DIRECTIVE**\n\n${seatDirective}`
+        : '';
     const roleBlock = rolePrompt
         ? `**SPECIALIZED ANALYST ROLE ACTIVE**\n\n${rolePrompt}`
         : '';
@@ -359,6 +373,7 @@ export async function analyzeTradingView(
             : '';
         systemPrompt = composePrompt([
             { id: 'contract', text: HARNESS_CONTRACT_PROMPT },
+            { id: 'seat', text: seatBlock },
             { id: 'role', text: roleBlock },
             { id: 'job', text: getPrompt('analysis.pure_ai', PURE_AI_MODE_PROMPT) },
             { id: 'vision', text: visionDeepDive },
@@ -374,6 +389,7 @@ export async function analyzeTradingView(
     } else if (isAccuracyMode) {
         systemPrompt = composePrompt([
             { id: 'contract', text: HARNESS_CONTRACT_PROMPT },
+            { id: 'seat', text: seatBlock },
             { id: 'role', text: roleBlock },
             { id: 'accuracy', text: getPrompt('analysis.accuracy', ACCURACY_MODE_PROMPT) },
             { id: 'job', text: getPrompt('analysis.master', MASTER_ANALYSIS_PROMPT) },
@@ -392,6 +408,7 @@ export async function analyzeTradingView(
             : (systemPromptOverride || getPrompt('analysis.master', MASTER_ANALYSIS_PROMPT));
         systemPrompt = composePrompt([
             { id: 'contract', text: HARNESS_CONTRACT_PROMPT },
+            { id: 'seat', text: seatBlock },
             { id: 'role', text: roleBlock },
             { id: 'job', text: basePrompt },
             { id: 'vision', text: rolePrompt ? '' : visionDeepDive },
