@@ -263,7 +263,7 @@ describe('MemoryFilesService', () => {
       expect(file.autoManaged).toBe(true);
       expect(file.content).toContain('# BTCUSDT Trade Diary');
       expect(file.content).toContain('Aug 9 · BTCUSDT · Short · WIN ✅ (+3.2%)');
-      expect(file.content).toContain('Lesson: Wait for the 15m reclaim before entering.');
+      expect(file.content).toContain('What I learned: Wait for the 15m reclaim before entering.');
       expect(file.content).toContain('id: trade-1');
     });
 

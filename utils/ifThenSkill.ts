@@ -34,9 +34,9 @@ export const parseIfThenClauses = (text: string): IfThenClause[] => {
 
 export const formatSkillProcedure = (clause: IfThenClause): string =>
     [
-        `**Trigger:** IF ${clause.ifCondition}`,
-        `**Procedure:** THEN ${clause.thenAction}`,
-        '**Invalidates:** when the IF no longer holds, or the regime/family is different.',
+        `**When:** ${clause.ifCondition}`,
+        `**What I do:** ${clause.thenAction}`,
+        '**Stands until:** the IF no longer holds, or the regime/family is different.',
     ].join('\n');
 
 export const skillHitRate = (wins: number, losses: number): number | null => {
