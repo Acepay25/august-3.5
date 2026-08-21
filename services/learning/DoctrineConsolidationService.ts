@@ -22,7 +22,11 @@ import {
 import { sendChatTurn } from '../providers/GenericProviderService';
 
 /** Rewrite the doctrine after every N newly-closed trades. */
-const DOCTRINE_EVERY_N_TRADES = 10;
+const DOCTRINE_EVERY_N_TRADES = 15;
+/** How many recent closed trades the rewrite sees (older evidence is already distilled). */
+const DOCTRINE_WINDOW_TRADES = 60;
+/** Max share of existing doctrine bullets the rewrite may drop per pass. */
+export const DOCTRINE_MAX_REVISE_SHARE = 1 / 3;
 /** Hard cap on doctrine length — it is injected on every analysis. */
 const MAX_DOCTRINE_CHARS = 1800;
 
@@ -55,7 +59,7 @@ export const shouldConsolidateDoctrine = (trades: LoggedTrade[]): boolean => {
 
 export const buildDoctrinePrompt = (trades: LoggedTrade[], currentDoctrine: string): string => {
     const closed = trades.filter(t => t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS);
-    const recent = closed.slice(-40).map(t => {
+    const recent = closed.slice(-DOCTRINE_WINDOW_TRADES).map(t => {
         const a = t.analysis ?? {};
         const post = (t.postMortem || '').replace(/\s+/g, ' ').slice(0, 200);
         return `- ${new Date(t.timestamp).toLocaleDateString()} ${a.coinName ?? '?'} ${a.direction ?? '?'} ${t.outcome}${typeof t.pnlPercent === 'number' ? ` (${t.pnlPercent > 0 ? '+' : ''}${t.pnlPercent}%)` : ''}${post ? ` — ${post}` : ''}`;
@@ -68,7 +72,7 @@ Below are your recent closed trades with their outcomes and lessons. Distill the
 RULES:
 - First person, past-tense evidence: "I keep losing when I chase extended moves" not "The trader should avoid...".
 - Only stances backed by at least two concrete trades. No generic advice.
-- Keep what still holds from the CURRENT doctrine; revise what the new evidence contradicts.
+- Keep what still holds from the CURRENT doctrine; revise what the new evidence contradicts. Carry forward all but at most one third of the current bullets verbatim — a doctrine that flips every pass is noise, not belief.
 - Attach recent exceptions where a belief did NOT hold recently.
 - Maximum 25 lines. Plain markdown bullets. No preamble, no JSON.
 

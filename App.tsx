@@ -1206,6 +1206,16 @@ const App: React.FC = () => {
         // user's markdown memory into the sync cache (seeds the default
         // folders + starter templates on first boot).
         await initMemoryFiles(username);
+        // One-time mechanical migration (ROUND-24m): legacy IF/THEN rules
+        // become candidate skills so lessons live in one system. Idempotent.
+        try {
+            const { migrateIfThenRulesToSkills } = await import('./services/learning/IfThenMigrationService');
+            const userProfile = await dbService.getUserProfile(username).catch(() => null);
+            const res = await migrateIfThenRulesToSkills(username, userProfile?.tradeLog ?? []);
+            if (res.created > 0) console.log('[IfThenMigration] Created', res.created, 'candidate skills from legacy rules.');
+        } catch (e) {
+            console.warn('[IfThenMigration] skipped:', e instanceof Error ? e.message : e);
+        }
         // Native (Capacitor) loads the lens config asynchronously, after the
         // useAppSettings lazy initializer already ran with an empty default —
         // push the cached config into React state so the lens dropdowns don't

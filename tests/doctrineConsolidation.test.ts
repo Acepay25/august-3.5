@@ -22,7 +22,7 @@ describe('shouldConsolidateDoctrine', () => {
 
     it('returns true at the threshold when no doctrine exists yet', async () => {
         await initMemoryFiles('doctrine-test-2');
-        const trades = Array.from({ length: 10 }, (_, i) => trade(i, i % 3 === 0 ? TradeOutcome.LOSS : TradeOutcome.WIN));
+        const trades = Array.from({ length: 15 }, (_, i) => trade(i, i % 3 === 0 ? TradeOutcome.LOSS : TradeOutcome.WIN));
         // No doctrine file exists → lastCount = 0 → closed(10) - 0 >= 10.
         expect(shouldConsolidateDoctrine(trades)).toBe(true);
     });

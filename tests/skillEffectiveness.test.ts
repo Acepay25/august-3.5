@@ -97,7 +97,7 @@ describe('reviewSkillEffectiveness', () => {
         await initMemoryFiles('review-test-2');
         const bleeding = await skillFile(
             'skill-bleeding.md',
-            skillContent({ status: 'confirmed', kind: 'avoid', wins: 4, losses: 1, consecutiveLosses: 2 }),
+            skillContent({ status: 'confirmed', kind: 'avoid', wins: 4, losses: 1, consecutiveLosses: 3 }),
             'review-test-2',
         );
         const review = reviewSkillEffectiveness().find(r => r.fileId === bleeding.id);

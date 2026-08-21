@@ -1,19 +1,33 @@
 /**
  * Setup-aware retrieval for the trader notebook.
  *
- * Walks the typed memory graph (setup → dimensions → skills/notes/trades)
- * instead of dumping every file that shares a keyword. Identity files are
- * always on. The full notebook and pattern-memory essay are not dumped.
+ * Design (post-simplification pass, ROUND-24m):
+ *  - ONE narrative voice: doctrine rides every stage; everything else is
+ *    ranked data under a hard per-stage budget.
+ *  - Diary is RAW STORAGE — never injected. It feeds doctrine rewrites and
+ *    skill gates; the model sees its conclusions, not its journal.
+ *  - Recurring-mistakes lines escalate into skills: once a skill owns a
+ *    coin+direction cluster, the raw warning line goes quiet.
+ *  - IF/THEN rules live INSIDE skills (candidate → confirmed by evidence);
+ *    there is no separate rules injection path.
+ *  - Similar-trade history is verdict-stage material (and `recall` tool).
+ *
+ * Pull-over-push: analysts/debaters who want more history call the `recall`
+ * desk tool instead of receiving bigger prompts.
  */
 
 import { LoggedTrade } from '../../types';
-import { getMemoryFiles, buildNotebookMapMarkdown } from './MemoryFilesService';
+import { getMemoryFiles } from './MemoryFilesService';
 import { readDoctrineForInjection } from './DoctrineConsolidationService';
 import { findRelevantTrades } from './PatternMemorySynthesisService';
-import { isSkillFile, parseSkillMarkdown, skillMatchesSetup } from './SkillMemoryService';
+import {
+    isSkillFile,
+    parseSkillMarkdown,
+    skillMatchesSetup,
+    type SkillMeta,
+} from './SkillMemoryService';
 import {
     buildMemoryGraph,
-    matchingLearningRules,
     walkMemoryNeighbors,
     type MemoryRetrievalQuery,
     type WalkedMemoryHit,
@@ -21,59 +35,154 @@ import {
 
 export type { MemoryRetrievalQuery };
 
-const MAX_CONTEXT_CHARS = 4500;
-const MAX_FILE_CHARS = 900;
-const MAX_DIARY_CHARS = 600;
-const MAX_MAP_CHARS = 1400;
-const ALWAYS_ON = new Set(['memory.md', 'risk-rules.md', 'recurring-mistakes.md']);
+/** Hard per-stage budget for EVERYTHING except the doctrine slot. */
+const STAGE_BUDGET_CHARS: Record<MemoryStage, number> = {
+    opening: 900,
+    rebuttal: 400,
+    verdict: 600,
+};
+const DOCTRINE_SLOT_CHARS = 800;
+const SKILL_BLOCK_MAX = 400;
+const RISK_RULES_MAX = 300;
+const MISTAKE_LINE_MAX = 200;
+
+export interface RetrievedMemorySource {
+    path: string;
+    kind: 'identity' | 'skill' | 'playbook' | 'diary' | 'rules' | 'similar';
+}
 
 /**
- * The trading doctrine (profile/doctrine.md) rides with EVERY stage — it is
- * the model's settled beliefs, not reference material. Returns '' when no
- * doctrine has been consolidated yet.
+ * Debate stage selector for retrieval budgeting.
+ *   opening  — doctrine + best matched skill only (independent read)
+ *   rebuttal — best matched skill only (tight counter-evidence)
+ *   verdict  — doctrine + skills + similar trades (binding constraints)
+ */
+export type MemoryStage = 'opening' | 'rebuttal' | 'verdict';
+
+const kindForHit = (hit: WalkedMemoryHit): RetrievedMemorySource['kind'] => {
+    if (hit.node.kind === 'identity') return 'identity';
+    if (hit.node.kind === 'skill') return 'skill';
+    if (hit.node.path?.startsWith('trader-diary/')) return 'diary';
+    if (hit.node.kind === 'rule' || hit.node.path?.startsWith('rules/')) return 'rules';
+    return 'playbook';
+};
+
+/** Best matching enabled skill for this setup, ranked: confirmed first, then sample size. */
+const bestMatchedSkill = (query?: MemoryRetrievalQuery): { file: ReturnType<typeof getMemoryFiles>['files'][number]; meta: SkillMeta } | null => {
+    if (!query) return null;
+    const setup = {
+        coin: query.coin,
+        direction: query.direction === 'Long' || query.direction === 'Short' ? query.direction : undefined,
+        family: query.family,
+        pattern: query.pattern,
+        regime: typeof query.regime === 'string' ? query.regime : undefined,
+    };
+    const candidates: Array<{ file: ReturnType<typeof getMemoryFiles>['files'][number]; meta: SkillMeta }> = [];
+    for (const file of getMemoryFiles().files) {
+        if (!file.enabled || !isSkillFile(file)) continue;
+        const meta = parseSkillMarkdown(file.content);
+        if (!meta || meta.status === 'retired') continue;
+        if (!skillMatchesSetup(meta, setup)) continue;
+        candidates.push({ file, meta });
+    }
+    if (candidates.length === 0) return null;
+    candidates.sort((a, b) => {
+        const statusRank = (s: SkillMeta['status']): number => (s === 'confirmed' ? 2 : s === 'candidate' ? 1 : 0);
+        const sample = (m: SkillMeta): number => m.wins + m.losses;
+        return statusRank(b.meta.status) - statusRank(a.meta.status) || sample(b.meta) - sample(a.meta);
+    });
+    return candidates[0];
+};
+
+/**
+ * Doctrine block — the ONE narrative voice, fixed slot on every stage.
  */
 const doctrineBlock = (): string => {
     try {
         const doctrine = readDoctrineForInjection();
-        return doctrine ? `**My trading doctrine (settled beliefs):**\n${doctrine}` : '';
+        if (!doctrine) return '';
+        const capped = doctrine.length > DOCTRINE_SLOT_CHARS
+            ? `${doctrine.slice(0, DOCTRINE_SLOT_CHARS).trimEnd()}\n…`
+            : doctrine;
+        return `**My trading doctrine (settled beliefs):**\n${capped}`;
     } catch {
         return '';
     }
 };
 
-const cap = (text: string, n: number): string =>
-    text.length <= n ? text : `${text.slice(0, n).trimEnd()}\n…`;
+/** The single best-matched skill body, capped. */
+const matchedSkillBlock = (query?: MemoryRetrievalQuery): string => {
+    const match = bestMatchedSkill(query);
+    if (!match) return '';
+    const titleBits = [match.meta.kind === 'avoid' ? 'Avoid' : 'Repeat', match.meta.coin, match.meta.direction]
+        .filter(Boolean).join(' ');
+    const body = match.file.content.trim();
+    const capped = body.length > SKILL_BLOCK_MAX ? `${body.slice(0, SKILL_BLOCK_MAX).trimEnd()}\n…` : body;
+    return `[skills/${match.file.name} · ${match.meta.status} · ${match.meta.wins}W/${match.meta.losses}L]\n${titleBits}\n${capped}`;
+};
 
-const folderOf = (fileId: string): string => {
+/**
+ * Risk-rules excerpt — hard rules only (always-on identity file), capped tight.
+ */
+const riskRulesBlock = (): string => {
     const { files, folders } = getMemoryFiles();
-    const file = files.find(f => f.id === fileId);
-    if (!file) return 'misc';
-    return folders.find(f => f.id === file.folderId)?.name ?? 'misc';
+    const folder = folders.find(f => f.name === 'rules');
+    const file = files.find(f => f.folderId === folder?.id && f.name === 'risk-rules.md');
+    if (!file?.enabled) return '';
+    // Strip the instructional preamble — keep bullet lines only.
+    const bullets = file.content.split('\n').filter(l => l.trim().startsWith('-')).slice(0, 6).join('\n');
+    if (!bullets) return '';
+    return cap(`[rules/risk-rules.md]\n${bullets}`, RISK_RULES_MAX);
 };
 
-const diaryExcerpt = (content: string): string => {
-    const chunks = content.split('\n## ');
-    if (chunks.length <= 1) return cap(content, MAX_DIARY_CHARS);
-    const header = chunks[0];
-    const last = chunks.slice(1).slice(-3);
-    return cap(`${header}\n## ${last.join('\n## ')}`, MAX_DIARY_CHARS);
+/**
+ * Identity slice — profile/memory.md ("About the Trader"), compact and
+ * always-on. Who the model is: stats, preferences, style. Capped tight.
+ */
+const identityBlock = (): string => {
+    const { files, folders } = getMemoryFiles();
+    const folder = folders.find(f => f.name === 'profile');
+    const file = files.find(f => f.folderId === folder?.id && f.name === 'memory.md');
+    if (!file?.enabled) return '';
+    const bullets = file.content.split('\n').filter(l => l.trim().startsWith('-')).slice(0, 7).join('\n');
+    if (!bullets) return '';
+    return cap(`[profile/memory.md]\n${bullets}`, 300);
 };
 
-const skillCatalogBlock = (query?: MemoryRetrievalQuery): string => {
-    const { files } = getMemoryFiles();
-    const lines: string[] = [];
-    for (const file of files) {
-        if (!file.enabled || !isSkillFile(file)) continue;
-        const meta = parseSkillMarkdown(file.content);
-        if (!meta || meta.status === 'retired') continue;
-        if (query && !skillMatchesSetup(meta, query) && meta.status !== 'confirmed') continue;
-        const trigger = meta.body.split('\n').find(l => l.trim())?.replace(/^#+\s*/, '').trim().slice(0, 80) || file.name;
-        lines.push(`- ${file.name.replace(/\.md$/i, '')} · ${meta.kind} · ${meta.status} · ${meta.wins}W/${meta.losses}L — ${trigger}`);
-        if (lines.length >= 8) break;
-    }
-    return lines.length ? `**Skill catalog (preload matching skills into workers, not this prompt):**\n${lines.join('\n')}` : '';
+/**
+ * Recurring-mistakes line for a cluster ONLY when no enabled skill owns that
+ * coin+direction. Escalation contract: mistake → skill created → line silent.
+ */
+const uncoveredMistakeLine = (query?: MemoryRetrievalQuery): string => {
+    if (!query?.coin) return '';
+    const { files, folders } = getMemoryFiles();
+    const rulesFolder = folders.find(f => f.name === 'rules');
+    const file = files.find(f => f.folderId === rulesFolder?.id && f.name === 'recurring-mistakes.md');
+    if (!file?.enabled) return '';
+
+    // Does an enabled skill already own this coin (+direction when set)?
+    const setup = {
+        coin: query.coin,
+        direction: query.direction === 'Long' || query.direction === 'Short' ? query.direction : undefined,
+    };
+    const owned = getMemoryFiles().files.some(f => {
+        if (!f.enabled || !isSkillFile(f)) return false;
+        const meta = parseSkillMarkdown(f.content);
+        if (!meta || meta.status === 'retired') return false;
+        if ((meta.coin ?? '').toLowerCase() !== setup.coin.toLowerCase()) return false;
+        if (setup.direction && meta.direction && meta.direction !== setup.direction) return false;
+        return true;
+    });
+    if (owned) return ''; // skill owns it — raw warning would be a stale duplicate
+
+    const line = file.content
+        .split('\n')
+        .find(l => l.includes(` ${setup.coin.toUpperCase()} `) || l.includes(`${setup.coin.toUpperCase()} `));
+    if (!line) return '';
+    return cap(`[rules/recurring-mistakes.md]\n${line.trim()}`, MISTAKE_LINE_MAX);
 };
 
+/** Similar closed trades — verdict-stage history (and the recall tool). */
 const similarTradesBlock = (query: MemoryRetrievalQuery | undefined, trades?: LoggedTrade[]): string => {
     if (!trades || trades.length === 0 || !query) return '';
     const relevant = findRelevantTrades({
@@ -90,92 +199,33 @@ const similarTradesBlock = (query: MemoryRetrievalQuery | undefined, trades?: Lo
     return `**Similar closed trades**\n${lines.join('\n')}`;
 };
 
-const rulesBlock = (query?: MemoryRetrievalQuery): string => {
-    const rules = matchingLearningRules(query, 4);
-    if (rules.length === 0) return '';
-    const lines = rules.map(r => {
-        const ev = typeof r.wins === 'number' || typeof r.losses === 'number'
-            ? ` [${r.wins ?? 0}W/${r.losses ?? 0}L]`
-            : '';
-        return `- IF ${r.ifCondition} THEN ${r.thenAction}${ev}`;
-    });
-    return `**Matching rules**\n${lines.join('\n')}`;
-};
-
-export interface RetrievedMemorySource {
-    path: string;
-    kind: 'identity' | 'skill' | 'playbook' | 'diary' | 'rules' | 'similar';
-}
-
-/**
- * Debate stage selector for retrieval budgeting. Different decision points
- * need different memory slices — injecting everything everywhere dilutes the
- * memories that matter (models weight given context roughly equally).
- *   opening  — patterns + similar trades (what has this setup done before)
- *   rebuttal — rules only (tight counter-evidence, minimal tokens)
- *   verdict  — vetoes + confidence caps + catalog (binding constraints)
- */
-export type MemoryStage = 'opening' | 'rebuttal' | 'verdict';
-
-const STAGE_SKILL_CAP: Record<MemoryStage, number> = { opening: 2, rebuttal: 1, verdict: 2 };
-
-const kindForHit = (hit: WalkedMemoryHit): RetrievedMemorySource['kind'] => {
-    if (hit.node.kind === 'identity') return 'identity';
-    if (hit.node.kind === 'skill') return 'skill';
-    if (hit.node.path?.startsWith('trader-diary/')) return 'diary';
-    if (hit.node.kind === 'rule' || hit.node.path?.startsWith('rules/')) return 'rules';
-    return 'playbook';
-};
-
-const fileHits = (query?: MemoryRetrievalQuery, audience: 'analyst' | 'moderator' = 'analyst', stage: MemoryStage = 'opening'): WalkedMemoryHit[] => {
-    const graph = buildMemoryGraph(query, []);
-    const walked = walkMemoryNeighbors(graph, query, audience);
-    let skillsKept = 0;
-    const skillCap = STAGE_SKILL_CAP[stage];
-    const out: WalkedMemoryHit[] = [];
-    for (const hit of walked) {
-        if (!hit.node.fileId) continue;
-        if (hit.node.kind === 'skill') {
-            if (audience === 'moderator') continue;
-            if (skillsKept >= skillCap) continue;
-            skillsKept += 1;
-        }
-        // Rebuttal stage: diary/playbook history is noise mid-argument —
-        // keep only identity + the single most relevant skill.
-        if (stage === 'rebuttal' && hit.node.kind !== 'skill' && hit.node.kind !== 'identity') continue;
-        out.push(hit);
-    }
-    return out;
-};
+const cap = (text: string, n: number): string =>
+    text.length <= n ? text : `${text.slice(0, n).trimEnd()}\n…`;
 
 export const listRetrievedMemorySources = (
     query?: MemoryRetrievalQuery,
     trades?: LoggedTrade[],
     audience: 'analyst' | 'moderator' = 'analyst',
 ): RetrievedMemorySource[] => {
-    const out: RetrievedMemorySource[] = fileHits(query, audience).map(hit => ({
-        path: hit.node.path || hit.node.label,
-        kind: kindForHit(hit),
-    }));
-    if (doctrineBlock()) {
-        out.unshift({ path: 'profile/doctrine', kind: 'identity' });
-    }
-    if (audience === 'moderator' && skillCatalogBlock(query)) {
-        out.push({ path: 'skills/catalog', kind: 'skill' });
-    }
-    if (similarTradesBlock(query, trades)) {
-        out.push({ path: 'journal/similar-trades', kind: 'similar' });
-    }
-    if (rulesBlock(query)) {
-        out.push({ path: 'rules/if-then', kind: 'rules' });
-    }
+    void audience;
+    const out: RetrievedMemorySource[] = [];
+    if (doctrineBlock()) out.push({ path: 'profile/doctrine', kind: 'identity' });
+    if (identityBlock()) out.push({ path: 'profile/memory', kind: 'identity' });
+    const skill = bestMatchedSkill(query);
+    if (skill) out.push({ path: `skills/${skill.file.name}`, kind: 'skill' });
+    if (riskRulesBlock()) out.push({ path: 'rules/risk-rules', kind: 'rules' });
+    if (uncoveredMistakeLine(query)) out.push({ path: 'rules/recurring-mistakes', kind: 'rules' });
+    if (similarTradesBlock(query, trades)) out.push({ path: 'journal/similar-trades', kind: 'similar' });
     return out;
 };
 
 /**
- * Capped, setup-aware harness context. Replaces dumping every notebook file.
- * `audience: 'moderator'` weaves a skill catalog (name, W/L, trigger) instead
- * of full skill bodies — analysts still get matching skill text.
+ * Capped, setup-ranked harness context.
+ *
+ * Fill order per stage (budget enforced across all non-doctrine blocks):
+ *   1. best matched skill   2. risk-rules excerpt   3. uncovered mistake line
+ *   4. similar trades (verdict only)
+ * Doctrine has its own always-on slot and does not count against the budget.
  */
 export const getMemoryFilesContext = (
     query?: MemoryRetrievalQuery,
@@ -183,63 +233,100 @@ export const getMemoryFilesContext = (
     audience: 'analyst' | 'moderator' = 'analyst',
     stage: MemoryStage = 'opening',
 ): string => {
-    const { files } = getMemoryFiles();
-    const hits = fileHits(query, audience, stage);
-
-    if (hits.length === 0 && !trades?.length) {
-        const mapOnly = cap(buildNotebookMapMarkdown(), MAX_MAP_CHARS);
-        return mapOnly
-            ? `═══════════════════════════════════════════════════════════════
-📓 HARNESS MEMORY
-═══════════════════════════════════════════════════════════════
-${mapOnly}
-═══════════════════════════════════════════════════════════════`
-            : '';
-    }
-
-    const mapBlock = cap(buildNotebookMapMarkdown(), MAX_MAP_CHARS);
+    void audience;
+    const budget = STAGE_BUDGET_CHARS[stage];
     const blocks: string[] = [];
-    let used = mapBlock.length;
-    for (const hit of hits) {
-        if (used >= MAX_CONTEXT_CHARS) break;
-        const file = files.find(f => f.id === hit.node.fileId);
-        if (!file) continue;
-        const folder = folderOf(file.id);
-        let body = file.content.trim();
-        if (folder === 'trader-diary') body = diaryExcerpt(body);
-        else body = cap(body, ALWAYS_ON.has(file.name) ? 1600 : MAX_FILE_CHARS);
-        const block = `[${folder}/${file.name}]\n${body}`;
-        if (used + block.length > MAX_CONTEXT_CHARS) {
-            blocks.push(cap(block, MAX_CONTEXT_CHARS - used));
-            used = MAX_CONTEXT_CHARS;
-            break;
-        }
-        blocks.push(block);
-        used += block.length;
-    }
+    let used = 0;
 
-    const extras = [
-        doctrineBlock(),
-        audience === 'moderator' ? skillCatalogBlock(query) : '',
-        // Similar-trade history belongs at openings and verdicts, not
-        // mid-argument — rebuttals argue levels, not history.
-        stage !== 'rebuttal' ? similarTradesBlock(query, trades) : '',
-        rulesBlock(query),
-    ].filter(Boolean);
-    for (const extra of extras) {
-        if (used >= MAX_CONTEXT_CHARS) break;
-        const room = MAX_CONTEXT_CHARS - used;
-        blocks.push(cap(extra, room));
-        used += Math.min(extra.length, room);
-    }
+    const push = (block: string): void => {
+        if (!block || used >= budget) return;
+        const room = budget - used;
+        blocks.push(cap(block, room));
+        used += Math.min(block.length, room);
+    };
 
-    if (blocks.length === 0 && !mapBlock) return '';
+    push(identityBlock());
+    push(matchedSkillBlock(query));
+    push(riskRulesBlock());
+    push(uncoveredMistakeLine(query));
+    if (stage === 'verdict') push(similarTradesBlock(query, trades));
+
+    const doctrine = doctrineBlock();
+    if (blocks.length === 0 && !doctrine) return '';
+
+    const parts: string[] = [];
+    if (doctrine) parts.push(doctrine);
+    if (blocks.length > 0) parts.push(blocks.join('\n\n'));
 
     return `═══════════════════════════════════════════════════════════════
-📓 HARNESS MEMORY (notebook map + graph neighbors — not a blank slate)
+📓 MY MEMORY (doctrine + what matches THIS setup — not a blank slate)
 ═══════════════════════════════════════════════════════════════
-Identity files always apply. ${audience === 'moderator' ? 'Skills are listed as a catalog only — do not paste full skill bodies here.' : 'Matching skill bodies apply when they match this coin, direction, or regime; otherwise ignore them.'} Do not contradict a matching confirmed skill without strong new evidence.
-
-${[mapBlock, ...blocks].filter(Boolean).join('\n\n---\n\n')}
-═══════════════════════════════════════════════════════════════`;
+Do not contradict a confirmed rule without strong new evidence. Need more
+history? Call the recall tool with this setup's coin/topic.
+═══════════════════════════════════════════════════════════════
+${parts.join('\n\n---\n\n')}`;
 };
+
+// ─── recall tool (pull-over-push) ───────────────────────────────────────────
+
+export interface RecallRequest {
+    /** Free-text topic: usually the coin ("BTC"), optionally + direction/pattern. */
+    topic: string;
+}
+
+/**
+ * Handle a model-initiated `recall` desk-tool call: search the notebook the
+ * way the retrieval layer does and hand back a compact digest — matched
+ * skills (top 3, one-line each), similar closed trades, uncovered mistakes,
+ * and the current doctrine header. Budget-capped like every other slice.
+ */
+export const handleRecallTool = (
+    args: RecallRequest,
+    trades?: LoggedTrade[],
+): string => {
+    const raw = (args.topic || '').trim();
+    if (!raw) return JSON.stringify({ error: 'recall requires a topic, e.g. {"topic": "BTC long"}' });
+
+    // Parse "BTC long" / "ETH short sweep" style topics into a query.
+    const words = raw.toLowerCase().split(/\s+/);
+    const direction = words.includes('long') ? 'Long' : words.includes('short') ? 'Short' : undefined;
+    const coin = words.find(w => w !== 'long' && w !== 'short' && w.length >= 2)?.toUpperCase();
+    const query: MemoryRetrievalQuery = {
+        coin,
+        direction: direction as MemoryRetrievalQuery['direction'],
+        family: undefined,
+        pattern: undefined,
+    };
+
+    const sections: string[] = [];
+
+    const skillMatch = bestMatchedSkill(query);
+    if (skillMatch) {
+        const ruleLine = skillMatch.meta.ifCondition
+            ? `IF ${skillMatch.meta.ifCondition} THEN ${skillMatch.meta.thenAction}`
+            : skillMatch.meta.body.split('\n').find(l => l.trim())?.replace(/^#+\s*/, '').slice(0, 160)
+                || skillMatch.file.name.replace(/\.md$/i, '');
+        sections.push(`SKILL ${skillMatch.meta.status.toUpperCase()} (${skillMatch.meta.wins}W/${skillMatch.meta.losses}L): ${ruleLine}`);
+    }
+
+    const mistakes = uncoveredMistakeLine(query);
+    if (mistakes) sections.push(mistakes.replace(/^\[[^\]]+\]\n/, ''));
+
+    const similar = similarTradesBlock(query, trades);
+    if (similar) sections.push(similar);
+
+    const doctrine = readDoctrineForInjection();
+    if (doctrine) {
+        const head = doctrine.split('\n').filter(l => l.trim()).slice(0, 3).join('\n');
+        sections.push(`DOCTRINE (my settled beliefs):\n${head}`);
+    }
+
+    if (sections.length === 0) {
+        return JSON.stringify({ result: `No notebook memory found for "${raw}".` });
+    }
+    const digest = sections.join('\n\n');
+    return JSON.stringify({
+        result: digest.length > MAX_TOOL_CONTENT_RECALL ? `${digest.slice(0, MAX_TOOL_CONTENT_RECALL)}\n…` : digest,
+    });
+};
+const MAX_TOOL_CONTENT_RECALL = 1600;

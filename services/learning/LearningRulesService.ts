@@ -250,7 +250,7 @@ export const storeRule = (
     // Avoid duplicates - check if similar rule exists. The OUTCOME is part of
     // the identity: an identical IF/THEN from a WIN must not block storing the
     // +2-scored LOSS variant (the stronger rule), or vice versa.
-    const isDuplicate = storage.rules.some(existing =>
+    const isDuplicate = (storage.rules ?? []).some(existing =>
         existing.ifCondition.toLowerCase() === rule.ifCondition.toLowerCase() &&
         existing.thenAction.toLowerCase() === rule.thenAction.toLowerCase() &&
         existing.outcome === rule.outcome
@@ -265,7 +265,7 @@ export const storeRule = (
     // most valuable — unused rules (useCount 0, PENDING/blank outcome) go first.
     // Ascending sort + slice(-maxRules) keeps the HIGHEST-priority rules.
     const maxRules = 100;
-    const rules = [...storage.rules, rule];
+    const rules = [...(storage.rules ?? []), rule];
     const prunedRules = rules.length > maxRules
         ? rules
             .map((r, index) => ({ r, index }))

@@ -11,7 +11,7 @@
 import { LoggedTrade, AIProvider, InsightKnowledgeBase } from '../../types';
 import { computeLearningProfile, generateLearningContext, PersonalizedLearningProfile } from './SelfLearningService';
 import { generateMistakeWarningInjection } from './MistakePatternService';
-import { generateLearningRulesPrompt, LearningRulesStorage, loadLearningRules } from './LearningRulesService';
+// LearningRulesService injection retired (ROUND-24m) — lessons live in skills.
 import { generateInsightInjection } from './InsightExtractionService';
 import { generateAdaptiveFeedbackInjection } from './AdaptiveLearningService';
 import { generateWeightedVotingContext } from '../backtesting/ModelPerformanceService';
@@ -80,19 +80,13 @@ export const buildUnifiedLearningContext = (
     }
 
     try {
-        // 3. Learning Rules (LearningRulesService)
-        const rulesStorage = loadLearningRules();
-        const rules = generateLearningRulesPrompt(rulesStorage, {
-            coin: currentSetup.coin,
-            pattern: currentSetup.pattern,
-            direction: currentSetup.direction === 'Neutral' ? undefined : currentSetup.direction
-        });
-        if (rules && rules.trim()) {
-            parts.push(rules);
-            console.log('[UnifiedLearning] Added', rulesStorage.rules.length, 'learning rules');
-        }
+        // 3. Learning Rules — RETIRED from injection (ROUND-24m). IF/THEN
+        // lessons live inside skills now (evidence-counted, enforced);
+        // a parallel advisory rules prompt double-injected the same facts
+        // and drifted from the skill versions. The rules store still runs
+        // for outcome attribution.
     } catch (e) {
-        console.error('[UnifiedLearning] Failed to generate learning rules:', e);
+        console.error('[UnifiedLearning] learning rules teardown:', e);
     }
 
     try {

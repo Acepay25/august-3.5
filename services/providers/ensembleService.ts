@@ -2734,6 +2734,8 @@ export const conductRealDebate = async function* (
     /** This setup's similar closed trades (for loss priming). Compact rows —
      *  outcome/keyLesson only, no full post-mortems. */
     similarTrades?: { outcome?: string; keyLesson?: string; coin?: string; direction?: string; timestamp?: string }[],
+    /** Full closed-trade log — powers the `recall` notebook desk tool. */
+    fullTradesForRecall?: LoggedTrade[],
 ): AsyncGenerator<RealDebateTurnEvent, void, unknown> {
 
     if (analysts.length < 2) {
@@ -3051,6 +3053,7 @@ export const conductRealDebate = async function* (
                     () => streamChatWithDeskTools(analyst.provider.config, messages, {
                         temperature: 0.35,
                         signal,
+                        trades: fullTradesForRecall,
                         maxTokens: TASK_BUDGETS.rebuttal,
                         onReasoning: (reasoning: string) => onAnalystReasoning?.(analyst.provider.name, reasoning, round),
                         onToolEvent: (line: string) => {
@@ -3367,6 +3370,7 @@ export const conductRealDebate = async function* (
                         () => streamChatWithDeskTools(analyst.provider.config, messages, {
                             temperature: 0.3,
                             signal,
+                            trades: fullTradesForRecall,
                             maxTokens: TASK_BUDGETS.clarification,
                             onReasoning: (reasoning: string) => onAnalystReasoning?.(analyst.provider.name, reasoning, answerRound),
                             onToolEvent: (line: string) => {

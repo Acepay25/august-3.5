@@ -2622,6 +2622,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                             botByThoughtsKey,
                             centralizedSnapshot,
                             lossPrimingRows,
+                            loggedTrades,
                         );
                     }
 

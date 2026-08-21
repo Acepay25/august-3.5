@@ -1120,16 +1120,10 @@ ${providerAccuracyInjection}
         sessionInjection = generateSessionCalibrationPrompt(calibration);
     }
 
-    // Generate learning rules from post-mortem insights
-    let learningRulesInjection = '';
-    if (learningRules) {
-        learningRulesInjection = generateLearningRulesPrompt(learningRules, {
-            coin: granularContext?.coin || data.symbol,
-            pattern: granularContext?.pattern,
-            direction: data.regime.trendDirection === 'bullish' ? 'Long' as const :
-                data.regime.trendDirection === 'bearish' ? 'Short' as const : undefined
-        });
-    }
+    // Learning rules injection RETIRED (ROUND-24m): IF/THEN lessons live in
+    // skills (evidence-counted + enforced). Keeping a parallel advisory
+    // rules prompt double-injected the same facts and drifted from the
+    // skill versions. The rules store still runs for outcome attribution.
 
     const fullPrompt = `
 ${baseInjection}
@@ -1138,7 +1132,7 @@ ${calibrationInjection}
 
 ${sessionInjection}
 
-${learningRulesInjection}
+
 
 ${validationInjection}
 
