@@ -1272,7 +1272,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             const lossPrimingRows = loggedTrades
                 .filter(t => (t.outcome === 'WIN' || t.outcome === 'LOSS')
                     && (!detectedLearningCoin || t.analysis?.coinName?.toLowerCase() === detectedLearningCoin.toLowerCase())
-                    && (!pendingDirection || t.analysis?.direction === pendingDirection))
+                    && (pendingDirection === 'Neutral' || t.analysis?.direction === pendingDirection))
                 .sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''))
                 .slice(0, 6)
                 .map(t => {

@@ -127,6 +127,35 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
     const skillReview = useMemo(() => reviewSkillEffectiveness(), [notebook]);
     const calibrationSummaries = useMemo(() => getCalibrationSummaries().filter(c => c.samples > 0), []);
 
+    // Conviction auction history: scan stored debate transcripts for each
+    // seat's sealed CONVICTION lines and average them.
+    const convictionSummaries = useMemo(() => {
+        const bySeat = new Map<string, { total: number; count: number; last: number }>();
+        for (const trade of trades) {
+            const turns = trade.debateTurns;
+            if (!Array.isArray(turns)) continue;
+            const seen = new Set<string>();
+            for (const t of turns) {
+                if (t.speaker === 'Moderator' || t.speaker === 'System' || seen.has(t.speaker)) continue;
+                const m = t.text.match(/CONVICTION:\s*(\d{1,3})/i);
+                if (!m) continue;
+                seen.add(t.speaker);
+                const v = Math.min(100, Math.max(0, parseInt(m[1], 10)));
+                const cur = bySeat.get(t.speaker) ?? { total: 0, count: 0, last: v };
+                cur.total += v;
+                cur.count += 1;
+                cur.last = v;
+                bySeat.set(t.speaker, cur);
+            }
+        }
+        return [...bySeat.entries()].map(([name, s]) => ({
+            name,
+            avgConviction: s.total / Math.max(s.count, 1),
+            debateCount: s.count,
+            lastValue: s.last,
+        })).sort((a, b) => b.avgConviction - a.avgConviction);
+    }, [trades]);
+
     // Write-approval gate: opt-in trust gate for auto-learned rules.
     const [writeApproval, setWriteApproval] = useState<boolean>(false);
     const [pendingRules, setPendingRules] = useState<PendingRuleItem[]>([]);
@@ -807,6 +836,20 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
                                     : 'text-zinc-500',
                     }))}
                     emptyText="Close trades to measure whether model confidence means anything — lower Brier = better calibrated (chance ≈ 0.25)"
+                />
+                <StatCard
+                    title="Conviction auction"
+                    items={convictionSummaries.slice(0, 6).map(c => ({
+                        name: c.name,
+                        value: `${c.avgConviction.toFixed(0)}/100`,
+                        subtext: `avg sealed conviction · ${c.debateCount} debate${c.debateCount === 1 ? '' : 's'} · last ${c.lastValue}`,
+                        color: c.avgConviction >= 70
+                            ? 'text-emerald-400'
+                            : c.avgConviction >= 45
+                                ? 'text-zinc-300'
+                                : 'text-yellow-500',
+                    }))}
+                    emptyText="Run debates to see each seat's average sealed conviction (0-100)"
                 />
             </div>
 

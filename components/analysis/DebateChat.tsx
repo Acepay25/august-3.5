@@ -127,6 +127,25 @@ const StreamedTurnBody: React.FC<{ text: string; live: boolean }> = ({ text, liv
     return <MarkdownContent content={shown} className="text-sm leading-6 text-zinc-200" />;
 };
 
+/**
+ * Debate-flow upgrade badges (devil's advocate / evidence round / sealed
+ * conviction). Derived from turn text — no schema change needed.
+ */
+const DEVIL_BADGE = 'Devil’s advocate';
+const EVIDENCE_BADGE = 'Evidence round';
+
+const extractConviction = (text: string): number | null => {
+    const m = text.match(/CONVICTION:\s*(\d{1,3})/i);
+    if (!m) return null;
+    return Math.min(100, Math.max(0, parseInt(m[1], 10)));
+};
+
+const isDevilTurn = (text: string): boolean =>
+    /contra position|strongest honest case against/i.test(text);
+
+const isEvidenceTurn = (text: string): boolean =>
+    /evidence round|concrete data point already on the table/i.test(text);
+
 interface DebateTurnRowProps {
     turn: DebateTurn;
     showPhase: boolean;
@@ -219,6 +238,28 @@ const DebateTurnRow = React.memo(function DebateTurnRow({
                                 <span className="shrink-0 text-[10px] text-zinc-600">Done</span>
                             ) : null}
                         </div>
+                        {(isDevilTurn(body) || isEvidenceTurn(body) || extractConviction(body) !== null) && !streaming && (
+                            <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                                {isDevilTurn(body) && (
+                                    <span className="rounded-md border border-white/15 bg-zinc-900 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
+                                        {DEVIL_BADGE}
+                                    </span>
+                                )}
+                                {isEvidenceTurn(body) && (
+                                    <span className="rounded-md border border-white/15 bg-zinc-900 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
+                                        {EVIDENCE_BADGE}
+                                    </span>
+                                )}
+                                {extractConviction(body) !== null && (
+                                    <span
+                                        className="rounded-md border border-white/15 bg-zinc-800 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-zinc-200"
+                                        title="Sealed conviction — visible to the Moderator only during the debate"
+                                    >
+                                        Conviction {extractConviction(body)}/100
+                                    </span>
+                                )}
+                            </div>
+                        )}
                         {segmentIndex === 0 && turnReasoning && (
                             <TurnThinking content={turnReasoning} streaming={streaming} />
                         )}
