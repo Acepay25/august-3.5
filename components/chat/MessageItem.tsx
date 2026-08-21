@@ -95,6 +95,8 @@ export interface ChatContextProps {
     latestMessageId?: string | null;
     lensConfig?: AnalystLensConfig;
     priorAnalysisById?: Record<string, TradeAnalysis>;
+    /** id of the user message immediately before each message (thread "You" bubble). */
+    priorUserMessageById?: Record<string, Pick<Message, 'text' | 'createdAt'>>;
 }
 
 const SmoothText: React.FC<{ text: string; animate: boolean }> = ({ text, animate }) => {
@@ -362,6 +364,8 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     liveToolEvents={message.liveToolEvents}
                                     reasoningProcesses={message.reasoningProcesses}
                                     runStats={message.runStats}
+                                    userPrompt={context.priorUserMessageById?.[message.id] ?? null}
+                                    onReplyInThread={context.onFollowUpTicket ? (text) => context.onFollowUpTicket!(message.id, text) : undefined}
                                 />
                             )}
 
