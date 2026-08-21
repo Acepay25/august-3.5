@@ -427,6 +427,14 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     )}
                                 </div>
                             )}
+                            {/* Pre-skeleton gap: the debate is live and no plan
+                                field has landed yet — show an empty skeleton
+                                card so the verdict area doesn't pop in later. */}
+                            {isEnsembleMessage && !message.analysis && message.isDebating && !message.provisionalAnalysis && !message.provisionalPlanFields && (
+                                <div className="mb-4">
+                                    <VerdictSkeletonCard fields={{}} />
+                                </div>
+                            )}
 
                             {liveMarketJson && (
                                 <div className="mb-4 sm:mb-6">
