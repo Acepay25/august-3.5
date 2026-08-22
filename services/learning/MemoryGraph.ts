@@ -9,7 +9,7 @@
  * notebook file that shares a keyword.
  */
 
-import { LoggedTrade, LearningRule, MemoryFile, RootCauseClass } from '../../types';
+import { LoggedTrade, MemoryFile, RootCauseClass } from '../../types';
 import { getMemoryFiles } from './MemoryFilesService';
 import { isSkillFile, parseSkillMarkdown, skillMatchesSetup, SkillMeta } from './SkillMemoryService';
 import { shouldAdmitTechnicalStrategyRule, rootCauseForTrade } from '../../utils/rootCause';
@@ -291,9 +291,4 @@ export const walkMemoryNeighbors = (
     return [...hits.values()].sort((a, b) => b.score - a.score);
 };
 
-/**
- * DEPRECATED (ROUND-25): rules are no longer injected or graph-walked.
- * Returns [] — kept only so any lingering import compiles. Lessons live in
- * skills (see SkillMemoryService).
- */
-export const matchingLearningRules = (_query?: MemoryRetrievalQuery, _maxRules = 4): LearningRule[] => [];
+
