@@ -8,6 +8,7 @@ import { summarizeSimilarSetups, COLD_START_MIN } from '../../services/learning/
 import { computeEvidenceQualityStats } from '../../utils/analysisQuality';
 import { summarizePromptVersions, summarizePromptLanes } from '../../utils/promptVersionStats';
 import { listSkills, reviewSkillEffectiveness } from '../../services/learning/SkillMemoryService';
+import { computeAllSkillLifts } from '../../services/learning/MemoryProvenanceService';
 import { getCalibrationSummaries } from '../../services/backtesting/ModelPerformanceService';
 import { buildMemoryGraph } from '../../services/learning/MemoryGraph';
 import { EmptyState } from '../ui/EmptyState';
@@ -118,6 +119,7 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
     const promptLanes = useMemo(() => summarizePromptLanes(closedWindowed), [closedWindowed]);
     const notebookSkills = useMemo(() => listSkills(), [notebook]);
     const skillReview = useMemo(() => reviewSkillEffectiveness(), [notebook]);
+    const skillLifts = useMemo(() => computeAllSkillLifts(trades), [trades]);
     const calibrationSummaries = useMemo(() => getCalibrationSummaries().filter(c => c.samples > 0), []);
 
     // Conviction auction history: scan stored debate transcripts for each
@@ -689,17 +691,22 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
                     title="Skills"
                     items={notebookSkills.slice(0, 6).map(({ meta, file }) => {
                         const review = skillReview.find(r => r.fileId === file.id);
+                        const lift = skillLifts.find(l => l.fileId === file.id);
+                        const liftPct = lift?.lift != null ? Math.round(lift.lift * 100) : null;
                         return {
                             name: file.name.replace(/\.md$/i, ''),
                             value: meta.wins + meta.losses > 0
                                 ? `${Math.round((meta.wins / (meta.wins + meta.losses)) * 100)}%`
                                 : meta.status,
-                            subtext: review
-                                ? `${review.recommendation.toUpperCase()} · ${meta.kind} · ${meta.wins}/${meta.losses}`
-                                : `${meta.kind} · ${meta.wins}/${meta.losses}${meta.ifCondition ? ` · IF ${meta.ifCondition.slice(0, 28)}` : ''}`,
-                            color: review?.recommendation === 'retire' || review?.recommendation === 'demote'
+                            subtext: [
+                                review ? review.recommendation.toUpperCase() : meta.kind,
+                                `${meta.wins}/${meta.losses}`,
+                                meta.evalVerdict ? `eval:${meta.evalVerdict}` : null,
+                                liftPct !== null ? `lift ${liftPct > 0 ? '+' : ''}${liftPct}pp` : null,
+                            ].filter(Boolean).join(' · '),
+                            color: review?.recommendation === 'retire' || review?.recommendation === 'demote' || meta.evalVerdict === 'hurts' || (lift?.verdict === 'negative')
                                 ? 'text-red-400'
-                                : review?.recommendation === 'promote'
+                                : review?.recommendation === 'promote' || lift?.verdict === 'positive'
                                     ? 'text-emerald-400'
                                     : 'text-white',
                         };

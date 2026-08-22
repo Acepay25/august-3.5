@@ -8,7 +8,7 @@ import MarkdownContent from '../shared/MarkdownContent';
 import { FileTextIcon, ChevronRightIcon, ChevronLeftIcon, FolderIcon } from '../shared/Icons';
 import { Sparkles, Loader2 } from 'lucide-react';
 import { runNotebookReview } from '../../services/learning/MemoryReviewService';
-import { listSkills, setSkillStatus, SkillMeta } from '../../services/learning/SkillMemoryService';
+import { listSkills, setSkillStatus, SkillMeta, parseSkillMarkdown, serializeSkill, titleFromMeta} from '../../services/learning/SkillMemoryService';
 import {
     initMemoryFiles,
     getMemoryFiles,
@@ -437,11 +437,32 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                             </button>
                         </div>
                     </div>
-                    <p className="text-sm text-zinc-500 mb-8">
-                        {folders.find(f => f.id === selectedFile.folderId)?.name ?? selectedFile.folderId}
-                        {selectedFile.autoManaged ? ' · auto-maintained' : ''}
-                        {' · '}{draft.length.toLocaleString()} chars
-                    </p>
+                    <div className="flex items-center justify-between gap-3 mb-8 flex-wrap">
+                        <p className="text-sm text-zinc-500">
+                            {folders.find(f => f.id === selectedFile.folderId)?.name ?? selectedFile.folderId}
+                            {selectedFile.autoManaged ? ' · auto-maintained' : ''}
+                            {' · '}{draft.length.toLocaleString()} chars
+                        </p>
+                        {selectedFolder?.name === 'skills' && (
+                            <button
+                                type="button"
+                                title="Which debate audience may load this skill"
+                                onClick={() => {
+                                    const meta = parseSkillMarkdown(draft);
+                                    if (!meta) return;
+                                    const order: Array<'all' | 'analyst' | 'moderator'> = ['all', 'analyst', 'moderator'];
+                                    const next = order[(order.indexOf(meta.audience ?? 'all') + 1) % order.length];
+                                    const updated = { ...meta, audience: next, modifiedAt: new Date().toISOString() };
+                                    const serialized = serializeSkill(updated, titleFromMeta(updated));
+                                    setDraft(serialized);
+                                    setIsDirty(true);
+                                }}
+                                className="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider border transition-colors bg-zinc-900 border-white/10 text-zinc-400 hover:text-zinc-100"
+                            >
+                                audience: {(parseSkillMarkdown(draft)?.audience ?? 'all')}
+                            </button>
+                        )}
+                    </div>
                     <div className="flex-1 min-h-[320px] rounded-xl border border-zinc-800 bg-zinc-900 overflow-hidden flex flex-col">
                         {isPreview ? (
                             <div className="flex-1 overflow-y-auto custom-scrollbar px-8 py-8 lg:px-10 lg:py-10">
