@@ -28,6 +28,7 @@ import { DUAL_SCENARIO_JSON_SCHEMA, MASTER_TRADE_PLAN_MARKDOWN } from '../../con
 import { parseLiveMarketData } from '../../utils/liveMarketParser';
 import { truncateTextToTokens, parsePrice, parseMarkdownTradePlan } from '../../utils/analysisUtils';
 import { extractDebateLevels, formatDebateLevelsTable, summarizeFinalPositions } from '../../utils/debateLevels';
+import { getCalibrationSummaries } from '../../services/backtesting/ModelPerformanceService';
 import { stripLeakedScratchpad } from '../../utils/thinkingSplit';
 import { buildRebuttalDiffPacket } from '../../utils/debateDiff';
 import { compactDebateEpisode } from '../../utils/debateEpisodes';
@@ -2503,6 +2504,65 @@ export const buildConvictionAuctionBlock = (roundTexts: Record<string, string[]>
 };
 
 /**
+ * Seat-trust weighting (ROUND-26): the moderator sees each seat's historical
+ * calibration (Brier score, overconfidence gap) and its average sealed
+ * conviction from stored debates. Seats with proven track records get
+ * explicitly flagged as more trustworthy; overconfident seats get a
+ * discount instruction. Data comes from the trade log — no new plumbing.
+ */
+export const buildSeatTrustBlock = (
+    names: string[],
+    providerIdBySeat: Record<string, string | undefined>,
+    trades?: { debateTurns?: { speaker: string; text: string }[]; moderatorProvider?: string }[],
+): string => {
+    let calibrations: ReturnType<typeof getCalibrationSummaries> = [];
+    try {
+        calibrations = getCalibrationSummaries();
+    } catch {
+        return '';
+    }
+    if (calibrations.length === 0) return '';
+
+    // Average sealed conviction per seat from stored debate transcripts.
+    const conv = new Map<string, { total: number; count: number }>();
+    for (const t of trades ?? []) {
+        for (const turn of t.debateTurns ?? []) {
+            if (turn.speaker === 'Moderator' || turn.speaker === 'System') continue;
+            const m = turn.text.match(/CONVICTION:\s*(\d{1,3})/i);
+            if (!m) continue;
+            const v = Math.min(100, Math.max(0, parseInt(m[1], 10)));
+            const cur = conv.get(turn.speaker) ?? { total: 0, count: 0 };
+            cur.total += v;
+            cur.count += 1;
+            conv.set(turn.speaker, cur);
+        }
+    }
+
+    const rows: string[] = [];
+    for (const name of names) {
+        const providerId = providerIdBySeat[name];
+        const cal = calibrations.find(c => c.provider === providerId || c.provider === name);
+        const c = conv.get(name);
+        const bits: string[] = [];
+        if (cal && cal.samples > 0) {
+            bits.push(`Brier ${cal.brierScore !== null ? cal.brierScore.toFixed(3) : 'n/a'} over ${cal.samples} trades (${cal.verdict}${cal.highGap !== null ? `, High gap ${cal.highGap > 0 ? '+' : ''}${cal.highGap.toFixed(0)}%` : ''})`);
+        }
+        if (c && c.count > 0) {
+            bits.push(`avg sealed conviction ${Math.round(c.total / c.count)}/100 across ${c.count} debates`);
+        }
+        if (bits.length === 0) continue;
+        rows.push(`- ${name}: ${bits.join(' · ')}`);
+    }
+    if (rows.length === 0) return '';
+
+    return [
+        '**SEAT TRUST RECORD (historical calibration — weight accordingly):**',
+        ...rows,
+        'Seats with low Brier scores and calibrated verdicts have earned more weight; overconfident seats (large positive High gap) should be discounted when they dissent from better-calibrated peers.',
+    ].join('\n');
+};
+
+/**
  * Loss priming (B4): surface this setup's historical failures as a
  * first-person recollection so analysts argue from remembered losses instead
  * of discovering them at verdict time. Returns '' when there are no similar
@@ -3555,6 +3615,10 @@ export const conductRealDebate = async function* (
         effectiveTradingStyle as 'swing' | 'scalp'
     );
 
+    // Seat-trust weighting (ROUND-26): historical calibration per seat.
+    const providerIdBySeat: Record<string, string | undefined> = {};
+    for (const seat of debateRoster) providerIdBySeat[seat.provider.name] = seat.provider.config.id;
+
     const moderatorPrompt = [
         getPrompt('debate.final_verdict', MODERATOR_FINAL_VERDICT_PROMPT).replace('{{ANALYSTS}}', names.join(', ')),
         `\n\n**THE DEBATE TRANSCRIPT (EPISODES):**\n${transcriptBlock}`,
@@ -3562,6 +3626,7 @@ export const conductRealDebate = async function* (
         // the moderator sees where each seat LANDED, not just the openings.
         `\n\n${summarizeFinalPositions(roundTexts, names).block}`,
         buildConvictionAuctionBlock(roundTexts, names, lastRebuttalRound) ? `\n\n${buildConvictionAuctionBlock(roundTexts, names, lastRebuttalRound)}` : '',
+        buildSeatTrustBlock(names, providerIdBySeat, fullTradesForRecall as never) ? `\n\n${buildSeatTrustBlock(names, providerIdBySeat, fullTradesForRecall as never)}` : '',
         `\n\n**TRADING REQUEST:**\n${truncateTextToTokens(userPrompt, 350)}`,
         steerVerdict ? `\n\n**USER STEERING (queued mid-debate — follow this):**\n${steerVerdict}` : '',
         marketDataOverride,

@@ -176,8 +176,12 @@ const matchedSkillBlock = (
         .filter(Boolean).join(' ');
     const body = substituteSkillContext(match.file.content.trim(), query);
     const capped = body.length > SKILL_BLOCK_MAX ? `${body.slice(0, SKILL_BLOCK_MAX).trimEnd()}\n…` : body;
+    // Provenance (ROUND-26): how many logged trades shaped this rule.
+    const provenance = match.meta.tradeIds.length > 0
+        ? `learned from ${match.meta.tradeIds.length} logged trade(s)`
+        : '';
     return {
-        text: `${header}\n${evidenceFreshness(match.meta)}\n${titleBits}\n${capped}`,
+        text: `${header}\n${[evidenceFreshness(match.meta), provenance].filter(Boolean).join(' · ')}\n${titleBits}\n${capped}`,
         meta: match.meta,
         name: match.file.name,
     };

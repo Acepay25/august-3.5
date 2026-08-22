@@ -207,7 +207,13 @@ export const buildMemoryGraph = (
             regime: query.regime as 'trending' | 'ranging' | 'volatile' | 'compression' | undefined,
         }, trades).slice(0, 5);
         for (const row of similar) {
-            addEdge(graph, { from: setupId, to: `trade:${row.tradeId}`, kind: 'similarTo', weight: row.similarity / 100 });
+            // Edge decay (ROUND-26): older associations weigh less — a 90-day-old
+            // trade keeps at most ~50% of its similarity influence, a year old
+            // nearly none. Stale associations stop surfacing without deletion.
+            const t = trades.find(x => x.id === row.tradeId);
+            const ageDays = t?.timestamp ? Math.max(0, (Date.now() - Date.parse(t.timestamp)) / 86_400_000) : 0;
+            const decay = Math.exp(-ageDays / 120); // 120-day half-life-ish
+            addEdge(graph, { from: setupId, to: `trade:${row.tradeId}`, kind: 'similarTo', weight: (row.similarity / 100) * decay });
         }
     }
 
