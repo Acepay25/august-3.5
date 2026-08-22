@@ -45,6 +45,8 @@ const DOCTRINE_SLOT_CHARS = 800;
 const SKILL_BLOCK_MAX = 400;
 const RISK_RULES_MAX = 300;
 const MISTAKE_LINE_MAX = 200;
+/** Extra matched skills surfaced as index lines at verdict depth (on top of #1). */
+const VERDICT_EXTRA_SKILLS = 2;
 
 export interface RetrievedMemorySource {
     path: string;
@@ -67,9 +69,12 @@ const kindForHit = (hit: WalkedMemoryHit): RetrievedMemorySource['kind'] => {
     return 'playbook';
 };
 
-/** Best matching enabled skill for this setup, ranked: confirmed first, then sample size. */
-const bestMatchedSkill = (query?: MemoryRetrievalQuery): { file: ReturnType<typeof getMemoryFiles>['files'][number]; meta: SkillMeta } | null => {
-    if (!query) return null;
+/** Enabled, non-retired skills matching this setup, ranked: confirmed first, then sample size. */
+const rankedMatchedSkills = (
+    query?: MemoryRetrievalQuery,
+    audience?: 'analyst' | 'moderator',
+): Array<{ file: ReturnType<typeof getMemoryFiles>['files'][number]; meta: SkillMeta }> => {
+    if (!query) return [];
     const setup = {
         coin: query.coin,
         direction: query.direction === 'Long' || query.direction === 'Short' ? query.direction : undefined,
@@ -77,24 +82,30 @@ const bestMatchedSkill = (query?: MemoryRetrievalQuery): { file: ReturnType<type
         pattern: query.pattern,
         regime: typeof query.regime === 'string' ? query.regime : undefined,
     };
-    const audience = (query as MemoryRetrievalQuery & { _audience?: 'analyst' | 'moderator' })._audience;
-    void audience; // audience filtering happens in matchedSkillBlock
     const candidates: Array<{ file: ReturnType<typeof getMemoryFiles>['files'][number]; meta: SkillMeta }> = [];
     for (const file of getMemoryFiles().files) {
         if (!file.enabled || !isSkillFile(file)) continue;
         const meta = parseSkillMarkdown(file.content);
         if (!meta || meta.status === 'retired') continue;
         if (!skillMatchesSetup(meta, setup)) continue;
+        // Audience filtering happens BEFORE ranking (#4 invocation control): a
+        // blocked best-match must surface the second-best skill, not an empty slot.
+        if (audience && !skillAllowedFor(meta, audience)) continue;
         candidates.push({ file, meta });
     }
-    if (candidates.length === 0) return null;
     candidates.sort((a, b) => {
         const statusRank = (s: SkillMeta['status']): number => (s === 'confirmed' ? 2 : s === 'candidate' ? 1 : 0);
         const sample = (m: SkillMeta): number => m.wins + m.losses;
         return statusRank(b.meta.status) - statusRank(a.meta.status) || sample(b.meta) - sample(a.meta);
     });
-    return candidates[0];
+    return candidates;
 };
+
+const bestMatchedSkill = (
+    query?: MemoryRetrievalQuery,
+    audience?: 'analyst' | 'moderator',
+): { file: ReturnType<typeof getMemoryFiles>['files'][number]; meta: SkillMeta } | null =>
+    rankedMatchedSkills(query, audience)[0] ?? null;
 
 /**
  * Doctrine block — the ONE narrative voice, fixed slot on every stage.
@@ -114,7 +125,7 @@ const doctrineBlock = (): string => {
 
 /** The single best-matched skill body, capped. */
 /** Human-readable evidence freshness for a skill (Claude Code 'modified' pattern). */
-const evidenceFreshness = (meta: SkillMeta): string => {
+export const evidenceFreshness = (meta: SkillMeta): string => {
     if (!meta.lastEvidenceAt) return 'no counted evidence yet';
     const t = Date.parse(meta.lastEvidenceAt);
     if (!Number.isFinite(t)) return 'no counted evidence yet';
@@ -142,7 +153,7 @@ const skillAllowedFor = (meta: SkillMeta, audience: 'analyst' | 'moderator'): bo
  * ${REGIME} / ${DIRECTION}; substituted with the live setup at assembly
  * time so the model reads facts, not placeholders.
  */
-const substituteSkillContext = (text: string, query?: MemoryRetrievalQuery): string =>
+export const substituteSkillContext = (text: string, query?: MemoryRetrievalQuery): string =>
     text
         .replace(/\$\{SYMBOL\}/g, (query?.coin ?? 'this coin').toUpperCase())
         .replace(/\$\{REGIME\}/g, (typeof query?.regime === 'string' && query.regime) || 'the current regime')
@@ -153,7 +164,7 @@ const skillIndexLine = (name: string, meta: SkillMeta): string => {
     const rule = meta.ifCondition
         ? `IF ${meta.ifCondition} THEN ${meta.thenAction}`
         : meta.body.split('\n').find(l => l.trim())?.replace(/^#+\s*/, '').slice(0, 100) || name;
-    return `${meta.kind === 'avoid' ? 'AVOID' : 'REPEAT'} [${meta.status} · ${meta.wins}W/${meta.losses}L · ${evidenceFreshness(meta)}] ${rule}`;
+    return `${meta.kind === 'avoid' ? 'AVOID' : 'REPEAT'} [${meta.status} · ${Math.round(meta.wins)}W/${Math.round(meta.losses)}L · ${evidenceFreshness(meta)}] ${rule}`;
 };
 
 /**
@@ -165,10 +176,9 @@ const matchedSkillBlock = (
     audience: 'analyst' | 'moderator' = 'analyst',
     stage: MemoryStage = 'opening',
 ): { text: string; meta: SkillMeta | null; name: string } => {
-    const match = bestMatchedSkill(query);
+    const match = bestMatchedSkill(query, audience);
     if (!match) return { text: '', meta: null, name: '' };
-    if (!skillAllowedFor(match.meta, audience)) return { text: '', meta: null, name: '' };
-    const header = `[skills/${match.file.name} · ${match.meta.status} · ${match.meta.wins}W/${match.meta.losses}L]`;
+    const header = `[skills/${match.file.name} · ${match.meta.status} · ${Math.round(match.meta.wins)}W/${Math.round(match.meta.losses)}L]`;
     if (stage !== 'verdict') {
         return { text: `${header}\n${skillIndexLine(match.file.name, match.meta)}`, meta: match.meta, name: match.file.name };
     }
@@ -248,6 +258,34 @@ const uncoveredMistakeLine = (query?: MemoryRetrievalQuery): string => {
     return cap(`[rules/recurring-mistakes.md]\n${line.trim()}`, MISTAKE_LINE_MAX);
 };
 
+/**
+ * Avoid-vs-repeat conflict flag: when BOTH kinds of enabled skill match this
+ * exact setup, say so instead of silently letting sample size pick a winner.
+ * One line, verdict-stage only — where the full bodies are actually shown.
+ */
+const conflictNote = (query?: MemoryRetrievalQuery): string => {
+    if (!query) return '';
+    const setup = {
+        coin: query.coin,
+        direction: query.direction === 'Long' || query.direction === 'Short' ? query.direction : undefined,
+        family: query.family,
+        pattern: query.pattern,
+        regime: typeof query.regime === 'string' ? query.regime : undefined,
+    };
+    let avoid = false;
+    let repeat = false;
+    for (const file of getMemoryFiles().files) {
+        if (!file.enabled || !isSkillFile(file)) continue;
+        const meta = parseSkillMarkdown(file.content);
+        if (!meta || meta.status === 'retired') continue;
+        if (!skillMatchesSetup(meta, setup)) continue;
+        if (meta.kind === 'avoid') avoid = true; else repeat = true;
+        if (avoid && repeat) break;
+    }
+    if (!(avoid && repeat)) return '';
+    return '[notebook conflict] Both an AVOID and a REPEAT skill match this setup and they disagree — resolve against doctrine and evidence freshness rather than habit.';
+};
+
 /** Similar closed trades — verdict-stage history (and the recall tool). */
 const similarTradesBlock = (query: MemoryRetrievalQuery | undefined, trades?: LoggedTrade[]): string => {
     if (!trades || trades.length === 0 || !query) return '';
@@ -298,26 +336,60 @@ export const getMemoryFilesContext = (
     audience: 'analyst' | 'moderator' = 'analyst',
     stage: MemoryStage = 'opening',
 ): string => {
-    void audience;
     const budget = STAGE_BUDGET_CHARS[stage];
     const blocks: string[] = [];
+    /** What ACTUALLY made it into the prompt — recorded for attribution. */
+    const injected: Array<{ path: string; kind: string }> = [];
     let used = 0;
 
-    const push = (block: string): void => {
-        if (!block || used >= budget) return;
+    const push = (block: string): boolean => {
+        if (!block || used >= budget) return false;
         const room = budget - used;
         blocks.push(cap(block, room));
         used += Math.min(block.length, room);
+        return true;
     };
 
-    push(identityBlock());
-    push(matchedSkillBlock(query, audience, stage).text);
-    push(riskRulesBlock());
-    push(uncoveredMistakeLine(query));
-    if (stage === 'verdict') push(similarTradesBlock(query, trades));
+    if (push(identityBlock())) injected.push({ path: 'profile/memory', kind: 'identity' });
+    if (stage === 'verdict') push(conflictNote(query)); // a flag, not a notebook source
+    const primary = matchedSkillBlock(query, audience, stage);
+    if (push(primary.text) && primary.meta) injected.push({ path: `skills/${primary.name}`, kind: 'skill' });
+    if (stage === 'verdict') {
+        // Top-K (ROUND-26): verdict depth surfaces the runners-up as index
+        // lines — one matching skill is a coincidence, two a pattern.
+        const ranked = rankedMatchedSkills(query);
+        for (const extra of ranked.slice(1, 1 + VERDICT_EXTRA_SKILLS)) {
+            if (push(`[skills/${extra.file.name}] ${skillIndexLine(extra.file.name, extra.meta)}`)) {
+                injected.push({ path: `skills/${extra.file.name}`, kind: 'skill' });
+            }
+        }
+    }
+    if (push(riskRulesBlock())) injected.push({ path: 'rules/risk-rules', kind: 'rules' });
+    if (push(uncoveredMistakeLine(query))) injected.push({ path: 'rules/recurring-mistakes', kind: 'rules' });
+    if (stage === 'verdict' && push(similarTradesBlock(query, trades))) {
+        injected.push({ path: 'journal/similar-trades', kind: 'similar' });
+    }
 
     const doctrine = doctrineBlock();
     if (blocks.length === 0 && !doctrine) return '';
+    if (doctrine) injected.unshift({ path: 'profile/doctrine', kind: 'identity' });
+
+    // Telemetry (fire-and-forget): record what was REALLY injected so skill
+    // evidence, lift and the dashboard reflect injections, not setup matches.
+    if (injected.length > 0) {
+        void (async () => {
+            try {
+                const { recordMemoryInjection } = await import('./MemoryInjectionService');
+                const { getActiveUsername } = await import('../../utils/activeUser');
+                await recordMemoryInjection(getActiveUsername(), {
+                    stage,
+                    audience,
+                    coin: query?.coin,
+                    sources: injected,
+                });
+            } catch { /* telemetry must never break prompt assembly */ }
+        })();
+    }
 
     const parts: string[] = [];
     if (doctrine) parts.push(doctrine);
@@ -365,15 +437,20 @@ export const handleRecallTool = (
 
     const sections: string[] = [];
 
-    const skillMatch = bestMatchedSkill(query);
-    if (skillMatch) {
-        // recall = pull tier: full procedure body with live substitutions.
-        const body = substituteSkillContext(skillMatch.file.content.trim(), query);
-        const capped = body.length > 700 ? `${body.slice(0, 700).trimEnd()}\n…` : body;
-        sections.push(
-            `SKILL ${skillMatch.meta.status.toUpperCase()} (${skillMatch.meta.wins}W/${skillMatch.meta.losses}L · ${evidenceFreshness(skillMatch.meta)}):\n${capped}`
-        );
-    }
+    // Pull tier: #1 gets the full body; runners-up appear as one-line index
+    // entries so the model knows they exist and can ask again specifically.
+    const matches = rankedMatchedSkills(query).slice(0, 1 + VERDICT_EXTRA_SKILLS);
+    matches.forEach((m, i) => {
+        if (i === 0) {
+            const body = substituteSkillContext(m.file.content.trim(), query);
+            const capped = body.length > 700 ? `${body.slice(0, 700).trimEnd()}\n…` : body;
+            sections.push(
+                `SKILL ${m.meta.status.toUpperCase()} (${Math.round(m.meta.wins)}W/${Math.round(m.meta.losses)}L · ${evidenceFreshness(m.meta)}):\n${capped}`
+            );
+        } else {
+            sections.push(`SKILL (also matches) ${skillIndexLine(m.file.name, m.meta)}`);
+        }
+    });
 
     const mistakes = uncoveredMistakeLine(query);
     if (mistakes) sections.push(mistakes.replace(/^\[[^\]]+\]\n/, ''));

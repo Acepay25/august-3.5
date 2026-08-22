@@ -7,12 +7,13 @@
  */
 
 import { extractDebateLevels } from './debateLevels';
+import { CLARIFICATION_MARKERS_RE } from '../constants/debateMarkers';
 
 const CLAIM_CHARS = 220;
 const MODERATOR_CHARS = 480;
 
 const stripMarkers = (text: string): string =>
-    text.replace(/<CLARIFICATION_(DONE|SATISFIED|UNSATISFIED)>/gi, '').trim();
+    text.replace(CLARIFICATION_MARKERS_RE, '').trim();
 
 const firstSentences = (text: string, maxChars: number): string => {
     const cleaned = text

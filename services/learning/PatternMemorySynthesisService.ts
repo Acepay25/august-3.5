@@ -8,6 +8,7 @@
 import { LoggedTrade, AIProvider } from '../../types';
 import { getPreferenceObject, setPreferenceObject, PREF_KEYS } from '../infrastructure/PreferencesService';
 import { parsePrice } from '../../utils/analysisUtils';
+import { familiesRelate } from '../../utils/patternMatch';
 // Cyclic-import note: InsightExtractionService imports several helpers from
 // this module. The cycle is safe — both sides only reference the other's
 // exports inside function bodies, never at module-evaluation time.
@@ -143,11 +144,10 @@ export function calculateSimilarity(setup: SetupContext, trade: LoggedTrade): nu
         }
     }
 
-    // Family match (very important)
+    // Family match (very important) — negation-aware: "fake-breakout" is the
+    // OPPOSITE of "breakout", so substring includes() would be a bug.
     if (setup.family && analysis?.detectedPatternFamily) {
-        const normSetup = setup.family.toLowerCase().replace(/\s/g, '');
-        const normTrade = analysis.detectedPatternFamily.toLowerCase().replace(/\s/g, '');
-        if (normSetup === normTrade || normTrade.includes(normSetup) || normSetup.includes(normTrade)) {
+        if (familiesRelate(setup.family, analysis.detectedPatternFamily)) {
             score += SIMILARITY_WEIGHTS.family;
         }
     }
@@ -158,7 +158,7 @@ export function calculateSimilarity(setup: SetupContext, trade: LoggedTrade): nu
         const normTrade = analysis.marketConditions.pattern.toLowerCase();
         if (normSetup === normTrade) {
             score += SIMILARITY_WEIGHTS.pattern;
-        } else if (normTrade.includes(normSetup) || normSetup.includes(normTrade)) {
+        } else if (familiesRelate(normSetup, normTrade)) {
             score += SIMILARITY_WEIGHTS.pattern * 0.5; // Partial match
         }
     }

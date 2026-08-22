@@ -15,9 +15,10 @@ import { LoggedTrade, TradeOutcome } from '../../types';
 import { ProviderConfig } from '../../types/provider';
 import {
     getMemoryFiles,
-    createMemoryFile,
-    updateMemoryFile,
-    ensureHarnessFolders,
+    createMemoryFileUnlocked,
+    updateMemoryFileUnlocked,
+    ensureHarnessFoldersUnlocked,
+    withNotebookWriteLock,
 } from './MemoryFilesService';
 import { sendChatTurn } from '../providers/GenericProviderService';
 
@@ -85,13 +86,13 @@ ${recent || '(no closed trades)'}
 Output ONLY the new doctrine markdown.`;
 };
 
-export const consolidateDoctrine = async (
+const consolidateDoctrineUnlocked = async (
     trades: LoggedTrade[],
     username: string,
     config: ProviderConfig,
 ): Promise<DoctrineResult> => {
     try {
-        await ensureHarnessFolders(username);
+        await ensureHarnessFoldersUnlocked(username);
         const { files, folders } = getMemoryFiles();
         const profileFolder = folders.find(f => f.name === 'profile');
         if (!profileFolder) return { updated: false, reason: 'profile folder missing' };
@@ -119,9 +120,9 @@ export const consolidateDoctrine = async (
 
         const stamped = `<!-- trades: ${countClosed(trades)} -->\n${text}`;
         if (existing) {
-            await updateMemoryFile(existing.id, { content: stamped }, username);
+            await updateMemoryFileUnlocked(existing.id, { content: stamped }, username);
         } else {
-            await createMemoryFile(profileFolder.id, DOCTRINE_FILE_NAME, stamped, username, true);
+            await createMemoryFileUnlocked(profileFolder.id, DOCTRINE_FILE_NAME, stamped, username, true);
         }
         return { updated: true };
     } catch (e) {
@@ -129,6 +130,14 @@ export const consolidateDoctrine = async (
         return { updated: false, reason: 'consolidation error' };
     }
 };
+
+/** Serialized public API — see withNotebookWriteLock in MemoryFilesService. */
+export const consolidateDoctrine = (
+    trades: LoggedTrade[],
+    username: string,
+    config: ProviderConfig,
+): Promise<DoctrineResult> =>
+    withNotebookWriteLock(() => consolidateDoctrineUnlocked(trades, username, config));
 
 /** Extract the doctrine body for prompt injection (front-matter stamp removed). */
 export const readDoctrineForInjection = (): string => {

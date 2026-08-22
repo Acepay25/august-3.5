@@ -220,11 +220,6 @@ export const buildMemoryGraph = (
     // Legacy IF/THEN rules are no longer graph nodes (ROUND-25): lessons
     // live in skills. The rules store remains read-only history for outcome
     // attribution only.
-    // Legacy IF/THEN rules are no longer graph nodes (ROUND-25): lessons
-    // live in skills. The rules store remains read-only history for outcome
-    // attribution only.
-
-
     return graph;
 };
 

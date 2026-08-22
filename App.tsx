@@ -73,7 +73,7 @@ import { recalculateAnalysisMetrics } from './utils/analysisUtils';
 import { parseAppHash, serializeAppHash } from './utils/appHash';
 import { collectWatchedSignals, toggleWatchOnMessage } from './utils/watchList';
 import { collectApprovalItems, setAutoJournalRule } from './utils/approvalInbox';
-import { takeSkillDraft } from './utils/skillDrafts';
+import { takeSkillDraft, tombstoneSkillDraftKey, draftTriggerKey } from './utils/skillDrafts';
 import { ingestCraftedSkill, ingestCraftedSkillFromDraft } from './services/learning/SkillMemoryService';
 import { buildRiskBook, formatRiskBookBadge } from './utils/riskBook';
 import { reconstructOpenings } from './utils/debateResume';
@@ -3369,7 +3369,16 @@ const App: React.FC = () => {
                     }}
                     onDeny={(item) => {
                         if (item.kind === 'skill') {
-                            takeSkillDraft(item.id, activeUsername || undefined);
+                            const draft = takeSkillDraft(item.id, activeUsername || undefined);
+                            if (draft) {
+                                // Rejected triggers stay quiet for the cooldown
+                                // instead of re-queuing on the next verdict.
+                                tombstoneSkillDraftKey(
+                                    draftTriggerKey(draft.coin, draft.crafted),
+                                    activeUsername || undefined,
+                                );
+                                toast.success('Skill discarded', 'Similar suggestions paused for 7 days');
+                            }
                             return;
                         }
                         handleDismissAutopilot(item.messageId);

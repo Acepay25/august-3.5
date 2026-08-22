@@ -9,7 +9,7 @@
 import { TradeAnalysis } from '../types';
 import { CraftedSkill } from '../schemas/learning';
 import { listSkills, skillMatchesSetup } from '../services/learning/SkillMemoryService';
-import { queueSkillDraft, SkillDraft } from './skillDrafts';
+import { queueSkillDraft, isDraftTombstoned, draftTriggerKey, SkillDraft } from './skillDrafts';
 
 const cleanLine = (text: string, max: number): string =>
     text.replace(/\s+/g, ' ').trim().slice(0, max);
@@ -78,6 +78,8 @@ export const maybeQueueVerdictSkillDraft = (
     };
     const alreadyKnown = listSkills().some(({ meta }) => skillMatchesSetup(meta, setup));
     if (alreadyKnown) return null;
+    // A recently rejected trigger stays quiet for the cooldown window.
+    if (isDraftTombstoned(draftTriggerKey(analysis.coinName, crafted), username)) return null;
     return queueSkillDraft({
         tradeId: messageId,
         coin: analysis.coinName,

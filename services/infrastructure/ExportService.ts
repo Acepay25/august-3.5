@@ -198,7 +198,7 @@ export const canShare = async (): Promise<boolean> => {
 };
 
 
-import { getPreferenceObject, setPreferenceObject, PREF_KEYS } from './PreferencesService';
+import { getAllKeys, getPreferenceObject, setPreferenceObject, PREF_KEYS } from './PreferencesService';
 import { ProviderConfig } from '../../types/provider';
 
 const redactPreferenceValue = (key: string, value: unknown): unknown => {
@@ -230,13 +230,23 @@ export const exportPreferencesData = async (): Promise<Record<string, any>> => {
         }
     }
 
-    // Per-user scoped keys (learning_rules_v2_<user>, attributed_insights_kb_<user>,
-    // global_learning_state_<user>, rl_signals_data) are NOT in PREF_KEYS —
-    // sweep every remaining localStorage key so backups/exports cover them
-    // too (F6: previously they were silently lost on WebView data clears).
+    // Per-user scoped keys (memory_files_v1_<user>, memory_injections_v1_<user>,
+    // learning_rules_v2_<user>, attributed_insights_kb_<user>,
+    // global_learning_state_<user>, rl_signals_data) are NOT in PREF_KEYS.
+    // Sweep BOTH sources: localStorage keys (web fallback) and the full
+    // Preferences key list via getAllKeys() — on native, Capacitor Preferences
+    // is NOT localStorage, so the notebook would silently vanish from backups
+    // without the abstraction-level sweep.
     try {
+        const swept = new Set<string>();
         for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
+            if (key) swept.add(key);
+        }
+        try {
+            for (const key of await getAllKeys()) swept.add(key);
+        } catch { /* abstraction listing unavailable — localStorage sweep still ran */ }
+        for (const key of swept) {
             if (!key || keysToBackup.includes(key)) continue;
             const value = await getPreferenceObject(key);
             if (value !== null) {

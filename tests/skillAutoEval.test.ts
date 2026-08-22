@@ -135,6 +135,108 @@ tradeIds: x,y
         expect(updated.status).not.toBe('confirmed');
     });
 
+    it('a hurts-demoted candidate becomes due for re-evaluation once the gates pass', async () => {
+        await initMemoryFiles('recover-user');
+        const skills = getMemoryFiles().folders.find(f => f.name === 'skills')!;
+        const lastEvalAt = new Date(Date.now() - 3 * 86_400_000).toISOString(); // cooldown (24h) passed
+        const file = await createMemoryFile(skills.id, 'btc-short-avoid.md', `---
+status: candidate
+kind: avoid
+coin: BTCUSDT
+direction: Short
+family: Family A
+wins: 1
+losses: 6
+ifCondition: BTC short setup in Family A
+thenAction: skip the short
+evalVerdict: hurts (0/2)
+lastEvalAt: ${lastEvalAt}
+tradeIds: a,b,c
+---
+
+# Avoid BTC short
+`, 'recover-user', true);
+        const meta = parseSkillMarkdown(file.content)!;
+        // 10 closed trades after lastEvalAt satisfy EVAL_MIN_TRADES_BETWEEN.
+        const tradeTime = new Date(Date.now() - 2 * 86_400_000).toISOString();
+        const trades = Array.from({ length: 10 }, (_, i) => makeTrade({ id: `r${i}`, timestamp: tradeTime }));
+        expect(isSkillDueForEval(meta, trades)).toBe(true);
+    });
+
+    it('a hurts-demoted candidate within the cooldown is not due', async () => {
+        await initMemoryFiles('recover-cooldown-user');
+        const skills = getMemoryFiles().folders.find(f => f.name === 'skills')!;
+        const lastEvalAt = new Date(Date.now() - 2 * 3_600_000).toISOString(); // 2h ago < 24h cooldown
+        const file = await createMemoryFile(skills.id, 'btc-short-avoid.md', `---
+status: candidate
+kind: avoid
+coin: BTCUSDT
+direction: Short
+family: Family A
+wins: 1
+losses: 6
+ifCondition: BTC short setup in Family A
+thenAction: skip the short
+evalVerdict: hurts (0/2)
+lastEvalAt: ${lastEvalAt}
+tradeIds: a,b,c
+---
+
+# Avoid BTC short
+`, 'recover-cooldown-user', true);
+        const meta = parseSkillMarkdown(file.content)!;
+        const tradeTime = new Date(Date.now() - 1 * 3_600_000).toISOString();
+        const trades = Array.from({ length: 10 }, (_, i) => makeTrade({ id: `c${i}`, timestamp: tradeTime }));
+        expect(isSkillDueForEval(meta, trades)).toBe(false);
+    });
+
+    it('a stale hurts verdict expires: healthy stats re-confirm on the next evidence pass', async () => {
+        await initMemoryFiles('stale-user');
+        const skills = getMemoryFiles().folders.find(f => f.name === 'skills')!;
+        // Healthy avoid skill (winRate 0.25 ≤ 0.4 → confirmed by outcomes alone).
+        const seed = async (username: string, lastEvalAt: string): Promise<string> => {
+            const file = await createMemoryFile(skills.id, `stale-${username}.md`, `---
+status: confirmed
+kind: avoid
+coin: BTCUSDT
+direction: Short
+family: Family A
+wins: 2
+losses: 6
+ifCondition: BTC short setup in Family A
+thenAction: skip the short
+evalVerdict: hurts (0/2)
+lastEvalAt: ${lastEvalAt}
+tradeIds: a,b,c
+---
+
+# Avoid BTC short
+`, username, true);
+            return file.id;
+        };
+
+        const { serializeSkill, titleFromMeta, applySkillEvidence } =
+            await import('../services/learning/SkillMemoryService');
+        const { updateMemoryFile } = await import('../services/learning/MemoryFilesService');
+        const win = makeTrade({ id: 'fresh-win', outcome: 'WIN' as never });
+
+        // Fresh verdict (2 days old): demotion still active.
+        await initMemoryFiles('stale-fresh');
+        const freshId = await seed('stale-fresh', new Date(Date.now() - 2 * 86_400_000).toISOString());
+        const freshMeta = parseSkillMarkdown(getMemoryFiles().files.find(f => f.id === freshId)!.content)!;
+        await updateMemoryFile(freshId, { content: serializeSkill(freshMeta, titleFromMeta(freshMeta)) }, 'stale-fresh');
+        await applySkillEvidence(win, 'stale-fresh', [win]);
+        expect(parseSkillMarkdown(getMemoryFiles().files.find(f => f.id === freshId)!.content)!.status).toBe('candidate');
+
+        // Stale verdict (40 days old): expired — outcomes alone decide, and they say confirmed.
+        await initMemoryFiles('stale-old');
+        const oldId = await seed('stale-old', new Date(Date.now() - 40 * 86_400_000).toISOString());
+        const oldMeta = parseSkillMarkdown(getMemoryFiles().files.find(f => f.id === oldId)!.content)!;
+        await updateMemoryFile(oldId, { content: serializeSkill(oldMeta, titleFromMeta(oldMeta)) }, 'stale-old');
+        await applySkillEvidence(win, 'stale-old', [win]);
+        expect(parseSkillMarkdown(getMemoryFiles().files.find(f => f.id === oldId)!.content)!.status).toBe('confirmed');
+    });
+
     it('evaluateSkill remains importable and pure (regression)', async () => {
         expect(typeof evaluateSkill).toBe('function');
     });

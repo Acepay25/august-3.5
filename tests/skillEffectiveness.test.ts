@@ -110,4 +110,73 @@ describe('reviewSkillEffectiveness', () => {
         expect(meta?.wins).toBe(3);
         expect(meta?.losses).toBe(1);
     });
+
+    it('a negative causal lift overrides a healthy correlation (keep → demote)', async () => {
+        await initMemoryFiles('review-lift');
+        const healthy = await skillFile(
+            'skill-healthy.md',
+            skillContent({ status: 'confirmed', kind: 'repeat', wins: 8, losses: 2 }),
+            'review-lift',
+        );
+        const review = reviewSkillEffectiveness({
+            liftByFileId: { [healthy.id]: { lift: -0.25, verdict: 'negative' } },
+        }).find(r => r.fileId === healthy.id);
+        expect(review?.recommendation).toBe('demote');
+        expect(review?.rationale).toContain('BELOW the pre-skill baseline');
+        await deleteMemoryFile(healthy.id, 'review-lift');
+    });
+
+    it('a fresh hurts eval overrides promote; positive lift upgrades watch → keep', async () => {
+        await initMemoryFiles('review-eval');
+        const promoted = await skillFile(
+            'skill-promote.md',
+            skillContent({
+                status: 'candidate', kind: 'repeat', wins: 6, losses: 1,
+                evalVerdict: 'hurts', evalDetail: '0/3', lastEvalAt: new Date().toISOString(),
+            }),
+            'review-eval',
+        );
+        const hurt = reviewSkillEffectiveness().find(r => r.fileId === promoted.id);
+        expect(hurt?.recommendation).toBe('watch');
+        expect(hurt?.rationale).toContain('HURTS decisions');
+        expect(hurt?.evalVerdict).toBe('hurts');
+
+        const watched = await skillFile(
+            'skill-watched.md',
+            skillContent({ status: 'confirmed', kind: 'repeat', wins: 3, losses: 3 }),
+            'review-eval',
+        );
+        const lifted = reviewSkillEffectiveness({
+            liftByFileId: { [watched.id]: { lift: 0.2, verdict: 'positive' } },
+        }).find(r => r.fileId === watched.id);
+        expect(lifted?.recommendation).toBe('keep');
+        expect(lifted?.liftVerdict).toBe('positive');
+        await deleteMemoryFile(promoted.id, 'review-eval');
+        await deleteMemoryFile(watched.id, 'review-eval');
+    });
+
+    it('never-injected skills get an attribution caveat and lose their promote', async () => {
+        await initMemoryFiles('review-injected');
+        const candidate = await skillFile(
+            'skill-candidate.md',
+            skillContent({ status: 'candidate', kind: 'repeat', wins: 6, losses: 1 }),
+            'review-injected',
+        );
+        const withTelemetry = reviewSkillEffectiveness({ injectedFileNames: new Set() })
+            .find(r => r.fileId === candidate.id);
+        expect(withTelemetry?.recommendation).toBe('watch');
+        expect(withTelemetry?.rationale).toContain('co-occurrence, not influence');
+
+        // Injected skills keep their promote under the same telemetry.
+        const injected = await skillFile(
+            'skill-injected.md',
+            skillContent({ status: 'candidate', kind: 'repeat', wins: 6, losses: 1 }),
+            'review-injected',
+        );
+        const ok = reviewSkillEffectiveness({ injectedFileNames: new Set(['skill-injected.md']) })
+            .find(r => r.fileId === injected.id);
+        expect(ok?.recommendation).toBe('promote');
+        await deleteMemoryFile(candidate.id, 'review-injected');
+        await deleteMemoryFile(injected.id, 'review-injected');
+    });
 });

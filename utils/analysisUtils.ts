@@ -11,6 +11,7 @@
 import { TradeAnalysis, ConfidenceCalibration, DebateTurn } from '../types';
 import { parseTradeAnalysis } from '../schemas/tradeAnalysis';
 import { FAMILY_UI_DATA } from '../constants/models';
+import { CLARIFICATION_MARKERS_RE, MODERATOR_RETRY_RE } from '../constants/debateMarkers';
 
 // Shared cleaners, re-exported for consumers (autopilot, metrics).
 export { cleanPriceField } from './sanitizers';
@@ -820,8 +821,8 @@ export const stripPlanTags = (text: string): string =>
         .replace(/<JSON_PLAN>[\s\S]*?<\/JSON_PLAN>/gi, '')
         .replace(/<\/?DEBATE_END>/gi, '')
         .replace(/<MODERATOR_ERROR>[\s\S]*?<\/MODERATOR_ERROR>/gi, '')
-        .replace(/<CLARIFICATION_[A-Z_]+>/gi, '')
-        .replace(/<MODERATOR_RETRY>/gi, '')
+        .replace(CLARIFICATION_MARKERS_RE, '')
+        .replace(MODERATOR_RETRY_RE, '')
         .trim();
 
 const CLARIFICATION_LABEL_RE = /\b(?:Macro(?:\s*(?:&?\s*Volatility)?)?|Technical|Risk(?:\s*(?:&?\s*Execution)?)?|Analyst\s+[A-C]|[A-Z][A-Za-z]+ Analyst)\s*:/g;

@@ -121,7 +121,7 @@ export const initMemoryFiles = async (username: string): Promise<void> => {
         const stored = await getPreferenceObject<MemoryFilesStore>(`${MEMORY_KEY_PREFIX}${username}`);
         if (stored && Array.isArray(stored.folders) && Array.isArray(stored.files)) {
             memoryCache = stored;
-            await ensureHarnessFolders(username);
+            await ensureHarnessFoldersUnlocked(username);
             return;
         }
         memoryCache = freshSeed();
@@ -138,7 +138,7 @@ export const initMemoryFiles = async (username: string): Promise<void> => {
 export const getMemoryFiles = (): MemoryFilesStore => memoryCache;
 
 /** Add any missing harness folders (skills, …) for notebooks created before they existed. */
-export const ensureHarnessFolders = async (username: string): Promise<void> => {
+export const ensureHarnessFoldersUnlocked = async (username: string): Promise<void> => {
     const names = new Set(memoryCache.folders.map(f => f.name));
     const looksLikeHarness = DEFAULT_FOLDERS.some(d => names.has(d.name));
     if (!looksLikeHarness) return;
@@ -152,17 +152,52 @@ export const ensureHarnessFolders = async (username: string): Promise<void> => {
     if (changed) await persist(username);
 };
 
+/** Serialized public API — see withNotebookWriteLock. */
+export const ensureHarnessFolders = (username: string): Promise<void> =>
+    withNotebookWriteLock(() => ensureHarnessFoldersUnlocked(username));
+
+/** Retired skills land here — out of every skill path (folder-based), kept for the record. */
+export const ARCHIVE_FOLDER_NAME = 'archive';
+
+/** Create/find skills/archive. Caller must hold the write lock (or be boot). */
+export const ensureSkillsArchiveFolderUnlocked = async (username: string): Promise<MemoryFolder | null> => {
+    const existing = memoryCache.folders.find(f => f.name === ARCHIVE_FOLDER_NAME);
+    if (existing) return existing;
+    if (!memoryCache.folders.some(f => f.name === 'skills')) return null;
+    const folder: MemoryFolder = { id: uid(), name: ARCHIVE_FOLDER_NAME, order: memoryCache.folders.length };
+    memoryCache.folders.push(folder);
+    await persist(username);
+    return folder;
+};
+
 /** Persist the cache for the active user (empty store clears the key). */
 const persist = async (username: string): Promise<void> => {
     if (persistSilentDepth === 0) upsertNotebookIndexInCache();
     if (memoryCache.folders.length === 0 && memoryCache.files.length === 0) {
         await removePreference(`${MEMORY_KEY_PREFIX}${username}`);
     } else {
+        warnIfNotebookHuge();
         await setPreferenceObject(`${MEMORY_KEY_PREFIX}${username}`, memoryCache);
     }
     if (persistSilentDepth === 0) {
         memoryChangeListeners.forEach(handler => handler(username));
     }
+};
+
+/** Whole-store blob guard: Preferences keys have platform size limits. */
+const NOTEBOOK_SIZE_WARN_CHARS = 1_000_000;
+let lastSizeWarnedAt = 0;
+const warnIfNotebookHuge = (): void => {
+    try {
+        const size = JSON.stringify(memoryCache).length;
+        if (size > NOTEBOOK_SIZE_WARN_CHARS && size - lastSizeWarnedAt > 250_000) {
+            lastSizeWarnedAt = size;
+            console.warn(
+                `[MemoryFiles] Notebook blob reached ${(size / 1_000_000).toFixed(1)} MB — ` +
+                'every write rewrites it whole and Preferences may refuse it. Consider pruning notes/diaries.'
+            );
+        }
+    } catch { /* guard must never break a persist */ }
 };
 
 let persistSilentDepth = 0;
@@ -180,11 +215,28 @@ export const setOnMemoryFilesChanged = (handler: ((username: string) => void) | 
     if (handler) memoryChangeListeners.add(handler);
 };
 
+// ─── Write lock ─────────────────────────────────────────────────────────────
+// Every notebook mutation is a read-modify-write over the shared cache, and
+// writers run concurrently: fire-and-forget trade syncs, the awaited
+// post-mortem sync, detached eval stamping, doctrine rewrites, UI edits.
+// Mutations are therefore serialized through a single promise chain.
+//
+// DEADLOCK RULE: a function that acquires this lock (any public mutator or
+// withNotebookWriteLock caller) must only call the *Unlocked variants of
+// other mutators — never a locked public from inside the lock.
+let writeChain: Promise<unknown> = Promise.resolve();
+
+export const withNotebookWriteLock = <T>(fn: () => Promise<T>): Promise<T> => {
+    const run = writeChain.then(fn, fn);
+    writeChain = run.then(() => undefined, () => undefined);
+    return run;
+};
+
 /** Persist without notifying listeners (used when writing suggestions.md). */
 export const withSilentMemoryPersist = async (fn: () => Promise<void>): Promise<void> => {
     persistSilentDepth += 1;
     try {
-        await fn();
+        await withNotebookWriteLock(fn);
     } finally {
         persistSilentDepth -= 1;
     }
@@ -307,7 +359,7 @@ ${map}
 
 // ─── Folder CRUD ────────────────────────────────────────────────────────────
 
-export const createMemoryFolder = async (name: string, username: string): Promise<MemoryFolder> => {
+export const createMemoryFolderUnlocked = async (name: string, username: string): Promise<MemoryFolder> => {
     const clean = slugifyName(name);
     if (!clean) throw new Error('Folder name is required');
     const existing = memoryCache.folders.find(f => f.name === clean);
@@ -318,8 +370,12 @@ export const createMemoryFolder = async (name: string, username: string): Promis
     return folder;
 };
 
+/** Serialized public API — see withNotebookWriteLock. */
+export const createMemoryFolder = (name: string, username: string): Promise<MemoryFolder> =>
+    withNotebookWriteLock(() => createMemoryFolderUnlocked(name, username));
+
 /** Rename a folder (slugified). Returns the new slug, or null if unknown. */
-export const renameMemoryFolder = async (id: string, name: string, username: string): Promise<string | null> => {
+export const renameMemoryFolderUnlocked = async (id: string, name: string, username: string): Promise<string | null> => {
     const clean = slugifyName(name);
     if (!clean) throw new Error('Folder name is required');
     if (memoryCache.folders.some(f => f.id !== id && f.name === clean)) throw new Error(`Folder "${clean}" already exists`);
@@ -330,11 +386,15 @@ export const renameMemoryFolder = async (id: string, name: string, username: str
     return clean;
 };
 
+/** Serialized public API — see withNotebookWriteLock. */
+export const renameMemoryFolder = (id: string, name: string, username: string): Promise<string | null> =>
+    withNotebookWriteLock(() => renameMemoryFolderUnlocked(id, name, username));
+
 /**
  * Move a folder to a new index in the sidebar (drag & drop). Order persists
  * and drives prompt-injection order (profile stays first until moved).
  */
-export const moveMemoryFolder = async (id: string, toIndex: number, username: string): Promise<void> => {
+export const moveMemoryFolderUnlocked = async (id: string, toIndex: number, username: string): Promise<void> => {
     const fromIndex = memoryCache.folders.findIndex(f => f.id === id);
     if (fromIndex < 0) return;
     const target = Math.max(0, Math.min(toIndex, memoryCache.folders.length - 1));
@@ -345,15 +405,23 @@ export const moveMemoryFolder = async (id: string, toIndex: number, username: st
     await persist(username);
 };
 
-export const deleteMemoryFolder = async (id: string, username: string): Promise<void> => {
+/** Serialized public API — see withNotebookWriteLock. */
+export const moveMemoryFolder = (id: string, toIndex: number, username: string): Promise<void> =>
+    withNotebookWriteLock(() => moveMemoryFolderUnlocked(id, toIndex, username));
+
+export const deleteMemoryFolderUnlocked = async (id: string, username: string): Promise<void> => {
     memoryCache.folders = memoryCache.folders.filter(f => f.id !== id);
     memoryCache.files = memoryCache.files.filter(f => f.folderId !== id);
     await persist(username);
 };
 
+/** Serialized public API — see withNotebookWriteLock. */
+export const deleteMemoryFolder = (id: string, username: string): Promise<void> =>
+    withNotebookWriteLock(() => deleteMemoryFolderUnlocked(id, username));
+
 // ─── File CRUD ──────────────────────────────────────────────────────────────
 
-export const createMemoryFile = async (
+export const createMemoryFileUnlocked = async (
     folderId: string,
     name: string,
     content: string,
@@ -373,18 +441,36 @@ export const createMemoryFile = async (
     return file;
 };
 
+/** Serialized public API — see withNotebookWriteLock. */
+export const createMemoryFile = (
+    folderId: string,
+    name: string,
+    content: string,
+    username: string,
+    autoManaged = false
+): Promise<MemoryFile> =>
+    withNotebookWriteLock(() => createMemoryFileUnlocked(folderId, name, content, username, autoManaged));
+
 /** Patch fields of an existing file (content edits, enable toggle). */
-export const updateMemoryFile = async (id: string, patch: Partial<MemoryFile>, username: string): Promise<void> => {
+export const updateMemoryFileUnlocked = async (id: string, patch: Partial<MemoryFile>, username: string): Promise<void> => {
     const existing = memoryCache.files.findIndex(f => f.id === id);
     if (existing < 0) return;
     memoryCache.files[existing] = { ...memoryCache.files[existing], ...patch, updatedAt: Date.now() };
     await persist(username);
 };
 
-export const deleteMemoryFile = async (id: string, username: string): Promise<void> => {
+/** Serialized public API — see withNotebookWriteLock. */
+export const updateMemoryFile = (id: string, patch: Partial<MemoryFile>, username: string): Promise<void> =>
+    withNotebookWriteLock(() => updateMemoryFileUnlocked(id, patch, username));
+
+export const deleteMemoryFileUnlocked = async (id: string, username: string): Promise<void> => {
     memoryCache.files = memoryCache.files.filter(f => f.id !== id);
     await persist(username);
 };
+
+/** Serialized public API — see withNotebookWriteLock. */
+export const deleteMemoryFile = (id: string, username: string): Promise<void> =>
+    withNotebookWriteLock(() => deleteMemoryFileUnlocked(id, username));
 
 // ─── Prompt injection ───────────────────────────────────────────────────────
 
@@ -440,7 +526,7 @@ const buildDiaryEntry = (trade: LoggedTrade): string => {
  * first entry). Only WIN/LOSS trades are logged — pending and entry-not-hit
  * runs carry no lesson. The file keeps the newest MAX_DIARY_ENTRIES entries.
  */
-export const appendDiaryEntry = async (trade: LoggedTrade, username: string): Promise<void> => {
+export const appendDiaryEntryUnlocked = async (trade: LoggedTrade, username: string): Promise<void> => {
     if (trade.outcome !== TradeOutcome.WIN && trade.outcome !== TradeOutcome.LOSS) return;
     const folder = memoryCache.folders.find(f => f.name === 'trader-diary');
     if (!folder) return;
@@ -454,17 +540,21 @@ export const appendDiaryEntry = async (trade: LoggedTrade, username: string): Pr
     if (existing) {
         const entries = existing.content.split('\n## ').slice(1).filter(Boolean);
         const updated = [...entries, entry].slice(-MAX_DIARY_ENTRIES);
-        await updateMemoryFile(existing.id, { content: `${header}\n\n## ${updated.join('\n## ')}` }, username);
+        await updateMemoryFileUnlocked(existing.id, { content: `${header}\n\n## ${updated.join('\n## ')}` }, username);
     } else {
-        await createMemoryFile(folder.id, safeName, `${header}\n\n## ${entry}`, username, true);
+        await createMemoryFileUnlocked(folder.id, safeName, `${header}\n\n## ${entry}`, username, true);
     }
 };
+
+/** Serialized public API — see withNotebookWriteLock. */
+export const appendDiaryEntry = (trade: LoggedTrade, username: string): Promise<void> =>
+    withNotebookWriteLock(() => appendDiaryEntryUnlocked(trade, username));
 
 /**
  * Regenerate profile/memory.md from the user's actual profile data — who the
  * trader is, what they trade, their settings. Fully harness-managed.
  */
-export const syncProfileMemory = async (profile: UserProfile | null, username: string): Promise<void> => {
+export const syncProfileMemoryUnlocked = async (profile: UserProfile | null, username: string): Promise<void> => {
     const folder = memoryCache.folders.find(f => f.name === 'profile');
     if (!folder) return;
     const now = new Date();
@@ -474,9 +564,9 @@ export const syncProfileMemory = async (profile: UserProfile | null, username: s
         const fallback = `# About the Trader (auto-maintained by August)\n> Updated ${dateStr}\n\nNo profile data loaded yet.\n`;
         const existing = memoryCache.files.find(f => f.folderId === folder.id && f.name === 'memory.md');
         if (existing) {
-            await updateMemoryFile(existing.id, { content: fallback }, username);
+            await updateMemoryFileUnlocked(existing.id, { content: fallback }, username);
         } else {
-            await createMemoryFile(folder.id, 'memory.md', fallback, username, true);
+            await createMemoryFileUnlocked(folder.id, 'memory.md', fallback, username, true);
         }
         return;
     }
@@ -524,11 +614,15 @@ export const syncProfileMemory = async (profile: UserProfile | null, username: s
 
     const existing = memoryCache.files.find(f => f.folderId === folder.id && f.name === 'memory.md');
     if (existing) {
-        await updateMemoryFile(existing.id, { content }, username);
+        await updateMemoryFileUnlocked(existing.id, { content }, username);
     } else {
-        await createMemoryFile(folder.id, 'memory.md', content, username, true);
+        await createMemoryFileUnlocked(folder.id, 'memory.md', content, username, true);
     }
 };
+
+/** Serialized public API — see withNotebookWriteLock. */
+export const syncProfileMemory = (profile: UserProfile | null, username: string): Promise<void> =>
+    withNotebookWriteLock(() => syncProfileMemoryUnlocked(profile, username));
 
 const PATTERN_MEMORY_HEADINGS = [
     'Executive Summary',
@@ -660,7 +754,7 @@ export const toPatternMemoryMarkdown = (
  * Write profile/pattern-memory.md from the current synthesis (or a stub when
  * empty). Harness-managed — the History tab opens this as a document.
  */
-export const syncPatternMemory = async (
+export const syncPatternMemoryUnlocked = async (
     summary: string | null | undefined,
     username: string,
     trades?: LoggedTrade[],
@@ -671,11 +765,19 @@ export const syncPatternMemory = async (
     const content = toPatternMemoryMarkdown(summary, stats);
     const existing = memoryCache.files.find(f => f.folderId === folder.id && f.name === 'pattern-memory.md');
     if (existing) {
-        await updateMemoryFile(existing.id, { content }, username);
+        await updateMemoryFileUnlocked(existing.id, { content }, username);
     } else {
-        await createMemoryFile(folder.id, 'pattern-memory.md', content, username, true);
+        await createMemoryFileUnlocked(folder.id, 'pattern-memory.md', content, username, true);
     }
 };
+
+/** Serialized public API — see withNotebookWriteLock. */
+export const syncPatternMemory = (
+    summary: string | null | undefined,
+    username: string,
+    trades?: LoggedTrade[],
+): Promise<void> =>
+    withNotebookWriteLock(() => syncPatternMemoryUnlocked(summary, username, trades));
 
 /**
  * Regenerate rules/recurring-mistakes.md from the trade log — deterministic,
@@ -683,17 +785,21 @@ export const syncPatternMemory = async (
  * coin + direction, worst first. The model reads this on every analysis, so
  * recurring failures become impossible to ignore.
  */
-export const syncRecurringMistakes = async (trades: LoggedTrade[], username: string): Promise<void> => {
+export const syncRecurringMistakesUnlocked = async (trades: LoggedTrade[], username: string): Promise<void> => {
     const folder = memoryCache.folders.find(f => f.name === 'rules');
     if (!folder) return;
     const content = buildRecurringMistakesContent(trades);
     const existing = memoryCache.files.find(f => f.folderId === folder.id && f.name === 'recurring-mistakes.md');
     if (existing) {
-        await updateMemoryFile(existing.id, { content }, username);
+        await updateMemoryFileUnlocked(existing.id, { content }, username);
     } else {
-        await createMemoryFile(folder.id, 'recurring-mistakes.md', content, username, true);
+        await createMemoryFileUnlocked(folder.id, 'recurring-mistakes.md', content, username, true);
     }
 };
+
+/** Serialized public API — see withNotebookWriteLock. */
+export const syncRecurringMistakes = (trades: LoggedTrade[], username: string): Promise<void> =>
+    withNotebookWriteLock(() => syncRecurringMistakesUnlocked(trades, username));
 
 /** Pure content builder for recurring-mistakes.md (exported for tests). */
 export const buildRecurringMistakesContent = (trades: LoggedTrade[]): string => {
@@ -844,7 +950,13 @@ export const getMemoryFilesIndex = (): string => {
  *    suffixed -2, -3… instead of overwriting.
  * Files are marked "auto" like the other harness-managed ones.
  */
-export const writeModelNote = async (note: ModelNote, username: string): Promise<MemoryFile> => {
+/** Max appended sections per AI-written note file (oldest trimmed). */
+const MAX_NOTE_SECTIONS = 30;
+/** Max harness-written note files per folder (oldest autoManaged file pruned). */
+const MAX_NOTES_PER_FOLDER = 40;
+const NOTE_SECTION_SEP = '\n\n---\n\n';
+
+export const writeModelNoteUnlocked = async (note: ModelNote, username: string): Promise<MemoryFile> => {
     let cleanFolder = slugifyName(note.folder) || 'lessons';
     if (cleanFolder === 'skills') cleanFolder = 'lessons';
     const baseName = slugifyName(note.fileName.replace(/\.md$/i, '')) || 'note';
@@ -852,7 +964,7 @@ export const writeModelNote = async (note: ModelNote, username: string): Promise
     if (!content) throw new Error('Note content is empty');
 
     let folder = memoryCache.folders.find(f => f.name === cleanFolder);
-    if (!folder) folder = await createMemoryFolder(cleanFolder, username);
+    if (!folder) folder = await createMemoryFolderUnlocked(cleanFolder, username);
 
     // Append: extend an existing file when one matches (same stem, or one
     // name contains the other) — never overwrite, the note is a new section.
@@ -864,14 +976,20 @@ export const writeModelNote = async (note: ModelNote, username: string): Promise
                 || baseName.includes(f.name.replace(/\.md$/i, ''))
             );
         if (target) {
-            const updated = `${target.content.trimEnd()}\n\n---\n\n${content}\n`;
-            await updateMemoryFile(target.id, { content: updated }, username);
+            // Bound append-mode growth: keep the file head (everything before
+            // the first section separator) plus the newest sections only.
+            const parts = target.content.split(NOTE_SECTION_SEP);
+            const head = parts[0];
+            const sections = [...parts.slice(1), content].slice(-MAX_NOTE_SECTIONS);
+            const updated = `${[head, ...sections].join(NOTE_SECTION_SEP)}\n`;
+            await updateMemoryFileUnlocked(target.id, { content: updated }, username);
             // Return the FRESH object from the cache — `target` is a stale
             // reference and would report the pre-append content.
             return memoryCache.files.find(f => f.id === target.id) ?? target;
         }
         // Target file does not exist yet — create it with the note as its content.
-        return createMemoryFile(folder.id, `${baseName}.md`, content, username, true);
+        await pruneModelNotesIfFull(folder.id, username);
+        return createMemoryFileUnlocked(folder.id, `${baseName}.md`, content, username, true);
     }
 
     // Create: never overwrite — suffix -2, -3… when the name is taken.
@@ -881,5 +999,22 @@ export const writeModelNote = async (note: ModelNote, username: string): Promise
         name = `${baseName}-${i}.md`;
         i += 1;
     }
-    return createMemoryFile(folder.id, name, content, username, true);
+    await pruneModelNotesIfFull(folder.id, username);
+    return createMemoryFileUnlocked(folder.id, name, content, username, true);
+};
+
+/** Serialized public API — see withNotebookWriteLock. */
+export const writeModelNote = (note: ModelNote, username: string): Promise<MemoryFile> =>
+    withNotebookWriteLock(() => writeModelNoteUnlocked(note, username));
+
+/**
+ * Keep a folder's harness-written note count bounded: when at capacity,
+ * drop the OLDEST autoManaged file before a new one lands. User-authored
+ * files are never touched — only notes this service created.
+ */
+const pruneModelNotesIfFull = async (folderId: string, username: string): Promise<void> => {
+    const auto = memoryCache.files.filter(f => f.folderId === folderId && f.autoManaged);
+    if (auto.length < MAX_NOTES_PER_FOLDER) return;
+    const oldest = [...auto].sort((a, b) => a.updatedAt - b.updatedAt)[0];
+    if (oldest) await deleteMemoryFileUnlocked(oldest.id, username);
 };
