@@ -13,17 +13,10 @@ import {
     extractAndRecordSeverityInsights,
     extractAndRecordProviderInsights
 } from '../learning/InsightExtractionService';
-import {
-    processPostMortemForLearning,
-    loadLearningRules,
-    saveLearningRules
-} from '../learning/LearningRulesService';
-import { WriteApprovalGate } from '../learning/WriteApprovalGate';
-import { ingestIfThenFromTrade } from '../learning/SkillMemoryService';
-import { addRulesFromPostMortem } from '../validation/InvalidationRuleService';
-
 export enum JobType {
     EXTRACT_INSIGHTS = 'EXTRACT_INSIGHTS',
+    /** Retired (ROUND-25b): IF/THEN lessons live in skills. Kept as a string
+     *  for queued-job backward compatibility; no handler runs it. */
     EXTRACT_RULES = 'EXTRACT_RULES'
 }
 
@@ -133,8 +126,6 @@ class JobQueueService {
             case JobType.EXTRACT_INSIGHTS:
                 return await this.handleExtractInsights(job.payload);
 
-            case JobType.EXTRACT_RULES:
-                return await this.handleExtractRules(job.payload);
 
             default:
                 throw new Error(`Unknown job type: ${job.type}`);
@@ -196,49 +187,7 @@ class JobQueueService {
     /**
      * Handler: Extract Rules from Post-Mortem
      */
-    private async handleExtractRules(trade: LoggedTrade) {
-        // Load, Process, Save
-        const storage = loadLearningRules();
-        const updatedStorage = processPostMortemForLearning(storage, trade);
-
-        // Only save if rules changed (optimization)
-        let rulesCount = updatedStorage.rules.length;
-        if (updatedStorage.rules.length !== storage.rules.length ||
-            updatedStorage.lastUpdated !== storage.lastUpdated) {
-            // Write-approval gate: when enabled, newly extracted rules are
-            // staged for review instead of auto-persisted.
-            const originalIds = new Set(storage.rules.map(r => r.id));
-            const newRules = updatedStorage.rules.filter(r => !originalIds.has(r.id));
-            const gateEnabled = await WriteApprovalGate.isEnabled();
-            if (gateEnabled && newRules.length > 0) {
-                const staged = await WriteApprovalGate.stageRules(newRules, 'regex');
-                rulesCount = storage.rules.length; // active store unchanged when staging
-                console.log(`[JobQueue] Write-approval ON: staged ${staged} new rules for review.`);
-            } else {
-                saveLearningRules(updatedStorage);
-                rulesCount = updatedStorage.rules.length;
-                console.log(`[JobQueue] Saved new learning rules.`);
-            }
-        }
-
-        const notebookUser = (typeof localStorage !== 'undefined' && localStorage.getItem('last_active_user')) || 'default';
-        await ingestIfThenFromTrade(trade, notebookUser);
-
-        // Invalidation rules: previously the LLM extraction path
-        // (addRulesFromPostMortem) was never called in production, so
-        // checkTradeAgainstRules always ran against an empty store. Wire it
-        // into the post-mortem rule job now (regex + LLM extraction).
-        if (trade.postMortem) {
-            try {
-                await addRulesFromPostMortem(trade.postMortem, trade);
-            } catch (e) {
-                console.warn('[JobQueue] Invalidation rule extraction failed:', e);
-            }
-        }
-
-        return { rulesCount };
-    }
-
+    
     private notifyListeners(job: Job) {
         this.listeners.forEach(l => l(job));
     }

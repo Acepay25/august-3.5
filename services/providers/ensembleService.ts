@@ -48,10 +48,6 @@ import {
     getConfluenceInsight,
 } from '../analysis/TimeframeConfluenceService';
 import {
-    checkTradeAgainstRules,
-    addRulesFromPostMortem,
-} from '../validation/InvalidationRuleService';
-import {
     ANALYST_ROLE_DEFINITIONS,
     getRoleForProvider,
     getLensPromptForStyle,
@@ -1386,17 +1382,6 @@ export const conductTwoWayDebate = async function* (
         }
     }
 
-    // --- RULE VIOLATION CHECKING ---
-    let ruleViolationContext = '';
-    try {
-        const ruleCheck = checkTradeAgainstRules(analyst1Result.analysis);
-        if (ruleCheck.violations.length > 0) {
-            ruleViolationContext = ruleCheck.promptInjection;
-            console.log('[TwoWayDebate][Rules] Found', ruleCheck.violations.length, 'violations');
-        }
-    } catch (e) {
-        console.error('[TwoWayDebate][Rules] Error:', e);
-    }
 
     // --- ANALYST LENS CONTEXT ---
     // Using 'medium' verbosity by default to prevent token overflow causing JSON parsing failures
@@ -1433,7 +1418,6 @@ export const conductTwoWayDebate = async function* (
 
       ${confluenceContext}
 
-      ${ruleViolationContext}
 
       ${gateReconciliationContext}
 
@@ -1857,17 +1841,6 @@ export const conductThreeWayDebate = async function* (
         }
     }
 
-    // --- RULE VIOLATION CHECKING ---
-    let ruleViolationContext = '';
-    try {
-        const ruleCheck = checkTradeAgainstRules(analyst1Result.analysis);
-        if (ruleCheck.violations.length > 0) {
-            ruleViolationContext = ruleCheck.promptInjection;
-            console.log('[Rules] Found', ruleCheck.violations.length, 'violations');
-        }
-    } catch (e) {
-        console.error('[Rules] Failed to check:', e);
-    }
 
     // --- LIVE MARKET DATA PARSING & INJECTION ---
     const parsedMarketData = parseLiveMarketData(userPrompt);
@@ -1958,7 +1931,6 @@ ${enhancedContext}
 
 ${confluenceContext}
 
-${ruleViolationContext}
 
 ${gateReconciliationContext}
 

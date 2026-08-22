@@ -486,6 +486,12 @@ export const processPostMortemForLearning = (
  * later outcomes contradict (repeat-rules that keep losing, avoid-rules
  * that keep winning).
  */
+/**
+ * DEPRECATED write-path (ROUND-25): rules are no longer created or injected —
+ * lessons live in skills. This function only updates OUTCOME COUNTS on
+ * already-existing historical rules so old data stays attributable. It never
+ * creates rules. Do not add new callers.
+ */
 export const applyOutcomeToRules = (trade: LoggedTrade): void => {
     if (trade.outcome !== TradeOutcome.WIN && trade.outcome !== TradeOutcome.LOSS) return;
     const storage = loadLearningRules();

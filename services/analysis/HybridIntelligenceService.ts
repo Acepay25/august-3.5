@@ -85,9 +85,7 @@ import {
     SimulationConfig
 } from './MonteCarloService';
 
-import {
-    LearningRulesStorage
-} from '../learning/LearningRulesService';
+
 
 import {
     NumericChartData,
@@ -1048,8 +1046,7 @@ export const generateEnhancedHybridPromptInjection = (
     calibration?: ConfidenceCalibration,
     correlationRiskPrompt?: string,
     granularContext?: { coin?: string; pattern?: string; timeframe?: string; regime?: 'trending' | 'ranging' | 'volatile' },
-    proposedConfidence?: ConfidenceLevel,
-    learningRules?: LearningRulesStorage
+    proposedConfidence?: ConfidenceLevel
 ): { prompt: string; adjustedConfidence?: ConfidenceLevel; totalPenalty?: number } => {
     // Get base hybrid data injection
     const baseInjection = generateHybridPromptInjection(data);
@@ -1131,8 +1128,6 @@ ${calibrationInjection}
 
 ${sessionInjection}
 
-
-
 ${validationInjection}
 
 ${accuracyEnhancements}
@@ -1152,8 +1147,7 @@ ${accuracyEnhancements}
  */
 export const tryFetchHybridDataFromPromptWithCalibration = async (
     prompt: string,
-    calibration?: ConfidenceCalibration,
-    learningRules?: LearningRulesStorage
+    calibration?: ConfidenceCalibration
 ): Promise<{
     data: HybridDataPacket;
     promptInjection: string;
@@ -1200,8 +1194,7 @@ export const tryFetchHybridDataFromPromptWithCalibration = async (
             calibration,
             correlationRiskPrompt,
             granularContext,
-            'High', // Default proposed confidence, will be adjusted by calibration
-            learningRules
+            'High' // Default proposed confidence, will be adjusted by calibration
         );
 
         return {
