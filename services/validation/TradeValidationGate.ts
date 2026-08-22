@@ -74,8 +74,6 @@ import {
     TIMEFRAME_REQUIREMENTS,
     MAX_CONFLICTS_FOR_HIGH_CONFIDENCE
 } from './ValidationConstants';
-import { StructuredRule } from '../../types';
-import { validateAllRules } from '../learning/RuleEngineService';
 import { parsePrice } from '../../utils/analysisUtils';
 
 
@@ -88,7 +86,6 @@ export interface TradeValidationInput {
     hybridData: HybridDataPacket | null;
     calibration?: ConfidenceCalibration;
     tradeHistory?: LoggedTrade[];
-    learningRules?: StructuredRule[]; // New: Injected structured rules
 }
 
 export interface TradeValidationOutput {
@@ -469,7 +466,7 @@ export const validateTimeframeAlignment = (
 export const runValidationGate = (
     input: TradeValidationInput
 ): TradeValidationOutput => {
-    const { analysis, hybridData, calibration, tradeHistory, learningRules } = input;
+    const { analysis, hybridData, calibration, tradeHistory } = input;
 
     const warnings: string[] = [];
     const errors: string[] = [];
@@ -828,23 +825,10 @@ ${patternMatch.warning ? `\n PATTERN MEMORY:\n${patternMatch.warning}` : ''}
     }
 
 
-    // 3.12 Centralized Rule Engine (CORE, STRUCTURED & INVALIDATION)
-    // Run this last to catch anything else and enforce safety rails
-    if (isTradeableDirection) {
-        const ruleValidation = validateAllRules(analysis, hybridData, learningRules);
-
-        warnings.push(...ruleValidation.warnings);
-        errors.push(...ruleValidation.errors);
-
-        if (ruleValidation.adjustedConfidence && isLowerConfidence(ruleValidation.adjustedConfidence, adjustedConfidence)) {
-            adjustedConfidence = ruleValidation.adjustedConfidence;
-        }
-
-        if (ruleValidation.promptInjection) {
-            warnings.push(' Invalidation Rules: ' + ruleValidation.promptInjection);
-        }
-    }
-
+    // 3.12 Rule engine (ROUND-25b): the learned structured-rules layer is
+    // retired — skills are the only learned enforcement layer now. The core
+    // CONFIDENCE_RULES safety rails live in RuleEngineService and are still
+    // applied via applyNotebookSkillsToAnalysis + validation elsewhere.
 
 
     // Detect trade type and run type-specific validation BEFORE the report is

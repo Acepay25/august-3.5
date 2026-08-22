@@ -36,11 +36,9 @@ import { splitThinkingFromOutput } from '../utils/thinkingSplit';
 import { sanitizeAIResponseLight } from '../utils/sanitizers';
 import { buildModelIdToName, isProviderReady } from '../utils/providerUtils';
 import { DEFAULT_LEVERAGE } from '../utils/conversationUtils';
-import { loadLearningRules } from '../services/learning/LearningRulesService';
 import { buildDecisionReflectionContext } from '../services/learning/DecisionReflectionService';
 import { buildCoinLessonsBlock } from '../utils/postMortemLessons';
 import { getEnabledStrategiesText } from '../services/infrastructure/StrategyService';
-import { StructuredRule } from '../types';
 import { COMMON_WORDS } from '../constants/commonWords';
 import { useRafThrottle } from './useRafThrottle';
 
@@ -1160,11 +1158,9 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     devLog('[Hybrid Intelligence] Attempting to fetch data for prompt:', effectiveInput);
                     if (!isAutomationRun) setLoadingMessage('Fetching real-time market data...');
                     startStep('market-data');
-                    const learningRules = loadLearningRules();
                     const hybridResult = await tryFetchHybridDataFromPromptWithCalibration(
                         effectiveInput,
-                        GlobalLearningService.getCalibration(),
-                        learningRules
+                        GlobalLearningService.getCalibration()
                     );
                     if (!isCurrentRequest()) assertCurrentRequest();
                     if (!isAutomationRun) setIsHybridLoading(false);
@@ -1562,8 +1558,7 @@ ${reflectionBlock}`
                             analysis: finalAnalysis,
                             hybridData: freshHybridData, // May be null in non-hybrid mode
                             calibration: GlobalLearningService.getCalibration(), // Use global persistent calibration
-                            tradeHistory: loggedTrades,
-                            learningRules: loadLearningRules().rules as StructuredRule[]
+                            tradeHistory: loggedTrades
                         });
 
                         // Store original confidence if adjusted

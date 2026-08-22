@@ -14,7 +14,6 @@ import { getMemoryFiles } from './MemoryFilesService';
 import { isSkillFile, parseSkillMarkdown, skillMatchesSetup, SkillMeta } from './SkillMemoryService';
 import { shouldAdmitTechnicalStrategyRule, rootCauseForTrade } from '../../utils/rootCause';
 import { findRelevantTrades } from './PatternMemorySynthesisService';
-import { getRelevantRules, loadLearningRules } from './LearningRulesService';
 
 export interface MemoryRetrievalQuery {
     coin?: string;
@@ -212,30 +211,13 @@ export const buildMemoryGraph = (
         }
     }
 
-    const rules = loadLearningRules().rules || [];
-    for (const rule of rules) {
-        if (rule.status === 'retired') continue;
-        const id = `rule:${rule.id}`;
-        addNode(graph, { id, kind: 'rule', label: `IF ${rule.ifCondition}`, path: 'rules/if-then' });
-        if (rule.coin) {
-            const dim = dimId('coin', normalizeCoin(rule.coin));
-            addNode(graph, { id: dim, kind: 'setup', label: dim });
-            addEdge(graph, { from: id, to: dim, kind: 'appliesWhen', weight: 1 });
-        }
-        if (rule.direction) {
-            const dim = dimId('direction', rule.direction);
-            addNode(graph, { id: dim, kind: 'setup', label: dim });
-            addEdge(graph, { from: id, to: dim, kind: 'appliesWhen', weight: 1 });
-        }
-        if (rule.pattern) {
-            const dim = dimId('family', rule.pattern);
-            addNode(graph, { id: dim, kind: 'setup', label: dim });
-            addEdge(graph, { from: id, to: dim, kind: 'appliesWhen', weight: 1 });
-        }
-        if (rule.sourceTradeId) {
-            addEdge(graph, { from: id, to: `trade:${rule.sourceTradeId}`, kind: 'evidence', weight: 1 });
-        }
-    }
+    // Legacy IF/THEN rules are no longer graph nodes (ROUND-25): lessons
+    // live in skills. The rules store remains read-only history for outcome
+    // attribution only.
+    // Legacy IF/THEN rules are no longer graph nodes (ROUND-25): lessons
+    // live in skills. The rules store remains read-only history for outcome
+    // attribution only.
+
 
     return graph;
 };
@@ -309,11 +291,9 @@ export const walkMemoryNeighbors = (
     return [...hits.values()].sort((a, b) => b.score - a.score);
 };
 
-export const matchingLearningRules = (query?: MemoryRetrievalQuery, maxRules = 4): LearningRule[] => {
-    if (!query) return [];
-    return getRelevantRules(loadLearningRules(), {
-        coin: query.coin,
-        pattern: query.family || query.pattern,
-        direction: query.direction === 'Long' || query.direction === 'Short' ? query.direction : undefined,
-    }, maxRules).filter(r => r.status !== 'retired');
-};
+/**
+ * DEPRECATED (ROUND-25): rules are no longer injected or graph-walked.
+ * Returns [] — kept only so any lingering import compiles. Lessons live in
+ * skills (see SkillMemoryService).
+ */
+export const matchingLearningRules = (_query?: MemoryRetrievalQuery, _maxRules = 4): LearningRule[] => [];

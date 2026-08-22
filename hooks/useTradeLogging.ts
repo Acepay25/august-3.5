@@ -1,12 +1,11 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Message, TradeOutcome, LoggedTrade, SavedAnalysis, TradeSummary, LearningRule, ImageMetadata, AIProvider } from '../types';
+import { Message, TradeOutcome, LoggedTrade, SavedAnalysis, TradeSummary, ImageMetadata, AIProvider } from '../types';
 import { PostMortemCandidate } from '../components/modals/PostTradeUploadModal';
 import { captureForPostMortem } from '../services/ui/AutoCaptureService';
 import * as MemoryService from '../services/learning/MemoryService';
 import { insightTextForTrade } from '../utils/tradeInsightBrief';
 import { ProviderConfig } from '../types/provider';
 import GlobalLearningService from '../services/learning/GlobalLearningService';
-import { storeRule, loadLearningRules, saveLearningRules } from '../services/learning/LearningRulesService';
 import { DEFAULT_LEVERAGE } from '../utils/conversationUtils';
 import { parsePrice } from '../utils/analysisUtils';
 import { trackTradeOutcome, mapRegimeToKey } from '../services/backtesting/ModelPerformanceService';
@@ -15,8 +14,6 @@ import { SLOptimizationData } from '../services/backtesting/StopLossOptimizerSer
 import { ConfidenceLevel } from '../services/validation/ConfidenceCalibrationService';
 import { syncClosedTradeToNotebook } from '../services/learning/SkillMemoryService';
 import { appendWatchEpisode } from '../utils/watchList';
-import { parseIfThenClauses } from '../utils/ifThenSkill';
-import { tradeAdmitsTechnicalStrategyRule } from '../utils/rootCause';
 
 // Maximum number of trade summaries (Recent Insights) to keep - enforces FIFO when limit reached
 export const MAX_TRADE_SUMMARIES = 100;
@@ -140,34 +137,12 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             });
         });
 
-        // Auto-create learning rule from LOSS
-        if (trade.outcome === TradeOutcome.LOSS && analysis.coinName && (trade.postMortem || '').trim() && tradeAdmitsTechnicalStrategyRule(trade)) {
-            try {
-                const rulesStorage = loadLearningRules();
-                const clause = parseIfThenClauses(trade.postMortem || '')[0];
-                const newRule: LearningRule = {
-                    id: `auto_${Date.now()}`,
-                    ifCondition: clause?.ifCondition
-                        || `${analysis.coinName} + ${analysis.direction} + ${analysis.detectedPatternFamily || 'unknown'}`,
-                    thenAction: clause?.thenAction
-                        || 'Apply extra scrutiny - similar setup recently lost',
-                    sourceTradeId: trade.id,
-                    outcome: 'LOSS',
-                    coin: analysis.coinName,
-                    pattern: analysis.detectedPatternFamily,
-                    // Neutral/undefined directions can never match a rule —
-                    // guard like createRule does instead of casting blindly.
-                    direction: (analysis.direction === 'Long' || analysis.direction === 'Short') ? analysis.direction : undefined,
-                    createdAt: new Date().toISOString(),
-                    useCount: 0
-                };
-                const updatedStorage = storeRule(rulesStorage, newRule);
-                saveLearningRules(updatedStorage);
-                console.log('[AutoLearn] Created rule from loss:', newRule.ifCondition);
-            } catch (e) {
-                console.error('[AutoLearn] Failed to create rule:', e);
-            }
-        }
+        // Auto-learn from LOSS now lands in the SKILLS system (ROUND-25):
+        // syncClosedTradeToNotebook (called below by the caller) already runs
+        // ingestIfThenFromTrade + the skill-worth gate — evidence-counted,
+        // enforceable, one representation. The parallel rules store is no
+        // longer written; it remains read-only history for outcome
+        // attribution (applyOutcomeToRules).
     };
 
     // ─── Recent Insights helper ────────────────────────────────────────────

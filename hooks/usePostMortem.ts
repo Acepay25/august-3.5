@@ -10,7 +10,6 @@ import { jobQueue, JobType } from '../services/infrastructure/JobQueueService';
 import { buildSeverityPostMortemContext } from '../services/learning/InsightExtractionService';
 import { writeModelNote } from '../services/learning/MemoryFilesService';
 import { syncClosedTradeToNotebook } from '../services/learning/SkillMemoryService';
-import { applyOutcomeToRules } from '../services/learning/LearningRulesService';
 import { writeNotebookNoteFromPostMortem } from '../services/learning/NotebookWriterService';
 import { craftSkillFromPostMortem } from '../services/learning/SkillCraftService';
 import { queueSkillDraft } from '../utils/skillDrafts';
@@ -638,7 +637,8 @@ Please investigate this discrepancy in your analysis.
                         rootCauseClass: classifyRootCause(finalPostMortemReport, tradeToUpdate.outcome),
                     };
                     jobQueue.addJob(JobType.EXTRACT_INSIGHTS, tradeWithPM);
-                    jobQueue.addJob(JobType.EXTRACT_RULES, tradeWithPM);
+                    // EXTRACT_RULES retired (ROUND-25b): IF/THEN lessons live
+                    // in skills now (ingestIfThenFromTrade runs below).
                 } catch (insightError) {
                     console.error('[AI Learning] Failed to queue background jobs:', insightError);
                 }
@@ -667,7 +667,6 @@ Please investigate this discrepancy in your analysis.
                         }
                     }
                     await syncClosedTradeToNotebook(closed, loggedTradesRef.current, notebookUser);
-                    applyOutcomeToRules(closed);
                 } catch (notebookError) {
                     console.warn('[TraderNotebook] Memory-file sync failed (non-fatal):', notebookError);
                 }

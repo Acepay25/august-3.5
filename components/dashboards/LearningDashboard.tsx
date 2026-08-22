@@ -3,7 +3,6 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { BrainCircuit, ChevronDownIcon } from 'lucide-react';
 import { LoggedTrade, MemoryFile, MemoryFolder, TradeOutcome } from '../../types';
 import { computeLearningProfile, PersonalizedLearningProfile } from '../../services/learning/SelfLearningService';
-import { loadLearningRules } from '../../services/learning/LearningRulesService';
 import { initMemoryFiles, getMemoryFiles, computeTopLessons, TopLesson } from '../../services/learning/MemoryFilesService';
 import { summarizeSimilarSetups, COLD_START_MIN } from '../../services/learning/SetupMemoryService';
 import { computeEvidenceQualityStats } from '../../utils/analysisQuality';
@@ -85,11 +84,6 @@ const CalibrationBar: React.FC<{ label: string; actual: number; expected: number
 
 export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, username }) => {
     const profile = useMemo(() => computeLearningProfile(trades), [trades]);
-    // Memoized — loadLearningRules parses localStorage; running it inline in
-    // the JSX re-parsed on every render of the dashboard. Keyed on `trades` so
-    // newly learned rules (post-mortems append to the trade log) appear while
-    // the tab is open instead of only after a remount.
-    const learnedRules = useMemo(() => loadLearningRules().rules || [], [trades]);
 
     // Trader Notebook — the markdown memory files the harness writes and the
     // model reads (diary entries, recurring mistakes, profile memory, AI notes).
@@ -201,7 +195,6 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
         for (const n of memoryGraph.nodes.values()) m.set(n.kind, (m.get(n.kind) ?? 0) + 1);
         return m;
     }, [memoryGraph]);
-    const usedRules = useMemo(() => learnedRules.filter(r => (r.useCount ?? 0) > 0), [learnedRules]);
     const learnedSkills = useMemo(() => notebookSkills.filter(s => s.meta.wins + s.meta.losses > 0 || s.meta.status === 'confirmed'), [notebookSkills]);
 
     // Pool stats: setups indexed + avg matches per query (sampled for cost)
@@ -517,16 +510,10 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
                 </div>
             )}
             {graphTab === 'used' && (
-                usedRules.length === 0 && learnedSkills.length === 0
-                    ? <p className="text-xs text-zinc-600 italic">Nothing used yet — rules/skills appear here once injected into an analysis.</p>
+                learnedSkills.length === 0
+                    ? <p className="text-xs text-zinc-600 italic">Nothing used yet — skills appear here once injected into an analysis.</p>
                     : <div className="space-y-1.5">
-                        {usedRules.slice(0, 6).map(r => (
-                            <div key={r.id} className="rounded-lg border border-white/5 bg-zinc-950/50 px-2.5 py-1.5 text-[11px]">
-                                <span className="text-zinc-500 font-mono">IF</span> <span className="text-zinc-300">{r.ifCondition}</span>
-                                <span className="text-zinc-500"> · used ×{r.useCount}</span>
-                            </div>
-                        ))}
-                        {learnedSkills.slice(0, 6).map(s => (
+                        {learnedSkills.slice(0, 8).map(s => (
                             <div key={s.file.id} className="rounded-lg border border-white/5 bg-zinc-950/50 px-2.5 py-1.5 text-[11px]">
                                 <span className="text-zinc-500 font-mono">{s.meta.kind}</span> <span className="text-zinc-300">{s.file.name.replace(/\.md$/i, '')}</span>
                                 <span className="text-zinc-500"> · {s.meta.wins}/{s.meta.losses}</span>
@@ -535,18 +522,13 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
                     </div>
             )}
             {graphTab === 'learned' && (
-                learnedRules.length === 0 && notebookSkills.length === 0
-                    ? <p className="text-xs text-zinc-600 italic">Nothing learned yet — close trades with post-mortems to grow rule/skill memory.</p>
+                notebookSkills.length === 0
+                    ? <p className="text-xs text-zinc-600 italic">Nothing learned yet — close trades with post-mortems to grow skill memory.</p>
                     : <div className="space-y-1.5">
-                        {learnedRules.slice(0, 8).map(r => (
-                            <div key={r.id} className="rounded-lg border border-white/5 bg-zinc-950/50 px-2.5 py-1.5 text-[11px]">
-                                <span className="text-zinc-500 font-mono">IF</span> <span className="text-zinc-300">{r.ifCondition}</span>
-                                <span className="text-zinc-500"> → </span><span className="text-zinc-400">{r.thenAction}</span>
-                            </div>
-                        ))}
-                        {notebookSkills.slice(0, 6).map(s => (
+                        {notebookSkills.slice(0, 10).map(s => (
                             <div key={s.file.id} className="rounded-lg border border-white/5 bg-zinc-950/50 px-2.5 py-1.5 text-[11px]">
-                                <span className="text-zinc-500 font-mono">{s.meta.kind}</span> <span className="text-zinc-300">{s.file.name.replace(/\.md$/i, '')}</span>
+                                <span className="text-zinc-500 font-mono">{s.meta.kind}</span> <span className="text-zinc-300">{s.meta.ifCondition || s.file.name.replace(/\.md$/i, '')}</span>
+                                <span className="text-zinc-500"> · {s.meta.wins}/{s.meta.losses} · {s.meta.status}</span>
                             </div>
                         ))}
                     </div>
@@ -725,14 +707,14 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
             <div className="grid grid-cols-1 gap-3 sm:gap-4">
                 {/* Best Coins */}
                 <StatCard
-                    title="Learned Rules"
-                    items={learnedRules.slice(0, 5).map(rule => ({
-                        name: String((rule as any).promptInjection || (rule as any).condition || (rule as any).id || 'Rule').slice(0, 80),
-                        value: (rule as any).strength !== undefined ? `${(rule as any).strength}` : '✓',
-                        subtext: undefined,
-                        color: 'text-cyan-300',
+                    title="Learned Skills"
+                    items={notebookSkills.slice(0, 5).map(({ meta, file }) => ({
+                        name: `${meta.kind === 'avoid' ? 'Avoid' : 'Repeat'}: ${meta.ifCondition || file.name.replace(/\.md$/i, '')}`.slice(0, 90),
+                        value: `${meta.wins}W/${meta.losses}L`,
+                        subtext: meta.status,
+                        color: meta.status === 'confirmed' ? 'text-emerald-400' : meta.status === 'retired' ? 'text-zinc-600' : 'text-cyan-300',
                     }))}
-                    emptyText="No rules learned yet — rules are generated from loss post-mortems"
+                    emptyText="No skills learned yet — close trades with post-mortems to grow skill memory"
                 />
 
                 <StatCard
