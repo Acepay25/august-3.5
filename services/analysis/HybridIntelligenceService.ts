@@ -86,7 +86,6 @@ import {
 } from './MonteCarloService';
 
 import {
-    generateLearningRulesPrompt,
     LearningRulesStorage
 } from '../learning/LearningRulesService';
 
