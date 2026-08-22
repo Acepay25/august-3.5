@@ -12,8 +12,17 @@
 import { TradeAnalysis } from '../../types';
 import { ConfidenceLevel } from '../validation/AccuracyValidationService';
 import { HybridDataPacket } from '../analysis/HybridIntelligenceService';
-import { CONFIDENCE_RULES } from './LearningRulesService';
 import { StructuredRule } from '../../types';
+
+/**
+ * Core safety rails — engineering constants, NOT learned knowledge.
+ * (Moved here from the retired LearningRulesService, ROUND-25b.)
+ */
+export const CONFIDENCE_RULES: Record<string, { minTfAlign: number; minRR: number; minConfidenceScore: number }> = {
+    'High': { minTfAlign: 3, minRR: 2.0, minConfidenceScore: 80 },
+    'Medium': { minTfAlign: 2, minRR: 1.5, minConfidenceScore: 65 },
+    'Low': { minTfAlign: 1, minRR: 1.1, minConfidenceScore: 40 }
+};
 import { checkTradeAgainstRules as checkInvalidationRules, RuleCheckResult } from '../validation/InvalidationRuleService';
 import { parsePrice } from '../../utils/analysisUtils';
 

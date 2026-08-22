@@ -13,7 +13,7 @@
  */
 
 import { createMemoryFile as createSkillFile, ensureHarnessFolders, getMemoryFiles } from './MemoryFilesService';
-import { loadLearningRules } from './LearningRulesService';
+import { storageService } from '../infrastructure/StorageService';
 import {
     isSkillFile,
     parseSkillMarkdown,
@@ -33,8 +33,10 @@ export const migrateIfThenRulesToSkills = async (
     trades: LoggedTrade[] = [],
 ): Promise<MigrationResult> => {
     await ensureHarnessFolders(username);
-    const storage = loadLearningRules();
-    const rules = (storage.rules || []).filter(r => r.status !== 'retired');
+    // ROUND-25b: the LearningRulesService is deleted; legacy rule data is
+    // read straight from storage for this one-time migration.
+    const storage = storageService.loadLearningRules();
+    const rules = (storage.rules || []).filter((r) => r.status !== 'retired');
     if (rules.length === 0) return { created: 0, skipped: 0 };
 
     const folder = getMemoryFiles().folders.find(f => f.name === 'skills');

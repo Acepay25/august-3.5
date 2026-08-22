@@ -12,7 +12,8 @@ import { storageService } from '../../services/infrastructure/StorageService';
 import { getAttributedInsightsSummary } from '../../services/learning/InsightExtractionService';
 import { recordInsightFeedback } from '../../services/learning/PatternMemorySynthesisService';
 import { jobQueue } from '../../services/infrastructure/JobQueueService'; // Import JobQueue
-import { ConfidenceCalibration, LearningRule } from '../../types';
+import { ConfidenceCalibration } from '../../types';
+import { listSkills } from '../../services/learning/SkillMemoryService';
 import {
     GATE_SCAN_JSON_SCHEMA,
     MASTER_TRADE_PLAN_MARKDOWN,
@@ -48,7 +49,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
     const [activeTab, setActiveTab] = useState<'Intelligence' | 'Algorithm' | 'System'>('Intelligence');
     const [signals, setSignals] = useState<ReinforcementSignal[]>([]);
     const [calibration, setCalibration] = useState<ConfidenceCalibration | undefined>(undefined);
-    const [rules, setRules] = useState<LearningRule[]>([]);
+    const [rules, setRules] = useState<Array<{ file: { name: string }; meta: { kind: string; status: string; wins: number; losses: number; ifCondition?: string; thenAction?: string } }>>([]);
     const [insights, setInsights] = useState<any[]>([]);
     const [providerStats, setProviderStats] = useState<Record<string, { count: number; avgQuality: number }>>({});
 
@@ -75,12 +76,12 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
 
             setCalibration(storageService.loadSetting<ConfidenceCalibration>('confidence_calibration', initializeCalibration()));
 
-            const r = storageService.loadLearningRules().rules || [];
-            setRules(r);
+            const sk = listSkills().filter(s => s.meta.status !== 'retired');
+            setRules(sk);
             // 5s polling reloads the lists — clamp the selection so a shrink
             // between polls can't point past the end of the new array (the
             // <select> would render no matching <option>).
-            setSelectedRuleIndex(i => Math.min(i, Math.max(0, r.length - 1)));
+            setSelectedRuleIndex(i => Math.min(i, Math.max(0, sk.length - 1)));
 
             const iStats = getAttributedInsightsSummary();
             const topInsights = iStats.topInsights || [];
@@ -93,7 +94,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
 
             // Simulate Storage Count (just for demo, usually async)
             const logs = await storageService.getTradeLogs();
-            setStorageCount(logs.length + r.length + (iStats.totalInsights || 0));
+            setStorageCount(logs.length + sk.length + (iStats.totalInsights || 0));
         } catch (error) {
             console.error('[VersionHistoryDashboard] Failed to load data:', error);
         }
@@ -200,11 +201,11 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                             </div>
                         </ModernCard>
 
-                        {/* 1.2 Rule Extraction */}
-                        <ModernCard title="Rule Extraction" accent="purple" icon={<Icons.Brain className="w-5 h-5" />}>
+                        {/* 1.2 Skill Library (ROUND-25b: replaced the retired IF/THEN rule extraction) */}
+                        <ModernCard title="Skill Library" accent="purple" icon={<Icons.Brain className="w-5 h-5" />}>
                             <div className="flex items-center justify-between mb-2">
                                 <div className="text-2xl font-light text-white">{rules.length}</div>
-                                <div className="text-xs text-white/40">Rules Extracted</div>
+                                <div className="text-xs text-white/40">Active Skills</div>
                             </div>
 
                             {rules.length > 0 ? (
@@ -215,22 +216,26 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                                             onChange={(e) => setSelectedRuleIndex(Number(e.target.value))}
                                             className="w-full bg-transparent text-xs text-purple-300 focus:outline-none cursor-pointer"
                                         >
-                                            {rules.map((rule, idx) => (
+                                            {rules.map((s, idx) => (
                                                 <option key={idx} value={idx} className="bg-zinc-900 text-gray-300">
-                                                    Rule #{idx + 1}: {rule.ifCondition.substring(0, 20)}...
+                                                    Skill #{idx + 1}: {s.file.name.replace(/\.md$/i, '').substring(0, 24)}
                                                 </option>
                                             ))}
                                         </select>
                                     </div>
                                     <div className="p-3 overflow-y-auto max-h-[100px] custom-scrollbar scrollbar-thumb-purple-500/20">
                                         <p className="text-[10px] text-purple-200/80 font-mono leading-relaxed">
-                                            <span className="text-purple-400 font-bold">IF</span> {rules[selectedRuleIndex]?.ifCondition} <br />
-                                            <span className="text-purple-400 font-bold">THEN</span> {rules[selectedRuleIndex]?.thenAction}
+                                            <span className="text-purple-400 font-bold uppercase">{rules[selectedRuleIndex]?.meta.kind}</span> {' '}
+                                            [{rules[selectedRuleIndex]?.meta.status} · {rules[selectedRuleIndex]?.meta.wins}W/{rules[selectedRuleIndex]?.meta.losses}L]
+                                            <br />
+                                            {rules[selectedRuleIndex]?.meta.ifCondition
+                                                ? `IF ${rules[selectedRuleIndex]?.meta.ifCondition} THEN ${rules[selectedRuleIndex]?.meta.thenAction}`
+                                                : rules[selectedRuleIndex]?.file.name.replace(/\.md$/i, '')}
                                         </p>
                                     </div>
                                 </div>
                             ) : (
-                                <div className="mt-auto text-xs text-white/30 italic">No rules extracted yet.</div>
+                                <div className="mt-auto text-xs text-white/30 italic">No active skills yet.</div>
                             )}
                         </ModernCard>
 

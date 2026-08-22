@@ -108,7 +108,6 @@ import { SetupWatchService, describeWatchTrigger } from './services/ui/SetupWatc
 import { OutcomeAutopilotService, AutopilotResolution } from './services/ui/OutcomeAutopilotService';
 import { useWatchSideEffects } from './hooks/useWatchSideEffects';
 import { getThinkingTradeId, updateThinkingOutcome, deleteThinkingByTrade } from './services/infrastructure/ThinkingStoreService';
-import { removeRulesForTrades } from './services/learning/LearningRulesService';
 import { initNativeStatusBar } from './services/infrastructure/NativeStatusBar';
 import { initConfluenceService, syncConfluenceFromTradeLog } from './services/analysis/TimeframeConfluenceService';
 import { initPatternMemoryService, setAttributedInsightsUser } from './services/learning/PatternMemorySynthesisService';
@@ -1850,7 +1849,6 @@ const App: React.FC = () => {
             void deleteThinkingByTrade(getThinkingTradeId(t.analysis?.createdAt, t.id), username);
             OutcomeAutopilotService.unregister(t.id);
         });
-        removeRulesForTrades(ids);
     };
 
     const handleClearAllTrades = async () => {
@@ -1888,7 +1886,6 @@ const App: React.FC = () => {
                     void deleteThinkingByTrade(getThinkingTradeId(t.analysis?.createdAt, t.id), username);
                     OutcomeAutopilotService.unregister(t.id);
                 });
-                removeRulesForTrades(prevTrades.map(t => t.id));
             }, 5500);
         }
     };
