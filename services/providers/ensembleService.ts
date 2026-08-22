@@ -3022,7 +3022,7 @@ export const conductRealDebate = async function* (
             })}\n\n` +
             `${others}\n\n` +
             (levelsSnap ? `**LEVELS SNAPSHOT:**\n${levelsSnap}\n\n` : '') +
-            (buildLossPrimingBlock(similarTrades) ? buildLossPrimingBlock(similarTrades) + `\\n\\n` : '') +
+            (buildLossPrimingBlock(similarTrades) ? buildLossPrimingBlock(similarTrades) + `\n\n` : '') +
             (isDevilSeat
                 ? "**DEVIL'S ADVOCATE ASSIGNMENT (this round only):** You are assigned the CONTRA position for this round. Argue the strongest honest case AGAINST the emerging floor consensus - what invalidates it, where it fails, who is on the wrong side of the levels. You may concede afterwards, but this round your job is the counter-case. Do not strawman: use real levels and timeframes.\n\n"
                 : '') +
