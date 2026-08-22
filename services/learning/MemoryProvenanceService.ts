@@ -8,8 +8,10 @@
  * whose post-influence win rate is worse than its pre-influence baseline is
  * actively misleading despite plausible-looking evidence.
  *
- * Pure functions over the trade log — no LLM, no new storage. The dashboard
- * and reviewSkillEffectiveness consume these numbers directly.
+ * Pure functions over the trade log — no LLM, no new storage. When injection
+ * telemetry is supplied (MemoryInjectionService), the influence window starts
+ * at the first REAL injection instead of the createdAt approximation.
+ * The dashboard and reviewSkillEffectiveness consume these numbers directly.
  */
 
 import type { LoggedTrade } from '../../types';
@@ -20,6 +22,7 @@ import {
     skillMatchesSetup,
     isSkillFile,
 } from './SkillMemoryService';
+import type { MemoryInjectionRecord } from './MemoryInjectionService';
 
 export interface SkillLiftResult {
     fileId: string;
@@ -41,6 +44,7 @@ const LOSS = TradeOutcome.LOSS;
 export const computeSkillLift = (
     fileId: string,
     trades: LoggedTrade[],
+    injections?: MemoryInjectionRecord[],
 ): SkillLiftResult => {
     const file = getMemoryFiles().files.find(f => f.id === fileId);
     const meta = file ? parseSkillMarkdown(file.content) : null;
@@ -86,6 +90,19 @@ export const computeSkillLift = (
         const t = typeof file.createdAt === 'number' ? new Date(file.createdAt).toISOString() : file.createdAt;
         influenceStart = t;
     }
+    // Telemetry upgrade: the first REAL injection record is a stronger
+    // influence signal than either approximation — use whichever starts first.
+    if (injections) {
+        let telemetryStart: string | null = null;
+        for (const rec of injections) {
+            if (rec.sources.some(s => s.path === `skills/${file.name}`)) {
+                if (!telemetryStart || rec.ts < telemetryStart) telemetryStart = rec.ts;
+            }
+        }
+        if (telemetryStart && (!influenceStart || telemetryStart < influenceStart)) {
+            influenceStart = telemetryStart;
+        }
+    }
 
     const influencedTrades = matched.filter(t => known.has(t.id)).length;
 
@@ -123,11 +140,14 @@ export const computeSkillLift = (
 };
 
 /** Lift for every enabled skill, worst first (the ones to look at). */
-export const computeAllSkillLifts = (trades: LoggedTrade[]): SkillLiftResult[] => {
+export const computeAllSkillLifts = (trades: LoggedTrade[], injections?: MemoryInjectionRecord[]): SkillLiftResult[] => {
     const out: SkillLiftResult[] = [];
     for (const f of getMemoryFiles().files) {
         if (!isSkillFile(f) || !f.enabled) continue;
-        out.push(computeSkillLift(f.id, trades));
+        out.push(computeSkillLift(f.id, trades, injections));
     }
-    return out.sort((a, b) => (a.lift ?? 0) - (b.lift ?? 0));
+    // Worst lift first; inconclusive (null) sinks to the bottom — it is not
+    // evidence of neutrality, just of missing data.
+    const liftKey = (r: SkillLiftResult): number => (r.lift === null ? Number.POSITIVE_INFINITY : r.lift);
+    return out.sort((a, b) => liftKey(a) - liftKey(b));
 };

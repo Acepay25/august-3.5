@@ -100,11 +100,27 @@ describe('SkillEvalService (with-skill vs without-skill A/B)', () => {
         expect(res.verdict).toBe('inconclusive');
     });
 
-    it('restores the original enabled state after the run', async () => {
+    it('never mutates the notebook and hands the real skill to the enabled arm', async () => {
         await initMemoryFiles('eval-restore');
         const fileId = await seedSkill('eval-restore');
-        const runner = async () => ({ confidence: 'Medium' });
-        await evaluateSkill(fileId, 'eval-restore', [makeTrade()], {} as never, runner);
+        const seen: { skillEnabled: boolean; hasRealBody: boolean }[] = [];
+        const runner = async (_t: LoggedTrade, { skillEnabled, skill }: { skillEnabled: boolean; skill?: { content: string } }) => {
+            seen.push({ skillEnabled, hasRealBody: !!skill?.content?.includes('# Avoid BTC short') });
+            return skillEnabled ? { confidence: 'Avoid', direction: 'Neutral' } : { confidence: 'High', direction: 'Short' };
+        };
+
+        const before = JSON.stringify(getMemoryFiles());
+        const res = await evaluateSkill(fileId, 'eval-restore', [makeTrade()], {} as never, runner);
+        const after = JSON.stringify(getMemoryFiles());
+
+        expect(after).toBe(before); // no enabled flip-flop, no frontmatter writes mid-eval
+        expect(res.error).toBeUndefined();
+        // Context rides along on BOTH arms — the runner itself gates rendering
+        // on skillEnabled (that's what keeps the notebook untouched).
+        expect(seen).toEqual([
+            { skillEnabled: false, hasRealBody: true },
+            { skillEnabled: true, hasRealBody: true },
+        ]);
         expect(getMemoryFiles().files.find(f => f.id === fileId)!.enabled).toBe(true);
     });
 

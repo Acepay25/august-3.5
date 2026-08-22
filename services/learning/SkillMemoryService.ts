@@ -11,14 +11,16 @@ import { LoggedTrade, MemoryFile, TradeOutcome } from '../../types';
 import { ProviderConfig } from '../../types/provider';
 import {
     appendDiaryEntry,
-    createMemoryFile,
-    deleteMemoryFile,
-    ensureHarnessFolders,
+    createMemoryFileUnlocked,
+    deleteMemoryFileUnlocked,
+    ensureHarnessFoldersUnlocked,
+    ensureSkillsArchiveFolderUnlocked,
     extractLessonFromPostMortem,
     getMemoryFiles,
     slugifyName,
     syncRecurringMistakes,
-    updateMemoryFile,
+    updateMemoryFileUnlocked,
+    withNotebookWriteLock,
 } from './MemoryFilesService';
 import { formatSkillProcedure, parseIfThenClauses, skillHitRate } from '../../utils/ifThenSkill';
 import { maybePinWinningPromptLane } from '../../utils/promptVersionStats';
@@ -26,6 +28,8 @@ import { CraftedSkill } from '../../schemas/learning';
 import { formatCraftedSkillBody, refineSkillFromLosses } from './SkillCraftService';
 import { listSkillDrafts } from '../../utils/skillDrafts';
 import { tradeAdmitsTechnicalStrategyRule } from '../../utils/rootCause';
+import { familiesRelate } from '../../utils/patternMatch';
+import { skillInjectedSince } from './MemoryInjectionService';
 import { loadProviderConfigs, getReadyProviders } from '../infrastructure/ProviderConfigService';
 import { getFirstReadyProvider } from '../../utils/providerUtils';
 
@@ -102,7 +106,10 @@ export const parseSkillMarkdown = (content: string): SkillMeta | null => {
         return v && v !== 'undefined' && v !== '' ? v : undefined;
     };
     const num = (key: string): number => {
-        const n = parseInt(pick(key) || '0', 10);
+        // parseFloat, not parseInt: weighted attribution (ROUND-27) stores
+        // half-credit counts like `wins: 0.5` — truncating them back to
+        // integers silently erased matched-but-not-injected evidence.
+        const n = parseFloat(pick(key) || '0');
         return Number.isFinite(n) ? n : 0;
     };
     const statusRaw = (pick('status') || 'candidate').toLowerCase();
@@ -164,7 +171,7 @@ export const setSkillStatus = async (fileId: string, status: SkillStatus, userna
     const meta = parseSkillMarkdown(file.content);
     if (!meta) return;
     meta.status = status;
-    await updateMemoryFile(fileId, {
+    await updateMemoryFileUnlocked(fileId, {
         content: serializeSkill(meta, titleFromMeta(meta)),
         enabled: status !== 'retired',
     }, username || 'local');
@@ -219,8 +226,9 @@ export const skillMatchesSetup = (
     const skillCoin = meta.coin?.toUpperCase().replace(/USDT?$/, '');
     if (coin && skillCoin && coin === skillCoin) hits += 2;
     if (setup.direction && meta.direction && setup.direction === meta.direction) hits += 2;
+    // Negation-aware: "fake-breakout" must NOT match a "breakout" skill.
     const fam = (setup.family || setup.pattern || '').toLowerCase();
-    if (fam && meta.family && fam.includes(meta.family.toLowerCase())) hits += 2;
+    if (fam && meta.family && familiesRelate(fam, meta.family)) hits += 2;
     if (setup.regime && meta.regime && setup.regime === meta.regime) hits += 1;
     return hits >= 2;
 };
@@ -230,12 +238,34 @@ const enabledSkillMeta = (file: MemoryFile): SkillMeta | null => {
     return parseSkillMarkdown(file.content);
 };
 
+/**
+ * How long a recorded automated-eval verdict stays authoritative. After this
+ * window a 'hurts' demotion expires: the next evidence pass re-derives status
+ * from outcomes alone, and the scheduler may re-audit the skill for a fresh
+ * verdict.
+ */
+export const EVAL_VERDICT_STALE_MS = 30 * 86_400_000;
+
+/**
+ * TRUE while an automated-eval 'hurts' verdict still outranks outcome
+ * correlation. Undated or unparseable verdicts stay active — conservative,
+ * since there is no timestamp from which they could expire.
+ */
+export const evalDemotionActive = (meta: SkillMeta): boolean => {
+    if (meta.evalVerdict !== 'hurts') return false;
+    if (!meta.lastEvalAt) return true;
+    const t = Date.parse(meta.lastEvalAt);
+    if (!Number.isFinite(t)) return true;
+    return Date.now() - t < EVAL_VERDICT_STALE_MS;
+};
+
 const deriveStatus = (meta: SkillMeta): SkillStatus => {
     // ── Causal override (ROUND-25c) ──
     // An automated A/B eval that shows the skill HURTS decisions demotes it
     // regardless of outcome correlation — injection-causation outranks
-    // co-occurrence. The verdict decays with the next eval run.
-    if (meta.evalVerdict === 'hurts' && meta.status === 'confirmed') return 'candidate';
+    // co-occurrence. The override expires after EVAL_VERDICT_STALE_MS so a
+    // single noisy eval cannot bench a skill forever.
+    if (meta.evalVerdict === 'hurts' && meta.status === 'confirmed' && evalDemotionActive(meta)) return 'candidate';
 
     const sample = meta.wins + meta.losses;
     const winRate = sample > 0 ? meta.wins / sample : 0;
@@ -278,10 +308,10 @@ const clusterKey = (trade: LoggedTrade): string => {
  * REFINE_AFTER_CONSECUTIVE_LOSSES gets an LLM refinement pass (tightened
  * trigger) instead of silently bleeding.
  */
-export const applySkillEvidence = async (trade: LoggedTrade, username: string, allTrades?: LoggedTrade[]): Promise<void> => {
+const applySkillEvidenceUnlocked = async (trade: LoggedTrade, username: string, allTrades?: LoggedTrade[]): Promise<void> => {
     if (trade.outcome !== TradeOutcome.WIN && trade.outcome !== TradeOutcome.LOSS) return;
     if (!tradeAdmitsTechnicalStrategyRule(trade)) return;
-    await ensureHarnessFolders(username);
+    await ensureHarnessFoldersUnlocked(username);
     const setup = {
         coin: trade.analysis?.coinName,
         direction: trade.analysis?.direction,
@@ -302,11 +332,22 @@ export const applySkillEvidence = async (trade: LoggedTrade, username: string, a
         // no new status machinery needed.
         applyEvidenceDecay(meta, trade.marketRegime);
 
+        // ── Weighted attribution (ROUND-27) ──
+        // Full credit when retrieval actually injected this skill; half when
+        // it merely matched the setup (budgets/audience filters mean it may
+        // never have reached the prompt). Unknown telemetry (empty log) keeps
+        // full credit so tiering cannot starve on missing data.
+        let injected: boolean | null = null;
+        try {
+            injected = await skillInjectedSince(username, file.name);
+        } catch { injected = null; }
+        const credit = injected === false ? 0.5 : 1;
+
         if (trade.outcome === TradeOutcome.WIN) {
-            meta.wins += 1;
+            meta.wins += credit;
             meta.consecutiveLosses = 0;
         } else {
-            meta.losses += 1;
+            meta.losses += credit;
             meta.consecutiveLosses += 1;
         }
         meta.tradeIds = [...meta.tradeIds, trade.id];
@@ -315,7 +356,7 @@ export const applySkillEvidence = async (trade: LoggedTrade, username: string, a
         meta.modifiedAt = new Date().toISOString();
         if (trade.marketRegime) meta.regime = trade.marketRegime;
         meta.status = deriveStatus(meta);
-        await updateMemoryFile(file.id, {
+        await updateMemoryFileUnlocked(file.id, {
             content: serializeSkill(meta, titleFromMeta(meta)),
             enabled: meta.status !== 'retired',
         }, username);
@@ -329,6 +370,14 @@ export const applySkillEvidence = async (trade: LoggedTrade, username: string, a
         }
     }
 };
+
+/** Serialized public API — see withNotebookWriteLock in MemoryFilesService. */
+export const applySkillEvidence = (
+    trade: LoggedTrade,
+    username: string,
+    allTrades?: LoggedTrade[],
+): Promise<void> =>
+    withNotebookWriteLock(() => applySkillEvidenceUnlocked(trade, username, allTrades));
 
 /** Age of the freshest recorded evidence in days (Infinity when unknown). */
 const evidenceAgeDays = (meta: SkillMeta): number => {
@@ -423,7 +472,7 @@ const maybeRefineSkill = async (fileId: string, allTrades: LoggedTrade[], userna
         latest.consecutiveLosses = 0;
         latest.refinedAt = new Date().toISOString();
         latest.modifiedAt = latest.refinedAt;
-        await updateMemoryFile(fileId, {
+        await updateMemoryFileUnlocked(fileId, {
             content: serializeSkill(latest, refined.name || titleFromMeta(latest)),
             enabled: latest.status !== 'retired',
         }, username);
@@ -436,14 +485,14 @@ const maybeRefineSkill = async (fileId: string, allTrades: LoggedTrade[], userna
  * Create a skill when a similar cluster reaches MIN_CLUSTER_FOR_SKILL and
  * no matching skill exists yet. Evidence-gated — not a free-form LLM spawn.
  */
-export const maybeUpsertSkill = async (
+const maybeUpsertSkillUnlocked = async (
     trade: LoggedTrade,
     allTrades: LoggedTrade[],
     username: string
 ): Promise<MemoryFile | null> => {
     if (trade.outcome !== TradeOutcome.WIN && trade.outcome !== TradeOutcome.LOSS) return null;
     if (!tradeAdmitsTechnicalStrategyRule(trade)) return null;
-    await ensureHarnessFolders(username);
+    await ensureHarnessFoldersUnlocked(username);
     const key = clusterKey(trade);
     const cluster = allTrades.filter(t =>
         (t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS) && clusterKey(t) === key
@@ -503,17 +552,25 @@ export const maybeUpsertSkill = async (
     const folder = getMemoryFiles().folders.find(f => f.name === 'skills');
     if (!folder) return null;
     const content = serializeSkill(meta, titleFromMeta(meta));
-    return createMemoryFile(folder.id, fileNameFromMeta(meta), content, username, true);
+    return createMemoryFileUnlocked(folder.id, fileNameFromMeta(meta), content, username, true);
 };
 
-export const ingestCraftedSkill = async (
+/** Serialized public API — see withNotebookWriteLock in MemoryFilesService. */
+export const maybeUpsertSkill = (
+    trade: LoggedTrade,
+    allTrades: LoggedTrade[],
+    username: string
+): Promise<MemoryFile | null> =>
+    withNotebookWriteLock(() => maybeUpsertSkillUnlocked(trade, allTrades, username));
+
+const ingestCraftedSkillUnlocked = async (
     trade: LoggedTrade,
     crafted: CraftedSkill,
     username: string,
 ): Promise<void> => {
     if (trade.outcome !== TradeOutcome.WIN && trade.outcome !== TradeOutcome.LOSS) return;
     if (!tradeAdmitsTechnicalStrategyRule(trade)) return;
-    await ensureHarnessFolders(username);
+    await ensureHarnessFoldersUnlocked(username);
     const folder = getMemoryFiles().folders.find(f => f.name === 'skills');
     if (!folder) return;
     const setupDir = trade.analysis?.direction === 'Long' || trade.analysis?.direction === 'Short'
@@ -537,7 +594,7 @@ export const ingestCraftedSkill = async (
         meta.thenAction = crafted.thenAction;
         meta.body = formatCraftedSkillBody(crafted);
         meta.status = deriveStatus(meta);
-        await updateMemoryFile(existing.id, {
+        await updateMemoryFileUnlocked(existing.id, {
             content: serializeSkill(meta, crafted.name || titleFromMeta(meta)),
             enabled: meta.status !== 'retired',
         }, username);
@@ -560,20 +617,28 @@ export const ingestCraftedSkill = async (
     };
     meta.status = deriveStatus(meta);
     const slug = slugifyName(crafted.name) || slugifyName([trade.analysis?.coinName, kind].filter(Boolean).join(' ')) || 'skill';
-    await createMemoryFile(folder.id, `${slug}.md`, serializeSkill(meta, crafted.name || titleFromMeta(meta)), username, true);
+    await createMemoryFileUnlocked(folder.id, `${slug}.md`, serializeSkill(meta, crafted.name || titleFromMeta(meta)), username, true);
 };
+
+/** Serialized public API — see withNotebookWriteLock in MemoryFilesService. */
+export const ingestCraftedSkill = (
+    trade: LoggedTrade,
+    crafted: CraftedSkill,
+    username: string,
+): Promise<void> =>
+    withNotebookWriteLock(() => ingestCraftedSkillUnlocked(trade, crafted, username));
 
 /**
  * Ingest a user-approved skill draft that has NO closed trade behind it
  * (verdict-sourced drafts). Starts as a zero-evidence candidate — it must
  * earn wins/losses through applySkillEvidence before it can confirm.
  */
-export const ingestCraftedSkillFromDraft = async (
+const ingestCraftedSkillFromDraftUnlocked = async (
     crafted: CraftedSkill,
     coin: string | undefined,
     username: string,
 ): Promise<void> => {
-    await ensureHarnessFolders(username);
+    await ensureHarnessFoldersUnlocked(username);
     const folder = getMemoryFiles().folders.find(f => f.name === 'skills');
     if (!folder) return;
     const existing = getMemoryFiles().files.filter(isSkillFile).find(f => {
@@ -594,16 +659,24 @@ export const ingestCraftedSkillFromDraft = async (
         body: formatCraftedSkillBody(crafted),
     };
     const slug = slugifyName(crafted.name) || slugifyName([coin, crafted.kind].filter(Boolean).join(' ')) || 'skill';
-    await createMemoryFile(folder.id, `${slug}.md`, serializeSkill(meta, crafted.name || titleFromMeta(meta)), username, true);
+    await createMemoryFileUnlocked(folder.id, `${slug}.md`, serializeSkill(meta, crafted.name || titleFromMeta(meta)), username, true);
 };
 
-export const ingestIfThenFromTrade = async (trade: LoggedTrade, username: string): Promise<void> => {
+/** Serialized public API — see withNotebookWriteLock in MemoryFilesService. */
+export const ingestCraftedSkillFromDraft = (
+    crafted: CraftedSkill,
+    coin: string | undefined,
+    username: string,
+): Promise<void> =>
+    withNotebookWriteLock(() => ingestCraftedSkillFromDraftUnlocked(crafted, coin, username));
+
+const ingestIfThenFromTradeUnlocked = async (trade: LoggedTrade, username: string): Promise<void> => {
     if (trade.outcome !== TradeOutcome.WIN && trade.outcome !== TradeOutcome.LOSS) return;
     if (!tradeAdmitsTechnicalStrategyRule(trade)) return;
     if (listSkillDrafts(username).some(d => d.tradeId === trade.id)) return;
     const clauses = parseIfThenClauses(trade.postMortem ?? '');
     if (clauses.length === 0) return;
-    await ensureHarnessFolders(username);
+    await ensureHarnessFoldersUnlocked(username);
     const folder = getMemoryFiles().folders.find(f => f.name === 'skills');
     if (!folder) return;
     const kind: SkillKind = trade.outcome === TradeOutcome.LOSS ? 'avoid' : 'repeat';
@@ -627,7 +700,7 @@ export const ingestIfThenFromTrade = async (trade: LoggedTrade, username: string
             meta.modifiedAt = new Date().toISOString();
             meta.body = formatSkillProcedure(clause);
             meta.status = deriveStatus(meta);
-            await updateMemoryFile(existing.id, {
+            await updateMemoryFileUnlocked(existing.id, {
                 content: serializeSkill(meta, titleFromMeta(meta)),
                 enabled: meta.status !== 'retired',
             }, username);
@@ -651,15 +724,19 @@ export const ingestIfThenFromTrade = async (trade: LoggedTrade, username: string
         meta.status = deriveStatus(meta);
         const slug = slugifyName([trade.analysis?.coinName, kind, clause.ifCondition.slice(0, 40)].filter(Boolean).join(' '))
             || 'if-then';
-        await createMemoryFile(folder.id, `${slug}.md`, serializeSkill(meta, titleFromMeta(meta)), username, true);
+        await createMemoryFileUnlocked(folder.id, `${slug}.md`, serializeSkill(meta, titleFromMeta(meta)), username, true);
     }
 };
+
+/** Serialized public API — see withNotebookWriteLock in MemoryFilesService. */
+export const ingestIfThenFromTrade = (trade: LoggedTrade, username: string): Promise<void> =>
+    withNotebookWriteLock(() => ingestIfThenFromTradeUnlocked(trade, username));
 
 /**
  * Disable retired skills and merge exact-duplicate triggers (same file stem).
  */
-export const consolidateSkills = async (username: string): Promise<void> => {
-    await ensureHarnessFolders(username);
+const consolidateSkillsUnlocked = async (username: string): Promise<void> => {
+    await ensureHarnessFoldersUnlocked(username);
     const skills = getMemoryFiles().files.filter(isSkillFile);
     const byKey = new Map<string, MemoryFile[]>();
     for (const file of skills) {
@@ -675,7 +752,7 @@ export const consolidateSkills = async (username: string): Promise<void> => {
         if (group.length < 2) {
             const meta = parseSkillMarkdown(group[0].content);
             if (meta?.status === 'retired' && group[0].enabled) {
-                await updateMemoryFile(group[0].id, { enabled: false }, username);
+                await updateMemoryFileUnlocked(group[0].id, { enabled: false }, username);
             }
             continue;
         }
@@ -689,15 +766,40 @@ export const consolidateSkills = async (username: string): Promise<void> => {
             body: metas[0].body,
         };
         merged.status = deriveStatus(merged);
-        await updateMemoryFile(keep.id, {
+        await updateMemoryFileUnlocked(keep.id, {
             content: serializeSkill(merged, titleFromMeta(merged)),
             enabled: merged.status !== 'retired',
         }, username);
         for (const extra of group.slice(1)) {
-            await deleteMemoryFile(extra.id, username);
+            await deleteMemoryFileUnlocked(extra.id, username);
+        }
+    }
+
+    // ── Archive sweep (bounds pass) ──
+    // Retired skills leave the active skills folder: isSkillFile is
+    // folder-based, so archived skills drop out of retrieval, evidence and
+    // dashboards while staying in the notebook for the record. Keeps the
+    // active skill set bounded instead of growing forever.
+    const retired = getMemoryFiles().files.filter(f => {
+        if (!isSkillFile(f)) return false;
+        const m = parseSkillMarkdown(f.content);
+        return m?.status === 'retired';
+    });
+    if (retired.length > 0) {
+        const archive = await ensureSkillsArchiveFolderUnlocked(username);
+        if (archive) {
+            for (const f of retired) {
+                if (f.folderId !== archive.id) {
+                    await updateMemoryFileUnlocked(f.id, { folderId: archive.id, enabled: false }, username);
+                }
+            }
         }
     }
 };
+
+/** Serialized public API — see withNotebookWriteLock in MemoryFilesService. */
+export const consolidateSkills = (username: string): Promise<void> =>
+    withNotebookWriteLock(() => consolidateSkillsUnlocked(username));
 
 /**
  * Closed-loop write: diary + mistakes + skill scores. Safe to call from
@@ -714,7 +816,7 @@ export const syncClosedTradeToNotebook = async (
     await ingestIfThenFromTrade(trade, username);
     try {
         const { evaluateSkillWorth, validateCraftedSkill } = await import('./skillWorthGate');
-        await ensureHarnessFolders(username);
+        await ensureHarnessFoldersUnlocked(username);
         const key = clusterKey(trade);
         const cluster = allTrades.filter(t => (t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS) && clusterKey(t) === key);
         if (cluster.length >= MIN_CLUSTER_FOR_SKILL) {
@@ -777,14 +879,18 @@ export const syncClosedTradeToNotebook = async (
             if (res.updated) console.log('[Doctrine] Doctrine rewritten from', countClosedTrades(allTrades), 'closed trades.');
 
             // ── Automated skill evals (ROUND-25c) ──
-            // The harness audits its own knowledge: one due confirmed skill
-            // gets a cost-capped A/B run; a 'hurts' verdict demotes it via
-            // deriveStatus. No user action required.
+            // The harness audits its own knowledge: one due skill gets a
+            // cost-capped A/B run; a 'hurts' verdict demotes it via
+            // deriveStatus. Deliberately NOT awaited — up to a dozen provider
+            // calls must never stall the post-mortem chain. The scheduler's
+            // own try/catch + session budget make it safe detached.
             try {
                 const { runDueSkillEvalWithDefaultRunner } = await import('./SkillEvalScheduler');
-                await runDueSkillEvalWithDefaultRunner(allTrades, username, config);
+                void runDueSkillEvalWithDefaultRunner(allTrades, username, config).catch(e => {
+                    console.warn('[SkillEvalScheduler] deferred:', e instanceof Error ? e.message : e);
+                });
             } catch (e) {
-                console.warn('[SkillEvalScheduler] deferred:', e instanceof Error ? e.message : e);
+                console.warn('[SkillEvalScheduler] import failed:', e instanceof Error ? e.message : e);
             }
         }
     } catch { /* doctrine + eval are optional — sync must not fail because of them */ }
@@ -891,6 +997,39 @@ export const confirmedAvoidForSetup = (
 // This closes the loop: skills are enforced in code (applyNotebookSkillsTo-
 // Analysis), so their enforcement history must feed back into their status.
 
+// ─── Applying review recommendations ────────────────────────────────────────
+
+const applyReviewRecommendationUnlocked = async (
+    fileId: string,
+    recommendation: 'promote' | 'demote' | 'retire',
+    username: string,
+): Promise<boolean> => {
+    const file = getMemoryFiles().files.find(f => f.id === fileId);
+    const meta = file ? parseSkillMarkdown(file.content) : null;
+    if (!file || !meta || meta.status === 'retired') return false;
+    meta.status = recommendation === 'promote'
+        ? 'confirmed'
+        : recommendation === 'demote' ? 'candidate' : 'retired';
+    meta.modifiedAt = new Date().toISOString();
+    await updateMemoryFileUnlocked(fileId, {
+        content: serializeSkill(meta, titleFromMeta(meta)),
+        enabled: meta.status !== 'retired',
+    }, username);
+    return true;
+};
+
+/**
+ * User-applied review action from the dashboard. Evidence keeps the final
+ * say — the next applySkillEvidence pass re-derives status from counts, so a
+ * manual promote of a stats-weak skill reverts unless outcomes back it up.
+ */
+export const applyReviewRecommendation = (
+    fileId: string,
+    recommendation: 'promote' | 'demote' | 'retire',
+    username: string,
+): Promise<boolean> =>
+    withNotebookWriteLock(() => applyReviewRecommendationUnlocked(fileId, recommendation, username));
+
 export interface SkillEffectiveness {
     fileId: string;
     title: string;
@@ -903,9 +1042,25 @@ export interface SkillEffectiveness {
     /** What the loop should do next with this skill. */
     recommendation: 'keep' | 'watch' | 'refine' | 'demote' | 'retire' | 'promote';
     rationale: string;
+    /** Causal A/B verdict from the automated eval (when one exists). */
+    evalVerdict?: SkillMeta['evalVerdict'];
+    /** Causal before/after win-rate verdict (when computable). */
+    liftVerdict?: 'positive' | 'neutral' | 'negative' | 'insufficient-data';
 }
 
-export const reviewSkillEffectiveness = (): SkillEffectiveness[] => {
+export interface SkillEffectivenessReviewOptions {
+    /** Per-skill lift results (MemoryProvenanceService.computeAllSkillLifts), keyed by fileId. */
+    liftByFileId?: Record<string, { lift: number | null; verdict: 'positive' | 'neutral' | 'negative' | 'insufficient-data' }>;
+    /** Notebook file names ACTUALLY injected since tracking began (MemoryInjectionService). When provided, never-injected skills get an attribution caveat. */
+    injectedFileNames?: Set<string>;
+}
+
+/**
+ * Correlation (W/L counts) decides the base recommendation; causal signals —
+ * the automated A/B eval and post-vs-pre lift — override it, because a skill
+ * that correlates with wins but causes losses is worse than no skill at all.
+ */
+export const reviewSkillEffectiveness = (opts: SkillEffectivenessReviewOptions = {}): SkillEffectiveness[] => {
     return getMemoryFiles().files
         .map(file => {
             const meta = enabledSkillMeta(file);
@@ -913,6 +1068,7 @@ export const reviewSkillEffectiveness = (): SkillEffectiveness[] => {
             const sample = meta.wins + meta.losses;
             const hitRate = skillHitRate(meta.wins, meta.losses);
             const title = titleFromMeta(meta);
+            const lift = opts.liftByFileId?.[file.id];
 
             let recommendation: SkillEffectiveness['recommendation'] = 'keep';
             let rationale: string;
@@ -945,17 +1101,41 @@ export const reviewSkillEffectiveness = (): SkillEffectiveness[] => {
                 rationale = `Healthy at ${hitRate}% (${meta.wins}W/${meta.losses}L).`;
             }
 
+            // ── Causal overrides (injection-causation outranks co-occurrence) ──
+            const freshHurts = meta.evalVerdict === 'hurts' && evalDemotionActive(meta);
+            if (freshHurts && (recommendation === 'keep' || recommendation === 'promote')) {
+                recommendation = meta.status === 'confirmed' ? 'demote' : 'watch';
+                rationale = `Automated A/B eval says the skill HURTS decisions${meta.evalDetail ? ` (${meta.evalDetail} flips misaligned)` : ''} — the causal signal outranks the ${hitRate ?? '?'}% outcome correlation.`;
+            }
+            if (lift?.verdict === 'negative' && (recommendation === 'keep' || recommendation === 'promote')) {
+                recommendation = sample >= MIN_SAMPLE_CONFIRMED ? 'demote' : 'watch';
+                rationale = `Post-influence win rate is ${lift.lift != null ? Math.round(Math.abs(lift.lift) * 100) : '?'}pp BELOW the pre-skill baseline — setups got worse once this skill started injecting.`;
+            }
+            if (!freshHurts && lift?.verdict === 'positive' && recommendation === 'watch' && sample > 0) {
+                recommendation = 'keep';
+                rationale = `${rationale} Lift +${lift.lift != null ? Math.round(lift.lift * 100) : '?'}pp over baseline supports it.`;
+            }
+            // Attribution caveat: evidence earned purely by setup match, when
+            // we know the skill was never actually injected into a prompt.
+            if (opts.injectedFileNames && !opts.injectedFileNames.has(file.name)
+                && sample > 0 && recommendation === 'promote') {
+                recommendation = 'watch';
+                rationale = `${rationale} Caveat: never actually injected into a prompt since tracking began — its record is co-occurrence, not influence.`;
+            }
+
             return {
                 fileId: file.id,
                 title,
                 kind: meta.kind,
                 status: meta.status,
-                wins: meta.wins,
-                losses: meta.losses,
+                wins: Math.round(meta.wins),
+                losses: Math.round(meta.losses),
                 hitRate,
                 consecutiveLosses: meta.consecutiveLosses,
                 recommendation,
                 rationale,
+                ...(meta.evalVerdict ? { evalVerdict: meta.evalVerdict } : {}),
+                ...(lift ? { liftVerdict: lift.verdict } : {}),
             };
         })
         .filter((s): s is SkillEffectiveness => s !== null)

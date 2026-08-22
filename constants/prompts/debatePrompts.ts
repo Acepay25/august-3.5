@@ -510,3 +510,62 @@ Output exactly ONE of the following markers and NOTHING else:
 or
 <CLARIFICATION_UNSATISFIED>
 `;
+
+// ─── Shared round-protocol fragments ────────────────────────────────────────
+// Used verbatim by BOTH debate engines (conductDebate + conductRealDebate).
+// One contract: edit here, both engines stay in sync. Do not re-inline.
+
+export const DEBATE_CONFIDENCE_GOAL = `**🎯 GOAL: AIM FOR 70%+ CONFIDENCE:**
+Your objective is to WORK HARD to achieve Grade A/B setups:
+- Ask clarifying questions to fill gaps
+- Demand specific price levels from analysts
+- Verify R:R calculations mathematically
+- Check Pattern Memory alignment
+- If all criteria are met → Award 70%+ confidence honestly
+- If criteria are NOT met → Be honest, stay at Grade C or lower`;
+
+export const DEBATE_QUALITY_MANDATE = `**QUALITY ENFORCEMENT MANDATE:**
+You are the GATEKEEPER of quality. Do NOT accept vague, generic, or unreliable outputs.
+1. **Quality Checkpoint:** After EACH analyst turn, rate output quality (1-10).
+2. **Persistent Questioning Loop (Low Grade Protocol):**
+   - Grade A/B (≥70%) → Proceed to final verdict.
+   - Grade C (55-69%) → Ask: "What SPECIFIC evidence would justify 70%+ confidence?"
+   - Grade D/F (<55%) → Ask: "Is this trade even viable? What must change?"
+   - Continue questioning until upgraded to A/B OR honestly marked AVOID.
+3. **Stop Condition:** Do NOT proceed until you are satisfied (Score > 8) with reliability.
+4. **Honesty Check:**
+   - If you cannot justify ≥70% confidence with specific evidence, DO NOT assign it
+   - Better to be honest at 65% than hallucinate at 75%`;
+
+export const REFINEMENT_LOOP_SCRIPT = `"This setup is currently Grade [C/D/F]. I will NOT proceed until it is upgraded. Answer these:"
+- "What SPECIFIC price action would upgrade this to Grade A?"
+- "Is the risk fatal or manageable? How do we mitigate?"
+- "Show me the EXACT invalidation level."`;
+
+export const GATE_CAP_CHALLENGE = `Your confidence of X% exceeds the Gate's cap of Y%. Justify this NOW with specific evidence, or accept the cap.`;
+
+export const GATE_CAP_CRITICAL = `**CRITICAL:** If analysts cannot justify exceeding the Gate's cap, the final verdict MUST respect the cap.`;
+
+export const MONTE_CARLO_RECONCILIATION_PROMPT = `Review the Monte Carlo probabilities (Win Rate & Ruin Risk). How do they compare to your estimated AI Probabilities for SL/TP? Reconcile any major divergence.`;
+
+export const CHART_VALIDATION_QUESTIONS = `"Let's validate your thesis against the Numeric Chart Representation. Reference the chart data:"
+- "What does the trend maturity (early/mid/late) tell us about entry timing?"
+- "Is the market regime (trend/range/compression/breakout) aligned with your strategy?"
+- "Does the wick bias and volume trend support or contradict your direction?"`;
+
+export const MTF_ALIGNMENT_CHECK_PROMPT = `"MTF Alignment Check: Are 4H-1H aligned? Are 1H-15M aligned? If divergent, reduce confidence."`;
+
+export const CHART_CONTRADICTION_CRITICAL = `**CRITICAL:** If chart data contradicts thesis, analysts MUST acknowledge and explain why they proceed.`;
+
+export const DUAL_SCENARIO_CRITICAL = `**CRITICAL:** The final JSON MUST include "dualScenarioAnalysis" with BOTH bullish and bearish scenarios populated with specific price levels.`;
+
+export const RED_TEAM_QUESTION = `"How does this trade FAIL?"`;
+
+export const FINAL_RESOLUTION_PROMPT = `"Final evidence required from each party."`;
+
+export const VALIDITY_WINDOW_PROMPT = `"How long does this setup remain valid? Consider: (1) timeframe analyzed, (2) current volatility, (3) proximity to key events, (4) pattern decay rate."`;
+
+export const VALIDITY_GUIDELINES = `- Scalp / high volatility: 30m - 2h
+- Intraday setups: 2h - 6h
+- Swing / multi-timeframe: 6h - 24h
+- Position trades: 24h - 72h`;

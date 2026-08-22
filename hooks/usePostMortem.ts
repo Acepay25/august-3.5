@@ -12,7 +12,7 @@ import { writeModelNote } from '../services/learning/MemoryFilesService';
 import { syncClosedTradeToNotebook } from '../services/learning/SkillMemoryService';
 import { writeNotebookNoteFromPostMortem } from '../services/learning/NotebookWriterService';
 import { craftSkillFromPostMortem } from '../services/learning/SkillCraftService';
-import { queueSkillDraft } from '../utils/skillDrafts';
+import { queueSkillDraft, isDraftTombstoned, draftTriggerKey } from '../utils/skillDrafts';
 import { MAX_TRADE_SUMMARIES } from './useTradeLogging';
 import { saveThinkingBatch, buildThinkingRecordId, getThinkingTradeId } from '../services/infrastructure/ThinkingStoreService';
 import { lensFromSpeakerName } from '../utils/thinkingLens';
@@ -22,6 +22,7 @@ import { extractPostMortemFinalReport } from '../utils/postMortemReport';
 import { classifyRootCause } from '../utils/rootCause';
 import { fetchMarketData, normalizeSymbol } from '../services/analysis/MarketDataService';
 import { PriceAlertService } from '../services/ui/PriceAlertService';
+import { getActiveUsername } from '../utils/activeUser';
 
 export interface UsePostMortemParams {
     // Conversation state
@@ -525,7 +526,7 @@ Please investigate this discrepancy in your analysis.
                     // LOW #10: static import — this module is already in the
                     // main bundle (useAnalysisPipeline imports it statically),
                     // so the dynamic import gave zero code-splitting benefit.
-                    const username = localStorage.getItem('last_active_user') || 'default';
+                    const username = getActiveUsername();
                     const now = new Date().toISOString();
                     const turnRecords = postMortemTurns.map((turn, idx) => ({
                         id: buildThinkingRecordId(postMortemTradeId, turn.speaker.toLowerCase().includes('moderator') ? 'moderator' : turn.speaker.toLowerCase(), 'debate_turn', idx),
@@ -649,7 +650,7 @@ Please investigate this discrepancy in your analysis.
                 // — the report is already saved, a diary failure must never
                 // fail the post-mortem.
                 try {
-                    const notebookUser = localStorage.getItem('last_active_user') || 'default';
+                    const notebookUser = getActiveUsername();
                     const closed = {
                         ...tradeToUpdate,
                         postMortem: finalPostMortemReport,
@@ -658,7 +659,7 @@ Please investigate this discrepancy in your analysis.
                     const craftConfig = memoryConfig ?? enabledProviders[0]?.config;
                     if (craftConfig) {
                         const crafted = await craftSkillFromPostMortem(closed, craftConfig);
-                        if (crafted) {
+                        if (crafted && !isDraftTombstoned(draftTriggerKey(closed.analysis?.coinName, crafted), notebookUser)) {
                             queueSkillDraft({
                                 tradeId: closed.id,
                                 coin: closed.analysis?.coinName,
@@ -678,7 +679,7 @@ Please investigate this discrepancy in your analysis.
                 // ready analyst provider. Best-effort: the diary above is the
                 // guaranteed record.
                 try {
-                    const notebookUser = localStorage.getItem('last_active_user') || 'default';
+                    const notebookUser = getActiveUsername();
                     const writerConfig = memoryConfig ?? enabledProviders[0]?.config;
                     if (writerConfig) {
                         const note = await writeNotebookNoteFromPostMortem(

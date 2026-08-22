@@ -7,10 +7,13 @@
  * consistent with the skill's intent?
  *
  * Method: for each historical trade the skill matches, run TWO fresh analyses —
- * one with the skill injected (temporarily force-enabled) and one suppressed —
- * using the SAME provider config. Compare confidence + direction deltas.
- * Deterministic scoring, no LLM grading needed: we measure DECISION FLIPS,
- * not prose quality.
+ * one with the skill content handed to the runner and one without — using the
+ * SAME provider config. Compare confidence + direction deltas. Deterministic
+ * scoring, no LLM grading needed: we measure DECISION FLIPS, not prose quality.
+ *
+ * The service NEVER mutates the live notebook: both arms are expressed purely
+ * through the runner's options, so concurrent analyses can't observe the skill
+ * flapping on/off mid-benchmark.
  *
  * Cost model: 2 × N provider calls (N = matched trades, capped). This is a
  * deliberate, user-triggered benchmark — never run automatically mid-loop.
@@ -21,7 +24,8 @@ import { TradeOutcome } from '../../types';
 import { ProviderConfig } from '../../types/provider';
 import {
     getMemoryFiles,
-    updateMemoryFile,
+    updateMemoryFileUnlocked,
+    withNotebookWriteLock,
 } from './MemoryFilesService';
 import {
     parseSkillMarkdown,
@@ -72,9 +76,18 @@ export interface SkillEvalAnalysisOutput {
     direction?: string;
 }
 
+/** Everything a runner needs to render the WITH-skill arm itself. */
+export interface SkillEvalSkillContext {
+    /** Notebook file name, e.g. "btc-short-avoid.md". */
+    name: string;
+    /** Full stored markdown (frontmatter included). */
+    content: string;
+    meta: SkillMeta;
+}
+
 export type SkillAnalysisRunner = (
     trade: LoggedTrade,
-    options: { skillEnabled: boolean },
+    options: { skillEnabled: boolean; skill?: SkillEvalSkillContext },
 ) => Promise<SkillEvalAnalysisOutput>;
 
 const outcomeOf = (t: LoggedTrade): SkillEvalCase['actualOutcome'] =>
@@ -128,8 +141,8 @@ const repeatAligned = (from?: string, to?: string): boolean | undefined => {
 
 /**
  * Run the full eval for one skill file. The runner callback executes ONE
- * analysis turn against a trade; the service toggles skill visibility around
- * it so the pipeline's normal injection path does the rest.
+ * analysis turn against a trade; the WITH-skill arm receives the real skill
+ * context so the runner decides how to inject it — no shared state involved.
  */
 export const evaluateSkill = async (
     fileId: string,
@@ -139,6 +152,7 @@ export const evaluateSkill = async (
     runner: SkillAnalysisRunner,
 ): Promise<SkillEvalResult> => {
     void config; // runner captures the provider config; kept in signature for callers/diagnostics.
+    void username;
     const file = getMemoryFiles().files.find(f => f.id === fileId);
     const base = file ? parseSkillMarkdown(file.content) : null;
     if (!file || !base) {
@@ -150,50 +164,36 @@ export const evaluateSkill = async (
         return emptyResult(fileId, file.name, 'no matching historical trades');
     }
 
+    const skill: SkillEvalSkillContext = { name: file.name, content: file.content, meta: base };
     const pairs: SkillEvalPair[] = [];
     let flips = 0;
     let alignedFlips = 0;
     let misalignedFlips = 0;
 
-    // Temporarily suppress the skill for baseline runs (restore in finally).
-    const originallyEnabled = file.enabled;
-    try {
-        await updateMemoryFile(fileId, { enabled: false }, username);
-        for (const t of evalTrades) {
-            const baseline = await safeRun(runner, t, false);
-            await updateMemoryFile(fileId, { enabled: originallyEnabled }, username);
-            const withSkill = await safeRun(runner, t, true);
-            await updateMemoryFile(fileId, { enabled: false }, username);
+    for (const t of evalTrades) {
+        const baseline = await safeRun(runner, t, false, skill);
+        const withSkill = await safeRun(runner, t, true, skill);
 
-            const pair: SkillEvalPair = {
-                tradeId: t.id,
-                baselineConfidence: baseline.confidence,
-                baselineDirection: baseline.direction,
-                withConfidence: withSkill.confidence,
-                withDirection: withSkill.direction,
-            };
-            pairs.push(pair);
-
-            const changed = baseline.confidence !== withSkill.confidence
-                || baseline.direction !== withSkill.direction;
-            if (!changed) continue;
-            flips += 1;
-            const aligned = base.kind === 'avoid'
-                ? avoidAligned(baseline.confidence, withSkill.confidence)
-                    ?? (withSkill.direction !== baseline.direction ? withSkill.direction === 'Neutral' : undefined)
-                : repeatAligned(baseline.confidence, withSkill.confidence)
-                    ?? (withSkill.direction !== baseline.direction ? baseline.direction === 'Neutral' : undefined);
-            if (aligned === true) alignedFlips += 1;
-            else if (aligned === false) misalignedFlips += 1;
-        }
-    } catch (e) {
-        return {
-            ...emptyResult(fileId, file.name, e instanceof Error ? e.message : String(e)),
-            cases: pairs,
-            flips, alignedFlips, misalignedFlips,
+        const pair: SkillEvalPair = {
+            tradeId: t.id,
+            baselineConfidence: baseline.confidence,
+            baselineDirection: baseline.direction,
+            withConfidence: withSkill.confidence,
+            withDirection: withSkill.direction,
         };
-    } finally {
-        await updateMemoryFile(fileId, { enabled: originallyEnabled }, username).catch(() => undefined);
+        pairs.push(pair);
+
+        const changed = baseline.confidence !== withSkill.confidence
+            || baseline.direction !== withSkill.direction;
+        if (!changed) continue;
+        flips += 1;
+        const aligned = base.kind === 'avoid'
+            ? avoidAligned(baseline.confidence, withSkill.confidence)
+                ?? (withSkill.direction !== baseline.direction ? withSkill.direction === 'Neutral' : undefined)
+            : repeatAligned(baseline.confidence, withSkill.confidence)
+                ?? (withSkill.direction !== baseline.direction ? baseline.direction === 'Neutral' : undefined);
+        if (aligned === true) alignedFlips += 1;
+        else if (aligned === false) misalignedFlips += 1;
     }
 
     let verdict: SkillEvalResult['verdict'] = 'inconclusive';
@@ -218,9 +218,10 @@ const safeRun = async (
     runner: SkillAnalysisRunner,
     trade: LoggedTrade,
     skillEnabled: boolean,
+    skill: SkillEvalSkillContext,
 ): Promise<SkillEvalAnalysisOutput> => {
     try {
-        return await runner(trade, { skillEnabled });
+        return await runner(trade, { skillEnabled, skill });
     } catch {
         return {};
     }
@@ -241,7 +242,7 @@ const emptyResult = (fileId: string, name: string, error: string): SkillEvalResu
  * Persist an eval verdict into the skill frontmatter as `evalVerdict:` so the
  * dashboard and the effectiveness review can weigh it.
  */
-export const recordEvalVerdict = async (
+const recordEvalVerdictUnlocked = async (
     fileId: string,
     result: Pick<SkillEvalResult, 'verdict' | 'flips' | 'alignedFlips'>,
     username: string,
@@ -254,8 +255,16 @@ export const recordEvalVerdict = async (
     meta.evalDetail = `${result.alignedFlips}/${result.flips}`;
     meta.lastEvalAt = new Date().toISOString();
     meta.modifiedAt = meta.lastEvalAt;
-    await updateMemoryFile(fileId, {
+    await updateMemoryFileUnlocked(fileId, {
         content: serializeSkill(meta, titleFromMeta(meta)),
         enabled: meta.status !== 'retired',
     }, username);
 };
+
+/** Serialized public API — see withNotebookWriteLock in MemoryFilesService. */
+export const recordEvalVerdict = (
+    fileId: string,
+    result: Pick<SkillEvalResult, 'verdict' | 'flips' | 'alignedFlips'>,
+    username: string,
+): Promise<void> =>
+    withNotebookWriteLock(() => recordEvalVerdictUnlocked(fileId, result, username));

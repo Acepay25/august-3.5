@@ -8,11 +8,11 @@ import { ProviderConfig } from '../../types/provider';
 import { getQuickResponse } from '../providers/GenericAnalysisService';
 import { sanitizeAIResponse } from '../../utils/sanitizers';
 import {
-    createMemoryFile,
+    createMemoryFileUnlocked,
     getMemoryFiles,
     getMemoryFilesIndex,
     SUGGESTIONS_FILE_NAME,
-    updateMemoryFile,
+    updateMemoryFileUnlocked,
     withSilentMemoryPersist,
 } from './MemoryFilesService';
 
@@ -58,10 +58,10 @@ export const runNotebookReview = async (
         );
         await withSilentMemoryPersist(async () => {
             if (existing) {
-                await updateMemoryFile(existing.id, { content, enabled: false }, username);
+                await updateMemoryFileUnlocked(existing.id, { content, enabled: false }, username);
             } else {
-                const created = await createMemoryFile(folder.id, SUGGESTIONS_FILE_NAME, content, username, true);
-                await updateMemoryFile(created.id, { enabled: false }, username);
+                const created = await createMemoryFileUnlocked(folder.id, SUGGESTIONS_FILE_NAME, content, username, true);
+                await updateMemoryFileUnlocked(created.id, { enabled: false }, username);
             }
         });
         return true;

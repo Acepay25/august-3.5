@@ -14,6 +14,7 @@ import { SLOptimizationData } from '../services/backtesting/StopLossOptimizerSer
 import { ConfidenceLevel } from '../services/validation/ConfidenceCalibrationService';
 import { syncClosedTradeToNotebook } from '../services/learning/SkillMemoryService';
 import { appendWatchEpisode } from '../utils/watchList';
+import { getActiveUsername } from '../utils/activeUser';
 
 // Maximum number of trade summaries (Recent Insights) to keep - enforces FIFO when limit reached
 export const MAX_TRADE_SUMMARIES = 100;
@@ -264,7 +265,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             return m.watched ? appendWatchEpisode(next, 'logged', outcome) : next;
         }));
 
-        const notebookUser = localStorage.getItem('last_active_user') || 'default';
+        const notebookUser = getActiveUsername();
         void syncClosedTradeToNotebook(loggedTrade, [loggedTrade, ...loggedTrades.filter(t => t.id !== loggedTrade.id)], notebookUser)
             .catch(err => console.warn('[TraderNotebook] Closed-trade sync failed:', err));
 
@@ -285,7 +286,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
                 tradeId,
                 outcome,
                 message.id,
-                localStorage.getItem('last_active_user') || 'default',
+                getActiveUsername(),
                 { pnlAmount: loggedTrade.pnlAmount, pnlPercent: loggedTrade.pnlPercent }
             ).catch(err => {
                 console.warn('[ThinkingStore] Failed to update outcome:', err);
@@ -513,7 +514,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         try {
             const { updateThinkingOutcome, getThinkingTradeId } = await import('../services/infrastructure/ThinkingStoreService');
             const tradeId = getThinkingTradeId(loggedTrade.analysis?.createdAt, loggedTrade.id);
-            updateThinkingOutcome(tradeId, TradeOutcome.ENTRY_NOT_HIT, candidate.message.id, localStorage.getItem('last_active_user') || 'default').catch(err => {
+            updateThinkingOutcome(tradeId, TradeOutcome.ENTRY_NOT_HIT, candidate.message.id, getActiveUsername()).catch(err => {
                 console.warn('[ThinkingStore] Failed to update outcome:', err);
             });
         } catch (err) {

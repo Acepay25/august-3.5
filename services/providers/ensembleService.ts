@@ -22,8 +22,23 @@ import {
     MODERATOR_FINAL_VERDICT_PROMPT_COMPACT,
     MODERATOR_CLARIFICATION_QUESTIONS_PROMPT,
     ANALYST_CLARIFICATION_RESPONSE_PROMPT,
-    MODERATOR_CLARIFICATION_JUDGMENT_PROMPT
+    MODERATOR_CLARIFICATION_JUDGMENT_PROMPT,
+    DEBATE_CONFIDENCE_GOAL,
+    DEBATE_QUALITY_MANDATE,
+    REFINEMENT_LOOP_SCRIPT,
+    GATE_CAP_CHALLENGE,
+    GATE_CAP_CRITICAL,
+    MONTE_CARLO_RECONCILIATION_PROMPT,
+    CHART_VALIDATION_QUESTIONS,
+    MTF_ALIGNMENT_CHECK_PROMPT,
+    CHART_CONTRADICTION_CRITICAL,
+    DUAL_SCENARIO_CRITICAL,
+    RED_TEAM_QUESTION,
+    FINAL_RESOLUTION_PROMPT,
+    VALIDITY_WINDOW_PROMPT,
+    VALIDITY_GUIDELINES
 } from '../../constants/prompts';
+import { CLARIFICATION_DONE_MARKER, CLARIFICATION_MARKERS_RE, MODERATOR_RETRY_MARKER, replacementTimeoutText } from '../../constants/debateMarkers';
 import { DUAL_SCENARIO_JSON_SCHEMA, MASTER_TRADE_PLAN_MARKDOWN } from '../../constants/schemas';
 import { parseLiveMarketData } from '../../utils/liveMarketParser';
 import { truncateTextToTokens, parsePrice, parseMarkdownTradePlan } from '../../utils/analysisUtils';
@@ -1532,27 +1547,9 @@ export const conductTwoWayDebate = async function* (
       - If ANY of these are missing, cap confidence at 69% (Grade C) maximum
       - Hallucinated confidence = SYSTEM FAILURE. Be honest.
       
-      **🎯 GOAL: AIM FOR 70%+ CONFIDENCE:**
-      Your objective is to WORK HARD to achieve Grade A/B setups:
-      - Ask clarifying questions to fill gaps
-      - Demand specific price levels from analysts
-      - Verify R:R calculations mathematically
-      - Check Pattern Memory alignment
-      - If all criteria are met → Award 70%+ confidence honestly
-      - If criteria are NOT met → Be honest, stay at Grade C or lower
+      ${DEBATE_CONFIDENCE_GOAL}
       
-      **QUALITY ENFORCEMENT MANDATE:**
-      You are the GATEKEEPER of quality. Do NOT accept vague, generic, or unreliable outputs.
-      1. **Quality Checkpoint:** After EACH analyst turn, rate output quality (1-10).
-      2. **Persistent Questioning Loop (Low Grade Protocol):**
-         - Grade A/B (≥70%) → Proceed to final verdict.
-         - Grade C (55-69%) → Ask: "What SPECIFIC evidence would justify 70%+ confidence?"
-         - Grade D/F (<55%) → Ask: "Is this trade even viable? What must change?"
-         - Continue questioning until upgraded to A/B OR honestly marked AVOID.
-      3. **Stop Condition:** Do NOT proceed until you are satisfied (Score > 8) with reliability.
-      4. **Honesty Check:**
-         - If you cannot justify ≥70% confidence with specific evidence, DO NOT assign it
-         - Better to be honest at 65% than hallucinate at 75%
+      ${DEBATE_QUALITY_MANDATE}
       
       1.  **<DEBATE_START>** (Start immediately with this tag)
       
@@ -1576,10 +1573,7 @@ export const conductTwoWayDebate = async function* (
       
       3.5 **ROUND 3: REFINEMENT LOOP (CONDITIONAL — REQUIRED IF GRADE < A/B)**
           *   **TRIGGER:** If the current consensus is Grade C, D, or F (Low/Medium confidence, weak R:R, unclear invalidation):
-          *   Moderator: "This setup is currently Grade [C/D/F]. I will NOT proceed until it is upgraded. Answer these:"
-              - "What SPECIFIC price action would upgrade this to Grade A?"
-              - "Is the risk fatal or manageable? How do we mitigate?"
-              - "Show me the EXACT invalidation level."
+          *   Moderator: ${REFINEMENT_LOOP_SCRIPT}
           *   ${analyst1Name}: Provides specific upgrade conditions (max 60 words)
           *   ${analyst2Name}: Confirms or proposes alternative (max 60 words)
           *   **LOOP:** Repeat questioning until Grade A/B is achieved OR trade is marked AVOID.
@@ -1593,18 +1587,15 @@ export const conductTwoWayDebate = async function* (
               ${analyst1Name}, explain how your thesis aligns with OR addresses these Gate findings."
           *   ${analyst1Name}: Responds to Gate findings (max 60 words)
           *   ${analyst2Name}: Agrees/disagrees, addresses Gate findings (max 60 words)
-          *   Moderator (if confidence > Gate Cap): "Your confidence of X% exceeds the Gate's cap of Y%. Justify this NOW with specific evidence, or accept the cap."
-          *   **CRITICAL:** If analysts cannot justify exceeding the Gate's cap, the final verdict MUST respect the cap.
+          *   Moderator (if confidence > Gate Cap): ${GATE_CAP_CHALLENGE}
+          *   ${GATE_CAP_CRITICAL}
       
       5.  **ROUND 5: NUMERIC CHART ANALYSIS (MANDATORY)**
-          *   Moderator: "Let's validate your thesis against the Numeric Chart Representation. Reference the chart data:"
-              - "What does the trend maturity (early/mid/late) tell us about entry timing?"
-              - "Is the market regime (trend/range/compression/breakout) aligned with your strategy?"
-              - "Does the wick bias and volume trend support or contradict your direction?"
+          *   Moderator: ${CHART_VALIDATION_QUESTIONS}
           *   ${analyst1Name}: Chart validation (max 60 words) — must reference trend, regime, pattern
           *   ${analyst2Name}: Chart validation (max 60 words) — agree/disagree (respond concisely)
-          *   Moderator: "MTF Alignment Check: Are 4H-1H aligned? Are 1H-15M aligned? If divergent, reduce confidence."
-          *   **CRITICAL:** If chart data contradicts thesis, analysts MUST acknowledge and explain why they proceed.
+          *   Moderator: ${MTF_ALIGNMENT_CHECK_PROMPT}
+          *   ${CHART_CONTRADICTION_CRITICAL}
       
       5.5 **ROUND 5.5: DUAL SCENARIO EVALUATION (MANDATORY - DO NOT SKIP)**
           *   Moderator: "⚖️ MANDATORY: Before proceeding, BOTH analysts must evaluate the ALTERNATIVE scenario."
@@ -1613,36 +1604,33 @@ export const conductTwoWayDebate = async function* (
           *   Moderator to ${analyst2Name}: "Same question - define the scenario you're NOT taking. What would prove you wrong?"
           *   ${analyst2Name}: Defines opposite scenario with specific price levels (max 60 words)
           *   Moderator: "Now COMPARE: Which scenario has stronger evidence? Why is [selected direction] more likely than [opposite]?"
-          *   **CRITICAL:** The final JSON MUST include "dualScenarioAnalysis" with BOTH bullish and bearish scenarios populated.
+          *   ${DUAL_SCENARIO_CRITICAL}
       
       6.  **ROUND 6: STATISTICAL REALITY CHECK (MONTE CARLO & AI PROBABILITY)**
-          *   Moderator: "Review the Monte Carlo probabilities (Win Rate & Ruin Risk). How do they compare to your estimated AI Probabilities for SL/TP? Reconcile any major divergence."
+          *   Moderator: "${MONTE_CARLO_RECONCILIATION_PROMPT}"
           *   ${analyst1Name}: Statistical reconciliation (max 50 words)
           *   ${analyst2Name}: Statistical reconciliation (max 50 words)
 
       7.  **ROUND 7: FINAL RESOLUTION** (If disagreement persists)
           *   If analysts STILL disagree on DIRECTION or KEY LEVELS:
-              - Moderator: "Final evidence required from each party."
+              - Moderator: ${FINAL_RESOLUTION_PROMPT}
               - ${analyst1Name}: Final defense (max 60 words)
               - ${analyst2Name}: Final defense (max 60 words)
           *   **If consensus reached in Round 2, skip to Round 8.**
 
       8.  **ROUND 8: RED TEAM STRESS TEST**
-          *   Moderator (Devil's Advocate): "How does this trade FAIL?"
+          *   Moderator (Devil's Advocate): ${RED_TEAM_QUESTION}
           *   ${analyst1Name}: Failure scenario (max 40 words)
           *   ${analyst2Name}: Failure scenario (max 40 words)
       
       9.  **ROUND 9: SETUP VALIDITY WINDOW (MANDATORY)**
-          *   Moderator: "How long does this setup remain valid? Consider: (1) timeframe analyzed, (2) current volatility, (3) proximity to key events, (4) pattern decay rate."
+          *   Moderator: ${VALIDITY_WINDOW_PROMPT}
           *   ${analyst1Name}: Propose validity (e.g., "4h 30m because...") (max 40 words)
           *   ${analyst2Name}: Agree/disagree with counter-reasoning (max 40 words)
           *   Moderator: Synthesize and state final validity in format "Xh Ym"
           
           **VALIDITY GUIDELINES:**
-          - Scalp / high volatility: 30m - 2h
-          - Intraday setups: 2h - 6h
-          - Swing / multi-timeframe: 6h - 24h
-          - Position trades: 24h - 72h
+          ${VALIDITY_GUIDELINES}
       
       10.  **</DEBATE_END>**
 
@@ -2048,27 +2036,9 @@ An actionable trade should offer R:R of at least 1:1.2. If RR < 1.2, mark it **C
 - If ANY of these are missing, cap confidence at 69% (Grade C) maximum
 - Hallucinated confidence = SYSTEM FAILURE. Be honest.
 
-**🎯 GOAL: AIM FOR 70%+ CONFIDENCE:**
-Your objective is to WORK HARD to achieve Grade A/B setups:
-- Ask clarifying questions to fill gaps
-- Demand specific price levels from analysts
-- Verify R:R calculations mathematically
-- Check Pattern Memory alignment
-- If all criteria are met → Award 70%+ confidence honestly
-- If criteria are NOT met → Be honest, stay at Grade C or lower
+${DEBATE_CONFIDENCE_GOAL}
 
-**QUALITY ENFORCEMENT MANDATE:**
-You are the GATEKEEPER of quality. Do NOT accept vague, generic, or unreliable outputs.
-1. **Quality Checkpoint:** After EACH analyst turn, rate output quality (1-10).
-2. **Persistent Questioning Loop (Low Grade Protocol):**
-   - Grade A/B (≥70%) → Proceed to final verdict.
-   - Grade C (55-69%) → Ask: "What SPECIFIC evidence would justify 70%+ confidence?"
-   - Grade D/F (<55%) → Ask: "Is this trade even viable? What must change?"
-   - Continue questioning until upgraded to A/B OR honestly marked AVOID.
-3. **Stop Condition:** Do NOT proceed until you are satisfied (Score > 8) with reliability.
-4. **Honesty Check:**
-   - If you cannot justify ≥70% confidence with specific evidence, DO NOT assign it
-   - Better to be honest at 65% than hallucinate at 75%
+${DEBATE_QUALITY_MANDATE}
 
 ### 1. Start Debate
 Begin immediately with:
@@ -2103,10 +2073,7 @@ Each analyst presents their complete thesis covering ALL sections:
 
 ### 3.5 ROUND 2.5 — REFINEMENT LOOP (CONDITIONAL — REQUIRED IF GRADE < A/B)
 **TRIGGER:** If the current consensus is Grade C, D, or F (Low/Medium confidence, weak R:R, unclear invalidation):
-**Moderator:** "This setup is currently Grade [C/D/F]. I will NOT proceed until it is upgraded. Answer these:"
-- "What SPECIFIC price action would upgrade this to Grade A?"
-- "Is the risk fatal or manageable? How do we mitigate?"
-- "Show me the EXACT invalidation level."
+**Moderator:** ${REFINEMENT_LOOP_SCRIPT}
 **${analyst1Name}:** Provides specific upgrade conditions (max 50 words)
 **${analyst2Name}:** Confirms or proposes alternative (max 50 words)
 **${analyst3Name}:** Final synthesis on upgrade path (max 50 words)
@@ -2135,13 +2102,13 @@ ${analyst1Name}, explain how your thesis aligns with OR addresses these Gate fin
 ### 4. ROUND 3 — GATE SCAN (SKIPPED)
 **Moderator:** "No Gate Scan data is available for this run. Do NOT invent gate findings — proceed to the statistical review."
 `}
-**Moderator (if any confidence exceeds Gate cap):** "Your confidence of X% exceeds the Gate's cap of Y%. Justify this NOW with specific evidence, or accept the cap."
-**CRITICAL:** If analysts cannot justify exceeding the Gate's cap, the final verdict MUST respect the cap.
+**Moderator (if any confidence exceeds Gate cap):** ${GATE_CAP_CHALLENGE}
+${GATE_CAP_CRITICAL}
 
 ---
 
 ### 5. ROUND 4 — STATISTICAL REALITY CHECK (MONTE CARLO & AI PROBABILITY)
-**Moderator:** "Review the Monte Carlo probabilities (Win Rate & Ruin Risk). How do they compare to your estimated AI Probabilities for SL/TP? Reconcile any major divergence."
+**Moderator:** "${MONTE_CARLO_RECONCILIATION_PROMPT}"
 **${analyst1Name}:** Statistical reconciliation (max 40 words)
 **${analyst2Name}:** Statistical reconciliation (max 40 words)
 **${analyst3Name}:** Statistical reconciliation (max 40 words)
@@ -2149,15 +2116,12 @@ ${analyst1Name}, explain how your thesis aligns with OR addresses these Gate fin
 ---
 
 ### 5.5 ROUND 4.5 — NUMERIC CHART ANALYSIS (MANDATORY)
-**Moderator:** "Let's validate your thesis against the Numeric Chart Representation. Reference the chart data:"
-- "What does the trend maturity (early/mid/late) tell us about entry timing?"
-- "Is the market regime (trend/range/compression/breakout) aligned with your strategy?"
-- "Does the wick bias and volume trend support or contradict your direction?"
+**Moderator:** ${CHART_VALIDATION_QUESTIONS}
 **${analyst1Name}:** Chart validation (max 50 words) — must reference trend, regime, pattern
 **${analyst2Name}:** Chart validation (max 50 words) — agree/disagree with chart interpretation
 **${analyst3Name}:** Chart validation (max 50 words) — synthesize chart data consensus
-**Moderator:** "MTF Alignment Check: 4H-1H aligned? 1H-15M aligned? If divergent, reduce confidence."
-**CRITICAL:** If chart data contradicts thesis, analysts MUST acknowledge and explain.
+**Moderator:** ${MTF_ALIGNMENT_CHECK_PROMPT}
+${CHART_CONTRADICTION_CRITICAL}
 
 ---
 
@@ -2172,13 +2136,13 @@ ${analyst1Name}, explain how your thesis aligns with OR addresses these Gate fin
 **${analyst3Name}:** Synthesizes: "The [selected] scenario dominates because..." (max 60 words)
 
 **Moderator:** "Which scenario wins? Document BOTH in the final JSON."
-**CRITICAL:** The final JSON MUST include "dualScenarioAnalysis" with BOTH bullish and bearish scenarios populated with specific price levels.
+${DUAL_SCENARIO_CRITICAL}
 
 ---
 
 ### 6. ROUND 5 — FINAL RESOLUTION (Only if disagreement persists)
 If analysts STILL disagree on DIRECTION or KEY LEVELS:
-- Moderator: "Final evidence required from each party."
+- Moderator: ${FINAL_RESOLUTION_PROMPT}
 - **${analyst1Name}:** Final defense (max 50 words)
 - **${analyst2Name}:** Final defense (max 50 words)
 - **${analyst3Name}:** Final defense (max 50 words)
@@ -2188,7 +2152,7 @@ If analysts STILL disagree on DIRECTION or KEY LEVELS:
 ---
 
 ### 7. ROUND 6 — RED TEAM STRESS TEST
-**Moderator (Devil's Advocate):** "How does this trade FAIL?"
+**Moderator (Devil's Advocate):** ${RED_TEAM_QUESTION}
 **${analyst1Name}:** Failure scenario (max 40 words)
 **${analyst2Name}:** Failure scenario (max 40 words)
 **${analyst3Name}:** Failure scenario (max 40 words)
@@ -2196,17 +2160,14 @@ If analysts STILL disagree on DIRECTION or KEY LEVELS:
 ---
 
 ### 8. ROUND 7 — SETUP VALIDITY WINDOW (MANDATORY)
-**Moderator:** "How long does this setup remain valid? Consider: (1) timeframe analyzed, (2) current volatility, (3) proximity to key events, (4) pattern decay rate."
+**Moderator:** ${VALIDITY_WINDOW_PROMPT}
 **${analyst1Name}:** Propose validity (e.g., "4h 30m because...") (max 40 words)
 **${analyst2Name}:** Agree/disagree with counter-reasoning (max 40 words)
 **${analyst3Name}:** Final proposal with synthesis (max 40 words)
 **Moderator:** State final validity in format "Xh Ym"
 
 **VALIDITY GUIDELINES:**
-- Scalp / high volatility: 30m - 2h
-- Intraday setups: 2h - 6h
-- Swing / multi-timeframe: 6h - 24h
-- Position trades: 24h - 72h
+${VALIDITY_GUIDELINES}
 
 ---
 
@@ -2440,7 +2401,7 @@ export const buildLivePriceRefreshBlock = (price: number | null | undefined, lab
 // Machine-readable markers emitted by the clarification phase. The questions
 // call may short-circuit with <CLARIFICATION_DONE>; the (internal) judgment
 // call outputs one of the SATISFIED/UNSATISFIED markers.
-const CLARIFICATION_MARKERS = /<CLARIFICATION_(DONE|SATISFIED|UNSATISFIED)>/gi;
+const CLARIFICATION_MARKERS = CLARIFICATION_MARKERS_RE; // single home: constants/debateMarkers
 
 const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -2524,13 +2485,18 @@ export const buildSeatTrustBlock = (
     if (calibrations.length === 0) return '';
 
     // Average sealed conviction per seat from stored debate transcripts.
+    // The protocol asks for exactly ONE sealed line per turn — when a seat's
+    // prose quotes another conviction, keep only their final line so quoted
+    // mentions don't inflate the average.
     const conv = new Map<string, { total: number; count: number }>();
     for (const t of trades ?? []) {
         for (const turn of t.debateTurns ?? []) {
             if (turn.speaker === 'Moderator' || turn.speaker === 'System') continue;
-            const m = turn.text.match(/CONVICTION:\s*(\d{1,3})/i);
-            if (!m) continue;
-            const v = Math.min(100, Math.max(0, parseInt(m[1], 10)));
+            let v: number | null = null;
+            for (const m of turn.text.matchAll(/CONVICTION:\s*(\d{1,3})/gi)) {
+                v = Math.min(100, Math.max(0, parseInt(m[1], 10)));
+            }
+            if (v === null) continue;
             const cur = conv.get(turn.speaker) ?? { total: 0, count: 0 };
             cur.total += v;
             cur.count += 1;
@@ -3184,7 +3150,7 @@ export const conductRealDebate = async function* (
                 // Consumer's offer is still pending — emit the marker so
                 // it abandons the wait; a late click must never inject a
                 // phantom analyst into a debate that already moved on.
-                yield { speaker: 'System', round, text: `<REPLACEMENT_TIMEOUT> No replacement selected for ${name} within the wait window — the debate continues without them.` };
+                yield { speaker: 'System', round, text: replacementTimeoutText(name) };
                 continue;
             }
             const replacement = waitResult.value;
@@ -3345,7 +3311,7 @@ export const conductRealDebate = async function* (
         // Reserve the question round for the verdict so the questions turn
         // (which may carry visible prose before the marker) and the verdict can
         // never collide on the same round.
-        if (/<CLARIFICATION_DONE>/i.test(questionText)) {
+        if (questionText.toUpperCase().includes(CLARIFICATION_DONE_MARKER)) {
             lastRebuttalRound = questionRound;
             break;
         }
@@ -3479,7 +3445,7 @@ export const conductRealDebate = async function* (
                     replacementTimeoutMs ?? DEBATE_REPLACEMENT_WAIT_MS,
                 );
                 if (waitResult.status === 'timedOut') {
-                    yield { speaker: 'System', round: answerRound, text: `<REPLACEMENT_TIMEOUT> No replacement selected for ${droppedName} within the wait window — the debate continues without them.` };
+                    yield { speaker: 'System', round: answerRound, text: replacementTimeoutText(droppedName) };
                     continue;
                 }
                 const replacement = waitResult.value;
@@ -3704,7 +3670,7 @@ export const conductRealDebate = async function* (
         // Reset the consumer's accumulated text for this round before the
         // retry streams — otherwise the failed attempt's partial prose
         // concatenates with the successful verdict in one bubble.
-        yield { speaker: 'Moderator', round: finalRound, text: '\n<MODERATOR_RETRY>\n' };
+        yield { speaker: 'Moderator', round: finalRound, text: `\n${MODERATOR_RETRY_MARKER}\n` };
     }
 };
 

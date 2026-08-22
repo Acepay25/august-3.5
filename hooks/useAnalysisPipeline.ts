@@ -13,6 +13,7 @@ import * as ensembleService from '../services/providers/ensembleService';
 import { BotRegistry } from '../services/bots/BotRegistry';
 import { defaultToolsForRole } from '../types/bot';
 import { AnalystRole } from '../types/enums';
+import { getActiveUsername } from '../utils/activeUser';
 
 // Analysis / validation / backtesting services
 import { tryFetchHybridDataFromPromptWithCalibration, generateHybridPromptInjection, HybridDataPacket, runMonteCarloForSetupAsync } from '../services/analysis/HybridIntelligenceService';
@@ -40,6 +41,8 @@ import { buildDecisionReflectionContext } from '../services/learning/DecisionRef
 import { buildCoinLessonsBlock } from '../utils/postMortemLessons';
 import { getEnabledStrategiesText } from '../services/infrastructure/StrategyService';
 import { COMMON_WORDS } from '../constants/commonWords';
+import { buildModelsUsedRecord } from './analysisPipeline/modelsUsed';
+import { assemblePipelineMemoryContext } from './analysisPipeline/memoryContext';
 import { useRafThrottle } from './useRafThrottle';
 
 // ─── Dev-only logging ─────────────────────────────────────────────────────
@@ -92,6 +95,7 @@ import { beginPromptLane, endPromptLane } from '../services/infrastructure/Promp
 import { buildEnsembleAnalysts, buildAnalystFailureReport, findDuplicateAnalystOutputs, AnalystOutputSample } from '../services/ui/EnsembleAnalystService';
 import { getEffectiveStyle } from '../services/ui/TradingStyleDetector';
 import GlobalLearningService from '../services/learning/GlobalLearningService';
+import { CLARIFICATION_MARKERS_RE, DEBATE_END_MARKERS_RE, MODERATOR_ERROR_BLOCK_RE, MODERATOR_RETRY_MARKER, MODERATOR_RETRY_RE, REPLACEMENT_TIMEOUT_MARKER } from '../constants/debateMarkers';
 
 // ─── Params Interface ──────────────────────────────────────────────────────────
 
@@ -192,35 +196,7 @@ export interface UseAnalysisPipelineParams {
 // unified learning context can match insights/mistakes to the current setup
 // before the AI analysis completes (there is no analysis yet at send time).
 // Falls back to undefined when no keyword matches.
-const minePatternFromPrompt = (prompt: string): string | undefined => {
-    const p = prompt.toUpperCase();
-    if (p.includes('FAMILY A') || p.includes('EXHAUSTION') || p.includes('TRAP') || p.includes('FAKEOUT')) return 'Family A';
-    if (p.includes('FAMILY B') || p.includes('REVERSAL')) return 'Family B';
-    if (p.includes('FAMILY C') || p.includes('CONTINUATION')) return 'Family C';
-    if (p.includes('OMEGA') || p.includes('MOMENTUM')) return 'Family Omega';
-    return undefined;
-};
 
-/**
- * modelsUsed is a Record<providerId, modelId>, but when two lens roles share
- * ONE provider with different models the second entry would overwrite the
- * first (one analyst silently disappears from the model attribution). The
- * UI's per-bubble lookup already accepts `providerId:model` keys
- * (DebateChat.tsx), so colliding keys fall back to thoughtsKey form.
- */
-const buildModelsUsedRecord = (analysts: { config: { id: string }; model: string; thoughtsKey: string }[]): Record<string, string> => {
-    const record: Record<string, string> = {};
-    const seen = new Set<string>();
-    for (const analyst of analysts) {
-        if (seen.has(analyst.config.id)) {
-            record[analyst.thoughtsKey] = analyst.model;
-        } else {
-            seen.add(analyst.config.id);
-            record[analyst.config.id] = analyst.model;
-        }
-    }
-    return record;
-};
 
 
 /**
@@ -844,7 +820,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             const provider = memoryConfig || enabledProviders[0]?.config;
             try {
                 setLoadingMessage('Writing to your notebook…');
-                const username = localStorage.getItem('last_active_user') || 'default';
+                const username = getActiveUsername();
                 // Give the model something concrete to write about: the most
                 // recent analysis card in this conversation, if any.
                 let notebookContext = '';
@@ -1218,70 +1194,21 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             // common command words, mirroring the GateKeeper commonWords
             // exclusion list. Hoisted ABOVE the moderator bundle so the
             // journal-driven accuracy blocks can join it.
-            const learningCommonWords = COMMON_WORDS;
-            const detectedCoinRaw = effectiveInput.match(/\b([A-Z]{2,10})(?:USDT?)?/)?.[1]?.toUpperCase();
-            const detectedLearningCoin = detectedCoinRaw && !learningCommonWords.includes(detectedCoinRaw) ? detectedCoinRaw : undefined;
-            const pendingDirection = effectiveInput.toLowerCase().includes('long') ? 'Long' :
-                effectiveInput.toLowerCase().includes('short') ? 'Short' : 'Neutral';
-            const pendingPattern = minePatternFromPrompt(effectiveInput);
-
-            // TRADER NOTEBOOK: retrieve matching files, skills, similar trades
-            // and rules for THIS setup — never dump the whole notebook.
-            const memoryQuery = {
-                coin: detectedLearningCoin,
-                direction: pendingDirection,
-                family: pendingPattern,
-                pattern: pendingPattern,
-                regime: freshHybridData?.regime?.regime,
-            };
-            const botMemoryContext = (() => {
-                try {
-                    const userKey = (typeof localStorage !== 'undefined' ? localStorage.getItem('last_active_user') : null) || 'default';
-                    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(`bots_v1_${userKey}`) : null;
-                    const data = raw ? JSON.parse(raw) as { bots?: Array<{ id: string; memoryScope?: string }> } : null;
-                    const first = data?.bots?.[0];
-                    return first ? getBotMemoryContext(first.id, memoryQuery as any, (first.memoryScope as any) || 'global') : '';
-                } catch { return ''; }
-            })();
-            const memoryFilesContext = [getMemoryFilesContext(memoryQuery, loggedTrades, 'analyst'), botMemoryContext].filter(Boolean).join('\n\n---\n\n');
-            const moderatorMemoryContext = [getMemoryFilesContext(memoryQuery, loggedTrades, 'moderator'), botMemoryContext].filter(Boolean).join('\n\n---\n\n');
-            const memoryRetrieved = listRetrievedMemorySources(memoryQuery, loggedTrades, 'analyst');
-
-            // JOURNAL-DRIVEN ACCURACY (SetupMemoryService): before the
-            // analysts answer, they see their own logged track record on
-            // setups like this one (similar-setup outcomes), and the
-            // moderator sees each model's win rate in the CURRENT regime.
-            // Code-side, zero AI cost — the journal is the model's edge.
-            const similarSetupsContext = buildSimilarSetupsContext(
-                { coinName: detectedLearningCoin, direction: pendingDirection, detectedPatternFamily: pendingPattern },
-                loggedTrades,
-                freshHybridData?.regime?.regime
-            );
-            const regimeWeightingContext = buildRegimeWeightingContext(
-                loggedTrades,
-                freshHybridData?.regime?.regime
-            );
-
-            // Loss priming rows (B4): this setup's recent closed trades,
-            // compact — the debate seats recall their own losses on setups
-            // like this before arguing.
-            const lossPrimingRows = loggedTrades
-                .filter(t => (t.outcome === 'WIN' || t.outcome === 'LOSS')
-                    && (!detectedLearningCoin || t.analysis?.coinName?.toLowerCase() === detectedLearningCoin.toLowerCase())
-                    && (pendingDirection === 'Neutral' || t.analysis?.direction === pendingDirection))
-                .sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''))
-                .slice(0, 6)
-                .map(t => {
-                    let lesson = '';
-                    try { lesson = extractLessonFromPostMortem(t.postMortem || ''); } catch { /* optional */ }
-                    return {
-                        outcome: t.outcome as string | undefined,
-                        keyLesson: lesson,
-                        coin: t.analysis?.coinName,
-                        direction: t.analysis?.direction,
-                        timestamp: t.timestamp,
-                    };
-                });
+            // TRADER NOTEBOOK stage (extracted): notebook slices, bot
+            // memory, similar-setups record, regime weighting, loss priming.
+            const {
+                memoryQuery,
+                detectedLearningCoin,
+                pendingDirection,
+                pendingPattern,
+                botMemoryContext,
+                memoryFilesContext,
+                moderatorMemoryContext,
+                memoryRetrieved,
+                similarSetupsContext,
+                regimeWeightingContext,
+                lossPrimingRows,
+            } = assemblePipelineMemoryContext(effectiveInput, loggedTrades, freshHybridData ?? null);
 
             // One context bundle for every moderator surface (autoplay debate,
             // real debate, accuracy verification, compact retry): the same
@@ -2286,6 +2213,11 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                             }
                         } catch (gateError) {
                             console.warn('[Pipeline] Pattern memory gate failed:', gateError);
+                            // Fail-open, but never silently — enforcement is
+                            // weaker this run and the user should know.
+                            if (!isAutomationRun) {
+                                toast.warning('Pattern-memory gate skipped', 'Historical-failure enforcement could not run for this debate.');
+                            }
                         }
                     }
 
@@ -2797,11 +2729,11 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                     const text = turnTexts[k] || '';
                                     const cleanedText = speaker === 'Moderator'
                                         ? text
-                                            .replace(/<CLARIFICATION_(?:DONE|SATISFIED|UNSATISFIED)>/gi, '')
-                                            .replace(/<MODERATOR_RETRY>/gi, '')
-                                            .replace(/<MODERATOR_ERROR>[\s\S]*?<\/MODERATOR_ERROR>/gi, '')
+                                            .replace(CLARIFICATION_MARKERS_RE, '')
+                                            .replace(MODERATOR_RETRY_RE, '')
+                                            .replace(MODERATOR_ERROR_BLOCK_RE, '')
                                             .replace(/<JSON_PLAN>[\s\S]*/i, '')
-                                            .replace(/<\/?DEBATE_END>/gi, '')
+                                            .replace(DEBATE_END_MARKERS_RE, '')
                                             .trim()
                                         : text.trim();
                                     const peeled = peelDebateTurn(speaker, cleanedText, k);
@@ -2872,7 +2804,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                             // The engine emits this marker before a moderator
                             // verdict retry — discard the failed attempt's
                             // partial prose so it never glues onto the verdict.
-                            if (event.text.includes('<MODERATOR_RETRY>')) {
+                            if (event.text.includes(MODERATOR_RETRY_MARKER)) {
                                 // Discard the failed attempt entirely — text, the
                                 // first-delta timestamp, AND the streamed thinking
                                 // (the retried verdict must not carry the failed
@@ -2889,7 +2821,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                             // a late click on the banner can never resolve into
                             // a phantom analyst (a full paid re-analysis call
                             // injected into consensus/runStats).
-                            if (event.text.includes('<REPLACEMENT_TIMEOUT>')) {
+                            if (event.text.includes(REPLACEMENT_TIMEOUT_MARKER)) {
                                 const pending = replacementChoiceRef.current;
                                 if (pending) handleReplacementChoice(pending.messageId, null);
                             }
@@ -2915,9 +2847,9 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                             const modKey = `${moderatorRound}::Moderator`;
                             if (turnTexts[modKey]) {
                                 const cleaned = turnTexts[modKey]
-                                    .replace(/<MODERATOR_RETRY>/gi, '')
-                                    .replace(/<\/?DEBATE_END>/gi, '')
-                                    .replace(/<MODERATOR_ERROR>[\s\S]*?<\/MODERATOR_ERROR>/gi, '')
+                                    .replace(MODERATOR_RETRY_RE, '')
+                                    .replace(DEBATE_END_MARKERS_RE, '')
+                                    .replace(MODERATOR_ERROR_BLOCK_RE, '')
                                     .replace(/<JSON_PLAN>[\s\S]*/i, '')
                                     .trim();
                                 if (cleaned) {
@@ -3262,7 +3194,7 @@ ${accuracyVerificationNote}`
                             maybeQueueVerdictSkillDraft(
                                 debateMessageId,
                                 processedAnalysis ?? finalAnalysis,
-                                localStorage.getItem('last_active_user') || 'default',
+                                getActiveUsername(),
                             );
                         } catch (draftError) {
                             console.warn('[SkillDraft] Verdict draft queue failed (non-fatal):', draftError);
@@ -3285,7 +3217,7 @@ ${accuracyVerificationNote}`
                     // so they can be correlated with outcomes and exported for model training.
                     try {
                         const tradeId = getThinkingTradeId(finalAnalysis.createdAt, debateMessageId);
-                        const username = localStorage.getItem('last_active_user') || 'default';
+                        const username = getActiveUsername();
                         const now = new Date().toISOString();
                         const thinkingRecords: ThinkingRecord[] = [];
                         const lensEnabled = Boolean(runLensConfig?.enabled && hasCompleteAnalystAssignments);
@@ -3326,10 +3258,10 @@ ${accuracyVerificationNote}`
 
                         // Save moderator synthesis (the full debate response)
                         const cleanedVerdict = fullResponseText
-                                .replace(/<CLARIFICATION_(?:DONE|SATISFIED|UNSATISFIED)>/gi, '')
-                                .replace(/<MODERATOR_RETRY>/gi, '')
-                                .replace(/<MODERATOR_ERROR>[\s\S]*?<\/MODERATOR_ERROR>/gi, '')
-                                .replace(/<\/?DEBATE_END>/gi, '')
+                                .replace(CLARIFICATION_MARKERS_RE, '')
+                                .replace(MODERATOR_RETRY_RE, '')
+                                .replace(MODERATOR_ERROR_BLOCK_RE, '')
+                                .replace(DEBATE_END_MARKERS_RE, '')
                                 .replace(/<JSON_PLAN>[\s\S]*/i, '')
                                 .replace(/<\/?DEBATE_START>/gi, '')
                                 .trim();
@@ -3482,7 +3414,7 @@ ${accuracyVerificationNote}`
                     // analyst record per card) so the Think view and outcome
                     // correlation work for single-provider runs too.
                     try {
-                        const username = localStorage.getItem('last_active_user') || 'default';
+                        const username = getActiveUsername();
                         const now = new Date().toISOString();
                         const soloSplit = splitThinkingFromOutput(soloRawReasoning || result.thoughtProcess || '', result.finalOutput || '');
                         persistThinkingRecords([{

@@ -1,5 +1,5 @@
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback, useReducer } from 'react';
 import { BrainCircuit, ChevronDownIcon } from 'lucide-react';
 import { LoggedTrade, MemoryFile, MemoryFolder, TradeOutcome } from '../../types';
 import { computeLearningProfile, PersonalizedLearningProfile } from '../../services/learning/SelfLearningService';
@@ -7,8 +7,11 @@ import { initMemoryFiles, getMemoryFiles, computeTopLessons, TopLesson } from '.
 import { summarizeSimilarSetups, COLD_START_MIN } from '../../services/learning/SetupMemoryService';
 import { computeEvidenceQualityStats } from '../../utils/analysisQuality';
 import { summarizePromptVersions, summarizePromptLanes } from '../../utils/promptVersionStats';
-import { listSkills, reviewSkillEffectiveness } from '../../services/learning/SkillMemoryService';
+import { listSkills, reviewSkillEffectiveness, applyReviewRecommendation } from '../../services/learning/SkillMemoryService';
 import { computeAllSkillLifts } from '../../services/learning/MemoryProvenanceService';
+import { getRecentMemoryInjections, type MemoryInjectionRecord } from '../../services/learning/MemoryInjectionService';
+import { useToastActions } from '../shared/Toast';
+import { getActiveUsername } from '../../utils/activeUser';
 import { getCalibrationSummaries } from '../../services/backtesting/ModelPerformanceService';
 import { buildMemoryGraph } from '../../services/learning/MemoryGraph';
 import { EmptyState } from '../ui/EmptyState';
@@ -88,16 +91,38 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
     // Trader Notebook — the markdown memory files the harness writes and the
     // model reads (diary entries, recurring mistakes, profile memory, AI notes).
     const [notebook, setNotebook] = useState<{ folders: MemoryFolder[]; files: MemoryFile[] }>({ folders: [], files: [] });
+    const [notebookVersion, bumpNotebook] = useReducer((n: number) => n + 1, 0);
+    const toast = useToastActions();
+    const [applyingFileId, setApplyingFileId] = useState<string | null>(null);
     useEffect(() => {
         let cancelled = false;
-        const user = username || localStorage.getItem('last_active_user') || 'default';
+        const user = username || getActiveUsername();
         initMemoryFiles(user).then(() => {
             if (cancelled) return;
             const { folders, files } = getMemoryFiles();
             setNotebook({ folders, files });
         });
         return () => { cancelled = true; };
-    }, [username]);
+    }, [username, notebookVersion]);
+
+    /** Apply a review recommendation from the UI, then refresh the notebook. */
+    const handleApplyRecommendation = useCallback(async (
+        fileId: string,
+        fileName: string,
+        recommendation: 'promote' | 'demote' | 'retire',
+    ) => {
+        const user = username || getActiveUsername();
+        setApplyingFileId(fileId);
+        try {
+            const ok = await applyReviewRecommendation(fileId, recommendation, user);
+            if (ok) {
+                toast.success(`Skill ${recommendation}d`, fileName.replace(/\.md$/i, ''));
+                bumpNotebook();
+            }
+        } finally {
+            setApplyingFileId(null);
+        }
+    }, [username, toast]);
 
     // Outcome-weighted clusters — losses first (fix list), then wins (repeat list).
     const topLessons = useMemo(() => computeTopLessons(trades, 6), [trades]);
@@ -118,8 +143,33 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
     const promptVersions = useMemo(() => summarizePromptVersions(closedWindowed), [closedWindowed]);
     const promptLanes = useMemo(() => summarizePromptLanes(closedWindowed), [closedWindowed]);
     const notebookSkills = useMemo(() => listSkills(), [notebook]);
-    const skillReview = useMemo(() => reviewSkillEffectiveness(), [notebook]);
-    const skillLifts = useMemo(() => computeAllSkillLifts(trades), [trades]);
+    // What retrieval ACTUALLY injected (MemoryInjectionService) — drives the
+    // "Learned Skills" list, the review caveat, and precise lift windows.
+    const [injections, setInjections] = useState<MemoryInjectionRecord[]>([]);
+    useEffect(() => {
+        let cancelled = false;
+        const user = username || getActiveUsername();
+        getRecentMemoryInjections(user).then(recs => {
+            if (!cancelled) setInjections(recs);
+        });
+        return () => { cancelled = true; };
+    }, [username, notebook]);
+    const injectedSkillFiles = useMemo(() => {
+        const names = new Set<string>();
+        for (const rec of injections) {
+            for (const src of rec.sources) {
+                if (src.path.startsWith('skills/')) names.add(src.path.slice('skills/'.length));
+            }
+        }
+        return names;
+    }, [injections]);
+    const skillLifts = useMemo(() => computeAllSkillLifts(trades, injections), [trades, injections]);
+    const liftByFileId = useMemo(() =>
+        Object.fromEntries(skillLifts.map(l => [l.fileId, l])), [skillLifts]);
+    const skillReview = useMemo(
+        () => reviewSkillEffectiveness({ liftByFileId, injectedFileNames: injectedSkillFiles }),
+        [notebook, liftByFileId, injectedSkillFiles],
+    );
     const calibrationSummaries = useMemo(() => getCalibrationSummaries().filter(c => c.samples > 0), []);
 
     // Conviction auction history: scan stored debate transcripts for each
@@ -159,7 +209,12 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
         for (const n of memoryGraph.nodes.values()) m.set(n.kind, (m.get(n.kind) ?? 0) + 1);
         return m;
     }, [memoryGraph]);
-    const learnedSkills = useMemo(() => notebookSkills.filter(s => s.meta.wins + s.meta.losses > 0 || s.meta.status === 'confirmed'), [notebookSkills]);
+    // Injection-driven (truthful): a skill shows as "learned" only once
+    // retrieval actually put it into a prompt — matching a setup is not use.
+    const learnedSkills = useMemo(
+        () => notebookSkills.filter(s => injectedSkillFiles.has(s.file.name)),
+        [notebookSkills, injectedSkillFiles],
+    );
 
     // Pool stats: setups indexed + avg matches per query (sampled for cost)
     // + how many queries hit the cold-start flag.
@@ -423,7 +478,7 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
                         {learnedSkills.slice(0, 8).map(s => (
                             <div key={s.file.id} className="rounded-lg border border-white/5 bg-zinc-950/50 px-2.5 py-1.5 text-[11px]">
                                 <span className="text-zinc-500 font-mono">{s.meta.kind}</span> <span className="text-zinc-300">{s.file.name.replace(/\.md$/i, '')}</span>
-                                <span className="text-zinc-500"> · {s.meta.wins}/{s.meta.losses}</span>
+                                <span className="text-zinc-500"> · {Math.round(s.meta.wins)}/{Math.round(s.meta.losses)}</span>
                             </div>
                         ))}
                     </div>
@@ -435,7 +490,7 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
                         {notebookSkills.slice(0, 10).map(s => (
                             <div key={s.file.id} className="rounded-lg border border-white/5 bg-zinc-950/50 px-2.5 py-1.5 text-[11px]">
                                 <span className="text-zinc-500 font-mono">{s.meta.kind}</span> <span className="text-zinc-300">{s.meta.ifCondition || s.file.name.replace(/\.md$/i, '')}</span>
-                                <span className="text-zinc-500"> · {s.meta.wins}/{s.meta.losses} · {s.meta.status}</span>
+                                <span className="text-zinc-500"> · {Math.round(s.meta.wins)}/{Math.round(s.meta.losses)} · {s.meta.status}</span>
                             </div>
                         ))}
                     </div>
@@ -561,6 +616,40 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
         return 'text-red-400';
     };
 
+    // ─── Review actions: apply what the causal review recommends ───────────
+    const actionableReviews = skillReview.filter(r =>
+        r.recommendation === 'promote' || r.recommendation === 'demote' || r.recommendation === 'retire');
+    const reviewActionsSection = (
+        <div className="bg-zinc-800 rounded-xl border border-white/5 p-3 sm:p-4">
+            <h4 className="text-[10px] sm:text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">⚖️ Skill Review — Apply</h4>
+            <p className="text-[10px] text-zinc-600 mb-2">
+                Causal verdicts (A/B eval + lift) outrank outcome correlation. Evidence still has the final say on the next closed trade.
+            </p>
+            {actionableReviews.length === 0
+                ? <p className="text-xs text-zinc-600 italic">No actions recommended — every skill is where its evidence says it belongs.</p>
+                : <div className="space-y-1.5">
+                    {actionableReviews.slice(0, 8).map(r => (
+                        <div key={r.fileId} className="rounded-lg border border-white/5 bg-zinc-950/50 px-2.5 py-1.5 flex items-center gap-2">
+                            <div className="min-w-0 flex-1">
+                                <span className={`text-[10px] font-bold uppercase tracking-wider ${r.recommendation === 'retire' || r.recommendation === 'demote' ? 'text-red-400' : 'text-emerald-400'}`}>
+                                    {r.recommendation}
+                                </span>
+                                <span className="text-[11px] text-zinc-300 ml-1.5 truncate inline-block max-w-[45%] align-bottom">{r.title}</span>
+                                <p className="text-[10px] text-zinc-600 truncate" title={r.rationale}>{r.rationale}</p>
+                            </div>
+                            <button
+                                onClick={() => handleApplyRecommendation(r.fileId, r.title, r.recommendation as 'promote' | 'demote' | 'retire')}
+                                disabled={applyingFileId === r.fileId}
+                                className="shrink-0 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider border border-white/10 bg-zinc-900 text-zinc-300 hover:text-white hover:border-white/25 disabled:opacity-40 transition-colors"
+                            >
+                                {applyingFileId === r.fileId ? '…' : 'Apply'}
+                            </button>
+                        </div>
+                    ))}
+                </div>}
+        </div>
+    );
+
     if (profile.totalAnalyzedTrades < 3) {
         return (
             <div className="space-y-4 p-3 sm:p-4 overflow-y-auto custom-scrollbar">
@@ -568,6 +657,7 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
                 {harnessSection}
                 {notebookSection}
                 {lessonsSection}
+                {reviewActionsSection}
                 <EmptyState
                     icon={<BrainCircuit className="w-8 h-8" />}
                     title="Building Your Profile"
@@ -584,6 +674,7 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
             {harnessSection}
             {notebookSection}
             {lessonsSection}
+            {reviewActionsSection}
             {/* Header */}
             <div className="text-center pb-3 sm:pb-4 border-b border-white/5">
                 <h2 className="text-base sm:text-lg font-bold text-cyan-400 mb-1">AI Learning Profile</h2>
@@ -615,7 +706,7 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
                     title="Learned Skills"
                     items={notebookSkills.slice(0, 5).map(({ meta, file }) => ({
                         name: `${meta.kind === 'avoid' ? 'Avoid' : 'Repeat'}: ${meta.ifCondition || file.name.replace(/\.md$/i, '')}`.slice(0, 90),
-                        value: `${meta.wins}W/${meta.losses}L`,
+                        value: `${Math.round(meta.wins)}W/${Math.round(meta.losses)}L`,
                         subtext: meta.status,
                         color: meta.status === 'confirmed' ? 'text-emerald-400' : meta.status === 'retired' ? 'text-zinc-600' : 'text-cyan-300',
                     }))}
@@ -700,7 +791,7 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
                                 : meta.status,
                             subtext: [
                                 review ? review.recommendation.toUpperCase() : meta.kind,
-                                `${meta.wins}/${meta.losses}`,
+                                `${Math.round(meta.wins)}/${Math.round(meta.losses)}`,
                                 meta.evalVerdict ? `eval:${meta.evalVerdict}` : null,
                                 liftPct !== null ? `lift ${liftPct > 0 ? '+' : ''}${liftPct}pp` : null,
                             ].filter(Boolean).join(' · '),

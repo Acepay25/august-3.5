@@ -72,7 +72,12 @@ export const isSkillDueForEval = (
     meta: SkillMeta,
     trades: LoggedTrade[],
 ): boolean => {
-    if (meta.status !== 'confirmed') return false; // only authority-holders get audited
+    // Confirmed skills are audited routinely. A skill benched by a 'hurts'
+    // eval also becomes due again once the gates below pass, so a fresh eval
+    // can overturn the demotion.
+    const auditable = meta.status === 'confirmed'
+        || (meta.evalVerdict === 'hurts' && meta.status === 'candidate');
+    if (!auditable) return false;
 
     // Enough matching history?
     const matched = selectEvalTrades(meta, trades);
@@ -159,30 +164,56 @@ export const findMatchingSetupForSkill = (meta: SkillMeta, trade: LoggedTrade): 
 
 // ─── Default runner (harness-provided, zero user setup) ─────────────────────
 
+/** Pull-tier budget for the injected skill body (matches the recall tool). */
+const EVAL_SKILL_BODY_MAX = 700;
+
 /**
  * Build a SkillAnalysisRunner from the user's own provider + prompt pipeline:
- * re-analyzes the stored trade context with the skill toggled on/off. Uses
- * analyzeTradingView with images omitted — historical trades rarely keep
- * chart screenshots, and the decision-relevant context is textual.
+ * re-analyzes the stored trade context with and without the REAL skill body
+ * injected (same formatting as verdict-stage retrieval: header, evidence
+ * freshness, provenance, ${SYMBOL}-substituted markdown). Images are omitted
+ * — historical trades rarely keep chart screenshots, and the decision-
+ * relevant context is textual.
  */
 export const buildDefaultRunner = (
     config: ProviderConfig,
 ): import('./SkillEvalService').SkillAnalysisRunner => {
     void config; // captured lazily per call below
-    return async (trade: LoggedTrade, { skillEnabled }: { skillEnabled: boolean }) => {
+    return async (trade, { skillEnabled, skill }) => {
         // Lazy imports break the cycle: GenericAnalysisService → … → this file.
         const { analyzeTradingView } = await import('../providers/GenericAnalysisService');
         const { getFirstReadyProvider } = await import('../../utils/providerUtils');
         const { loadProviderConfigs, getReadyProviders } = await import('../infrastructure/ProviderConfigService');
+        const { substituteSkillContext, evidenceFreshness } = await import('./MemoryRetrievalService');
 
         const configs = await loadProviderConfigs();
         const cfg = getFirstReadyProvider(getReadyProviders(configs));
         if (!cfg) return {};
 
         const a = trade.analysis ?? {};
-        const skillNote = skillEnabled
-            ? 'Your notebook memory for this exact setup is ACTIVE in your context — weigh it.'
-            : 'Run from your general expertise only.';
+        let skillNote: string;
+        if (skillEnabled && skill) {
+            const query = {
+                coin: a.coinName,
+                direction: a.direction === 'Long' || a.direction === 'Short' ? a.direction : undefined,
+                family: a.detectedPatternFamily,
+                pattern: undefined,
+                regime: trade.marketRegime,
+            };
+            const body = substituteSkillContext(skill.content.trim(), query);
+            const capped = body.length > EVAL_SKILL_BODY_MAX ? `${body.slice(0, EVAL_SKILL_BODY_MAX).trimEnd()}\n…` : body;
+            const provenance = skill.meta.tradeIds.length > 0
+                ? `learned from ${skill.meta.tradeIds.length} logged trade(s)`
+                : '';
+            skillNote = [
+                'YOUR NOTEBOOK MEMORY for this exact setup (weigh it heavily):',
+                `[skills/${skill.name} · ${skill.meta.status} · ${skill.meta.wins}W/${skill.meta.losses}L]`,
+                [evidenceFreshness(skill.meta), provenance].filter(Boolean).join(' · '),
+                capped,
+            ].join('\n');
+        } else {
+            skillNote = 'Run from your general expertise only.';
+        }
         const prompt = [
             `Analyze this ${a.coinName ?? 'crypto'} ${a.direction ?? ''} setup as of ${trade.timestamp ?? 'the logged time'}.`,
             `Entry ${a.entryPoints?.[0]?.price ?? 'n/a'}, stop ${a.stopLoss ?? 'n/a'}, target ${a.takeProfit?.[0]?.price ?? 'n/a'}.`,
