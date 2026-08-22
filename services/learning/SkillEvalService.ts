@@ -250,11 +250,12 @@ export const recordEvalVerdict = async (
     const meta = file ? parseSkillMarkdown(file.content) : null;
     if (!file || !meta) return;
     meta.modifiedAt = new Date().toISOString();
-    const stamp = `evalVerdict: ${result.verdict} (${result.alignedFlips}/${result.flips} aligned of ${result.flips} flips)`;
-    const body = serializeSkill(meta, titleFromMeta(meta));
-    // Insert right after the opening frontmatter fence.
-    const stamped = body.startsWith('---\n')
-        ? `---\n${stamp}\n${body.slice(4)}\n<!-- last-eval: ${new Date().toISOString()} -->`
-        : `${body}\n\n<!-- eval: ${stamp} @ ${new Date().toISOString()} -->`;
-    await updateMemoryFile(fileId, { content: stamped }, username);
+    meta.evalVerdict = result.verdict;
+    meta.evalDetail = `${result.alignedFlips}/${result.flips}`;
+    meta.lastEvalAt = new Date().toISOString();
+    meta.modifiedAt = meta.lastEvalAt;
+    await updateMemoryFile(fileId, {
+        content: serializeSkill(meta, titleFromMeta(meta)),
+        enabled: meta.status !== 'retired',
+    }, username);
 };

@@ -58,6 +58,13 @@ export interface SkillMeta {
     /** Invocation control (Agent Skills frontmatter port): which debate
      *  audience may load this skill. Default 'all'. */
     audience?: 'analyst' | 'moderator' | 'all';
+    /** Latest automated A/B verdict (SkillEvalService). 'hurts' demotes a
+     *  confirmed skill back to candidate on the next evidence pass. */
+    evalVerdict?: 'helps' | 'mixed' | 'hurts' | 'inconclusive';
+    /** Aligned/total flips from the latest eval, e.g. "2/3". */
+    evalDetail?: string;
+    /** ISO timestamp of the last automated eval run. */
+    lastEvalAt?: string;
     /** Trigger/action snapshot taken BEFORE the last refinement — the
      *  evidence diff shown in the notebook so a rewrite is auditable. */
     previousVersion?: { kind: SkillKind; ifCondition?: string; thenAction?: string };
@@ -136,6 +143,16 @@ export const parseSkillMarkdown = (content: string): SkillMeta | null => {
             const a = pick('audience');
             return a === 'analyst' || a === 'moderator' ? a : 'all';
         })(),
+        evalVerdict: (() => {
+            const v = (pick('evalVerdict') || '').toLowerCase();
+            return v.startsWith('helps') ? 'helps'
+                : v.startsWith('mixed') ? 'mixed'
+                    : v.startsWith('hurts') ? 'hurts'
+                        : v.startsWith('inconclusive') ? 'inconclusive'
+                            : undefined;
+        })(),
+        evalDetail: pick('evalVerdict')?.replace(/^(helps|mixed|hurts|inconclusive)\s*/i, '').replace(/^\(|\)$/g, '') || undefined,
+        lastEvalAt: pick('lastEvalAt'),
         lastEvidenceAt: pick('lastEvidenceAt'),
         previousVersion,
     };
@@ -178,6 +195,8 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
         ...(meta.lastEvidenceAt ? [`lastEvidenceAt: ${meta.lastEvidenceAt}`] : []),
         `modified: ${meta.modifiedAt ?? new Date().toISOString()}`,
         ...(meta.audience && meta.audience !== 'all' ? [`audience: ${meta.audience}`] : []),
+        ...(meta.evalVerdict ? [`evalVerdict: ${meta.evalVerdict}${meta.evalDetail ? ` (${meta.evalDetail})` : ''}`] : []),
+        ...(meta.lastEvalAt ? [`lastEvalAt: ${meta.lastEvalAt}`] : []),
         ...(meta.previousVersion ? [`previousVersion: ${JSON.stringify(meta.previousVersion)}`] : []),
         `tradeIds: ${meta.tradeIds.slice(-20).join(',')}`,
         '---',
@@ -212,6 +231,12 @@ const enabledSkillMeta = (file: MemoryFile): SkillMeta | null => {
 };
 
 const deriveStatus = (meta: SkillMeta): SkillStatus => {
+    // ── Causal override (ROUND-25c) ──
+    // An automated A/B eval that shows the skill HURTS decisions demotes it
+    // regardless of outcome correlation — injection-causation outranks
+    // co-occurrence. The verdict decays with the next eval run.
+    if (meta.evalVerdict === 'hurts' && meta.status === 'confirmed') return 'candidate';
+
     const sample = meta.wins + meta.losses;
     const winRate = sample > 0 ? meta.wins / sample : 0;
     if (sample >= MIN_SAMPLE_RETIRE) {
@@ -750,8 +775,19 @@ export const syncClosedTradeToNotebook = async (
         if (config) {
             const res = await consolidateDoctrine(allTrades, username, config);
             if (res.updated) console.log('[Doctrine] Doctrine rewritten from', countClosedTrades(allTrades), 'closed trades.');
+
+            // ── Automated skill evals (ROUND-25c) ──
+            // The harness audits its own knowledge: one due confirmed skill
+            // gets a cost-capped A/B run; a 'hurts' verdict demotes it via
+            // deriveStatus. No user action required.
+            try {
+                const { runDueSkillEvalWithDefaultRunner } = await import('./SkillEvalScheduler');
+                await runDueSkillEvalWithDefaultRunner(allTrades, username, config);
+            } catch (e) {
+                console.warn('[SkillEvalScheduler] deferred:', e instanceof Error ? e.message : e);
+            }
         }
-    } catch { /* doctrine is optional — sync must not fail because of it */ }
+    } catch { /* doctrine + eval are optional — sync must not fail because of them */ }
 };
 
 const countClosedTrades = (trades: LoggedTrade[]): number =>
