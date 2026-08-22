@@ -113,6 +113,7 @@ describe('SkillEvalService (with-skill vs without-skill A/B)', () => {
         const fileId = await seedSkill('eval-record');
         await recordEvalVerdict(fileId, { verdict: 'helps', flips: 2, alignedFlips: 2 }, 'eval-record');
         const content = getMemoryFiles().files.find(f => f.id === fileId)!.content;
-        expect(content).toContain('evalVerdict: helps (2/2 aligned of 2 flips)');
+        expect(content).toMatch(/evalVerdict: helps \(2\/2\)/);
+        expect(content).toContain('lastEvalAt:');
     });
 });
