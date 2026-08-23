@@ -4,6 +4,39 @@ Plain-English log of change rounds. Newest first.
 
 ---
 
+## ROUND-31 — Memory honesty fixes + composer declutter (2026-08-23)
+
+**Edge decay now actually reaches prompts (M1).** The 120-day exponential
+decay documented in ROUND-26 lived only in the dashboard's memory graph —
+`getMemoryFilesContext` fed prompts from raw similarity. `findRelevantTrades`
+gains a `decayByAge` option and both prompt consumers (similar-trades block,
+verdict evidence pack) now use it: old trades still appear with their lessons,
+but at honest reduced weight, and can no longer crowd out fresh evidence.
+
+**Bot memory respects the setup (M2).** `getBotMemoryContext` ignored its
+query entirely (`void query`). Bot notes are now line-filtered to this
+coin/regime: matching lines and general lessons pass, other-coin-specific
+lines are dropped, persona blocks always pass. Multi-bot merges are capped at
+1,800 chars total so N bots can't balloon the analyst prompt outside the
+stage-budget discipline.
+
+**Provenance counter (M4).** Skills serialize a monotonic `evidenceCount`
+frontmatter field; the verdict block's "learned from N logged trade(s)" now
+reads it instead of the tail-20 tradeIds list, which silently capped long-lived
+skills at 20 forever.
+
+**Composer declutter (from screenshot audit).** The nine-chip suggestion row
+(@roles, debate templates, skill slugs) collapses behind one "Templates ▾"
+toggle — the default composer is text + attach + Team + send, DeepSeek-minimal.
+The duplicate footer "Team" chip is suppressed (the composer dropdown already
+carries that control); overflow counting uses visible chips only.
+
+Verified: typecheck, 1106 tests, lint, build all green. New suite
+`tests/memoryHonesty.test.ts` pins decay math, bot-note filtering, and
+evidence-count round-tripping.
+
+---
+
 ## ROUND-29 — DeepSeek-parity chat polish (2026-08-23)
 
 Component-by-component comparison against the DeepSeek harness UI (thinking

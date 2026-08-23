@@ -18,6 +18,10 @@ import type { HybridDataPacket } from '../../services/analysis/HybridIntelligenc
 import { getActiveUsername } from '../../utils/activeUser';
 import type { LoggedTrade } from '../../types';
 
+// Merged cap across ALL bots' memory context (ROUND-31) — the notebook
+// opening budget is 900 chars; bot memory should not dwarf it.
+const BOT_MEMORY_TOTAL_CAP = 1800;
+
 // Pattern-family keyword mining — runs at SEND time so retrieval has a family
 // before the AI analysis completes (there is no analysis yet at send time).
 // Falls back to undefined when no keyword matches.
@@ -79,16 +83,24 @@ export const assemblePipelineMemoryContext = (
             const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(`bots_v1_${userKey}`) : null;
             const data = raw ? JSON.parse(raw) as { bots?: Array<{ id: string; memoryScope?: BotMemoryScope }> } : null;
             if (!data?.bots?.length) return '';
-            // ROUND-30: merge memory from EVERY enabled bot rather than
+            // ROUND-30/31: merge memory from EVERY enabled bot rather than
             // whichever entry happened to sort first — the debate roster may
-            // not include bots[0] at all. Deduped; capped per-bot downstream.
+            // not include bots[0] at all. Deduped, query-filtered per bot,
+            // and capped to a merged total so N bots cannot balloon the
+            // analyst prompt outside the stage-budget discipline.
             const seen = new Set<string>();
             const contexts: string[] = [];
+            let used = 0;
             for (const bot of data.bots) {
                 if (!bot?.id || seen.has(bot.id)) continue;
                 seen.add(bot.id);
                 const ctx = getBotMemoryContext(bot.id, memoryQuery, bot.memoryScope || 'global');
-                if (ctx) contexts.push(ctx);
+                if (!ctx) continue;
+                if (used >= BOT_MEMORY_TOTAL_CAP) break;
+                const room = BOT_MEMORY_TOTAL_CAP - used;
+                const clipped = ctx.length > room ? `${ctx.slice(0, room).trimEnd()}\n…` : ctx;
+                contexts.push(clipped);
+                used += clipped.length;
             }
             return contexts.join('\n\n---\n\n');
         } catch { return ''; }

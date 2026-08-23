@@ -50,6 +50,10 @@ export interface SkillMeta {
      *  LLM refinement pass instead of silently bleeding. */
     consecutiveLosses: number;
     tradeIds: string[];
+    /** Total trades EVER counted for this skill (ROUND-31). `tradeIds` is a
+     *  tail-20 list; without this counter the verdict block's "learned from
+     *  N logged trade(s)" understates long-lived skills forever. */
+    evidenceCount?: number;
     ifCondition?: string;
     thenAction?: string;
     body: string;
@@ -141,6 +145,13 @@ export const parseSkillMarkdown = (content: string): SkillMeta | null => {
         losses: num('losses'),
         consecutiveLosses: num('consecutiveLosses'),
         tradeIds,
+        // ROUND-31: total counted evidence. Falls back to the parsed tradeIds
+        // length for pre-existing skills (never larger than the real count —
+        // the tail list is an upper bound only until the next write).
+        evidenceCount: (() => {
+            const raw = parseInt(pick('evidenceCount') || '', 10);
+            return Number.isFinite(raw) && raw > 0 ? raw : undefined;
+        })(),
         ifCondition: pick('ifCondition'),
         thenAction: pick('thenAction'),
         body,
@@ -206,6 +217,9 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
         ...(meta.lastEvalAt ? [`lastEvalAt: ${meta.lastEvalAt}`] : []),
         ...(meta.previousVersion ? [`previousVersion: ${JSON.stringify(meta.previousVersion)}`] : []),
         `tradeIds: ${meta.tradeIds.slice(-20).join(',')}`,
+        // ROUND-31: monotonic evidence counter — tradeIds is a tail-20 list,
+        // so the provenance line must not silently cap at 20.
+        `evidenceCount: ${Math.max(meta.evidenceCount ?? 0, meta.tradeIds.length)}`,
         '---',
         '',
         `# ${title}`,

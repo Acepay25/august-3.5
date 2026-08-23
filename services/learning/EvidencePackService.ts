@@ -217,7 +217,7 @@ export const buildVerdictEvidencePack = (
                 pattern: query.pattern,
                 family: query.family,
                 regime: query.regime as 'trending' | 'ranging' | 'volatile' | 'compression' | undefined,
-            }, trades).slice(0, MAX_SIMILAR);
+            }, trades, { decayByAge: true }).slice(0, MAX_SIMILAR);
             ui.similar = relevant.map(t => ({
                 outcome: t.outcome,
                 coin: t.coin,
