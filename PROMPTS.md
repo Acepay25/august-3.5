@@ -9,21 +9,30 @@ reference are noted under each prompt.
 
 ## How prompts are assembled
 
-All AI calls flow through `services/providers/GenericProviderService.ts` and
-`services/providers/GenericAnalysisService.ts`. The system prompt for a single
-(trade) analysis is composed like this:
+All AI calls flow through `services/providers/GenericProviderService.ts`,
+`services/providers/GenericAnalysisService.ts`, and
+`services/providers/ensembleService.ts`. System prompts are composed through
+`utils/composePrompt.ts`: the harness contract is placed FIRST and exactly
+once, then layers in order (seat → role → job → vision → memory → override →
+playbook → strategies → desk tools → risk → output contract). Nested copies of
+the contract inside job/persona blocks are stripped automatically.
 
-| Mode | System prompt composition |
+| Mode | System prompt composition (`composePrompt` layers) |
 |---|---|
-| **Standard** (lenses off) | `MASTER_ANALYSIS_PROMPT` (or user custom override) + `RISK_MANAGEMENT_RULES` + `PROBABILITY_ESTIMATION_PROMPT` + `DEVILS_ADVOCATE_PROMPT` + `INVALIDATION_THESIS_PROMPT` + `CORRELATION_AWARENESS_PROMPT` + `AI_PROVIDER_MEMORY_ENFORCEMENT_PROMPT` + `TRADING_FAMILIES_PROMPT` + learning/personalization injections |
-| **Standard** (lenses on) | `LENS_MODE_BASE_PROMPT` + per-role lens prompt (swing/scalp/position) + the same appended blocks |
-| **Accuracy mode** | `ACCURACY_MODE_PROMPT` + `MASTER_ANALYSIS_PROMPT` + appended blocks |
-| **Pure AI mode** | `PURE_AI_MODE_PROMPT` (+ `TRADING_FAMILIES_PROMPT` if families enabled) + appended blocks |
-| **Compact / retry** | `COMPACT_ANALYSIS_PROMPT` (small-context models) |
+| **Standard** (lenses off) | contract → `MASTER_ANALYSIS_PROMPT` (or user custom override) → `AI_PROVIDER_MEMORY_ENFORCEMENT_PROMPT` → playbook / strategies / desk tools → `RISK_MANAGEMENT_RULES` → output contract |
+| **Standard** (lenses on) | contract → seat → role (`LENS_MODE_BASE_PROMPT` + per-role lens) → job → the same tail layers |
+| **Accuracy mode** | contract → seat → role → `ACCURACY_MODE_PROMPT` → `MASTER_ANALYSIS_PROMPT` → same tail layers |
+| **Pure AI mode** | contract → seat → role → `PURE_AI_MODE_PROMPT` (+ `TRADING_FAMILIES_PROMPT` layer when families enabled; optional playbook/memory reference layers) |
+| **Compact / small-context** | contract → `COMPACT_ANALYSIS_PROMPT` only (minimal user-side blocks, truncated) |
 | **Gate Scan (Stage 1)** | `GATE_SCAN_PROMPT` → output constrained by `GATE_SCAN_JSON_SCHEMA` |
-| **Simulated debate** | `MODERATOR_SYSTEM_PROMPT_V2` or `PURE_AI_MODERATOR_PROMPT` (one call, moderator plays all roles) |
-| **Real debate** | `ENSEMBLE_ROLE_PROMPTS` (initial) → `DEBATE_RESPONSE_PROMPT` (rounds) → clarification cycle (≤3 rounds: `MODERATOR_CLARIFICATION_QUESTIONS_PROMPT` → `ANALYST_CLARIFICATION_RESPONSE_PROMPT` → `MODERATOR_CLARIFICATION_JUDGMENT_PROMPT`) → `MODERATOR_FINAL_VERDICT_PROMPT` (+ `MODERATOR_FINAL_VERDICT_PROMPT_COMPACT` retry) |
-| **Post-mortem** | `ROLE_BASED_POSTMORTEM_SPECIALIST_PROMPT` per specialist → `ROLE_BASED_POSTMORTEM_MODERATOR_PROMPT` |
+| **Simulated debate** | `MODERATOR_SYSTEM_PROMPT_V2` or `PURE_AI_MODERATOR_PROMPT` (one call, moderator plays all roles; contract embedded via template literal — single use per message) |
+| **Real debate** | analyst openings from standard-mode analysis → `DEBATE_RESPONSE_PROMPT` (rebuttal rounds, lens persona preserved as system prefix) → clarification cycle (≤3: questions → answers → judgment) → `MODERATOR_FINAL_VERDICT_PROMPT` (+ evidence pack + seat-trust + conviction auction blocks; `MODERATOR_FINAL_VERDICT_PROMPT_COMPACT` retry). Arbiter desk tools default to recall/setup-stats/session/web-search. |
+| **Post-mortem** | post-mortem variants of the two/three-way debate generators on `GenericAnalysisService.conductPostMortem` context |
+
+User-side context blocks (assembled in `useAnalysisPipeline`): notebook slice
+(`getMemoryFilesContext`, stage-budgeted), similar-setups record, regime
+weighting, weighted-voting provider accuracy, decision reflections, coin
+lessons, hybrid data envelope, loss-priming rows.
 
 ## Contents
 

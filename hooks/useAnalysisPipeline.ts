@@ -64,10 +64,8 @@ const NOTEBOOK_SAVE_PATTERN = /\b(save|store|write|add|log|remember|record|put)\
 const SEAT_LAUNCH_STAGGER_MS = 700;
 
 // Learning services
-import { generateLearningFromPrompt, isLearningEnabled } from '../services/learning/LearningPromptService';
-import { generatePersonalizedInjection } from '../services/ui/PersonalizedPromptService';
+import { generateWeightedVotingContext } from '../services/backtesting/ModelPerformanceService';
 import { PriceAlertService } from '../services/ui/PriceAlertService';
-import { buildUnifiedLearningContext } from '../services/learning/UnifiedLearningBuilder';
 import { getMemoryFilesContext, writeModelNote, extractLessonFromPostMortem } from '../services/learning/MemoryFilesService';
 import { listRetrievedMemorySources } from '../services/learning/MemoryRetrievalService';
 import { getBotMemoryContext } from '../services/bots/BotMemoryService';
@@ -366,6 +364,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             seatDirective: params.seatDirective,
             userStrategies: params.userStrategies,
             temperature: params.temperature,
+            trades: loggedTradesRef.current.length > 0 ? loggedTradesRef.current : undefined,
             onReasoning: params.onReasoning,
             onPartialOutput: params.onPartialOutput,
         });
@@ -523,9 +522,14 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     const liveToolEventsRef = useRef<Record<string, string>>({});
     const debateTurnsRef = useRef<DebateTurn[]>([]);
     const debateRunLogRef = useRef<DebateRunEvent[]>([]);
-    /** Live run-contract view (U1): re-derived from the run log on every push. */
+    /**
+     * Live run-contract view (U1): re-derived from the run log on every push.
+     */
     const runContractFor = (): Message['runContract'] =>
         buildRunContractStages(debateRunLogRef.current, true);
+    /** Journal mirror for zero-dep callbacks (desk-tool recall on solo runs). */
+    const loggedTradesRef = useRef<LoggedTrade[]>(loggedTrades);
+    useEffect(() => { loggedTradesRef.current = loggedTrades; }, [loggedTrades]);
     const steeringQueueRef = useRef<string[]>([]);
     const [steeringNotes, setSteeringNotes] = useState<string[]>([]);
     // Mid-debate analyst replacement: the generator suspends and waits on a
@@ -1231,53 +1235,32 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             // no hybrid data exists (hybrid off / fetch failed).
             const effectiveTradingStyle = getEffectiveStyle(runLensConfig.tradingStyle, freshHybridData ?? undefined).style;
 
-            // AI LEARNING: Generate UNIFIED learning context from all 6 learning services
+            // AI LEARNING (ROUND-30a): the old UnifiedLearningBuilder channel is
+            // RETIRED — its six overlapping profile/mistake/insight injections
+            // fought the budgeted notebook slice above (two memory voices is
+            // exactly the degradation mode the ROUND-24m simplification killed).
+            // What survives is the one thing the notebook slice cannot produce:
+            // per-provider historical accuracy weighting (weighted voting), fed
+            // to BOTH the analysts and the moderator. Gated on a real closed
+            // trade sample so fresh installs get clean prompts.
             let learningInjection = '';
-            let moderatorLearningContext = ''; // NEW: Separate context for moderator
+            let moderatorLearningContext = ''; // Separate context for moderator surfaces
 
-            // Use UnifiedLearningBuilder to consolidate all learning services
-            const unifiedLearning = buildUnifiedLearningContext(
-                loggedTrades,
-                {
-                    coin: detectedLearningCoin,
-                    pattern: pendingPattern,
-                    direction: pendingDirection
-                },
-                enabledProviders.map(p => p.config.id),
-                insightKnowledgeBase
-            );
-
-            if (!unifiedLearning.isEmpty) {
-                learningInjection = unifiedLearning.forAnalysts;
-                moderatorLearningContext = unifiedLearning.forModerator; // Store for moderator
-                devLog('[AI Learning] Unified context generated - Analyst:', learningInjection.length, 'chars, Moderator:', moderatorLearningContext.length, 'chars');
-            } else if (loggedTrades.length >= 3) {
-                // Fallback to legacy personalized injection if unified fails
+            const closedSample = loggedTrades.filter(
+                t => t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS,
+            ).length;
+            if (closedSample >= 3 && enabledProviders.length > 0) {
                 try {
-                    learningInjection = generatePersonalizedInjection(
-                        loggedTrades,
-                        detectedLearningCoin,
-                        pendingDirection
+                    learningInjection = generateWeightedVotingContext(
+                        enabledProviders.map(p => p.config.id),
+                        pendingPattern || undefined,
                     );
+                    moderatorLearningContext = learningInjection;
                     if (learningInjection) {
-                        devLog('[AI Learning] Fallback: personalized injection, length:', learningInjection.length);
+                        devLog('[AI Learning] Weighted-voting context generated:', learningInjection.length, 'chars');
                     }
                 } catch (learningError) {
-                    console.error('[AI Learning] Failed to generate personalized context:', learningError);
-                }
-            } else if (isLearningEnabled(loggedTrades)) {
-                // Legacy fallback
-                try {
-                    learningInjection = generateLearningFromPrompt(
-                        effectiveInput,
-                        loggedTrades,
-                        insightKnowledgeBase
-                    );
-                    if (learningInjection) {
-                        devLog('[AI Learning] Fallback: legacy injection, length:', learningInjection.length);
-                    }
-                } catch (learningError) {
-                    console.error('[AI Learning] Failed to generate learning context:', learningError);
+                    console.error('[AI Learning] Failed to generate weighted-voting context:', learningError);
                 }
             }
 

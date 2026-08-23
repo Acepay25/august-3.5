@@ -276,6 +276,10 @@ export interface AnalyzeTradingViewParams {
      */
     temperature?: number;
     allowedTools?: string[];
+    /** Closed-trade journal for the `recall`/`get_setup_history_stats` desk
+     *  tools (ROUND-30): without it the single-analysis path had desk tools
+     *  but no history to recall. */
+    trades?: LoggedTrade[];
     onReasoning?: (reasoning: string) => void;
     /** Visible content deltas as they stream — lets the Floor show the
      *  answer (and any untagged thinking) forming live, not just at the end. */
@@ -496,6 +500,7 @@ export async function analyzeTradingView(
             ...options,
             enabled: deskToolsEnabled,
             allowedTools: params.allowedTools,
+            trades: params.trades,
             defaultSymbol: resolveDefaultSymbol(prompt, marketDataOverride),
             afterToolsNudge: 'Tool results are above. Write the public Floor reply now from the findings. No JSON, no tool tags.',
             onReasoning: (reasoning: string) => {
