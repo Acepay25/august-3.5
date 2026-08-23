@@ -4,6 +4,32 @@ Plain-English log of change rounds. Newest first.
 
 ---
 
+## ROUND-29 — DeepSeek-parity chat polish (2026-08-23)
+
+Component-by-component comparison against the DeepSeek harness UI (thinking
+row, settled turn, composer) drove three polish items — all view-layer:
+
+**Quiet model byline.** Every settled AI bubble now ends with a whisper line:
+`Macro · Technical · Moderator · 41s` (seat roster from the run ledger +
+wall-clock duration). This is the exact "DeepSeek-R1 · 12s" convention —
+previously august buried model names inside a details table.
+
+**One container language.** New shared `AuditPanel` wrapper; the run-contract
+panel, evidence-pack card, and used-notes strip all render through it, so a
+stack of audit surfaces reads as one grouped system instead of five competing
+boxes. Same radius/border/background everywhere.
+
+**Chip-bar overflow.** Past three active context chips above the composer,
+the tail collapses into a single `Context · N ▸` summary with a hover/focus
+popover listing the hidden chips. No second toolbar row, no portal, no deps.
+
+Verified matches (no change needed): `ReasoningRow` already implements the
+DeepSeek thinking row exactly — live expand while streaming, scroll-pinned
+latest-line ticker, collapse to "Thought for Xs" on settle, plain-text body
+while running and markdown on settle. Hover-copy affordance also matched.
+
+---
+
 ## ROUND-28 — Arbiter evidence, setup-stats tool, run contract UI (2026-08-23)
 
 **The moderator can finally see its own journal.** `getModeratorAnalysisStream`

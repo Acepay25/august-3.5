@@ -1,4 +1,5 @@
 import React from 'react';
+import AuditPanel from '../shared/AuditPanel';
 
 /**
  * Run-contract stage states, mirrored on Message.runContract (structural
@@ -36,7 +37,7 @@ const RunContractPanel: React.FC<RunContractPanelProps> = ({ stages }) => {
     if (!stages || stages.length === 0) return null;
     const doneCount = stages.filter(s => s.state === 'done').length;
     return (
-        <div className="mb-3 rounded-xl border border-white/10 bg-zinc-900/60 px-3 py-2">
+        <AuditPanel className="mb-2">
             <p className="text-[10px] uppercase tracking-wider text-zinc-500">
                 Run contract · {doneCount}/{stages.length}
             </p>
@@ -54,7 +55,7 @@ const RunContractPanel: React.FC<RunContractPanelProps> = ({ stages }) => {
                     );
                 })}
             </ul>
-        </div>
+        </AuditPanel>
     );
 };
 

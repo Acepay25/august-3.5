@@ -14,6 +14,7 @@ import DebateReplay from '../analysis/DebateReplay';
 import DebateRunLog from '../analysis/DebateRunLog';
 import RunContractPanel from '../analysis/RunContractPanel';
 import EvidencePackCard from '../analysis/EvidencePackCard';
+import ModelByline from '../shared/ModelByline';
 import AnalysisTracePanel from '../analysis/AnalysisTracePanel';
 import AnalysisDetails from './AnalysisDetails';
 import SetupLifecycleCard from '../analysis/SetupLifecycleCard';
@@ -669,6 +670,11 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     </svg>
                                     Retry Post-Mortem Analysis
                                 </button>
+                            )}
+
+                            {/* Quiet DeepSeek-style byline: who sat on this desk, how long. */}
+                            {!isUserMessage && !message.isDebating && !message.isPostMortem && message.runStats && (
+                                <ModelByline runStats={message.runStats} />
                             )}
 
                             {Array.isArray(message.images) && message.images.length > 0 && (
