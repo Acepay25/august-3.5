@@ -1,5 +1,6 @@
 import React from 'react';
 import { Task, TaskTrigger, TaskContent } from '../ui/task';
+import AuditPanel from '../shared/AuditPanel';
 
 /**
  * Minimal shape mirrored on Message.evidencePack (kept structural so the
@@ -19,11 +20,12 @@ interface EvidencePackCardProps {
 const stripMd = (text: string): string => text.replace(/\*\*/g, '');
 
 /**
- * Verdict evidence card (ROUND-28/U2): shows the journal evidence the
- * moderator's verdict was grounded in — cluster record, similar closed
- * trades, matched notebook skills, doctrine header. Mirrors the prompt-side
- * evidence pack byte-for-byte in content, so the user audits exactly what
- * the arbiter saw. Charcoal-only; collapsed by default.
+ * Verdict evidence card (ROUND-28/U2, ROUND-29 container pass): shows the
+ * journal evidence the moderator's verdict was grounded in — cluster record,
+ * similar closed trades, matched notebook skills, doctrine header. Mirrors
+ * the prompt-side evidence pack byte-for-byte in content, so the user audits
+ * exactly what the arbiter saw. Charcoal-only; collapsed by default.
+ * Wrapped in AuditPanel — the one container language for audit surfaces.
  */
 const EvidencePackCard: React.FC<EvidencePackCardProps> = ({ pack }) => {
     if (!pack) return null;
@@ -37,8 +39,9 @@ const EvidencePackCard: React.FC<EvidencePackCardProps> = ({ pack }) => {
     if (parts.length === 0) return null;
 
     return (
-        <div className="mb-3">
-            <Task defaultOpen={false} className="rounded-xl border border-white/10 bg-zinc-900/60 px-3 py-2">
+        <div className="mb-2">
+            <AuditPanel>
+                <Task defaultOpen={false} className="rounded-xl">
                 <TaskTrigger title={`Verdict evidence · ${parts.join(' · ')}`} />
                 <TaskContent>
                     {statsLine && (
@@ -76,6 +79,7 @@ const EvidencePackCard: React.FC<EvidencePackCardProps> = ({ pack }) => {
                     )}
                 </TaskContent>
             </Task>
+            </AuditPanel>
         </div>
     );
 };

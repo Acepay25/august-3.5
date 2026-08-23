@@ -7,6 +7,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { TradeAnalysis, TradeOutcome, Message, TradingStyle } from '../../types';
+import AuditPanel from '../shared/AuditPanel';
 import { AutopilotResolution } from '../../services/ui/OutcomeAutopilotService';
 import { PriceAlertService } from '../../services/ui/PriceAlertService';
 import ShareMenu from '../analysis/ShareMenu';
@@ -169,7 +170,7 @@ const AnalysisDetails: React.FC<AnalysisDetailsProps> = ({
             )}
 
             {message?.memoryRetrieved && message.memoryRetrieved.length > 0 && (
-                <div className="rounded-xl border border-white/10 bg-zinc-900/60 px-3 py-2">
+                <AuditPanel className="mb-2">
                     <p className="text-[10px] uppercase tracking-wider text-zinc-500">Used these notes</p>
                     <p className="mt-1 flex flex-wrap gap-1.5">
                         {message.memoryRetrieved.map(source => (
@@ -180,7 +181,7 @@ const AnalysisDetails: React.FC<AnalysisDetailsProps> = ({
                             </span>
                         ))}
                     </p>
-                </div>
+                </AuditPanel>
             )}
 
             {children}
