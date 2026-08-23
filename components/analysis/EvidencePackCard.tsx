@@ -8,6 +8,7 @@ import AuditPanel from '../shared/AuditPanel';
  */
 export interface EvidencePackView {
     statsLine: string;
+    causePattern: string;
     similar: Array<{ outcome: string; coin: string; direction: string; date: string; lesson: string; similarity: number }>;
     skills: string[];
     doctrineHeader: string;
@@ -29,9 +30,10 @@ const stripMd = (text: string): string => text.replace(/\*\*/g, '');
  */
 const EvidencePackCard: React.FC<EvidencePackCardProps> = ({ pack }) => {
     if (!pack) return null;
-    const { statsLine, similar, skills, doctrineHeader } = pack;
+    const { statsLine, causePattern, similar, skills, doctrineHeader } = pack;
     const parts = [
         statsLine ? 'journal record' : '',
+        causePattern ? 'failure pattern' : '',
         similar.length > 0 ? `${similar.length} similar trade${similar.length === 1 ? '' : 's'}` : '',
         skills.length > 0 ? `${skills.length} skill${skills.length === 1 ? '' : 's'}` : '',
         doctrineHeader ? 'doctrine' : '',
@@ -46,6 +48,9 @@ const EvidencePackCard: React.FC<EvidencePackCardProps> = ({ pack }) => {
                 <TaskContent>
                     {statsLine && (
                         <p className="text-[11px] leading-relaxed text-zinc-300">{stripMd(statsLine)}</p>
+                    )}
+                    {causePattern && (
+                        <p className="status-surface text-[11px] leading-relaxed font-medium">{stripMd(causePattern)}</p>
                     )}
                     {similar.length > 0 && (
                         <div>

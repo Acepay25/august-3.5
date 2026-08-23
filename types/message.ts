@@ -251,6 +251,7 @@ export interface Message {
    *  doctrine header. Mirrors the prompt-side block for auditability. */
   evidencePack?: {
     statsLine: string;
+    causePattern: string;
     similar: Array<{ outcome: string; coin: string; direction: string; date: string; lesson: string; similarity: number }>;
     skills: string[];
     doctrineHeader: string;

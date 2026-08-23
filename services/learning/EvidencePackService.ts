@@ -12,12 +12,14 @@
  */
 
 import type { LoggedTrade } from '../../types';
+import type { RootCauseClass } from '../../types';
 import { getMemoryFiles } from './MemoryFilesService';
 import { parseSkillMarkdown, isSkillFile, skillMatchesSetup } from './SkillMemoryService';
 import { findRelevantTrades, calculatePnlR } from './PatternMemorySynthesisService';
 import { evidenceFreshness } from './MemoryRetrievalService';
 import type { MemoryRetrievalQuery } from './MemoryRetrievalService';
 import { readDoctrineForInjection } from './DoctrineConsolidationService';
+import { rootCauseForTrade, shouldAdmitTechnicalStrategyRule } from '../../utils/rootCause';
 import { COMMON_WORDS } from '../../constants/commonWords';
 
 /** Hard cap for the whole prompt-side pack — the verdict prompt is already large. */
@@ -28,6 +30,8 @@ const MAX_SIMILAR = 3;
 const MAX_SKILLS = 3;
 /** Below this sample the cluster stats line is omitted (honest no-sample). */
 const MIN_SAMPLE_FOR_STATS = 3;
+/** Minimum admitted technical losses before a root-cause pattern line fires. */
+const MIN_CAUSE_SAMPLE = 4;
 
 export interface SetupClusterStats {
     sample: number;
@@ -156,6 +160,7 @@ export interface EvidencePack {
     /** Structured view for the UI card (null sections when absent). */
     ui: {
         statsLine: string;
+        causePattern: string;
         similar: Array<{ outcome: string; coin: string; direction: string; date: string; lesson: string; similarity: number }>;
         skills: string[];
         doctrineHeader: string;
@@ -170,6 +175,41 @@ const doctrineHeader = (): string => {
     } catch {
         return '';
     }
+};
+
+/**
+ * Root-cause cluster line (ROUND-32, LightRAG-style high-level summary):
+ * classify this coin+direction cluster's admitted technical losses by root
+ * cause and surface the dominant pattern. The graph's cause nodes exist for
+ * exactly this — one line turns "check your history" into a named failure
+ * mode. Returns '' below MIN_CAUSE_SAMPLE (honest no-pattern).
+ */
+export const buildRootCausePatternLine = (
+    coin: string | undefined,
+    direction: string | undefined,
+    trades: LoggedTrade[],
+): string => {
+    if (!coin || !trades || trades.length === 0) return '';
+    const wantCoin = coin.toUpperCase().replace(/USDT?$/, '');
+    const causes = new Map<RootCauseClass, number>();
+    let total = 0;
+    for (const t of trades) {
+        if (t.outcome !== 'LOSS') continue;
+        if ((t.analysis?.coinName || '').toUpperCase().replace(/USDT?$/, '') !== wantCoin) continue;
+        if ((direction === 'Long' || direction === 'Short') && t.analysis?.direction !== direction) continue;
+        // Only losses that admit a technical lesson inform an edge pattern.
+        const cause = rootCauseForTrade(t);
+        if (!shouldAdmitTechnicalStrategyRule(cause)) continue;
+        causes.set(cause, (causes.get(cause) ?? 0) + 1);
+        total += 1;
+    }
+    if (total < MIN_CAUSE_SAMPLE) return '';
+    let best: { cause: RootCauseClass; n: number } | null = null;
+    for (const [cause, n] of causes) {
+        if (!best || n > best.n) best = { cause, n };
+    }
+    if (!best || best.cause !== 'SETUP_EDGE_FAILURE' || best.n / total < 0.5) return '';
+    return `**Failure pattern:** ${best.n}/${total} of your admitted ${coin}${direction ? ` ${direction}` : ''} losses are SETUP_EDGE_FAILURE — the setups themselves, not execution or macro shocks. Tighten entry criteria before trusting this class again.`;
 };
 
 /**
@@ -202,12 +242,14 @@ export const buildVerdictEvidencePack = (
 ): EvidencePack => {
     const ui = {
         statsLine: '',
+        causePattern: '',
         similar: [] as EvidencePack['ui']['similar'],
         skills: [] as string[],
         doctrineHeader: '',
     };
     try {
         ui.statsLine = buildSetupStatsLine(query?.coin, query?.direction, query?.family, trades || []);
+        ui.causePattern = buildRootCausePatternLine(query?.coin, query?.direction, trades || []);
         ui.skills = buildEvidenceSkillLines(query);
 
         if (trades && trades.length > 0 && query?.coin) {
@@ -232,6 +274,7 @@ export const buildVerdictEvidencePack = (
 
         const sections: string[] = [];
         if (ui.statsLine) sections.push(ui.statsLine);
+        if (ui.causePattern) sections.push(ui.causePattern);
         if (ui.similar.length > 0) {
             sections.push(
                 '**Similar closed trades:**\n' + ui.similar

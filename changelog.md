@@ -4,6 +4,29 @@ Plain-English log of change rounds. Newest first.
 
 ---
 
+## ROUND-32 — Root-cause failure patterns in the evidence pack (2026-08-23)
+
+The first production payoff from the graph-engineering research (GraphRAG /
+Zep / LightRAG): the memory system's root-cause classification — which until
+now only fed the dashboard graph — surfaces as a **high-level failure-pattern
+line** in the verdict evidence pack.
+
+When a coin+direction cluster has ≥4 admitted technical losses and ≥50% of
+them classify as SETUP_EDGE_FAILURE, both the moderator's prompt block and the
+card's evidence panel now say so explicitly: *"Failure pattern: 3/4 of your
+admitted BTC Short losses are SETUP_EDGE_FAILURE — the setups themselves, not
+execution or macro shocks. Tighten entry criteria before trusting this class
+again."* Execution errors and macro shocks never fire the line (they don't
+admit edge lessons), small samples stay silent, and the card renders it in the
+status-surface scope.
+
+This is LightRAG's dual-level idea in miniature: seats reason at low level
+(specific skills, similar trades); the arbiter now also gets one high-level
+line summarizing what the cluster's cause nodes say — no new infrastructure,
+just reading data that already existed.
+
+---
+
 ## ROUND-31 — Memory honesty fixes + composer declutter (2026-08-23)
 
 **Edge decay now actually reaches prompts (M1).** The 120-day exponential

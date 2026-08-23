@@ -15,7 +15,7 @@ vi.mock('../services/infrastructure/PreferencesService', () => ({
 
 import { initMemoryFiles } from '../services/learning/MemoryFilesService';
 import { findRelevantTrades } from '../services/learning/PatternMemorySynthesisService';
-import { buildVerdictEvidencePack } from '../services/learning/EvidencePackService';
+import { buildVerdictEvidencePack, buildRootCausePatternLine } from '../services/learning/EvidencePackService';
 import { filterBotNoteByQuery } from '../services/bots/BotMemoryService';
 import { parseSkillMarkdown } from '../services/learning/SkillMemoryService';
 
@@ -111,5 +111,25 @@ describe('ROUND-31 memory honesty', () => {
         const meta = parseSkillMarkdown(md)!;
         expect(meta.evidenceCount).toBe(27);
         expect(meta.tradeIds.length).toBe(3);
+    });
+
+    it('surfaces the root-cause failure pattern only above sample + majority', () => {
+        const edgeLoss = (id: string): LoggedTrade => makeTrade({
+            id,
+            postMortem: '**Key Lesson:** Entry was early — setup failed at the level.',
+            rootCauseClass: 'SETUP_EDGE_FAILURE',
+        });
+        // 4 admitted edge losses ⇒ pattern fires.
+        const trades = [edgeLoss('e1'), edgeLoss('e2'), edgeLoss('e3'), edgeLoss('e4')];
+        const line = buildRootCausePatternLine('BTC', 'Short', trades);
+        expect(line).toContain('SETUP_EDGE_FAILURE');
+        expect(line).toContain('4/4');
+
+        // 2 losses is below MIN_CAUSE_SAMPLE → silent.
+        expect(buildRootCausePatternLine('BTC', 'Short', trades.slice(0, 2))).toBe('');
+
+        // Execution errors do not admit an edge pattern → below sample → silent.
+        const exec = makeTrade({ id: 'x1', rootCauseClass: 'EXECUTION_ERROR' });
+        expect(buildRootCausePatternLine('BTC', 'Short', [exec, exec, exec, exec])).toBe('');
     });
 });
