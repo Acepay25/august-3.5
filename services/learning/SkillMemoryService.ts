@@ -332,15 +332,20 @@ const applySkillEvidenceUnlocked = async (trade: LoggedTrade, username: string, 
         // no new status machinery needed.
         applyEvidenceDecay(meta, trade.marketRegime);
 
-        // ── Weighted attribution (ROUND-27) ──
-        // Full credit when retrieval actually injected this skill; half when
-        // it merely matched the setup (budgets/audience filters mean it may
-        // never have reached the prompt). Unknown telemetry (empty log) keeps
-        // full credit so tiering cannot starve on missing data.
-        let injected: boolean | null = null;
+        // ── Weighted attribution (ROUND-27, windowed in ROUND-28) ──
+        // Full credit when retrieval actually injected this skill AROUND THE
+        // TIME OF THIS TRADE; half when it merely matched the setup. Unknown
+        // telemetry (empty log) keeps full credit so tiering cannot starve
+        // on missing data. Scoping to the trade window means one injection
+        // can no longer upgrade credit for unrelated setups forever.
+        const tradeTs = Date.parse(trade.timestamp || '');
+        const sinceMs = Number.isFinite(tradeTs) ? Math.max(0, Date.now() - tradeTs) : undefined;
+        let injected: boolean | null;
         try {
-            injected = await skillInjectedSince(username, file.name);
-        } catch { injected = null; }
+            injected = await skillInjectedSince(username, file.name, sinceMs);
+        } catch {
+            injected = null;
+        }
         const credit = injected === false ? 0.5 : 1;
 
         if (trade.outcome === TradeOutcome.WIN) {

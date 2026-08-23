@@ -12,6 +12,8 @@ import TradingSignalCard from '../analysis/TradingSignalCard';
 import VerdictSkeletonCard from '../analysis/VerdictSkeletonCard';
 import DebateReplay from '../analysis/DebateReplay';
 import DebateRunLog from '../analysis/DebateRunLog';
+import RunContractPanel from '../analysis/RunContractPanel';
+import EvidencePackCard from '../analysis/EvidencePackCard';
 import AnalysisTracePanel from '../analysis/AnalysisTracePanel';
 import AnalysisDetails from './AnalysisDetails';
 import SetupLifecycleCard from '../analysis/SetupLifecycleCard';
@@ -267,7 +269,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
         ? '' // user messages render as plain text (Cursor-style, no bubble)
         : message.role === MessageRole.AI
             ? (message.isPostMortem
-                ? 'bg-zinc-900/60 text-zinc-100 border border-purple-500/20 rounded-xl'
+                ? 'bg-zinc-900/60 text-zinc-100 border border-white/10 rounded-xl'
                 : 'bg-transparent text-zinc-200')
             : 'bg-rose-500/10 text-rose-300 border border-rose-500/20 text-center rounded-xl';
 
@@ -323,15 +325,15 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     if (isSelectionMode) return;
                                     setExpandedPostMortems(prev => ({ ...prev, [message.id]: !prev[message.id] }))
                                 }}
-                                className="flex items-center justify-between w-full mb-3 group select-none border-b border-purple-500/20 pb-2 focus-visible:ring-2 focus-visible:ring-zinc-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+                                className="flex items-center justify-between w-full mb-3 group select-none border-b border-white/10 pb-2 focus-visible:ring-2 focus-visible:ring-zinc-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
                                 aria-expanded={!!expandedPostMortems[message.id]}
                                 aria-controls={`post-mortem-content-${message.id}`}
                             >
-                                <span className="text-xs font-black tracking-widest text-purple-400 uppercase group-hover:text-purple-300 transition-colors flex items-center gap-2">
-                                    <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse"></span>
+                                <span className="text-xs font-black tracking-widest text-zinc-400 uppercase group-hover:text-zinc-200 transition-colors flex items-center gap-2">
+                                    <span className="w-2 h-2 rounded-full bg-zinc-500 animate-pulse"></span>
                                     POST-MORTEM ANALYSIS
                                 </span>
-                                <ChevronDownIcon className={`w-4 h-4 text-purple-400 transition-transform duration-300 ${expandedPostMortems[message.id] ? 'rotate-180' : ''}`} />
+                                <ChevronDownIcon className={`w-4 h-4 text-zinc-500 transition-transform duration-300 ${expandedPostMortems[message.id] ? 'rotate-180' : ''}`} />
                             </button>
                         )}
 
@@ -581,7 +583,11 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     message={message}
                                     tradingStyle={message.tradingStyle}
                                     highlighted={isHighlighted}
-                                />
+                                >
+                                    {/* Audit surfaces (ROUND-28/U1+U2): run contract + verdict evidence. */}
+                                    <RunContractPanel stages={message.runContract} />
+                                    <EvidencePackCard pack={message.evidencePack} />
+                                </AnalysisDetails>
                                 </div>
                                 {(message.debateRunLog && message.debateRunLog.length > 0) || message.runStats ? (
                                     <DebateRunLog events={message.debateRunLog ?? []} runStats={message.runStats} defaultOpen={false} />

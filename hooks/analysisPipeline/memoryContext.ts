@@ -82,8 +82,12 @@ export const assemblePipelineMemoryContext = (
             return first ? getBotMemoryContext(first.id, memoryQuery, first.memoryScope || 'global') : '';
         } catch { return ''; }
     })();
-    const memoryFilesContext = [getMemoryFilesContext(memoryQuery, loggedTrades, 'analyst'), botMemoryContext].filter(Boolean).join('\n\n---\n\n');
-    const moderatorMemoryContext = [getMemoryFilesContext(memoryQuery, loggedTrades, 'moderator'), botMemoryContext].filter(Boolean).join('\n\n---\n\n');
+    // Analysts get the opening slice (independent read); the MODERATOR gets
+    // the verdict slice (full skill bodies, conflict flags, runner-up skills,
+    // similar trades) — the arbiter binds the decision, so it needs verdict
+    // depth even though its context bundle is assembled at send time.
+    const memoryFilesContext = [getMemoryFilesContext(memoryQuery, loggedTrades, 'analyst', 'opening'), botMemoryContext].filter(Boolean).join('\n\n---\n\n');
+    const moderatorMemoryContext = [getMemoryFilesContext(memoryQuery, loggedTrades, 'moderator', 'verdict'), botMemoryContext].filter(Boolean).join('\n\n---\n\n');
     const memoryRetrieved = listRetrievedMemorySources(memoryQuery, loggedTrades, 'analyst');
 
     // JOURNAL-DRIVEN ACCURACY (SetupMemoryService): before the analysts

@@ -25,6 +25,7 @@ describe('DeskToolsService', () => {
             'get_btc_context',
             'get_session_context',
             'get_price_snapshot',
+            'get_setup_history_stats',
             'recall',
         ]);
         expect(toAnthropicTools()[0]).toMatchObject({

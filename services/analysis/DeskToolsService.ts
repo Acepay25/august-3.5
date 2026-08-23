@@ -20,6 +20,7 @@ import {
 } from './MarketDataService';
 import { getSessionContext } from '../infrastructure/SessionService';
 import { handleRecallTool } from '../learning/MemoryRetrievalService';
+import { computeSetupClusterStats } from '../learning/EvidencePackService';
 import type { LoggedTrade } from '../../types';
 
 export interface DeskToolDefinition {
@@ -114,6 +115,7 @@ const TOOL_LABELS: Record<string, string> = {
     get_session_context: 'session',
     get_price_snapshot: 'price snapshot',
     recall: 'notebook recall',
+    get_setup_history_stats: 'setup history',
 };
 
 export const toolLabel = (name: string): string => TOOL_LABELS[name] ?? name.replace(/_/g, ' ');
@@ -151,6 +153,12 @@ export const digestToolResult = (name: string, ok: boolean, content: string): st
         if (name === 'get_price_snapshot') {
             const price = parsed.lastPrice ?? parsed.price ?? parsed.close;
             return price != null ? `price ${Number(price).toLocaleString()}` : `${toolLabel(name)} ok`;
+        }
+        if (name === 'get_setup_history_stats') {
+            const sample = typeof parsed.sample === 'number' ? parsed.sample : 0;
+            if (sample <= 0) return 'setup history: no logged trades';
+            const wr = typeof parsed.winRate === 'number' ? `${Math.round(parsed.winRate * 100)}% win` : '';
+            return `setup history: ${parsed.wins}W/${parsed.losses}L${wr ? ` (${wr})` : ''}`;
         }
     } catch {
         // Not JSON — fall through to the generic line.
@@ -282,6 +290,23 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
                         enum: ['15m', '1h', '4h', '1d'],
                         description: 'Candle interval. Default 1h.',
                     },
+                },
+                required: ['symbol'],
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'get_setup_history_stats',
+            description:
+                'Your own logged track record for a setup type: sample size, win rate, average R, last outcome, worst lesson. Use to check a claim like "this setup usually fails" against the journal before asserting it.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    symbol: { type: 'string', description: 'Futures symbol, e.g. BTCUSDT or ETH.' },
+                    direction: { type: 'string', enum: ['Long', 'Short', 'Neutral'], description: 'Trade direction to filter by.' },
                 },
                 required: ['symbol'],
                 additionalProperties: false,
@@ -517,6 +542,28 @@ export async function executeDeskTool(
                     context.trades,
                 );
                 break;
+            case 'get_setup_history_stats': {
+                const symRaw = asSymbol(call.arguments.symbol, fallback);
+                const coin = symRaw.replace(/USDT?$/, '');
+                const dirArg = asString(call.arguments.direction).toUpperCase();
+                const direction: 'Long' | 'Short' | undefined = dirArg === 'LONG' ? 'Long' : dirArg === 'SHORT' ? 'Short' : undefined;
+                const stats = computeSetupClusterStats(coin, direction, undefined, context.trades || []);
+                content = JSON.stringify(stats
+                    ? {
+                        coin,
+                        direction: direction ?? 'any',
+                        sample: stats.sample,
+                        wins: stats.wins,
+                        losses: stats.losses,
+                        winRate: stats.winRate !== null ? Math.round(stats.winRate * 100) / 100 : null,
+                        avgR: stats.avgR !== null ? Math.round(stats.avgR * 100) / 100 : null,
+                        lastOutcome: stats.lastOutcome,
+                        lastDate: stats.lastDate ? stats.lastDate.slice(0, 10) : null,
+                        worstLesson: stats.worstLesson,
+                    }
+                    : { coin, direction: direction ?? 'any', sample: 0, note: `No closed trades logged for ${coin}${direction ? ` ${direction}` : ''}.` }, null, 2);
+                break;
+            }
             default:
                 content = `Unknown tool: ${call.name}`;
                 return { toolCallId: call.id, name: call.name, ok: false, content };
@@ -541,6 +588,20 @@ export async function executeDeskTools(
 ): Promise<DeskToolResult[]> {
     return Promise.all(calls.map(call => executeDeskTool(call, context)));
 }
+
+/**
+ * Arbiter tool policy (ROUND-28/D0.2): the moderator's binding verdict is an
+ * argument-quality decision, so its DEFAULT desk is memory + context only.
+ * Order-book/derivatives data can outweigh argument quality and are opt-in
+ * per call site; the clarification rounds inherit the same policy (W6).
+ * Analysts keep their bot-role presets — this constrains the arbiter only.
+ */
+export const ARBITER_ALLOWED_TOOLS = [
+    'recall',
+    'get_setup_history_stats',
+    'get_session_context',
+    'web_search',
+] as const;
 
 /** Parse OpenAI-style tool_calls from a chat message. */
 export function parseOpenAIToolCalls(message: unknown): DeskToolCall[] {

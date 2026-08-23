@@ -195,7 +195,7 @@ const StrategySearch: React.FC<StrategySearchProps> = ({
              <button
                 onClick={handleDiscover}
                 disabled={isLoading}
-                className="w-full flex items-center justify-center gap-2 sm:gap-3 bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 font-bold py-3 sm:py-4 px-4 sm:px-5 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed text-xs sm:text-base"
+                className="w-full flex items-center justify-center gap-2 sm:gap-3 bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/30 font-bold py-3 sm:py-4 px-4 sm:px-5 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed text-xs sm:text-base"
              >
                 <BotIcon /> Auto-Discover Strategies
              </button>

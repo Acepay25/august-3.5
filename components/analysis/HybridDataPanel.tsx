@@ -504,9 +504,9 @@ const HybridDataPanel: React.FC<HybridDataPanelProps> = ({ data, isLoading, conn
 
                     {/* NEW: Session Context */}
                     {data.session && (
-                        <div className="bg-indigo-950/30 rounded-xl p-3 border border-indigo-500/20">
-                            <div className="flex items-center justify-between mb-2">
-                                <div className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">Session Context</div>
+                        <div className="bg-zinc-950/30 rounded-xl p-3 border border-white/10">
+                            <div className="flex items-center gap-2">
+                                <div className="text-[10px] font-bold text-cyan-300 uppercase tracking-wider">Session Context</div>
                                 <div className={`text-[9px] px-1.5 py-0.5 rounded-full ${data.session.isKillZone ? 'bg-rose-500/20 text-rose-400 animate-pulse' : 'bg-zinc-800 text-zinc-400'}`}>
                                     {data.session.isKillZone ? 'KILL ZONE' : 'Standard'}
                                 </div>
