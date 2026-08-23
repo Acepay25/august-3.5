@@ -78,8 +78,19 @@ export const assemblePipelineMemoryContext = (
             const userKey = getActiveUsername();
             const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(`bots_v1_${userKey}`) : null;
             const data = raw ? JSON.parse(raw) as { bots?: Array<{ id: string; memoryScope?: BotMemoryScope }> } : null;
-            const first = data?.bots?.[0];
-            return first ? getBotMemoryContext(first.id, memoryQuery, first.memoryScope || 'global') : '';
+            if (!data?.bots?.length) return '';
+            // ROUND-30: merge memory from EVERY enabled bot rather than
+            // whichever entry happened to sort first — the debate roster may
+            // not include bots[0] at all. Deduped; capped per-bot downstream.
+            const seen = new Set<string>();
+            const contexts: string[] = [];
+            for (const bot of data.bots) {
+                if (!bot?.id || seen.has(bot.id)) continue;
+                seen.add(bot.id);
+                const ctx = getBotMemoryContext(bot.id, memoryQuery, bot.memoryScope || 'global');
+                if (ctx) contexts.push(ctx);
+            }
+            return contexts.join('\n\n---\n\n');
         } catch { return ''; }
     })();
     // Analysts get the opening slice (independent read); the MODERATOR gets
