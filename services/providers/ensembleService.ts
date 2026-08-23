@@ -2,7 +2,8 @@
 import { TradeAnalysis, Message, TradeOutcome, AccuracySubMode, LoggedTrade, AnalystLensConfig, AnalystRole, AnalystConsensus } from '../../types';
 import { ProviderConfig } from '../../types/provider';
 import { ChatMessage, warmProviderConnection } from './GenericProviderService';
-import { streamChatWithDeskTools, resolveDefaultSymbol, clearDeskToolCache } from '../analysis/DeskToolsService';
+import { streamChatWithDeskTools, resolveDefaultSymbol, clearDeskToolCache, ARBITER_ALLOWED_TOOLS } from '../analysis/DeskToolsService';
+import { buildVerdictEvidencePack, deriveSetupQueryFromPrompt } from '../learning/EvidencePackService';
 import type { HermesBot } from '../../types/bot';
 import { TASK_BUDGETS } from './taskBudgets';
 import { getPrompt } from '../infrastructure/PromptOverrideService';
@@ -297,6 +298,9 @@ const getModeratorAnalysisStream = async function* (
     onReasoning?: (reasoning: string) => void,
     defaultSymbol?: string | null,
     onToolEvent?: (line: string) => void,
+    /** Journal access for the `recall` desk tool (ROUND-28/B2): the arbiter
+     *  must be able to check its own trade history, not just the analysts. */
+    trades?: LoggedTrade[],
 ): AsyncGenerator<string> {
     const effectiveConfig: ProviderConfig = { ...config, selectedModel: model || config.selectedModel };
     const messages: ChatMessage[] = [
@@ -317,6 +321,13 @@ const getModeratorAnalysisStream = async function* (
             onReasoning,
             onToolEvent,
             defaultSymbol: defaultSymbol ?? resolveDefaultSymbol(prompt),
+            // The arbiter keeps the memory+context desk (ROUND-28/D0.2):
+            // order-book noise must not outweigh argument quality at the
+            // binding stage. Data tools stay available to analyst seats.
+            allowedTools: [...ARBITER_ALLOWED_TOOLS],
+            // The arbiter gets the same journal access as the seats it judges
+            // (W1 fix): without this its recall desk tool returned nothing.
+            trades,
             afterToolsNudge: 'Tool results are above. Continue the moderator turn now. If this is the final verdict, end with the labeled FINAL TRADE PLAN markdown. No JSON, no tool tags.',
         })) {
             if (chunk) yield chunk;
@@ -1003,7 +1014,8 @@ export const verifyAccuracyPlan = async (
     debateContent: string,
     planJson: string,
     signal?: AbortSignal,
-    hybridContext?: string
+    hybridContext?: string,
+    trades?: LoggedTrade[],
 ): Promise<{ verdict: 'confirmed' | 'adjusted'; note: string; planJson?: string }> => {
     const prompt = `
 **ROLE: ENSEMBLE DEBATE MODERATOR — ACCURACY VERIFICATION PASS**
@@ -1026,7 +1038,11 @@ ${planJson.slice(0, 6000)}
 `;
     let text = '';
     try {
-        for await (const chunk of getModeratorAnalysisStream(moderatorConfig, moderatorModel, prompt, signal)) {
+        for await (const chunk of getModeratorAnalysisStream(
+            moderatorConfig, moderatorModel, prompt, signal,
+            undefined, undefined, undefined,
+            trades,
+        )) {
             if (chunk) text += chunk;
         }
     } catch (e: any) {
@@ -2230,13 +2246,13 @@ History:
 ${tradeHistoryContext}
 
 **${analyst1Name.toUpperCase()} INITIAL OUTPUT:**
-${truncateTextToTokens(analyst1Result.finalOutput || analyst1Result.thoughtProcess, 1500)}
+${truncateTextToTokens(analyst1Result.finalOutput || analyst1Result.thoughtProcess, 1500)} ${calibratedAnalysts[0].calibrationNote}
 
 **${analyst2Name.toUpperCase()} INITIAL OUTPUT:**
-${truncateTextToTokens(analyst2Result.finalOutput || analyst2Result.thoughtProcess, 1500)}
+${truncateTextToTokens(analyst2Result.finalOutput || analyst2Result.thoughtProcess, 1500)} ${calibratedAnalysts[1].calibrationNote}
 
 **${analyst3Name.toUpperCase()} INITIAL OUTPUT:**
-${truncateTextToTokens(analyst3Result.finalOutput || analyst3Result.thoughtProcess, 1500)}
+${truncateTextToTokens(analyst3Result.finalOutput || analyst3Result.thoughtProcess, 1500)} ${calibratedAnalysts[2].calibrationNote}
 
 Start with <DEBATE_START> now.
 `;
@@ -2476,7 +2492,7 @@ export const buildSeatTrustBlock = (
     providerIdBySeat: Record<string, string | undefined>,
     trades?: { debateTurns?: { speaker: string; text: string }[]; moderatorProvider?: string }[],
 ): string => {
-    let calibrations: ReturnType<typeof getCalibrationSummaries> = [];
+    let calibrations: ReturnType<typeof getCalibrationSummaries>;
     try {
         calibrations = getCalibrationSummaries();
     } catch {
@@ -3587,6 +3603,14 @@ export const conductRealDebate = async function* (
 
     const moderatorPrompt = [
         getPrompt('debate.final_verdict', MODERATOR_FINAL_VERDICT_PROMPT).replace('{{ANALYSTS}}', names.join(', ')),
+        // Verdict evidence pack (ROUND-28/D0.3): proactive journal evidence —
+        // cluster stats, similar trades, matched skills, doctrine header — so
+        // the binding verdict does not depend on remembering to call recall.
+        (() => {
+            try {
+                return buildVerdictEvidencePack(deriveSetupQueryFromPrompt(userPrompt), fullTradesForRecall).promptBlock;
+            } catch { return ''; }
+        })(),
         `\n\n**THE DEBATE TRANSCRIPT (EPISODES):**\n${transcriptBlock}`,
         // Final-stance divergence summary — recomputed AFTER clarification so
         // the moderator sees where each seat LANDED, not just the openings.
@@ -3824,7 +3848,7 @@ export const conductTwoWayPostMortemDebate = (
 
     Start with <DEBATE_START> now.`;
 
-    return getModeratorAnalysisStream(moderatorConfig, moderatorModel, moderatorPrompt, signal, onReasoning);
+    return getModeratorAnalysisStream(moderatorConfig, moderatorModel, moderatorPrompt, signal, onReasoning, undefined, undefined, trades);
 };
 
 /**

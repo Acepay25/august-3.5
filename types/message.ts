@@ -246,6 +246,18 @@ export interface Message {
   debateRunLog?: DebateRunEvent[];
   /** Notebook files / skills retrieved for this run (inspectable on the card). */
   memoryRetrieved?: Array<{ path: string; kind: string }>;
+  /** Verdict evidence pack (ROUND-28/U2): the journal evidence assembled for
+   *  the moderator's verdict — cluster record, similar trades, matched skills,
+   *  doctrine header. Mirrors the prompt-side block for auditability. */
+  evidencePack?: {
+    statsLine: string;
+    similar: Array<{ outcome: string; coin: string; direction: string; date: string; lesson: string; similarity: number }>;
+    skills: string[];
+    doctrineHeader: string;
+  };
+  /** Run contract (ROUND-28/U1): the run's stage ladder with honest skip
+   *  notes, persisted for replay audit. */
+  runContract?: Array<{ id: string; label: string; state: 'pending' | 'running' | 'done' | 'skipped' | 'failed'; note?: string }>;
   /** Crash-resume: last completed debate round (cleared when a verdict lands). */
   debateCheckpoint?: DebateCheckpoint;
   /** "What would I do today?" — fresh forward-looking re-assessment of the

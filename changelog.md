@@ -4,6 +4,52 @@ Plain-English log of change rounds. Newest first.
 
 ---
 
+## ROUND-28 — Arbiter evidence, setup-stats tool, run contract UI (2026-08-23)
+
+**The moderator can finally see its own journal.** `getModeratorAnalysisStream`
+now accepts the trade log, so the `recall` desk tool works at every moderator
+surface (clarification questions, judgment, verdict, accuracy verification,
+post-mortem debates) — previously only analysts had history and the arbiter
+recalled nothing.
+
+**Arbiter tool policy.** The moderator's default desk is now memory + context
+(`recall`, `get_setup_history_stats`, session, web search). Order-book and
+derivatives data no longer reach the binding verdict by default — argument
+quality decides, not wall noise.
+
+**New desk tool: `get_setup_history_stats`.** Any seat can check a claim like
+"this setup usually fails" against the real journal: sample size, win rate,
+average R, last outcome, worst lesson for a coin+direction cluster. Honest
+"no logged trades" when the sample is empty.
+
+**Verdict evidence pack.** Before the moderator writes the verdict, a compact
+block is assembled automatically: this desk's record on the setup, top similar
+closed trades, matched notebook skills, doctrine header. The binding decision
+no longer depends on the moderator remembering to call recall.
+
+**Run Contract panel.** Every debate card shows its stage ladder as a live
+todo — Gate scan → openings → rebuttals → clarification → verdict — derived
+from the existing run log. Skips are honest and labeled ("USD budget cap
+reached", floor alignment), so a lopsided-floor verdict is visible instead of
+silent. Frozen into the finished card for replay audits.
+
+**Evidence pack card.** The settled verdict card shows what the arbiter's
+evidence pack contained: journal record line, similar trades with lessons,
+matched skills with freshness, doctrine header. Prompt-side block and UI card
+show the same data.
+
+**Chat surface color pass.** Post-mortem headers, live post-mortem stream and
+the hybrid session panel dropped their purple/indigo accents back to the
+charcoal + steel-blue theme; the strategy auto-discover button joins the accent
+family properly.
+
+Also: skill injection credit is scoped to each trade's time window (one old
+injection no longer upgrades credit forever); the dead Bayesian calibration in
+post-mortem debates is wired into the transcript; README rewritten to describe
+this repo.
+
+---
+
 ## ROUND-26 — Seat trust, provenance, edge decay (2026-08-22)
 
 **Seat-trust weighting.** The moderator verdict prompt now includes each seat's historical record: Brier calibration score, overconfidence gap, and average sealed conviction from stored debates. Seats with proven accuracy are flagged trustworthy; overconfident seats get an explicit discount instruction when they dissent from better-calibrated peers. Data comes entirely from the existing trade log.

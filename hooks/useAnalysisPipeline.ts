@@ -78,6 +78,8 @@ import { applyNotebookSkillsToAnalysis, confirmedAvoidForSetup, titleFromMeta } 
 import { ANALYST_ROLE_DEFINITIONS, getLensPromptForStyle, getRoleForProvider, EnsembleModelSelection } from '../services/ui/AnalystLensService';
 import { buildHybridEnvelope, buildOcrEnvelope, envelopeKindForRole } from '../utils/debateEnvelopes';
 import { buildRecommendationContract } from '../utils/recommendationContract';
+import { buildRunContractStages, type RunContractStage } from '../utils/runContract';
+import { buildVerdictEvidencePack, deriveSetupQueryFromPrompt } from '../services/learning/EvidencePackService';
 import { maybeQueueVerdictSkillDraft } from '../utils/verdictSkillDraft';
 import { parseProvisionalVerdict, parsePartialVerdictFields } from '../utils/provisionalVerdict';
 import { extractDebateTemplate, DebateTemplate } from '../utils/debateTemplates';
@@ -383,7 +385,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         currentTurns: DebateTurn[],
         thoughtMap: Record<string, string>,
         reasoningMap: Record<string, string>,
-        activeSpeakers: Record<string, number>
+        activeSpeakers: Record<string, number>,
+        runContractStages: Message['runContract']
     ) => {
         updateMessages(prev => {
             const messageIndex = prev.findIndex(m => m.id === debateMessageId);
@@ -396,6 +399,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 activeDebateSpeakers: { ...activeSpeakers },
                 liveToolEvents: { ...liveToolEventsRef.current },
                 debateRunLog: [...debateRunLogRef.current],
+                runContract: runContractStages,
                 debateCheckpoint: currentTurns.length > 0 ? (() => {
                     const analystNames = [...new Set(currentTurns.filter(t => t.speaker !== 'System' && t.speaker !== 'Moderator').map(t => t.speaker))];
                     const completed = lastCompletedRound(currentTurns, analystNames);
@@ -519,6 +523,9 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     const liveToolEventsRef = useRef<Record<string, string>>({});
     const debateTurnsRef = useRef<DebateTurn[]>([]);
     const debateRunLogRef = useRef<DebateRunEvent[]>([]);
+    /** Live run-contract view (U1): re-derived from the run log on every push. */
+    const runContractFor = (): Message['runContract'] =>
+        buildRunContractStages(debateRunLogRef.current, true);
     const steeringQueueRef = useRef<string[]>([]);
     const [steeringNotes, setSteeringNotes] = useState<string[]>([]);
     // Mid-debate analyst replacement: the generator suspends and waits on a
@@ -2274,7 +2281,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                         debateTurnsRef.current,
                                         thoughtMap,
                                         reasoningMapRef.current,
-                                        activeDebateSpeakersRef.current,
+                                        activeDebateSpeakersRef.current, runContractFor(),
                                     );
                                 },
                                 // Provider IDs for Bayesian calibration (keyed by id)
@@ -2439,7 +2446,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                         debateTurnsRef.current,
                                         thoughtMap,
                                         reasoningMapRef.current,
-                                        activeDebateSpeakersRef.current,
+                                        activeDebateSpeakersRef.current, runContractFor(),
                                     );
                             },
                             (speaker: string, reasoning: string, round?: number) => {
@@ -2470,7 +2477,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                         debateTurnsRef.current,
                                         thoughtMap,
                                         reasoningMapRef.current,
-                                        activeDebateSpeakersRef.current,
+                                        activeDebateSpeakersRef.current, runContractFor(),
                                     );
                                 }
                             },
@@ -2486,7 +2493,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                     debateTurnsRef.current,
                                     thoughtMap,
                                     reasoningMapRef.current,
-                                    activeDebateSpeakersRef.current,
+                                    activeDebateSpeakersRef.current, runContractFor(),
                                 );
                             },
                             // Full chart/pattern context + user strategies —
@@ -2541,7 +2548,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                     debateTurnsRef.current,
                                     thoughtMap,
                                     reasoningMapRef.current,
-                                    activeDebateSpeakersRef.current,
+                                    activeDebateSpeakersRef.current, runContractFor(),
                                 );
                             },
                             // Risk-only template: straight to the verdict.
@@ -2686,7 +2693,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
 
                             // P1-5: Coalesce per-token updates into one per frame.
                             debateTurnsRef.current = currentTurns;
-                            throttledDebateUpdate(requestConversationId, debateMessageId, currentTurns, thoughtMap, reasoningMapRef.current, activeDebateSpeakersRef.current);
+                            throttledDebateUpdate(requestConversationId, debateMessageId, currentTurns, thoughtMap, reasoningMapRef.current, activeDebateSpeakersRef.current, runContractFor());
                         }
                     } else {
                         // STANDARD MODE — REAL debate: the pipeline receives
@@ -2768,7 +2775,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 .sort((a, b) => (a.round ?? 0) - (b.round ?? 0));
 
                             debateTurnsRef.current = currentTurns;
-                            throttledDebateUpdate(requestConversationId, debateMessageId, currentTurns, thoughtMap, reasoningMapRef.current, activeDebateSpeakersRef.current);
+                            throttledDebateUpdate(requestConversationId, debateMessageId, currentTurns, thoughtMap, reasoningMapRef.current, activeDebateSpeakersRef.current, runContractFor());
                         };
                         rebuildDebateTurnsRef.current = rebuildDebateTurns;
 
@@ -2963,6 +2970,9 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 // Chart context + user strategies so the
                                 // verification pass is not blind.
                                 moderatorContextBundle,
+                                // Journal access so the verifier's recall
+                                // desk tool can check claims against history.
+                                loggedTrades,
                             );
                             if (verification.verdict === 'adjusted' && verification.planJson) {
                                 const adjustedPlan = parseMarkdownTradePlan(verification.planJson);
@@ -3096,6 +3106,18 @@ ${accuracyVerificationNote}`
                             debateRunLog: [...debateRunLogRef.current],
                             debateCheckpoint: undefined,
                             memoryRetrieved,
+                            // Audit surfaces (ROUND-28/U1+U2): the finished
+                            // contract (frozen from the final log) + what the
+                            // arbiter's evidence pack contained.
+                            runContract: buildRunContractStages(debateRunLogRef.current, false),
+                            evidencePack: (() => {
+                                try {
+                                    return buildVerdictEvidencePack(
+                                        memoryQuery ?? deriveSetupQueryFromPrompt(effectiveInput),
+                                        loggedTrades,
+                                    ).ui;
+                                } catch { return undefined; }
+                            })(),
                         };
 
                         // Per-run execution summary (compare mode + diagnostics).

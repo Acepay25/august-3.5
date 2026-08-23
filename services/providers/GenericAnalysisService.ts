@@ -615,7 +615,7 @@ export async function conductPostMortem(
             direction: previousMessage.analysis?.direction,
             family: previousMessage.analysis?.detectedPatternFamily,
             pattern: previousMessage.analysis?.marketConditions?.pattern,
-        });
+        }, undefined, 'analyst', 'verdict');
         return ctx ? `\n${ctx}\n` : '';
     })();
 

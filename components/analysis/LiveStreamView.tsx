@@ -23,8 +23,8 @@ const VARIANT_CONFIG = {
   postmortem: {
     title: 'Live Post-Mortem Forensics',
     subtitle: 'Ensemble models are dissecting trade performance and verifying outcomes.',
-    dotColor: 'bg-purple-500',
-    dotShadow: 'shadow-[0_0_10px_#8a8a92]',
+    dotColor: 'bg-cyan-500',
+    dotShadow: 'shadow-[0_0_10px_#8aabd8]',
     loadingIdle: 'Analyzing Outcome...',
     loadingStreaming: 'Rendering Report...',
   },
@@ -32,7 +32,7 @@ const VARIANT_CONFIG = {
 
 const COLOR_PALETTE = [
   { bg: 'bg-blue-950/10', border: 'border-blue-500/20', text: 'text-blue-100/90', title: 'text-blue-400', accent: 'bg-blue-500' },
-  { bg: 'bg-purple-950/10', border: 'border-purple-500/20', text: 'text-purple-100/90', title: 'text-purple-400', accent: 'bg-purple-500' },
+  { bg: 'bg-cyan-950/10', border: 'border-white/10', text: 'text-zinc-100/90', title: 'text-cyan-300', accent: 'bg-cyan-500' },
   { bg: 'bg-emerald-950/10', border: 'border-emerald-500/20', text: 'text-emerald-100/90', title: 'text-emerald-400', accent: 'bg-emerald-500' },
   { bg: 'bg-amber-950/10', border: 'border-amber-500/20', text: 'text-amber-100/90', title: 'text-amber-400', accent: 'bg-amber-500' },
   { bg: 'bg-cyan-950/10', border: 'border-cyan-500/20', text: 'text-cyan-100/90', title: 'text-cyan-400', accent: 'bg-cyan-500' },

@@ -31,6 +31,8 @@ interface AnalysisDetailsProps {
     message?: Pick<Message, 'analysis' | 'debateTurns' | 'debateRunLog' | 'memoryRetrieved'> & { text?: string };
     tradingStyle?: Exclude<TradingStyle, 'auto'>;
     highlighted?: boolean;
+    /** Audit surfaces rendered above the action strip (run contract, evidence pack). */
+    children?: React.ReactNode;
 }
 
 const AnalysisDetails: React.FC<AnalysisDetailsProps> = ({
@@ -49,6 +51,7 @@ const AnalysisDetails: React.FC<AnalysisDetailsProps> = ({
     message,
     tradingStyle,
     highlighted = false,
+    children,
 }) => {
     const [alertsSet, setAlertsSet] = useState(false);
     const [moreOpen, setMoreOpen] = useState(false);
@@ -180,6 +183,7 @@ const AnalysisDetails: React.FC<AnalysisDetailsProps> = ({
                 </div>
             )}
 
+            {children}
             <div
                 ref={stripRef}
                 id={`signal-next-${messageId}`}
