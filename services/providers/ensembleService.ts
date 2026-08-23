@@ -2417,6 +2417,8 @@ export const buildLivePriceRefreshBlock = (price: number | null | undefined, lab
 // Machine-readable markers emitted by the clarification phase. The questions
 // call may short-circuit with <CLARIFICATION_DONE>; the (internal) judgment
 // call outputs one of the SATISFIED/UNSATISFIED markers.
+import { turnAddressedTo } from '../../utils/debateReplyTo';
+
 const CLARIFICATION_MARKERS = CLARIFICATION_MARKERS_RE; // single home: constants/debateMarkers
 
 const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -2440,6 +2442,7 @@ const buildFloorOrientation = (opts: {
         '- The chat "user" role is August\'s debate harness — not the trader and not the Moderator.',
         `- ${thisTurn}`,
         '- Never start from "the user is asking" or "analyze user input". A Moderator question is not a new trading request. The only trader speech after Round 1 is a **USER STEERING** note, if present.',
+        '- ROUTING: end your turn with ONE line "REPLY-TO: <names or all>" naming exactly who should read it (Moderator and/or specific analysts). Seats you do not name will NOT see this turn. Use "REPLY-TO: all" for floor-wide statements.',
     ].join('\n');
 };
 
@@ -2974,8 +2977,11 @@ export const conductRealDebate = async function* (
 
     const buildRebuttalTask = (analyst: RealDebateAnalyst, round: number, steeringNote: string) => {
         const ownPosition = roundTexts[analyst.provider.name]?.[round - 1];
+        // Addressed routing (ROUND-34): a seat only reads turns sent TO it
+        // (or floor-wide); turns addressed elsewhere stay out of its prompt.
         const otherOpenings = debateRoster
             .filter(o => o.provider.name !== analyst.provider.name && roundTexts[o.provider.name]?.[round - 1])
+            .filter(o => turnAddressedTo(roundTexts[o.provider.name][round - 1], analyst.provider.name))
             .map(o => ({ name: o.provider.name, text: roundTexts[o.provider.name][round - 1] }));
         const others = otherOpenings.length > 0
             ? buildRebuttalDiffPacket(analyst.provider.name, ownPosition, otherOpenings)
@@ -3025,6 +3031,7 @@ export const conductRealDebate = async function* (
         const livePriceBlock = buildLivePriceRefreshBlock(getLivePrice?.() ?? null, `before Round ${round}`);
         const snapshotRows = debateRoster
             .filter(o => roundTexts[o.provider.name]?.[round - 1])
+            .filter(o => turnAddressedTo(roundTexts[o.provider.name][round - 1], analyst.provider.name))
             .map(o => extractDebateLevels(o.provider.name, roundTexts[o.provider.name][round - 1]));
         const levelsSnap = formatDebateLevelsTable(snapshotRows);
         const userContent =

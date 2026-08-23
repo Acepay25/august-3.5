@@ -24,6 +24,9 @@ export interface DebateTurn {
     ttftMs?: number;
     tokensPerSec?: number;
   };
+  /** Addressed routing (ROUND-34): the seats this turn was sent to, parsed
+   *  from the speaker's REPLY-TO line. Absent = floor-wide (everyone reads). */
+  to?: string[];
 }
 
 export interface Kline {

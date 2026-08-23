@@ -8,13 +8,13 @@ import { ProviderConfig, ApiFormat } from '../../types/provider';
 import ProviderManager from './ProviderManager';
 import AnalystLensSettings from './AnalystLensSettings';
 import CustomInstructionsEditor, { InstructionTab } from './CustomInstructionsEditor';
-import MemorySettings from './MemorySettings';
+import SkillsGrid from './SkillsGrid';
 import { DiagnosticsPanel } from './DiagnosticsPanel';
 import SessionUsagePanel from './SessionUsagePanel';
 import { BackupManager } from './BackupManager';
 import { AlertManager } from './AlertManager';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
-import { ActivityIcon, AISettingsIcon, ChevronLeftIcon, HistoryIcon, SettingsIcon, SwitchUserIcon, CodeIcon } from '../shared/Icons';
+import { ActivityIcon, AISettingsIcon, HistoryIcon, SettingsIcon, SwitchUserIcon, CodeIcon, SearchIcon, CloseIcon } from '../shared/Icons';
 import PromptManager from './PromptManager';
 import StrategiesManager from './StrategiesManager';
 import MemoryFilesManager from './MemoryFilesManager';
@@ -22,9 +22,9 @@ import ModelPicker from '../shared/ModelPicker';
 import { Journal } from '../journal/Journal';
 import { getHarnessSettings, saveHarnessSettings } from '../../utils/harnessSettings';
 
-export type SettingsTab = 'general' | 'models' | 'journal' | 'lenses' | 'instructions' | 'memory' | 'actions' | 'prompts' | 'strategies';
+export type SettingsTab = 'general' | 'models' | 'journal' | 'lenses' | 'instructions' | 'memory' | 'actions' | 'prompts' | 'strategies' | 'skills';
 
-const SETTINGS_TABS: SettingsTab[] = ['general', 'models', 'journal', 'lenses', 'instructions', 'memory', 'actions', 'prompts', 'strategies'];
+const SETTINGS_TABS: SettingsTab[] = ['general', 'models', 'journal', 'lenses', 'instructions', 'memory', 'actions', 'prompts', 'strategies', 'skills'];
 
 const isSettingsTab = (value?: string): value is SettingsTab =>
     !!value && SETTINGS_TABS.includes(value as SettingsTab);
@@ -148,25 +148,6 @@ interface SettingsMenuProps {
 
 // ─── Shared UI Helpers ────────────────────────────────────────────────────────
 
-const SettingsSubNav: React.FC<{
-    items: { id: SettingsTab; label: string }[];
-    value: SettingsTab;
-    onChange: (id: SettingsTab) => void;
-}> = ({ items, value, onChange }) => (
-    <div className="flex gap-1 border-b border-zinc-800 px-1 pb-3">
-        {items.map(item => (
-            <button
-                key={item.id}
-                type="button"
-                onClick={() => onChange(item.id)}
-                className={`rounded-md px-2.5 py-1 text-[11px] ${value === item.id ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'}`}
-            >
-                {item.label}
-            </button>
-        ))}
-    </div>
-);
-
 const NavTabButton: React.FC<{
     id: SettingsTab;
     activeTab: SettingsTab;
@@ -277,6 +258,11 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
     const [deskToolsEnabled, setDeskToolsEnabled] = useState(() => getHarnessSettings().deskToolsEnabled);
     const [activeInstructionTab, setActiveInstructionTab] = useState<InstructionTab>('general');
     const [isDirty, setIsDirty] = useState(false);
+    const [navQuery, setNavQuery] = useState('');
+    const navMatch = (label: string): boolean => {
+        const q = navQuery.trim().toLowerCase();
+        return !q || label.toLowerCase().includes(q);
+    };
     const dialogRef = useRef<HTMLDivElement>(null);
     const initialTabResolvedRef = useRef(false);
 
@@ -344,84 +330,154 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
 
     return (
         <>
-            <div
-                ref={dialogRef}
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="settings-title"
-                className="fixed inset-0 z-50 bg-zinc-950 flex flex-col animate-fade-in"
-            >
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6">
+                <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={requestClose} aria-hidden="true" />
+                <div
+                    ref={dialogRef}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="settings-title"
+                    className="relative flex h-[min(860px,94vh)] w-[min(1180px,97vw)] overflow-hidden rounded-2xl border border-white/10 bg-zinc-900 shadow-2xl animate-fade-in"
+                >
+                    <button
+                        type="button"
+                        onClick={requestClose}
+                        aria-label="Close settings"
+                        className="absolute right-4 top-4 z-10 rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
+                    >
+                        <CloseIcon className="h-5 w-5" />
+                    </button>
                     <div className="flex-1 flex min-h-0 flex-col md:flex-row">
                         
-                        <div className="w-full md:w-60 max-h-[32vh] overflow-y-auto md:max-h-none md:overflow-y-auto border-b md:border-b-0 md:border-r border-white/10 bg-zinc-950 px-3 py-5 space-y-1 shrink-0 flex flex-col justify-between custom-scrollbar">
+                        <div className="w-full md:w-64 max-h-[32vh] overflow-y-auto md:max-h-none md:overflow-y-auto border-b md:border-b-0 md:border-r border-white/10 bg-zinc-900 px-3 py-4 space-y-1 shrink-0 flex flex-col justify-between custom-scrollbar">
                             <div className="space-y-1">
-                                <div className="px-2 mb-5">
-                                    <button
-                                        type="button"
-                                        onClick={requestClose}
-                                        className="flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-100 transition-colors"
-                                    >
-                                        <ChevronLeftIcon className="w-4 h-4" /> Back to workspace
-                                    </button>
+                                <div className="px-1 pb-4">
+                                    <div className="flex items-center gap-2 rounded-lg border border-white/5 bg-zinc-800/80 px-3 py-2">
+                                        <SearchIcon className="h-4 w-4 shrink-0 text-zinc-500" />
+                                        <input
+                                            value={navQuery}
+                                            onChange={e => setNavQuery(e.target.value)}
+                                            placeholder="Search"
+                                            aria-label="Search settings"
+                                            className="w-full bg-transparent text-sm text-zinc-200 placeholder-zinc-500 outline-none"
+                                        />
+                                    </div>
                                 </div>
                                 <h2 id="settings-title" className="sr-only">Settings</h2>
-                                <p className="ui-kicker px-3 pt-1 pb-2">
-                                    Get Started
-                                </p>
-                                <NavTabButton
-                                    id="models"
-                                    activeTab={activeTab}
-                                    onClick={() => setActiveTab('models')}
-                                    icon={<AISettingsIcon className="w-4 h-4" />}
-                                    label="AI setup"
-                                />
+                                {navMatch('AI setup') && (
+                                    <>
+                                        <p className="ui-kicker px-3 pt-1 pb-2">
+                                            Get Started
+                                        </p>
+                                        <NavTabButton
+                                            id="models"
+                                            activeTab={activeTab}
+                                            onClick={() => setActiveTab('models')}
+                                            icon={<AISettingsIcon className="w-4 h-4" />}
+                                            label="AI setup"
+                                        />
+                                    </>
+                                )}
                                 {/* Analysis — how analyses behave */}
-                                <p className="ui-kicker px-3 pt-5 pb-2">
-                                    Analysis
-                                </p>
-                                <NavTabButton
-                                    id="general"
-                                    activeTab={activeTab}
-                                    activeWhen={['general', 'lenses']}
-                                    onClick={() => setActiveTab('general')}
-                                    icon={<SettingsIcon className="w-4 h-4" />}
-                                    label="Analysis"
-                                />
-                                <NavTabButton
-                                    id="prompts"
-                                    activeTab={activeTab}
-                                    activeWhen={['prompts', 'instructions']}
-                                    onClick={() => setActiveTab('prompts')}
-                                    icon={<CodeIcon className="w-4 h-4" />}
-                                    label="Prompts"
-                                />
-                                <NavTabButton
-                                    id="memory"
-                                    activeTab={activeTab}
-                                    activeWhen={['memory', 'strategies']}
-                                    onClick={() => setActiveTab('memory')}
-                                    icon={<ActivityIcon className="w-4 h-4" />}
-                                    label="Knowledge"
-                                />
+                                {(navMatch('Analysis') || navMatch('Roles') || navMatch('Prompts') || navMatch('Instructions')) && (
+                                    <p className="ui-kicker px-3 pt-5 pb-2">
+                                        Analysis
+                                    </p>
+                                )}
+                                {navMatch('Analysis') && (
+                                    <NavTabButton
+                                        id="general"
+                                        activeTab={activeTab}
+                                        onClick={() => setActiveTab('general')}
+                                        icon={<SettingsIcon className="w-4 h-4" />}
+                                        label="Analysis"
+                                    />
+                                )}
+                                {navMatch('Roles') && (
+                                    <NavTabButton
+                                        id="lenses"
+                                        activeTab={activeTab}
+                                        onClick={() => setActiveTab('lenses')}
+                                        icon={<SettingsIcon className="w-4 h-4" />}
+                                        label="Roles"
+                                    />
+                                )}
+                                {navMatch('Prompts') && (
+                                    <NavTabButton
+                                        id="prompts"
+                                        activeTab={activeTab}
+                                        onClick={() => setActiveTab('prompts')}
+                                        icon={<CodeIcon className="w-4 h-4" />}
+                                        label="Prompts"
+                                    />
+                                )}
+                                {navMatch('Instructions') && (
+                                    <NavTabButton
+                                        id="instructions"
+                                        activeTab={activeTab}
+                                        onClick={() => setActiveTab('instructions')}
+                                        icon={<CodeIcon className="w-4 h-4" />}
+                                        label="Instructions"
+                                    />
+                                )}
+                                {/* Knowledge — flat entries, no sub-tabs */}
+                                {(navMatch('Memory') || navMatch('Skills') || navMatch('Playbooks')) && (
+                                    <p className="ui-kicker px-3 pt-5 pb-2">
+                                        Knowledge
+                                    </p>
+                                )}
+                                {navMatch('Memory') && (
+                                    <NavTabButton
+                                        id="memory"
+                                        activeTab={activeTab}
+                                        onClick={() => setActiveTab('memory')}
+                                        icon={<ActivityIcon className="w-4 h-4" />}
+                                        label="Memory"
+                                    />
+                                )}
+                                {navMatch('Skills') && (
+                                    <NavTabButton
+                                        id="skills"
+                                        activeTab={activeTab}
+                                        onClick={() => setActiveTab('skills')}
+                                        icon={<ActivityIcon className="w-4 h-4" />}
+                                        label="Skills"
+                                    />
+                                )}
+                                {navMatch('Playbooks') && (
+                                    <NavTabButton
+                                        id="strategies"
+                                        activeTab={activeTab}
+                                        onClick={() => setActiveTab('strategies')}
+                                        icon={<HistoryIcon className="w-4 h-4" />}
+                                        label="Playbooks"
+                                    />
+                                )}
                                 {/* Account & Data — journal, profile, backups */}
-                                <p className="ui-kicker px-3 pt-5 pb-2">
-                                    Account & Data
-                                </p>
-                        <NavTabButton
-                            id="journal"
-                            activeTab={activeTab}
-                            onClick={() => setActiveTab('journal')}
-                            icon={<HistoryIcon className="w-4 h-4" />}
-                            label="Journal"
-                            badge={props.loggedTrades && props.loggedTrades.length > 0 ? `${props.loggedTrades.length}` : undefined}
-                        />
-                                <NavTabButton
-                                    id="actions"
-                                    activeTab={activeTab}
-                                    onClick={() => setActiveTab('actions')}
-                                    icon={<SwitchUserIcon className="w-4 h-4" />}
-                                    label="Data"
-                                />
+                                {(navMatch('Journal') || navMatch('Data')) && (
+                                    <p className="ui-kicker px-3 pt-5 pb-2">
+                                        Account & Data
+                                    </p>
+                                )}
+                                {navMatch('Journal') && (
+                                    <NavTabButton
+                                        id="journal"
+                                        activeTab={activeTab}
+                                        onClick={() => setActiveTab('journal')}
+                                        icon={<HistoryIcon className="w-4 h-4" />}
+                                        label="Journal"
+                                        badge={props.loggedTrades && props.loggedTrades.length > 0 ? `${props.loggedTrades.length}` : undefined}
+                                    />
+                                )}
+                                {navMatch('Data') && (
+                                    <NavTabButton
+                                        id="actions"
+                                        activeTab={activeTab}
+                                        onClick={() => setActiveTab('actions')}
+                                        icon={<SwitchUserIcon className="w-4 h-4" />}
+                                        label="Data"
+                                    />
+                                )}
                             </div>
 
                             {/* Diagnostics & Version at bottom of nav — developer
@@ -445,8 +501,8 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                         </div>
 
                         {/* Right Content Workspace */}
-                        <div className={`flex-1 min-h-0 overflow-y-auto bg-zinc-950 custom-scrollbar ${
-                            activeTab === 'journal' || activeTab === 'prompts' || activeTab === 'memory' || activeTab === 'instructions' || activeTab === 'strategies'
+                        <div className={`flex-1 min-h-0 overflow-y-auto bg-zinc-900 custom-scrollbar ${
+                            activeTab === 'journal' || activeTab === 'prompts' || activeTab === 'memory' || activeTab === 'instructions' || activeTab === 'strategies' || activeTab === 'skills'
                                 ? ''
                                 : activeTab === 'models'
                                     ? 'px-6 py-8 lg:px-12 [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-6xl'
@@ -531,6 +587,31 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
 
                                         <div className="p-4 rounded-xl bg-zinc-900 border border-zinc-800/80">
                                             <div className="text-xs font-bold text-zinc-400 mb-2 uppercase tracking-wider">
+                                                Memory Model
+                                            </div>
+                                            <ModelPicker
+                                                providers={providerConfigs ?? []}
+                                                value={memoryConfig?.id && memoryConfig?.selectedModel ? `${memoryConfig.id}::${memoryConfig.selectedModel}` : memoryConfig?.id ?? ''}
+                                                onChange={(v) => {
+                                                    const separator = v.indexOf('::');
+                                                    if (separator >= 0) {
+                                                        const providerId = v.slice(0, separator);
+                                                        const modelId = v.slice(separator + 2);
+                                                        const selected = (providerConfigs ?? []).find(p => p.id === providerId) ?? null;
+                                                        if (selected) onMemoryConfigChange?.({ ...selected, selectedModel: modelId });
+                                                    } else {
+                                                        onMemoryConfigChange?.((providerConfigs ?? []).find(p => p.id === v) ?? null);
+                                                    }
+                                                }}
+                                                mode="provider-model"
+                                            />
+                                            <p className="text-[10px] text-zinc-600 mt-2 leading-relaxed">
+                                                The librarian: reviews the notebook, distills skills, organizes memory files, and runs every background learning pass.
+                                            </p>
+                                        </div>
+
+                                        <div className="p-4 rounded-xl bg-zinc-900 border border-zinc-800/80">
+                                            <div className="text-xs font-bold text-zinc-400 mb-2 uppercase tracking-wider">
                                                 Debate Moderator
                                             </div>
                                             <ModelPicker
@@ -578,37 +659,28 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                             {/* TAB 2: General & Analysis */}
                             {activeTab === 'general' && (
                                 <div className="space-y-6 max-w-3xl animate-fade-in">
-                                    <SettingsSubNav
-                                        items={[
-                                            { id: 'general', label: 'Modes' },
-                                            { id: 'lenses', label: 'Roles' },
-                                        ]}
-                                        value={activeTab}
-                                        onChange={setActiveTab}
-                                    />
-                                    <div className="border-b border-zinc-800 pb-3">
-                                        <h3 className="text-base font-bold text-white">Analysis</h3>
+                                    <div className="border-b border-white/5 pb-3">
+                                        <h3 className="text-lg font-bold text-white">Analysis</h3>
                                         <p className="text-xs text-zinc-500 mt-1">Core analysis modes first; fine-tuning is under Advanced.</p>
                                     </div>
 
-                                    {/* CORE — the two modes that change how analyses behave */}
-                                    <div className="space-y-4">
+                                    {/* CORE — reference-style hairline rows */}
+                                    <div>
                                         {/* Accuracy Mode */}
-                                        <div className="p-5 rounded-2xl bg-zinc-800 border border-zinc-800 space-y-4">
-                                            <div className="flex items-center justify-between">
-                                                <div>
-                                                    <h4 className="text-sm font-bold text-white">Accuracy Mode</h4>
-                                                    <p className="text-xs text-zinc-400 mt-0.5">
-                                                        {isAccuracyModeEnabled
-                                                            ? (accuracySubMode === 'original' ? 'Strict Protocol enabled' : 'Pure AI enabled')
-                                                            : 'Standard speed mode'}
-                                                    </p>
-                                                </div>
-                                                <ToggleSwitch checked={isAccuracyModeEnabled} onChange={onToggleAccuracyMode} label="Toggle Accuracy Mode" />
+                                        <div className="flex items-center justify-between gap-6 border-b border-white/5 py-5">
+                                            <div>
+                                                <h4 className="text-sm font-semibold text-zinc-100">Accuracy Mode</h4>
+                                                <p className="text-xs text-zinc-500 mt-1">
+                                                    {isAccuracyModeEnabled
+                                                        ? (accuracySubMode === 'original' ? 'Strict Protocol enabled' : 'Pure AI enabled')
+                                                        : 'Standard speed mode'}
+                                                </p>
                                             </div>
+                                            <ToggleSwitch checked={isAccuracyModeEnabled} onChange={onToggleAccuracyMode} label="Toggle Accuracy Mode" />
+                                        </div>
 
                                             {isAccuracyModeEnabled && (
-                                                <div className="grid grid-cols-2 gap-3 pt-2">
+                                                <div className="grid grid-cols-2 gap-3 border-b border-white/5 py-5">
                                                     <button
                                                         onClick={() => setAccuracySubMode?.('original')}
                                                         className={`p-3 rounded-xl border text-left transition-all ${
@@ -633,13 +705,12 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                                     </button>
                                                 </div>
                                             )}
-                                        </div>
 
                                         {/* Hybrid Intelligence */}
-                                        <div className="p-5 rounded-2xl bg-zinc-800 border border-zinc-800 flex items-center justify-between">
+                                        <div className="flex items-center justify-between gap-6 border-b border-white/5 py-5">
                                             <div>
-                                                <h4 className="text-sm font-bold text-white">Hybrid Intelligence</h4>
-                                                <p className="text-xs text-zinc-400 mt-0.5">Adds real-time market data (price, RSI, MACD, EMAs) to give the AI live context. Default: off.</p>
+                                                <h4 className="text-sm font-semibold text-zinc-100">Hybrid Intelligence</h4>
+                                                <p className="text-xs text-zinc-500 mt-1">Adds real-time market data (price, RSI, MACD, EMAs) to give the AI live context. Default: off.</p>
                                             </div>
                                             <ToggleSwitch checked={isHybridIntelligenceEnabled} onChange={() => {
                                                 if (onToggleHybridIntelligence) onToggleHybridIntelligence();
@@ -648,10 +719,10 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         </div>
 
                                         {/* Desk Tools */}
-                                        <div className="p-5 rounded-2xl bg-zinc-800 border border-zinc-800 flex items-center justify-between">
+                                        <div className="flex items-center justify-between gap-6 border-b border-white/5 py-5">
                                             <div>
-                                                <h4 className="text-sm font-bold text-white">Desk Tools</h4>
-                                                <p className="text-xs text-zinc-400 mt-0.5">Lets analysts and the moderator call live tools anytime — opening, rebuttal, clarification, or verdict: web search, funding/OI, order book, liquidations, BTC context, session timing. Default: on.</p>
+                                                <h4 className="text-sm font-semibold text-zinc-100">Desk Tools</h4>
+                                                <p className="text-xs text-zinc-500 mt-1">Lets analysts and the moderator call live tools anytime — opening, rebuttal, clarification, or verdict: web search, funding/OI, order book, liquidations, BTC context, session timing. Default: on.</p>
                                             </div>
                                             <ToggleSwitch
                                                 checked={deskToolsEnabled}
@@ -669,7 +740,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                     <button
                                         type="button"
                                         onClick={() => setIsAdvancedOpen(p => !p)}
-                                        className="w-full flex items-center justify-between p-4 rounded-2xl bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition-colors"
+                                        className="w-full flex items-center justify-between gap-6 py-5 text-left transition-colors hover:bg-zinc-800/30"
                                         aria-expanded={isAdvancedOpen}
                                     >
                                         <div className="text-left">
@@ -742,18 +813,10 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                 </div>
                             )}
 
-                            {(activeTab === 'general' || activeTab === 'lenses') && activeTab === 'lenses' && (
+                            {activeTab === 'lenses' && (
                                 <div className="space-y-4 animate-fade-in">
-                                    <SettingsSubNav
-                                        items={[
-                                            { id: 'general', label: 'Modes' },
-                                            { id: 'lenses', label: 'Roles' },
-                                        ]}
-                                        value={activeTab}
-                                        onChange={setActiveTab}
-                                    />
                                     <div className="border-b border-zinc-800 pb-3">
-                                        <h3 className="text-base font-bold text-white">Analyst roles</h3>
+                                        <h3 className="text-lg font-bold text-white">Analyst roles</h3>
                                         <p className="text-xs text-zinc-500 mt-1">Assign Technical, Risk, and Macro personas to models.</p>
                                     </div>
                                     <AnalystLensSettings
@@ -766,16 +829,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
 
                             {(activeTab === 'prompts' || activeTab === 'instructions') && (
                                 <div className="h-full min-h-0 animate-fade-in flex flex-col">
-                                    <div className="px-4 pt-4 shrink-0">
-                                        <SettingsSubNav
-                                            items={[
-                                                { id: 'prompts', label: 'Registry' },
-                                                { id: 'instructions', label: 'Instructions' },
-                                            ]}
-                                            value={activeTab === 'instructions' ? 'instructions' : 'prompts'}
-                                            onChange={setActiveTab}
-                                        />
-                                    </div>
                                     {activeTab === 'instructions' ? (
                                         <div className="flex-1 min-h-[480px] px-4 pb-4">
                                             <CustomInstructionsEditor
@@ -793,43 +846,32 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                 </div>
                             )}
 
-                            {(activeTab === 'memory' || activeTab === 'strategies') && (
+                            {activeTab === 'memory' && (
                                 <div className="h-full min-h-0 animate-fade-in flex flex-col">
-                                    <div className="px-4 pt-4 shrink-0">
-                                        <SettingsSubNav
-                                            items={[
-                                                { id: 'memory', label: 'Memory' },
-                                                { id: 'strategies', label: 'Playbooks' },
-                                            ]}
-                                            value={activeTab === 'strategies' ? 'strategies' : 'memory'}
-                                            onChange={setActiveTab}
-                                        />
-                                    </div>
-                                    <div className="flex-1 min-h-0">
-                                        {activeTab === 'strategies' ? (
-                                            <StrategiesManager
-                                                username={props.username}
-                                                providerConfigs={providerConfigs ?? []}
-                                                visionConfig={visionConfig ?? null}
-                                                isStrategiesEnabled={isStrategiesEnabled}
-                                                setIsStrategiesEnabled={setIsStrategiesEnabled}
-                                            />
-                                        ) : (
-                                            <MemoryFilesManager
-                                                username={username}
-                                                isGlobalMemoryEnabled={isGlobalMemoryEnabled}
-                                                setIsGlobalMemoryEnabled={setIsGlobalMemoryEnabled}
-                                                memoryConfig={memoryConfig ?? null}
-                                                memorySettings={
-                                                    <MemorySettings
-                                                        providerConfigs={providerConfigs ?? []}
-                                                        memoryConfig={memoryConfig ?? null}
-                                                        onMemoryConfigChange={onMemoryConfigChange}
-                                                    />
-                                                }
-                                            />
-                                        )}
-                                    </div>
+                                    <MemoryFilesManager
+                                        username={username}
+                                        isGlobalMemoryEnabled={isGlobalMemoryEnabled}
+                                        setIsGlobalMemoryEnabled={setIsGlobalMemoryEnabled}
+                                        memoryConfig={memoryConfig ?? null}
+                                    />
+                                </div>
+                            )}
+
+                            {activeTab === 'skills' && (
+                                <div className="h-full min-h-0 animate-fade-in flex flex-col px-4 pb-4">
+                                    <SkillsGrid />
+                                </div>
+                            )}
+
+                            {activeTab === 'strategies' && (
+                                <div className="h-full min-h-0 animate-fade-in flex flex-col">
+                                    <StrategiesManager
+                                        username={props.username}
+                                        providerConfigs={providerConfigs ?? []}
+                                        visionConfig={visionConfig ?? null}
+                                        isStrategiesEnabled={isStrategiesEnabled}
+                                        setIsStrategiesEnabled={setIsStrategiesEnabled}
+                                    />
                                 </div>
                             )}
 
@@ -857,6 +899,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
 
                         </div>
                     </div>
+                </div>
                 </div>
             {ConfirmDialogComponent}
         </>

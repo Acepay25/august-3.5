@@ -9,7 +9,7 @@ import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from
 import { createPortal } from 'react-dom';
 import { ProviderConfig } from '../../types/provider';
 import { formatModelDisplayName, isFreeModelId, sortModelsFreeFirst } from '../../utils/providerUtils';
-import { ChevronRightIcon, CheckIcon } from './Icons';
+import { ChevronRightIcon, ChevronDownIcon, CheckIcon } from './Icons';
 
 /** Viewport rect of the trigger at open time (kept so the flyout can be
  *  re-positioned with the flyout's real size before the first paint). */
@@ -310,15 +310,16 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
 
     return (
         <div ref={containerRef} className={`relative inline-block ${className}`}>
-            {/* Trigger button */}
+            {/* Trigger button — reference-style: bare model name + chevron,
+                no boxed chrome (ROUND-34). */}
             <button
                 onClick={handleToggle}
-                className={`flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800 text-white transition-colors hover:bg-zinc-700 ${
-                    compact ? 'px-2 py-1 text-[11px]' : 'px-3 py-1.5 text-xs'
+                className={`flex items-center gap-1.5 rounded-lg text-zinc-200 transition-colors hover:bg-zinc-800 hover:text-white ${
+                    compact ? 'px-2 py-1 text-[11px]' : 'px-2.5 py-1.5 text-sm font-medium'
                 }`}
             >
                 <span className="truncate max-w-[180px]">{getDisplayText()}</span>
-                <ChevronRightIcon className={`w-3 h-3 text-zinc-500 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
+                <ChevronDownIcon className={`h-3.5 w-3.5 shrink-0 text-zinc-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
             </button>
 
             {/* Flyout — portaled to document.body so `fixed` positioning is
@@ -335,7 +336,7 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
                     ref={flyoutRef}
                     onMouseDownCapture={(e) => e.stopPropagation()}
                     onPointerDownCapture={(e) => e.stopPropagation()}
-                    className="fixed z-[100] flex flex-col bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl overflow-hidden animate-fade-in min-w-[320px]"
+                    className="fixed z-[100] flex flex-col bg-zinc-900 border border-white/10 rounded-xl shadow-2xl overflow-hidden animate-fade-in min-w-[320px]"
                     style={{ top: flyoutPos.top, left: flyoutPos.left, maxHeight: flyoutPos.maxHeight }}
                 >
                     {mode !== 'provider-only' && (
@@ -370,7 +371,7 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
                                         key={provider.id}
                                         onClick={() => handleSelectProvider(provider.id)}
                                         onMouseEnter={() => mode !== 'provider-only' && setHoveredProvider(provider.id)}
-                                        className={`w-full flex items-center justify-between px-3 py-2 text-xs transition-colors ${
+                                        className={`w-full flex items-center justify-between px-3 py-2 text-[13px] transition-colors ${
                                             isActive
                                                 ? 'bg-zinc-800 text-white'
                                                 : isCurrentProvider
@@ -383,7 +384,7 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
                                             <ChevronRightIcon className="w-3 h-3 text-zinc-600 shrink-0" />
                                         )}
                                         {mode === 'provider-only' && isCurrentProvider && (
-                                            <CheckIcon className="w-3 h-3 text-cyan-400 shrink-0" />
+                                            <CheckIcon className="w-3 h-3 text-zinc-100 shrink-0" />
                                         )}
                                     </button>
                                 );
@@ -415,7 +416,7 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
                                                 key={model}
                                                 onClick={() => !disabled && handleSelectModel(hoveredProvider, model)}
                                                 disabled={disabled}
-                                                className={`w-full flex items-center justify-between px-3 py-2 text-xs transition-colors ${
+                                                className={`w-full flex items-center justify-between px-3 py-2 text-[13px] transition-colors ${
                                                     disabled
                                                         ? 'text-zinc-600 cursor-not-allowed'
                                                         : isCurrent
@@ -425,7 +426,7 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
                                             >
                                                 <span className="truncate" title={model}>{formatModelDisplayName(model)}</span>
                                                 {isCurrent && (
-                                                    <CheckIcon className="w-3 h-3 text-cyan-400 shrink-0" />
+                                                    <CheckIcon className="w-3 h-3 text-zinc-100 shrink-0" />
                                                 )}
                                             </button>
                                         );

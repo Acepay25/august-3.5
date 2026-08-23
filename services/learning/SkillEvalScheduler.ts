@@ -177,17 +177,16 @@ const EVAL_SKILL_BODY_MAX = 700;
  */
 export const buildDefaultRunner = (
     config: ProviderConfig,
+    username?: string,
 ): import('./SkillEvalService').SkillAnalysisRunner => {
     void config; // captured lazily per call below
     return async (trade, { skillEnabled, skill }) => {
         // Lazy imports break the cycle: GenericAnalysisService → … → this file.
         const { analyzeTradingView } = await import('../providers/GenericAnalysisService');
-        const { getFirstReadyProvider } = await import('../../utils/providerUtils');
-        const { loadProviderConfigs, getReadyProviders } = await import('../infrastructure/ProviderConfigService');
+        const { resolveMemoryConfig } = await import('./MemoryModelService');
         const { substituteSkillContext, evidenceFreshness } = await import('./MemoryRetrievalService');
 
-        const configs = await loadProviderConfigs();
-        const cfg = getFirstReadyProvider(getReadyProviders(configs));
+        const cfg = await resolveMemoryConfig(username);
         if (!cfg) return {};
 
         const a = trade.analysis ?? {};
@@ -254,7 +253,7 @@ export const runDueSkillEvalWithDefaultRunner = async (
     config: ProviderConfig,
 ): Promise<{ ran: boolean; verdict?: string; skill?: string }> =>
     runDueSkillEval(trades, username, {
-        runner: buildDefaultRunner(config),
+        runner: buildDefaultRunner(config, username),
         config,
         username,
     });

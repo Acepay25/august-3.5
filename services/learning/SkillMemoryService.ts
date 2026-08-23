@@ -30,8 +30,7 @@ import { listSkillDrafts } from '../../utils/skillDrafts';
 import { tradeAdmitsTechnicalStrategyRule } from '../../utils/rootCause';
 import { familiesRelate } from '../../utils/patternMatch';
 import { skillInjectedSince } from './MemoryInjectionService';
-import { loadProviderConfigs, getReadyProviders } from '../infrastructure/ProviderConfigService';
-import { getFirstReadyProvider } from '../../utils/providerUtils';
+import { resolveMemoryConfig } from './MemoryModelService';
 
 export type SkillStatus = 'candidate' | 'confirmed' | 'retired';
 export type SkillKind = 'repeat' | 'avoid';
@@ -456,8 +455,7 @@ export const lossesSpanEnoughHours = (
  */
 const maybeRefineSkill = async (fileId: string, allTrades: LoggedTrade[], username: string): Promise<void> => {
     try {
-        const configs = await loadProviderConfigs();
-        const config = getFirstReadyProvider(getReadyProviders(configs));
+        const config = await resolveMemoryConfig(username);
         if (!config) return;
         const file = getMemoryFiles().files.find(f => f.id === fileId);
         const meta = file ? parseSkillMarkdown(file.content) : null;
@@ -845,10 +843,7 @@ export const syncClosedTradeToNotebook = async (
                 return m ? skillMatchesSetup(m, setup) : false;
             });
             if (!hasMatch) {
-                const { getFirstReadyProvider } = await import('../../utils/providerUtils');
-                const { getReadyProviders, loadProviderConfigs } = await import('../infrastructure/ProviderConfigService');
-                const configs = await loadProviderConfigs();
-                const config = getFirstReadyProvider(getReadyProviders(configs));
+                const config = await resolveMemoryConfig(username);
                 if (config) {
                     const { getBotMemoryContext } = await import('../bots/BotMemoryService');
                     const firstBotId = (() => {
@@ -890,9 +885,7 @@ export const syncClosedTradeToNotebook = async (
     // Best-effort + gated on evidence count; never blocks the sync.
     try {
         const { consolidateDoctrine } = await import('./DoctrineConsolidationService');
-        const { getFirstReadyProvider } = await import('../../utils/providerUtils');
-        const configs = await (await import('../infrastructure/ProviderConfigService')).loadProviderConfigs();
-        const config = getFirstReadyProvider(getReadyProviders(configs));
+        const config = await resolveMemoryConfig(username);
         if (config) {
             const res = await consolidateDoctrine(allTrades, username, config);
             if (res.updated) console.log('[Doctrine] Doctrine rewritten from', countClosedTrades(allTrades), 'closed trades.');

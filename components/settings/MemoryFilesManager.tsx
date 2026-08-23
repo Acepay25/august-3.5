@@ -8,7 +8,7 @@ import MarkdownContent from '../shared/MarkdownContent';
 import { FileTextIcon, ChevronRightIcon, ChevronLeftIcon, FolderIcon } from '../shared/Icons';
 import { Sparkles, Loader2 } from 'lucide-react';
 import { runNotebookReview } from '../../services/learning/MemoryReviewService';
-import { listSkills, setSkillStatus, SkillMeta, parseSkillMarkdown, serializeSkill, titleFromMeta} from '../../services/learning/SkillMemoryService';
+import { parseSkillMarkdown, serializeSkill, titleFromMeta} from '../../services/learning/SkillMemoryService';
 import {
     initMemoryFiles,
     getMemoryFiles,
@@ -28,67 +28,8 @@ interface MemoryFilesManagerProps {
     isGlobalMemoryEnabled?: boolean;
     setIsGlobalMemoryEnabled?: (enabled: boolean) => void;
     /** Memory provider/model picker (Settings). */
-    memorySettings?: React.ReactNode;
     memoryConfig?: ProviderConfig | null;
 }
-
-/**
- * One skill row: score + a "refined" badge when the last LLM refinement
- * pass rewrote the trigger. Expanding shows the before/after evidence diff.
- */
-const SkillRow: React.FC<{ name: string; meta: SkillMeta; onRetire: () => void }> = ({ name, meta, onRetire }) => {
-    const [showDiff, setShowDiff] = useState(false);
-    const refined = Boolean(meta.previousVersion && meta.refinedAt);
-    return (
-        <div className="text-[12px] text-zinc-300">
-            <div className="flex items-center gap-2">
-                <span className="min-w-0 flex-1 truncate">{name}</span>
-                {refined && (
-                    <button
-                        type="button"
-                        className="shrink-0 rounded border border-white/10 bg-zinc-800/60 px-1.5 py-0.5 text-[10px] text-zinc-400 hover:text-zinc-200"
-                        title={`Refined ${new Date(meta.refinedAt!).toLocaleString()} — show what changed`}
-                        onClick={() => setShowDiff(v => !v)}
-                    >
-                        refined
-                    </button>
-                )}
-                <span className="shrink-0 text-zinc-500">{meta.status} · {meta.kind} · {meta.wins}W/{meta.losses}L</span>
-                {meta.status !== 'retired' && (
-                    <button
-                        type="button"
-                        className="shrink-0 text-[11px] text-zinc-500 hover:text-zinc-200"
-                        onClick={onRetire}
-                    >
-                        Retire
-                    </button>
-                )}
-            </div>
-            {showDiff && meta.previousVersion && (
-                <div className="mt-1 space-y-1 rounded-lg border border-white/5 bg-zinc-950/60 p-2 font-mono text-[11px] leading-5">
-                    <p className="text-zinc-500">
-                        Refined {new Date(meta.refinedAt!).toLocaleString()} after {meta.consecutiveLosses === 0 ? 'consecutive losses' : `${meta.consecutiveLosses} consecutive losses`}
-                    </p>
-                    {meta.previousVersion.ifCondition !== meta.ifCondition && (
-                        <div>
-                            <p className="text-zinc-600 line-through">IF {meta.previousVersion.ifCondition || '—'}</p>
-                            <p className="text-zinc-200">IF {meta.ifCondition || '—'}</p>
-                        </div>
-                    )}
-                    {meta.previousVersion.thenAction !== meta.thenAction && (
-                        <div>
-                            <p className="text-zinc-600 line-through">THEN {meta.previousVersion.thenAction || '—'}</p>
-                            <p className="text-zinc-200">THEN {meta.thenAction || '—'}</p>
-                        </div>
-                    )}
-                    {meta.previousVersion.kind !== meta.kind && (
-                        <p className="text-zinc-400">kind: {meta.previousVersion.kind} → {meta.kind}</p>
-                    )}
-                </div>
-            )}
-        </div>
-    );
-};
 
 /**
  * Settings → Memory: folders of markdown files the model can READ.
@@ -98,7 +39,6 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
     username,
     isGlobalMemoryEnabled,
     setIsGlobalMemoryEnabled,
-    memorySettings,
     memoryConfig,
 }) => {
     const toast = useToastActions();
@@ -106,7 +46,6 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
     const [folders, setFolders] = useState<MemoryFolder[]>([]);
     const [files, setFiles] = useState<MemoryFile[]>([]);
     const [stats, setStats] = useState({ enabledCount: 0, charCount: 0 });
-    const [skills, setSkills] = useState(listSkills());
     const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
     const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
     const [draft, setDraft] = useState('');
@@ -126,7 +65,6 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
         setFolders(folders);
         setFiles(files);
         setStats(getMemoryFilesStats());
-        setSkills(listSkills());
     }, []);
 
     useEffect(() => {
@@ -317,7 +255,15 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
             </div>
 
             <div className="flex flex-wrap items-end gap-4 shrink-0 mb-8">
-                {memorySettings}
+                {/* ROUND-33: the Memory Model picker moved to Settings →
+                    AI Setup (it owns every learning pass); this surface shows
+                    a read-only pointer so ownership stays discoverable. */}
+                {memoryConfig && (
+                    <div className="pb-2">
+                        <span className="text-[10px] uppercase tracking-widest text-zinc-600">Managed by </span>
+                        <span className="text-xs text-zinc-400">{memoryConfig.selectedModel || memoryConfig.name || 'memory model'}</span>
+                    </div>
+                )}
                 {setIsGlobalMemoryEnabled && (
                     <div className="flex items-center gap-3 pb-2 ml-auto">
                         <span className="text-xs font-medium uppercase tracking-widest text-zinc-500">Global memory</span>
@@ -329,22 +275,6 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                     </div>
                 )}
             </div>
-
-            {skills.length > 0 && (
-                <div className="shrink-0 mb-6 rounded-xl border border-zinc-800 bg-zinc-900 p-3">
-                    <p className="text-[11px] uppercase tracking-wider text-zinc-500 mb-2">Skills</p>
-                    <div className="max-h-40 space-y-1 overflow-y-auto custom-scrollbar">
-                        {skills.map(({ file, meta }) => (
-                            <SkillRow
-                                key={file.id}
-                                name={file.name.replace(/\.md$/i, '')}
-                                meta={meta}
-                                onRetire={() => { void setSkillStatus(file.id, 'retired', activeUser).then(refresh); }}
-                            />
-                        ))}
-                    </div>
-                </div>
-            )}
 
             {isCreatingFolder && !selectedFolder && !selectedFile && (
                 <div className="shrink-0 mb-4">

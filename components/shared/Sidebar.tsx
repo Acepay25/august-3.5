@@ -18,6 +18,24 @@ interface NavRowProps {
     collapsed?: boolean;
 }
 
+/** Reference-style relative age for session rows ("now", "51m", "21h", "3d"). */
+const relTime = (ms: number): string => {
+    if (!ms) return '';
+    const diff = Date.now() - ms;
+    const m = Math.floor(diff / 60000);
+    if (m < 1) return 'now';
+    if (m < 60) return `${m}m`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h`;
+    return `${Math.floor(h / 24)}d`;
+};
+
+const lastActivityMs = (conv: Conversation): number => {
+    const last = conv.messages?.[conv.messages.length - 1];
+    const parsed = last?.createdAt ? Date.parse(last.createdAt) : NaN;
+    return Number.isFinite(parsed) ? parsed : conv.timestamp || 0;
+};
+
 const NavRow: React.FC<NavRowProps> = ({ icon, label, onClick, collapsed = false }) => (
     <button
         onClick={onClick}
@@ -91,6 +109,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
     // F5: conversation search — typing a query searches the FULL history
     // (the recent list only shows the first 8).
     const [searchQuery, setSearchQuery] = useState('');
+    const [showAllConversations, setShowAllConversations] = useState(false);
     const [isSelectionMode, setIsSelectionMode] = useState(false);
     const [selectedConversationIds, setSelectedConversationIds] = useState<Set<string>>(new Set());
 
@@ -112,9 +131,9 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
     }, [conversations]);
     const recentConversations = useMemo(() => {
         const q = searchQuery.trim().toLowerCase();
-        if (!q) return conversations.slice(0, 8);
+        if (!q) return showAllConversations ? conversations : conversations.slice(0, 8);
         return conversations.filter(conv => (previews.get(conv.id) ?? '').toLowerCase().includes(q));
-    }, [conversations, searchQuery, previews]);
+    }, [conversations, searchQuery, previews, showAllConversations]);
 
     const act = (fn: () => void) => () => {
         fn();
@@ -303,6 +322,11 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                                 <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${conv.id === activeConversationId ? 'bg-zinc-300' : 'bg-zinc-700'}`} />
                                  {!collapsed && <span className="truncate text-sm">{getPreview(conv)}</span>}
                             </button>
+                            {!collapsed && (
+                                <span className="ml-auto shrink-0 text-[10px] text-zinc-600" title={new Date(lastActivityMs(conv)).toLocaleString()}>
+                                    {relTime(lastActivityMs(conv))}
+                                </span>
+                            )}
                             {!collapsed && !isSelectionMode && conv.id !== activeConversationId && (
                                 <button
                                     onClick={(e) => {
@@ -319,6 +343,15 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                             )}
                         </div>
                     ))
+                )}
+                {!collapsed && !searchQuery.trim() && conversations.length > 8 && (
+                    <button
+                        type="button"
+                        onClick={() => setShowAllConversations(v => !v)}
+                        className="w-full px-3 py-2 text-left text-xs text-zinc-500 transition-colors hover:text-zinc-200"
+                    >
+                        {showAllConversations ? 'Show less' : 'Show more'}
+                    </button>
                 )}
             </div>
 
