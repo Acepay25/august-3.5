@@ -293,8 +293,13 @@ export function calculatePnlR(trade: LoggedTrade): number | undefined {
  */
 export function findRelevantTrades(
     setup: SetupContext,
-    trades: LoggedTrade[]
+    trades: LoggedTrade[],
+    /** ROUND-31: apply the 120-day exponential edge decay to the similarity
+     *  score itself, so old associations weigh less at ranking time — not
+     *  just in the dashboard graph. Prompt-side consumers pass true. */
+    options?: { decayByAge?: boolean },
 ): RelevantTrade[] {
+    const decayByAge = options?.decayByAge ?? false;
     // Filter trades with outcomes
     const completedTrades = trades.filter(t =>
         t.outcome && t.outcome !== 'PENDING' && t.analysis
@@ -326,11 +331,21 @@ export function findRelevantTrades(
         family: trade.analysis?.detectedPatternFamily,
         regime: trade.marketRegime,
         keyLesson: extractKeyLesson(trade.postMortem),
-        similarity,
+        // Decay AFTER ranking so old trades still appear (with their honest,
+        // reduced weight) but cannot crowd out fresh ones by raw similarity.
+        similarity: decayByAge ? Math.round(similarity * ageDecay(trade)) : similarity,
         date: new Date(trade.timestamp).toLocaleDateString(),
         pnlR: calculatePnlR(trade),
     }));
 }
+
+/** 120-day exponential half-life-ish decay — same constant as MemoryGraph. */
+const ageDecay = (trade: LoggedTrade): number => {
+    const ts = trade.timestamp ? Date.parse(trade.timestamp) : NaN;
+    if (!Number.isFinite(ts)) return 1;
+    const ageDays = Math.max(0, (Date.now() - ts) / 86_400_000);
+    return Math.exp(-ageDays / 120);
+};
 
 /**
  * Calculate aggregated statistics for trades similar to the current setup

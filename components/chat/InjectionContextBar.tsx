@@ -33,7 +33,7 @@ const InjectionContextBar: React.FC<InjectionContextBarProps> = ({
     onChip,
 }) => {
     const chips = useMemo(() => {
-        const list: { kind: InjectionChipKind; label: string; title: string; active: boolean; Icon: React.ComponentType<{ className?: string }> }[] = [];
+        const list: { kind: InjectionChipKind; label: string; title: string; active: boolean; Icon: React.ComponentType<{ className?: string }>; hidden?: boolean }[] = [];
 
         const notebook = getMemoryFilesStats();
         if (notebook.enabledCount > 0) {
@@ -58,7 +58,10 @@ const InjectionContextBar: React.FC<InjectionContextBarProps> = ({
         }
 
         if (isEnsembleEnabled) {
-            list.push({ kind: 'team', label: 'Team', title: 'Analyst team is on', active: true, Icon: BrainCircuit });
+            // ROUND-31: no footer Team chip — the composer already carries a
+            // Team dropdown; a second control for the same state read as
+            // duplication in the empty-state UI.
+            list.push({ kind: 'team', label: 'Team', title: 'Analyst team is on', active: true, Icon: BrainCircuit, hidden: true });
         }
         if (isAccuracyModeEnabled) {
             list.push({ kind: 'accuracy', label: 'Accuracy', title: 'Accuracy Mode is on', active: true, Icon: Target });
@@ -87,7 +90,12 @@ const InjectionContextBar: React.FC<InjectionContextBarProps> = ({
 
     if (chips.length === 0) return null;
 
-    const renderChip = (chip: (typeof chips)[number]): React.ReactElement => {
+    // ROUND-31: chips flagged `hidden` (duplicate of a composer control) are
+    // excluded entirely — not merely overflowed.
+    const visibleChips = chips.filter(c => !c.hidden);
+    if (visibleChips.length === 0) return null;
+
+    const renderChip = (chip: (typeof visibleChips)[number]): React.ReactElement => {
         const Icon = chip.Icon;
         const className = `inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[9px] font-bold tracking-wide transition-colors ${
             chip.active
@@ -112,8 +120,8 @@ const InjectionContextBar: React.FC<InjectionContextBarProps> = ({
     // into one summary popover instead of growing a second toolbar row. The
     // popover is plain CSS (:focus-within) — no portal, no new deps.
     const OVERFLOW_AFTER = 3;
-    const visible = chips.slice(0, OVERFLOW_AFTER);
-    const hidden = chips.slice(OVERFLOW_AFTER);
+    const visible = visibleChips.slice(0, OVERFLOW_AFTER);
+    const hidden = visibleChips.slice(OVERFLOW_AFTER);
 
     return (
         <div className="flex flex-wrap items-center justify-end gap-1.5" aria-label="Analysis context">
@@ -126,7 +134,7 @@ const InjectionContextBar: React.FC<InjectionContextBarProps> = ({
                         className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-zinc-900/80 px-2 py-0.5 text-[9px] font-bold tracking-wide text-zinc-400 transition-colors hover:text-zinc-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-600"
                         aria-haspopup="true"
                     >
-                        Context · {chips.length}
+                        Context · {visibleChips.length}
                         <ChevronDownIcon className="h-3 w-3" />
                     </button>
                     <div className="invisible absolute right-0 bottom-full z-40 mb-2 w-56 rounded-lg border border-white/10 bg-zinc-950 p-2 opacity-0 shadow-xl shadow-black/50 transition-opacity focus-within:visible focus-within:opacity-100 hover:visible hover:opacity-100">

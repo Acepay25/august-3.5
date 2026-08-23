@@ -371,49 +371,62 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             style={{ overflow: 'hidden' }}
                         />
                     </div>
+                    {/* ROUND-31 composer declutter (DeepSeek-minimal): the
+                        suggestion row collapses behind a single "Templates ▾"
+                        toggle. Nothing renders unless the user asks — the
+                        empty-state composer shows text, + , Team, send. */}
                     {(isEnsembleEnabled || listSkillSlugs().length > 0) && (
-                        <div className="flex flex-wrap gap-x-2 gap-y-0.5 px-2 pb-1">
-                            {isEnsembleEnabled ? ['@Macro', '@Technical', '@Risk'].map(tag => (
-                                <button
-                                    key={tag}
-                                    type="button"
-                                    className="rounded-md px-1 py-0.5 text-[10px] text-zinc-600 transition-colors hover:text-zinc-300"
-                                    onClick={() => setInput(input.includes(tag) ? input : `${tag} ${input}`.trim())}
-                                >
-                                    {tag}
-                                </button>
-                            )) : null}
-                            {isEnsembleEnabled ? DEBATE_TEMPLATES.map(template => {
-                                const marker = debateTemplateMarker(template.id);
-                                const active = input.includes(marker);
-                                return (
-                                    <button
-                                        key={template.id}
-                                        type="button"
-                                        title={template.hint}
-                                        className={`rounded-md px-1 py-0.5 text-[10px] transition-colors ${
-                                            active
-                                                ? 'bg-zinc-800 text-zinc-200'
-                                                : 'text-zinc-600 hover:text-zinc-300'
-                                        }`}
-                                        onClick={() => setInput(active
-                                            ? input.split(marker).join('').replace(/\s+/g, ' ').trim()
-                                            : `${marker} ${input}`.trim())}
-                                    >
-                                        {template.label}
-                                    </button>
-                                );
-                            }) : null}
-                            {listSkillSlugs().slice(0, 4).map(slug => (
-                                <button
-                                    key={slug}
-                                    type="button"
-                                    className="rounded-md px-1 py-0.5 text-[10px] text-zinc-600 transition-colors hover:text-zinc-300"
-                                    onClick={() => setInput(`/${slug} ${parseComposerIntent(input).rest}`.trim())}
-                                >
-                                    /{slug}
-                                </button>
-                            ))}
+                        <div className="px-2 pb-1">
+                            <details className="group/templates">
+                                <summary className="inline-flex cursor-pointer select-none items-center gap-1 rounded-md px-1 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-600 transition-colors hover:text-zinc-300 [&::-webkit-details-marker]:hidden">
+                                    <ChevronDownIcon className="h-3 w-3 transition-transform group-open/templates:rotate-180" />
+                                    Templates
+                                </summary>
+                                <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5">
+                                    {isEnsembleEnabled ? ['@Macro', '@Technical', '@Risk'].map(tag => (
+                                        <button
+                                            key={tag}
+                                            type="button"
+                                            className="rounded-md px-1 py-0.5 text-[10px] text-zinc-600 transition-colors hover:text-zinc-300"
+                                            onClick={() => setInput(input.includes(tag) ? input : `${tag} ${input}`.trim())}
+                                        >
+                                            {tag}
+                                        </button>
+                                    )) : null}
+                                    {isEnsembleEnabled ? DEBATE_TEMPLATES.map(template => {
+                                        const marker = debateTemplateMarker(template.id);
+                                        const active = input.includes(marker);
+                                        return (
+                                            <button
+                                                key={template.id}
+                                                type="button"
+                                                title={template.hint}
+                                                className={`rounded-md px-1 py-0.5 text-[10px] transition-colors ${
+                                                    active
+                                                        ? 'bg-zinc-800 text-zinc-200'
+                                                        : 'text-zinc-600 hover:text-zinc-300'
+                                                }`}
+                                                onClick={() => setInput(active
+                                                    ? input.split(marker).join('').replace(/\s+/g, ' ').trim()
+                                                    : `${marker} ${input}`.trim())}
+                                            >
+                                                {template.label}
+                                            </button>
+                                        );
+                                    }) : null}
+                                    {listSkillSlugs().slice(0, 4).map(slug => (
+                                        <button
+                                            key={slug}
+                                            type="button"
+                                            title={`Apply the /${slug} skill veto to this run`}
+                                            className="rounded-md px-1 py-0.5 text-[10px] text-zinc-600 transition-colors hover:text-zinc-300"
+                                            onClick={() => setInput(`/${slug} ${parseComposerIntent(input).rest}`.trim())}
+                                        >
+                                            /{slug}
+                                        </button>
+                                    ))}
+                                </div>
+                            </details>
                         </div>
                     )}
                      <input type="file" multiple accept="image/*" ref={fileInputRef} onChange={handleImageUpload} className="hidden" disabled={uploadDisabled} />

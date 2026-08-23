@@ -56,7 +56,8 @@ describe('InjectionContextBar overflow (ROUND-29)', () => {
     const baseProviders = [] as unknown as ProviderConfig[];
 
     it('shows all chips inline when at or under the cap', () => {
-        // With sources mocked, Team + Accuracy = 2 chips → all visible.
+        // With sources mocked: notebook + strategies visible, Team hidden as a
+        // duplicate of the composer dropdown → 2 chips → all inline.
         render(
             <InjectionContextBar
                 providers={baseProviders}
@@ -64,12 +65,13 @@ describe('InjectionContextBar overflow (ROUND-29)', () => {
                 isAccuracyModeEnabled={false}
             />
         );
-        expect(screen.getByText('Team')).toBeInTheDocument();
+        expect(screen.getByText(/Notebook 2/)).toBeInTheDocument();
         expect(screen.queryByText(/Context ·/)).toBeNull();
     });
 
     it('collapses the tail into a single Context summary past three chips', () => {
-        // Notebook + Strategies + Team + Accuracy = 4 chips → 3 visible + summary.
+        // notebook(1) + strategies(1) + team(hidden) + accuracy(1) = 3 visible
+        // chips exactly → no overflow summary needed.
         render(
             <InjectionContextBar
                 providers={baseProviders}
@@ -77,7 +79,8 @@ describe('InjectionContextBar overflow (ROUND-29)', () => {
                 isAccuracyModeEnabled
             />
         );
-        expect(screen.getByText(/Context · 4/)).toBeInTheDocument();
-        expect(screen.getAllByText('Accuracy').length).toBeGreaterThan(0);
+        // Team chip is suppressed (duplicate of composer control).
+        expect(screen.queryByText(/^Team$/)).toBeNull();
+        expect(screen.getByText('Accuracy')).toBeInTheDocument();
     });
 });

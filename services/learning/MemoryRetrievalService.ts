@@ -186,9 +186,11 @@ const matchedSkillBlock = (
         .filter(Boolean).join(' ');
     const body = substituteSkillContext(match.file.content.trim(), query);
     const capped = body.length > SKILL_BLOCK_MAX ? `${body.slice(0, SKILL_BLOCK_MAX).trimEnd()}\n…` : body;
-    // Provenance (ROUND-26): how many logged trades shaped this rule.
-    const provenance = match.meta.tradeIds.length > 0
-        ? `learned from ${match.meta.tradeIds.length} logged trade(s)`
+    // Provenance (ROUND-26, counter fixed ROUND-31): how many logged trades
+    // shaped this rule — from the monotonic evidence counter, not the
+    // tail-20 tradeIds list.
+    const provenance = (match.meta.evidenceCount ?? match.meta.tradeIds.length) > 0
+        ? `learned from ${match.meta.evidenceCount ?? match.meta.tradeIds.length} logged trade(s)`
         : '';
     return {
         text: `${header}\n${[evidenceFreshness(match.meta), provenance].filter(Boolean).join(' · ')}\n${titleBits}\n${capped}`,
@@ -289,13 +291,15 @@ const conflictNote = (query?: MemoryRetrievalQuery): string => {
 /** Similar closed trades — verdict-stage history (and the recall tool). */
 const similarTradesBlock = (query: MemoryRetrievalQuery | undefined, trades?: LoggedTrade[]): string => {
     if (!trades || trades.length === 0 || !query) return '';
+    // ROUND-31: age-decayed similarity — old associations weigh less in
+    // prompts, honoring the ROUND-26 edge-decay contract end to end.
     const relevant = findRelevantTrades({
         coin: query.coin,
         direction: query.direction === 'Long' || query.direction === 'Short' ? query.direction : undefined,
         pattern: query.pattern,
         family: query.family,
         regime: query.regime as 'trending' | 'ranging' | 'volatile' | 'compression' | undefined,
-    }, trades).slice(0, 5);
+    }, trades, { decayByAge: true }).slice(0, 5);
     if (relevant.length === 0) return '';
     const lines = relevant.map(t =>
         `- ${t.coin} ${t.direction} ${t.outcome} (${t.similarity}% similar)${t.keyLesson ? ` — ${t.keyLesson}` : ''}`
