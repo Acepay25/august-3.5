@@ -39,6 +39,7 @@ describe('EvidencePackCard', () => {
             <EvidencePackCard
                 pack={{
                     statsLine: "**This desk's record on BTC Short:** 5 trades · 2W/3L (40%)",
+                    causePattern: '**Failure pattern:** 3/4 of your admitted BTC Short losses are SETUP_EDGE_FAILURE — the setups themselves, not execution or macro shocks. Tighten entry criteria before trusting this class again.',
                     similar: [
                         { outcome: 'LOSS', coin: 'BTC', direction: 'Short', date: '2026-08-19', lesson: 'Chased the wick', similarity: 88 },
                     ],
@@ -58,7 +59,7 @@ describe('EvidencePackCard', () => {
     it('omits sections that have no data', () => {
         render(
             <EvidencePackCard
-                pack={{ statsLine: '', similar: [], skills: [], doctrineHeader: '' }}
+                pack={{ statsLine: '', causePattern: '', similar: [], skills: [], doctrineHeader: '' }}
             />
         );
         expect(screen.queryByText(/Verdict evidence/)).toBeNull();
