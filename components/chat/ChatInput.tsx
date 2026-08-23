@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import ImagePreview from '../shared/ImagePreview';
-import { PlusIcon, LoadingIcon, SendIcon, StopIcon, ChevronDownIcon } from '../shared/Icons';
+import { PlusIcon, LoadingIcon, SendIcon, StopIcon, ChevronDownIcon, CheckIcon } from '../shared/Icons';
 import { ImageMetadata, AnalystLensConfig, AnalystRole } from '../../types';
 import { ProviderConfig } from '../../types/provider';
 import { EnsembleModelSelection, ANALYST_ROLE_DEFINITIONS, getLensPromptForRole } from '../../services/ui/AnalystLensService';
@@ -151,6 +151,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
     centered = false,
 }) => {
     const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
+    const [isTeamMenuOpen, setIsTeamMenuOpen] = useState(false);
     const [mentionOpen, setMentionOpen] = useState(false);
     const [botMentionNames, setBotMentionNames] = useState<string[]>([]);
     React.useEffect(() => {
@@ -364,7 +365,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && (!e.shiftKey || e.ctrlKey || e.metaKey) ? (e.preventDefault(), handleSendMessage()) : undefined}
-                            placeholder={isAnalysisInProgress ? 'Add a note for the next debate step…' : images.length > 0 ? 'Analyze charts...' : 'Work with ChatGPT'}
+                            placeholder={isAnalysisInProgress ? 'Add a note for the next debate step…' : images.length > 0 ? 'Analyze charts...' : isEnsembleEnabled ? 'Describe the setup or upload charts…' : 'How can I help you today?'}
                             className="flex-1 min-w-0 bg-transparent px-2 py-2 text-[15px] text-white placeholder-zinc-400 outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 min-h-[24px] max-h-28 resize-none leading-6"
                             rows={1}
                             disabled={isRateLimited}
@@ -375,7 +376,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                         suggestion row collapses behind a single "Templates ▾"
                         toggle. Nothing renders unless the user asks — the
                         empty-state composer shows text, + , Team, send. */}
-                    {(isEnsembleEnabled || listSkillSlugs().length > 0) && (
+                    {isEnsembleEnabled && (
                         <div className="px-2 pb-1">
                             <details className="group/templates">
                                 <summary className="inline-flex cursor-pointer select-none items-center gap-1 rounded-md px-1 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-600 transition-colors hover:text-zinc-300 [&::-webkit-details-marker]:hidden">
@@ -443,54 +444,117 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             >
                                 <PlusIcon className="h-4 w-4" />
                             </button>
+                            {/* Chat | Trade — Claude-desktop-style mode switcher
+                                (ROUND-33): Chat = casual single-model chat;
+                                Trade = the full ensemble pipeline. Replaces the
+                                old implicit toggle (Team button enabled the
+                                ensemble as a side effect). */}
+                            <div
+                                role="tablist"
+                                aria-label="Composer mode"
+                                className="flex items-center rounded-full border border-white/10 bg-zinc-950 p-0.5"
+                            >
+                                <button
+                                    type="button"
+                                    role="tab"
+                                    aria-selected={!isEnsembleEnabled}
+                                    onClick={() => setIsEnsembleEnabled(false)}
+                                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                                        !isEnsembleEnabled ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
+                                    }`}
+                                >
+                                    Chat
+                                </button>
+                                <button
+                                    type="button"
+                                    role="tab"
+                                    aria-selected={isEnsembleEnabled}
+                                    onClick={() => setIsEnsembleEnabled(true)}
+                                    title="Analyst team debates and issues a verdict"
+                                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                                        isEnsembleEnabled ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
+                                    }`}
+                                >
+                                    Trade
+                                </button>
+                            </div>
+
+                            {isEnsembleEnabled && (
+                                /* ROUND-34: the team opens as a clean dropdown
+                                   (model-selector style), not a modal. */
+                                <div className="relative">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsTeamMenuOpen(o => !o)}
+                                        className="flex items-center gap-1.5 rounded-full px-3 py-1 text-xs transition-colors bg-zinc-700 text-zinc-100 hover:bg-zinc-600"
+                                        aria-haspopup="menu"
+                                        aria-expanded={isTeamMenuOpen}
+                                        title="Choose the analyst team"
+                                    >
+                                        <span className="font-medium">Team</span>
+                                        <span className="flex -space-x-1.5">
+                                            {(rosterSlots.length > 0 ? rosterSlots : [{ initial: '?', label: 'Unassigned', model: '' }]).map((slot, index) => (
+                                                <span
+                                                    key={`${slot.label}-${index}`}
+                                                    className="flex h-5 w-5 items-center justify-center rounded-full border border-zinc-950 bg-zinc-700 text-[9px] font-semibold text-zinc-200"
+                                                    title={slot.model ? `${slot.label} · ${slot.model}` : slot.label}
+                                                >
+                                                    {slot.initial}
+                                                </span>
+                                            ))}
+                                        </span>
+                                        <ChevronDownIcon className={`h-3 w-3 text-zinc-500 transition-transform ${isTeamMenuOpen ? 'rotate-180' : ''}`} />
+                                    </button>
+                                    {isTeamMenuOpen && (
+                                        <>
+                                            <div className="fixed inset-0 z-30" onClick={() => setIsTeamMenuOpen(false)} aria-hidden="true" />
+                                            <div className="absolute bottom-full left-0 z-40 mb-2 w-72 rounded-xl border border-white/10 bg-zinc-900 p-1.5 shadow-2xl animate-fade-in">
+                                                {rosterSlots.map(slot => (
+                                                    <div key={slot.label} className="flex items-center justify-between rounded-lg px-2.5 py-2 hover:bg-zinc-800">
+                                                        <div className="min-w-0">
+                                                            <p className="truncate text-[13px] font-medium text-zinc-100">{slot.label}</p>
+                                                            <p className="truncate text-[11px] text-zinc-500">{slot.model}</p>
+                                                        </div>
+                                                        <CheckIcon className="h-4 w-4 shrink-0 text-zinc-300" />
+                                                    </div>
+                                                ))}
+                                                <div className="flex items-center justify-between rounded-lg px-2.5 py-2 hover:bg-zinc-800">
+                                                    <div className="min-w-0">
+                                                        <p className="truncate text-[13px] font-medium text-zinc-100">Moderator</p>
+                                                        <p className="truncate text-[11px] text-zinc-500">{moderatorModel ? formatModelDisplayName(moderatorModel) : 'first ready model'}</p>
+                                                    </div>
+                                                    <CheckIcon className="h-4 w-4 shrink-0 text-zinc-300" />
+                                                </div>
+                                                <div className="mt-1 border-t border-white/5 pt-1">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => { setIsTeamMenuOpen(false); setIsTeamModalOpen(true); }}
+                                                        className="w-full rounded-lg px-2.5 py-2 text-left text-[13px] text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
+                                                    >
+                                                        Customize team…
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            )}
+
+                        </div>
+
+                        {/* Right Side: model (chat) / leverage (trade) + send */}
+                        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                            {/* Casual chat model — reference-style bare selector */}
                             {!isEnsembleEnabled && chatModelOptions.length > 0 && (
                                 <ModelPicker
                                     providers={providers}
                                     value={effectiveChatModel}
                                     onChange={setSelectedChatModel}
                                     mode="model-only"
-                                    compact
-                                    className="max-w-[150px] sm:max-w-[190px]"
                                 />
                             )}
-
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setIsEnsembleEnabled(true);
-                                    setIsTeamModalOpen(true);
-                                }}
-                                className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs transition-colors ${
-                                    isEnsembleEnabled
-                                        ? 'bg-zinc-700 text-zinc-100 hover:bg-zinc-600'
-                                        : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
-                                }`}
-                                aria-haspopup="dialog"
-                                aria-expanded={isTeamModalOpen}
-                                title="Choose the analyst team"
-                            >
-                                <span className="font-medium">Team</span>
-                                {isEnsembleEnabled && (
-                                    <span className="flex -space-x-1.5">
-                                        {(rosterSlots.length > 0 ? rosterSlots : [{ initial: '?', label: 'Unassigned', model: '' }]).map((slot, index) => (
-                                            <span
-                                                key={`${slot.label}-${index}`}
-                                                className="flex h-5 w-5 items-center justify-center rounded-full border border-zinc-950 bg-zinc-700 text-[9px] font-semibold text-zinc-200"
-                                                title={slot.model ? `${slot.label} · ${slot.model}` : slot.label}
-                                            >
-                                                {slot.initial}
-                                            </span>
-                                        ))}
-                                    </span>
-                                )}
-                                <ChevronDownIcon className="h-3 w-3 text-zinc-500" />
-                            </button>
-
-                        </div>
-
-                        {/* Right Side: leverage + send — circular send like ChatGPT */}
-                        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-                            {/* Leverage Button */}
+                            {/* Leverage Button — Trade mode only */}
+                            {isEnsembleEnabled && (
                             <div className="relative" ref={leverageRef}>
                                 <button
                                     onClick={() => setIsLeverageDropdownOpen(!isLeverageDropdownOpen)}
@@ -535,6 +599,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                     </div>
                                 )}
                             </div>
+                            )}
                             <button
                                 onClick={isAnalysisInProgress ? handleCancelAnalysis : handleSendMessage}
                                 disabled={isSummarizing || (!isAnalysisInProgress && ((!input.trim() && images.length === 0) || isRateLimited || !isAnyProviderEnabled))}
@@ -547,26 +612,18 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                         </div>
                     </div>
 
-                    <div className="mt-1.5 flex flex-col items-end gap-1 px-1">
-                        {isEnsembleEnabled && rosterSlots.length > 0 && (
-                            <button
-                                type="button"
-                                onClick={() => setIsTeamModalOpen(true)}
-                                className="max-w-full truncate text-right text-[11px] text-zinc-500 hover:text-zinc-200"
-                                title="Open analyst team"
-                            >
-                                {rosterSlots.map(slot => `${slot.label} · ${slot.model}`).join('   ')}
-                            </button>
-                        )}
-                        <InjectionContextBar
-                            providers={providers}
-                            isEnsembleEnabled={isEnsembleEnabled}
-                            isAccuracyModeEnabled={isAccuracyModeEnabled}
-                            hybridConnectionStatus={hybridConnectionStatus}
-                            hybridData={hybridData}
-                            onChip={handleInjectionChip}
-                        />
-                    </div>
+                    {isEnsembleEnabled && (
+                        <div className="mt-1.5 flex flex-col items-end gap-1 px-1">
+                            <InjectionContextBar
+                                providers={providers}
+                                isEnsembleEnabled={isEnsembleEnabled}
+                                isAccuracyModeEnabled={isAccuracyModeEnabled}
+                                hybridConnectionStatus={hybridConnectionStatus}
+                                hybridData={hybridData}
+                                onChip={handleInjectionChip}
+                            />
+                        </div>
+                    )}
                 </div>
             </div>
 

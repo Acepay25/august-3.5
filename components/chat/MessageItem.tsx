@@ -6,11 +6,12 @@ import MarkdownContent from '../shared/MarkdownContent';
 import StreamingMarkdown from '../shared/StreamingMarkdown';
 import ReasoningRow from '../shared/ReasoningRow';
 import LiveMarketDataView from '../market/LiveMarketDataView';
-import EnsembleProgressChat from '../analysis/EnsembleProgressChat';
 import DebateSummary from '../analysis/DebateSummary';
 import TradingSignalCard from '../analysis/TradingSignalCard';
 import VerdictSkeletonCard from '../analysis/VerdictSkeletonCard';
 import DebateReplay from '../analysis/DebateReplay';
+import DebateStage, { DebateStageActor } from '../analysis/DebateStage';
+import DebateSidePanel from '../analysis/DebateSidePanel';
 import DebateRunLog from '../analysis/DebateRunLog';
 import RunContractPanel from '../analysis/RunContractPanel';
 import EvidencePackCard from '../analysis/EvidencePackCard';
@@ -21,7 +22,6 @@ import SetupLifecycleCard from '../analysis/SetupLifecycleCard';
 import TodayReassessmentPanel from './TodayReassessmentPanel';
 import { buildSupplementMarkdown, extractFinalVerdictText, extractModeratorThinking } from '../../utils/analysisUtils';
 import { extractAndStripThinkBlocks } from '../../utils/thinkingSplit';
-import { debateFloorProgress } from '../../utils/debateFloor';
 import { formatModelDisplayName } from '../../utils/providerUtils';
 import { AutopilotResolution } from '../../services/ui/OutcomeAutopilotService';
 
@@ -203,8 +203,48 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
         Object.keys(message.modelsUsed ?? {}).length > 1
     );
     const debateTurns = message.debateTurns ?? message.postMortemDebateTurns ?? [];
-    const floorProgress = debateFloorProgress(message);
-    const showFloor = Boolean(floorProgress);
+
+    // Debate floor (ROUND-34): one thinking bubble per debater in the chat
+    // area; the full transcript streams in the right-hand side panel.
+    const [debatePanelActor, setDebatePanelActor] = React.useState<string | null>(null);
+    const stageActors = React.useMemo((): DebateStageActor[] => {
+        if (!isEnsembleMessage) return [];
+        const active = message.activeDebateSpeakers ?? {};
+        const names: string[] = [];
+        for (const t of debateTurns) if (!names.includes(t.speaker)) names.push(t.speaker);
+        for (const k of Object.keys(active)) if (!names.includes(k)) names.push(k);
+        if (names.length === 0 && message.isDebating) names.push('Moderator');
+        return names.map(name => {
+            const last = debateTurns.slice().reverse().find(t => t.speaker === name);
+            const isActive = Boolean(message.isDebating) && (active[name] ?? 0) > 0;
+            const addressedTo = (last as { to?: string[] } | undefined)?.to;
+            return {
+                id: name,
+                name,
+                toneKey: name,
+                live: Boolean(message.isDebating),
+                // Bubbles show the thinking animation only — the output text
+                // streams in the side panel, never in the chat bubble.
+                thinking: isActive,
+                speaking: false,
+                speech: '',
+                // Reference-style activity chip: "replying to X" from the
+                // REPLY-TO routing, else the live desk-tool lookup line.
+                toolChip: addressedTo?.length
+                    ? `replying to ${addressedTo.join(', ')}`
+                    : (message.liveToolEvents ?? {})[name],
+                thought: (last?.reasoning ?? '').replace(/\s+/g, ' ').slice(0, 72),
+            };
+        });
+    }, [isEnsembleMessage, debateTurns, message.activeDebateSpeakers, message.isDebating]);
+
+    // While the debate is live, open the side transcript once so the full
+    // thinking/output is visible beside the thinking bubbles.
+    React.useEffect(() => {
+        if (message.isDebating && stageActors.length > 0) {
+            setDebatePanelActor(prev => prev ?? stageActors[0].id);
+        }
+    }, [message.isDebating, stageActors]);
 
     // Ensemble messages route their reasoning through the Floor surface, but the
     // moderator's chain-of-thought and the final verdict prose should still be
@@ -354,23 +394,32 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 </div>
                             )}
 
-                            {/* Live Market Data Component */}
-                            {showFloor && floorProgress && (
-                                <EnsembleProgressChat
-                                    progress={floorProgress}
-                                    modelIdToName={modelIdToName}
-                                    isLive={!!message.isDebating}
-                                    compact={!!message.isDebating}
-                                    onRetryAnalyst={onReRunAnalysis ? () => onReRunAnalysis(message.id) : undefined}
-                                    debateTurns={debateTurns}
-                                    activeDebateSpeakers={message.activeDebateSpeakers}
-                                    liveToolEvents={message.liveToolEvents}
-                                    reasoningProcesses={message.reasoningProcesses}
-                                    runStats={message.runStats}
-                                    userPrompt={context.priorUserMessageById?.[message.id] ?? null}
-                                    onReplyInThread={context.onFollowUpTicket ? (text) => context.onFollowUpTicket!(message.id, text) : undefined}
-                                />
+                            {/* Debate floor — thinking bubbles per debater;
+                                full transcripts stream in the side panel. */}
+                            {stageActors.length > 0 && (
+                                <div className="mb-4">
+                                    <DebateStage
+                                        actors={stageActors}
+                                        caption={message.isDebating ? 'Debate in progress' : 'Debate floor'}
+                                        live={Boolean(message.isDebating)}
+                                        onOpenActor={id => setDebatePanelActor(id)}
+                                    />
+                                    <DebateSidePanel
+                                        open={debatePanelActor !== null}
+                                        onClose={() => setDebatePanelActor(null)}
+                                        turns={debateTurns}
+                                        actorIds={stageActors.map(a => a.id)}
+                                        activeActor={debatePanelActor}
+                                        onSelectActor={id => setDebatePanelActor(id)}
+                                        isLive={Boolean(message.isDebating)}
+                                        liveToolEvents={message.liveToolEvents}
+                                        reasoningProcesses={message.reasoningProcesses}
+                                    />
+                                </div>
                             )}
+
+                            {/* ROUND-34: the old Floor seat cards are gone —
+                                the stage bubbles + side panel render the debate. */}
 
                             {/* Ensemble reasoning in the bubble: the moderator's
                                 chain-of-thought streams in a Thinking row, and the

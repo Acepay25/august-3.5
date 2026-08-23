@@ -79,6 +79,7 @@ import { buildRecommendationContract } from '../utils/recommendationContract';
 import { buildRunContractStages, type RunContractStage } from '../utils/runContract';
 import { buildVerdictEvidencePack, deriveSetupQueryFromPrompt } from '../services/learning/EvidencePackService';
 import { maybeQueueVerdictSkillDraft } from '../utils/verdictSkillDraft';
+import { applyReplyTo } from '../utils/debateReplyTo';
 import { parseProvisionalVerdict, parsePartialVerdictFields } from '../utils/provisionalVerdict';
 import { extractDebateTemplate, DebateTemplate } from '../utils/debateTemplates';
 import { debateTurnsToRoundTexts, lastCompletedRound, laneDraftsFromTurns, reconstructOpenings } from '../utils/debateResume';
@@ -2675,8 +2676,10 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                             }
 
                             // P1-5: Coalesce per-token updates into one per frame.
-                            debateTurnsRef.current = currentTurns;
-                            throttledDebateUpdate(requestConversationId, debateMessageId, currentTurns, thoughtMap, reasoningMapRef.current, activeDebateSpeakersRef.current, runContractFor());
+                            // REPLY-TO markers become `to` and leave the display text.
+                            const normalizedTurns = currentTurns.map(applyReplyTo);
+                            debateTurnsRef.current = normalizedTurns;
+                            throttledDebateUpdate(requestConversationId, debateMessageId, normalizedTurns, thoughtMap, reasoningMapRef.current, activeDebateSpeakersRef.current, runContractFor());
                         }
                     } else {
                         // STANDARD MODE — REAL debate: the pipeline receives
@@ -2757,8 +2760,9 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 .filter(turn => Boolean(turn.text) || Boolean(turn.reasoning))
                                 .sort((a, b) => (a.round ?? 0) - (b.round ?? 0));
 
-                            debateTurnsRef.current = currentTurns;
-                            throttledDebateUpdate(requestConversationId, debateMessageId, currentTurns, thoughtMap, reasoningMapRef.current, activeDebateSpeakersRef.current, runContractFor());
+                            const normalizedTurns = currentTurns.map(applyReplyTo);
+                            debateTurnsRef.current = normalizedTurns;
+                            throttledDebateUpdate(requestConversationId, debateMessageId, normalizedTurns, thoughtMap, reasoningMapRef.current, activeDebateSpeakersRef.current, runContractFor());
                         };
                         rebuildDebateTurnsRef.current = rebuildDebateTurns;
 
@@ -3043,6 +3047,16 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                         }
                         processedAnalysis.recommendationContract = buildRecommendationContract(processedAnalysis);
                     }
+
+                    // ROUND-34: each debater reviews their own transcript and
+                    // proposes skill creates/updates — filed by the Memory Model
+                    // as candidates. Best-effort; never blocks the verdict.
+                    void import('../services/learning/DebateSkillProposalService')
+                        .then(m => m.proposeSkillsFromDebate(
+                            (typeof localStorage !== 'undefined' ? localStorage.getItem('last_active_user') : null) || 'default',
+                            debateTurnsRef.current,
+                        ))
+                        .catch(e => console.warn('[DebateSkills] deferred:', e instanceof Error ? e.message : e));
 
                     updateRequestMessages(prev => {
                         const messageIndex = prev.findIndex(m => m.id === debateMessageId);

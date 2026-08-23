@@ -10,8 +10,6 @@ import { ChatInput } from './ChatInput';
 import { ArrowUpIcon, ArrowDownIcon, CloseIcon, LoadingIcon, EyeIcon, BrainIcon, EditIcon, CheckIcon, TrashIcon } from '../shared/Icons';
 import HybridDataPanel from '../analysis/HybridDataPanel';
 import ImageViewerModal from '../modals/ImageViewerModal';
-import AnalysisProgress from '../analysis/AnalysisProgress';
-import DebatePlanRail from '../analysis/DebatePlanRail';
 import WorkspaceWelcome, { WorkspaceWelcomeProps } from './WorkspaceWelcome';
 
 // Hoisted list components to prevent re-creation on each render
@@ -339,6 +337,20 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     // so no intro-text substitution is needed — messages pass through as-is.
     const processedMessages = messages;
 
+    // Reference-style fresh-session hero: time-of-day serif greeting.
+    const heroGreeting = useMemo(() => {
+        const hour = new Date().getHours();
+        const part = hour < 5 ? 'Up late' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+        let name = '';
+        try {
+            const raw = localStorage.getItem('last_active_user') || '';
+            name = raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : '';
+        } catch {
+            name = '';
+        }
+        return name ? `${part}, ${name}` : `${part}.`;
+    }, []);
+
     // Shared ChatInput props — the composer renders either inside the
     // fresh-session hero canvas (centered) or docked at the bottom. Memoized
     // so the React.memo'd ChatInput skips re-renders when only the message
@@ -584,17 +596,20 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 <div className="absolute bottom-[calc(env(safe-area-inset-bottom)+8rem)] sm:bottom-[calc(env(safe-area-inset-bottom)+8.5rem)] left-0 right-0 p-2 sm:p-4 pointer-events-none z-10 lg:hidden">
                     <div className="max-w-4xl mx-auto pointer-events-auto lg:max-w-none">
                         {analysisSteps && analysisSteps.length > 0 ? (
-                            <>
-                                <DebatePlanRail steps={analysisSteps.map(s => ({ id: s.id, title: s.title, status: s.status === 'running' ? 'running' : s.status === 'complete' ? 'done' : s.status === 'error' ? 'error' : 'pending' }))} />
-                                <AnalysisProgress
-                                    steps={analysisSteps}
-                                    isActive={!!loadingMessage || isAnalysisInProgress}
-                                    onCancel={handleCancelAnalysis}
-                                    isPostMortem={isPostMortemInProgress}
-                                    isPostMortemInProgress={isPostMortemInProgress}
-                                    onOpenPostMortem={() => setIsLivePostMortemVisible(true)}
-                                />
-                            </>
+                            /* ROUND-34: the old step rail + pipeline panel are
+                               gone — one quiet pill keeps the cancel affordance
+                               while the stage bots + side panel show the run. */
+                            <div className="flex justify-center">
+                                <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-white/10 bg-zinc-900 px-4 py-2 shadow-lg">
+                                    <span className="streaming-dots" aria-hidden="true"><span /><span /><span /></span>
+                                    <span className="text-xs text-zinc-400">{loadingMessage || 'Debate in progress'}</span>
+                                    {isPostMortemInProgress ? (
+                                        <button onClick={() => setIsLivePostMortemVisible(true)} className="text-xs text-zinc-200 hover:text-white">View Post-Mortem</button>
+                                    ) : (
+                                        <button onClick={handleCancelAnalysis} className="status-surface text-xs text-rose-300 hover:text-rose-200">Stop</button>
+                                    )}
+                                </div>
+                            </div>
                         ) : (
                             /* Fallback: original spinner overlay when no step data */
                                 <div className="flex flex-col items-center justify-center p-6 glass rounded-2xl shadow-[0_0_50px_-12px_rgba(176, 176, 182,0.2)] animate-fade-in border-t border-white/10">
@@ -620,10 +635,10 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 </>
             ) : messages.length === 0 ? (
                 <div className="flex flex-1 flex-col items-center justify-center bg-zinc-950 px-4 py-10">
-                    <h1 className="mb-8 text-center text-[28px] font-normal tracking-tight text-zinc-100 sm:text-[32px]">
-                        What should we work on?
+                    <h1 className="mb-10 text-center font-serif text-4xl tracking-tight text-zinc-100 sm:text-5xl">
+                        {heroGreeting}
                     </h1>
-                    <div className="w-full max-w-[720px]">
+                    <div className="w-full max-w-[760px]">
                         <ChatInput {...chatInputProps} centered />
                     </div>
                 </div>
