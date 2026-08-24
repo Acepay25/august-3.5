@@ -75,6 +75,16 @@ export interface SkillMeta {
     /** Trigger/action snapshot taken BEFORE the last refinement — the
      *  evidence diff shown in the notebook so a rewrite is auditable. */
     previousVersion?: { kind: SkillKind; ifCondition?: string; thenAction?: string };
+    /** Zep-style temporal ledger (ROUND-34): every status transition is
+     *  stamped validFrom → (invalidAt | null). Superseded beliefs are never
+     *  deleted — retirement/demotion closes the interval, so replay audits
+     *  can reconstruct exactly what was believed at any past moment. */
+    history?: Array<{
+        status: SkillStatus;
+        validFrom: string;
+        invalidAt?: string;
+        reason?: string;
+    }>;
 }
 
 export const MIN_CLUSTER_FOR_SKILL = 3;
@@ -172,6 +182,17 @@ export const parseSkillMarkdown = (content: string): SkillMeta | null => {
         lastEvalAt: pick('lastEvalAt'),
         lastEvidenceAt: pick('lastEvidenceAt'),
         previousVersion,
+        // Zep-style temporal ledger (ROUND-34): JSON array in frontmatter.
+        history: (() => {
+            const raw = pick('history');
+            if (!raw) return undefined;
+            try {
+                const parsed = JSON.parse(raw) as SkillMeta['history'];
+                return Array.isArray(parsed) && parsed.length > 0 ? parsed : undefined;
+            } catch {
+                return undefined;
+            }
+        })(),
     };
 };
 
@@ -180,11 +201,57 @@ export const setSkillStatus = async (fileId: string, status: SkillStatus, userna
     if (!file) return;
     const meta = parseSkillMarkdown(file.content);
     if (!meta) return;
+    stampStatusTransition(meta, status, 'manual');
     meta.status = status;
     await updateMemoryFileUnlocked(fileId, {
         content: serializeSkill(meta, titleFromMeta(meta)),
         enabled: status !== 'retired',
     }, username || 'local');
+};
+
+/**
+ * Zep-style temporal ledger write (ROUND-34): close the current interval and
+ * open the next one. Superseded beliefs are never erased — a demoted skill's
+ * confirmed era stays queryable for replay audits ("what did I believe before
+ * this eval?"). No-op when the status is unchanged.
+ */
+export const stampStatusTransition = (
+    meta: SkillMeta,
+    next: SkillStatus,
+    reason?: string,
+): void => {
+    if (meta.status === next) return;
+    const now = new Date().toISOString();
+    const history = meta.history ?? [];
+    // Close the currently-open interval.
+    if (history.length > 0) {
+        const last = history[history.length - 1];
+        if (!last.invalidAt) last.invalidAt = now;
+    } else if (meta.status) {
+        // Backfill the implicit origin interval so the first transition
+        // still yields two queryable eras.
+        history.push({ status: meta.status, validFrom: meta.lastEvidenceAt || meta.modifiedAt || now });
+        const last = history[history.length - 1];
+        last.invalidAt = now;
+    }
+    history.push({ status: next, validFrom: now, reason });
+    meta.history = history.slice(-20); // bound the ledger; 20 transitions is plenty
+};
+
+/**
+ * Replay query (ROUND-34): what status did this skill hold at a given moment?
+ * Returns the interval whose [validFrom, invalidAt) window contains `at`,
+ * or null when the ledger cannot answer (no history, or predates it).
+ */
+export const skillStatusAt = (meta: SkillMeta, at: string | number): SkillStatus | null => {
+    const ts = typeof at === 'number' ? at : Date.parse(at);
+    if (!Number.isFinite(ts)) return null;
+    for (const entry of meta.history ?? []) {
+        const from = Date.parse(entry.validFrom);
+        const to = entry.invalidAt ? Date.parse(entry.invalidAt) : Number.POSITIVE_INFINITY;
+        if (Number.isFinite(from) && ts >= from && ts < to) return entry.status;
+    }
+    return null;
 };
 
 export const listSkills = (): Array<{ file: MemoryFile; meta: SkillMeta }> =>
@@ -214,6 +281,7 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
         ...(meta.audience && meta.audience !== 'all' ? [`audience: ${meta.audience}`] : []),
         ...(meta.evalVerdict ? [`evalVerdict: ${meta.evalVerdict}${meta.evalDetail ? ` (${meta.evalDetail})` : ''}`] : []),
         ...(meta.lastEvalAt ? [`lastEvalAt: ${meta.lastEvalAt}`] : []),
+        ...(meta.history && meta.history.length > 0 ? [`history: ${JSON.stringify(meta.history)}`] : []),
         ...(meta.previousVersion ? [`previousVersion: ${JSON.stringify(meta.previousVersion)}`] : []),
         `tradeIds: ${meta.tradeIds.slice(-20).join(',')}`,
         // ROUND-31: monotonic evidence counter — tradeIds is a tail-20 list,
@@ -373,7 +441,11 @@ const applySkillEvidenceUnlocked = async (trade: LoggedTrade, username: string, 
         meta.lastEvidenceAt = trade.timestamp ?? new Date().toISOString();
         meta.modifiedAt = new Date().toISOString();
         if (trade.marketRegime) meta.regime = trade.marketRegime;
-        meta.status = deriveStatus(meta);
+        {
+            const derived = deriveStatus(meta);
+            stampStatusTransition(meta, derived, 'evidence');
+            meta.status = derived;
+        }
         await updateMemoryFileUnlocked(file.id, {
             content: serializeSkill(meta, titleFromMeta(meta)),
             enabled: meta.status !== 'retired',

@@ -2732,6 +2732,13 @@ export const conductRealDebate = async function* (
     getLivePrice?: () => number | null,
     /** Drain queued user notes sent while this debate was running. */
     getSteeringNotes?: () => string,
+    /** Per-seat steering (ROUND-34/U3): a note addressed to ONE seat. Invoked
+     *  when that seat's next turn is built; the note rides only its prompt. */
+    getSeatSteeringNote?: (seatName: string) => string,
+    /** Per-seat stop (ROUND-34/U3): the user benched this seat. The seat
+     *  leaves the roster (existing partial text is purged by the drop path)
+     *  and remaining rounds continue without it. */
+    shouldDropSeat?: (seatName: string) => boolean,
     /** Append-only run log (pipeline persists on the message). */
     onRunEvent?: (event: DebateRunEvent) => void,
     /** Pattern-memory gate for the pre-step waterfall. */
@@ -2975,7 +2982,7 @@ export const conductRealDebate = async function* (
         return false;
     };
 
-    const buildRebuttalTask = (analyst: RealDebateAnalyst, round: number, steeringNote: string) => {
+    const buildRebuttalTask = (analyst: RealDebateAnalyst, round: number, steeringNote: string, seatNote = '') => {
         const ownPosition = roundTexts[analyst.provider.name]?.[round - 1];
         // Addressed routing (ROUND-34): a seat only reads turns sent TO it
         // (or floor-wide); turns addressed elsewhere stay out of its prompt.
@@ -3055,6 +3062,7 @@ export const conductRealDebate = async function* (
                 : '') +
             `Respond now with your rebuttal for Round ${round}.` +
             (steeringNote ? `\n\n**USER STEERING (queued mid-debate — follow this):**\n${steeringNote}` : '') +
+            (seatNote ? `\n\n**USER STEERING — DIRECTED AT YOU (${analyst.provider.name}) ONLY:**\n${seatNote}` : '') +
             (missingLevelsNotice ? `\n\n${missingLevelsNotice}` : '') +
             snapshotBlock + livePriceBlock;
 
@@ -3107,10 +3115,14 @@ export const conductRealDebate = async function* (
     const launchSeat = (analyst: RealDebateAnalyst, round: number): void => {
         const steeringNote = takeSteering(round);
         if (steeringNote) pumpPush({ kind: 'delta', name: 'System', round, text: `User steering: ${steeringNote}` });
+        // U3 per-seat steering: a note addressed to THIS seat rides only its
+        // own prompt — the rest of the floor never sees it.
+        const seatNote = getSeatSteeringNote?.(analyst.provider.name) || '';
+        if (seatNote) pumpPush({ kind: 'delta', name: 'System', round, text: `Steering → ${analyst.provider.name}: ${seatNote.slice(0, 200)}` });
         emitLog('round', `Rebuttal round ${round}`, round, analyst.provider.name);
         inflight.add(analyst.provider.name);
         onSpeakerStatus?.(analyst.provider.name, round, true);
-        const task = buildRebuttalTask(analyst, round, steeringNote);
+        const task = buildRebuttalTask(analyst, round, steeringNote, seatNote);
         // TTFT metric: the launch timestamp rides the FIRST delta so the
         // consumer can measure real time-to-first-token per turn.
         const startedAt = new Date().toISOString();
@@ -3145,6 +3157,15 @@ export const conductRealDebate = async function* (
         for (const analyst of debateRoster) {
             const name = analyst.provider.name;
             if (!activeAnalystNames.has(name) || droppedNames.has(name) || inflight.has(name)) continue;
+            // U3 per-seat stop: the user benched this seat between rounds.
+            if (shouldDropSeat?.(name)) {
+                const currentRound = seatRound.get(name) ?? 0;
+                activeAnalystNames.delete(name);
+                droppedNames.add(name);
+                emitLog('drop', `${name} stopped by user`, currentRound, name);
+                pumpPush({ kind: 'delta', name: 'System', round: currentRound, text: `${name} was stopped by the user — the debate continues without them.` });
+                continue;
+            }
             const current = seatRound.get(name) ?? 0;
             const next = current + 1;
             if (next < rebuttalStart || next > totalRounds) continue;

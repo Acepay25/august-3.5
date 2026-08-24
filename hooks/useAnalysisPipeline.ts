@@ -533,6 +533,10 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     useEffect(() => { loggedTradesRef.current = loggedTrades; }, [loggedTrades]);
     const steeringQueueRef = useRef<string[]>([]);
     const [steeringNotes, setSteeringNotes] = useState<string[]>([]);
+    /** U3 per-seat steering: seat name → one queued note, drained per turn. */
+    const seatSteeringRef = useRef<Record<string, string>>({});
+    /** U3 per-seat stop: seats benched by the user for the rest of this run. */
+    const stoppedSeatsRef = useRef<Set<string>>(new Set());
     // Mid-debate analyst replacement: the generator suspends and waits on a
     // promise whose resolver lives here; the UI calls handleReplacementChoice
     // (via ChatContext) to settle it with the picked provider id (or null to
@@ -923,6 +927,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         analysisInFlightRef.current = true;
         steeringQueueRef.current = [];
         setSteeringNotes([]);
+        seatSteeringRef.current = {};
+        stoppedSeatsRef.current = new Set();
         // Bind every async message write to the conversation that started the
         // request. This remains correct even if the user switches conversations
         // before a provider response or stream chunk arrives.
@@ -2497,6 +2503,17 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 setSteeringNotes([]);
                                 return notes.join('\n');
                             },
+                            // U3 per-seat steering: notes addressed to one seat
+                            // ("@Technical …") ride only that seat's prompt.
+                            (seatName: string) => {
+                                const note = seatSteeringRef.current[seatName];
+                                if (!note) return '';
+                                delete seatSteeringRef.current[seatName];
+                                return note;
+                            },
+                            // U3 per-seat stop: benched seats leave at the next
+                            // round boundary; the debate continues without them.
+                            (seatName: string) => stoppedSeatsRef.current.has(seatName),
                             (event) => {
                                 debateRunLogRef.current = [...debateRunLogRef.current, event].slice(-100);
                             },
@@ -3721,6 +3738,15 @@ ${accuracyVerificationNote}`
         handleRemoveSteeringNote: (index: number) => {
             steeringQueueRef.current = steeringQueueRef.current.filter((_, i) => i !== index);
             setSteeringNotes(steeringQueueRef.current);
+        },
+        // U3 per-seat controls (ROUND-34): steer or bench one seat mid-debate.
+        handleSteerSeat: (seatName: string, note: string) => {
+            seatSteeringRef.current[seatName] = note;
+            toast.success?.(`Queued for ${seatName}`, 'Applied at that seat\'s next turn.');
+        },
+        handleStopSeat: (seatName: string) => {
+            stoppedSeatsRef.current.add(seatName);
+            toast.success?.(`${seatName} stopped`, 'The debate continues without them at the next round.');
         },
     };
 }

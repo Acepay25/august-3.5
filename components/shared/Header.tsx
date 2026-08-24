@@ -50,6 +50,8 @@ interface HeaderProps {
     onOpenBotManager?: () => void;
     onOpenApprovals?: () => void;
     approvalCount?: number;
+    /** U4: open the background-jobs drawer. */
+    onOpenJobs?: () => void;
 }
 
 // Memoized: Header re-renders every time App does (typing, progress ticks);
@@ -88,6 +90,7 @@ export const Header: React.FC<HeaderProps> = memo(({
     onOpenBotManager,
     onOpenApprovals,
     approvalCount = 0,
+    onOpenJobs,
 }) => {
     const [sessionContext, setSessionContext] = useState<SessionContext | null>(null);
     const [allSessions, setAllSessions] = useState<SessionStatus[]>([]);
@@ -317,6 +320,18 @@ export const Header: React.FC<HeaderProps> = memo(({
                                     {approvalCount > 99 ? '99+' : approvalCount}
                                 </span>
                             )}
+                        </button>
+                    )}
+                    {/* U4: background jobs — the autonomy trust surface. */}
+                    {onOpenJobs && (
+                        <button
+                            type="button"
+                            onClick={onOpenJobs}
+                            className="hidden sm:inline-flex items-center rounded-lg p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 transition-colors"
+                            title="Background jobs — evals & learning passes"
+                            aria-label="Background jobs"
+                        >
+                            <span className="text-[11px] font-semibold">Jobs</span>
                         </button>
                     )}
                     {onOpenWatchList && (

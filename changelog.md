@@ -4,6 +4,43 @@ Plain-English log of change rounds. Newest first.
 
 ---
 
+## ROUND-34 — Graph-scored ranking, temporal skill ledger, per-seat controls, jobs drawer
+
+The four queued deep-scan items, implemented together:
+
+**Graph-scored skill ranking (M3 reconciliation).** `rankedMatchedSkills`
+now scores every matched skill as status weight (confirmed 2 / candidate 1)
+× setup-dimension overlap × evidence-freshness decay (120-day constant,
+same as MemoryGraph). The dashboard graph and production retrieval can no
+longer disagree about what matters. The M3 conflict is resolved by design:
+moderators keep seeing skills through audience filtering (index tier at
+verdict), not exclusion.
+
+**Zep-style temporal ledger.** Skills carry a `history:` frontmatter array —
+every status transition stamps validFrom → invalidAt with a reason
+(evidence / eval hurts N/M / manual). Demotions and retirements close the old
+era instead of erasing it; `skillStatusAt(meta, timestamp)` answers "what did
+I believe at this moment?" for replay audits. Wired into evidence-driven
+status derivation, eval 'hurts' demotions, and manual retire/restore.
+
+**U3: per-seat Steer/Stop.** Hover a live actor bubble on the debate stage:
+the paper-plane queues a note that rides ONLY that seat's next prompt
+("**USER STEERING — DIRECTED AT YOU**"), the square benches the seat at the
+next round boundary (drop path reuses the tested transcript purge). Both flow
+through new engine hooks (`getSeatSteeringNote`, `shouldDropSeat`) and the
+pipeline exposes `handleSteerSeat` / `handleStopSeat`.
+
+**U4: Jobs drawer.** Header "Jobs" button opens a right drawer (Hermes
+status-stack pattern): live job queue rows (insight extraction etc., with
+status + error) and the 20 most recent skill audits with their verdicts.
+Background autonomy becomes visible instead of fire-and-forget toasts.
+
+Also: lint error in ChatArea hero greeting fixed (useless assignment).
+Tests: `tests/temporalLedger.test.ts` covers transition stamping, replay
+queries, and frontmatter round-tripping.
+
+---
+
 ## ROUND-32 — Root-cause failure patterns in the evidence pack (2026-08-23)
 
 The first production payoff from the graph-engineering research (GraphRAG /

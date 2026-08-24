@@ -346,7 +346,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
             const raw = localStorage.getItem('last_active_user') || '';
             name = raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : '';
         } catch {
-            name = '';
+            // localStorage unavailable — fall through with empty name.
         }
         return name ? `${part}, ${name}` : `${part}.`;
     }, []);

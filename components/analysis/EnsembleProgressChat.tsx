@@ -16,6 +16,10 @@ interface EnsembleProgressChatProps {
     hideSubagents?: boolean;
     compact?: boolean;
     onRetryAnalyst?: (analystKey: string) => void;
+    /** U3: queue a mid-debate note addressed to ONE seat only. */
+    onSteerSeat?: (seatName: string, note: string) => void;
+    /** U3: bench one seat — they leave at the next round boundary. */
+    onStopSeat?: (seatName: string) => void;
     debateTurns?: DebateTurn[];
     activeDebateSpeakers?: Record<string, number>;
     liveToolEvents?: Record<string, string>;
@@ -669,6 +673,8 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
     hideSubagents = false,
     compact = false,
     onRetryAnalyst,
+    onSteerSeat,
+    onStopSeat,
     debateTurns = [],
     activeDebateSpeakers = {},
     liveToolEvents = {},
@@ -1003,6 +1009,34 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
                                     <span className="debate-thread-seat-meta">
                                         {[seat.modelName, seat.trackRecord, seat.status, seat.usage].filter(Boolean).join(' · ')}
                                     </span>
+                                    {/* U3 per-seat controls: steer / stop this seat only. */}
+                                    {isLive && (onSteerSeat || onStopSeat) && (
+                                        <span className="ml-1 flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover/seat:opacity-100 focus-within:opacity-100" onClick={e => e.stopPropagation()}>
+                                            {onSteerSeat && (
+                                                <button
+                                                    type="button"
+                                                    title={`Steer ${seat.title}: queue a note only they see`}
+                                                    onClick={() => {
+                                                        const note = window.prompt(`Steer ${seat.title}`, '');
+                                                        if (note?.trim()) onSteerSeat(seat.title, note.trim());
+                                                    }}
+                                                    className="rounded-md p-1 text-zinc-600 hover:text-zinc-200"
+                                                >
+                                                    <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
+                                                </button>
+                                            )}
+                                            {onStopSeat && seat.live && (
+                                                <button
+                                                    type="button"
+                                                    title={`Stop ${seat.title}: they leave the debate at the next round`}
+                                                    onClick={() => onStopSeat(seat.title)}
+                                                    className="rounded-md p-1 text-zinc-600 hover:text-rose-400"
+                                                >
+                                                    <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1" /></svg>
+                                                </button>
+                                            )}
+                                        </span>
+                                    )}
                                 </div>
                                         <SeatTranscript title={seat.title} live={seat.live} thinking={seat.thinking} blocks={seat.blocks} error={seat.error} tokens={seat.usage ? parseInt(seat.usage.replace(/[^0-9]/g, '')) || undefined : undefined} />
                                     </div>
