@@ -47,6 +47,7 @@ const UserProfileManager = React.lazy(() => import('./components/settings/UserPr
 const SavedAnalyses = React.lazy(() => import('./components/journal/SavedAnalyses'));
 const WatchListPanel = React.lazy(() => import('./components/analysis/WatchListPanel'));
 const ApprovalInbox = React.lazy(() => import('./components/analysis/ApprovalInbox'));
+const JobsDrawer = React.lazy(() => import('./components/settings/JobsDrawer'));
 const SettingsMenu = React.lazy(() => import('./components/settings/SettingsMenu'));
 const LiveStreamView = React.lazy(() => import('./components/analysis/LiveStreamView'));
 // (LogTradeModal was removed — the capture flow uses DataCaptureModal.)
@@ -165,6 +166,8 @@ const App: React.FC = () => {
     } = useUIState();
     const [isWatchListVisible, setIsWatchListVisible] = useState(false);
     const [isApprovalInboxVisible, setIsApprovalInboxVisible] = useState(false);
+    /** U4: background-jobs drawer (Hermes status-stack pattern). */
+    const [isJobsDrawerVisible, setIsJobsDrawerVisible] = useState(false);
     const [isBotManagerVisible, setIsBotManagerVisible] = useState(false);
     const applyingHashRef = useRef(false);
 
@@ -610,6 +613,8 @@ const App: React.FC = () => {
         handleReplacementChoice,
         steeringNotes,
         handleRemoveSteeringNote,
+        handleSteerSeat,
+        handleStopSeat,
     } = useAnalysisPipeline({
         messages, messagesRef, updateMessages, activeConversation, activeConversationId,
         providerConfigs: readyProviders,
@@ -3010,11 +3015,14 @@ const App: React.FC = () => {
         onForkDebate: handleForkDebate,
         onToggleWatch: (messageId: string) => handleToggleWatch(messageId),
         onReplacementChoice: handleReplacementChoice,
+        // U3 per-seat controls: steer or bench one debate seat mid-run.
+        onSteerSeat: handleSteerSeat,
+        onStopSeat: handleStopSeat,
         // Post-mortem "what would I do today?" re-assessment.
         onTodayReassessment: startTodayReassessment,
         todayReassessmentInFlight,
         lensConfig,
-    }), [typingMessageState, highlightedAnalysisId, expandedPostMortems, expandedPostMortemImages, savedAnalyses, activeFrameworks, copiedMessageId, modelIdToName, providerNameToId, handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy, handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, confidenceCalibration, handleRetryPostMortem, chatLeverage, autopilotResolutions, handleConfirmAutopilot, handleDismissAutopilot, handleCompareAnalysis, handleViewReasoning, handleReRunAnalysis, handleResumeDebate, handleFollowUpTicket, handleForkDebate, handleToggleWatch, handleReplacementChoice, startTodayReassessment, todayReassessmentInFlight, lensConfig]);
+    }), [typingMessageState, highlightedAnalysisId, expandedPostMortems, expandedPostMortemImages, savedAnalyses, activeFrameworks, copiedMessageId, modelIdToName, providerNameToId, handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy, handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, confidenceCalibration, handleRetryPostMortem, chatLeverage, autopilotResolutions, handleConfirmAutopilot, handleDismissAutopilot, handleCompareAnalysis, handleViewReasoning, handleReRunAnalysis, handleResumeDebate, handleFollowUpTicket, handleForkDebate, handleToggleWatch, handleReplacementChoice, startTodayReassessment, todayReassessmentInFlight, lensConfig, handleSteerSeat, handleStopSeat]);
 
     // ... (Rest of component remains unchanged) ...
     const isAnalysisProgressVisible = Boolean(
@@ -3278,6 +3286,7 @@ const App: React.FC = () => {
                 watchOpenR={watchOpenR}
                 onOpenApprovals={() => setIsApprovalInboxVisible(true)}
                 approvalCount={approvalItems.length}
+                onOpenJobs={() => setIsJobsDrawerVisible(true)}
             />
 
             {/* Journal overlay — REMOVED: now rendered inside Settings → Journal tab */}
@@ -3396,6 +3405,10 @@ const App: React.FC = () => {
                         setIsApprovalInboxVisible(false);
                     }}
                 />
+            </React.Suspense>
+            {/* U4: background-jobs drawer — visible autonomy. */}
+            <React.Suspense fallback={null}>
+                <JobsDrawer open={isJobsDrawerVisible} onClose={() => setIsJobsDrawerVisible(false)} />
             </React.Suspense>
             {showMismatchModal && mismatchData && (
                 <OutcomeMismatchModal

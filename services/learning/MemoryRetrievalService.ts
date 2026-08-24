@@ -69,11 +69,15 @@ const kindForHit = (hit: WalkedMemoryHit): RetrievedMemorySource['kind'] => {
     return 'playbook';
 };
 
-/** Enabled, non-retired skills matching this setup, ranked: confirmed first, then sample size. */
+/** Enabled, non-retired skills matching this setup, ranked by graph score:
+ *  status weight × setup-dimension overlap × evidence freshness decay
+ *  (ROUND-34: the memory graph's semantics now drive production retrieval,
+ *  not just the dashboard — with the M3 reconciliation that moderators see
+ *  matched skills at index tier rather than being excluded entirely). */
 const rankedMatchedSkills = (
     query?: MemoryRetrievalQuery,
     audience?: 'analyst' | 'moderator',
-): Array<{ file: ReturnType<typeof getMemoryFiles>['files'][number]; meta: SkillMeta }> => {
+): Array<{ file: ReturnType<typeof getMemoryFiles>['files'][number]; meta: SkillMeta; score: number }> => {
     if (!query) return [];
     const setup = {
         coin: query.coin,
@@ -82,7 +86,7 @@ const rankedMatchedSkills = (
         pattern: query.pattern,
         regime: typeof query.regime === 'string' ? query.regime : undefined,
     };
-    const candidates: Array<{ file: ReturnType<typeof getMemoryFiles>['files'][number]; meta: SkillMeta }> = [];
+    const candidates: Array<{ file: ReturnType<typeof getMemoryFiles>['files'][number]; meta: SkillMeta; score: number }> = [];
     for (const file of getMemoryFiles().files) {
         if (!file.enabled || !isSkillFile(file)) continue;
         const meta = parseSkillMarkdown(file.content);
@@ -91,14 +95,38 @@ const rankedMatchedSkills = (
         // Audience filtering happens BEFORE ranking (#4 invocation control): a
         // blocked best-match must surface the second-best skill, not an empty slot.
         if (audience && !skillAllowedFor(meta, audience)) continue;
-        candidates.push({ file, meta });
+        // Graph score (ROUND-34/M3): status weight (confirmed 2 / candidate 1)
+        // × dimension overlap count × evidence-freshness decay. Mirrors the
+        // appliesWhen weights the dashboard graph assigns, so the two views
+        // can never disagree about what matters.
+        const statusWeight = meta.status === 'confirmed' ? 2 : 1;
+        const overlap = dimsOverlap(meta, query);
+        const score = statusWeight * overlap * evidenceDecay(meta);
+        candidates.push({ file, meta, score });
     }
-    candidates.sort((a, b) => {
-        const statusRank = (s: SkillMeta['status']): number => (s === 'confirmed' ? 2 : s === 'candidate' ? 1 : 0);
-        const sample = (m: SkillMeta): number => m.wins + m.losses;
-        return statusRank(b.meta.status) - statusRank(a.meta.status) || sample(b.meta) - sample(a.meta);
-    });
+    candidates.sort((a, b) => b.score - a.score || (b.meta.wins + b.meta.losses) - (a.meta.wins + a.meta.losses));
     return candidates;
+};
+
+/** Count shared setup dimensions between a skill and the current query. */
+const dimsOverlap = (meta: SkillMeta, query: MemoryRetrievalQuery): number => {
+    let n = 0;
+    const coin = (query.coin || '').toUpperCase().replace(/USDT?$/, '');
+    const skillCoin = (meta.coin || '').toUpperCase().replace(/USDT?$/, '');
+    if (coin && skillCoin && coin === skillCoin) n += 1;
+    if (query.direction && meta.direction && query.direction === meta.direction) n += 1;
+    if ((query.family || query.pattern) && meta.family && (query.family === meta.family)) n += 1;
+    if (query.regime && meta.regime && String(query.regime) === meta.regime) n += 1;
+    return Math.max(n, 0.5); // a bare trigger match still scores, just low
+};
+
+/** Evidence-age decay for scoring — same 120-day constant as MemoryGraph. */
+const evidenceDecay = (meta: SkillMeta): number => {
+    if (!meta.lastEvidenceAt) return 0.75;
+    const t = Date.parse(meta.lastEvidenceAt);
+    if (!Number.isFinite(t)) return 0.75;
+    const ageDays = Math.max(0, (Date.now() - t) / 86_400_000);
+    return Math.exp(-ageDays / 120);
 };
 
 const bestMatchedSkill = (

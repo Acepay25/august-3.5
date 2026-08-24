@@ -22,6 +22,9 @@ interface DebateStageProps {
     onOpenActor?: (id: string) => void;
     suppressBubbles?: boolean;
     live?: boolean;
+    /** U3 per-seat controls (ROUND-34): hover a live actor to steer/stop it. */
+    onSteerSeat?: (seatName: string, note: string) => void;
+    onStopSeat?: (seatName: string) => void;
 }
 
 /**
@@ -30,7 +33,7 @@ interface DebateStageProps {
  * (the reference's group-chat style); the full transcript streams in the
  * side panel opened via onOpenActor.
  */
-export const DebateStage: React.FC<DebateStageProps> = ({ actors, caption, onOpenActor, live = false }) => {
+export const DebateStage: React.FC<DebateStageProps> = ({ actors, caption, onOpenActor, live = false, onSteerSeat, onStopSeat }) => {
     if (actors.length === 0) return null;
     return (
         <div className="rounded-xl border border-white/5 bg-zinc-900/60 p-3">
@@ -39,13 +42,14 @@ export const DebateStage: React.FC<DebateStageProps> = ({ actors, caption, onOpe
             )}
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
                 {actors.map(actor => (
-                    <button
-                        key={actor.id}
-                        type="button"
-                        onClick={() => onOpenActor?.(actor.id)}
-                        title={`Open ${actor.name}'s transcript`}
-                        className="flex items-center gap-2.5 rounded-lg border border-white/5 bg-zinc-900 px-2.5 py-2 text-left transition-colors hover:border-zinc-700"
-                    >
+                    <div key={actor.id} className="group/actor relative">
+                        <button
+                            key={actor.id}
+                            type="button"
+                            onClick={() => onOpenActor?.(actor.id)}
+                            title={`Open ${actor.name}'s transcript`}
+                            className="flex w-full items-center gap-2.5 rounded-lg border border-white/5 bg-zinc-900 px-2.5 py-2 text-left transition-colors hover:border-zinc-700"
+                        >
                         <DebateBotAvatar
                             name={actor.name}
                             toneKey={actor.toneKey}
@@ -77,7 +81,40 @@ export const DebateStage: React.FC<DebateStageProps> = ({ actors, caption, onOpe
                                 </span>
                             )}
                         </span>
-                    </button>
+                        </button>
+                        {/* U3 hover controls: steer (paper plane) / stop (square). */}
+                        {live && (onSteerSeat || onStopSeat) && (
+                            <span className="absolute right-1.5 top-1.5 flex items-center gap-0.5 opacity-0 transition-opacity group-hover/actor:opacity-100">
+                                {onSteerSeat && (
+                                    <button
+                                        type="button"
+                                        title={`Steer ${actor.name}: a note only they see`}
+                                        onClick={e => {
+                                            e.stopPropagation();
+                                            const note = window.prompt(`Steer ${actor.name}`, '');
+                                            if (note?.trim()) onSteerSeat(actor.name, note.trim());
+                                        }}
+                                        className="rounded-md bg-zinc-950/80 p-1 text-zinc-500 hover:text-zinc-200"
+                                    >
+                                        <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
+                                    </button>
+                                )}
+                                {onStopSeat && actor.live && (
+                                    <button
+                                        type="button"
+                                        title={`Stop ${actor.name}: they leave at the next round`}
+                                        onClick={e => {
+                                            e.stopPropagation();
+                                            onStopSeat(actor.name);
+                                        }}
+                                        className="rounded-md bg-zinc-950/80 p-1 text-zinc-500 hover:text-rose-400"
+                                    >
+                                        <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1" /></svg>
+                                    </button>
+                                )}
+                            </span>
+                        )}
+                    </div>
                 ))}
             </div>
         </div>

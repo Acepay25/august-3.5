@@ -78,6 +78,11 @@ class JobQueueService {
         return this.queue.length;
     }
 
+    /** Snapshot of every tracked job (ROUND-34/U4 Jobs drawer). Newest first. */
+    getJobs(): Job[] {
+        return [...this.queue].reverse();
+    }
+
     /**
      * Process the queue
      */

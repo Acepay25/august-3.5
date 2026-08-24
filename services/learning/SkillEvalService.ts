@@ -32,6 +32,7 @@ import {
     serializeSkill,
     titleFromMeta,
     skillMatchesSetup,
+    stampStatusTransition,
     type SkillMeta,
 } from './SkillMemoryService';
 
@@ -255,6 +256,12 @@ const recordEvalVerdictUnlocked = async (
     meta.evalDetail = `${result.alignedFlips}/${result.flips}`;
     meta.lastEvalAt = new Date().toISOString();
     meta.modifiedAt = meta.lastEvalAt;
+    // Zep-style ledger (ROUND-34): an eval demotion is exactly the kind of
+    // belief change that must stay queryable for replay audits.
+    if (result.verdict === 'hurts' && meta.status === 'confirmed') {
+        stampStatusTransition(meta, 'candidate', `eval hurts (${meta.evalDetail})`);
+        meta.status = 'candidate';
+    }
     await updateMemoryFileUnlocked(fileId, {
         content: serializeSkill(meta, titleFromMeta(meta)),
         enabled: meta.status !== 'retired',

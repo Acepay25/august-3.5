@@ -73,6 +73,9 @@ export interface ChatContextProps {
     onRetryFailedRun?: (userMessageId: string) => void;
     /** Continue an interrupted debate from the last completed round. */
     onResumeDebate?: (messageId: string) => void;
+    /** U3 per-seat controls (ROUND-34): steer or bench one seat mid-debate. */
+    onSteerSeat?: (seatName: string, note: string) => void;
+    onStopSeat?: (seatName: string) => void;
     onFollowUpTicket?: (messageId: string, text: string) => void;
     /** Edit a sent user message's text in place (persisted to history). */
     onEditUserMessage?: (messageId: string, text: string) => void;
@@ -166,6 +169,8 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
         onToggleWatch,
         onRetryFailedRun,
         onResumeDebate,
+        onSteerSeat,
+        onStopSeat,
         onFollowUpTicket,
         onEditUserMessage,
         copiedMessageId,
@@ -403,6 +408,8 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                         caption={message.isDebating ? 'Debate in progress' : 'Debate floor'}
                                         live={Boolean(message.isDebating)}
                                         onOpenActor={id => setDebatePanelActor(id)}
+                                        onSteerSeat={message.isDebating ? onSteerSeat : undefined}
+                                        onStopSeat={message.isDebating ? onStopSeat : undefined}
                                     />
                                     <DebateSidePanel
                                         open={debatePanelActor !== null}
