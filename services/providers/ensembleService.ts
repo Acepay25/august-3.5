@@ -4,6 +4,7 @@ import { ProviderConfig } from '../../types/provider';
 import { ChatMessage, warmProviderConnection } from './GenericProviderService';
 import { streamChatWithDeskTools, resolveDefaultSymbol, clearDeskToolCache, ARBITER_ALLOWED_TOOLS } from '../analysis/DeskToolsService';
 import { buildVerdictEvidencePack, deriveSetupQueryFromPrompt } from '../learning/EvidencePackService';
+import { persuasionProfile } from '../analysis/convictionDrift';
 import type { HermesBot } from '../../types/bot';
 import { TASK_BUDGETS } from './taskBudgets';
 import { getPrompt } from '../infrastructure/PromptOverrideService';
@@ -2534,6 +2535,14 @@ export const buildSeatTrustBlock = (
         }
         if (c && c.count > 0) {
             bits.push(`avg sealed conviction ${Math.round(c.total / c.count)}/100 across ${c.count} debates`);
+            // D2.2 persuasion profile: does this seat ever MOVE when challenged?
+            const prof = persuasionProfile(trades ?? [], name);
+            if (prof.disposition === 'movable') {
+                const dir = prof.avgDelta > 0 ? 'hardens' : prof.avgDelta < 0 ? 'yields' : 'mixed';
+                bits.push(`moved in ${prof.movedDebates}/${prof.debates} debates (${dir}, avg ${prof.avgDelta > 0 ? '+' : ''}${prof.avgDelta.toFixed(0)}) — weight their FINAL conviction over their first`);
+            } else if (prof.disposition === 'rigid' && prof.debates >= 2) {
+                bits.push(`rigid: never moved across ${prof.debates} debates — first impression is their final answer`);
+            }
         }
         if (bits.length === 0) continue;
         rows.push(`- ${name}: ${bits.join(' · ')}`);

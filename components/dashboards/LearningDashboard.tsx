@@ -175,30 +175,45 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
     // Conviction auction history: scan stored debate transcripts for each
     // seat's sealed CONVICTION lines and average them.
     const convictionSummaries = useMemo(() => {
-        const bySeat = new Map<string, { total: number; count: number; last: number }>();
+        const bySeat = new Map<string, { total: number; count: number; last: number; deltas: number[] }>();
         for (const trade of trades) {
             const turns = trade.debateTurns;
             if (!Array.isArray(turns)) continue;
-            const seen = new Set<string>();
+            // D2.2: collect the seat's FULL ordered trajectory in this debate,
+            // not just the first sealed line — the within-debate movement is
+            // the persuasion signal.
+            const trajBySeat = new Map<string, number[]>();
             for (const t of turns) {
-                if (t.speaker === 'Moderator' || t.speaker === 'System' || seen.has(t.speaker)) continue;
-                const m = t.text.match(/CONVICTION:\s*(\d{1,3})/i);
-                if (!m) continue;
-                seen.add(t.speaker);
-                const v = Math.min(100, Math.max(0, parseInt(m[1], 10)));
-                const cur = bySeat.get(t.speaker) ?? { total: 0, count: 0, last: v };
-                cur.total += v;
+                if (t.speaker === 'Moderator' || t.speaker === 'System') continue;
+                const mAll = [...t.text.matchAll(/CONVICTION:\s*(\d{1,3})/gi)];
+                if (mAll.length === 0) continue;
+                const v = Math.min(100, Math.max(0, parseInt(mAll[mAll.length - 1][1], 10)));
+                const arr = trajBySeat.get(t.speaker) ?? [];
+                arr.push(v);
+                trajBySeat.set(t.speaker, arr);
+            }
+            for (const [seat, vals] of trajBySeat) {
+                if (vals.length === 0) continue;
+                const cur = bySeat.get(seat) ?? { total: 0, count: 0, last: vals[vals.length - 1], deltas: [] };
+                cur.total += vals[0];
                 cur.count += 1;
-                cur.last = v;
-                bySeat.set(t.speaker, cur);
+                cur.last = vals[vals.length - 1];
+                if (vals.length >= 2) cur.deltas.push(vals[vals.length - 1] - vals[0]);
+                bySeat.set(seat, cur);
             }
         }
-        return [...bySeat.entries()].map(([name, s]) => ({
-            name,
-            avgConviction: s.total / Math.max(s.count, 1),
-            debateCount: s.count,
-            lastValue: s.last,
-        })).sort((a, b) => b.avgConviction - a.avgConviction);
+        return [...bySeat.entries()].map(([name, s]) => {
+            const movedCount = s.deltas.filter(d => d !== 0).length;
+            return {
+                name,
+                avgConviction: s.total / Math.max(s.count, 1),
+                debateCount: s.count,
+                lastValue: s.last,
+                // D2.2 additions: mean within-debate drift + how often it moves.
+                avgDelta: s.deltas.length > 0 ? s.deltas.reduce((a, b) => a + b, 0) / s.deltas.length : 0,
+                moveRate: s.deltas.length > 0 ? movedCount / s.deltas.length : 0,
+            };
+        }).sort((a, b) => b.avgConviction - a.avgConviction);
     }, [trades]);
 
     // Memory Graph — build the typed memory graph and offer All / Used / Learned views.
@@ -822,16 +837,22 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
                 />
                 <StatCard
                     title="Conviction auction"
-                    items={convictionSummaries.slice(0, 6).map(c => ({
-                        name: c.name,
-                        value: `${c.avgConviction.toFixed(0)}/100`,
-                        subtext: `avg sealed conviction · ${c.debateCount} debate${c.debateCount === 1 ? '' : 's'} · last ${c.lastValue}`,
-                        color: c.avgConviction >= 70
-                            ? 'text-emerald-400'
-                            : c.avgConviction >= 45
-                                ? 'text-zinc-300'
-                                : 'text-yellow-500',
-                    }))}
+                    items={convictionSummaries.slice(0, 6).map(c => {
+                        // D2.2: show the persuasion signal alongside the level.
+                        const drift = c.debateCount > 0 && c.moveRate > 0
+                            ? ` · ${c.moveRate >= 0.4 ? 'moves' : 'occasional'} (avg Δ${c.avgDelta > 0 ? '+' : ''}${c.avgDelta.toFixed(0)})`
+                            : '';
+                        return {
+                            name: c.name,
+                            value: `${c.avgConviction.toFixed(0)}/100`,
+                            subtext: `avg sealed conviction · ${c.debateCount} debate${c.debateCount === 1 ? '' : 's'} · last ${c.lastValue}${drift}`,
+                            color: c.avgConviction >= 70
+                                ? 'text-emerald-400'
+                                : c.avgConviction >= 45
+                                    ? 'text-zinc-300'
+                                    : 'text-yellow-500',
+                        };
+                    })}
                     emptyText="Run debates to see each seat's average sealed conviction (0-100)"
                 />
             </div>

@@ -116,6 +116,7 @@ const TOOL_LABELS: Record<string, string> = {
     get_price_snapshot: 'price snapshot',
     recall: 'notebook recall',
     get_setup_history_stats: 'setup history',
+    recall_chat: 'session search',
 };
 
 export const toolLabel = (name: string): string => TOOL_LABELS[name] ?? name.replace(/_/g, ' ');
@@ -162,6 +163,10 @@ export const digestToolResult = (name: string, ok: boolean, content: string): st
         }
     } catch {
         // Not JSON — fall through to the generic line.
+    }
+    // recall_chat returns a plain-text digest, not JSON — summarize by length.
+    if (name === 'recall_chat') {
+        return content.startsWith('No matching') ? 'no past sessions matched' : `${Math.min(content.split('\n').length, 5)} past passages found`;
     }
     return `${toolLabel(name)} ok`;
 };
@@ -328,6 +333,25 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
                     },
                 },
                 required: ['topic'],
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'recall_chat',
+            description:
+                'Search your past analysis sessions - prior debates, verdicts, and reasoning stored in this app. Use when the current setup resembles something discussed before ("we debated BTC shorts last week") or when prior conclusions could inform your stance. Returns matched excerpts with session titles and dates.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    query: {
+                        type: 'string',
+                        description: 'What to look for, e.g. "BTC short fakeout", "funding squeeze ETH", "range high rejection".',
+                    },
+                },
+                required: ['query'],
                 additionalProperties: false,
             },
         },
@@ -542,6 +566,18 @@ export async function executeDeskTool(
                     context.trades,
                 );
                 break;
+            case 'recall_chat': {
+                // U7: search past analysis sessions (stored conversations).
+                const { searchChatHistory, formatChatHitsDigest } = await import('../infrastructure/sessionSearch');
+                const query = asString(call.arguments.query);
+                if (!query) {
+                    content = JSON.stringify({ error: 'query is required' });
+                    break;
+                }
+                const hits = await searchChatHistory(query, undefined, 5);
+                content = formatChatHitsDigest(hits);
+                break;
+            }
             case 'get_setup_history_stats': {
                 const symRaw = asSymbol(call.arguments.symbol, fallback);
                 const coin = symRaw.replace(/USDT?$/, '');
@@ -598,6 +634,7 @@ export async function executeDeskTools(
  */
 export const ARBITER_ALLOWED_TOOLS = [
     'recall',
+    'recall_chat',
     'get_setup_history_stats',
     'get_session_context',
     'web_search',
