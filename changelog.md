@@ -4,6 +4,27 @@ Plain-English log of change rounds. Newest first.
 
 ---
 
+## ROUND-36 — Conviction drift tracking + recall_chat session search
+
+**D2.2: conviction drift.** New `services/analysis/convictionDrift.ts`:
+extracts each seat's ordered sealed-conviction trajectory from stored debate
+transcripts and measures whether rounds actually MOVE anyone. The moderator's
+seat-trust record now says which seats are "movable" (changed stance in ≥40%
+of debates) vs "rigid" (never moved), with the direction — so a movable
+seat's FINAL conviction gets weighted over its first. The Learning
+Dashboard's conviction card shows the same signal ("moves · avg Δ−18").
+
+**U7: recall_chat desk tool.** New `services/infrastructure/sessionSearch.ts`
+— unified search over stored conversations (term-frequency × role weight ×
+recency, 1600-char bounded digest). Exposed as a 10th desk tool so seats can
+search past debates mid-run ("did we discuss this before?"); the arbiter's
+tool policy includes it. One backend, ready for future UI search too.
+
+Tests: convictionDrift (extraction quoting-guard, trajectories,
+movable/rigid profiles) + sessionSearch (rank, no-match, digest bounds).
+
+---
+
 ## ROUND-35 — Debate-stage polish: inline steer input + cost tooltips
 
 The two known-open polish items from ROUND-34:

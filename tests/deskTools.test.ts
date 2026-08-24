@@ -27,6 +27,7 @@ describe('DeskToolsService', () => {
             'get_price_snapshot',
             'get_setup_history_stats',
             'recall',
+            'recall_chat',
         ]);
         expect(toAnthropicTools()[0]).toMatchObject({
             name: 'web_search',
