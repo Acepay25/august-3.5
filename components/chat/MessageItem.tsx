@@ -239,6 +239,16 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                     ? `replying to ${addressedTo.join(', ')}`
                     : (message.liveToolEvents ?? {})[name],
                 thought: (last?.reasoning ?? '').replace(/\s+/g, ' ').slice(0, 72),
+                // U3 polish: quiet cost/latency tooltip from the run ledger —
+                // "Macro · gemini-2.5-pro · 41s · 1.2k out".
+                meta: (() => {
+                    const seat = (message.runStats?.analysts ?? []).find(a =>
+                        a.displayName === name || name.includes(a.displayName));
+                    if (!seat) return undefined;
+                    const secs = seat.durationMs ? `${Math.round(seat.durationMs / 1000)}s` : null;
+                    const out = seat.charsOut ? `${(seat.charsOut / 1000).toFixed(1)}k out` : null;
+                    return [seat.displayName, seat.modelId, secs, out].filter(Boolean).join(' · ');
+                })(),
             };
         });
     }, [isEnsembleMessage, debateTurns, message.activeDebateSpeakers, message.isDebating]);

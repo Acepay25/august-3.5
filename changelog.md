@@ -4,6 +4,24 @@ Plain-English log of change rounds. Newest first.
 
 ---
 
+## ROUND-35 — Debate-stage polish: inline steer input + cost tooltips
+
+The two known-open polish items from ROUND-34:
+
+**Inline steer input.** Clicking a seat's paper-plane no longer opens a
+browser `window.prompt` — an inline row appears under the debate stage
+("→ Macro · [note for Macro — only they see it] · Queue"). Enter queues,
+Esc cancels. Monochrome, in keeping with the composer.
+
+**Cost/latency tooltips.** Each stage actor's hover tooltip now carries the
+quiet ledger line from `runStats.analysts` — "Macro — qwen3-1.7b · 41s ·
+1.2k out" — so per-seat cost is visible without opening the side panel.
+
+Tests: `tests/debateStageSteer.test.tsx` (inline queue flow, tooltip line,
+stop button).
+
+---
+
 ## ROUND-34 — Graph-scored ranking, temporal skill ledger, per-seat controls, jobs drawer
 
 The four queued deep-scan items, implemented together:
