@@ -2,7 +2,7 @@ import type { Conversation } from '../../types/trade';
 import { MessageRole } from '../../types/enums';
 
 /**
- * SessionSearch (ROUND-36 / U7): unified FTS-style search over the user's
+ * SessionSearch: unified FTS-style search over the user's
  * stored conversation history — one backend powering both:
  *  - the `recall_chat` desk tool (seats can search past debates mid-run), and
  *  - future UI search surfaces.

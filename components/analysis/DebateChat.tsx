@@ -84,8 +84,8 @@ const splitModeratorTurn = (
 
 /**
  * Per-turn thinking as the shared collapsible reasoning row. While the turn
- * streams it is EXPANDED so the thinking is visibly generated in real time
- * (DeepSeek-style); when the stream settles the row collapses to its
+ * streams it is EXPANDED so the thinking is visibly generated in real time;
+ * when the stream settles the row collapses to its
  * one-line summary automatically.
  */
 const TurnThinking: React.FC<{ content: string; streaming?: boolean }> = ({ content, streaming = false }) => (

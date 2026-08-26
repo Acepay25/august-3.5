@@ -1,6 +1,5 @@
 /**
- * SkillEvalService — with-skill vs without-skill A/B evaluation
- * (inspired by Claude Code's skill-creator evals).
+ * SkillEvalService — with-skill vs without-skill A/B evaluation.
  *
  * Question answered per skill: does INJECTING this skill actually change the
  * model's decision on setups it matches — and is the change directionally
@@ -96,7 +95,7 @@ const outcomeOf = (t: LoggedTrade): SkillEvalCase['actualOutcome'] =>
     t.outcome === TradeOutcome.WIN ? 'WIN' : 'LOSS';
 
 /** Pick the historical trades this skill applies to (newest first, capped).
- *  Review fix (ROUND-39): uses the STRICT matcher — the audit must measure
+ *  Uses the STRICT matcher — the audit must measure
  *  the same population production enforcement acts on (S1). */
 export const selectEvalTrades = (meta: SkillMeta, trades: LoggedTrade[]): LoggedTrade[] => {
     return trades
@@ -195,7 +194,7 @@ export const evaluateSkill = async (
     }
 
     let verdict: SkillEvalResult['verdict'] = 'inconclusive';
-    // S6 (ROUND-39): helps/hurts need enough directional signal to trust.
+    // Helps/hurts need enough directional signal to trust.
     // On real samples (>2 pairs) a SINGLE flip is noise — one lucky or
     // unlucky completion used to demote confirmed skills. Tiny scripted
     // samples (1-2 pairs, engine tests) keep single-flip classification:
@@ -259,7 +258,7 @@ const recordEvalVerdictUnlocked = async (
     meta.evalDetail = `${result.alignedFlips}/${result.flips}`;
     meta.lastEvalAt = new Date().toISOString();
     meta.modifiedAt = meta.lastEvalAt;
-    // Zep-style ledger (ROUND-34): an eval demotion is exactly the kind of
+    // Temporal ledger: an eval demotion is exactly the kind of
     // belief change that must stay queryable for replay audits.
     if (result.verdict === 'hurts' && meta.status === 'confirmed') {
         stampStatusTransition(meta, 'candidate', `eval hurts (${meta.evalDetail})`);

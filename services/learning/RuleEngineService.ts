@@ -16,7 +16,7 @@ import { StructuredRule } from '../../types';
 
 /**
  * Core safety rails — engineering constants, NOT learned knowledge.
- * (Moved here from the retired LearningRulesService, ROUND-25b.)
+ * (Moved here from the retired LearningRulesService.)
  */
 export const CONFIDENCE_RULES: Record<string, { minTfAlign: number; minRR: number; minConfidenceScore: number }> = {
     'High': { minTfAlign: 3, minRR: 2.0, minConfidenceScore: 80 },

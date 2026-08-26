@@ -3,7 +3,7 @@ import { familiesRelate } from '../utils/patternMatch';
 import { calculateSimilarity, type SetupContext } from '../services/learning/PatternMemorySynthesisService';
 import type { LoggedTrade } from '../types';
 
-// ROUND-26: family matching must be negation-aware — "fake-breakout" is the
+// Family matching must be negation-aware — "fake-breakout" is the
 // OPPOSITE of "breakout", which plain substring includes() got backwards.
 
 describe('familiesRelate (negation-aware segment matching)', () => {

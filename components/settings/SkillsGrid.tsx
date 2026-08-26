@@ -8,7 +8,7 @@ import { ChevronLeftIcon } from '../shared/Icons';
 import { PinIcon, MessageSquarePlus } from 'lucide-react';
 
 /**
- * ROUND-39 UI: "Try in chat" — drops the skill's /slug into the composer.
+ * "Try in chat" — drops the skill's /slug into the composer.
  * ChatInput listens for this event and prepends the marker; App closes the
  * settings surface so the user lands back on the chat with the text ready.
  */
@@ -17,12 +17,11 @@ export const trySkillInChat = (slug: string): void => {
 };
 
 /**
- * SkillsGrid (ROUND-33) — every skill as a card in a responsive grid,
- * modeled on Claude desktop's plugin gallery: rounded monogram tile, name,
- * one-line description, status badges, hover action icons. Clicking a card
- * opens the skill detail (meta panel + full instructions), same pattern as
- * the reference gallery. Monochrome zinc; confirmed/retired carry meaning
- * through the existing badge vocabulary.
+ * SkillsGrid — every skill as a card in a responsive grid, laid out like a
+ * plugin gallery: rounded monogram tile, name, one-line description, status
+ * badges, hover action icons. Clicking a card opens the skill detail
+ * (meta panel + full instructions). Monochrome zinc; confirmed/retired carry
+ * meaning through the existing badge vocabulary.
  */
 
 interface SkillCardData {
@@ -117,8 +116,7 @@ const SkillsCard: React.FC<{
             </div>
 
             {/* Hover actions — try-in-chat + pin + retire/restore, right-aligned
-                like the reference's kebab row. The toggle mirrors the reference
-                card's inline On/Off switch. */}
+                kebab row. The toggle is the card's inline On/Off switch. */}
             <div className="absolute right-3 top-3 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
                 {!retired && (
                     <button

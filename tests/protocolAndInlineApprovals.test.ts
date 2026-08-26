@@ -6,7 +6,7 @@ import type { LoggedTrade } from '../types';
 import { TradeOutcome } from '../types';
 import type { Message } from '../types/message';
 
-describe('D2.3 protocol A/B lanes (ROUND-37)', () => {
+describe('Protocol A/B lanes', () => {
     it('assigns only valid protocols', () => {
         for (let i = 0; i < 50; i++) {
             expect(['standard', 'extended', 'efficient']).toContain(assignDebateProtocol());
@@ -27,7 +27,7 @@ describe('D2.3 protocol A/B lanes (ROUND-37)', () => {
     });
 });
 
-describe('U5 inline approval cards (ROUND-37)', () => {
+describe('Inline approval cards', () => {
     it('collects autopilot + skill items keyed by messageId', () => {
         const aiMessage = {
             id: 'msg1',

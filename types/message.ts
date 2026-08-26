@@ -18,13 +18,13 @@ export interface DebateTurn {
   round?: number;
   /** When this turn started streaming (real debates only) — powers replay. */
   createdAt?: string;
-  /** Per-turn speed metrics (DeepSeek-style): time to first token and
+  /** Per-turn speed metrics: time to first token and
    *  output rate. Present on live-debate turns once measurable. */
   metrics?: {
     ttftMs?: number;
     tokensPerSec?: number;
   };
-  /** Addressed routing (ROUND-34): the seats this turn was sent to, parsed
+  /** Addressed routing: the seats this turn was sent to, parsed
    *  from the speaker's REPLY-TO line. Absent = floor-wide (everyone reads). */
   to?: string[];
 }
@@ -97,8 +97,8 @@ export interface RunStats {
   /** live = registry overrides; control = built-in prompts (A/B). */
   promptLane?: 'live' | 'control';
   /**
-   * D2.3 debate-structure lane used by this run (standard/extended/efficient).
-   * Deterministically assigned per setup (ROUND-39/D6) — surfaced on the
+   * Debate-structure lane used by this run (standard/extended/efficient).
+   * Deterministically assigned per setup — surfaced on the
    * signal card as a provenance chip.
    */
   protocol?: string;
@@ -188,7 +188,7 @@ export interface Message {
   debateTurns?: DebateTurn[]; // Holds the live debate conversation
   /** True while a single-model reply is actively streaming into the bubble.
    *  Cleared when the stream settles — drives live markdown rendering and the
-   *  Thinking row's running state (DeepSeek-style perceived speed). */
+   *  Thinking row's running state (perceived speed). */
   isStreaming?: boolean;
   /** Provisional verdict parsed from the moderator's stream WHILE it is still
    *  writing (progressive rendering). Replaced by the final `analysis` when
@@ -255,7 +255,7 @@ export interface Message {
   debateRunLog?: DebateRunEvent[];
   /** Notebook files / skills retrieved for this run (inspectable on the card). */
   memoryRetrieved?: Array<{ path: string; kind: string }>;
-  /** Verdict evidence pack (ROUND-28/U2): the journal evidence assembled for
+  /** Verdict evidence pack: the journal evidence assembled for
    *  the moderator's verdict — cluster record, similar trades, matched skills,
    *  doctrine header. Mirrors the prompt-side block for auditability. */
   evidencePack?: {
@@ -265,7 +265,7 @@ export interface Message {
     skills: string[];
     doctrineHeader: string;
   };
-  /** Run contract (ROUND-28/U1): the run's stage ladder with honest skip
+  /** Run contract: the run's stage ladder with honest skip
    *  notes, persisted for replay audit. */
   runContract?: Array<{ id: string; label: string; state: 'pending' | 'running' | 'done' | 'skipped' | 'failed'; note?: string }>;
   /** Crash-resume: last completed debate round (cleared when a verdict lands). */

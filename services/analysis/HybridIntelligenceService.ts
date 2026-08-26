@@ -1116,7 +1116,7 @@ ${providerAccuracyInjection}
         sessionInjection = generateSessionCalibrationPrompt(calibration);
     }
 
-    // Learning rules injection RETIRED (ROUND-24m): IF/THEN lessons live in
+    // Learning rules injection RETIRED: IF/THEN lessons live in
     // skills (evidence-counted + enforced). Keeping a parallel advisory
     // rules prompt double-injected the same facts and drifted from the
     // skill versions. The rules store still runs for outcome attribution.

@@ -50,7 +50,7 @@ interface HeaderProps {
     onOpenBotManager?: () => void;
     onOpenApprovals?: () => void;
     approvalCount?: number;
-    /** U4: open the background-jobs drawer. */
+    /** Open the background-jobs drawer. */
     onOpenJobs?: () => void;
 }
 
@@ -322,7 +322,7 @@ export const Header: React.FC<HeaderProps> = memo(({
                             )}
                         </button>
                     )}
-                    {/* U4: background jobs — the autonomy trust surface. */}
+                    {/* Background jobs — the autonomy trust surface. */}
                     {onOpenJobs && (
                         <button
                             type="button"

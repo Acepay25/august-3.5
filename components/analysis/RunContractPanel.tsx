@@ -28,7 +28,7 @@ const STATE_MARK: Record<RunContractStageState, { glyph: string; cls: string }> 
 };
 
 /**
- * Run Contract panel (ROUND-28/U1): the run's stage ladder as a live todo —
+ * Run Contract panel: the run's stage ladder as a live todo —
  * gate → openings → rebuttals → clarification → verdict → journal. Skips are
  * honest (budget cap / aligned floor / resume), so a lopsided-floor verdict is
  * visible instead of silent (W8). Persisted into DebateReplay via the message.

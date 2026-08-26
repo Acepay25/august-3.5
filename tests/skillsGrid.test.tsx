@@ -52,7 +52,7 @@ const SKILL_B = [
     'Add when HTF trend aligns with the 4h reclaim.',
 ].join('\n');
 
-describe('SkillsGrid (ROUND-33)', () => {
+describe('SkillsGrid', () => {
     beforeEach(async () => {
         store = {};
         await initMemoryFiles('tester');

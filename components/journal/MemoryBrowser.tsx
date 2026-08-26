@@ -1,5 +1,5 @@
 /**
- * MemoryBrowser — ZCode-style 3-level drill-down for the Journal Memory tab.
+ * MemoryBrowser — 3-level drill-down for the Journal Memory tab.
  *
  * Level 1: Category list (notebook folders + file counts)
  * Level 2: File list within a selected folder

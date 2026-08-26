@@ -58,7 +58,7 @@ const InjectionContextBar: React.FC<InjectionContextBarProps> = ({
         }
 
         if (isEnsembleEnabled) {
-            // ROUND-31: no footer Team chip — the composer already carries a
+            // No footer Team chip — the composer already carries a
             // Team dropdown; a second control for the same state read as
             // duplication in the empty-state UI.
             list.push({ kind: 'team', label: 'Team', title: 'Analyst team is on', active: true, Icon: BrainCircuit, hidden: true });
@@ -90,7 +90,7 @@ const InjectionContextBar: React.FC<InjectionContextBarProps> = ({
 
     if (chips.length === 0) return null;
 
-    // ROUND-31: chips flagged `hidden` (duplicate of a composer control) are
+    // Chips flagged `hidden` (duplicate of a composer control) are
     // excluded entirely — not merely overflowed.
     const visibleChips = chips.filter(c => !c.hidden);
     if (visibleChips.length === 0) return null;
@@ -116,7 +116,7 @@ const InjectionContextBar: React.FC<InjectionContextBarProps> = ({
         );
     };
 
-    // DeepSeek-calm overflow (ROUND-29): past three chips the rest collapse
+    // Chip overflow: past three chips the rest collapse
     // into one summary popover instead of growing a second toolbar row. The
     // popover is plain CSS (:focus-within) — no portal, no new deps.
     const OVERFLOW_AFTER = 3;

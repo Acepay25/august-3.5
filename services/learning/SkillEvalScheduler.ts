@@ -1,5 +1,5 @@
 /**
- * SkillEvalScheduler — fully-automated skill benchmarking (ROUND-25c).
+ * SkillEvalScheduler — fully-automated skill benchmarking.
  *
  * The harness runs evals ITSELF; the user never clicks anything. After every
  * trade-log sync, one due skill (if any) is evaluated with a cost-capped A/B
@@ -195,7 +195,7 @@ export const buildDefaultRunner = (
         if (!cfg) return {};
 
         const a = trade.analysis ?? {};
-        // S6 + review fix (ROUND-39): BOTH arms are the PRODUCTION context —
+        // BOTH arms are the PRODUCTION context —
         // doctrine + budgeted notebook slices. The treatment arm appends the
         // skill body; the baseline arm builds the same context with
         // excludeSkillName so the skill under test is genuinely absent (eval

@@ -81,7 +81,7 @@ describe('EvidencePackService', () => {
     });
 });
 
-describe('Desk tools ROUND-28 additions', () => {
+describe('Desk tools additions', () => {
     it('registers get_setup_history_stats in the catalog and arbiter policy', () => {
         const names = DESK_TOOL_DEFINITIONS.map(t => t.function.name);
         expect(names).toContain('get_setup_history_stats');

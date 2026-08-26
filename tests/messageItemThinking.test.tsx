@@ -98,7 +98,7 @@ describe('MessageItem — ensemble thinking + final output in the chat area', ()
             analysis: { coinName: 'BTC', direction: 'Long', confidence: 'High' } as any,
         });
         render(<MessageItem message={settled} context={baseContext} />);
-        // ROUND-39: the verdict prose is NOT a chat-area surface anymore.
+        // The verdict prose is NOT a chat-area surface anymore.
         expect(screen.queryByText('Final output')).toBeNull();
         expect(screen.queryByText(/Verdict: Long BTC/)).toBeNull();
         // The TradingSignalCard carries the verdict instead.

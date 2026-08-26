@@ -15,7 +15,7 @@ import {
 } from '../learning/InsightExtractionService';
 export enum JobType {
     EXTRACT_INSIGHTS = 'EXTRACT_INSIGHTS',
-    /** Retired (ROUND-25b): IF/THEN lessons live in skills. Kept as a string
+    /** Retired: IF/THEN lessons live in skills. Kept as a string
      *  for queued-job backward compatibility; no handler runs it. */
     EXTRACT_RULES = 'EXTRACT_RULES'
 }
@@ -78,7 +78,7 @@ class JobQueueService {
         return this.queue.length;
     }
 
-    /** Snapshot of every tracked job (ROUND-34/U4 Jobs drawer). Newest first. */
+    /** Snapshot of every tracked job (Jobs drawer). Newest first. */
     getJobs(): Job[] {
         return [...this.queue].reverse();
     }

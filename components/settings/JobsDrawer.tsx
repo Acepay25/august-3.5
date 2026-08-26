@@ -3,7 +3,7 @@ import { jobQueue, Job } from '../../services/infrastructure/JobQueueService';
 import { listSkills, type SkillMeta } from '../../services/learning/SkillMemoryService';
 
 /**
- * JobsDrawer (ROUND-34/U4): the Hermes "status stack" pattern — every
+ * JobsDrawer: a "status stack" of background work — every
  * background learning job (insight extraction, skill evals) visible in one
  * place instead of fire-and-forget toasts. Autonomy you can see.
  *

@@ -48,7 +48,7 @@ export interface SkillMeta {
      *  LLM refinement pass instead of silently bleeding. */
     consecutiveLosses: number;
     tradeIds: string[];
-    /** Total trades EVER counted for this skill (ROUND-31). `tradeIds` is a
+    /** Total trades EVER counted for this skill. `tradeIds` is a
      *  tail-20 list; without this counter the verdict block's "learned from
      *  N logged trade(s)" understates long-lived skills forever. */
     evidenceCount?: number;
@@ -74,7 +74,7 @@ export interface SkillMeta {
     /** Trigger/action snapshot taken BEFORE the last refinement — the
      *  evidence diff shown in the notebook so a rewrite is auditable. */
     previousVersion?: { kind: SkillKind; ifCondition?: string; thenAction?: string };
-    /** Zep-style temporal ledger (ROUND-34): every status transition is
+    /** Temporal ledger: every status transition is
      *  stamped validFrom → (invalidAt | null). Superseded beliefs are never
      *  deleted — retirement/demotion closes the interval, so replay audits
      *  can reconstruct exactly what was believed at any past moment. */
@@ -94,7 +94,7 @@ export const REFINE_AFTER_CONSECUTIVE_LOSSES = 3;
 /**
  * Refinement also requires the losses to span at least this many hours —
  * three whipsaw losses inside one session is regime noise, not a broken rule
- * (ROUND-24m: rewrite loops must lag the evidence that triggers them).
+ * (rewrite loops must lag the evidence that triggers them).
  */
 export const REFINE_MIN_SPAN_HOURS = 48;
 
@@ -118,7 +118,7 @@ export const parseSkillMarkdown = (content: string): SkillMeta | null => {
         return v && v !== 'undefined' && v !== '' ? v : undefined;
     };
     const num = (key: string): number => {
-        // parseFloat, not parseInt: weighted attribution (ROUND-27) stores
+        // parseFloat, not parseInt: weighted attribution stores
         // half-credit counts like `wins: 0.5` — truncating them back to
         // integers silently erased matched-but-not-injected evidence.
         const n = parseFloat(pick(key) || '0');
@@ -153,7 +153,7 @@ export const parseSkillMarkdown = (content: string): SkillMeta | null => {
         losses: num('losses'),
         consecutiveLosses: num('consecutiveLosses'),
         tradeIds,
-        // ROUND-31: total counted evidence. Falls back to the parsed tradeIds
+        // Total counted evidence. Falls back to the parsed tradeIds
         // length for pre-existing skills (never larger than the real count —
         // the tail list is an upper bound only until the next write).
         evidenceCount: (() => {
@@ -181,7 +181,7 @@ export const parseSkillMarkdown = (content: string): SkillMeta | null => {
         lastEvalAt: pick('lastEvalAt'),
         lastEvidenceAt: pick('lastEvidenceAt'),
         previousVersion,
-        // Zep-style temporal ledger (ROUND-34): JSON array in frontmatter.
+        // Temporal ledger: JSON array in frontmatter.
         history: (() => {
             const raw = pick('history');
             if (!raw) return undefined;
@@ -209,7 +209,7 @@ export const setSkillStatus = async (fileId: string, status: SkillStatus, userna
 };
 
 /**
- * Zep-style temporal ledger write (ROUND-34): close the current interval and
+ * Temporal ledger write: close the current interval and
  * open the next one. Superseded beliefs are never erased — a demoted skill's
  * confirmed era stays queryable for replay audits ("what did I believe before
  * this eval?"). No-op when the status is unchanged.
@@ -238,7 +238,7 @@ export const stampStatusTransition = (
 };
 
 /**
- * Replay query (ROUND-34): what status did this skill hold at a given moment?
+ * Replay query: what status did this skill hold at a given moment?
  * Returns the interval whose [validFrom, invalidAt) window contains `at`,
  * or null when the ledger cannot answer (no history, or predates it).
  */
@@ -283,7 +283,7 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
         ...(meta.history && meta.history.length > 0 ? [`history: ${JSON.stringify(meta.history)}`] : []),
         ...(meta.previousVersion ? [`previousVersion: ${JSON.stringify(meta.previousVersion)}`] : []),
         `tradeIds: ${meta.tradeIds.slice(-20).join(',')}`,
-        // ROUND-31: monotonic evidence counter — tradeIds is a tail-20 list,
+        // Monotonic evidence counter — tradeIds is a tail-20 list,
         // so the provenance line must not silently cap at 20.
         `evidenceCount: ${Math.max(meta.evidenceCount ?? 0, meta.tradeIds.length)}`,
         '---',
@@ -314,7 +314,7 @@ export const skillMatchesSetup = (
 };
 
 /**
- * S1 (ROUND-39): STRICT matcher for ENFORCEMENT paths (vetoes, eval-trade
+ * STRICT matcher for ENFORCEMENT paths (vetoes, eval-trade
  * selection). The loose `skillMatchesSetup` scores direction-equality alone
  * as a match (hits=2), so a confirmed avoid for "BTC long" vetoed EVERY Long
  * on EVERY coin. Enforcement requires real setup overlap: the skill must
@@ -340,7 +340,7 @@ export const skillStrictlyMatchesSetup = (
     return sameCoin || sameFamily || (sameDirection && sameRegime);
 };
 
-/** S8 (ROUND-39): how many setup dimensions a skill actually shares — the
+/** How many setup dimensions a skill actually shares — the
  *  ranking weight behind enforcement priority (coin > direction > family). */
 const dimsOverlapCount = (
     meta: SkillMeta,
@@ -356,7 +356,7 @@ const dimsOverlapCount = (
     return Math.max(1, n);
 };
 
-/** S8 (ROUND-39): evidence-freshness multiplier for enforcement ranking —
+/** Evidence-freshness multiplier for enforcement ranking —
  *  mirrors MemoryRetrievalService's decay: 0.75 default when no evidence is
  *  recorded, then exp(-ageDays/120) with NO floor (→ ~0.13 at 240d, ~0.02 at
  *  a year). Ranking weight only — it can never zero out a match entirely. */
@@ -395,7 +395,7 @@ export const evalDemotionActive = (meta: SkillMeta): boolean => {
 };
 
 const deriveStatus = (meta: SkillMeta): SkillStatus => {
-    // ── Causal override (ROUND-25c) ──
+    // ── Causal override ──
     // An automated A/B eval that shows the skill HURTS decisions demotes it
     // regardless of outcome correlation — injection-causation outranks
     // co-occurrence. The override expires after EVAL_VERDICT_STALE_MS so a
@@ -459,7 +459,7 @@ const applySkillEvidenceUnlocked = async (trade: LoggedTrade, username: string, 
         if (!meta || !file.enabled || !skillMatchesSetup(meta, setup)) continue;
         if (meta.tradeIds.includes(trade.id)) continue;
 
-        // ── Evidence decay (ROUND-24m) ──
+        // ── Evidence decay ──
         // Authority expires with its evidence. Before counting this trade:
         //   • counts >30 days stale are halved
         //   • evidence earned in a DIFFERENT market regime halves again
@@ -467,7 +467,7 @@ const applySkillEvidenceUnlocked = async (trade: LoggedTrade, username: string, 
         // no new status machinery needed.
         applyEvidenceDecay(meta, trade.marketRegime);
 
-        // ── Weighted attribution (ROUND-27, windowed in ROUND-28) ──
+        // ── Weighted attribution ──
         // Full credit when retrieval actually injected this skill AROUND THE
         // TIME OF THIS TRADE; half when it merely matched the setup. Unknown
         // telemetry (empty log) keeps full credit so tiering cannot starve
@@ -574,58 +574,88 @@ export const lossesSpanEnoughHours = (
 };
 
 /**
+ * LLM phase of skill refinement — resolves the memory model, feeds the
+ * losing post-mortems back to it, and returns the tightened skill (or null
+ * when nothing should change). Performs NO notebook writes, so it is safe
+ * to run outside the write lock.
+ */
+const craftRefinement = async (
+    meta: SkillMeta,
+    allTrades: LoggedTrade[],
+    username: string,
+): Promise<CraftedSkill | null> => {
+    const config = await resolveMemoryConfig(username);
+    if (!config) return null;
+    const losingTrades = allTrades
+        .filter(t => t.outcome === TradeOutcome.LOSS && meta.tradeIds.includes(t.id))
+        .slice(-4);
+    return refineSkillFromLosses({
+        title: titleFromMeta(meta),
+        kind: meta.kind,
+        ifCondition: meta.ifCondition,
+        thenAction: meta.thenAction,
+        body: meta.body,
+        wins: meta.wins,
+        losses: meta.losses,
+    }, losingTrades, config);
+};
+
+/**
+ * Write phase of skill refinement — MUST run under the notebook write lock.
+ * Re-reads the skill so evidence that landed during the LLM round-trip is
+ * preserved, then applies the refined trigger/procedure. Returns false when
+ * the file vanished meanwhile.
+ */
+const applyRefinementUnlocked = async (
+    fileId: string,
+    refined: CraftedSkill,
+    username: string,
+): Promise<boolean> => {
+    const file = getMemoryFiles().files.find(f => f.id === fileId);
+    const latest = file ? parseSkillMarkdown(file.content) : null;
+    if (!latest) return false;
+    latest.previousVersion = {
+        kind: latest.kind,
+        ifCondition: latest.ifCondition,
+        thenAction: latest.thenAction,
+    };
+    latest.kind = refined.kind;
+    latest.ifCondition = refined.ifCondition;
+    latest.thenAction = refined.thenAction;
+    latest.body = formatCraftedSkillBody(refined);
+    latest.consecutiveLosses = 0;
+    latest.refinedAt = new Date().toISOString();
+    latest.modifiedAt = latest.refinedAt;
+    await updateMemoryFileUnlocked(fileId, {
+        content: serializeSkill(latest, refined.name || titleFromMeta(latest)),
+        enabled: latest.status !== 'retired',
+    }, username);
+    return true;
+};
+
+/**
  * Self-improving skills: hand a confirmed skill that keeps losing back to
  * the model with the losing post-mortems so the trigger/procedure is
  * tightened. Best-effort — any failure keeps the existing skill untouched.
  * The refined skill starts a fresh consecutive-loss streak.
+ * Called ALREADY UNDER the notebook write lock (evidence-path callers hold
+ * it), so both phases run inline here.
  */
 const maybeRefineSkill = async (fileId: string, allTrades: LoggedTrade[], username: string): Promise<void> => {
     try {
-        const config = await resolveMemoryConfig(username);
-        if (!config) return;
         const file = getMemoryFiles().files.find(f => f.id === fileId);
         const meta = file ? parseSkillMarkdown(file.content) : null;
         if (!meta) return;
-        const losingTrades = allTrades
-            .filter(t => t.outcome === TradeOutcome.LOSS && meta.tradeIds.includes(t.id))
-            .slice(-4);
-        const refined = await refineSkillFromLosses({
-            title: titleFromMeta(meta),
-            kind: meta.kind,
-            ifCondition: meta.ifCondition,
-            thenAction: meta.thenAction,
-            body: meta.body,
-            wins: meta.wins,
-            losses: meta.losses,
-        }, losingTrades, config);
+        const refined = await craftRefinement(meta, allTrades, username);
         if (!refined) return;
-        // Re-read after the LLM round-trip — evidence may have landed meanwhile.
-        const latestFile = getMemoryFiles().files.find(f => f.id === fileId);
-        const latest = latestFile ? parseSkillMarkdown(latestFile.content) : null;
-        if (!latest) return;
-        latest.previousVersion = {
-            kind: latest.kind,
-            ifCondition: latest.ifCondition,
-            thenAction: latest.thenAction,
-        };
-        latest.kind = refined.kind;
-        latest.ifCondition = refined.ifCondition;
-        latest.thenAction = refined.thenAction;
-        latest.body = formatCraftedSkillBody(refined);
-        latest.consecutiveLosses = 0;
-        latest.refinedAt = new Date().toISOString();
-        latest.modifiedAt = latest.refinedAt;
-        await updateMemoryFileUnlocked(fileId, {
-            content: serializeSkill(latest, refined.name || titleFromMeta(latest)),
-            enabled: latest.status !== 'retired',
-        }, username);
+        await applyRefinementUnlocked(fileId, refined, username);
     } catch (e) {
         console.warn('[SkillMemory] Refinement pass failed (skill kept):', e);
     }
 };
 
 /**
- * S7 (ROUND-39): act on the worth-gate's 'merge' verdict. Previously the
+ * Act on the worth-gate's 'merge' verdict. Previously the
  * second-most-useful gate outcome was DROPPED silently — overlaps festered
  * until consolidateSkills destroyed the extras. The named target skill is
  * tightened with the same refine pass used for consecutive-loss skills, fed
@@ -659,20 +689,19 @@ const maybeMergeSkillUnlocked = async (
         }
         const foldEvidence = (): void => {
             if (!latestMeta.tradeIds.includes(trade.id)) {
-                const prevStatus = latestMeta.status;
                 latestMeta.tradeIds = [...latestMeta.tradeIds, trade.id];
                 if (trade.outcome === TradeOutcome.WIN) latestMeta.wins += 1;
                 else latestMeta.losses += 1;
                 latestMeta.consecutiveLosses = trade.outcome === TradeOutcome.LOSS
                     ? latestMeta.consecutiveLosses + 1
                     : 0;
-                latestMeta.status = deriveStatus(latestMeta);
-                // Review fix (ROUND-39): merge-driven transitions ride the
-                // temporal ledger like every other path, so skillStatusAt
-                // replay sees them.
-                if (latestMeta.status !== prevStatus) {
-                    stampStatusTransition(latestMeta, latestMeta.status, 'worth-gate merge');
-                }
+                // Merge-driven transitions ride the temporal ledger like every
+                // other path so skillStatusAt replay sees them. Stamp BEFORE
+                // assigning: stampStatusTransition no-ops once meta.status
+                // already equals the next status.
+                const derived = deriveStatus(latestMeta);
+                stampStatusTransition(latestMeta, derived, 'worth-gate merge');
+                latestMeta.status = derived;
             }
         };
         let latestMeta = meta;
@@ -722,23 +751,36 @@ export const maybeMergeSkill = (
     withNotebookWriteLock(() => maybeMergeSkillUnlocked(mergeTarget, trade, allTrades, username));
 
 /**
- * S10 (ROUND-39): user-triggered refinement from the dashboard. Runs the same
- * LLM tighten pass the automatic 3-loss gate uses, on demand — closes the
- * loop for 'refine' recommendations that previously rendered as dead-end rows.
- * Review fix: resolves FALSE when nothing changed (no provider / LLM declined)
- * so the dashboard doesn't toast success on a no-op.
+ * User-triggered refinement from the dashboard. Runs the same LLM tighten
+ * pass the automatic 3-loss gate uses, on demand — closes the loop for
+ * 'refine' recommendations that would otherwise render as dead-end rows.
+ * Resolves FALSE when nothing changed (no provider / LLM declined) so the
+ * dashboard doesn't toast success on a no-op.
+ *
+ * The LLM round-trip runs OUTSIDE the notebook write lock — it can take
+ * tens of seconds and must not block every other notebook writer (evidence
+ * sync, post-mortem ingestion, UI edits). Only the re-read-and-write phase
+ * holds the lock.
  */
-export const refineSkillNow = (
+export const refineSkillNow = async (
     fileId: string,
     allTrades: LoggedTrade[],
     username: string,
-): Promise<boolean> =>
-    withNotebookWriteLock(async () => {
-        const before = getMemoryFiles().files.find(f => f.id === fileId);
-        await maybeRefineSkill(fileId, allTrades, username);
-        const after = getMemoryFiles().files.find(f => f.id === fileId);
-        return Boolean(before && after && before.content !== after.content);
-    });
+): Promise<boolean> => {
+    const file = getMemoryFiles().files.find(f => f.id === fileId);
+    const meta = file ? parseSkillMarkdown(file.content) : null;
+    if (!meta) return false;
+    let refined: CraftedSkill | null;
+    try {
+        refined = await craftRefinement(meta, allTrades, username);
+    } catch (e) {
+        console.warn('[SkillMemory] On-demand refinement failed (skill kept):', e);
+        return false;
+    }
+    if (!refined) return false;
+    const result = refined;
+    return withNotebookWriteLock(() => applyRefinementUnlocked(fileId, result, username));
+};
 
 /**
  * Create a skill when a similar cluster reaches MIN_CLUSTER_FOR_SKILL and
@@ -748,7 +790,7 @@ const maybeUpsertSkillUnlocked = async (
     trade: LoggedTrade,
     allTrades: LoggedTrade[],
     username: string,
-    // S7 (ROUND-39): the worth-gate's JUDGED clauses ride through so the
+    // The worth-gate's JUDGED clauses ride through so the
     // persisted skill matches the artifact that was validated.
     preferredClause?: { ifCondition?: string; thenAction?: string },
 ): Promise<MemoryFile | null> => {
@@ -781,7 +823,7 @@ const maybeUpsertSkillUnlocked = async (
     let streak = 0;
     for (let i = ordered.length - 1; i >= 0 && ordered[i].outcome === TradeOutcome.LOSS; i--) streak++;
     const kind: SkillKind = losses >= wins ? 'avoid' : 'repeat';
-    // S7 (ROUND-39): prefer the clauses the worth-gate JUDGED over whatever
+    // Prefer the clauses the worth-gate JUDGED over whatever
     // re-parsing the raw post-mortem produces now — validated ≠ persisted was
     // a silent mismatch before.
     const clause = (preferredClause?.ifCondition || preferredClause?.thenAction)
@@ -827,7 +869,7 @@ export const maybeUpsertSkill = (
     trade: LoggedTrade,
     allTrades: LoggedTrade[],
     username: string,
-    // S7 (ROUND-39): the worth-gate's JUDGED clauses ride through the locked
+    // The worth-gate's JUDGED clauses ride through the locked
     // wrapper so callers can persist the validated artifact.
     preferredClause?: { ifCondition?: string; thenAction?: string },
 ): Promise<MemoryFile | null> =>
@@ -1028,11 +1070,11 @@ const consolidateSkillsUnlocked = async (username: string): Promise<void> => {
         }
         const metas = group.map(f => parseSkillMarkdown(f.content)).filter(Boolean) as SkillMeta[];
         const keep = group[0];
-        // S3 (ROUND-39): the surviving body is the RICHEST one (longest — a
+        // The surviving body is the RICHEST one (longest — a
         // refined procedure always beats an original stub), not arbitrarily
         // `metas[0].body`.
         const richest = metas.reduce((a, b) => (b.body.length > a.body.length ? b : a), metas[0]);
-        // Review fix (ROUND-39): W/L are re-derived from the DEDUPED union of
+        // W/L are re-derived from the DEDUPED union of
         // tradeIds (joined against actual outcomes where possible) — raw
         // summing double-counted trades that sat in two duplicates and
         // inflated the sample that deriveStatus confirms/retires on. We can't
@@ -1067,8 +1109,8 @@ const consolidateSkillsUnlocked = async (username: string): Promise<void> => {
             content: serializeSkill(merged, titleFromMeta(merged)),
             enabled: merged.status !== 'retired',
         }, username);
-        // S3 (ROUND-39): superseded duplicates are ARCHIVED, not deleted.
-        // Deleting broke the ROUND-34 doctrine ("superseded beliefs are never
+        // Superseded duplicates are ARCHIVED, not deleted.
+        // Deleting broke the ledger doctrine ("superseded beliefs are never
         // deleted") and destroyed replay-audit trails. The skills-archive
         // folder already exists for retired skills; merged dupes join them
         // (disabled, so they drop out of retrieval/evidence/dashboards).
@@ -1151,7 +1193,7 @@ export const syncClosedTradeToNotebook = async (
                     const decision = await evaluateSkillWorth({ coin: setup.coin, direction: setup.direction, family: setup.family, cluster }, botCtx, config);
                     if (decision) {
                         const judgedClause = { ifCondition: decision.ifCondition, thenAction: decision.thenAction };
-                        // Review fix (ROUND-39): the create/merge mutations are
+                        // The create/merge mutations are
                         // read-modify-write cycles over the shared notebook
                         // cache — they MUST hold the write lock. syncClosedTrade-
                         // ToNotebook itself is not locked (its earlier steps use
@@ -1163,13 +1205,13 @@ export const syncClosedTradeToNotebook = async (
                             const err = validateCraftedSkill(decision,
                                 cluster.filter(t => t.outcome === TradeOutcome.WIN).length,
                                 cluster.filter(t => t.outcome === TradeOutcome.LOSS).length);
-                            // S7 (ROUND-39): the gate judged SPECIFIC clauses —
+                            // The gate judged SPECIFIC clauses —
                             // persist those (validated ≡ persisted), not a fresh
                             // re-parse of the raw post-mortem.
                             if (!err) await maybeUpsertSkill(trade, allTrades, username, judgedClause);
                             else console.warn('[SkillMemory] Skill worth-gate rejected crafted skill:', err);
                         } else if (decision.verdict === 'merge' && decision.mergeTarget) {
-                            // S7 (ROUND-39): 'merge' was dead code — the gate's
+                            // 'merge' was dead code — the gate's
                             // second-most-useful verdict is now honored: tighten
                             // the named target instead of letting overlaps
                             // fester until destructive consolidation.
@@ -1207,7 +1249,7 @@ export const syncClosedTradeToNotebook = async (
             const res = await consolidateDoctrine(allTrades, username, config);
             if (res.updated) console.log('[Doctrine] Doctrine rewritten from', countClosedTrades(allTrades), 'closed trades.');
 
-            // ── Automated skill evals (ROUND-25c) ──
+            // ── Automated skill evals ──
             // The harness audits its own knowledge: one due skill gets a
             // cost-capped A/B run; a 'hurts' verdict demotes it via
             // deriveStatus. Deliberately NOT awaited — up to a dozen provider
@@ -1250,11 +1292,11 @@ export const applyNotebookSkillsToAnalysis = <T extends {
         family: analysis.detectedPatternFamily,
         pattern: analysis.marketConditions?.pattern,
     };
-    // S8 (ROUND-39): code-side enforcement now honors the same invocation
+    // Code-side enforcement now honors the same invocation
     // controls as prompt injection — `audience: moderator` skills no longer
     // veto the analyst card, and matches are ranked (status × overlap ×
     // freshness) instead of taken in file order.
-    // S1 (ROUND-39): enforcement uses the STRICT matcher — a direction-only
+    // Enforcement uses the STRICT matcher — a direction-only
     // match no longer vetoes every coin.
     const ranked = getMemoryFiles().files
         .map(enabledSkillMeta)
@@ -1272,7 +1314,7 @@ export const applyNotebookSkillsToAnalysis = <T extends {
 
     const next = { ...analysis };
     const warn = (note: string): void => {
-        // S8: warnings ONLY — validationWarnings is display-safe. Writing
+        // Warnings ONLY — validationWarnings is display-safe. Writing
         // into riskVeto made classifyAvoidBasis report a mere size-down as
         // a HARD blocker in the WhyAvoidPanel.
         next.validationWarnings = [...(next.validationWarnings ?? []), note];
@@ -1334,7 +1376,7 @@ export const listAppliedSkills = (
 export const confirmedAvoidForSetup = (
     setup: { coin?: string; direction?: string; family?: string; pattern?: string },
 ): SkillMeta | null => {
-    // S1 (ROUND-39): strict matching — this result drives the moderator's
+    // Strict matching — this result drives the moderator's
     // skip_to_verdict veto, so a "BTC long" avoid must never HALT an ETH
     // long just because the direction matches.
     const matches = getMemoryFiles().files
@@ -1358,7 +1400,7 @@ const applyReviewRecommendationUnlocked = async (
     const file = getMemoryFiles().files.find(f => f.id === fileId);
     const meta = file ? parseSkillMarkdown(file.content) : null;
     if (!file || !meta || meta.status === 'retired') return false;
-    // S5 (ROUND-39): route through the temporal ledger so dashboard actions
+    // Route through the temporal ledger so dashboard actions
     // stay visible to skillStatusAt replay queries — a manual promote/demote
     // used to be invisible to the audit trail.
     stampStatusTransition(meta, recommendation === 'promote'

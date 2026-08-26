@@ -825,7 +825,7 @@ ${patternMatch.warning ? `\n PATTERN MEMORY:\n${patternMatch.warning}` : ''}
     }
 
 
-    // 3.12 Rule engine (ROUND-25b): the learned structured-rules layer is
+    // 3.12 Rule engine: the learned structured-rules layer is
     // retired — skills are the only learned enforcement layer now. The core
     // CONFIDENCE_RULES safety rails live in RuleEngineService and are still
     // applied via applyNotebookSkillsToAnalysis + validation elsewhere.

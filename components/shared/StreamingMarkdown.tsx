@@ -16,7 +16,7 @@ const FrozenBlock = memo(function FrozenBlock({ block, className }: { block: str
 });
 
 /**
- * Append-only streaming markdown (DeepSeek-style). Every chunk used to
+ * Append-only streaming markdown. Every chunk used to
  * re-parse the whole reply (O(n²)); here all but the trailing blocks are
  * frozen into memoized renders keyed to content that never changes again, so
  * each delta only re-renders the small live tail. When the stream settles,

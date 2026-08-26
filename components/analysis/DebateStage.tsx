@@ -14,7 +14,7 @@ export interface DebateStageActor {
     replyTo?: string;
     replies?: Array<{ id: string; target: string; text: string }>;
     toolChip?: string;
-    /** U3 polish (ROUND-35): quiet cost/latency line for the hover tooltip —
+    /** Quiet cost/latency line for the hover tooltip —
      *  "Macro · gemini-2.5-pro · 41s · 1.2k out". */
     meta?: string;
 }
@@ -25,19 +25,19 @@ interface DebateStageProps {
     onOpenActor?: (id: string) => void;
     suppressBubbles?: boolean;
     live?: boolean;
-    /** U3 per-seat controls (ROUND-34): hover a live actor to steer/stop it. */
+    /** Hover a live actor to steer/stop it. */
     onSteerSeat?: (seatName: string, note: string) => void;
     onStopSeat?: (seatName: string) => void;
 }
 
 /**
- * Debate floor (ROUND-34): one bubble per debater — the analysts and the
+ * Debate floor: one bubble per debater — the analysts and the
  * moderator. While live, a bubble shows only the thinking/speaking animation
- * (the reference's group-chat style); the full transcript streams in the
+ * (group-chat style); the full transcript streams in the
  * side panel opened via onOpenActor.
  */
 export const DebateStage: React.FC<DebateStageProps> = ({ actors, caption, onOpenActor, live = false, onSteerSeat, onStopSeat }) => {
-    // U3 polish (ROUND-35): steering uses an inline input row instead of
+    // Steering uses an inline input row instead of
     // window.prompt — the note is typed in place and queued on Enter.
     const [steerTarget, setSteerTarget] = React.useState<string | null>(null);
     const [steerDraft, setSteerDraft] = React.useState('');
@@ -94,7 +94,7 @@ export const DebateStage: React.FC<DebateStageProps> = ({ actors, caption, onOpe
                             )}
                         </span>
                         </button>
-                        {/* U3 hover controls: steer (paper plane) / stop (square). */}
+                        {/* Hover controls: steer (paper plane) / stop (square). */}
                         {live && (onSteerSeat || onStopSeat) && (
                             <span className="absolute right-1.5 top-1.5 flex items-center gap-0.5 opacity-0 transition-opacity group-hover/actor:opacity-100">
                                 {onSteerSeat && (
@@ -129,7 +129,7 @@ export const DebateStage: React.FC<DebateStageProps> = ({ actors, caption, onOpe
                     </div>
                 ))}
             </div>
-            {/* Inline steer row (ROUND-35): type the note, Enter queues it for
+            {/* Inline steer row: type the note, Enter queues it for
                 that seat only. Esc cancels. */}
             {steerTarget && onSteerSeat && (
                 <div className="mt-2 flex items-center gap-2 rounded-lg border border-white/10 bg-zinc-950 px-2.5 py-1.5">

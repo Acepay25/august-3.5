@@ -1,6 +1,6 @@
 /**
- * Perceived-speed helper, modeled on the DeepSeek harness's incremental
- * markdown. Re-parsing an entire streaming reply on every chunk is O(n²);
+ * Perceived-speed helper: incremental markdown. Re-parsing an entire
+ * streaming reply on every chunk is O(n²);
  * instead we split the text into blocks and FREEZE every block except the
  * trailing few. Streaming is append-only, so frozen blocks never change and
  * their memoized renders are skipped — only the small tail is re-parsed per

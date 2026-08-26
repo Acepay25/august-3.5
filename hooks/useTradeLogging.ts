@@ -138,7 +138,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             });
         });
 
-        // Auto-learn from LOSS now lands in the SKILLS system (ROUND-25):
+        // Auto-learn from LOSS now lands in the SKILLS system:
         // syncClosedTradeToNotebook (called below by the caller) already runs
         // ingestIfThenFromTrade + the skill-worth gate — evidence-counted,
         // enforceable, one representation. The parallel rules store is no

@@ -1,9 +1,9 @@
 /**
- * LeverageSection (ROUND-39 UI) — the composer's leverage control relocated
- * into the Team menu so the composer bar reads like the reference (+ modes …
- * send). Same presets + custom input as the old inline dropdown, restyled to
- * the Claude-dark tokens. Controlled entirely by props: state stays in
- * ChatInput/App, so this is a pure controlled section.
+ * LeverageSection — the composer's leverage control relocated into the
+ * Team menu so the composer bar stays a clean pill (+ modes … send). Same
+ * presets + custom input as the old inline dropdown, restyled to the dark
+ * theme tokens. Controlled entirely by props: state stays in ChatInput/App,
+ * so this is a pure controlled section.
  */
 import React from 'react';
 

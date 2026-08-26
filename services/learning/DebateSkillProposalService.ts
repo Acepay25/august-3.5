@@ -26,7 +26,7 @@ const parseProposal = (raw: string): SkillProposal | null => {
 };
 
 /**
- * ROUND-34: after a debate concludes, EACH debater (analysts and moderator)
+ * After a debate concludes, EACH debater (analysts and moderator)
  * reviews their own transcript and proposes a skill create/update. The
  * Memory Model runs the pass; creations land as CANDIDATE skills and updates
  * append a proposed-update note to the target skill — the trader confirms or

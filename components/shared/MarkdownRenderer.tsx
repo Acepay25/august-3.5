@@ -16,7 +16,7 @@ interface MarkdownRendererProps {
  * AI message instead of being bundled into the startup entry.
  * ReactMarkdown escapes raw HTML by default, so AI output can't inject markup.
  *
- * ROUND-39 typography pass (reference-aligned): tighter paragraphs (my-3,
+ * Typography: tighter paragraphs (my-3,
  * 1.65 line-height instead of my-4/leading-8), neutral zinc inline code
  * pills and blockquote borders (cyan is reserved for interactive links —
  * the monochrome doctrine), denser lists.

@@ -193,7 +193,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
         };
         document.addEventListener('keydown', handleEscape);
         document.addEventListener('keydown', handleSlash);
-        // ROUND-39 UI: "Try in chat" from a skill card — prepend the /slug
+        // "Try in chat" from a skill card — prepend the /slug
         // marker and focus the composer so the user can fire it immediately.
         const handleTrySkill = (event: Event) => {
             const slug = (event as CustomEvent<{ slug?: string }>).detail?.slug;
@@ -237,7 +237,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                 const provider = chatProviders.find(item => item.id === assignment?.assignedProvider);
                 const model = assignment?.assignedModel || provider?.models[0] || '';
                 return {
-                    // ROUND-39 UI: lens seats keep their role glyph (M/T/R) —
+                    // Lens seats keep their role glyph (M/T/R) —
                     // role identity, not provider name.
                     initial: def.shortName.charAt(0).toUpperCase(),
                     label: def.shortName,
@@ -251,7 +251,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
             .map((entry, index) => {
                 const provider = chatProviders.find(item => item.id === entry.providerId);
                 return {
-                    // ROUND-39 UI: fixed SEAT glyphs (1/2/3), never provider-name
+                    // Fixed SEAT glyphs (1/2/3), never provider-name
                     // initials — three K-named providers used to spell an
                     // unfortunate word in the avatar stack.
                     initial: `${index + 1}`,
@@ -317,9 +317,9 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
             ? 'w-full'
             : 'absolute bottom-0 left-0 right-0 px-3 sm:px-4 lg:px-8 pointer-events-none z-20 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] sm:pb-[calc(env(safe-area-inset-bottom)+0.75rem)] lg:pb-4 status-surface'}>
             <div className={centered ? 'w-full' : 'chat-column pointer-events-auto'}>
-                {/* Main Input Container — CLAUDE PILL PROPORTIONS (ROUND-39 UI):
+                {/* Main Input Container — pill proportions:
                     ~16px radius, generous ~20px inner padding, solid #262626
-                    fill, no border/shadow — copied from the reference shot. */}
+                    fill, no border/shadow. */}
                 <div className="rounded-2xl bg-zinc-800 p-3 sm:p-5 transition-colors">
 
                     {/* Image Preview */}
@@ -385,13 +385,13 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             style={{ overflow: 'hidden' }}
                         />
                     </div>
-                    {/* ROUND-39 UI: the Templates ▾ row is gone — the reference
-                        composer carries nothing between input and controls.
+                    {/* The Templates ▾ row is gone — the composer carries
+                        nothing between input and controls.
                         Debate templates still parse from typed text, and skills
                         remain available via /slug in the message itself. */}
                     <input type="file" multiple accept="image/*" ref={fileInputRef} onChange={handleImageUpload} className="hidden" disabled={uploadDisabled} />
 
-                    {/* Bottom Toolbar — ChatGPT style: + left, model/mic/send right */}
+                    {/* Bottom Toolbar — + left, model/mic/send right */}
                     <div className="flex items-center justify-between gap-2 px-1 pt-2">
                         {/* Left Side: upload + action pills */}
                         <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2 flex-wrap">
@@ -403,10 +403,9 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             >
                                 <PlusIcon className="h-[18px] w-[18px]" />
                             </button>
-                            {/* Chat | Trade — reference-style bare mode pills:
+                            {/* Chat | Trade — bare mode pills:
                                 no capsule around them; the ACTIVE mode reads
-                                from a lighter fill, the inactive is plain text
-                                (ROUND-39 UI parity with the screenshots). */}
+                                from a lighter fill, the inactive is plain text. */}
                             <div
                                 role="tablist"
                                 aria-label="Composer mode"
@@ -438,7 +437,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             </div>
 
                             {isEnsembleEnabled && (
-                                /* ROUND-34: the team opens as a clean dropdown
+                                /* The team opens as a clean dropdown
                                    (model-selector style), not a modal. */
                                 <div className="relative">
                                     <button
@@ -492,11 +491,11 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                         </div>
 
                         {/* Right Side: send (+ leverage in Trade mode, model in
-                            Chat mode) — CLAUDE PARITY: the leverage control
-                            moved into the Team menu so the composer bar reads
+                            Chat mode) — the leverage control moved into the
+                            Team menu so the composer bar reads
                             + modes … send only. */}
                         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-                            {/* Casual chat model — reference-style bare selector */}
+                            {/* Casual chat model — bare selector */}
                             {!isEnsembleEnabled && chatModelOptions.length > 0 && (
                                 <ModelPicker
                                     providers={providers}

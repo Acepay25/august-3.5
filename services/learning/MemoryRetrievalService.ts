@@ -1,7 +1,7 @@
 /**
  * Setup-aware retrieval for the trader notebook.
  *
- * Design (post-simplification pass, ROUND-24m):
+ * Design:
  *  - ONE narrative voice: doctrine rides every stage; everything else is
  *    ranked data under a hard per-stage budget.
  *  - Diary is RAW STORAGE — never injected. It feeds doctrine rewrites and
@@ -71,7 +71,7 @@ const kindForHit = (hit: WalkedMemoryHit): RetrievedMemorySource['kind'] => {
 
 /** Enabled, non-retired skills matching this setup, ranked by graph score:
  *  status weight × setup-dimension overlap × evidence freshness decay
- *  (ROUND-34: the memory graph's semantics now drive production retrieval,
+ *  (the memory graph's semantics now drive production retrieval,
  *  not just the dashboard — with the M3 reconciliation that moderators see
  *  matched skills at index tier rather than being excluded entirely). */
 const rankedMatchedSkills = (
@@ -95,13 +95,13 @@ const rankedMatchedSkills = (
         // Audience filtering happens BEFORE ranking (#4 invocation control): a
         // blocked best-match must surface the second-best skill, not an empty slot.
         if (audience && !skillAllowedFor(meta, audience)) continue;
-        // S2 (ROUND-39): zero-evidence skills stay OUT of prompt injection.
+        // Zero-evidence skills stay OUT of prompt injection.
         // A 0W/0L draft is an unproven hunch; injecting it gave the model no
         // basis to weigh it against — and contradicted the dashboard's own
         // "stays unenforced until it earns a record" message. The recall tool
         // still serves the full body when a model asks explicitly.
         if ((meta.wins + meta.losses) === 0) continue;
-        // Graph score (ROUND-34/M3): status weight (confirmed 2 / candidate 1)
+        // Graph score: status weight (confirmed 2 / candidate 1)
         // × dimension overlap count × evidence-freshness decay. Mirrors the
         // appliesWhen weights the dashboard graph assigns, so the two views
         // can never disagree about what matters.
@@ -158,7 +158,7 @@ const doctrineBlock = (): string => {
 };
 
 /** The single best-matched skill body, capped. */
-/** Human-readable evidence freshness for a skill (Claude Code 'modified' pattern). */
+/** Human-readable evidence freshness for a skill (relative-time label). */
 export const evidenceFreshness = (meta: SkillMeta): string => {
     if (!meta.lastEvidenceAt) return 'no counted evidence yet';
     const t = Date.parse(meta.lastEvidenceAt);
@@ -220,7 +220,7 @@ const matchedSkillBlock = (
         .filter(Boolean).join(' ');
     const body = substituteSkillContext(match.file.content.trim(), query);
     const capped = body.length > SKILL_BLOCK_MAX ? `${body.slice(0, SKILL_BLOCK_MAX).trimEnd()}\n…` : body;
-    // Provenance (ROUND-26, counter fixed ROUND-31): how many logged trades
+    // Provenance: how many logged trades
     // shaped this rule — from the monotonic evidence counter, not the
     // tail-20 tradeIds list.
     const provenance = (match.meta.evidenceCount ?? match.meta.tradeIds.length) > 0
@@ -325,8 +325,8 @@ const conflictNote = (query?: MemoryRetrievalQuery): string => {
 /** Similar closed trades — verdict-stage history (and the recall tool). */
 const similarTradesBlock = (query: MemoryRetrievalQuery | undefined, trades?: LoggedTrade[]): string => {
     if (!trades || trades.length === 0 || !query) return '';
-    // ROUND-31: age-decayed similarity — old associations weigh less in
-    // prompts, honoring the ROUND-26 edge-decay contract end to end.
+    // Age-decayed similarity — old associations weigh less in
+    // prompts, honoring the edge-decay contract end to end.
     const relevant = findRelevantTrades({
         coin: query.coin,
         direction: query.direction === 'Long' || query.direction === 'Short' ? query.direction : undefined,
@@ -369,11 +369,11 @@ export const listRetrievedMemorySources = (
  * Doctrine has its own always-on slot and does not count against the budget.
  */
 export interface MemoryContextOptions {
-    /** ROUND-39 review fix: exclude one skill (file stem) from matching —
+    /** Exclude one skill (file stem) from matching —
      *  used by the A/B eval so the "baseline minus skill" arm genuinely
      *  omits the skill under test. */
     excludeSkillName?: string;
-    /** ROUND-39 review fix: skip recordMemoryInjection — synthetic contexts
+    /** Skip recordMemoryInjection — synthetic contexts
      *  (A/B evals) must not pollute the attribution telemetry that
      *  applySkillEvidence trusts for credit-granting windows. */
     recordInjections?: boolean;
@@ -413,9 +413,9 @@ export const getMemoryFilesContext = (
     })();
     if (push(primary.text) && primary.meta) injected.push({ path: `skills/${primary.name}`, kind: 'skill' });
     if (stage === 'verdict') {
-        // Top-K (ROUND-26): verdict depth surfaces the runners-up as index
+        // Top-K: verdict depth surfaces the runners-up as index
         // lines — one matching skill is a coincidence, two a pattern.
-        // Review fix: the primary skill is already pushed above — skip it
+        // The primary skill is already pushed above — skip it
         // here so it never renders twice when no exclusion is set.
         const ranked = rankedMatchedSkills(query).filter(
             m => (!exclude || m.file.name.toLowerCase().replace(/\.md$/i, '') !== exclude)
@@ -439,7 +439,7 @@ export const getMemoryFilesContext = (
 
     // Telemetry (fire-and-forget): record what was REALLY injected so skill
     // evidence, lift and the dashboard reflect injections, not setup matches.
-    // ROUND-39 review fix: synthetic contexts (A/B eval arms) pass
+    // Synthetic contexts (A/B eval arms) pass
     // recordInjections:false — their fresh timestamps must never fall inside
     // a future trade's attribution window and grant phantom credit.
     if (injected.length > 0 && options?.recordInjections !== false) {

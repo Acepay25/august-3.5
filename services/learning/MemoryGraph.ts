@@ -207,7 +207,7 @@ export const buildMemoryGraph = (
             regime: query.regime as 'trending' | 'ranging' | 'volatile' | 'compression' | undefined,
         }, trades).slice(0, 5);
         for (const row of similar) {
-            // Edge decay (ROUND-26): older associations weigh less — a 90-day-old
+            // Edge decay: older associations weigh less — a 90-day-old
             // trade keeps at most ~50% of its similarity influence, a year old
             // nearly none. Stale associations stop surfacing without deletion.
             const t = trades.find(x => x.id === row.tradeId);
@@ -217,7 +217,7 @@ export const buildMemoryGraph = (
         }
     }
 
-    // Legacy IF/THEN rules are no longer graph nodes (ROUND-25): lessons
+    // Legacy IF/THEN rules are no longer graph nodes: lessons
     // live in skills. The rules store remains read-only history for outcome
     // attribution only.
     return graph;

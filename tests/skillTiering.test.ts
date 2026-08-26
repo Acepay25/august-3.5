@@ -10,7 +10,7 @@ import {
     getMemoryFiles,
 } from '../services/learning/MemoryFilesService';
 
-// ROUND-25 progressive-disclosure + invocation-control + dynamic-context tests.
+// Progressive-disclosure + invocation-control + dynamic-context tests.
 
 const seedSkill = async (username: string, extra = ''): Promise<string> => {
     const skills = getMemoryFiles().folders.find(f => f.name === 'skills')!;
@@ -35,7 +35,7 @@ ${extra}---
     return file.id;
 };
 
-describe('tiered skill injection (ROUND-25)', () => {
+describe('tiered skill injection', () => {
     it('opening/rebuttal get the index line; verdict gets the full body', async () => {
         await initMemoryFiles('tier-user');
         await seedSkill('tier-user');
@@ -68,7 +68,7 @@ describe('tiered skill injection (ROUND-25)', () => {
     });
 });
 
-describe('audience invocation control (ROUND-25)', () => {
+describe('audience invocation control', () => {
     it('audience: analyst hides the skill from moderator assembly', async () => {
         await initMemoryFiles('aud-user');
         await seedSkill('aud-user', 'audience: analyst\n');
@@ -119,7 +119,7 @@ tradeIds: d,e
     });
 });
 
-describe('top-K + conflict retrieval (ROUND-26)', () => {
+describe('top-K + conflict retrieval', () => {
     const seedPair = async (username: string): Promise<void> => {
         await seedSkill(username); // confirmed avoid, btc-short-avoid.md
         const skills = getMemoryFiles().folders.find(f => f.name === 'skills')!;

@@ -21,7 +21,7 @@ interface EvidencePackCardProps {
 const stripMd = (text: string): string => text.replace(/\*\*/g, '');
 
 /**
- * Verdict evidence card (ROUND-28/U2, ROUND-29 container pass): shows the
+ * Verdict evidence card: shows the
  * journal evidence the moderator's verdict was grounded in — cluster record,
  * similar closed trades, matched notebook skills, doctrine header. Mirrors
  * the prompt-side evidence pack byte-for-byte in content, so the user audits

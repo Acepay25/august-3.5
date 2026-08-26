@@ -2,7 +2,7 @@ import React from 'react';
 import type { ApprovalItem } from '../../utils/approvalInbox';
 import { CheckIcon, CloseIcon as XIcon } from '../shared/Icons';
 /**
- * InlineApprovalCard (ROUND-37 / U5): approvals appear as a compact card in
+ * InlineApprovalCard: approvals appear as a compact card in
  * the chat flow — right under the message they belong to — instead of only
  * living in the modal Inbox. Same actions as the Inbox (Allow/Deny/Always/
  * Never/Show); the card disappears once the item is resolved.

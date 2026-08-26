@@ -1,7 +1,7 @@
 /**
  * TeamRosterMenu — the composer's Team dropdown (Trade mode).
  *
- * Claude-style cascading menu: a Lenses/Normal switch on top, one row per
+ * Cascading menu: a Lenses/Normal switch on top, one row per
  * seat (lens roles or Expert 1–3, plus the moderator). Hovering a seat opens
  * a provider/model flyout — providers first, models materialize when a
  * provider is hovered — the same interaction as ModelPicker, so picking a
@@ -40,7 +40,7 @@ interface TeamRosterMenuProps {
     onSetModeratorModel?: (modelId: string) => void;
     /** Regime-matched provider win rates — feeds lens auto-assign. */
     regimeProviderStats?: RegimeProviderStatsMap;
-    /** ROUND-39 UI: optional leverage section pinned to the menu bottom —
+    /** Optional leverage section pinned to the menu bottom —
      *  the control moved here out of the composer bar. */
     leverageSection?: React.ReactNode;
     onClose: () => void;
@@ -215,7 +215,9 @@ const TeamRosterMenu: React.FC<TeamRosterMenuProps> = ({
         if (next === mode) return;
         setHoveredSeat(null);
         setHoveredProviderId(null);
-        if (next === 'lenses') {
+        if (next === 'lenses' && (lensConfig.assignments ?? []).length === 0) {
+            // Seed an empty roster only — a populated one keeps the user's
+            // manual picks (matches the Team modal entry point).
             const auto = autoAssignLenses(lensConfig, readyProviders, regimeProviderStats);
             if (auto) {
                 setLensConfig(auto);
@@ -277,7 +279,7 @@ const TeamRosterMenu: React.FC<TeamRosterMenuProps> = ({
                 tabIndex={0}
                 onMouseEnter={e => handleSeatHover(seat, e.currentTarget.getBoundingClientRect())}
                 onClick={e => handleSeatHover(seat, e.currentTarget.getBoundingClientRect())}
-                // Review fix: keyboard parity — Enter/Space open the flyout.
+                // Keyboard parity — Enter/Space open the flyout.
                 onKeyDown={e => {
                     if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
@@ -330,7 +332,7 @@ const TeamRosterMenu: React.FC<TeamRosterMenuProps> = ({
                     </>
                 )}
 
-                {/* ROUND-39 UI: leverage lives here now (moved out of the
+                {/* Leverage lives here now (moved out of the
                     composer bar for reference parity). */}
                 {leverageSection}
             </div>

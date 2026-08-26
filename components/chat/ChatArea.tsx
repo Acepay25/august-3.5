@@ -331,8 +331,8 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     // so no intro-text substitution is needed — messages pass through as-is.
     const processedMessages = messages;
 
-    // Reference-style fresh-session hero: time-of-day serif greeting.
-    // Late-evening threshold matches the reference ("Up late" from 22:00).
+    // Fresh-session hero: time-of-day serif greeting.
+    // Late-evening variant ("Up late") starts at 22:00.
     const heroGreeting = useMemo(() => {
         const hour = new Date().getHours();
         const part = hour < 5 ? 'Up late' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : hour < 22 ? 'Good evening' : 'Up late';
@@ -588,7 +588,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 <div className="absolute bottom-[calc(env(safe-area-inset-bottom)+8rem)] sm:bottom-[calc(env(safe-area-inset-bottom)+8.5rem)] left-0 right-0 p-2 sm:p-4 pointer-events-none z-10 lg:hidden">
                     <div className="max-w-4xl mx-auto pointer-events-auto lg:max-w-none">
                         {analysisSteps && analysisSteps.length > 0 ? (
-                            /* ROUND-34: the old step rail + pipeline panel are
+                            /* The old step rail + pipeline panel are
                                gone — one quiet pill keeps the cancel affordance
                                while the stage bots + side panel show the run. */
                             <div className="flex justify-center">
@@ -627,9 +627,8 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 </>
             ) : messages.length === 0 ? (
                 <div className="flex flex-1 flex-col items-center justify-center bg-zinc-950 px-4 py-10">
-                    {/* CLAUDE-HOME HERO (ROUND-39 UI, copied from the reference
-                        screenshot): serif greeting ALONE on the page background
-                        — no spark/asterisk mark beside it. */}
+                    {/* Home hero: serif greeting ALONE on the page
+                        background — no spark/asterisk mark beside it. */}
                     <div className="mb-10 flex items-center justify-center">
                         <h1 className="text-center font-serif text-[32px] tracking-tight text-white sm:text-[40px]">
                             {heroGreeting}

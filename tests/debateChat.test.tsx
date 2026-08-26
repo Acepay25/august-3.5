@@ -188,7 +188,7 @@ describe('DebateChat', () => {
             createdAt: '2025-01-01T12:00:00Z',
         }];
         render(<DebateChat {...baseProps} debateTurns={turns} isDebating activeDebateSpeakers={{ 'Macro Analyst': 1 }} />);
-        // ROUND-39: thinking row stays COLLAPSED while live — the collapsed
+        // Thinking row stays COLLAPSED while live — the collapsed
         // ticker AND the in-DOM body both carry the trace text.
         const hits = screen.getAllByText('Weighing the 4H structure and the failed reclaim.');
         expect(hits.length).toBeGreaterThanOrEqual(1);
@@ -346,7 +346,7 @@ describe('DebateChat', () => {
             />,
         );
         const reasoningHits = screen.getAllByText('Comparing the analyst levels before asking a question.');
-        // ROUND-39: collapsed by default even for the moderator's pre-text
+        // Collapsed by default even for the moderator's pre-text
         // reasoning — the row exists (trace in DOM), just not auto-opened.
         expect(reasoningHits[0].closest('details')?.open).toBe(false);
         expect(screen.queryByText('Final output')).toBeNull();

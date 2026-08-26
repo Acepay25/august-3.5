@@ -18,7 +18,7 @@ import type { HybridDataPacket } from '../../services/analysis/HybridIntelligenc
 import { getActiveUsername } from '../../utils/activeUser';
 import type { LoggedTrade } from '../../types';
 
-// Merged cap across ALL bots' memory context (ROUND-31) — the notebook
+// Merged cap across ALL bots' memory context — the notebook
 // opening budget is 900 chars; bot memory should not dwarf it.
 const BOT_MEMORY_TOTAL_CAP = 1800;
 
@@ -83,7 +83,7 @@ export const assemblePipelineMemoryContext = (
             const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(`bots_v1_${userKey}`) : null;
             const data = raw ? JSON.parse(raw) as { bots?: Array<{ id: string; memoryScope?: BotMemoryScope }> } : null;
             if (!data?.bots?.length) return '';
-            // ROUND-30/31: merge memory from EVERY enabled bot rather than
+            // Merge memory from EVERY enabled bot rather than
             // whichever entry happened to sort first — the debate roster may
             // not include bots[0] at all. Deduped, query-filtered per bot,
             // and capped to a merged total so N bots cannot balloon the

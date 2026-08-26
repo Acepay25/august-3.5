@@ -1,5 +1,5 @@
 /**
- * One-time mechanical migration (ROUND-24m): fold legacy IF/THEN learning
+ * One-time mechanical migration: fold legacy IF/THEN learning
  * rules into the skills system as candidate skills.
  *
  * Rationale: two representations of "lesson learned" drifted apart — skills
@@ -33,7 +33,7 @@ export const migrateIfThenRulesToSkills = async (
     trades: LoggedTrade[] = [],
 ): Promise<MigrationResult> => {
     await ensureHarnessFolders(username);
-    // ROUND-25b: the LearningRulesService is deleted; legacy rule data is
+    // The LearningRulesService is deleted; legacy rule data is
     // read straight from storage for this one-time migration.
     const storage = storageService.loadLearningRules();
     const rules = (storage.rules || []).filter((r) => r.status !== 'retired');

@@ -16,7 +16,7 @@ import {
 import { parseSkillMarkdown } from '../services/learning/SkillMemoryService';
 import type { LoggedTrade, TradeAnalysis } from '../types';
 
-// ROUND-25c: the harness evaluates its own skills — no user action.
+// The harness evaluates its own skills — no user action.
 
 const makeTrade = (overrides: Partial<LoggedTrade> = {}): LoggedTrade => ({
     id: 't1',
@@ -49,7 +49,7 @@ ${extra}---
     return file.id;
 };
 
-describe('auto-eval scheduler (ROUND-25c)', () => {
+describe('auto-eval scheduler', () => {
     beforeEach(() => resetAutoEvalBudget());
 
     it('a confirmed skill with enough matched history is due when never evaluated', async () => {

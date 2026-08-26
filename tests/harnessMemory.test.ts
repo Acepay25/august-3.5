@@ -87,12 +87,12 @@ describe('Harness memory (skills + retrieval)', () => {
     const file = getMemoryFiles().files.find(f => f.name.includes('btc') && f.name.includes('avoid'));
     const meta = parseSkillMarkdown(file!.content)!;
     expect(meta.wins).toBe(1);
-    // ROUND-24m: no lastEvidenceAt before this win -> no stale-decay halving.
+    // No lastEvidenceAt before this win -> no stale-decay halving.
     expect(meta.losses).toBeGreaterThanOrEqual(1);
     expect(meta.lastEvidenceAt).toBeTruthy();
   });
 
-  it('decays stale evidence before counting new outcomes (ROUND-24m)', async () => {
+  it('decays stale evidence before counting new outcomes', async () => {
     const { EVIDENCE_STALE_DAYS } = await import('../services/learning/SkillMemoryService');
     const folder = getMemoryFiles().folders.find(f => f.name === 'skills')!;
     const staleDate = new Date(Date.now() - (EVIDENCE_STALE_DAYS + 5) * 86400000).toISOString();
@@ -235,7 +235,7 @@ ${extra}tradeIds: a,b,c,d,e,f,g
       family: 'Family A',
       regime: 'ranging',
     }, trades);
-    // ROUND-25 tier-1: openings get the one-line skill index, not the body.
+    // Tier-1: openings get the one-line skill index, not the body.
     expect(ctx).toContain('[skills/');
     expect(ctx).toMatch(/AVOID \[/);
     const sources = listRetrievedMemorySources({
@@ -252,7 +252,7 @@ ${extra}tradeIds: a,b,c,d,e,f,g
       family: 'Family A',
       regime: 'ranging',
     }, trades, 'moderator');
-    // ROUND-24m: moderator gets the ranked analyst slices too (no separate
+    // Moderator gets the ranked analyst slices too (no separate
     // catalog block — the recall tool covers discovery).
     expect(moderator).not.toContain('Skill catalog');
     // Openings: doctrine slot + ranked slices only; similar-trades moved to
@@ -263,7 +263,7 @@ ${extra}tradeIds: a,b,c,d,e,f,g
     expect(ctx.length).toBeLessThan(4000);
   });
 
-  it('verdict stage includes similar-trade history (ROUND-24m)', async () => {
+  it('verdict stage includes similar-trade history', async () => {
     const verdictTrades = Array.from({ length: MIN_CLUSTER_FOR_SKILL }, (_, i) =>
       makeTrade({ id: `t-${i}` })
     );
@@ -291,7 +291,7 @@ ${extra}tradeIds: a,b,c,d,e,f,g
     });
     expect(next.confidence).toBe('Low');
     expect(next.direction).toBe('Short');
-    // S8 (ROUND-39): candidate caps are a WARNING, not a hard risk veto —
+    // Candidate caps are a WARNING, not a hard risk veto —
     // the setup stays tradeable at reduced size.
     expect(next.riskVeto).toBeUndefined();
     expect((next as { validationWarnings?: string[] }).validationWarnings?.join(' ')).toMatch(/NOTEBOOK SKILL/);

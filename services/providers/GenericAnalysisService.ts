@@ -277,7 +277,7 @@ export interface AnalyzeTradingViewParams {
     temperature?: number;
     allowedTools?: string[];
     /** Closed-trade journal for the `recall`/`get_setup_history_stats` desk
-     *  tools (ROUND-30): without it the single-analysis path had desk tools
+     *  tools: without it the single-analysis path had desk tools
      *  but no history to recall. */
     trades?: LoggedTrade[];
     onReasoning?: (reasoning: string) => void;
@@ -950,7 +950,7 @@ export async function getQuickResponse(
 }
 
 /**
- * Streaming casual-chat reply (DeepSeek-style perceived speed). Same contract
+ * Streaming casual-chat reply (perceived speed). Same contract
  * as getQuickResponse, but visible deltas are pushed to `onChunk` as they
  * arrive so the bubble renders incrementally instead of appearing all at once
  * after completion. Reasoning deltas still flow through `onReasoning`. The

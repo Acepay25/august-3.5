@@ -197,7 +197,7 @@ describe('MemoryFilesService', () => {
       expect(getMemoryFilesStats()).toEqual({ enabledCount: 0, charCount: 0 });
     });
 
-    it('injects the ranked slices: identity, risk-rules bullets (ROUND-24m budget layout)', async () => {
+    it('injects the ranked slices: identity, risk-rules bullets (budget layout)', async () => {
       const ctx = getMemoryFilesContext();
       expect(ctx).toContain('[profile/memory.md]'.replace('profile/memory.md', 'rules/risk-rules.md'));
       // risk-rules injects its bullet lines, not the instructional preamble.
@@ -215,7 +215,7 @@ describe('MemoryFilesService', () => {
       expect(ctx.indexOf('[profile/memory.md]')).toBeLessThan(ctx.indexOf('[rules/'));
     });
 
-    it('never injects diary content — it is raw storage (ROUND-24m)', async () => {
+    it('never injects diary content — it is raw storage', async () => {
       await appendDiaryEntry(makeTrade(), 'test-user');
       const ctx = getMemoryFilesContext({ coin: 'BTCUSDT' });
       expect(ctx).not.toContain('WIN ✅');
@@ -245,7 +245,7 @@ describe('MemoryFilesService', () => {
     });
 
     it('cold-start context is empty, not a map dump (recall tool covers discovery)', () => {
-      // ROUND-24m: no query → no matched skill/mistakes → only identity +
+      // No query → no matched skill/mistakes → only identity +
       // risk rules. A brand-new notebook with no profile yields ''.
       const ctx = getMemoryFilesContext();
       expect(ctx).not.toContain('NOTEBOOK MAP');

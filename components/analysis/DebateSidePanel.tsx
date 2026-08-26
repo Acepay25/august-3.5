@@ -22,8 +22,8 @@ export interface DebateSidePanelProps {
 }
 
 /**
- * Right-hand transcript drawer (ROUND-34, rebuilt ROUND-36b): one tab per
- * debater, styled after the reference agentic runner's task panel —
+ * Right-hand transcript drawer: one tab per
+ * debater, laid out like an agentic runner's task panel —
  *   · "Worked for Xm Ys" runtime counter per seat,
  *   · Thought rows COLLAPSED by default; expanding shows a truncated
  *     preview with a Show more toggle for the full reasoning,
@@ -110,7 +110,7 @@ const ThoughtRow: React.FC<{ thinking: string; durationLabel?: string; live?: bo
                 title={open ? 'Collapse thought' : 'Expand thought'}
                 className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-white/[0.03]"
             >
-                {/* Lightbulb — matches the reference runner's Thought glyph. */}
+                {/* Lightbulb — the Thought glyph. */}
                 <svg viewBox="0 0 16 16" className="h-3 w-3 shrink-0 text-zinc-500" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.2">
                     <path d="M8 1.5a4.5 4.5 0 0 0-2.6 8.17c.36.28.6.7.6 1.16v.67h4v-.67c0-.46.24-.88.6-1.16A4.5 4.5 0 0 0 8 1.5Z" />
                     <path d="M6.4 13.2h3.2M7 14.5h2" strokeLinecap="round" />
@@ -149,7 +149,7 @@ const ReplyToolRow: React.FC<{
                 title={open ? 'Collapse reply' : 'Expand reply'}
                 className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-white/[0.03]"
             >
-                {/* Reply glyph — reads like the reference's tool-call chips. */}
+                {/* Reply glyph — tool-call chip style. */}
                 <svg viewBox="0 0 16 16" className="h-3 w-3 shrink-0 text-zinc-500" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.4">
                     <path d="M6.5 3.5 3 7l3.5 3.5" strokeLinecap="round" strokeLinejoin="round" />
                     <path d="M3 7h6a4 4 0 0 1 4 4v1.5" strokeLinecap="round" />
@@ -176,10 +176,10 @@ const ReplyToolRow: React.FC<{
     );
 };
 
-// ─── Tool-event feed row (zcode-style) ─────────────────────────────────────
+// ─── Tool-event feed row ───────────────────────────────────────────────────
 
 /**
- * ROUND-39 UI: per-TYPE tints (Zed reference). Each action class gets a muted
+ * Per-TYPE tints: each action class gets a muted
  * hue so long feeds scan by shape: violet = reasoning/thought traffic,
  * steel-blue = data lookups, zinc = everything else. Status colors (emerald/
  * rose) stay reserved for WIN/LOSS.
@@ -187,7 +187,7 @@ const ReplyToolRow: React.FC<{
 const rowTintForLine = (line: string): { icon: string; label?: string } => {
     if (/direct message|→\s|read inbox|inbox/i.test(line)) return { icon: 'text-violet-300/80' };
     if (/^calling/i.test(line)) return { icon: 'text-violet-300/50' };
-    return { icon: 'text-sky-300/70' }; // explore / lookup — Zed's blue
+    return { icon: 'text-sky-300/70' }; // explore / lookup — muted blue
 };
 
 /** Pick the row glyph from the event line's shape (mail vs lookup vs pending). */
@@ -195,7 +195,7 @@ const ToolRowIcon: React.FC<{ line: string }> = ({ line }) => {
     const tint = rowTintForLine(line);
     const cls = `h-3 w-3 shrink-0 ${tint.icon}`;
     if (/^calling/i.test(line)) {
-        // In-flight call — hourglass-style dot like the reference's running tools.
+        // In-flight call — hourglass-style dot for running tools.
         return (
             <svg viewBox="0 0 16 16" className={`${cls} animate-pulse`} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.4">
                 <circle cx="8" cy="8" r="5.5" /><path d="M8 5v3l2 2" strokeLinecap="round" />
@@ -219,8 +219,8 @@ const ToolRowIcon: React.FC<{ line: string }> = ({ line }) => {
 };
 
 const ToolEventRow: React.FC<{ line: string }> = React.memo(({ line }) => {
-    // Lines arrive as "HH:MM:SS · event" (stamped at capture — ROUND-39);
-    // the stamp renders as a right-aligned tabular chip, reference-style.
+    // Lines arrive as "HH:MM:SS · event" (stamped at capture);
+    // the stamp renders as a right-aligned tabular chip.
     const m = line.match(/^(\d{1,2}:\d{2}:\d{2})\s·\s([\s\S]+)$/);
     const when = m?.[1];
     const body = m?.[2] ?? line;
@@ -235,10 +235,10 @@ const ToolEventRow: React.FC<{ line: string }> = React.memo(({ line }) => {
 ToolEventRow.displayName = 'ToolEventRow';
 
 /**
- * ROUND-39 UI (Zed "Explore · 4 searches" pattern): consecutive same-kind
- * tool events collapse into ONE row with a count, so a busy seat reads as
- * "Lookups · 4" instead of four near-identical lines. Mixed kinds still
- * render individually. Counted groups expand on click.
+ * Consecutive same-kind tool events collapse into ONE row with a count
+ * ("Lookups · 4" style), so a busy seat reads as one line instead of four
+ * near-identical ones. Mixed kinds still render individually. Counted
+ * groups expand on click.
  */
 const ToolEventFeed: React.FC<{ events?: Record<string, string> }> = ({ events }) => {
     const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
@@ -325,7 +325,7 @@ export const DebateSidePanel: React.FC<DebateSidePanelProps> = ({
 
     // Per-seat runtime counter ("Worked for Xm Ys"): first turn start →
     // last turn end (or NOW while the seat is still generating). A 1 Hz
-    // tick keeps it counting up live, like the reference's task panel.
+    // tick keeps it counting up live.
     const [nowTick, setNowTick] = useState(() => Date.now());
     useEffect(() => {
         if (!isLive) return;
@@ -333,19 +333,24 @@ export const DebateSidePanel: React.FC<DebateSidePanelProps> = ({
         return () => window.clearInterval(id);
     }, [isLive]);
 
+    // Per-seat liveness — a seat is still working only while the debate is
+    // live AND its last turn is the newest in `turns`. A settled last turn
+    // stops ticking even when other seats (or the verdict) are still
+    // streaming. Shared by the worked-for counter and the per-row live flags.
+    const seatIsNewest = useMemo(() => {
+        const lastTurn = actorTurns[actorTurns.length - 1];
+        if (!lastTurn?.createdAt) return true;
+        const newestTurnTs = Math.max(...turns.map(t => (t.createdAt ? Date.parse(t.createdAt) : NaN)).filter(n => Number.isFinite(n)), NaN);
+        return !Number.isFinite(newestTurnTs)
+            || Math.abs((Date.parse(lastTurn.createdAt) || 0) - newestTurnTs) < 1500;
+    }, [actorTurns, turns]);
+
     const workedForLabel = useMemo(() => {
         const stamps = actorTurns.map(t => (t.createdAt ? Date.parse(t.createdAt) : NaN)).filter(n => Number.isFinite(n));
         if (stamps.length === 0) return '';
         const startedAt = Math.min(...stamps);
         const endedAt = stamps.length > 1 ? Math.max(...stamps) : NaN;
         const lastTurn = actorTurns[actorTurns.length - 1];
-        // Review fix (ROUND-39): per-seat liveness — a seat is still working
-        // only while the debate is live AND its last turn is the newest in
-        // `turns`. A settled last turn stops ticking even when other seats
-        // (or the verdict) are still streaming.
-        const newestTurnTs = Math.max(...turns.map(t => (t.createdAt ? Date.parse(t.createdAt) : NaN)).filter(n => Number.isFinite(n)), NaN);
-        const seatIsNewest = !Number.isFinite(newestTurnTs) || !lastTurn?.createdAt
-            || Math.abs((Date.parse(lastTurn.createdAt) || 0) - newestTurnTs) < 1500;
         const stillWorking = Boolean(isLive) && lastTurn !== undefined && seatIsNewest;
         // A finished seat freezes at its last turn's timestamp (+5s minimum
         // display so sub-second turns don't read as "0s").
@@ -353,7 +358,7 @@ export const DebateSidePanel: React.FC<DebateSidePanelProps> = ({
             ? nowTick
             : (Number.isFinite(endedAt) ? endedAt + 5000 : startedAt + 5000);
         return `Worked for ${formatWorkedFor(Math.max(1000, endMs - startedAt))}`;
-    }, [actorTurns, isLive, nowTick, turns]);
+    }, [actorTurns, isLive, nowTick, seatIsNewest]);
 
     // Per-thought durations: a thought lasts until the NEXT turn starts.
     // While live AND this is the newest turn overall, it ticks toward now;
@@ -426,11 +431,11 @@ export const DebateSidePanel: React.FC<DebateSidePanelProps> = ({
                 </button>
             </div>
             <div ref={bodyRef} className="flex-1 overflow-y-auto custom-scrollbar px-4 py-4">
-                {/* Runtime header — the reference task-panel convention. */}
+                {/* Runtime header — task-panel convention. */}
                 {workedForLabel && (
                     <p className="pb-2 text-xs font-medium text-zinc-400">{workedForLabel}</p>
                 )}
-                {/* Live tool feed (zcode-style): typed rows, consecutive
+                {/* Live tool feed: typed rows, consecutive
                     same-kind events grouped with a count (expandable). */}
                 {isLive && activeActor && liveToolEvents?.[activeActor]?.trim() && (
                     <div className="mb-3">
@@ -452,7 +457,7 @@ export const DebateSidePanel: React.FC<DebateSidePanelProps> = ({
                     </p>
                 ) : (
                     actorTurns.map((turn, i) => {
-                        // Inter-model addressing (ROUND-34): turns carrying a
+                        // Inter-model addressing: turns carrying a
                         // parsed `to` target render as tool-style reply rows;
                         // everything else stays readable markdown.
                         const target = turn.to && turn.to.length > 0 ? turn.to[0] : undefined;
@@ -468,13 +473,13 @@ export const DebateSidePanel: React.FC<DebateSidePanelProps> = ({
                                         <ThoughtRow
                                             thinking={turn.reasoning}
                                             durationLabel={thoughtDurations.get(i)}
-                                            live={Boolean(isLive && i === turnCount - 1)}
+                                            live={Boolean(isLive && i === turnCount - 1 && seatIsNewest)}
                                         />
                                     </div>
                                 )}
                                 {(turn.text || '').trim() ? (
                                     target ? (
-                                        <ReplyToolRow turn={turn} target={target} live={Boolean(isLive && i === turnCount - 1)} />
+                                        <ReplyToolRow turn={turn} target={target} live={Boolean(isLive && i === turnCount - 1 && seatIsNewest)} />
                                     ) : (
                                         <MarkdownContent content={turn.text || '…'} className="text-[13px] leading-6" />
                                     )

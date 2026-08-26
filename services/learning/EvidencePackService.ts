@@ -1,5 +1,5 @@
 /**
- * EvidencePackService — the arbiter's proactive evidence (ROUND-28, D0.3/D1.2).
+ * EvidencePackService — the arbiter's proactive evidence.
  *
  * Before the verdict call, assemble a compact block so the binding decision is
  * grounded in the journal WITHOUT depending on the moderator remembering to
@@ -178,7 +178,7 @@ const doctrineHeader = (): string => {
 };
 
 /**
- * Root-cause cluster line (ROUND-32, LightRAG-style high-level summary):
+ * Root-cause cluster line (high-level summary):
  * classify this coin+direction cluster's admitted technical losses by root
  * cause and surface the dominant pattern. The graph's cause nodes exist for
  * exactly this — one line turns "check your history" into a named failure

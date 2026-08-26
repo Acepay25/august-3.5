@@ -35,7 +35,7 @@ vi.mock('../services/infrastructure/dbService', () => ({
     getUserProfile: vi.fn(async () => ({ username: 'tester', conversations: CONVERSATIONS })),
 }));
 
-describe('session search (ROUND-36 / U7)', () => {
+describe('session search', () => {
     beforeEach(() => {
         localStorage.setItem('last_active_user', 'tester');
     });

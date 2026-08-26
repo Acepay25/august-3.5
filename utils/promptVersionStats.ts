@@ -88,7 +88,7 @@ export const summarizePromptVersions = (trades: LoggedTrade[]): PromptVersionSta
 };
 
 /**
- * D2.3 protocol A/B summary (ROUND-37): per-protocol outcomes. A trade's
+ * Protocol A/B summary: per-protocol outcomes. A trade's
  * protocol is inferred from its promptVersion hash — versions that ran under
  * 'extended'/'efficient' lanes hash differently because the protocol rides
  * the same hash payload. We can't reverse the hash, so instead we attribute

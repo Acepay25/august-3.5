@@ -85,7 +85,7 @@ describe('EnsembleProgressChat', () => {
         openSeat('Analyst A');
         expect(screen.getAllByText('Thinking').length).toBeGreaterThan(0);
         {
-          // ROUND-39: row stays collapsed while live (ticker + body carry the text).
+          // Row stays collapsed while live (ticker + body carry the text).
           const dialog = screen.getByRole('dialog', { name: 'Analyst A analysis' });
           const hits = within(dialog).getAllByText('Still weighing the sweep.');
           expect(hits.length).toBeGreaterThan(0);
@@ -167,7 +167,7 @@ describe('EnsembleProgressChat', () => {
         render(<EnsembleProgressChat progress={progress} isLive={true} />);
         openSeat('Analyst A');
         expect(screen.getAllByText('Thinking').length).toBeGreaterThan(0);
-        // ROUND-39: live Thinking rows stay COLLAPSED by default.
+        // Live Thinking rows stay COLLAPSED by default.
         expect(screen.getAllByText('Live trace in progress')[0].closest('details')?.open).toBe(false);
         expect(screen.getAllByText('Bullish outlook').length).toBeGreaterThan(0);
     });

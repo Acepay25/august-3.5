@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { parseReplyTo, turnAddressedTo, applyReplyTo } from '../utils/debateReplyTo';
 
-describe('debate reply-to routing (ROUND-34)', () => {
+describe('debate reply-to routing', () => {
     it('parses named recipients case-insensitively and strips @', () => {
         expect(parseReplyTo('My point stands.\nREPLY-TO: @Moderator, Technical')).toEqual(['moderator', 'technical']);
     });

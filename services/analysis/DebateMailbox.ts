@@ -1,7 +1,7 @@
 import { DeskToolDefinition } from './DeskToolsService';
 
 /**
- * Debate mailbox (ROUND-38): inter-seat DIRECT MESSAGING over real tool
+ * Debate mailbox: inter-seat DIRECT MESSAGING over real tool
  * calls. A seat ends (or accompanies) its turn by calling `send_message`
  * with the target seat and the note; the note lands in exactly that seat's
  * inbox. The recipient learns about unread mail deterministically — the
