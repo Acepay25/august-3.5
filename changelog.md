@@ -4,6 +4,47 @@ Plain-English log of change rounds. Newest first.
 
 ---
 
+## ROUND-39 — zcode/claude UI parity, debate hardening, learning-loop review fixes
+
+**UI parity with the reference screenshots.** The whole app moved onto the
+Claude-dark gray ramp (#111111 page / #1a1a1a panels / #262626 composer /
+~#37373d active fills). Composer rebuilt as the borderless pill: centered
+placeholder, bare Chat/Trade pills, seat-glyph avatars (1/2/3 — no more
+accidental "KKK" from provider initials), leverage relocated into the Team
+menu, Templates row removed (skills still fire via `/slug`, now with a
+reference-native "Try in chat" button on every skill card). Sidebar became a
+lighter-than-page rail with bullet rows and a footer account popover. Hero:
+solo serif greeting ("Up late" from 22:00). Debate feed rows are typed and
+tinted (violet DMs / blue lookups) with zcode-style count-grouping
+("Lookups · 4"). Settled verdict cards carry a Replay · Run log · Audit tab
+strip plus protocol/prompt-version provenance chips. Reasoning rows are
+collapsed by default everywhere, truncate on line boundaries, and markdown
+rendering tightened (paragraph rhythm, neutral inline code).
+
+**Debate engine hardening.** Protocol lanes are deterministic (hashed from
+the setup — same idea, same structure, no more flaky round counts); residual
+clarification concerns surface in the verdict prompt; seats cut off by the
+budget keep their last sealed conviction in the auction; rebuttal budget
+raised and a missing CONVICTION line retries once; debates without live
+hybrid data force one grounding tool call before any seat may speak;
+moderator DM receipts carry real round numbers.
+
+**Learning-loop review fixes** (post-implementation audit, all verified):
+eval A/B arms rebuilt on the production context builder with skill exclusion
++ telemetry suppression (no more contaminated baselines or phantom
+attribution credit); worth-gate create/merge restored behind the notebook
+write lock; strict matcher extended to eval-trade selection and lift so the
+audit measures what enforcement enforces; consolidation dedupes evidence
+counts instead of double-counting; merge transitions ride the temporal
+ledger; refine reports real change instead of always toasting success;
+inline-approval memo deps fixed so cards track drafts.
+
+Tests: 1147 passing across 122 files (new suites: debateMailbox,
+debateSidePanel, protocolAndInlineApprovals, skillConsolidation). Lint 0
+errors, typecheck clean, production build green.
+
+---
+
 ## ROUND-36 — Conviction drift tracking + recall_chat session search
 
 **D2.2: conviction drift.** New `services/analysis/convictionDrift.ts`:
