@@ -124,8 +124,8 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
         }
     }, [username, toast]);
 
-    /** S10 (ROUND-39): run the on-demand refine pass for a 'refine' row.
-     *  Review fix: only toast success when the skill actually changed. */
+    /** Run the on-demand refine pass for a 'refine' row.
+     *  Only toast success when the skill actually changed. */
     const handleRefineSkill = useCallback(async (fileId: string, fileName: string) => {
         const user = username || getActiveUsername();
         setApplyingFileId(fileId);
@@ -199,7 +199,7 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
         for (const trade of trades) {
             const turns = trade.debateTurns;
             if (!Array.isArray(turns)) continue;
-            // D2.2: collect the seat's FULL ordered trajectory in this debate,
+            // Collect the seat's FULL ordered trajectory in this debate,
             // not just the first sealed line — the within-debate movement is
             // the persuasion signal.
             const trajBySeat = new Map<string, number[]>();
@@ -229,7 +229,7 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
                 avgConviction: s.total / Math.max(s.count, 1),
                 debateCount: s.count,
                 lastValue: s.last,
-                // D2.2 additions: mean within-debate drift + how often it moves.
+                // Mean within-debate drift + how often it moves.
                 avgDelta: s.deltas.length > 0 ? s.deltas.reduce((a, b) => a + b, 0) / s.deltas.length : 0,
                 moveRate: s.deltas.length > 0 ? movedCount / s.deltas.length : 0,
             };
@@ -652,7 +652,7 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
     };
 
     // ─── Review actions: apply what the causal review recommends ───────────
-    // S10 (ROUND-39): 'refine' rows are now actionable too — a Refine button
+    // 'refine' rows are now actionable too — a Refine button
     // runs the LLM tighten pass instead of rendering a dead-end recommendation.
     const actionableReviews = skillReview.filter(r =>
         r.recommendation === 'promote' || r.recommendation === 'demote' || r.recommendation === 'retire' || r.recommendation === 'refine');
@@ -870,7 +870,7 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
                 <StatCard
                     title="Conviction auction"
                     items={convictionSummaries.slice(0, 6).map(c => {
-                        // D2.2: show the persuasion signal alongside the level.
+                        // Show the persuasion signal alongside the level.
                         const drift = c.debateCount > 0 && c.moveRate > 0
                             ? ` · ${c.moveRate >= 0.4 ? 'moves' : 'occasional'} (avg Δ${c.avgDelta > 0 ? '+' : ''}${c.avgDelta.toFixed(0)})`
                             : '';

@@ -147,7 +147,7 @@ export const readDoctrineForInjection = (): string => {
     const file = files.find(f => f.name === DOCTRINE_FILE_NAME && f.folderId === profileFolder.id);
     if (!file?.enabled) return '';
 
-    // Staleness header (ROUND-25c): the model should know how current its own
+    // Staleness header: the model should know how current its own
     // convictions are. Derived from the trades-stamp the consolidator writes.
     const stampMatch = file.content.match(/<!--\s*trades:\s*(\d+)\s*-->/);
     const body = file.content.replace(/^<!--[^>]*-->\n?/, '').trim();

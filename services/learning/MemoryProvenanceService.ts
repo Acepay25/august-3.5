@@ -1,5 +1,5 @@
 /**
- * MemoryProvenanceService (ROUND-26) — closes the last measurement loop:
+ * MemoryProvenanceService — closes the last measurement loop:
  * "did THIS injected memory change THIS outcome?"
  *
  * Every skill already records the tradeIds that shaped it. This service
@@ -63,7 +63,7 @@ export const computeSkillLift = (
     };
 
     // Matching closed trades sorted oldest → newest.
-    // Review fix (ROUND-39): STRICT matcher — lift must be computed over the
+    // STRICT matcher — lift must be computed over the
     // same population production enforcement acts on (S1), not every coin
     // sharing the direction.
     const matched = trades

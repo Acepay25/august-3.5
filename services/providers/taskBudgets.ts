@@ -8,7 +8,7 @@
 export const TASK_BUDGETS = {
   /** Full chart analysis (multi-timeframe + ensemble + accuracy modes). */
   analysis: 8192,
-  /** Per-analyst rebuttal round in the real debate. ROUND-39/D12: raised
+  /** Per-analyst rebuttal round in the real debate. Raised
    *  from 1536 — later rounds stack duties (devil's-advocate case, evidence
    *  citation, name-addressed counters, the mandatory CONVICTION line), and
    *  a truncated seat silently lost its sealed conviction from the auction. */

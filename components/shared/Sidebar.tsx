@@ -52,7 +52,7 @@ const lastActivityMs = (conv: Conversation): number => {
     return Number.isFinite(parsed) ? parsed : conv.timestamp || 0;
 };
 
-// Claude-style recency buckets for the session list.
+// Recency buckets for the session list.
 const BUCKET_ORDER = ['Today', 'Yesterday', 'Previous 7 days', 'Previous 30 days', 'Older'] as const;
 
 const bucketOf = (ms: number): string => {
@@ -154,7 +154,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
     const [showAllConversations, setShowAllConversations] = useState(false);
     const [isSelectionMode, setIsSelectionMode] = useState(false);
     const [selectedConversationIds, setSelectedConversationIds] = useState<Set<string>>(new Set());
-    // ROUND-39 UI: account popover on the footer row.
+    // Account popover on the footer row.
     const [userMenuOpen, setUserMenuOpen] = useState(false);
 
     useEffect(() => {
@@ -254,7 +254,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
     const renderConversationRow = (conv: Conversation) => (
         <div
             key={conv.id}
-            // CLAUDE ROWS (ROUND-39 UI): bullet + title; the ACTIVE session is
+            // Session rows: bullet + title; the ACTIVE session is
             // the ~#37373d fill (zinc-700), hover is a whisper of white.
             className={`group w-full flex items-center ${collapsed ? 'justify-center px-2' : 'gap-2 px-3'} py-2 rounded-md text-left transition-colors ${conv.id === activeConversationId
                 ? 'bg-zinc-700 text-zinc-100'
@@ -308,7 +308,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
 
     return (
         <div className="flex flex-col h-full min-h-0 bg-zinc-900">
-            {/* Top rows — Claude style: New chat + Search with kbd hints, then
+            {/* Top rows: New chat + Search with kbd hints, then
                 the quick actions as plain icon rows (no section header). */}
             <div className={collapsed ? 'p-2 pb-1' : 'px-2 pt-3 pb-1'}>
                 <button
@@ -518,9 +518,9 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                 )}
             </div>
 
-            {/* User footer — opens a reference-style account popover (Settings,
-                New chat, version). ROUND-39 UI: the footer no longer navigates
-                directly; it reveals a menu like Claude's avatar menu. */}
+            {/* User footer — opens an account popover (Settings,
+                New chat, version). The footer no longer navigates
+                directly; it reveals the account menu. */}
             {activeUsername && (
                 <div className="relative border-t border-white/[0.06]">
                     <button

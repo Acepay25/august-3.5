@@ -16,9 +16,9 @@ interface EnsembleProgressChatProps {
     hideSubagents?: boolean;
     compact?: boolean;
     onRetryAnalyst?: (analystKey: string) => void;
-    /** U3: queue a mid-debate note addressed to ONE seat only. */
+    /** Queue a mid-debate note addressed to ONE seat only. */
     onSteerSeat?: (seatName: string, note: string) => void;
-    /** U3: bench one seat — they leave at the next round boundary. */
+    /** Bench one seat — they leave at the next round boundary. */
     onStopSeat?: (seatName: string) => void;
     debateTurns?: DebateTurn[];
     activeDebateSpeakers?: Record<string, number>;
@@ -525,7 +525,7 @@ const ThreadView: React.FC<ThreadViewProps> = ({
             <div className="flex items-center gap-1.5 px-3 py-2 text-[12px] text-zinc-500">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-zinc-600"><path d="M6 9l6 6 6-6" /></svg>
                 Collapse thread
-                {/* Avatar stack + bot count, reference-style header cluster. */}
+                {/* Avatar stack + bot count header cluster. */}
                 <span className="ml-auto flex items-center -space-x-1.5" aria-hidden="true">
                     {analysts.slice(0, 4).map(a => (
                         <DebateBotAvatar key={a.key} name={a.displayName} toneKey={a.modelId || a.modelName} size={18} square />
@@ -1009,7 +1009,7 @@ const EnsembleProgressChat: React.FC<EnsembleProgressChatProps> = ({
                                     <span className="debate-thread-seat-meta">
                                         {[seat.modelName, seat.trackRecord, seat.status, seat.usage].filter(Boolean).join(' · ')}
                                     </span>
-                                    {/* U3 per-seat controls: steer / stop this seat only. */}
+                                    {/* Per-seat controls: steer / stop this seat only. */}
                                     {isLive && (onSteerSeat || onStopSeat) && (
                                         <span className="ml-1 flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover/seat:opacity-100 focus-within:opacity-100" onClick={e => e.stopPropagation()}>
                                             {onSteerSeat && (

@@ -164,7 +164,7 @@ const App: React.FC = () => {
     } = useUIState();
     const [isWatchListVisible, setIsWatchListVisible] = useState(false);
     const [isApprovalInboxVisible, setIsApprovalInboxVisible] = useState(false);
-    /** U4: background-jobs drawer (Hermes status-stack pattern). */
+    /** Background-jobs drawer (status-stack pattern). */
     const [isJobsDrawerVisible, setIsJobsDrawerVisible] = useState(false);
     const [isBotManagerVisible, setIsBotManagerVisible] = useState(false);
     const applyingHashRef = useRef(false);
@@ -1174,7 +1174,7 @@ const App: React.FC = () => {
         // user's markdown memory into the sync cache (seeds the default
         // folders + starter templates on first boot).
         await initMemoryFiles(username);
-        // One-time mechanical migration (ROUND-24m): legacy IF/THEN rules
+        // One-time mechanical migration: legacy IF/THEN rules
         // become candidate skills so lessons live in one system. Idempotent.
         try {
             const { migrateIfThenRulesToSkills } = await import('./services/learning/IfThenMigrationService');
@@ -2939,7 +2939,7 @@ const App: React.FC = () => {
         });
     }, []);
 
-    /** U5 (ROUND-37): shared approval handlers — the Inbox modal AND the
+    /** Shared approval handlers — the Inbox modal AND the
      *  inline cards in the chat flow both route through these. */
     const approvalHandlers = useMemo(() => ({
         allow: (item: ApprovalItem): void => {
@@ -3024,10 +3024,10 @@ const App: React.FC = () => {
         onForkDebate: handleForkDebate,
         onToggleWatch: (messageId: string) => handleToggleWatch(messageId),
         onReplacementChoice: handleReplacementChoice,
-        // U3 per-seat controls: steer or bench one debate seat mid-run.
+        // Per-seat controls: steer or bench one debate seat mid-run.
         onSteerSeat: handleSteerSeat,
         onStopSeat: handleStopSeat,
-        // U5 (ROUND-37): inline approval cards — MessageItem filters to its own id.
+        // Inline approval cards — MessageItem filters to its own id.
         inlineApprovals: approvalItems,
         onApprovalAllow: approvalHandlers.allow,
         onApprovalDeny: approvalHandlers.deny,
@@ -3042,7 +3042,7 @@ const App: React.FC = () => {
         todayReassessmentInFlight,
         lensConfig,
     }), [typingMessageState, highlightedAnalysisId, expandedPostMortems, expandedPostMortemImages, savedAnalyses, activeFrameworks, copiedMessageId, modelIdToName, providerNameToId, handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy, handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, confidenceCalibration, handleRetryPostMortem, chatLeverage, autopilotResolutions, handleConfirmAutopilot, handleDismissAutopilot, handleCompareAnalysis, handleViewReasoning, handleReRunAnalysis, handleResumeDebate, handleFollowUpTicket, handleForkDebate, handleToggleWatch, handleReplacementChoice, startTodayReassessment, todayReassessmentInFlight, lensConfig, handleSteerSeat, handleStopSeat,
-        // Review fix (ROUND-39): the inline-approval surface reads these —
+        // The inline-approval surface reads these —
         // missing them froze cards on stale drafts/handlers.
         approvalItems, approvalHandlers]);
 
@@ -3051,7 +3051,7 @@ const App: React.FC = () => {
         loadingMessage || (isAnalysisInProgress && !isPostMortemInProgress),
     );
 
-    // Pipeline card chrome (ROUND-36b): the floating card used to be a
+    // Pipeline card chrome: the floating card used to be a
     // fixed, unclosable overlay that sat on top of the debate side panel.
     // It can now be collapsed to a slim pill and dismissed for the rest of
     // the run — the Stop control lives in the pill so cancel stays one
@@ -3410,7 +3410,7 @@ const App: React.FC = () => {
                     }}
                 />
             </React.Suspense>
-            {/* U4: background-jobs drawer — visible autonomy. */}
+            {/* Background-jobs drawer — visible autonomy. */}
             <React.Suspense fallback={null}>
                 <JobsDrawer open={isJobsDrawerVisible} onClose={() => setIsJobsDrawerVisible(false)} />
             </React.Suspense>
@@ -3455,9 +3455,9 @@ const App: React.FC = () => {
 
             {/* Main row: persistent desktop sidebar + chat column */}
             <div className="flex-1 flex flex-row min-h-0">
-                {/* CLAUDE-DARK SHELL (ROUND-39 UI): the rail sits LIGHTER than
-                    the page (#1a1a1a over #111111) with NO dividing border —
-                    separation reads from the fill step alone, per reference. */}
+                {/* Dark shell: the rail sits LIGHTER than the page
+                    (#1a1a1a over #111111) with NO dividing border —
+                    separation reads from the fill step alone. */}
                 <aside className={`hidden lg:flex flex-col ${isSidebarCollapsed ? 'w-16' : 'w-60'} shrink-0 min-h-0 bg-zinc-900 transition-[width] duration-200 relative`}>
                     <button
                         type="button"
@@ -3591,7 +3591,7 @@ const App: React.FC = () => {
             />
                 </main>
 
-                {/* Desktop activity card (ROUND-36b): float progress over the
+                {/* Desktop activity card: float progress over the
                     right side so the conversation keeps its width while a run
                     is live. Collapsible + closable so it never traps content
                     underneath; the pill keeps Stop one click away. */}
@@ -3621,7 +3621,7 @@ const App: React.FC = () => {
                                         <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400" aria-hidden="true" />
                                         {isPostMortemInProgress ? 'Post-mortem' : 'Running'}
                                     </span>
-                                    {/* Collapse / dismiss chrome (ROUND-36b): the card is no longer
+                                    {/* Collapse / dismiss chrome: the card is no longer
                                         unclosable — collapse to the pill or hide it for this run.
                                         The main chat keeps its own Stop control either way. */}
                                     <button

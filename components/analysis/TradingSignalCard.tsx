@@ -266,9 +266,9 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
                 )}
                 {validityLine && <span className="text-xs text-zinc-500">{validityLine}</span>}
                 {gateLine && <span className="text-xs text-zinc-500">{gateLine}</span>}
-                {/* ROUND-39 UI (Zed header-meta pattern): run provenance as
-                    quiet chips — protocol lane + prompt version — so a settled
-                    verdict carries its own provenance at a glance. */}
+                {/* Run provenance as quiet header-meta chips — protocol
+                    lane + prompt version — so a settled verdict carries its
+                    own provenance at a glance. */}
                 {runStats?.protocol && (
                     <span
                         className="inline-flex items-center rounded border border-white/[0.07] bg-zinc-900/70 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-zinc-500"

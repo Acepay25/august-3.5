@@ -17,7 +17,7 @@ const baseMeta = (overrides: Partial<SkillMeta> = {}): SkillMeta => ({
     ...overrides,
 });
 
-describe('Zep-style temporal ledger (ROUND-34)', () => {
+describe('Temporal ledger', () => {
     it('closes the old interval and opens the next on transition', () => {
         const meta = baseMeta({ status: 'candidate' });
         stampStatusTransition(meta, 'confirmed', 'evidence');

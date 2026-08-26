@@ -9,7 +9,7 @@ import type { DebateTurn } from '../types/message';
 const turn = (speaker: string, text: string, round?: number): DebateTurn =>
     ({ speaker, text, round }) as DebateTurn;
 
-describe('conviction drift (ROUND-36 / D2.2)', () => {
+describe('conviction drift', () => {
     it('extracts the last sealed conviction per turn (quoted numbers ignored)', () => {
         const t = turn('Macro', 'Technical said CONVICTION: 90 but I disagree. CONVICTION: 55', 2);
         expect(extractConvictions(t)).toEqual([55]);

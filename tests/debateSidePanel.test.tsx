@@ -39,7 +39,7 @@ const baseProps: DebateSidePanelProps = {
     onSelectActor: () => {},
 };
 
-describe('DebateSidePanel (zcode-style rows)', () => {
+describe('DebateSidePanel tool-event rows', () => {
     it('renders nothing when closed', () => {
         const { container } = render(<DebateSidePanel {...baseProps} open={false} />);
         expect(container).toBeEmptyDOMElement();

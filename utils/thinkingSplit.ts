@@ -1,7 +1,7 @@
 /**
  * Keep chain-of-thought out of the final answer (and vice versa).
- * Same rule as Hermes / OpenCode / Codex: tags and scratchpads never stay
- * in the user-visible reply, even when a model dumps them into `content`.
+ * Tags and scratchpads never stay in the user-visible reply, even when a
+ * model dumps them into `content`.
  */
 
 import { noteThinkingLeak, stillLooksLikeLeakedThinking } from './thinkingLeakBin';
@@ -48,7 +48,7 @@ const takeMatches = (raw: string, re: RegExp): { visible: string; leaked: string
     return { visible, leaked };
 };
 
-/** Same rule as Hermes `_strip_think_blocks`: tags never stay in the answer. */
+/** Tags never stay in the answer. */
 export const extractAndStripThinkBlocks = (text: string): { visible: string; leaked: string } => {
     let visible = text || '';
     const leaked: string[] = [];

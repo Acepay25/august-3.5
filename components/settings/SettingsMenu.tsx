@@ -664,7 +664,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         <p className="text-xs text-zinc-500 mt-1">Core analysis modes first; fine-tuning is under Advanced.</p>
                                     </div>
 
-                                    {/* CORE — reference-style hairline rows */}
+                                    {/* CORE — hairline rows */}
                                     <div>
                                         {/* Accuracy Mode */}
                                         <div className="flex items-center justify-between gap-6 border-b border-white/5 py-5">

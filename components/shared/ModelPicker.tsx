@@ -303,8 +303,8 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
 
     return (
         <div ref={containerRef} className={`relative inline-block ${className}`}>
-            {/* Trigger button — reference-style: bare model name + chevron,
-                no boxed chrome (ROUND-34). */}
+            {/* Trigger button — bare model name + chevron,
+                no boxed chrome. */}
             <button
                 onClick={handleToggle}
                 className={`flex items-center gap-1.5 rounded-lg text-zinc-200 transition-colors hover:bg-zinc-800 hover:text-white ${

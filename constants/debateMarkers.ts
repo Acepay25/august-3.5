@@ -9,7 +9,7 @@
 
 export const MODERATOR_RETRY_MARKER = '<MODERATOR_RETRY>';
 /**
- * D12 (ROUND-39): emitted by a seat BEFORE its conviction-retry reply. The
+ * Emitted by a seat BEFORE its conviction-retry reply. The
  * pipeline strips the marker AND everything before it in that seat's turn —
  * the truncated attempt is replaced, not concatenated with the retry.
  */

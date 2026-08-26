@@ -10,7 +10,7 @@ vi.mock('../components/shared/Icons', () => ({
     ChevronDownIcon: ({ className }: { className?: string }) => <span data-testid="chevron" className={className} />,
 }));
 
-describe('ReasoningRow (ROUND-39: collapsed by default)', () => {
+describe('ReasoningRow (collapsed by default)', () => {
     it('renders nothing for empty thinking', () => {
         const { container } = render(<ReasoningRow thinking="   " />);
         expect(container.querySelector('.reasoning-row')).toBeNull();

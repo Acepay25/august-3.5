@@ -30,7 +30,7 @@ const makeTrade = (overrides: Partial<LoggedTrade> = {}): LoggedTrade => ({
     ...overrides,
 } as LoggedTrade);
 
-describe('ROUND-31 memory honesty', () => {
+describe('memory honesty', () => {
     beforeEach(async () => {
         store = {};
         await initMemoryFiles('test-user');

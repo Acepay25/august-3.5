@@ -52,7 +52,7 @@ describe('ModelByline', () => {
     });
 });
 
-describe('InjectionContextBar overflow (ROUND-29)', () => {
+describe('InjectionContextBar overflow', () => {
     const baseProviders = [] as unknown as ProviderConfig[];
 
     it('shows all chips inline when at or under the cap', () => {

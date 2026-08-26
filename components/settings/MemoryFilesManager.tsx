@@ -255,7 +255,7 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
             </div>
 
             <div className="flex flex-wrap items-end gap-4 shrink-0 mb-8">
-                {/* ROUND-33: the Memory Model picker moved to Settings →
+                {/* The Memory Model picker moved to Settings →
                     AI Setup (it owns every learning pass); this surface shows
                     a read-only pointer so ownership stays discoverable. */}
                 {memoryConfig && (

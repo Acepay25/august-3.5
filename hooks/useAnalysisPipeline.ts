@@ -476,7 +476,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     // ─── RAF-throttled CASUAL-CHAT streaming updates ──────────────────────
     // Casual replies used to appear all at once after the full response
     // resolved. This streams visible deltas into the bubble one frame at a
-    // time (DeepSeek-style perceived speed). The latest accumulated text +
+    // time (perceived speed). The latest accumulated text +
     // reasoning win per frame; the final flush() commits the settled state.
     const throttledCasualStream = useRafThrottle((
         conversationId: string | null,
@@ -533,9 +533,9 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     useEffect(() => { loggedTradesRef.current = loggedTrades; }, [loggedTrades]);
     const steeringQueueRef = useRef<string[]>([]);
     const [steeringNotes, setSteeringNotes] = useState<string[]>([]);
-    /** U3 per-seat steering: seat name → one queued note, drained per turn. */
+    /** Per-seat steering: seat name → one queued note, drained per turn. */
     const seatSteeringRef = useRef<Record<string, string>>({});
-    /** U3 per-seat stop: seats benched by the user for the rest of this run. */
+    /** Per-seat stop: seats benched by the user for the rest of this run. */
     const stoppedSeatsRef = useRef<Set<string>>(new Set());
     // Mid-debate analyst replacement: the generator suspends and waits on a
     // promise whose resolver lives here; the UI calls handleReplacementChoice
@@ -1282,10 +1282,10 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             // no hybrid data exists (hybrid off / fetch failed).
             const effectiveTradingStyle = getEffectiveStyle(runLensConfig.tradingStyle, freshHybridData ?? undefined).style;
 
-            // AI LEARNING (ROUND-30a): the old UnifiedLearningBuilder channel is
+            // AI LEARNING: the old UnifiedLearningBuilder channel is
             // RETIRED — its six overlapping profile/mistake/insight injections
             // fought the budgeted notebook slice above (two memory voices is
-            // exactly the degradation mode the ROUND-24m simplification killed).
+            // exactly the degradation mode the simplification killed).
             // What survives is the one thing the notebook slice cannot produce:
             // per-provider historical accuracy weighting (weighted voting), fed
             // to BOTH the analysts and the moderator. Gated on a real closed
@@ -2462,7 +2462,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 centralizedSnapshot = generateHybridPromptInjection(freshHybridData as any).slice(0, 1800);
                             } catch { /* ignore */ }
                         }
-                        // D6 (ROUND-39): the protocol lane is hashed from THIS
+                        // The protocol lane is hashed from THIS
                         // setup's identity — identical trade ideas always run
                         // the same debate structure, so verdicts stay
                         // comparable across reruns. Unseeded engine calls
@@ -2571,7 +2571,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 setSteeringNotes([]);
                                 return notes.join('\n');
                             },
-                            // U3 per-seat steering: notes addressed to one seat
+                            // Per-seat steering: notes addressed to one seat
                             // ("@Technical …") ride only that seat's prompt.
                             (seatName: string) => {
                                 const note = seatSteeringRef.current[seatName];
@@ -2579,7 +2579,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 delete seatSteeringRef.current[seatName];
                                 return note;
                             },
-                            // U3 per-seat stop: benched seats leave at the next
+                            // Per-seat stop: benched seats leave at the next
                             // round boundary; the debate continues without them.
                             (seatName: string) => stoppedSeatsRef.current.has(seatName),
                             (event) => {
@@ -2609,13 +2609,13 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                             },
                             // Live desk-tool chips — the Floor shows what each
                             // seat is looking up instead of a silent bot.
-                            // ROUND-38: keep a short ROLLING FEED per seat
+                            // Keep a short ROLLING FEED per seat
                             // (newest first, capped) so the side panel can
-                            // render zcode-style stacked tool rows instead of
+                            // render stacked tool rows instead of
                             // a single overwriting chip.
-                            // ROUND-39: each line carries a wall-clock prefix
-                            // (HH:MM:SS) so the panel rows can render a
-                            // reference-style elapsed/when stamp per row.
+                            // Each line carries a wall-clock prefix
+                            // (HH:MM:SS) so the panel rows can render an
+                            // elapsed/when stamp per row.
                             (speaker: string, _round: number, line: string) => {
                                 const stamp = new Date().toLocaleTimeString([], { hour12: false });
                                 const stamped = `${stamp} · ${line}`;
@@ -2826,7 +2826,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                             .trim()
                                         : text.trim();
                                     const peeled = peelDebateTurn(speaker, cleanedText, k);
-                                    // Per-turn speed metrics (DeepSeek-style):
+                                    // Per-turn speed metrics:
                                     // TTFT from provider-launch → first delta,
                                     // output rate from first → last delta.
                                     const launch = turnLaunchTimes[k];
@@ -3144,7 +3144,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                         processedAnalysis.recommendationContract = buildRecommendationContract(processedAnalysis);
                     }
 
-                    // ROUND-34: each debater reviews their own transcript and
+                    // Each debater reviews their own transcript and
                     // proposes skill creates/updates — filed by the Memory Model
                     // as candidates. Best-effort; never blocks the verdict.
                     void import('../services/learning/DebateSkillProposalService')
@@ -3199,7 +3199,7 @@ ${accuracyVerificationNote}`
                             debateRunLog: [...debateRunLogRef.current],
                             debateCheckpoint: undefined,
                             memoryRetrieved,
-                            // Audit surfaces (ROUND-28/U1+U2): the finished
+                            // Audit surfaces: the finished
                             // contract (frozen from the final log) + what the
                             // arbiter's evidence pack contained.
                             runContract: buildRunContractStages(debateRunLogRef.current, false),
@@ -3228,11 +3228,11 @@ ${accuracyVerificationNote}`
                                 memory: isMemoryEnabledInPureAI,
                                 customEnsemble: Boolean(customEnsemblePrompt),
                                 promptLane,
-                                // D2.3 protocol lane attribution (ROUND-37).
+                                // Protocol lane attribution.
                                 protocol: ensembleService.getLastDebateProtocol(),
                             }),
                             promptLane,
-                            // D2.3 protocol lane attribution (ROUND-37) — on
+                            // Protocol lane attribution — on
                             // runStats itself so the signal card can chip it.
                             protocol: ensembleService.getLastDebateProtocol(),
                             gateCap: capturedGateResult?.confidenceCap,
@@ -3571,8 +3571,8 @@ ${accuracyVerificationNote}`
                 setLoadingMessage("Thinking...");
                 setIsAnalysisInProgress(true);
                 startStep('analysis');
-                // Stream the reply into the bubble as it generates (DeepSeek-style
-                // perceived speed) instead of appending it once after completion.
+                // Stream the reply into the bubble as it generates (perceived
+                // speed) instead of appending it once after completion.
                 const streamingMessageId = `ai-${Date.now()}`;
                 casualMessageId = streamingMessageId;
                 updateRequestMessages(prev => [...prev, {
@@ -3823,7 +3823,7 @@ ${accuracyVerificationNote}`
             steeringQueueRef.current = steeringQueueRef.current.filter((_, i) => i !== index);
             setSteeringNotes(steeringQueueRef.current);
         },
-        // U3 per-seat controls (ROUND-34): steer or bench one seat mid-debate.
+        // Steer or bench one seat mid-debate.
         handleSteerSeat: (seatName: string, note: string) => {
             seatSteeringRef.current[seatName] = note;
             toast.success?.(`Queued for ${seatName}`, 'Applied at that seat\'s next turn.');

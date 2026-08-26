@@ -1,7 +1,7 @@
 import { DebateTurn } from '../types';
 
 /**
- * Addressed debate routing (ROUND-34): speakers end a turn with a
+ * Addressed debate routing: speakers end a turn with a
  * "REPLY-TO: name1, name2" line. Only the named seats (plus the sender's own
  * history) feed the next prompt — each model reads what was sent TO it, not
  * the whole floor. Absent marker (or "all") = floor-wide broadcast.

@@ -1,7 +1,7 @@
 import type { DebateRunEvent } from '../types/message';
 
 /**
- * Run-contract derivation (ROUND-28/U1).
+ * Run-contract derivation.
  *
  * The run's stage ladder as a live todo, derived from the append-only debate
  * run log — no new plumbing. Skips are honest: budget caps, floor alignment,

@@ -201,7 +201,7 @@ export const VersionHistoryDashboard: React.FC<{ onClose: () => void }> = ({ onC
                             </div>
                         </ModernCard>
 
-                        {/* 1.2 Skill Library (ROUND-25b: replaced the retired IF/THEN rule extraction) */}
+                        {/* 1.2 Skill Library (replaced the retired IF/THEN rule extraction) */}
                         <ModernCard title="Skill Library" accent="purple" icon={<Icons.Brain className="w-5 h-5" />}>
                             <div className="flex items-center justify-between mb-2">
                                 <div className="text-2xl font-light text-white">{rules.length}</div>

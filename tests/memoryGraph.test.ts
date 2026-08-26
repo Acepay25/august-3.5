@@ -66,7 +66,7 @@ tradeIds: d,e,f
       family: 'Family A',
       regime: 'ranging',
     });
-    // ROUND-24m: matched skill injects as a capped block with its filename.
+    // Matched skill injects as a capped block with its filename.
     expect(btc).toContain('btc-short-avoid.md');
     expect(btc).not.toContain('eth-long-avoid.md');
   });

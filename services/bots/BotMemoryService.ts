@@ -108,7 +108,7 @@ export const getBotMemoryContext = (
     const parts: string[] = [];
     const sys = readBotSystemMarkdown(botId);
     const mem = readBotMemoryMarkdown(botId);
-    // ROUND-31: the setup query now filters bot notes — a line that names a
+    // The setup query now filters bot notes — a line that names a
     // different coin than this setup is dead weight in every prompt. The
     // system.md persona block always passes (it defines who the seat IS).
     const memFiltered = filterBotNoteByQuery(mem, query);
@@ -119,7 +119,7 @@ export const getBotMemoryContext = (
 };
 
 /**
- * ROUND-31: keep only lines relevant to THIS setup. Empty/short notes pass
+ * Keep only lines relevant to THIS setup. Empty/short notes pass
  * through whole (a 2-line note cannot mismatch); otherwise keep bullet/
  * content lines that name the queried coin or regime, or carry no coin
  * reference at all (general lessons). Returns null when nothing qualifies.

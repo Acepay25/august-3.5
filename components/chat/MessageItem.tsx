@@ -74,10 +74,10 @@ export interface ChatContextProps {
     onRetryFailedRun?: (userMessageId: string) => void;
     /** Continue an interrupted debate from the last completed round. */
     onResumeDebate?: (messageId: string) => void;
-    /** U3 per-seat controls (ROUND-34): steer or bench one seat mid-debate. */
+    /** Steer or bench one seat mid-debate. */
     onSteerSeat?: (seatName: string, note: string) => void;
     onStopSeat?: (seatName: string) => void;
-    /** U5 (ROUND-37): approval items attached to THIS message, rendered inline. */
+    /** Approval items attached to THIS message, rendered inline. */
     inlineApprovals?: import('../../utils/approvalInbox').ApprovalItem[];
     onApprovalAllow?: (item: import('../../utils/approvalInbox').ApprovalItem) => void;
     onApprovalDeny?: (item: import('../../utils/approvalInbox').ApprovalItem) => void;
@@ -200,7 +200,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
     // Inline edit of a sent user message (history correction).
     const [editingMessageId, setEditingMessageId] = React.useState<string | null>(null);
     const [editDraft, setEditDraft] = React.useState('');
-    // ROUND-39 UI: which deep surface is open on the settled card — 'replay' |
+    // Which deep surface is open on the settled card — 'replay' |
     // 'runlog' | 'audit' | null. Replaces the scattered toggles.
     const [paneTab, setPaneTab] = React.useState<string | null>(null);
     // Track whether this bubble streamed live — once text has been revealed
@@ -225,7 +225,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
     );
     const debateTurns = message.debateTurns ?? message.postMortemDebateTurns ?? [];
 
-    // Debate floor (ROUND-34): one thinking bubble per debater in the chat
+    // Debate floor: one thinking bubble per debater in the chat
     // area; the full transcript streams in the right-hand side panel.
     const [debatePanelActor, setDebatePanelActor] = React.useState<string | null>(null);
     const stageActors = React.useMemo((): DebateStageActor[] => {
@@ -249,14 +249,14 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                 thinking: isActive,
                 speaking: false,
                 speech: '',
-                // Reference-style activity chip: "replying to X" from the
+                // Activity chip: "replying to X" from the
                 // REPLY-TO routing, else the NEWEST live desk-tool line
-                // (liveToolEvents is a newest-first rolling feed — ROUND-38).
+                // (liveToolEvents is a newest-first rolling feed).
                 toolChip: addressedTo?.length
                     ? `replying to ${addressedTo.join(', ')}`
                     : (message.liveToolEvents ?? {})[name]?.split('\n')[0],
                 thought: (last?.reasoning ?? '').replace(/\s+/g, ' ').slice(0, 72),
-                // U3 polish: quiet cost/latency tooltip from the run ledger —
+                // Quiet cost/latency tooltip from the run ledger —
                 // "Macro · gemini-2.5-pro · 41s · 1.2k out".
                 meta: (() => {
                     const seat = (message.runStats?.analysts ?? []).find(a =>
@@ -280,7 +280,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
 
     // Ensemble messages route their reasoning through the Floor surface. The
     // moderator's chain-of-thought still shows here as a Thinking row, but the
-    // final verdict PROSE does NOT render in the chat area (ROUND-39): the
+    // final verdict PROSE does NOT render in the chat area: the
     // TradingSignalCard below is the moderator's only chat-area output.
     const moderatorThinking = extractModeratorThinking(message.reasoningProcesses, message.thoughtProcesses);
 
@@ -442,7 +442,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 </div>
                             )}
 
-                            {/* ROUND-34: the old Floor seat cards are gone —
+                            {/* The old Floor seat cards are gone —
                                 the stage bubbles + side panel render the debate. */}
 
                             {/* Ensemble reasoning in the bubble: the moderator's
@@ -459,7 +459,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     />
                                 </div>
                             )}
-                            {/* ROUND-39: the moderator's verdict PROSE no longer
+                            {/* The moderator's verdict PROSE no longer
                                 renders in the chat area — the signal card is
                                 the only chat-area output. The full text stays
                                 available via Replay debate + the side panel. */}
@@ -586,10 +586,9 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                             ) : message.analysis ? (
                                 <div className="ui-panel">
                                 <DebateSummary debateTurns={debateTurns} analysis={message.analysis} />
-                                {/* ROUND-39 UI (Zed "Open tab" pattern): the
-                                    settled run's deep surfaces live in one tab
-                                    strip — Replay · Run log · Audit — instead of
-                                    scattered toggles down the card. */}
+                                {/* The settled run's deep surfaces live in one
+                                    tab strip — Replay · Run log · Audit — instead
+                                    of scattered toggles down the card. */}
                                 {(() => {
                                     const tabs: Array<{ id: string; label: string }> = [];
                                     if (debateTurns.length > 0) tabs.push({ id: 'replay', label: 'Replay' });
@@ -648,7 +647,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     embedded
                                 />
                                 <div className="border-t border-white/5 px-4 pb-4">
-                                {/* U5 (ROUND-37): inline approval cards — same actions
+                                {/* Inline approval cards — same actions
                                     as the Inbox modal, surfaced where the user is. */}
                                 {(() => {
                                     const mine = (inlineApprovals ?? []).filter(i => i.messageId === message.id);
@@ -685,7 +684,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     tradingStyle={message.tradingStyle}
                                     highlighted={isHighlighted}
                                 >
-                                    {/* Audit surfaces (ROUND-28/U1+U2): run contract + verdict evidence. */}
+                                    {/* Audit surfaces: run contract + verdict evidence. */}
                                     <RunContractPanel stages={message.runContract} />
                                     <EvidencePackCard pack={message.evidencePack} />
                                 </AnalysisDetails>
@@ -780,7 +779,7 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 </button>
                             )}
 
-                            {/* Quiet DeepSeek-style byline: who sat on this desk, how long. */}
+                            {/* Quiet byline: who sat on this desk, how long. */}
                             {!isUserMessage && !message.isDebating && !message.isPostMortem && message.runStats && (
                                 <ModelByline runStats={message.runStats} />
                             )}

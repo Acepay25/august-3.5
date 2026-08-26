@@ -5,7 +5,7 @@ import {
     formatDmEventLine,
 } from '../services/analysis/DebateMailbox';
 
-describe('DebateMailbox (ROUND-38 tool-call messaging)', () => {
+describe('DebateMailbox (tool-call messaging)', () => {
     it('delivers a message to exactly one seat', () => {
         const box = createDebateMailbox(['Macro Analyst', 'Risk Analyst', 'Moderator']);
         const receipt = box.send('Risk Analyst', 2, { to: 'Macro Analyst', message: 'Your 78.8k level is stale.' });

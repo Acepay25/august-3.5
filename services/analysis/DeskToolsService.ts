@@ -171,7 +171,7 @@ export const digestToolResult = (name: string, ok: boolean, content: string): st
     if (name === 'recall_chat') {
         return content.startsWith('No matching') ? 'no past sessions matched' : `${Math.min(content.split('\n').length, 5)} past passages found`;
     }
-    // Mail tools (ROUND-38): receipts and inbox reads.
+    // Mail tools: receipts and inbox reads.
     if (name === 'send_message') {
         const to = content.match(/^Delivered to (.+?)\./)?.[1];
         return to ? `→ ${to}` : 'message not delivered';
@@ -579,7 +579,7 @@ export async function executeDeskTool(
                 );
                 break;
             case 'recall_chat': {
-                // U7: search past analysis sessions (stored conversations).
+                // Search past analysis sessions (stored conversations).
                 const { searchChatHistory, formatChatHitsDigest } = await import('../infrastructure/sessionSearch');
                 const query = asString(call.arguments.query);
                 if (!query) {
@@ -638,7 +638,7 @@ export async function executeDeskTools(
 }
 
 /**
- * Arbiter tool policy (ROUND-28/D0.2): the moderator's binding verdict is an
+ * Arbiter tool policy: the moderator's binding verdict is an
  * argument-quality decision, so its DEFAULT desk is memory + context only.
  * Order-book/derivatives data can outweigh argument quality and are opt-in
  * per call site; the clarification rounds inherit the same policy (W6).
@@ -767,7 +767,7 @@ export async function runDeskToolLoop(params: {
     /** Deterministic instruction appended to the system prompt before turn 1
      *  (e.g. "you have unread direct messages — call read_message first"). */
     appendSystemNotice?: string;
-    /** D8 (ROUND-39): round 0 forces `toolChoice:'required'` so the seat MUST
+    /** Round 0 forces `toolChoice:'required'` so the seat MUST
      *  ground itself with at least one real lookup before arguing — used by
      *  debates running WITHOUT live hybrid market data. */
     requireFirstToolRound?: boolean;
@@ -816,7 +816,7 @@ export async function runDeskToolLoop(params: {
         const turn = await sendTurn(config, messages, {
             ...options,
             tools: effectiveTools,
-            // D8: the FIRST round can force a tool call so a seat never argues
+            // The FIRST round can force a tool call so a seat never argues
             // from zero data; later rounds stay 'auto' (the seat may stop).
             toolChoice: nativeTools
                 ? (round === 0 && requireFirstToolRound && effectiveTools?.length ? 'required' : 'auto')
@@ -908,7 +908,7 @@ export interface StreamWithDeskToolsOptions extends ChatRequestOptions {
     allowedTools?: string[];
     /** Closed-trade log for the `recall` notebook tool. */
     trades?: LoggedTrade[];
-    /** Debate mailbox (ROUND-38): when present, the seat can send_message /
+    /** Debate mailbox: when present, the seat can send_message /
      *  read_message to other seats. The loop injects an inbox notice and
      *  reports deliveries back through `onMailSent`. */
     mailbox?: DebateMailbox;
@@ -918,7 +918,7 @@ export interface StreamWithDeskToolsOptions extends ChatRequestOptions {
     mailboxRound?: number;
     /** Fires once per successfully delivered message (for DM visibility lines). */
     onMailSent?: (info: { from: string; to: string; text: string; round: number }) => void;
-    /** D8 (ROUND-39): when true, round 0 forces one real tool lookup before
+    /** When true, round 0 forces one real tool lookup before
      *  the seat may speak — used for debates WITHOUT live hybrid market data
      *  so seats ground themselves in fresh data instead of arguing from zero. */
     requireFirstToolRound?: boolean;
@@ -975,7 +975,7 @@ export async function* streamChatWithDeskTools(
         ...chatOptions
     } = options || {};
 
-    // Debate mailbox (ROUND-38): merge the floor-messaging tools into the
+    // Debate mailbox: merge the floor-messaging tools into the
     // desk set so a seat's turn can carry real send_message/read_message
     // tool calls alongside market lookups. Dispatch is handled inside the
     // loop below (executeDeskTools stays pure market/memory).

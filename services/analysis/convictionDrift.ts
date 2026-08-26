@@ -1,7 +1,7 @@
 import type { DebateTurn } from '../../types/message';
 
 /**
- * ConvictionDrift (ROUND-36 / D2.2): measure whether debate rounds actually
+ * ConvictionDrift: measure whether debate rounds actually
  * MOVE a seat's sealed conviction. Seats emit one sealed `CONVICTION: <0-100>`
  * line per rebuttal round; the trajectory across rounds is the seat's drift.
  *

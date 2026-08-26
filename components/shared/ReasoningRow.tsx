@@ -7,7 +7,7 @@ export interface ReasoningRowProps {
     thinking: string;
     /** Live stream in progress — shows a ticker + light sweep. */
     running?: boolean;
-    /** Kept for API compatibility — rows ALWAYS start collapsed (ROUND-39). */
+    /** Kept for API compatibility — rows ALWAYS start collapsed. */
     defaultOpen?: boolean;
     /** Row label. */
     label?: string;
@@ -16,7 +16,7 @@ export interface ReasoningRowProps {
 }
 
 /** Expanded traces longer than this truncate with an inline Show-more toggle
- *  (the reference runner truncates inside the expanded state too). */
+ *  (truncation applies inside the expanded state too). */
 const EXPAND_PREVIEW_CHARS = 600;
 
 const latestLine = (text: string): string => {
@@ -39,9 +39,8 @@ const firstLine = (text: string): string => {
 };
 
 /**
- * DeepSeek-style collapsible thinking row (rebuilt ROUND-39), built on a
- * native `<details>` so it keeps disclosure semantics. Reference-aligned
- * behavior:
+ * Collapsible thinking row, built on a native `<details>` so it keeps
+ * disclosure semantics. Behavior:
  *   · COLLAPSED BY DEFAULT — always. While streaming the collapsed summary
  *     shows a LIVE DURATION ("Thinking · 7s") plus the latest-line ticker,
  *     so progress is visible without yanking the pane open.
@@ -79,7 +78,7 @@ const ReasoningRow: React.FC<ReasoningRowProps> = ({
 
     // Follow the live state WITHOUT opening: when the stream starts we begin
     // (or restart) the clock; when it settles we snap shut (no-op if already
-    // collapsed — the ROUND-39 rule is collapsed-by-default) and record the
+    // collapsed — the rule is collapsed-by-default) and record the
     // total thinking time for the "Thought for Ns" meta.
     useEffect(() => {
         if (running && !wasRunningRef.current) {
@@ -140,7 +139,7 @@ const ReasoningRow: React.FC<ReasoningRowProps> = ({
 
     // Inner truncation applies to the SETTLED expanded body only — a live
     // stream shows everything (the user opened it deliberately mid-run).
-    // Review fix: the cut lands on a LINE boundary (never mid-fence/mid-table)
+    // The cut lands on a LINE boundary (never mid-fence/mid-table)
     // and "Show full reasoning" reveals the WHOLE trace — no second truncated
     // view behind a toggle.
     const needsTrim = !running && trimmed.length > EXPAND_PREVIEW_CHARS;

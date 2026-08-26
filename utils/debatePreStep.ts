@@ -1,5 +1,5 @@
 /**
- * DeepSeek-style pre-step waterfall: admit, rewrite, or skip remaining
+ * Pre-step waterfall: admit, rewrite, or skip remaining
  * worker rounds before the next model call.
  */
 

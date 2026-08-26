@@ -639,7 +639,7 @@ Please investigate this discrepancy in your analysis.
                         rootCauseClass: classifyRootCause(finalPostMortemReport, tradeToUpdate.outcome),
                     };
                     jobQueue.addJob(JobType.EXTRACT_INSIGHTS, tradeWithPM);
-                    // EXTRACT_RULES retired (ROUND-25b): IF/THEN lessons live
+                    // EXTRACT_RULES retired: IF/THEN lessons live
                     // in skills now (ingestIfThenFromTrade runs below).
                 } catch (insightError) {
                     console.error('[AI Learning] Failed to queue background jobs:', insightError);
@@ -658,7 +658,7 @@ Please investigate this discrepancy in your analysis.
                         rootCauseClass: classifyRootCause(finalPostMortemReport, tradeToUpdate.outcome),
                     };
                     const craftConfig = memoryConfig ?? enabledProviders[0]?.config;
-                    // GOVERNANCE NOTE (review, ROUND-39): sync runs FIRST by
+                    // GOVERNANCE NOTE: sync runs FIRST by
                     // design — auto-ingested IF/THEN skills are evidence-backed
                     // (they come from a CLOSED trade's own post-mortem) and
                     // start as unenforced candidates that still need wins to
@@ -667,7 +667,7 @@ Please investigate this discrepancy in your analysis.
                     await syncClosedTradeToNotebook(closed, loggedTradesRef.current, notebookUser);
                     if (craftConfig) {
                         const crafted = await craftSkillFromPostMortem(closed, craftConfig);
-                        // S4 (ROUND-39): one post-mortem must not spawn BOTH an
+                        // One post-mortem must not spawn BOTH an
                         // auto-ingested IF/THEN skill AND an inbox craft draft
                         // from the same report. The reverse collision is guarded
                         // inside ingestIfThenFromTradeUnlocked (it skips when a

@@ -9,7 +9,7 @@ const actor = (over: Partial<DebateStageActor> = {}): DebateStageActor => ({
     ...over,
 });
 
-describe('DebateStage inline steer (ROUND-35 polish)', () => {
+describe('DebateStage inline steer', () => {
     it('queues a seat note via the inline input (no window.prompt)', () => {
         const onSteerSeat = vi.fn();
         const { container } = render(

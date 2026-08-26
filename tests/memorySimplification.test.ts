@@ -15,7 +15,7 @@ import { storageService } from '../services/infrastructure/StorageService';
 import { parseSkillMarkdown } from '../services/learning/SkillMemoryService';
 import type { LoggedTrade, TradeAnalysis } from '../types';
 
-// ROUND-24m simplification contract tests:
+// Simplification contract tests:
 // budgeted slices, no diary, mistakes escalate to silence, recall tool.
 
 const makeTrade = (overrides: Partial<LoggedTrade> = {}): LoggedTrade => ({
@@ -48,7 +48,7 @@ tradeIds: a,b,c
 `, username, true);
 };
 
-describe('ROUND-24m retrieval budget + slices', () => {
+describe('retrieval budget + slices', () => {
     it('keeps every stage context under its budget (plus doctrine header overhead)', async () => {
         await initMemoryFiles('budget-user');
         await seedConfirmedSkill('budget-user');

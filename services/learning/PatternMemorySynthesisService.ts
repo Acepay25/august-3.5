@@ -294,7 +294,7 @@ export function calculatePnlR(trade: LoggedTrade): number | undefined {
 export function findRelevantTrades(
     setup: SetupContext,
     trades: LoggedTrade[],
-    /** ROUND-31: apply the 120-day exponential edge decay to the similarity
+    /** Apply the 120-day exponential edge decay to the similarity
      *  score itself, so old associations weigh less at ranking time — not
      *  just in the dashboard graph. Prompt-side consumers pass true. */
     options?: { decayByAge?: boolean },

@@ -14,7 +14,7 @@ const applyLeverage = (messages: Message[], val: number): Message[] =>
         : m);
 
 /** Session Nx: clamp, persist on the conversation, rewrite ticket percentages.
- *  ROUND-39 review fix: the dropdown-close callback is gone — the leverage
+ *  The dropdown-close callback is gone — the leverage
  *  control lives in the Team menu now and owns its own dismissal. */
 export function useConversationLeverage({
     leverageInput,
