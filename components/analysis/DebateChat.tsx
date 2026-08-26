@@ -89,7 +89,7 @@ const splitModeratorTurn = (
  * one-line summary automatically.
  */
 const TurnThinking: React.FC<{ content: string; streaming?: boolean }> = ({ content, streaming = false }) => (
-    <ReasoningRow thinking={content} running={streaming} defaultOpen={streaming} />
+    <ReasoningRow thinking={content} running={streaming} defaultOpen={false} />
 );
 
 const SpeakerAvatar: React.FC<{ name: string; live?: boolean }> = ({ name, live = false }) => (

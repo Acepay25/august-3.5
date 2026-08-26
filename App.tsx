@@ -10,7 +10,6 @@ import { initStrategyDocs } from './services/infrastructure/StrategyService';
 import { initMemoryFiles, syncPatternMemory, syncProfileMemory, syncRecurringMistakes, subscribeMemoryFilesChanged } from './services/learning/MemoryFilesService';
 import { runNotebookReview } from './services/learning/MemoryReviewService';
 import { computeRegimeProviderStats } from './services/learning/SetupMemoryService';
-import { ANALYST_ROLE_DEFINITIONS } from './services/ui/AnalystLensService';
 import { AnalystRole } from './types/enums';
 import { BotRegistry } from './services/bots/BotRegistry';
 import { defaultToolsForRole } from './types/bot';
@@ -34,7 +33,7 @@ import { useConversationLeverage } from './hooks/useConversationLeverage';
 import { useCatalogReconcile } from './hooks/useCatalogReconcile';
 import AutomationView from './components/automation/AutomationView';
 import AutomationEditorModal, { ModelOption } from './components/automation/AutomationEditorModal';
-import { ChevronLeftIcon, ChevronRightIcon } from './components/shared/Icons';
+import { ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, CloseIcon } from './components/shared/Icons';
 import BotManagerDrawer from './components/bots/BotManagerDrawer';
 
 // P1-6: Lazy-load heavy, conditionally-rendered components so the initial
@@ -73,7 +72,7 @@ import { createNewConversation, DEFAULT_LEVERAGE, findReusableEmptyConversation 
 import { recalculateAnalysisMetrics } from './utils/analysisUtils';
 import { parseAppHash, serializeAppHash } from './utils/appHash';
 import { collectWatchedSignals, toggleWatchOnMessage } from './utils/watchList';
-import { collectApprovalItems, setAutoJournalRule } from './utils/approvalInbox';
+import { collectApprovalItems, setAutoJournalRule, type ApprovalItem } from './utils/approvalInbox';
 import { takeSkillDraft, tombstoneSkillDraftKey, draftTriggerKey } from './utils/skillDrafts';
 import { ingestCraftedSkill, ingestCraftedSkillFromDraft } from './services/learning/SkillMemoryService';
 import { buildRiskBook, formatRiskBookBadge } from './utils/riskBook';
@@ -146,7 +145,6 @@ const App: React.FC = () => {
         isLivePostMortemVisible, setIsLivePostMortemVisible,
         isMobileMenuOpen, setIsMobileMenuOpen,
         showMismatchModal, setShowMismatchModal,
-        isLeverageDropdownOpen, setIsLeverageDropdownOpen,
         isVisionDataVisible, setIsVisionDataVisible,
         showAccuracyModal, setShowAccuracyModal,
         showScrollDown, setShowScrollDown,
@@ -541,7 +539,6 @@ const App: React.FC = () => {
         leverageInput,
         setLeverageInput,
         updateActiveConversation,
-        setIsLeverageDropdownOpen,
     });
     // (i/n) progress for the manual insight-generation loops (App only shows
     // a boolean spinner otherwise; a 50-trade rewrite runs for minutes).
@@ -550,7 +547,6 @@ const App: React.FC = () => {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const virtuosoRef = useRef<VirtuosoHandle>(null);
     const mobileMenuRef = useRef<HTMLDivElement>(null);
-    const leverageRef = useRef<HTMLDivElement>(null);
 
     // Casual-chat model (used when ensemble is off): app-wide preference,
     // persisted in Preferences. Empty until loaded or chosen — the pipeline
@@ -654,43 +650,14 @@ const App: React.FC = () => {
         [loggedTrades, currentHybridData]
     );
 
-    // Warn when ensemble is switched on without the required configuration
-    // (2–3 enabled models + a selected moderator). The toggle still turns
-    // on; the pipeline degrades to single-model analysis / casual chat.
-    // Toggling off clears attached charts — they are only analyzed in
-    // ensemble mode. Note: Accuracy Mode lifts the 3-provider cap
-    // (useAnalysisPipeline only enforces it in Standard Mode), so the
-    // maximum warning is skipped there.
+    // Toggling Trade on no longer warns about missing setup — incomplete
+    // teams surface as chat bubbles when a run is actually attempted
+    // (useAnalysisPipeline). Toggling off clears attached charts — they are
+    // only analyzed in ensemble mode.
     const handleSetEnsembleEnabled = useCallback((enabled: boolean) => {
         setIsEnsembleEnabled(enabled);
-        if (!enabled) {
-            setImages([]);
-            return;
-        }
-        const issues: string[] = [];
-        if (ensembleModelCount < 2) {
-            const missing = 2 - ensembleModelCount;
-            issues.push(`enable ${missing} more AI model${missing === 1 ? '' : 's'} (ensemble needs 2–3 enabled models)`);
-        } else if (!isAccuracyModeEnabled && ensembleModelCount > 3) {
-            issues.push('disable extra models (maximum 3 for ensemble)');
-        }
-        if (!moderatorProviderId || !readyProviders.some(p => p.id === moderatorProviderId)) {
-            issues.push('select a moderator in Settings → AI setup');
-        }
-        if (missingAnalystRoles.length > 0 && lensConfig.enabled) {
-            issues.push(`assign ${missingAnalystRoles.map(role => ANALYST_ROLE_DEFINITIONS[role].shortName).join(', ')} in Assign Analysts`);
-        } else if (lensConfig.enabled) {
-            const identities = requiredAnalystRoles.map(role => {
-                const assignment = lensConfig.assignments.find(item => item.role === role)!;
-                const provider = readyProviders.find(item => item.id === assignment.assignedProvider);
-                return `${assignment.assignedProvider}::${assignment.assignedModel || provider?.selectedModel}`;
-            });
-            if (new Set(identities).size !== identities.length) issues.push('assign a different model to each analyst role');
-        }
-        if (issues.length > 0) {
-            toast.warning('Ensemble needs more setup', `To use ensemble: ${issues.join(' and ')}.`);
-        }
-    }, [readyProviders, ensembleModelCount, moderatorProviderId, isAccuracyModeEnabled, toast, setImages, lensConfig.enabled, missingAnalystRoles]);
+        if (!enabled) setImages([]);
+    }, [setImages]);
 
     // P0-2: Mirror the (later-declared) activeUsername into a ref so the
     // usePostMortem hook — which is instantiated BEFORE useUserProfiles
@@ -840,15 +807,12 @@ const App: React.FC = () => {
             if (isMobileMenuOpen && mobileMenuRef.current && !mobileMenuRef.current.contains(event.target as Node)) {
                 setIsMobileMenuOpen(false);
             }
-            if (isLeverageDropdownOpen && leverageRef.current && !leverageRef.current.contains(event.target as Node)) {
-                setIsLeverageDropdownOpen(false);
-            }
         };
         document.addEventListener('mousedown', handleClickOutside);
         return () => {
             document.removeEventListener('mousedown', handleClickOutside);
         };
-    }, [isMobileMenuOpen, isLeverageDropdownOpen]);
+    }, [isMobileMenuOpen]);
 
     // Offline Queue: Sync when coming back online
     useEffect(() => {
@@ -2839,6 +2803,7 @@ const App: React.FC = () => {
         [messages, autopilotResolutions, skillDraftNonce, activeUsername],
     );
 
+
     useWatchSideEffects({
         messagesRef,
         setConversationHistory,
@@ -2940,6 +2905,7 @@ const App: React.FC = () => {
     }, [messages, confirmAutopilotOutcome, confirmAutopilotEntryNotHit, toast]);
     confirmAutopilotRef.current = handleConfirmAutopilot;
 
+
     const runWatchListAction = useCallback((
         conversationId: string,
         action: { type: 'log'; messageId: string; outcome: TradeOutcome.WIN | TradeOutcome.LOSS } | { type: 'autopilot'; messageId: string },
@@ -2972,6 +2938,49 @@ const App: React.FC = () => {
             return next;
         });
     }, []);
+
+    /** U5 (ROUND-37): shared approval handlers — the Inbox modal AND the
+     *  inline cards in the chat flow both route through these. */
+    const approvalHandlers = useMemo(() => ({
+        allow: (item: ApprovalItem): void => {
+            if (item.kind === 'skill') {
+                const draft = takeSkillDraft(item.id, activeUsername || undefined);
+                const trade = loggedTrades.find(t => t.id === item.messageId);
+                if (draft && trade) {
+                    void ingestCraftedSkill(trade, draft.crafted, activeUsername || 'default');
+                    toast.success('Skill saved', draft.crafted.name);
+                } else if (draft) {
+                    // Verdict-sourced draft — no closed trade behind it.
+                    void ingestCraftedSkillFromDraft(draft.crafted, draft.coin, activeUsername || 'default');
+                    toast.success('Skill saved', draft.crafted.name);
+                }
+                return;
+            }
+            handleConfirmAutopilot(item.messageId);
+        },
+        deny: (item: ApprovalItem): void => {
+            if (item.kind === 'skill') {
+                const draft = takeSkillDraft(item.id, activeUsername || undefined);
+                if (draft) {
+                    tombstoneSkillDraftKey(
+                        draftTriggerKey(draft.coin, draft.crafted),
+                        activeUsername || undefined,
+                    );
+                    toast.success('Skill discarded', 'Similar suggestions paused for 7 days');
+                }
+                return;
+            }
+            handleDismissAutopilot(item.messageId);
+        },
+        always: (item: ApprovalItem): void => {
+            if (item.coin) setAutoJournalRule(item.coin, 'always', activeUsername || undefined);
+            handleConfirmAutopilot(item.messageId);
+        },
+        never: (item: ApprovalItem): void => {
+            if (item.coin) setAutoJournalRule(item.coin, 'deny', activeUsername || undefined);
+            handleDismissAutopilot(item.messageId);
+        },
+    }), [activeUsername, loggedTrades, handleConfirmAutopilot, handleDismissAutopilot, toast]);
 
     // P1-6b: leverage as a primitive — deriving it inside the memo with
     // `activeConversation` in the dep list made chatContext (and therefore
@@ -3018,16 +3027,47 @@ const App: React.FC = () => {
         // U3 per-seat controls: steer or bench one debate seat mid-run.
         onSteerSeat: handleSteerSeat,
         onStopSeat: handleStopSeat,
+        // U5 (ROUND-37): inline approval cards — MessageItem filters to its own id.
+        inlineApprovals: approvalItems,
+        onApprovalAllow: approvalHandlers.allow,
+        onApprovalDeny: approvalHandlers.deny,
+        onApprovalAlways: approvalHandlers.always,
+        onApprovalNever: approvalHandlers.never,
+        onApprovalShow: (item) => {
+            setHighlightedAnalysisId(item.messageId);
+            setIsApprovalInboxVisible(false);
+        },
         // Post-mortem "what would I do today?" re-assessment.
         onTodayReassessment: startTodayReassessment,
         todayReassessmentInFlight,
         lensConfig,
-    }), [typingMessageState, highlightedAnalysisId, expandedPostMortems, expandedPostMortemImages, savedAnalyses, activeFrameworks, copiedMessageId, modelIdToName, providerNameToId, handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy, handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, confidenceCalibration, handleRetryPostMortem, chatLeverage, autopilotResolutions, handleConfirmAutopilot, handleDismissAutopilot, handleCompareAnalysis, handleViewReasoning, handleReRunAnalysis, handleResumeDebate, handleFollowUpTicket, handleForkDebate, handleToggleWatch, handleReplacementChoice, startTodayReassessment, todayReassessmentInFlight, lensConfig, handleSteerSeat, handleStopSeat]);
+    }), [typingMessageState, highlightedAnalysisId, expandedPostMortems, expandedPostMortemImages, savedAnalyses, activeFrameworks, copiedMessageId, modelIdToName, providerNameToId, handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy, handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, confidenceCalibration, handleRetryPostMortem, chatLeverage, autopilotResolutions, handleConfirmAutopilot, handleDismissAutopilot, handleCompareAnalysis, handleViewReasoning, handleReRunAnalysis, handleResumeDebate, handleFollowUpTicket, handleForkDebate, handleToggleWatch, handleReplacementChoice, startTodayReassessment, todayReassessmentInFlight, lensConfig, handleSteerSeat, handleStopSeat,
+        // Review fix (ROUND-39): the inline-approval surface reads these —
+        // missing them froze cards on stale drafts/handlers.
+        approvalItems, approvalHandlers]);
 
     // ... (Rest of component remains unchanged) ...
     const isAnalysisProgressVisible = Boolean(
         loadingMessage || (isAnalysisInProgress && !isPostMortemInProgress),
     );
+
+    // Pipeline card chrome (ROUND-36b): the floating card used to be a
+    // fixed, unclosable overlay that sat on top of the debate side panel.
+    // It can now be collapsed to a slim pill and dismissed for the rest of
+    // the run — the Stop control lives in the pill so cancel stays one
+    // click away even when the body is hidden. Dismissal resets when the
+    // next run starts.
+    const [isPipelineCollapsed, setIsPipelineCollapsed] = useState(false);
+    const [isPipelineDismissed, setIsPipelineDismissed] = useState(false);
+    const wasProgressVisibleRef = useRef(false);
+    useEffect(() => {
+        if (isAnalysisProgressVisible && !wasProgressVisibleRef.current) {
+            setIsPipelineDismissed(false);
+            setIsPipelineCollapsed(false);
+        }
+        wasProgressVisibleRef.current = isAnalysisProgressVisible;
+    }, [isAnalysisProgressVisible]);
+    const showPipelineCard = isAnalysisProgressVisible && !isPipelineDismissed;
 
     return (
         // P1-6: Outer Suspense boundary. fallback={null} so a suspending lazy
@@ -3360,46 +3400,10 @@ const App: React.FC = () => {
                     isVisible={isApprovalInboxVisible}
                     onClose={() => setIsApprovalInboxVisible(false)}
                     items={approvalItems}
-                    onAllow={(item) => {
-                        if (item.kind === 'skill') {
-                            const draft = takeSkillDraft(item.id, activeUsername || undefined);
-                            const trade = loggedTrades.find(t => t.id === item.messageId);
-                            if (draft && trade) {
-                                void ingestCraftedSkill(trade, draft.crafted, activeUsername || 'default');
-                                toast.success('Skill saved', draft.crafted.name);
-                            } else if (draft) {
-                                // Verdict-sourced draft — no closed trade behind it.
-                                void ingestCraftedSkillFromDraft(draft.crafted, draft.coin, activeUsername || 'default');
-                                toast.success('Skill saved', draft.crafted.name);
-                            }
-                            return;
-                        }
-                        handleConfirmAutopilot(item.messageId);
-                    }}
-                    onDeny={(item) => {
-                        if (item.kind === 'skill') {
-                            const draft = takeSkillDraft(item.id, activeUsername || undefined);
-                            if (draft) {
-                                // Rejected triggers stay quiet for the cooldown
-                                // instead of re-queuing on the next verdict.
-                                tombstoneSkillDraftKey(
-                                    draftTriggerKey(draft.coin, draft.crafted),
-                                    activeUsername || undefined,
-                                );
-                                toast.success('Skill discarded', 'Similar suggestions paused for 7 days');
-                            }
-                            return;
-                        }
-                        handleDismissAutopilot(item.messageId);
-                    }}
-                    onAlways={(item) => {
-                        if (item.coin) setAutoJournalRule(item.coin, 'always', activeUsername || undefined);
-                        handleConfirmAutopilot(item.messageId);
-                    }}
-                    onNever={(item) => {
-                        if (item.coin) setAutoJournalRule(item.coin, 'deny', activeUsername || undefined);
-                        handleDismissAutopilot(item.messageId);
-                    }}
+                    onAllow={approvalHandlers.allow}
+                    onDeny={approvalHandlers.deny}
+                    onAlways={approvalHandlers.always}
+                    onNever={approvalHandlers.never}
                     onOpen={(item) => {
                         setHighlightedAnalysisId(item.messageId);
                         setIsApprovalInboxVisible(false);
@@ -3451,11 +3455,14 @@ const App: React.FC = () => {
 
             {/* Main row: persistent desktop sidebar + chat column */}
             <div className="flex-1 flex flex-row min-h-0">
-                <aside className={`hidden lg:flex flex-col ${isSidebarCollapsed ? 'w-16' : 'w-60'} shrink-0 min-h-0 border-r border-white/[0.06] bg-zinc-950 transition-[width] duration-200 relative`}>
+                {/* CLAUDE-DARK SHELL (ROUND-39 UI): the rail sits LIGHTER than
+                    the page (#1a1a1a over #111111) with NO dividing border —
+                    separation reads from the fill step alone, per reference. */}
+                <aside className={`hidden lg:flex flex-col ${isSidebarCollapsed ? 'w-16' : 'w-60'} shrink-0 min-h-0 bg-zinc-900 transition-[width] duration-200 relative`}>
                     <button
                         type="button"
                         onClick={() => setIsSidebarCollapsed(prev => !prev)}
-                        className="absolute -right-3 top-4 z-30 h-6 w-6 rounded-full border border-white/10 bg-zinc-800 text-zinc-400 shadow-lg hover:bg-zinc-700 hover:text-white transition-colors flex items-center justify-center focus-visible:ring-2 focus-visible:ring-cyan-400"
+                        className="absolute -right-3 top-4 z-30 h-6 w-6 rounded-full bg-zinc-800 text-zinc-500 hover:bg-zinc-700 hover:text-white transition-colors flex items-center justify-center focus-visible:ring-2 focus-visible:ring-cyan-400"
                         title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
                         aria-label={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
                     >
@@ -3551,12 +3558,9 @@ const App: React.FC = () => {
                 onSetModeratorModel={handleSetModeratorModel}
                 images={images}
                 removeImage={removeImage}
-                leverageRef={leverageRef}
-                setIsLeverageDropdownOpen={setIsLeverageDropdownOpen}
                 leverageInput={leverageInput}
                 handleLeverageChange={handleLeverageChange}
                 handleLeverageBlur={handleLeverageBlur}
-                isLeverageDropdownOpen={isLeverageDropdownOpen}
                 handlePresetLeverage={handlePresetLeverage}
                 fileInputRef={fileInputRef}
                 isImageUploadDisabled={isImageUploadDisabled}
@@ -3587,19 +3591,57 @@ const App: React.FC = () => {
             />
                 </main>
 
-                {/* Desktop activity card: float progress over the right side so
-                    the conversation keeps its full width while the run is live. */}
-                {isAnalysisProgressVisible && (
+                {/* Desktop activity card (ROUND-36b): float progress over the
+                    right side so the conversation keeps its width while a run
+                    is live. Collapsible + closable so it never traps content
+                    underneath; the pill keeps Stop one click away. */}
+                {showPipelineCard && (
                     <div className="pointer-events-none fixed right-4 top-24 z-40 hidden w-[min(20rem,calc(100vw-2rem))] max-h-[calc(100vh-7rem)] lg:block">
+                        {isPipelineCollapsed ? (
+                            /* Collapsed pill: status + expand/dismiss + Stop. */
+                            <div className="pointer-events-auto flex h-fit items-center gap-1.5 rounded-full border border-white/10 bg-zinc-950 px-3 py-1.5 shadow-lg" aria-label="Analysis progress (collapsed)">
+                                <span className="flex items-center gap-1.5 rounded-full bg-cyan-500/10 px-2 py-0.5 text-[10px] font-medium text-cyan-300">
+                                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400" aria-hidden="true" />
+                                    Running
+                                </span>
+                                <button type="button" onClick={() => setIsPipelineCollapsed(false)} className="text-[11px] text-zinc-400 transition-colors hover:text-zinc-100" title="Show pipeline steps">Show</button>
+                                <button type="button" onClick={() => setIsPipelineDismissed(true)} className="rounded p-1 text-zinc-500 transition-colors hover:text-zinc-200" title="Hide for this run" aria-label="Dismiss analysis progress">
+                                    <CloseIcon className="h-3.5 w-3.5" />
+                                </button>
+                            </div>
+                        ) : (
                         <div className="pointer-events-auto h-fit max-h-[calc(100vh-7rem)] overflow-y-auto rounded-2xl border border-white/10 bg-zinc-950 p-3 custom-scrollbar" aria-label="Analysis progress">
                             <div className="flex items-center justify-between px-1 pb-3">
                                 <div>
                                     <h2 className="text-sm font-medium text-zinc-200">Analysis</h2>
                                     <p className="mt-0.5 text-[11px] text-zinc-500">Pipeline</p>
                                 </div>
-                                <span className="flex items-center gap-1.5 rounded-full bg-cyan-500/10 px-2 py-1 text-[10px] font-medium text-cyan-300">
-                                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400" aria-hidden="true" />
-                                    {isPostMortemInProgress ? 'Post-mortem' : 'Running'}
+                                <span className="ml-auto flex shrink-0 items-center gap-1">
+                                    <span className="flex items-center gap-1 rounded-full bg-cyan-500/10 px-2 py-1 text-[10px] font-medium text-cyan-300">
+                                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400" aria-hidden="true" />
+                                        {isPostMortemInProgress ? 'Post-mortem' : 'Running'}
+                                    </span>
+                                    {/* Collapse / dismiss chrome (ROUND-36b): the card is no longer
+                                        unclosable — collapse to the pill or hide it for this run.
+                                        The main chat keeps its own Stop control either way. */}
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsPipelineCollapsed(true)}
+                                        className="rounded-md p-1 text-zinc-500 transition-colors hover:bg-zinc-900 hover:text-zinc-100"
+                                        title="Collapse"
+                                        aria-label="Collapse analysis progress"
+                                    >
+                                        <ChevronDownIcon className="h-4 w-4" />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsPipelineDismissed(true)}
+                                        className="rounded-md p-1 text-zinc-500 transition-colors hover:bg-zinc-900 hover:text-zinc-100"
+                                        title="Hide for this run"
+                                        aria-label="Dismiss analysis progress"
+                                    >
+                                        <CloseIcon className="h-4 w-4" />
+                                    </button>
                                 </span>
                             </div>
 
@@ -3629,6 +3671,7 @@ const App: React.FC = () => {
                                 </div>
                             )}
                         </div>
+                        )}
                     </div>
                 )}
 

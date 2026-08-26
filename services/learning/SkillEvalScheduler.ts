@@ -36,6 +36,7 @@ import {
     selectEvalTrades,
     SKILL_EVAL_MAX_TRADES,
 } from './SkillEvalService';
+import { getMemoryFilesContext } from './MemoryRetrievalService';
 
 /** Minimum closed trades since a skill's last eval before it becomes due again. */
 export const EVAL_MIN_TRADES_BETWEEN = 10;
@@ -184,21 +185,35 @@ export const buildDefaultRunner = (
         // Lazy imports break the cycle: GenericAnalysisService → … → this file.
         const { analyzeTradingView } = await import('../providers/GenericAnalysisService');
         const { resolveMemoryConfig } = await import('./MemoryModelService');
-        const { substituteSkillContext, evidenceFreshness } = await import('./MemoryRetrievalService');
+        const {
+            substituteSkillContext,
+            evidenceFreshness,
+            getMemoryFilesContext,
+        } = await import('./MemoryRetrievalService');
 
         const cfg = await resolveMemoryConfig(username);
         if (!cfg) return {};
 
         const a = trade.analysis ?? {};
+        // S6 + review fix (ROUND-39): BOTH arms are the PRODUCTION context —
+        // doctrine + budgeted notebook slices. The treatment arm appends the
+        // skill body; the baseline arm builds the same context with
+        // excludeSkillName so the skill under test is genuinely absent (eval
+        // trades match the skill by design, so an unfiltered baseline still
+        // contained it). recordInjections:false keeps synthetic arms out of
+        // the attribution telemetry.
+        const query = {
+            coin: a.coinName,
+            direction: a.direction === 'Long' || a.direction === 'Short' ? a.direction : undefined,
+            family: a.detectedPatternFamily,
+            regime: trade.marketRegime,
+        };
+        const productionContext = getMemoryFilesContext(query, [], 'analyst', 'opening', {
+            ...(skill ? { excludeSkillName: skill.name } : {}),
+            recordInjections: false,
+        });
         let skillNote: string;
         if (skillEnabled && skill) {
-            const query = {
-                coin: a.coinName,
-                direction: a.direction === 'Long' || a.direction === 'Short' ? a.direction : undefined,
-                family: a.detectedPatternFamily,
-                pattern: undefined,
-                regime: trade.marketRegime,
-            };
             const body = substituteSkillContext(skill.content.trim(), query);
             const capped = body.length > EVAL_SKILL_BODY_MAX ? `${body.slice(0, EVAL_SKILL_BODY_MAX).trimEnd()}\n…` : body;
             const provenance = skill.meta.tradeIds.length > 0
@@ -211,14 +226,16 @@ export const buildDefaultRunner = (
                 capped,
             ].join('\n');
         } else {
-            skillNote = 'Run from your general expertise only.';
+            skillNote = productionContext || 'Run from your general expertise only.';
         }
-        const prompt = [
+        const promptParts = [
             `Analyze this ${a.coinName ?? 'crypto'} ${a.direction ?? ''} setup as of ${trade.timestamp ?? 'the logged time'}.`,
             `Entry ${a.entryPoints?.[0]?.price ?? 'n/a'}, stop ${a.stopLoss ?? 'n/a'}, target ${a.takeProfit?.[0]?.price ?? 'n/a'}.`,
-            skillNote,
-            'Respond with your confidence level (High/Medium/Low/Avoid), direction (Long/Short/Neutral) and a one-paragraph rationale.',
-        ].join(' ');
+        ];
+        if (productionContext && skillEnabled && skill) promptParts.push(productionContext);
+        promptParts.push(skillNote);
+        promptParts.push('Respond with your confidence level (High/Medium/Low/Avoid), direction (Long/Short/Neutral) and a one-paragraph rationale.');
+        const prompt = promptParts.join(' ');
 
         try {
             const { analysis } = await analyzeTradingView(cfg, {

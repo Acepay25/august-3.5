@@ -188,9 +188,11 @@ describe('DebateChat', () => {
             createdAt: '2025-01-01T12:00:00Z',
         }];
         render(<DebateChat {...baseProps} debateTurns={turns} isDebating activeDebateSpeakers={{ 'Macro Analyst': 1 }} />);
-        // Thinking row is present, auto-expanded (visible generation)…
-        expect(screen.getByText('Weighing the 4H structure and the failed reclaim.')).toBeDefined();
-        expect(screen.getByText('Weighing the 4H structure and the failed reclaim.').closest('details')?.open).toBe(true);
+        // ROUND-39: thinking row stays COLLAPSED while live — the collapsed
+        // ticker AND the in-DOM body both carry the trace text.
+        const hits = screen.getAllByText('Weighing the 4H structure and the failed reclaim.');
+        expect(hits.length).toBeGreaterThanOrEqual(1);
+        expect(hits[0].closest('details')?.open).toBe(false);
         // …the answer area shows the live "Writing…" placeholder, not a
         // final-output label or a scratchpad notice.
         expect(screen.getByText('Writing')).toBeDefined();
@@ -248,10 +250,10 @@ describe('DebateChat', () => {
         // (closed <details> keeps children in the DOM, so assert `open`).
         expect(screen.getByText('Final output')).toBeDefined();
         expect(screen.getByText('Final verdict text')).toBeDefined();
-        const details = screen.getByText('Chain of thought for macro call').closest('details');
+        const details = screen.getAllByText('Chain of thought for macro call')[0].closest('details');
         expect(details?.open).toBe(false);
         fireEvent.click(screen.getByText(/Thinking/));
-        expect(screen.getByText('Chain of thought for macro call').closest('details')?.open).toBe(true);
+        expect(screen.getAllByText('Chain of thought for macro call')[0].closest('details')?.open).toBe(true);
     });
 
     it('strips leftover {{NAME}}: prompt placeholders from turn text', () => {
@@ -288,7 +290,7 @@ describe('DebateChat', () => {
         render(<DebateChat {...baseProps} debateTurns={turns} />);
         expect(screen.getByText('Final output')).toBeDefined();
         expect(screen.getByText('Short the failed sweep with SL above 95k.')).toBeDefined();
-        const details = screen.getByText('Chain of thought: momentum is rolling over on the 4H.').closest('details');
+        const details = screen.getAllByText('Chain of thought: momentum is rolling over on the 4H.')[0].closest('details');
         expect(details?.open).toBe(false);
     });
 
@@ -329,10 +331,10 @@ describe('DebateChat', () => {
         };
         render(<DebateChat {...props} />);
         expect(screen.getByText('Master Strategist verdict')).toBeDefined();
-        const details = screen.getByText('Weighed the extended SL zone and missed-win flag…').closest('details');
+        const details = screen.getAllByText('Weighed the extended SL zone and missed-win flag…')[0].closest('details');
         expect(details?.open).toBe(false);
         fireEvent.click(screen.getByText(/Thinking/));
-        expect(screen.getByText('Weighed the extended SL zone and missed-win flag…').closest('details')?.open).toBe(true);
+        expect(screen.getAllByText('Weighed the extended SL zone and missed-win flag…')[0].closest('details')?.open).toBe(true);
     });
 
     it('renders moderator reasoning before public moderator text exists', () => {
@@ -343,8 +345,10 @@ describe('DebateChat', () => {
                 reasoningProcesses={{ moderator: 'Comparing the analyst levels before asking a question.' }}
             />,
         );
-        const reasoning = screen.getByText('Comparing the analyst levels before asking a question.');
-        expect(reasoning.closest('details')?.open).toBe(true);
+        const reasoningHits = screen.getAllByText('Comparing the analyst levels before asking a question.');
+        // ROUND-39: collapsed by default even for the moderator's pre-text
+        // reasoning — the row exists (trace in DOM), just not auto-opened.
+        expect(reasoningHits[0].closest('details')?.open).toBe(false);
         expect(screen.queryByText('Final output')).toBeNull();
     });
 });

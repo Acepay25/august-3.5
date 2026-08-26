@@ -16,7 +16,6 @@ interface UIStateShape {
     isLivePostMortemVisible: boolean;
     isMobileMenuOpen: boolean;
     showMismatchModal: boolean;
-    isLeverageDropdownOpen: boolean;
     isVisionDataVisible: boolean;
     showAccuracyModal: boolean;
     showScrollDown: boolean;
@@ -48,7 +47,6 @@ const initialState: UIStateShape = {
     isLivePostMortemVisible: false,
     isMobileMenuOpen: false,
     showMismatchModal: false,
-    isLeverageDropdownOpen: false,
     isVisionDataVisible: false,
     showAccuracyModal: false,
     showScrollDown: false,
@@ -91,7 +89,6 @@ const OVERLAY_KEYS: (keyof UIStateShape)[] = [
     'showMismatchModal',
     'isVisionDataVisible',
     'showAccuracyModal',
-    'isLeverageDropdownOpen',
 ];
 
 /** Keys that are progress/loading flags — reset by RESET_PROGRESS */

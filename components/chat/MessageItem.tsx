@@ -16,11 +16,12 @@ import DebateRunLog from '../analysis/DebateRunLog';
 import RunContractPanel from '../analysis/RunContractPanel';
 import EvidencePackCard from '../analysis/EvidencePackCard';
 import ModelByline from '../shared/ModelByline';
+import InlineApprovalCard from './InlineApprovalCard';
 import AnalysisTracePanel from '../analysis/AnalysisTracePanel';
 import AnalysisDetails from './AnalysisDetails';
 import SetupLifecycleCard from '../analysis/SetupLifecycleCard';
 import TodayReassessmentPanel from './TodayReassessmentPanel';
-import { buildSupplementMarkdown, extractFinalVerdictText, extractModeratorThinking } from '../../utils/analysisUtils';
+import { buildSupplementMarkdown, extractModeratorThinking } from '../../utils/analysisUtils';
 import { extractAndStripThinkBlocks } from '../../utils/thinkingSplit';
 import { formatModelDisplayName } from '../../utils/providerUtils';
 import { AutopilotResolution } from '../../services/ui/OutcomeAutopilotService';
@@ -76,6 +77,13 @@ export interface ChatContextProps {
     /** U3 per-seat controls (ROUND-34): steer or bench one seat mid-debate. */
     onSteerSeat?: (seatName: string, note: string) => void;
     onStopSeat?: (seatName: string) => void;
+    /** U5 (ROUND-37): approval items attached to THIS message, rendered inline. */
+    inlineApprovals?: import('../../utils/approvalInbox').ApprovalItem[];
+    onApprovalAllow?: (item: import('../../utils/approvalInbox').ApprovalItem) => void;
+    onApprovalDeny?: (item: import('../../utils/approvalInbox').ApprovalItem) => void;
+    onApprovalAlways?: (item: import('../../utils/approvalInbox').ApprovalItem) => void;
+    onApprovalNever?: (item: import('../../utils/approvalInbox').ApprovalItem) => void;
+    onApprovalShow?: (item: import('../../utils/approvalInbox').ApprovalItem) => void;
     onFollowUpTicket?: (messageId: string, text: string) => void;
     /** Edit a sent user message's text in place (persisted to history). */
     onEditUserMessage?: (messageId: string, text: string) => void;
@@ -171,6 +179,12 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
         onResumeDebate,
         onSteerSeat,
         onStopSeat,
+        inlineApprovals,
+        onApprovalAllow,
+        onApprovalDeny,
+        onApprovalAlways,
+        onApprovalNever,
+        onApprovalShow,
         onFollowUpTicket,
         onEditUserMessage,
         copiedMessageId,
@@ -186,7 +200,9 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
     // Inline edit of a sent user message (history correction).
     const [editingMessageId, setEditingMessageId] = React.useState<string | null>(null);
     const [editDraft, setEditDraft] = React.useState('');
-    const [isReplayOpen, setIsReplayOpen] = React.useState(false);
+    // ROUND-39 UI: which deep surface is open on the settled card — 'replay' |
+    // 'runlog' | 'audit' | null. Replaces the scattered toggles.
+    const [paneTab, setPaneTab] = React.useState<string | null>(null);
     // Track whether this bubble streamed live — once text has been revealed
     // incrementally, the settle must not replay the SmoothText animation.
     const wasStreamingRef = React.useRef(false);
@@ -234,10 +250,11 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                 speaking: false,
                 speech: '',
                 // Reference-style activity chip: "replying to X" from the
-                // REPLY-TO routing, else the live desk-tool lookup line.
+                // REPLY-TO routing, else the NEWEST live desk-tool line
+                // (liveToolEvents is a newest-first rolling feed — ROUND-38).
                 toolChip: addressedTo?.length
                     ? `replying to ${addressedTo.join(', ')}`
-                    : (message.liveToolEvents ?? {})[name],
+                    : (message.liveToolEvents ?? {})[name]?.split('\n')[0],
                 thought: (last?.reasoning ?? '').replace(/\s+/g, ' ').slice(0, 72),
                 // U3 polish: quiet cost/latency tooltip from the run ledger —
                 // "Macro · gemini-2.5-pro · 41s · 1.2k out".
@@ -261,21 +278,11 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
         }
     }, [message.isDebating, stageActors]);
 
-    // Ensemble messages route their reasoning through the Floor surface, but the
-    // moderator's chain-of-thought and the final verdict prose should still be
-    // visible in the chat area — not only inside the seat modal.
+    // Ensemble messages route their reasoning through the Floor surface. The
+    // moderator's chain-of-thought still shows here as a Thinking row, but the
+    // final verdict PROSE does NOT render in the chat area (ROUND-39): the
+    // TradingSignalCard below is the moderator's only chat-area output.
     const moderatorThinking = extractModeratorThinking(message.reasoningProcesses, message.thoughtProcesses);
-    const verdictProse = React.useMemo(() => {
-        if (message.analysis || !message.isDebating) {
-            return extractFinalVerdictText(debateTurns, message.analysis?.strategy);
-        }
-        // Live: once plan fields start landing, the moderator's current turn
-        // IS the verdict (clarification questions never carry a plan) — stream
-        // its prose in the chat area while it is still being written.
-        if (!message.provisionalAnalysis && !message.provisionalPlanFields) return '';
-        const modTurns = debateTurns.filter(t => t.speaker === 'Moderator' && t.text.trim());
-        return modTurns[modTurns.length - 1]?.text ?? '';
-    }, [debateTurns, message.analysis, message.isDebating, message.provisionalAnalysis, message.provisionalPlanFields]);
 
     // Extract embedded Live Market JSON if present
     const liveMarketMatch = message.text.match(/\*\*LIVE MARKET DATA\*\*\s*```json\s*([\s\S]*?)\s*```/);
@@ -452,23 +459,10 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     />
                                 </div>
                             )}
-                            {isEnsembleMessage && !message.isPostMortem && verdictProse && (
-                                <div className="mb-4">
-                                    <div className="mb-2 flex items-center justify-between gap-2">
-                                        <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
-                                            Final output
-                                        </div>
-                                    </div>
-                                    <div className="prose prose-invert max-w-none leading-[1.65] overflow-x-auto min-w-0 text-zinc-200" style={{ fontSize: '15px' }}>
-                                        {message.isDebating ? (
-                                            <StreamingMarkdown text={verdictProse} live className="text-zinc-200" />
-                                        ) : (
-                                            <MarkdownContent content={verdictProse} className="text-zinc-200" />
-                                        )}
-                                    </div>
-                                </div>
-                            )}
-
+                            {/* ROUND-39: the moderator's verdict PROSE no longer
+                                renders in the chat area — the signal card is
+                                the only chat-area output. The full text stays
+                                available via Replay debate + the side panel. */}
                             {/* Progressive verdict: while the moderator is still
                                 writing, a complete plan already parsed from the
                                 stream fills the signal card live. No action
@@ -592,20 +586,40 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                             ) : message.analysis ? (
                                 <div className="ui-panel">
                                 <DebateSummary debateTurns={debateTurns} analysis={message.analysis} />
-                                {debateTurns.length > 0 && (
-                                    <div className="flex items-center justify-end border-b border-white/5 px-4 py-1.5">
-                                        <button
-                                            type="button"
-                                            onClick={() => setIsReplayOpen(open => !open)}
-                                            className="rounded border border-white/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-zinc-500 transition-colors hover:text-zinc-200"
-                                        >
-                                            {isReplayOpen ? 'Hide replay' : 'Replay debate'}
-                                        </button>
-                                    </div>
-                                )}
-                                {isReplayOpen && debateTurns.length > 0 && (
+                                {/* ROUND-39 UI (Zed "Open tab" pattern): the
+                                    settled run's deep surfaces live in one tab
+                                    strip — Replay · Run log · Audit — instead of
+                                    scattered toggles down the card. */}
+                                {(() => {
+                                    const tabs: Array<{ id: string; label: string }> = [];
+                                    if (debateTurns.length > 0) tabs.push({ id: 'replay', label: 'Replay' });
+                                    if ((message.debateRunLog?.length ?? 0) > 0 || message.runStats) tabs.push({ id: 'runlog', label: 'Run log' });
+                                    if (message.runContract || message.evidencePack) tabs.push({ id: 'audit', label: 'Audit' });
+                                    if (tabs.length === 0) return null;
+                                    const activeTab = paneTab && tabs.some(t => t.id === paneTab) ? paneTab : null;
+                                    return (
+                                        <div className="flex items-center gap-1 border-b border-white/5 px-3 py-1.5">
+                                            {tabs.map(tab => (
+                                                <button
+                                                    key={tab.id}
+                                                    type="button"
+                                                    onClick={() => setPaneTab(activeTab === tab.id ? null : tab.id)}
+                                                    aria-pressed={activeTab === tab.id}
+                                                    className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest transition-colors ${
+                                                        activeTab === tab.id
+                                                            ? 'bg-zinc-700/70 text-zinc-100'
+                                                            : 'text-zinc-500 hover:bg-white/[0.06] hover:text-zinc-200'
+                                                    }`}
+                                                >
+                                                    {tab.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    );
+                                })()}
+                                {paneTab === 'replay' && debateTurns.length > 0 && (
                                     <div className="border-b border-white/5 px-4 py-3">
-                                        <DebateReplay turns={debateTurns} onClose={() => setIsReplayOpen(false)} />
+                                        <DebateReplay turns={debateTurns} onClose={() => setPaneTab(null)} />
                                     </div>
                                 )}
                                 <div className="border-t border-white/5">
@@ -634,6 +648,26 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     embedded
                                 />
                                 <div className="border-t border-white/5 px-4 pb-4">
+                                {/* U5 (ROUND-37): inline approval cards — same actions
+                                    as the Inbox modal, surfaced where the user is. */}
+                                {(() => {
+                                    const mine = (inlineApprovals ?? []).filter(i => i.messageId === message.id);
+                                    return mine.length > 0 && onApprovalAllow && onApprovalDeny ? (
+                                        <div className="mb-3 space-y-2">
+                                            {mine.map(item => (
+                                                <InlineApprovalCard
+                                                    key={item.id}
+                                                    item={item}
+                                                    onAllow={onApprovalAllow}
+                                                    onDeny={onApprovalDeny}
+                                                    onAlways={onApprovalAlways}
+                                                    onNever={onApprovalNever}
+                                                    onShow={onApprovalShow}
+                                                />
+                                            ))}
+                                        </div>
+                                    ) : null;
+                                })()}
                                 <AnalysisDetails
                                     messageId={message.id}
                                     analysis={message.analysis}
@@ -657,8 +691,16 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                 </AnalysisDetails>
                                 </div>
                                 {(message.debateRunLog && message.debateRunLog.length > 0) || message.runStats ? (
-                                    <DebateRunLog events={message.debateRunLog ?? []} runStats={message.runStats} defaultOpen={false} />
+                                    paneTab === 'runlog'
+                                        ? <DebateRunLog events={message.debateRunLog ?? []} runStats={message.runStats} defaultOpen />
+                                        : null
                                 ) : null}
+                                {paneTab === 'audit' && (message.runContract || message.evidencePack) && (
+                                    <div className="border-t border-white/5 px-4 py-3">
+                                        <RunContractPanel stages={message.runContract} />
+                                        <EvidencePackCard pack={message.evidencePack} />
+                                    </div>
+                                )}
                                 </div>
                             ) : message.isPostMortem ? (
                                 <div className="overflow-x-auto min-w-0">

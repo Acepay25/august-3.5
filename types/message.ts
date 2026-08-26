@@ -96,6 +96,12 @@ export interface RunStats {
   promptVersion?: string;
   /** live = registry overrides; control = built-in prompts (A/B). */
   promptLane?: 'live' | 'control';
+  /**
+   * D2.3 debate-structure lane used by this run (standard/extended/efficient).
+   * Deterministically assigned per setup (ROUND-39/D6) — surfaced on the
+   * signal card as a provenance chip.
+   */
+  protocol?: string;
   /** First analyst's Monte Carlo win rate (%), if computed. */
   mcWinRate?: number;
   /** First analyst's Monte Carlo expected value (R), if computed. */

@@ -15,6 +15,11 @@ interface MarkdownRendererProps {
  * single dependency in the app) is only fetched on the first render of an
  * AI message instead of being bundled into the startup entry.
  * ReactMarkdown escapes raw HTML by default, so AI output can't inject markup.
+ *
+ * ROUND-39 typography pass (reference-aligned): tighter paragraphs (my-3,
+ * 1.65 line-height instead of my-4/leading-8), neutral zinc inline code
+ * pills and blockquote borders (cyan is reserved for interactive links —
+ * the monochrome doctrine), denser lists.
  */
 const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className }) => {
   return (
@@ -23,23 +28,24 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className 
         remarkPlugins={[remarkGfm]}
         components={{
           pre: ({ children }) => (
-            <pre className="my-2 rounded-lg bg-black/50 border border-white/10 p-3 overflow-x-auto text-[11px] font-mono leading-relaxed text-zinc-300 whitespace-pre-wrap">
+            <pre className="my-3 rounded-lg bg-black/50 border border-white/10 p-3 overflow-x-auto text-[12px] font-mono leading-relaxed text-zinc-300 whitespace-pre-wrap">
               {children}
             </pre>
           ),
           code: ({ className: codeClassName, children, ...props }) => {
             // Fenced blocks carry a language-* class and live inside the
-            // boxed <pre>; bare backticks are inline highlights.
+            // boxed <pre>; bare backticks are neutral zinc pills.
             const isBlock = /language-/.test(String(codeClassName || ''));
             if (isBlock) {
               return (
-                <code className="font-mono text-zinc-300" {...props}>
-                  {children}
-                </code>
+                <code className="font-mono text-zinc-300" {...props}>{children}</code>
               );
             }
             return (
-              <code className="rounded bg-cyan-500/10 border border-cyan-500/15 px-1 py-0.5 text-[11px] font-mono text-cyan-200" {...props}>
+              <code
+                {...props}
+                className="rounded border border-white/10 bg-white/[0.06] px-1 py-0.5 font-mono text-[12.5px] text-zinc-200"
+              >
                 {children}
               </code>
             );
@@ -56,15 +62,16 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className 
             <td className="border-b border-white/5 px-3 py-1.5 text-[13px] text-zinc-300 align-middle leading-snug">{children}</td>
           ),
           blockquote: ({ children }) => (
-            <blockquote className="border-l-2 border-cyan-500/40 pl-3 text-zinc-400">{children}</blockquote>
+            <blockquote className="border-l-2 border-white/15 pl-3 text-zinc-400 italic">{children}</blockquote>
           ),
-          h1: ({ children }) => <h1 className="mt-6 mb-3 text-lg font-semibold text-zinc-100">{children}</h1>,
-          h2: ({ children }) => <h2 className="mt-6 mb-3 text-base font-semibold text-zinc-100">{children}</h2>,
-          h3: ({ children }) => <h3 className="mt-5 mb-2 text-sm font-semibold text-zinc-100">{children}</h3>,
-          p: ({ children }) => <p className="my-4 leading-8 text-zinc-300">{children}</p>,
-          ul: ({ children }) => <ul className="my-4 list-disc space-y-2.5 pl-5 text-zinc-300">{children}</ul>,
-          ol: ({ children }) => <ol className="my-4 list-decimal space-y-2.5 pl-5 text-zinc-300">{children}</ol>,
-          li: ({ children }) => <li className="leading-8">{children}</li>,
+          h1: ({ children }) => <h1 className="mt-5 mb-2.5 text-lg font-semibold text-zinc-100">{children}</h1>,
+          h2: ({ children }) => <h2 className="mt-5 mb-2.5 text-base font-semibold text-zinc-100">{children}</h2>,
+          h3: ({ children }) => <h3 className="mt-4 mb-2 text-sm font-semibold text-zinc-100">{children}</h3>,
+          hr: () => <hr className="my-4 border-white/10" />,
+          p: ({ children }) => <p className="my-3 leading-[1.65] text-zinc-300">{children}</p>,
+          ul: ({ children }) => <ul className="my-3 list-disc space-y-1.5 pl-5 text-zinc-300 marker:text-zinc-600">{children}</ul>,
+          ol: ({ children }) => <ol className="my-3 list-decimal space-y-1.5 pl-5 text-zinc-300 marker:text-zinc-600">{children}</ol>,
+          li: ({ children }) => <li className="leading-[1.65]">{children}</li>,
           em: ({ children }) => <em className="italic text-zinc-200">{children}</em>,
           strong: ({ children }) => <strong className="font-bold text-zinc-50">{children}</strong>,
           a: ({ children, href }) => (

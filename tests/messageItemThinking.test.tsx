@@ -87,13 +87,23 @@ describe('MessageItem — ensemble thinking + final output in the chat area', ()
     it('shows the moderator thinking row for a settled ensemble message', () => {
         render(<MessageItem message={ensembleMessage()} context={baseContext} />);
         expect(screen.getByText('Moderator thinking')).toBeDefined();
-        expect(screen.getByText(/Weighing the sweep against the funding rate/)).toBeDefined();
+        // The collapsed row previews the reasoning AND keeps the body in the
+        // DOM — two copies, so match all of them.
+        expect(screen.getAllByText(/Weighing the sweep against the funding rate/).length).toBeGreaterThan(0);
     });
 
-    it('shows the final verdict prose under a Final output label once settled', () => {
-        render(<MessageItem message={ensembleMessage()} context={baseContext} />);
-        expect(screen.getByText('Final output')).toBeDefined();
-        expect(screen.getByText(/Verdict: Long BTC/)).toBeDefined();
+    it('renders ONLY the signal card once settled — no moderator prose in chat', () => {
+        // A settled ensemble message always carries its parsed analysis.
+        const settled = ensembleMessage({
+            analysis: { coinName: 'BTC', direction: 'Long', confidence: 'High' } as any,
+        });
+        render(<MessageItem message={settled} context={baseContext} />);
+        // ROUND-39: the verdict prose is NOT a chat-area surface anymore.
+        expect(screen.queryByText('Final output')).toBeNull();
+        expect(screen.queryByText(/Verdict: Long BTC/)).toBeNull();
+        // The TradingSignalCard carries the verdict instead.
+        expect(screen.getAllByTestId('signal-card').length).toBeGreaterThan(0);
+        expect(screen.getAllByTestId('signal-card')[0].getAttribute('data-direction')).toBe('Long');
     });
 
     it('does not show the verdict prose while the debate is still live', () => {

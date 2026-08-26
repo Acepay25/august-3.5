@@ -86,3 +86,36 @@ export const summarizePromptVersions = (trades: LoggedTrade[]): PromptVersionSta
         })
         .sort((a, b) => b.trades - a.trades);
 };
+
+/**
+ * D2.3 protocol A/B summary (ROUND-37): per-protocol outcomes. A trade's
+ * protocol is inferred from its promptVersion hash — versions that ran under
+ * 'extended'/'efficient' lanes hash differently because the protocol rides
+ * the same hash payload. We can't reverse the hash, so instead we attribute
+ * by run-log evidence: trades whose debate transcript contains the protocol
+ * announcement line.
+ */
+export interface ProtocolStat {
+    protocol: 'standard' | 'extended' | 'efficient';
+    trades: number;
+    wins: number;
+    winRate: number | null;
+}
+
+export const summarizeDebateProtocols = (
+    tradesByProtocol: Record<string, LoggedTrade[]>,
+): ProtocolStat[] => {
+    const out: ProtocolStat[] = [];
+    for (const key of ['standard', 'extended', 'efficient'] as const) {
+        const list = tradesByProtocol[key] ?? [];
+        const closed = list.filter(t => t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS);
+        const wins = closed.filter(t => t.outcome === TradeOutcome.WIN).length;
+        out.push({
+            protocol: key,
+            trades: closed.length,
+            wins,
+            winRate: closed.length > 0 ? Math.round((wins / closed.length) * 100) : null,
+        });
+    }
+    return out;
+};

@@ -85,9 +85,12 @@ describe('EnsembleProgressChat', () => {
         openSeat('Analyst A');
         expect(screen.getAllByText('Thinking').length).toBeGreaterThan(0);
         {
+          // ROUND-39: row stays collapsed while live (ticker + body carry the text).
           const dialog = screen.getByRole('dialog', { name: 'Analyst A analysis' });
-          expect(within(dialog).getByText('Still weighing the sweep.').closest('details')).toBeDefined();
-          expect(within(dialog).getByText('Still weighing the sweep.').closest('.mx-2')).toBeNull();
+          const hits = within(dialog).getAllByText('Still weighing the sweep.');
+          expect(hits.length).toBeGreaterThan(0);
+          expect(hits[0].closest('details')).toBeDefined();
+          expect(hits[0].closest('.mx-2')).toBeNull();
         }
     });
 
@@ -150,9 +153,10 @@ describe('EnsembleProgressChat', () => {
           const dialog2 = screen.getByRole('dialog', { name: 'Analyst A analysis' });
           expect(within(dialog2).getByText('Final output')).toBeDefined();
           expect(within(dialog2).getByText('Bullish call')).toBeDefined();
-          expect(within(dialog2).getByText('Chain of thought trace').closest('details')?.open).toBe(false);
+          // Collapsed thinking shows preview + body copies — match all.
+          expect(within(dialog2).getAllByText('Chain of thought trace')[0].closest('details')?.open).toBe(false);
           fireEvent.click(within(dialog2).getByText(/Thinking/));
-          expect(within(dialog2).getByText('Chain of thought trace').closest('details')?.open).toBe(true);
+          expect(within(dialog2).getAllByText('Chain of thought trace')[0].closest('details')?.open).toBe(true);
         }
     });
 
@@ -163,7 +167,8 @@ describe('EnsembleProgressChat', () => {
         render(<EnsembleProgressChat progress={progress} isLive={true} />);
         openSeat('Analyst A');
         expect(screen.getAllByText('Thinking').length).toBeGreaterThan(0);
-        expect(screen.getAllByText('Live trace in progress')[0].closest('details')?.open).toBe(true);
+        // ROUND-39: live Thinking rows stay COLLAPSED by default.
+        expect(screen.getAllByText('Live trace in progress')[0].closest('details')?.open).toBe(false);
         expect(screen.getAllByText('Bullish outlook').length).toBeGreaterThan(0);
     });
 
@@ -492,11 +497,11 @@ describe('EnsembleProgressChat', () => {
         {
           const dialog = screen.getByRole('dialog', { name: 'Analyst A analysis' });
           expect(within(dialog).getByText('Final output')).toBeDefined();
-          expect(within(dialog).getByText(/Weigh HTF vs LTF/).closest('details')).toBeDefined();
+          expect(within(dialog).getAllByText(/Weigh HTF vs LTF/)[0].closest('details')).toBeDefined();
         }
         {
           const dialog = screen.getByRole('dialog', { name: 'Analyst A analysis' });
-          expect(within(dialog).getByText(/Weigh HTF vs LTF/).closest('.mx-2')).toBeNull();
+          expect(within(dialog).getAllByText(/Weigh HTF vs LTF/)[0].closest('.mx-2')).toBeNull();
           expect(within(dialog).getByText(/Direction/).closest('.mx-2')).toBeDefined();
         }
     });

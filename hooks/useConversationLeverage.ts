@@ -6,7 +6,6 @@ interface UseConversationLeverageArgs {
     leverageInput: string;
     setLeverageInput: (value: string) => void;
     updateActiveConversation: (updater: (conv: Conversation) => Conversation) => void;
-    setIsLeverageDropdownOpen: (open: boolean) => void;
 }
 
 const applyLeverage = (messages: Message[], val: number): Message[] =>
@@ -14,12 +13,13 @@ const applyLeverage = (messages: Message[], val: number): Message[] =>
         ? { ...m, analysis: recalculateAnalysisMetrics(m.analysis as TradeAnalysis, val) }
         : m);
 
-/** Session Nx: clamp, persist on the conversation, rewrite ticket percentages. */
+/** Session Nx: clamp, persist on the conversation, rewrite ticket percentages.
+ *  ROUND-39 review fix: the dropdown-close callback is gone — the leverage
+ *  control lives in the Team menu now and owns its own dismissal. */
 export function useConversationLeverage({
     leverageInput,
     setLeverageInput,
     updateActiveConversation,
-    setIsLeverageDropdownOpen,
 }: UseConversationLeverageArgs): {
     handleLeverageChange: (e: ChangeEvent<HTMLInputElement>) => void;
     handleLeverageBlur: () => void;
@@ -48,8 +48,7 @@ export function useConversationLeverage({
 
     const handlePresetLeverage = useCallback((val: number) => {
         commit(val);
-        setIsLeverageDropdownOpen(false);
-    }, [commit, setIsLeverageDropdownOpen]);
+    }, [commit]);
 
     return { handleLeverageChange, handleLeverageBlur, handlePresetLeverage };
 }

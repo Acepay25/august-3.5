@@ -3,6 +3,7 @@ import { TradeAnalysis, Message, TradeOutcome, AccuracySubMode, LoggedTrade, Ana
 import { ProviderConfig } from '../../types/provider';
 import { ChatMessage, warmProviderConnection } from './GenericProviderService';
 import { streamChatWithDeskTools, resolveDefaultSymbol, clearDeskToolCache, ARBITER_ALLOWED_TOOLS } from '../analysis/DeskToolsService';
+import { createDebateMailbox, synthesizeReplyToLine, formatDmEventLine } from '../analysis/DebateMailbox';
 import { buildVerdictEvidencePack, deriveSetupQueryFromPrompt } from '../learning/EvidencePackService';
 import { persuasionProfile } from '../analysis/convictionDrift';
 import type { HermesBot } from '../../types/bot';
@@ -40,7 +41,7 @@ import {
     VALIDITY_WINDOW_PROMPT,
     VALIDITY_GUIDELINES
 } from '../../constants/prompts';
-import { CLARIFICATION_DONE_MARKER, CLARIFICATION_MARKERS_RE, MODERATOR_RETRY_MARKER, replacementTimeoutText } from '../../constants/debateMarkers';
+import { CLARIFICATION_DONE_MARKER, CLARIFICATION_MARKERS_RE, CONVICTION_RETRY_MARKER, MODERATOR_RETRY_MARKER, replacementTimeoutText } from '../../constants/debateMarkers';
 import { DUAL_SCENARIO_JSON_SCHEMA, MASTER_TRADE_PLAN_MARKDOWN } from '../../constants/schemas';
 import { parseLiveMarketData } from '../../utils/liveMarketParser';
 import { truncateTextToTokens, parsePrice, parseMarkdownTradePlan } from '../../utils/analysisUtils';
@@ -302,6 +303,13 @@ const getModeratorAnalysisStream = async function* (
     /** Journal access for the `recall` desk tool (ROUND-28/B2): the arbiter
      *  must be able to check its own trade history, not just the analysts. */
     trades?: LoggedTrade[],
+    /** ROUND-38: debate mailbox — lets the Moderator DM a seat directly and
+     *  read whatever the seats sent them during the debate. */
+    mailbox?: import('../analysis/DebateMailbox').DebateMailbox,
+    onMailSent?: (info: { from: string; to: string; text: string; round: number }) => void,
+    /** Review fix (ROUND-39): which debate round the moderator turn belongs
+     *  to — DM receipts used to print "(Round 0)" in the verdict transcript. */
+    mailboxRound?: number,
 ): AsyncGenerator<string> {
     const effectiveConfig: ProviderConfig = { ...config, selectedModel: model || config.selectedModel };
     const messages: ChatMessage[] = [
@@ -330,6 +338,12 @@ const getModeratorAnalysisStream = async function* (
             // (W1 fix): without this its recall desk tool returned nothing.
             trades,
             afterToolsNudge: 'Tool results are above. Continue the moderator turn now. If this is the final verdict, end with the labeled FINAL TRADE PLAN markdown. No JSON, no tool tags.',
+            // ROUND-38: the Moderator can DM seats (e.g. a targeted challenge
+            // before the verdict) and read messages addressed to them.
+            mailbox,
+            mailboxSeat: 'Moderator',
+            mailboxRound: mailboxRound ?? 0,
+            onMailSent: info => onMailSent?.(info),
         })) {
             if (chunk) yield chunk;
         }
@@ -2273,6 +2287,61 @@ Start with <DEBATE_START> now.
  * autoplaying the entire transcript.
  */
 export const REAL_DEBATE_RESPONSE_ROUNDS = 2;
+/**
+ * D2.3 protocol A/B lane (ROUND-37): which debate protocol this run uses.
+ *  - 'standard'  — current behavior: 2 rebuttal rounds, devil rotation on,
+ *                  clarification cycles allowed (MAX_CLARIFICATION_CYCLES).
+ *  - 'extended'  — one extra rebuttal round for harder setups.
+ *  - 'efficient' — devil round only when the floor disagrees; no clarifications.
+ * The chosen protocol rides runStats.promptVersion so outcomes can be
+ * attributed per-protocol alongside the prompt-lane A/B.
+ */
+export type DebateProtocol = 'standard' | 'extended' | 'efficient';
+/**
+ * D6 (ROUND-39): protocol assignment is DETERMINISTIC — hashed from the
+ * setup (symbol + prompt + roster), so the same trade idea always runs the
+ * same structure. The old Math.random() draw made verdicts on identical
+ * setups incomparable, silently changed debate length run-to-run, and made
+ * engine tests flake (call-count assertions needed a Math.random pin).
+ * Distribution is preserved in aggregate: a uniform hash over the key space
+ * still lands ~60/20/20 across many DIFFERENT setups, while any single
+ * setup stays reproducible. `rate` keeps the API for tests.
+ */
+export const assignDebateProtocol = (
+    rate = 0.2,
+    seed?: string,
+): DebateProtocol => {
+    const key = seed ?? lastProtocolSeedRef.key;
+    // D6: no seed (engine tests, direct generator calls) → the CONTROL lane,
+    // deterministically. Only seeded real debates spread across lanes.
+    if (!key) {
+        lastDebateProtocol = 'standard';
+        return 'standard';
+    }
+    let h = 2166136261 >>> 0;
+    const text = `${key}|${Math.floor(Date.now() / DEBATE_PROTOCOL_EPOCH_MS)}`;
+    for (let i = 0; i < text.length; i++) {
+        h ^= text.charCodeAt(i);
+        h = Math.imul(h, 16777619) >>> 0;
+    }
+    const r = (h % 1000) / 1000;
+    const p: DebateProtocol = r < rate ? 'extended' : r < rate * 2 ? 'efficient' : 'standard';
+    lastDebateProtocol = p;
+    return p;
+};
+/** The most recently assigned protocol (read by the pipeline for runStats). */
+let lastDebateProtocol: DebateProtocol = 'standard';
+export const getLastDebateProtocol = (): DebateProtocol => lastDebateProtocol;
+/**
+ * D6: per-debate protocol seed. conductRealDebate calls setProtocolSeed()
+ * with the setup identity before assigning; when unset the assignment falls
+ * back to a time-bucketed key (still deterministic within an epoch hour).
+ */
+export const DEBATE_PROTOCOL_EPOCH_MS = 60 * 60_000;
+const lastProtocolSeedRef: { key: string } = { key: '' };
+export const setProtocolSeed = (seed: string): void => {
+    lastProtocolSeedRef.key = seed;
+};
 
 /** Wall-clock budget for the whole real debate — see conductRealDebate. */
 export const DEBATE_DEFAULT_TIMEOUT_MS = 8 * 60_000;
@@ -2810,6 +2879,13 @@ export const conductRealDebate = async function* (
     // context) reads THIS, never the original `analysts` array — a replacement
     // provider must be re-callable and visible to the moderator.
     const debateRoster: RealDebateAnalyst[] = [...analysts];
+    // Debate mailbox (ROUND-38): real send_message / read_message tool calls.
+    // The Moderator is addressable too — DMs to them ride into the verdict
+    // context via the transcript builder below.
+    const debateMailbox = createDebateMailbox([...names, 'Moderator']);
+    // Per-round deliveries already surfaced as System "DM" lines in the
+    // transcript (dedupe — a message is announced exactly once).
+    const announcedDms = new Set<unknown>();
     // Analysts whose stream failed mid-debate — their partial text is purged
     // from the transcript and a visible notice is emitted. Late deltas from a
     // dropped seat are discarded for the rest of the debate.
@@ -2921,6 +2997,16 @@ export const conductRealDebate = async function* (
 
     // Consensus shortcut: when openings already agree tightly, the final rebuttal adds little — skip it and go to verdict sooner.
     let totalRounds = REAL_DEBATE_RESPONSE_ROUNDS + 1;
+    // D2.3 protocol lane (ROUND-37): 'extended' adds a rebuttal round;
+    // 'efficient' drops clarifications + conditional devil round. The chosen
+    // protocol is announced on the run log and hashed into the pipeline's
+    // promptVersion so outcomes attribute per-protocol.
+    // D6 note: the protocol seed is set by the ORCHESTRATOR (pipeline) via
+    // setProtocolSeed() before the generator runs — direct engine calls
+    // (tests) stay unseeded and deterministically take the control lane.
+    const debateProtocol = assignDebateProtocol();
+    if (debateProtocol === 'extended') totalRounds += 1;
+    emitLog('episode', `Protocol lane: ${debateProtocol} (${totalRounds - 1} response rounds).`);
     try {
         const dirs = analysts.map(a => (a.result.analysis.direction || '').toLowerCase());
         const sameDir = dirs.length >= 2 && dirs.every(d => d === dirs[0] && (d === 'long' || d === 'short'));
@@ -3010,12 +3096,23 @@ export const conductRealDebate = async function* (
         // The existing synthetic-dissent protocol still covers full echo
         // chambers; this guarantees exactly one structured counter-voice even
         // when divergence is moderate.
+        // D2.3 'efficient' lane: skip the devil assignment when openings
+        // already disagree — the counter-case exists without forcing one.
+        const floorAgrees = (() => {
+            const dirs = debateRoster.map(a => (a.result.analysis.direction || '').toLowerCase());
+            return dirs.length >= 2 && dirs.every(d => d === dirs[0]);
+        })();
+        if (debateProtocol === 'efficient' && floorAgrees) {
+            // fall through with no devil seat: devilName stays undefined below
+        }
         const devilSeatIndex = (() => {
             let h = 0;
             for (let i = 0; i < userPrompt.length; i++) h = (h * 31 + userPrompt.charCodeAt(i)) >>> 0;
             return h % Math.max(debateRoster.length, 1);
         })();
-        const devilName = debateRoster[devilSeatIndex]?.provider.name;
+        const devilName = (debateProtocol === 'efficient' && floorAgrees)
+            ? undefined
+            : debateRoster[devilSeatIndex]?.provider.name;
         const isDevilSeat = analyst.provider.name === devilName && round === rebuttalStart;
 
         // The lens persona must survive into the rebuttal rounds —
@@ -3067,7 +3164,7 @@ export const conductRealDebate = async function* (
                 ? '**EVIDENCE ROUND:** Cite ONE concrete data point already on the table (a level, volume figure, funding rate, session context) that most supports OR most threatens your stance. No new analysis - just the evidence and why it matters in one or two sentences, then your updated Levels line.\n\n'
                 : '') +
             (round === totalRounds
-                ? '**FINAL CONVICTION LINE (required):** End your rebuttal with exactly one line: CONVICTION: <0-100> - your private numeric conviction in your own stance after this debate. This is sealed: other seats never see it, only the Moderator sees all convictions together at the verdict.\n\n'
+                ? '**FINAL CONVICTION LINE (required):** START your reply with exactly one line: CONVICTION: <0-100> - your private numeric conviction in your own stance after this debate. This is sealed: other seats never see it, only the Moderator sees all convictions together at the verdict. Put it BEFORE your arguments so it can never be cut off.\n\n'
                 : '') +
             `Respond now with your rebuttal for Round ${round}.` +
             (steeringNote ? `\n\n**USER STEERING (queued mid-debate — follow this):**\n${steeringNote}` : '') +
@@ -3084,27 +3181,81 @@ export const conductRealDebate = async function* (
             name: analyst.provider.name,
             round,
             run: async (emit: (delta: string) => void) => {
+                // D12: local accumulation of THIS turn's emission — the pump
+                // queue merges asynchronously, so checking roundTexts here
+                // would race the drain loop.
+                let localTurnText = '';
+                const emitAndTrack = (delta: string): void => {
+                    localTurnText += delta;
+                    emit(delta);
+                };
                 // Bounded retry: a transient 429/network blip before
                 // any output must not permanently drop the analyst
                 // (the drop path asks the user to pick a replacement).
-                await streamWithTransientRetry(
-                    () => streamChatWithDeskTools(analyst.provider.config, messages, {
-                        temperature: 0.35,
-                        signal,
-                        trades: fullTradesForRecall,
-                        maxTokens: TASK_BUDGETS.rebuttal,
-                        onReasoning: (reasoning: string) => onAnalystReasoning?.(analyst.provider.name, reasoning, round),
-                        onToolEvent: (line: string) => {
-                            emitLog('tool', line, round, analyst.provider.name);
-                            onToolEvent?.(analyst.provider.name, round, line);
-                        },
-                        defaultSymbol: resolveDefaultSymbol(userPrompt),
-                        afterToolsNudge: 'Tool results are above. Write your rebuttal Floor turn now. No JSON, no tool tags.',
-                        allowedTools: botByThoughtsKey?.[analyst.provider.thoughtsKey]?.enabledTools,
-                    }),
-                    emit,
-                    `${analyst.provider.name} Round ${round} rebuttal`,
-                );
+                const runOnce = () => streamChatWithDeskTools(analyst.provider.config, messages, {
+                    temperature: 0.35,
+                    signal,
+                    trades: fullTradesForRecall,
+                    maxTokens: TASK_BUDGETS.rebuttal,
+                    onReasoning: (reasoning: string) => onAnalystReasoning?.(analyst.provider.name, reasoning, round),
+                    onToolEvent: (line: string) => {
+                        emitLog('tool', line, round, analyst.provider.name);
+                        onToolEvent?.(analyst.provider.name, round, line);
+                    },
+                    defaultSymbol: resolveDefaultSymbol(userPrompt),
+                    afterToolsNudge: 'Tool results are above. Write your rebuttal Floor turn now. No JSON, no tool tags.',
+                    allowedTools: botByThoughtsKey?.[analyst.provider.thoughtsKey]?.enabledTools,
+                    // D8 (ROUND-39): without live hybrid market data, the first
+                    // round forces one real grounding lookup — a seat must not
+                    // argue from zero data when the debate is already running
+                    // blind. With hybrid data present the seat keeps full
+                    // discretion (auto).
+                    requireFirstToolRound: !hybridContext,
+                    // ROUND-38 floor messaging: real tool-call DMs between seats.
+                    mailbox: debateMailbox,
+                    mailboxSeat: analyst.provider.name,
+                    mailboxRound: round,
+                    onMailSent: info => {
+                        // Announce each delivery once as a System line —
+                        // the DM body itself stays private to recipient.
+                        const key = `${info.from}>${info.to}@${info.round}:${info.text}`;
+                        if (announcedDms.has(key)) return;
+                        announcedDms.add(key);
+                        const dm = debateMailbox.all().find(m =>
+                            m.from === info.from && m.toLabel === info.to
+                            && m.round === info.round && m.text === info.text);
+                        if (dm) {
+                            emitLog('tool', formatDmEventLine(dm), round, info.from);
+                            pumpPush({ kind: 'delta', name: 'System', round, text: formatDmEventLine(dm) });
+                        }
+                    },
+                });
+                await streamWithTransientRetry(runOnce, emitAndTrack, `${analyst.provider.name} Round ${round} rebuttal`);
+                // D12 conviction insurance: the final-round seat MUST produce a
+                // sealed CONVICTION for the auction. A truncated/ignored line is
+                // retried ONCE with a pointed nudge — the auction silently lost
+                // seats before, and nothing downstream ever flagged it.
+                if (round === totalRounds && !signal?.aborted) {
+                    const produced = /CONVICTION:\s*\d{1,3}/i.test(localTurnText);
+                    if (!produced) {
+                        console.warn(`[RealDebate] ${analyst.provider.name} missed the CONVICTION line on the final round — retrying once.`);
+                        emitLog('tool', `${analyst.provider.name} missing CONVICTION — retrying once`, round, analyst.provider.name);
+                        // The cutoff marker tells the consumer to REPLACE this
+                        // seat's turn text with the retry reply (no concat).
+                        pumpPush({ kind: 'delta', name: analyst.provider.name, round, text: `\n${CONVICTION_RETRY_MARKER}\n` });
+                        messages.push({
+                            role: 'user',
+                            content:
+                                `Your reply was cut off before the required conviction line. ` +
+                                `As your ENTIRE reply, output only: "CONVICTION: <0-100>" — your numeric conviction in your own stance.`,
+                        });
+                        await streamWithTransientRetry(
+                            runOnce,
+                            emit,
+                            `${analyst.provider.name} conviction retry`,
+                        );
+                    }
+                }
             },
         };
     };
@@ -3140,6 +3291,18 @@ export const conductRealDebate = async function* (
             pumpPush({ kind: 'delta', name: analyst.provider.name, round, text: delta, startedAt: firstDelta ? startedAt : undefined });
             firstDelta = false;
         })
+            .then(() => {
+                // ROUND-38 bridge: messages sent via send_message tool calls
+                // become a routed REPLY-TO line on the settled turn — the
+                // addressing filters (turnAddressedTo) and the side panel's
+                // tool-style reply rows read exactly this marker.
+                const recipients = debateMailbox.recipientsFor(analyst.provider.name, round);
+                const line = synthesizeReplyToLine(roundTexts[analyst.provider.name]?.[round] || '', recipients);
+                if (line) {
+                    roundTexts[analyst.provider.name][round] = (roundTexts[analyst.provider.name]?.[round] || '') + line;
+                    pumpPush({ kind: 'delta', name: analyst.provider.name, round, text: line });
+                }
+            })
             .catch((e: any) => {
                 const isAbort = e?.name === 'AbortError' || e?.code === 'ABORT_ERR' || e?.name === 'TimeoutError';
                 if (!isAbort) {
@@ -3250,6 +3413,21 @@ export const conductRealDebate = async function* (
             // Deltas arriving after the drop are discarded (partial text was
             // already purged in the catch) — nothing further is yielded.
             if (droppedNames.has(item.name)) continue;
+            // D12: the conviction-retry marker CUTOFFS the truncated attempt —
+            // the seat's round text is replaced by the retry reply, not
+            // concatenated with it.
+            const markerIdx = item.text.indexOf(CONVICTION_RETRY_MARKER);
+            if (markerIdx >= 0) {
+                const before = item.text.slice(0, markerIdx).trim();
+                const after = item.text.slice(markerIdx + CONVICTION_RETRY_MARKER.length).trim();
+                roundTexts[item.name][item.round] = before || '';
+                if (before) yield { speaker: item.name, round: item.round, text: before };
+                if (after) {
+                    roundTexts[item.name][item.round] = (roundTexts[item.name][item.round] || '') + after;
+                    yield { speaker: item.name, round: item.round, text: after };
+                }
+                continue;
+            }
             roundTexts[item.name][item.round] = (roundTexts[item.name][item.round] || '') + item.text;
             yield { speaker: item.name, round: item.round, text: item.text, startedAt: item.startedAt };
         }
@@ -3262,6 +3440,28 @@ export const conductRealDebate = async function* (
                     ? 'Debate cost cap reached — skipping remaining rebuttal rounds and proceeding to the verdict.'
                     : 'Debate time budget reached — skipping remaining rebuttal rounds and proceeding to the verdict.',
             };
+            // D10: seats cut off before the final round never got to declare a
+            // sealed conviction. If they declared one in an EARLIER round,
+            // surface it to the arbiter — their last-known stance should not
+            // vanish from the conviction auction just because time ran out.
+            for (const name of activeAnalystNames) {
+                if (roundTexts[name]?.[totalRounds]?.match(/CONVICTION:\s*\d{1,3}/i)) continue;
+                let lastConviction: { round: number; value: number } | null = null;
+                for (let r = totalRounds - 1; r >= 1; r--) {
+                    const m = roundTexts[name]?.[r]?.match(/CONVICTION:\s*(\d{1,3})/i);
+                    if (m) {
+                        lastConviction = { round: r, value: Math.min(100, Math.max(0, parseInt(m[1], 10))) };
+                        break;
+                    }
+                }
+                if (lastConviction) {
+                    yield {
+                        speaker: 'System',
+                        round: noticeRound,
+                        text: `${name} was cut off by the debate budget before the final round — their last sealed conviction (Round ${lastConviction.round}): CONVICTION: ${lastConviction.value}.`,
+                    };
+                }
+            }
         }
     }
 
@@ -3296,7 +3496,12 @@ export const conductRealDebate = async function* (
         emitLog('episode', `Openings aligned (divergence ${openingDivergence.score}) — skipping clarification.`, lastRebuttalRound);
         yield { speaker: 'System', round: lastRebuttalRound, text: `Openings aligned (divergence score ${openingDivergence.score}) — skipping clarification and proceeding to the verdict.` };
     }
+    // D7: appended to the verdict prompt when clarification cycles exhaust
+    // without a satisfaction judgment (see the cap branch below).
+    let verdictAddendum = '';
     for (let cycle = 1; cycle <= MAX_CLARIFICATION_CYCLES; cycle++) {
+        // D2.3 'efficient' lane: no clarification cycles at all.
+        if (debateProtocol === 'efficient') break;
         if (skipRebuttals || skipClarification || !runClarification) break;
         if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
@@ -3331,6 +3536,19 @@ export const conductRealDebate = async function* (
                     emitLog('tool', line, questionRound, 'Moderator');
                     onToolEvent?.('Moderator', questionRound, line);
                 },
+                undefined,
+                // ROUND-38: the Moderator reads seat DMs and may DM back.
+                debateMailbox,
+                info => {
+                    emitLog('tool', formatDmEventLine({
+                        from: info.from, toKey: info.to.toLowerCase(), toLabel: info.to, text: info.text, round: questionRound,
+                    }), questionRound, 'Moderator');
+                    onToolEvent?.('Moderator', questionRound, formatDmEventLine({
+                        from: info.from, toKey: info.to.toLowerCase(), toLabel: info.to, text: info.text, round: questionRound,
+                    }));
+                },
+                // Review fix: DM receipts carry the real debate round.
+                questionRound,
             )) {
                 if (chunk) {
                     questionText += chunk;
@@ -3430,6 +3648,19 @@ export const conductRealDebate = async function* (
                             },
                             defaultSymbol: resolveDefaultSymbol(userPrompt),
                             afterToolsNudge: 'Tool results are above. Answer the Moderator now. No JSON, no tool tags.',
+                            // ROUND-38: mail may have arrived since the seat's
+                            // last turn — inbox notice + send/read available.
+                            mailbox: debateMailbox,
+                            mailboxSeat: analyst.provider.name,
+                            mailboxRound: answerRound,
+                            onMailSent: info => {
+                                const key = `${info.from}>${info.to}@${info.round}:${info.text}`;
+                                if (announcedDms.has(key)) return;
+                                announcedDms.add(key);
+                                emitLog('tool', formatDmEventLine({
+                                    from: info.from, toKey: info.to.toLowerCase(), toLabel: info.to, text: info.text, round: info.round,
+                                }), answerRound, info.from);
+                            },
                         }),
                         emit,
                         `${analyst.provider.name} clarification answer`,
@@ -3514,6 +3745,17 @@ export const conductRealDebate = async function* (
 
         // -- Cap: on cycle 3 there is no judgment — proceed to verdict --
         if (cycle === MAX_CLARIFICATION_CYCLES) {
+            // D7: the moderator never judged this last cycle, so residual
+            // concerns are unknown. Flag it so the verdict is written with
+            // honest uncertainty instead of silently dropped dissatisfaction.
+            const unresolvedBlock = [
+                '**UNRESOLVED CONCERNS:** the clarification budget ran out after your last round of questions without a satisfaction judgment.',
+                'The analysts\' latest answers may still leave open questions. In the verdict:',
+                '- state explicitly which concerns REMAIN open (or that none do), and',
+                '- widen uncertainty on the affected plan fields rather than presenting false precision.',
+                'Do not re-ask questions — rule with what is on the table.',
+            ].join('\n');
+            verdictAddendum = `${verdictAddendum}\n\n${unresolvedBlock}`;
             break;
         }
 
@@ -3649,6 +3891,15 @@ export const conductRealDebate = async function* (
             } catch { return ''; }
         })(),
         `\n\n**THE DEBATE TRANSCRIPT (EPISODES):**\n${transcriptBlock}`,
+        // ROUND-38 direct messages: the private side-channel is evidence for
+        // the arbiter — who messaged whom often explains a stance shift that
+        // the public transcript alone doesn't.
+        (() => {
+            const all = debateMailbox.all();
+            if (all.length === 0) return '';
+            const lines = all.map(m => `- ${m.from} → ${m.toLabel} (Round ${m.round}): ${m.text}`);
+            return `\n\n**DIRECT MESSAGES EXCHANGED DURING THE DEBATE:**\n${lines.join('\n')}`;
+        })(),
         // Final-stance divergence summary — recomputed AFTER clarification so
         // the moderator sees where each seat LANDED, not just the openings.
         `\n\n${summarizeFinalPositions(roundTexts, names).block}`,
@@ -3656,6 +3907,9 @@ export const conductRealDebate = async function* (
         buildSeatTrustBlock(names, providerIdBySeat, fullTradesForRecall as never) ? `\n\n${buildSeatTrustBlock(names, providerIdBySeat, fullTradesForRecall as never)}` : '',
         `\n\n**TRADING REQUEST:**\n${truncateTextToTokens(userPrompt, 350)}`,
         steerVerdict ? `\n\n**USER STEERING (queued mid-debate — follow this):**\n${steerVerdict}` : '',
+        // D7: honest-uncertainty instructions when clarification ran out of
+        // budget without a satisfaction judgment.
+        verdictAddendum.trim() ? verdictAddendum : '',
         marketDataOverride,
         generateGateReconciliationContext(gateResult ?? null, []),
         // Live-path divergence + calibration: previously these only existed in
@@ -3696,7 +3950,14 @@ export const conductRealDebate = async function* (
             for await (const chunk of getModeratorAnalysisStream(moderatorConfig, moderatorModel, attempts[attempt], signal, moderatorReasoningFor(finalRound), resolveDefaultSymbol(userPrompt), (line: string) => {
                 emitLog('tool', line, finalRound, 'Moderator');
                 onToolEvent?.('Moderator', finalRound, line);
-            })) {
+            }, undefined, debateMailbox, info => {
+                // ROUND-38: moderator DMs surface as tool events + a System line.
+                const dmLine = formatDmEventLine({
+                    from: info.from, toKey: info.to.toLowerCase(), toLabel: info.to, text: info.text, round: finalRound,
+                });
+                emitLog('tool', dmLine, finalRound, 'Moderator');
+                onToolEvent?.('Moderator', finalRound, dmLine);
+            }, finalRound)) {
                 if (chunk) {
                     moderatorText += chunk;
                     yield { speaker: 'Moderator', round: finalRound, text: chunk };

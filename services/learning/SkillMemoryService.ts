@@ -12,7 +12,6 @@ import { ProviderConfig } from '../../types/provider';
 import {
     appendDiaryEntry,
     createMemoryFileUnlocked,
-    deleteMemoryFileUnlocked,
     ensureHarnessFoldersUnlocked,
     ensureSkillsArchiveFolderUnlocked,
     extractLessonFromPostMortem,
@@ -314,6 +313,61 @@ export const skillMatchesSetup = (
     return hits >= 2;
 };
 
+/**
+ * S1 (ROUND-39): STRICT matcher for ENFORCEMENT paths (vetoes, eval-trade
+ * selection). The loose `skillMatchesSetup` scores direction-equality alone
+ * as a match (hits=2), so a confirmed avoid for "BTC long" vetoed EVERY Long
+ * on EVERY coin. Enforcement requires real setup overlap: the skill must
+ * share the coin, OR the pattern family, OR (direction + regime).
+ * Retrieval keeps the loose matcher — recall breadth is cheap there.
+ */
+export const skillStrictlyMatchesSetup = (
+    meta: SkillMeta,
+    setup: { coin?: string; direction?: string; family?: string; pattern?: string; regime?: string },
+): boolean => {
+    if (meta.status === 'retired') return false;
+    const coin = setup.coin?.toUpperCase().replace(/USDT?$/, '');
+    const skillCoin = meta.coin?.toUpperCase().replace(/USDT?$/, '');
+    const sameCoin = Boolean(coin && skillCoin && coin === skillCoin);
+    const fam = (setup.family || setup.pattern || '').toLowerCase();
+    const sameFamily = Boolean(fam && meta.family && familiesRelate(fam, meta.family));
+    const sameDirection = Boolean(setup.direction && meta.direction && setup.direction === meta.direction);
+    const sameRegime = Boolean(setup.regime && meta.regime && setup.regime === meta.regime);
+    // A skill with NO scoping dimensions at all is a general lesson — it can
+    // never strictly enforce.
+    const scoped = Boolean(meta.coin || meta.family || meta.direction || meta.regime);
+    if (!scoped) return false;
+    return sameCoin || sameFamily || (sameDirection && sameRegime);
+};
+
+/** S8 (ROUND-39): how many setup dimensions a skill actually shares — the
+ *  ranking weight behind enforcement priority (coin > direction > family). */
+const dimsOverlapCount = (
+    meta: SkillMeta,
+    setup: { coin?: string; direction?: string; family?: string; pattern?: string },
+): number => {
+    let n = 0;
+    const coin = (setup.coin || '').toUpperCase().replace(/USDT?$/, '');
+    const skillCoin = (meta.coin || '').toUpperCase().replace(/USDT?$/, '');
+    if (coin && skillCoin && coin === skillCoin) n += 1;
+    if (setup.direction && meta.direction && setup.direction === meta.direction) n += 1;
+    const fam = (setup.family || setup.pattern || '').toLowerCase();
+    if (fam && meta.family && familiesRelate(fam, meta.family)) n += 1;
+    return Math.max(1, n);
+};
+
+/** S8 (ROUND-39): evidence-freshness multiplier for enforcement ranking —
+ *  mirrors MemoryRetrievalService's decay: 0.75 default when no evidence is
+ *  recorded, then exp(-ageDays/120) with NO floor (→ ~0.13 at 240d, ~0.02 at
+ *  a year). Ranking weight only — it can never zero out a match entirely. */
+const evidenceFreshnessFactor = (meta: SkillMeta): number => {
+    if (!meta.lastEvidenceAt) return 0.75;
+    const t = Date.parse(meta.lastEvidenceAt);
+    if (!Number.isFinite(t)) return 0.75;
+    const ageDays = Math.max(0, (Date.now() - t) / 86_400_000);
+    return Math.exp(-ageDays / 120);
+};
+
 const enabledSkillMeta = (file: MemoryFile): SkillMeta | null => {
     if (!file.enabled || !isSkillFile(file)) return null;
     return parseSkillMarkdown(file.content);
@@ -571,13 +625,132 @@ const maybeRefineSkill = async (fileId: string, allTrades: LoggedTrade[], userna
 };
 
 /**
+ * S7 (ROUND-39): act on the worth-gate's 'merge' verdict. Previously the
+ * second-most-useful gate outcome was DROPPED silently — overlaps festered
+ * until consolidateSkills destroyed the extras. The named target skill is
+ * tightened with the same refine pass used for consecutive-loss skills, fed
+ * the cluster's losing post-mortems as falsifying evidence (an all-win
+ * cluster skips the LLM call — nothing was falsified — and just folds the
+ * extra evidence into the target).
+ */
+const maybeMergeSkillUnlocked = async (
+    mergeTarget: string,
+    trade: LoggedTrade,
+    allTrades: LoggedTrade[],
+    username: string,
+): Promise<void> => {
+    try {
+        const key = clusterKey(trade);
+        const cluster = allTrades.filter(t =>
+            (t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS) && clusterKey(t) === key
+        );
+        const needle = mergeTarget.trim().toLowerCase().replace(/\.md$/i, '');
+        const file = getMemoryFiles().files.filter(isSkillFile).find(f => {
+            const stem = f.name.replace(/\.md$/i, '').toLowerCase();
+            const m = parseSkillMarkdown(f.content);
+            return stem === needle || (m ? titleFromMeta(m).toLowerCase() === needle : false);
+        });
+        const meta = file ? parseSkillMarkdown(file.content) : null;
+        if (!file || !meta) {
+            // Target vanished between the gate and now — fall back to create
+            // so the gate's work still lands somewhere useful.
+            await maybeUpsertSkillUnlocked(trade, allTrades, username);
+            return;
+        }
+        const foldEvidence = (): void => {
+            if (!latestMeta.tradeIds.includes(trade.id)) {
+                const prevStatus = latestMeta.status;
+                latestMeta.tradeIds = [...latestMeta.tradeIds, trade.id];
+                if (trade.outcome === TradeOutcome.WIN) latestMeta.wins += 1;
+                else latestMeta.losses += 1;
+                latestMeta.consecutiveLosses = trade.outcome === TradeOutcome.LOSS
+                    ? latestMeta.consecutiveLosses + 1
+                    : 0;
+                latestMeta.status = deriveStatus(latestMeta);
+                // Review fix (ROUND-39): merge-driven transitions ride the
+                // temporal ledger like every other path, so skillStatusAt
+                // replay sees them.
+                if (latestMeta.status !== prevStatus) {
+                    stampStatusTransition(latestMeta, latestMeta.status, 'worth-gate merge');
+                }
+            }
+        };
+        let latestMeta = meta;
+        const losers = cluster.filter(t => t.outcome === TradeOutcome.LOSS);
+        const config = await resolveMemoryConfig(username);
+        if (config && losers.length > 0) {
+            const refined = await refineSkillFromLosses({
+                title: titleFromMeta(meta),
+                kind: meta.kind,
+                ifCondition: meta.ifCondition,
+                thenAction: meta.thenAction,
+                body: meta.body,
+                wins: meta.wins,
+                losses: meta.losses,
+            }, losers.slice(-4), config);
+            // Re-read after the LLM round-trip — evidence may have landed meanwhile.
+            const latestFile = getMemoryFiles().files.find(f => f.id === file.id);
+            const latest = latestFile ? parseSkillMarkdown(latestFile.content) : null;
+            if (latest && refined) {
+                latest.previousVersion = { kind: latest.kind, ifCondition: latest.ifCondition, thenAction: latest.thenAction };
+                latest.kind = refined.kind;
+                latest.ifCondition = refined.ifCondition;
+                latest.thenAction = refined.thenAction;
+                latest.body = formatCraftedSkillBody(refined);
+                latest.refinedAt = new Date().toISOString();
+                latestMeta = latest;
+            }
+        }
+        foldEvidence();
+        latestMeta.modifiedAt = new Date().toISOString();
+        await updateMemoryFileUnlocked(file.id, {
+            content: serializeSkill(latestMeta, titleFromMeta(latestMeta)),
+            enabled: latestMeta.status !== 'retired',
+        }, username);
+        console.log('[SkillMemory] Worth-gate merge applied to', file.name);
+    } catch (e) {
+        console.warn('[SkillMemory] Worth-gate merge failed:', e);
+    }
+};
+
+export const maybeMergeSkill = (
+    mergeTarget: string,
+    trade: LoggedTrade,
+    allTrades: LoggedTrade[],
+    username: string,
+): Promise<void> =>
+    withNotebookWriteLock(() => maybeMergeSkillUnlocked(mergeTarget, trade, allTrades, username));
+
+/**
+ * S10 (ROUND-39): user-triggered refinement from the dashboard. Runs the same
+ * LLM tighten pass the automatic 3-loss gate uses, on demand — closes the
+ * loop for 'refine' recommendations that previously rendered as dead-end rows.
+ * Review fix: resolves FALSE when nothing changed (no provider / LLM declined)
+ * so the dashboard doesn't toast success on a no-op.
+ */
+export const refineSkillNow = (
+    fileId: string,
+    allTrades: LoggedTrade[],
+    username: string,
+): Promise<boolean> =>
+    withNotebookWriteLock(async () => {
+        const before = getMemoryFiles().files.find(f => f.id === fileId);
+        await maybeRefineSkill(fileId, allTrades, username);
+        const after = getMemoryFiles().files.find(f => f.id === fileId);
+        return Boolean(before && after && before.content !== after.content);
+    });
+
+/**
  * Create a skill when a similar cluster reaches MIN_CLUSTER_FOR_SKILL and
  * no matching skill exists yet. Evidence-gated — not a free-form LLM spawn.
  */
 const maybeUpsertSkillUnlocked = async (
     trade: LoggedTrade,
     allTrades: LoggedTrade[],
-    username: string
+    username: string,
+    // S7 (ROUND-39): the worth-gate's JUDGED clauses ride through so the
+    // persisted skill matches the artifact that was validated.
+    preferredClause?: { ifCondition?: string; thenAction?: string },
 ): Promise<MemoryFile | null> => {
     if (trade.outcome !== TradeOutcome.WIN && trade.outcome !== TradeOutcome.LOSS) return null;
     if (!tradeAdmitsTechnicalStrategyRule(trade)) return null;
@@ -608,7 +781,12 @@ const maybeUpsertSkillUnlocked = async (
     let streak = 0;
     for (let i = ordered.length - 1; i >= 0 && ordered[i].outcome === TradeOutcome.LOSS; i--) streak++;
     const kind: SkillKind = losses >= wins ? 'avoid' : 'repeat';
-    const clause = parseIfThenClauses(trade.postMortem ?? '')[0];
+    // S7 (ROUND-39): prefer the clauses the worth-gate JUDGED over whatever
+    // re-parsing the raw post-mortem produces now — validated ≠ persisted was
+    // a silent mismatch before.
+    const clause = (preferredClause?.ifCondition || preferredClause?.thenAction)
+        ? { ifCondition: preferredClause.ifCondition ?? '', thenAction: preferredClause.thenAction ?? '' }
+        : parseIfThenClauses(trade.postMortem ?? '')[0];
     const lesson = clause
         ? formatSkillProcedure(clause)
         : extractLessonFromPostMortem(trade.postMortem ?? '')
@@ -648,9 +826,12 @@ const maybeUpsertSkillUnlocked = async (
 export const maybeUpsertSkill = (
     trade: LoggedTrade,
     allTrades: LoggedTrade[],
-    username: string
+    username: string,
+    // S7 (ROUND-39): the worth-gate's JUDGED clauses ride through the locked
+    // wrapper so callers can persist the validated artifact.
+    preferredClause?: { ifCondition?: string; thenAction?: string },
 ): Promise<MemoryFile | null> =>
-    withNotebookWriteLock(() => maybeUpsertSkillUnlocked(trade, allTrades, username));
+    withNotebookWriteLock(() => maybeUpsertSkillUnlocked(trade, allTrades, username, preferredClause));
 
 const ingestCraftedSkillUnlocked = async (
     trade: LoggedTrade,
@@ -847,20 +1028,61 @@ const consolidateSkillsUnlocked = async (username: string): Promise<void> => {
         }
         const metas = group.map(f => parseSkillMarkdown(f.content)).filter(Boolean) as SkillMeta[];
         const keep = group[0];
+        // S3 (ROUND-39): the surviving body is the RICHEST one (longest — a
+        // refined procedure always beats an original stub), not arbitrarily
+        // `metas[0].body`.
+        const richest = metas.reduce((a, b) => (b.body.length > a.body.length ? b : a), metas[0]);
+        // Review fix (ROUND-39): W/L are re-derived from the DEDUPED union of
+        // tradeIds (joined against actual outcomes where possible) — raw
+        // summing double-counted trades that sat in two duplicates and
+        // inflated the sample that deriveStatus confirms/retires on. We can't
+        // re-check each trade's outcome from here, so we scale proportionally:
+        // uniqueCount / summedCount applied to the totals.
+        const uniqueTrades = new Set(metas.flatMap(m => m.tradeIds));
+        const summedSample = metas.reduce((s, m) => s + m.wins + m.losses, 0);
+        let mergedWins = metas.reduce((s, m) => s + m.wins, 0);
+        let mergedLosses = metas.reduce((s, m) => s + m.losses, 0);
+        if (summedSample > uniqueTrades.size && summedSample > 0) {
+            const scale = uniqueTrades.size / summedSample;
+            mergedWins = Math.round(mergedWins * scale);
+            // Wins+losses must sum EXACTLY to the deduped sample size —
+            // assign rounding remainder to losses so deriveStatus sees a
+            // consistent sample.
+            mergedLosses = Math.max(0, uniqueTrades.size - mergedWins);
+        }
         const merged: SkillMeta = {
             ...metas[0],
-            wins: metas.reduce((s, m) => s + m.wins, 0),
-            losses: metas.reduce((s, m) => s + m.losses, 0),
-            tradeIds: [...new Set(metas.flatMap(m => m.tradeIds))],
-            body: metas[0].body,
+            wins: mergedWins,
+            losses: mergedLosses,
+            tradeIds: [...uniqueTrades],
+            body: richest.body,
+            ifCondition: richest.ifCondition || metas[0].ifCondition,
+            thenAction: richest.thenAction || metas[0].thenAction,
+            // Keep the strongest provenance fields across the group.
+            refinedAt: metas.map(m => m.refinedAt).filter(Boolean).sort().at(-1) ?? metas[0].refinedAt,
+            evidenceCount: uniqueTrades.size,
         };
         merged.status = deriveStatus(merged);
         await updateMemoryFileUnlocked(keep.id, {
             content: serializeSkill(merged, titleFromMeta(merged)),
             enabled: merged.status !== 'retired',
         }, username);
+        // S3 (ROUND-39): superseded duplicates are ARCHIVED, not deleted.
+        // Deleting broke the ROUND-34 doctrine ("superseded beliefs are never
+        // deleted") and destroyed replay-audit trails. The skills-archive
+        // folder already exists for retired skills; merged dupes join them
+        // (disabled, so they drop out of retrieval/evidence/dashboards).
+        const archiveFolder = await ensureSkillsArchiveFolderUnlocked(username);
         for (const extra of group.slice(1)) {
-            await deleteMemoryFileUnlocked(extra.id, username);
+            if (archiveFolder) {
+                await updateMemoryFileUnlocked(extra.id, {
+                    folderId: archiveFolder.id,
+                    enabled: false,
+                }, username);
+            } else {
+                // No archive available — disable in place instead of deleting.
+                await updateMemoryFileUnlocked(extra.id, { enabled: false }, username);
+            }
         }
     }
 
@@ -927,10 +1149,33 @@ export const syncClosedTradeToNotebook = async (
                     })();
                     const botCtx = getBotMemoryContext(firstBotId, setup, 'global');
                     const decision = await evaluateSkillWorth({ coin: setup.coin, direction: setup.direction, family: setup.family, cluster }, botCtx, config);
-                    if (decision && decision.verdict === 'create') {
-                        const err = validateCraftedSkill(decision, cluster.filter(t => t.outcome === TradeOutcome.WIN).length, cluster.filter(t => t.outcome === TradeOutcome.LOSS).length);
-                        if (!err) await maybeUpsertSkill(trade, allTrades, username);
-                        else console.warn('[SkillMemory] Skill worth-gate rejected crafted skill:', err);
+                    if (decision) {
+                        const judgedClause = { ifCondition: decision.ifCondition, thenAction: decision.thenAction };
+                        // Review fix (ROUND-39): the create/merge mutations are
+                        // read-modify-write cycles over the shared notebook
+                        // cache — they MUST hold the write lock. syncClosedTrade-
+                        // ToNotebook itself is not locked (its earlier steps use
+                        // locked public APIs), so route through the locked
+                        // wrappers; the LLM gate call above stays outside the
+                        // lock on purpose (slow network I/O must not block
+                        // other writers).
+                        if (decision.verdict === 'create') {
+                            const err = validateCraftedSkill(decision,
+                                cluster.filter(t => t.outcome === TradeOutcome.WIN).length,
+                                cluster.filter(t => t.outcome === TradeOutcome.LOSS).length);
+                            // S7 (ROUND-39): the gate judged SPECIFIC clauses —
+                            // persist those (validated ≡ persisted), not a fresh
+                            // re-parse of the raw post-mortem.
+                            if (!err) await maybeUpsertSkill(trade, allTrades, username, judgedClause);
+                            else console.warn('[SkillMemory] Skill worth-gate rejected crafted skill:', err);
+                        } else if (decision.verdict === 'merge' && decision.mergeTarget) {
+                            // S7 (ROUND-39): 'merge' was dead code — the gate's
+                            // second-most-useful verdict is now honored: tighten
+                            // the named target instead of letting overlaps
+                            // fester until destructive consolidation.
+                            await maybeMergeSkill(decision.mergeTarget, trade, allTrades, username);
+                        }
+                        // 'skip' stays skip — the gate said no.
                     }
                 } else {
                     // No ready provider = the gate cannot run. Fail CLOSED:
@@ -1005,41 +1250,60 @@ export const applyNotebookSkillsToAnalysis = <T extends {
         family: analysis.detectedPatternFamily,
         pattern: analysis.marketConditions?.pattern,
     };
-    const matches = getMemoryFiles().files
+    // S8 (ROUND-39): code-side enforcement now honors the same invocation
+    // controls as prompt injection — `audience: moderator` skills no longer
+    // veto the analyst card, and matches are ranked (status × overlap ×
+    // freshness) instead of taken in file order.
+    // S1 (ROUND-39): enforcement uses the STRICT matcher — a direction-only
+    // match no longer vetoes every coin.
+    const ranked = getMemoryFiles().files
         .map(enabledSkillMeta)
-        .filter((m): m is SkillMeta => Boolean(m && skillMatchesSetup(m, setup)));
-    if (matches.length === 0) return analysis;
+        .filter((m): m is SkillMeta => Boolean(m && skillStrictlyMatchesSetup(m, setup)))
+        .filter(m => (m.audience ?? 'all') !== 'moderator')
+        .map(m => ({
+            m,
+            score: (m.status === 'confirmed' ? 2 : 1)
+                * dimsOverlapCount(m, setup)
+                * evidenceFreshnessFactor(m),
+        }))
+        .sort((a, b) => b.score - a.score || (b.m.wins + b.m.losses) - (a.m.wins + a.m.losses))
+        .map(x => x.m);
+    if (ranked.length === 0) return analysis;
 
     const next = { ...analysis };
     const warn = (note: string): void => {
+        // S8: warnings ONLY — validationWarnings is display-safe. Writing
+        // into riskVeto made classifyAvoidBasis report a mere size-down as
+        // a HARD blocker in the WhyAvoidPanel.
         next.validationWarnings = [...(next.validationWarnings ?? []), note];
-        next.riskVeto = [next.riskVeto, note].filter(Boolean).join(' ');
     };
 
-    const avoidConfirmed = matches.find(m => m.kind === 'avoid' && m.status === 'confirmed');
+    const avoidConfirmed = ranked.find(m => m.kind === 'avoid' && m.status === 'confirmed');
     if (avoidConfirmed && (next.direction === 'Long' || next.direction === 'Short')) {
         next.originalConfidence = next.originalConfidence ?? next.confidence;
         next.confidence = 'Avoid';
         next.direction = 'Neutral';
         if (typeof next.probability === 'number') next.probability = Math.min(next.probability, 15);
-        warn(`NOTEBOOK SKILL VETO: ${titleFromMeta(avoidConfirmed)} — IF ${avoidConfirmed.ifCondition || avoidConfirmed.body.replace(/\s+/g, ' ').slice(0, 120)}`);
+        const vetoNote = `NOTEBOOK SKILL VETO: ${titleFromMeta(avoidConfirmed)} — IF ${avoidConfirmed.ifCondition || avoidConfirmed.body.replace(/\s+/g, ' ').slice(0, 120)}`;
+        warn(vetoNote);
+        // Hard vetoes DO belong in riskVeto — this path genuinely blocks.
+        next.riskVeto = [next.riskVeto, vetoNote].filter(Boolean).join(' ');
         return next;
     }
 
-    const avoidCandidate = matches.find(m => m.kind === 'avoid' && m.status === 'candidate');
+    const avoidCandidate = ranked.find(m => m.kind === 'avoid' && m.status === 'candidate');
     if (avoidCandidate && (next.direction === 'Long' || next.direction === 'Short')) {
         next.originalConfidence = next.originalConfidence ?? next.confidence;
         if (next.confidence === 'High' || next.confidence === 'Medium') next.confidence = 'Low';
+        // Candidate caps stay a WARNING: the setup remains tradeable at
+        // reduced size — not a hard avoidance.
         warn(`NOTEBOOK SKILL: candidate avoid ${titleFromMeta(avoidCandidate)} — size down until the cluster confirms or retires.`);
         return next;
     }
 
-    const repeat = matches.find(m => m.kind === 'repeat' && m.status === 'confirmed');
+    const repeat = ranked.find(m => m.kind === 'repeat' && m.status === 'confirmed');
     if (repeat) {
-        next.validationWarnings = [
-            ...(next.validationWarnings ?? []),
-            `NOTEBOOK SKILL: confirmed repeat ${titleFromMeta(repeat)} — follow the procedure in skills, do not invent a new tape.`,
-        ];
+        warn(`NOTEBOOK SKILL: confirmed repeat ${titleFromMeta(repeat)} — follow the procedure in skills, do not invent a new tape.`);
     }
     return next;
 };
@@ -1070,9 +1334,12 @@ export const listAppliedSkills = (
 export const confirmedAvoidForSetup = (
     setup: { coin?: string; direction?: string; family?: string; pattern?: string },
 ): SkillMeta | null => {
+    // S1 (ROUND-39): strict matching — this result drives the moderator's
+    // skip_to_verdict veto, so a "BTC long" avoid must never HALT an ETH
+    // long just because the direction matches.
     const matches = getMemoryFiles().files
         .map(enabledSkillMeta)
-        .filter((m): m is SkillMeta => Boolean(m && skillMatchesSetup(m, setup)));
+        .filter((m): m is SkillMeta => Boolean(m && skillStrictlyMatchesSetup(m, setup)));
     return matches.find(m => m.kind === 'avoid' && m.status === 'confirmed') ?? null;
 };
 
@@ -1091,6 +1358,12 @@ const applyReviewRecommendationUnlocked = async (
     const file = getMemoryFiles().files.find(f => f.id === fileId);
     const meta = file ? parseSkillMarkdown(file.content) : null;
     if (!file || !meta || meta.status === 'retired') return false;
+    // S5 (ROUND-39): route through the temporal ledger so dashboard actions
+    // stay visible to skillStatusAt replay queries — a manual promote/demote
+    // used to be invisible to the audit trail.
+    stampStatusTransition(meta, recommendation === 'promote'
+        ? 'confirmed'
+        : recommendation === 'demote' ? 'candidate' : 'retired', `manual-review:${recommendation}`);
     meta.status = recommendation === 'promote'
         ? 'confirmed'
         : recommendation === 'demote' ? 'candidate' : 'retired';

@@ -817,12 +817,44 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
         if (loadingMessage || isSummarizing || (!effectiveInput.trim() && imagesToUse.length === 0) || isRateLimited) return;
 
+        // Setup problems no longer toast — they render as a normal chat
+        // exchange (the user's message + an explanation bubble) so the reason
+        // a run cannot start stays visible in the conversation history.
+        const appendBlockedRunNotice = (reason: string): void => {
+            updateMessages(prev => [...prev, {
+                id: `user-${Date.now()}`,
+                role: MessageRole.USER,
+                text: effectiveInput,
+                createdAt: new Date().toISOString(),
+                images: imagesToUse.map(meta => meta.dataURL),
+                imageSummaries: imagesToUse.map(meta => meta.summary).filter(Boolean) as string[],
+            }, {
+                id: `blocked-${Date.now()}`,
+                role: MessageRole.AI,
+                text: reason,
+                createdAt: new Date().toISOString(),
+                isDebating: false,
+            }], activeConversationId);
+        };
+
         // P0 fix: Surface a clear error when no AI providers are enabled.
         // Previously this returned silently, leaving the user with no feedback.
         if (enabledProviders.length === 0) {
-            toast.error(
-                "No AI Providers Enabled",
-                "Add an API key in Settings → AI Models to start analyzing charts."
+            appendBlockedRunNotice(
+                'No AI models are ready yet. Add an API key and enable at least one provider in Settings → AI Models, then send this again.'
+            );
+            return;
+        }
+
+        // Moderator pre-flight: the debate cannot function without its
+        // moderator — they chair the rounds and produce the binding verdict.
+        // A missing/broken moderator pick used to fall through to a 'none'
+        // placeholder config and the run died mid-debate with a raw provider
+        // error AFTER the analysts had already burned their requests. Refuse
+        // before anything starts instead.
+        if (runEnsembleEnabled && !isProviderReady(runModeratorConfig)) {
+            appendBlockedRunNotice(
+                'The debate cannot start: no moderator model is available. Pick a moderator (Team picker or Settings → AI Models), make sure it is enabled and has an API key, then send this again.'
             );
             return;
         }
@@ -888,11 +920,15 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             // (Automation runs build complete assignments by construction.)
             if (runLensConfig.enabled) {
                 if (missingAnalystRoles.length > 0) {
-                    toast.warning('Assign all analysts', `Assign ${missingAnalystRoles.map(role => ANALYST_ROLE_DEFINITIONS[role].shortName).join(', ')} before starting the ensemble.`);
+                    appendBlockedRunNotice(
+                        `Your analyst team is incomplete. Assign ${missingAnalystRoles.map(role => ANALYST_ROLE_DEFINITIONS[role].shortName).join(', ')} in the Team menu, then send again.`
+                    );
                     return;
                 }
                 if (!hasCompleteAnalystAssignments) {
-                    toast.warning('Distinct analyst models required', 'Each analyst role must use a different model. The same provider is allowed.');
+                    appendBlockedRunNotice(
+                        'Analysts must use different models. Each lens role needs its own model (the same provider is allowed) — reassign the duplicates in the Team menu, then send again.'
+                    );
                     return;
                 }
             } else if (enabledProviders.length > 1) {
@@ -902,14 +938,18 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 // thing" symptom). Block it up front.
                 const seatIdentities = enabledProviders.map(p => `${p.config.id}::${p.model}`);
                 if (new Set(seatIdentities).size !== seatIdentities.length) {
-                    toast.warning('Distinct debate models required', 'Two or more debate slots use the same model. Pick different models in the Team picker so the analysts don\u2019t return identical output.');
+                    appendBlockedRunNotice(
+                        'Two debate seats share a model. Identical prompts through an identical model return identical output — pick a different model per seat in the Team menu, then send again.'
+                    );
                     return;
                 }
             }
         }
 
         if (!isAutomationRun && !runAccuracyMode && enabledProviders.length > 3) {
-            toast.warning("Provider Limit", "A maximum of 3 AI providers can be enabled for an ensemble debate in Standard Mode. Please disable at least one.");
+            appendBlockedRunNotice(
+                'Too many providers for a Standard-mode debate. A maximum of 3 AI providers can join — disable at least one in Settings → AI Models, then send again.'
+            );
             return;
         }
 
@@ -2152,11 +2192,31 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
 
                     const activeModModel = moderatorModel;
 
+                    // STRICT ALL-OR-NOTHING GATE — a debate with a missing seat
+                    // is not a debate: rebuttals answer specific arguments, so
+                    // one dropped analyst poisons the whole transcript. The old
+                    // behavior silently continued with whoever survived and let
+                    // only the <2 guard catch total collapse. Now ANY failure
+                    // aborts before the moderator is invoked, with the per-seat
+                    // reason surfaced in the chat bubble.
+                    const failedAnalysts = settledResults
+                        .map((settled, i) => ({ settled, provider: enabledProviders[i] }))
+                        .filter((x): x is { settled: PromiseRejectedResult; provider: NonNullable<typeof enabledProviders[number]> } => x.settled.status === 'rejected');
+                    if (failedAnalysts.length > 0) {
+                        const reasons = failedAnalysts.map(({ settled, provider }) =>
+                            `• ${provider?.name || 'Unknown seat'}: ${String((settled as PromiseRejectedResult).reason?.message || (settled as PromiseRejectedResult).reason || 'unknown error')}`
+                        ).join('\n');
+                        throw new Error(
+                            `Debate aborted: ${failedAnalysts.length} of ${enabledProviders.length} analysts failed to deliver an opening. All seats must be working for the debate to run.\n${reasons}`
+                        );
+                    }
                     // Align analysts with their results by ticker index. The
                     // re-indexed `results` array shifts when an analyst fails,
                     // silently mislabeling provider #2's analysis as #1's (and
                     // passing `undefined` when fewer analysts succeed than the
                     // enabledProviders count — crashing the n-way debaters).
+                    // With the strict gate above this list always matches
+                    // enabledProviders 1:1.
                     const fulfilledAnalysts = settledResults
                         .map((settled, i) => settled.status === 'fulfilled' ? { provider: enabledProviders[i], result: settled.value } : null)
                         .filter((x): x is { provider: (typeof enabledProviders)[number]; result: { thoughtProcess: string; finalOutput: string; analysis: any } } => x !== null);
@@ -2402,6 +2462,14 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 centralizedSnapshot = generateHybridPromptInjection(freshHybridData as any).slice(0, 1800);
                             } catch { /* ignore */ }
                         }
+                        // D6 (ROUND-39): the protocol lane is hashed from THIS
+                        // setup's identity — identical trade ideas always run
+                        // the same debate structure, so verdicts stay
+                        // comparable across reruns. Unseeded engine calls
+                        // (tests) deterministically take the control lane.
+                        ensembleService.setProtocolSeed(
+                            `${finalSymbol || 'unknown'}|${enhancedPrompt.slice(0, 200)}|${fulfilledAnalysts.map(a => a.provider.name).join(',')}`,
+                        );
                         debateStream = ensembleService.conductRealDebate(
                                 fulfilledAnalysts.map(a => ({
                                     provider: a.provider,
@@ -2541,8 +2609,19 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                             },
                             // Live desk-tool chips — the Floor shows what each
                             // seat is looking up instead of a silent bot.
+                            // ROUND-38: keep a short ROLLING FEED per seat
+                            // (newest first, capped) so the side panel can
+                            // render zcode-style stacked tool rows instead of
+                            // a single overwriting chip.
+                            // ROUND-39: each line carries a wall-clock prefix
+                            // (HH:MM:SS) so the panel rows can render a
+                            // reference-style elapsed/when stamp per row.
                             (speaker: string, _round: number, line: string) => {
-                                liveToolEventsRef.current[speaker] = line;
+                                const stamp = new Date().toLocaleTimeString([], { hour12: false });
+                                const stamped = `${stamp} · ${line}`;
+                                const prev = liveToolEventsRef.current[speaker];
+                                const merged = prev ? `${stamped}\n${prev}` : stamped;
+                                liveToolEventsRef.current[speaker] = merged.split('\n').slice(0, 8).join('\n');
                                 throttledDebateUpdate(
                                     requestConversationId,
                                     debateMessageId,
@@ -3149,8 +3228,13 @@ ${accuracyVerificationNote}`
                                 memory: isMemoryEnabledInPureAI,
                                 customEnsemble: Boolean(customEnsemblePrompt),
                                 promptLane,
+                                // D2.3 protocol lane attribution (ROUND-37).
+                                protocol: ensembleService.getLastDebateProtocol(),
                             }),
                             promptLane,
+                            // D2.3 protocol lane attribution (ROUND-37) — on
+                            // runStats itself so the signal card can chip it.
+                            protocol: ensembleService.getLastDebateProtocol(),
                             gateCap: capturedGateResult?.confidenceCap,
                             mcWinRate: perAIMC[0]?.result?.winRate,
                             mcEV: perAIMC[0]?.result?.expectedValue,

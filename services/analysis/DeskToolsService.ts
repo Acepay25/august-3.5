@@ -22,6 +22,7 @@ import { getSessionContext } from '../infrastructure/SessionService';
 import { handleRecallTool } from '../learning/MemoryRetrievalService';
 import { computeSetupClusterStats } from '../learning/EvidencePackService';
 import type { LoggedTrade } from '../../types';
+import { DEBATE_MAIL_TOOLS, type DebateMailbox } from './DebateMailbox';
 
 export interface DeskToolDefinition {
     type: 'function';
@@ -117,6 +118,8 @@ const TOOL_LABELS: Record<string, string> = {
     recall: 'notebook recall',
     get_setup_history_stats: 'setup history',
     recall_chat: 'session search',
+    send_message: 'direct message',
+    read_message: 'read inbox',
 };
 
 export const toolLabel = (name: string): string => TOOL_LABELS[name] ?? name.replace(/_/g, ' ');
@@ -167,6 +170,15 @@ export const digestToolResult = (name: string, ok: boolean, content: string): st
     // recall_chat returns a plain-text digest, not JSON — summarize by length.
     if (name === 'recall_chat') {
         return content.startsWith('No matching') ? 'no past sessions matched' : `${Math.min(content.split('\n').length, 5)} past passages found`;
+    }
+    // Mail tools (ROUND-38): receipts and inbox reads.
+    if (name === 'send_message') {
+        const to = content.match(/^Delivered to (.+?)\./)?.[1];
+        return to ? `→ ${to}` : 'message not delivered';
+    }
+    if (name === 'read_message') {
+        if (content.startsWith('Inbox empty')) return 'inbox empty';
+        return `${content.split('From ').length - 1} direct message${content.split('From ').length - 1 === 1 ? '' : 's'} read`;
     }
     return `${toolLabel(name)} ok`;
 };
@@ -748,6 +760,17 @@ export async function runDeskToolLoop(params: {
     nativeTools?: boolean;
     allowedTools?: string[];
     trades?: LoggedTrade[];
+    /** Additional tool definitions merged into the desk set (e.g. debate mail). */
+    extraToolDefs?: DeskToolDefinition[];
+    /** Dispatch for extra tools. Return null to fall through to executeDeskTools. */
+    executeExtraTool?: (call: DeskToolCall) => Promise<DeskToolResult | null>;
+    /** Deterministic instruction appended to the system prompt before turn 1
+     *  (e.g. "you have unread direct messages — call read_message first"). */
+    appendSystemNotice?: string;
+    /** D8 (ROUND-39): round 0 forces `toolChoice:'required'` so the seat MUST
+     *  ground itself with at least one real lookup before arguing — used by
+     *  debates running WITHOUT live hybrid market data. */
+    requireFirstToolRound?: boolean;
 }): Promise<DeskToolLoopResult> {
     const {
         config,
@@ -758,22 +781,46 @@ export async function runDeskToolLoop(params: {
         nativeTools = config.apiFormat === 'chat_completions',
         allowedTools,
         trades,
+        extraToolDefs = [],
+        executeExtraTool,
+        appendSystemNotice,
+        requireFirstToolRound = false,
     } = params;
     const messages = [...params.messages];
+    // The inbox notice lands AFTER the desk-tools block inside the system
+    // message — the last thing the seat reads before its turn.
+    if (appendSystemNotice?.trim()) {
+        const needle = appendSystemNotice.trim();
+        const sysIdx = messages.findIndex(m => m.role === 'system');
+        if (sysIdx >= 0) {
+            const prev = messages[sysIdx].content;
+            const prevText = typeof prev === 'string' ? prev : '';
+            if (!prevText.includes(needle)) {
+                messages[sysIdx] = { ...messages[sysIdx], content: `${prevText}\n\n${needle}` };
+            }
+        } else {
+            messages.unshift({ role: 'system', content: needle });
+        }
+    }
     const usedTools: string[] = [];
     let finalText = '';
     let reasoning = '';
 
     for (let round = 0; round < MAX_DESK_TOOL_ROUNDS; round++) {
+        const allDefs = extraToolDefs.length > 0 ? [...DESK_TOOL_DEFINITIONS, ...extraToolDefs] : DESK_TOOL_DEFINITIONS;
         const effectiveTools = nativeTools
             ? (allowedTools && allowedTools.length > 0
-                ? DESK_TOOL_DEFINITIONS.filter(d => allowedTools.includes(d.function.name))
-                : DESK_TOOL_DEFINITIONS)
+                ? allDefs.filter(d => allowedTools.includes(d.function.name))
+                : allDefs)
             : undefined;
         const turn = await sendTurn(config, messages, {
             ...options,
             tools: effectiveTools,
-            toolChoice: nativeTools ? 'auto' : undefined,
+            // D8: the FIRST round can force a tool call so a seat never argues
+            // from zero data; later rounds stay 'auto' (the seat may stop).
+            toolChoice: nativeTools
+                ? (round === 0 && requireFirstToolRound && effectiveTools?.length ? 'required' : 'auto')
+                : undefined,
             // Tool rounds stay shorter than the final analysis stream.
             maxTokens: Math.min(options?.maxTokens ?? 4096, 4096),
         });
@@ -799,12 +846,30 @@ export async function runDeskToolLoop(params: {
 
         // Cap parallel tools per round.
         calls = calls.slice(0, 3);
+
+        // Extra tools (debate mailbox) execute here — they touch orchestration
+        // state and must not go through the pure market-data executor.
+        const extraResults: DeskToolResult[] = [];
+        const coreCalls: DeskToolCall[] = [];
+        for (const call of calls) {
+            if (executeExtraTool) {
+                const handled = await executeExtraTool(call);
+                if (handled) {
+                    extraResults.push(handled);
+                    continue;
+                }
+            }
+            coreCalls.push(call);
+        }
         onToolEvent?.(calls.map(c => `calling ${toolLabel(c.name)}…`).join(' · '));
-        const results = await executeDeskTools(calls, {
-            defaultSymbol,
-            signal: options?.signal,
-            trades,
-        });
+        const coreResults = coreCalls.length > 0
+            ? await executeDeskTools(coreCalls, {
+                defaultSymbol,
+                signal: options?.signal,
+                trades,
+            })
+            : [];
+        const results = [...extraResults, ...coreResults];
         usedTools.push(...results.map(r => r.name));
         onToolEvent?.(results.map(r => digestToolResult(r.name, r.ok, r.content)).join(' · '));
 
@@ -843,6 +908,20 @@ export interface StreamWithDeskToolsOptions extends ChatRequestOptions {
     allowedTools?: string[];
     /** Closed-trade log for the `recall` notebook tool. */
     trades?: LoggedTrade[];
+    /** Debate mailbox (ROUND-38): when present, the seat can send_message /
+     *  read_message to other seats. The loop injects an inbox notice and
+     *  reports deliveries back through `onMailSent`. */
+    mailbox?: DebateMailbox;
+    /** Display name of the seat whose turn this is (mailbox addressing). */
+    mailboxSeat?: string;
+    /** Current debate round (stamped on sent messages). */
+    mailboxRound?: number;
+    /** Fires once per successfully delivered message (for DM visibility lines). */
+    onMailSent?: (info: { from: string; to: string; text: string; round: number }) => void;
+    /** D8 (ROUND-39): when true, round 0 forces one real tool lookup before
+     *  the seat may speak — used for debates WITHOUT live hybrid market data
+     *  so seats ground themselves in fresh data instead of arguing from zero. */
+    requireFirstToolRound?: boolean;
 }
 
 function withDeskToolsSystemPrompt(messages: ChatMessage[], nativeTools: boolean): ChatMessage[] {
@@ -888,8 +967,35 @@ export async function* streamChatWithDeskTools(
         onToolEvent,
         allowedTools,
         trades,
+        mailbox,
+        mailboxSeat,
+        mailboxRound,
+        onMailSent,
+        requireFirstToolRound,
         ...chatOptions
     } = options || {};
+
+    // Debate mailbox (ROUND-38): merge the floor-messaging tools into the
+    // desk set so a seat's turn can carry real send_message/read_message
+    // tool calls alongside market lookups. Dispatch is handled inside the
+    // loop below (executeDeskTools stays pure market/memory).
+    const seatName = mailboxSeat || '';
+    const mailActive = Boolean(mailbox && seatName);
+    const mailToolDefs = mailActive ? DEBATE_MAIL_TOOLS : [];
+    const mergedAllowed = mailActive && allowedTools && allowedTools.length > 0
+        ? [...allowedTools, ...DEBATE_MAIL_TOOLS.map(t => t.function.name)]
+        : undefined;
+    // Discoverability: the capability block rides EVERY seat turn so models
+    // learn they can DM; the inbox notice (unread count + read first)
+    // appends only when mail is actually waiting.
+    const appendSystemNotice = mailActive
+        ? [
+            '**FLOOR MESSAGING:** you can direct-message other seats with the send_message tool '
+            + '(one recipient per message — use their exact seat name). '
+            + 'Read waiting messages with read_message before speaking when told you have unread mail.',
+            mailbox?.inboxNotice(seatName) || '',
+        ].filter(Boolean).join('\n\n')
+        : '';
 
     // Quiet until a real tool runs — a status banner via onReasoning made
     // empty-stream paths look non-empty and polluted Thinking cards.
@@ -900,9 +1006,36 @@ export async function* streamChatWithDeskTools(
         options: chatOptions,
         defaultSymbol,
         nativeTools,
-        allowedTools,
+        allowedTools: mergedAllowed,
         trades,
-        onToolEvent: (line) => {
+        requireFirstToolRound,
+        extraToolDefs: mailToolDefs,
+        executeExtraTool: async call => {
+            if (!mailbox) return null;
+            const name = call.name;
+            const args = call.arguments || {};
+            if (name === 'send_message') {
+                // Deliver; the result text doubles as the model-visible receipt.
+                const receipt = mailbox.send(seatName, mailboxRound ?? 0, {
+                    to: args.to,
+                    message: args.message,
+                });
+                const ok = !receipt.startsWith('send_message failed');
+                if (ok) {
+                    const toLabel = String(args.to ?? '').trim().replace(/^@/, '');
+                    onMailSent?.({ from: seatName, to: toLabel, text: String(args.message ?? ''), round: mailboxRound ?? 0 });
+                }
+                return { toolCallId: call.id, name, ok, content: receipt };
+            }
+            if (name === 'read_message') {
+                return { toolCallId: call.id, name, ok: true, content: mailbox.read(seatName) };
+            }
+            return null;
+        },
+        // Inbox + capability notice rides AFTER any desk-tools block so it is
+        // always the most recent instruction the seat reads before its turn.
+        appendSystemNotice,
+        onToolEvent: line => {
             onToolEvent?.(line);
             options?.onReasoning?.(`\n[Desk tools] ${line}\n`);
         },
