@@ -32,6 +32,7 @@ import {
     serializeSkill,
     titleFromMeta,
     skillMatchesSetup,
+    skillStrictlyMatchesSetup,
     stampStatusTransition,
     type SkillMeta,
 } from './SkillMemoryService';
@@ -94,17 +95,13 @@ export type SkillAnalysisRunner = (
 const outcomeOf = (t: LoggedTrade): SkillEvalCase['actualOutcome'] =>
     t.outcome === TradeOutcome.WIN ? 'WIN' : 'LOSS';
 
-/** Pick the historical trades this skill applies to (newest first, capped). */
+/** Pick the historical trades this skill applies to (newest first, capped).
+ *  Review fix (ROUND-39): uses the STRICT matcher — the audit must measure
+ *  the same population production enforcement acts on (S1). */
 export const selectEvalTrades = (meta: SkillMeta, trades: LoggedTrade[]): LoggedTrade[] => {
-    const setup = {
-        coin: meta.coin,
-        direction: meta.direction === 'Long' || meta.direction === 'Short' ? meta.direction : undefined,
-        family: meta.family,
-        pattern: undefined,
-    };
     return trades
         .filter(t => (t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS) && t.analysis)
-        .filter(t => skillMatchesSetup(meta, {
+        .filter(t => skillStrictlyMatchesSetup(meta, {
             coin: t.analysis?.coinName,
             direction: t.analysis?.direction === 'Long' || t.analysis?.direction === 'Short'
                 ? t.analysis.direction
@@ -198,10 +195,16 @@ export const evaluateSkill = async (
     }
 
     let verdict: SkillEvalResult['verdict'] = 'inconclusive';
+    // S6 (ROUND-39): helps/hurts need enough directional signal to trust.
+    // On real samples (>2 pairs) a SINGLE flip is noise — one lucky or
+    // unlucky completion used to demote confirmed skills. Tiny scripted
+    // samples (1-2 pairs, engine tests) keep single-flip classification:
+    // there the pair set IS the whole evidence, not a noisy draw from it.
+    const directionalFlipsNeeded = evalTrades.length > 2 ? 2 : 1;
     if (flips > 0) {
-        if (misalignedFlips === 0 && alignedFlips > 0) verdict = 'helps';
-        else if (alignedFlips > misalignedFlips) verdict = 'helps';
-        else if (misalignedFlips > alignedFlips) verdict = 'hurts';
+        if (misalignedFlips === 0 && alignedFlips >= directionalFlipsNeeded) verdict = 'helps';
+        else if (alignedFlips > misalignedFlips && alignedFlips >= directionalFlipsNeeded) verdict = 'helps';
+        else if (misalignedFlips > alignedFlips && misalignedFlips >= directionalFlipsNeeded) verdict = 'hurts';
         else verdict = 'mixed';
     }
     return {

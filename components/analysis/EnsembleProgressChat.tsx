@@ -183,7 +183,7 @@ const ThinkingDetails: React.FC<{ text: string; live?: boolean; tokens?: number 
     if (!text) return null;
     return (
         <div className="border-b border-white/5 px-3 py-2">
-            <ReasoningRow thinking={text} running={Boolean(live)} defaultOpen={Boolean(live)} tokens={tokens} />
+            <ReasoningRow thinking={text} running={Boolean(live)} defaultOpen={false} tokens={tokens} />
         </div>
     );
 };

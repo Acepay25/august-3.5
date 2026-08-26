@@ -154,3 +154,26 @@ export function sortModelsFreeFirst(modelIds: string[]): string[] {
 export function mergeDiscoveredModels(existing: string[], discovered: string[]): string[] {
     return sortModelsFreeFirst([...discovered, ...existing]);
 }
+
+// -----------------------------------------------------------------------------
+// "Free models only" picker preference — shared by every provider/model flyout
+// (ModelPicker, team roster menu) so the toggle follows the user across UIs.
+// -----------------------------------------------------------------------------
+
+export const FREE_ONLY_STORAGE_KEY = 'august_model_picker_free_only_v1';
+
+export const readFreeOnlyPref = (): boolean => {
+    try {
+        return localStorage.getItem(FREE_ONLY_STORAGE_KEY) === '1';
+    } catch {
+        return false;
+    }
+};
+
+export const writeFreeOnlyPref = (value: boolean): void => {
+    try {
+        localStorage.setItem(FREE_ONLY_STORAGE_KEY, value ? '1' : '0');
+    } catch {
+        // Ignore quota / private-mode failures — the toggle still works in-session.
+    }
+};

@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import ImagePreview from '../shared/ImagePreview';
-import { PlusIcon, LoadingIcon, SendIcon, StopIcon, ChevronDownIcon, CheckIcon } from '../shared/Icons';
+import { PlusIcon, LoadingIcon, SendIcon, StopIcon, ChevronDownIcon } from '../shared/Icons';
 import { ImageMetadata, AnalystLensConfig, AnalystRole } from '../../types';
 import { ProviderConfig } from '../../types/provider';
 import { EnsembleModelSelection, ANALYST_ROLE_DEFINITIONS, getLensPromptForRole } from '../../services/ui/AnalystLensService';
@@ -9,13 +9,13 @@ import { RegimeProviderStatsMap } from '../../services/learning/SetupMemoryServi
 import { MASTER_ANALYSIS_PROMPT } from '../../constants/prompts';
 import PromptEditorModal from '../settings/PromptEditorModal';
 import TeamModal from './TeamModal';
+import TeamRosterMenu from './TeamRosterMenu';
+import { LeverageSection } from './LeverageSection';
 import ModelPicker from '../shared/ModelPicker';
 import InjectionContextBar, { InjectionChipKind } from './InjectionContextBar';
 
 import { parseComposerIntent } from '../../utils/composerMentions';
-import { DEBATE_TEMPLATES, debateTemplateMarker } from '../../utils/debateTemplates';
 import { formatModelDisplayName } from '../../utils/providerUtils';
-import { listSkillSlugs } from '../../services/learning/SkillMemoryService';
 
 const LENS_ROSTER_ROLES: AnalystRole[] = [
     AnalystRole.MACRO_VOLATILITY,
@@ -26,12 +26,9 @@ const LENS_ROSTER_ROLES: AnalystRole[] = [
 interface ChatInputProps {
     images: ImageMetadata[];
     removeImage: (index: number) => void;
-    leverageRef: React.RefObject<HTMLDivElement | null>;
-    setIsLeverageDropdownOpen: React.Dispatch<React.SetStateAction<boolean>>;
     leverageInput: string;
     handleLeverageChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
     handleLeverageBlur: (e: React.FocusEvent<HTMLInputElement>) => void;
-    isLeverageDropdownOpen: boolean;
     handlePresetLeverage: (value: number) => void;
     fileInputRef: React.RefObject<HTMLInputElement | null>;
     isImageUploadDisabled: boolean;
@@ -99,12 +96,9 @@ interface ChatInputProps {
 const ChatInputInner: React.FC<ChatInputProps> = ({
     images,
     removeImage,
-    leverageRef,
-    setIsLeverageDropdownOpen,
     leverageInput,
     handleLeverageChange,
     handleLeverageBlur,
-    isLeverageDropdownOpen,
     handlePresetLeverage,
     fileInputRef,
     isImageUploadDisabled,
@@ -186,7 +180,6 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
         const handleEscape = (event: KeyboardEvent) => {
             if (event.key !== 'Escape') return;
             if (mentionOpen) { setMentionOpen(false); return; }
-            setIsLeverageDropdownOpen(false);
             setIsTeamModalOpen(false);
             if (isAnalysisInProgress) handleCancelAnalysis();
         };
@@ -200,11 +193,24 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
         };
         document.addEventListener('keydown', handleEscape);
         document.addEventListener('keydown', handleSlash);
+        // ROUND-39 UI: "Try in chat" from a skill card — prepend the /slug
+        // marker and focus the composer so the user can fire it immediately.
+        const handleTrySkill = (event: Event) => {
+            const slug = (event as CustomEvent<{ slug?: string }>).detail?.slug;
+            if (!slug) return;
+            const marker = `/${slug}`;
+            if (!input.includes(marker)) {
+                setInput(`${marker} ${parseComposerIntent(input).rest}`.trim());
+            }
+            document.getElementById('chat-composer')?.focus();
+        };
+        document.addEventListener('august:try-skill', handleTrySkill);
         return () => {
             document.removeEventListener('keydown', handleEscape);
             document.removeEventListener('keydown', handleSlash);
+            document.removeEventListener('august:try-skill', handleTrySkill);
         };
-    }, [setIsLeverageDropdownOpen, isAnalysisInProgress, handleCancelAnalysis, mentionOpen]);
+    }, [isAnalysisInProgress, handleCancelAnalysis, mentionOpen, setInput, input]);
     React.useEffect(() => {
         if (!isEnsembleEnabled || isAnalysisInProgress) setMentionOpen(false);
         else if (input.includes('@') && mentionCandidates.length > 0) setMentionOpen(true);
@@ -231,6 +237,8 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                 const provider = chatProviders.find(item => item.id === assignment?.assignedProvider);
                 const model = assignment?.assignedModel || provider?.models[0] || '';
                 return {
+                    // ROUND-39 UI: lens seats keep their role glyph (M/T/R) —
+                    // role identity, not provider name.
                     initial: def.shortName.charAt(0).toUpperCase(),
                     label: def.shortName,
                     model: provider && model ? `${provider.name} · ${formatModelDisplayName(model)}` : '',
@@ -243,7 +251,10 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
             .map((entry, index) => {
                 const provider = chatProviders.find(item => item.id === entry.providerId);
                 return {
-                    initial: (provider?.name || 'E').charAt(0).toUpperCase(),
+                    // ROUND-39 UI: fixed SEAT glyphs (1/2/3), never provider-name
+                    // initials — three K-named providers used to spell an
+                    // unfortunate word in the avatar stack.
+                    initial: `${index + 1}`,
                     label: provider?.name || `Expert ${index + 1}`,
                     model: formatModelDisplayName(entry.model),
                 };
@@ -306,8 +317,10 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
             ? 'w-full'
             : 'absolute bottom-0 left-0 right-0 px-3 sm:px-4 lg:px-8 pointer-events-none z-20 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] sm:pb-[calc(env(safe-area-inset-bottom)+0.75rem)] lg:pb-4 status-surface'}>
             <div className={centered ? 'w-full' : 'chat-column pointer-events-auto'}>
-                {/* Main Input Container — ChatGPT pill */}
-                <div className="rounded-[28px] border border-white/[0.04] bg-zinc-800 p-3 shadow-[0_8px_32px_rgba(0,0,0,0.4)] transition-all">
+                {/* Main Input Container — CLAUDE PILL PROPORTIONS (ROUND-39 UI):
+                    ~16px radius, generous ~20px inner padding, solid #262626
+                    fill, no border/shadow — copied from the reference shot. */}
+                <div className="rounded-2xl bg-zinc-800 p-3 sm:p-5 transition-colors">
 
                     {/* Image Preview */}
                     <ImagePreview images={images} onRemoveImage={removeImage} />
@@ -366,71 +379,17 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             onChange={(e) => setInput(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && (!e.shiftKey || e.ctrlKey || e.metaKey) ? (e.preventDefault(), handleSendMessage()) : undefined}
                             placeholder={isAnalysisInProgress ? 'Add a note for the next debate step…' : images.length > 0 ? 'Analyze charts...' : isEnsembleEnabled ? 'Describe the setup or upload charts…' : 'How can I help you today?'}
-                            className="flex-1 min-w-0 bg-transparent px-2 py-2 text-[15px] text-white placeholder-zinc-400 outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 min-h-[24px] max-h-28 resize-none leading-6"
+                            className="flex-1 min-w-0 bg-transparent px-2 py-2 text-[15px] text-white placeholder-zinc-400 outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 min-h-[24px] max-h-28 resize-none leading-6 placeholder:text-center focus:placeholder:text-left"
                             rows={1}
                             disabled={isRateLimited}
                             style={{ overflow: 'hidden' }}
                         />
                     </div>
-                    {/* ROUND-31 composer declutter (DeepSeek-minimal): the
-                        suggestion row collapses behind a single "Templates ▾"
-                        toggle. Nothing renders unless the user asks — the
-                        empty-state composer shows text, + , Team, send. */}
-                    {isEnsembleEnabled && (
-                        <div className="px-2 pb-1">
-                            <details className="group/templates">
-                                <summary className="inline-flex cursor-pointer select-none items-center gap-1 rounded-md px-1 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-600 transition-colors hover:text-zinc-300 [&::-webkit-details-marker]:hidden">
-                                    <ChevronDownIcon className="h-3 w-3 transition-transform group-open/templates:rotate-180" />
-                                    Templates
-                                </summary>
-                                <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5">
-                                    {isEnsembleEnabled ? ['@Macro', '@Technical', '@Risk'].map(tag => (
-                                        <button
-                                            key={tag}
-                                            type="button"
-                                            className="rounded-md px-1 py-0.5 text-[10px] text-zinc-600 transition-colors hover:text-zinc-300"
-                                            onClick={() => setInput(input.includes(tag) ? input : `${tag} ${input}`.trim())}
-                                        >
-                                            {tag}
-                                        </button>
-                                    )) : null}
-                                    {isEnsembleEnabled ? DEBATE_TEMPLATES.map(template => {
-                                        const marker = debateTemplateMarker(template.id);
-                                        const active = input.includes(marker);
-                                        return (
-                                            <button
-                                                key={template.id}
-                                                type="button"
-                                                title={template.hint}
-                                                className={`rounded-md px-1 py-0.5 text-[10px] transition-colors ${
-                                                    active
-                                                        ? 'bg-zinc-800 text-zinc-200'
-                                                        : 'text-zinc-600 hover:text-zinc-300'
-                                                }`}
-                                                onClick={() => setInput(active
-                                                    ? input.split(marker).join('').replace(/\s+/g, ' ').trim()
-                                                    : `${marker} ${input}`.trim())}
-                                            >
-                                                {template.label}
-                                            </button>
-                                        );
-                                    }) : null}
-                                    {listSkillSlugs().slice(0, 4).map(slug => (
-                                        <button
-                                            key={slug}
-                                            type="button"
-                                            title={`Apply the /${slug} skill veto to this run`}
-                                            className="rounded-md px-1 py-0.5 text-[10px] text-zinc-600 transition-colors hover:text-zinc-300"
-                                            onClick={() => setInput(`/${slug} ${parseComposerIntent(input).rest}`.trim())}
-                                        >
-                                            /{slug}
-                                        </button>
-                                    ))}
-                                </div>
-                            </details>
-                        </div>
-                    )}
-                     <input type="file" multiple accept="image/*" ref={fileInputRef} onChange={handleImageUpload} className="hidden" disabled={uploadDisabled} />
+                    {/* ROUND-39 UI: the Templates ▾ row is gone — the reference
+                        composer carries nothing between input and controls.
+                        Debate templates still parse from typed text, and skills
+                        remain available via /slug in the message itself. */}
+                    <input type="file" multiple accept="image/*" ref={fileInputRef} onChange={handleImageUpload} className="hidden" disabled={uploadDisabled} />
 
                     {/* Bottom Toolbar — ChatGPT style: + left, model/mic/send right */}
                     <div className="flex items-center justify-between gap-2 px-1 pt-2">
@@ -438,21 +397,20 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                         <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2 flex-wrap">
                             <button
                                 onClick={() => fileInputRef.current?.click()}
-                                className={`h-8 w-8 rounded-full border transition-all shrink-0 flex items-center justify-center ${uploadDisabled ? 'border-white/5 text-zinc-600 cursor-not-allowed' : 'border-white/10 text-zinc-400 hover:text-white hover:bg-zinc-800 hover:border-white/15'}`}
+                                className={`h-8 w-8 rounded-full transition-all shrink-0 flex items-center justify-center ${uploadDisabled ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-400 hover:text-white hover:bg-white/[0.06]'}`}
                                 disabled={uploadDisabled}
                                 title={isEnsembleEnabled ? 'Upload charts' : 'Open Team to analyze charts'}
                             >
-                                <PlusIcon className="h-4 w-4" />
+                                <PlusIcon className="h-[18px] w-[18px]" />
                             </button>
-                            {/* Chat | Trade — Claude-desktop-style mode switcher
-                                (ROUND-33): Chat = casual single-model chat;
-                                Trade = the full ensemble pipeline. Replaces the
-                                old implicit toggle (Team button enabled the
-                                ensemble as a side effect). */}
+                            {/* Chat | Trade — reference-style bare mode pills:
+                                no capsule around them; the ACTIVE mode reads
+                                from a lighter fill, the inactive is plain text
+                                (ROUND-39 UI parity with the screenshots). */}
                             <div
                                 role="tablist"
                                 aria-label="Composer mode"
-                                className="flex items-center rounded-full border border-white/10 bg-zinc-950 p-0.5"
+                                className="flex items-center gap-1"
                             >
                                 <button
                                     type="button"
@@ -460,7 +418,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                     aria-selected={!isEnsembleEnabled}
                                     onClick={() => setIsEnsembleEnabled(false)}
                                     className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ${
-                                        !isEnsembleEnabled ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
+                                        !isEnsembleEnabled ? 'bg-zinc-700/80 text-zinc-100' : 'bg-transparent text-zinc-500 hover:text-zinc-300'
                                     }`}
                                 >
                                     Chat
@@ -472,7 +430,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                     onClick={() => setIsEnsembleEnabled(true)}
                                     title="Analyst team debates and issues a verdict"
                                     className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ${
-                                        isEnsembleEnabled ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
+                                        isEnsembleEnabled ? 'bg-zinc-700/80 text-zinc-100' : 'bg-transparent text-zinc-500 hover:text-zinc-300'
                                     }`}
                                 >
                                     Trade
@@ -506,43 +464,37 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                         <ChevronDownIcon className={`h-3 w-3 text-zinc-500 transition-transform ${isTeamMenuOpen ? 'rotate-180' : ''}`} />
                                     </button>
                                     {isTeamMenuOpen && (
-                                        <>
-                                            <div className="fixed inset-0 z-30" onClick={() => setIsTeamMenuOpen(false)} aria-hidden="true" />
-                                            <div className="absolute bottom-full left-0 z-40 mb-2 w-72 rounded-xl border border-white/10 bg-zinc-900 p-1.5 shadow-2xl animate-fade-in">
-                                                {rosterSlots.map(slot => (
-                                                    <div key={slot.label} className="flex items-center justify-between rounded-lg px-2.5 py-2 hover:bg-zinc-800">
-                                                        <div className="min-w-0">
-                                                            <p className="truncate text-[13px] font-medium text-zinc-100">{slot.label}</p>
-                                                            <p className="truncate text-[11px] text-zinc-500">{slot.model}</p>
-                                                        </div>
-                                                        <CheckIcon className="h-4 w-4 shrink-0 text-zinc-300" />
-                                                    </div>
-                                                ))}
-                                                <div className="flex items-center justify-between rounded-lg px-2.5 py-2 hover:bg-zinc-800">
-                                                    <div className="min-w-0">
-                                                        <p className="truncate text-[13px] font-medium text-zinc-100">Moderator</p>
-                                                        <p className="truncate text-[11px] text-zinc-500">{moderatorModel ? formatModelDisplayName(moderatorModel) : 'first ready model'}</p>
-                                                    </div>
-                                                    <CheckIcon className="h-4 w-4 shrink-0 text-zinc-300" />
-                                                </div>
-                                                <div className="mt-1 border-t border-white/5 pt-1">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => { setIsTeamMenuOpen(false); setIsTeamModalOpen(true); }}
-                                                        className="w-full rounded-lg px-2.5 py-2 text-left text-[13px] text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
-                                                    >
-                                                        Customize team…
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </>
+                                        <TeamRosterMenu
+                                            providers={providers}
+                                            lensConfig={lensConfig}
+                                            setLensConfig={setLensConfig}
+                                            ensembleModelSelection={ensembleModelSelection}
+                                            setEnsembleModelSelection={setEnsembleModelSelection}
+                                            moderatorProviderId={moderatorProviderId}
+                                            moderatorModel={moderatorModel}
+                                            onSetModeratorProvider={onSetModeratorProvider}
+                                            onSetModeratorModel={onSetModeratorModel}
+                                            regimeProviderStats={regimeProviderStats}
+                                            leverageSection={isEnsembleEnabled ? (
+                                                <LeverageSection
+                                                    value={leverageInput}
+                                                    onChange={handleLeverageChange}
+                                                    onBlur={handleLeverageBlur}
+                                                    onPreset={handlePresetLeverage}
+                                                />
+                                            ) : undefined}
+                                            onClose={() => setIsTeamMenuOpen(false)}
+                                        />
                                     )}
                                 </div>
                             )}
 
                         </div>
 
-                        {/* Right Side: model (chat) / leverage (trade) + send */}
+                        {/* Right Side: send (+ leverage in Trade mode, model in
+                            Chat mode) — CLAUDE PARITY: the leverage control
+                            moved into the Team menu so the composer bar reads
+                            + modes … send only. */}
                         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                             {/* Casual chat model — reference-style bare selector */}
                             {!isEnsembleEnabled && chatModelOptions.length > 0 && (
@@ -553,57 +505,10 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                     mode="model-only"
                                 />
                             )}
-                            {/* Leverage Button — Trade mode only */}
-                            {isEnsembleEnabled && (
-                            <div className="relative" ref={leverageRef}>
-                                <button
-                                    onClick={() => setIsLeverageDropdownOpen(!isLeverageDropdownOpen)}
-                                    className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all focus-visible:ring-2 focus-visible:ring-zinc-500 ${isLeverageDropdownOpen ? 'bg-zinc-700 text-white' : 'bg-zinc-700/60 text-zinc-300 hover:bg-zinc-700 hover:text-white'}`}
-                                    aria-label={`Select leverage, currently ${leverageInput}x`}
-                                    aria-expanded={isLeverageDropdownOpen}
-                                    aria-haspopup="menu"
-                                >
-                                    
-                                    <span className="font-medium">{leverageInput}x</span>
-                                </button>
-                                {isLeverageDropdownOpen && (
-                                     <div role="menu" aria-label="Leverage presets" className="absolute bottom-full right-0 mb-2 w-36 overflow-hidden rounded-lg border border-white/10 bg-zinc-950 shadow-2xl animate-fade-in">
-                                        <div className="border-b border-white/10 px-3 py-2.5">
-                                            <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Leverage</div>
-                                            <div className="mt-1 text-[10px] text-zinc-600">Risk multiplier</div>
-                                        </div>
-                                        <div className="p-1.5">
-                                        {[25, 50, 75, 100, 125].map(preset => (
-                                            <button
-                                                key={preset}
-                                                onClick={() => handlePresetLeverage(preset)}
-                                                className={`w-full rounded-md px-3 py-2 text-left text-sm font-mono transition-colors ${parseInt(leverageInput) === preset ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-300 hover:bg-zinc-900'}`}
-                                            >
-                                                {preset}x
-                                            </button>
-                                        ))}
-                                        <div className="px-3 py-2 border-t border-white/10">
-                                            <input
-                                                type="number"
-                                                value={leverageInput}
-                                                onChange={handleLeverageChange}
-                                                onBlur={handleLeverageBlur}
-                                                className="w-full bg-zinc-900 border border-white/10 rounded-md px-2 py-1.5 text-sm font-mono text-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500"
-                                                aria-label="Custom leverage"
-                                                min="1"
-                                                max="125"
-                                                placeholder="Custom"
-                                            />
-                                        </div>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                            )}
                             <button
                                 onClick={isAnalysisInProgress ? handleCancelAnalysis : handleSendMessage}
                                 disabled={isSummarizing || (!isAnalysisInProgress && ((!input.trim() && images.length === 0) || isRateLimited || !isAnyProviderEnabled))}
-                                className={`h-8 w-8 rounded-full transition-all flex items-center justify-center shrink-0 disabled:opacity-40 disabled:cursor-not-allowed ${isAnalysisInProgress ? 'status-surface bg-rose-500 hover:bg-rose-400 text-white' : 'bg-white text-zinc-900 hover:bg-zinc-100 shadow-sm'}`}
+                                className={`h-8 w-8 rounded-full transition-all flex items-center justify-center shrink-0 disabled:opacity-40 disabled:cursor-not-allowed ${isAnalysisInProgress ? 'status-surface bg-rose-500 hover:bg-rose-400 text-white' : 'bg-zinc-200 text-zinc-900 hover:bg-white shadow-sm'}`}
                                 title={isAnalysisInProgress ? 'Stop generating' : 'Send'}
                                 aria-label={isAnalysisInProgress ? 'Stop generating' : 'Send message'}
                             >

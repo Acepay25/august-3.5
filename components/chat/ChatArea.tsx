@@ -52,12 +52,9 @@ interface ChatAreaProps {
     // ChatInput Props
     images: ImageMetadata[];
     removeImage: (index: number) => void;
-    leverageRef: React.RefObject<HTMLDivElement | null>;
-    setIsLeverageDropdownOpen: React.Dispatch<React.SetStateAction<boolean>>;
     leverageInput: string;
     handleLeverageChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
     handleLeverageBlur: (e: React.FocusEvent<HTMLInputElement>) => void;
-    isLeverageDropdownOpen: boolean;
     handlePresetLeverage: (value: number) => void;
     fileInputRef: React.RefObject<HTMLInputElement | null>;
     isImageUploadDisabled: boolean;
@@ -150,12 +147,9 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     // ChatInput Props
     images,
     removeImage,
-    leverageRef,
-    setIsLeverageDropdownOpen,
     leverageInput,
     handleLeverageChange,
     handleLeverageBlur,
-    isLeverageDropdownOpen,
     handlePresetLeverage,
     fileInputRef,
     isImageUploadDisabled,
@@ -338,9 +332,10 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     const processedMessages = messages;
 
     // Reference-style fresh-session hero: time-of-day serif greeting.
+    // Late-evening threshold matches the reference ("Up late" from 22:00).
     const heroGreeting = useMemo(() => {
         const hour = new Date().getHours();
-        const part = hour < 5 ? 'Up late' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+        const part = hour < 5 ? 'Up late' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : hour < 22 ? 'Good evening' : 'Up late';
         let name = '';
         try {
             const raw = localStorage.getItem('last_active_user') || '';
@@ -358,12 +353,9 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     const chatInputProps = useMemo(() => ({
         images,
         removeImage,
-        leverageRef,
-        setIsLeverageDropdownOpen,
         leverageInput,
         handleLeverageChange,
         handleLeverageBlur,
-        isLeverageDropdownOpen,
         handlePresetLeverage,
         fileInputRef,
         isImageUploadDisabled,
@@ -406,9 +398,9 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         hybridConnectionStatus,
         hybridData,
     }), [
-        images, removeImage, leverageRef, setIsLeverageDropdownOpen,
+        images, removeImage,
         leverageInput, handleLeverageChange, handleLeverageBlur,
-        isLeverageDropdownOpen, handlePresetLeverage, fileInputRef,
+        handlePresetLeverage, fileInputRef,
         isImageUploadDisabled, handleImageUpload, input, setInput,
         handleSendMessage, handleCancelAnalysis, loadingMessage, isSummarizing,
         isAnalysisInProgress, steeringNotes, onRemoveSteeringNote, isRateLimited, isAnyProviderEnabled, providers,
@@ -635,10 +627,15 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 </>
             ) : messages.length === 0 ? (
                 <div className="flex flex-1 flex-col items-center justify-center bg-zinc-950 px-4 py-10">
-                    <h1 className="mb-10 text-center font-serif text-4xl tracking-tight text-zinc-100 sm:text-5xl">
-                        {heroGreeting}
-                    </h1>
-                    <div className="w-full max-w-[760px]">
+                    {/* CLAUDE-HOME HERO (ROUND-39 UI, copied from the reference
+                        screenshot): serif greeting ALONE on the page background
+                        — no spark/asterisk mark beside it. */}
+                    <div className="mb-10 flex items-center justify-center">
+                        <h1 className="text-center font-serif text-[32px] tracking-tight text-white sm:text-[40px]">
+                            {heroGreeting}
+                        </h1>
+                    </div>
+                    <div className="w-full max-w-[680px]">
                         <ChatInput {...chatInputProps} centered />
                     </div>
                 </div>

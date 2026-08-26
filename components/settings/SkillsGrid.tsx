@@ -5,7 +5,16 @@ import type { SkillMeta } from '../../services/learning/SkillMemoryService';
 import MarkdownContent from '../shared/MarkdownContent';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
 import { ChevronLeftIcon } from '../shared/Icons';
-import { PinIcon, TrashIcon } from 'lucide-react';
+import { PinIcon, MessageSquarePlus } from 'lucide-react';
+
+/**
+ * ROUND-39 UI: "Try in chat" — drops the skill's /slug into the composer.
+ * ChatInput listens for this event and prepends the marker; App closes the
+ * settings surface so the user lands back on the chat with the text ready.
+ */
+export const trySkillInChat = (slug: string): void => {
+    window.dispatchEvent(new CustomEvent('august:try-skill', { detail: { slug } }));
+};
 
 /**
  * SkillsGrid (ROUND-33) — every skill as a card in a responsive grid,
@@ -107,8 +116,21 @@ const SkillsCard: React.FC<{
                 )}
             </div>
 
-            {/* Hover actions — pin + retire/restore, right-aligned like the reference */}
+            {/* Hover actions — try-in-chat + pin + retire/restore, right-aligned
+                like the reference's kebab row. The toggle mirrors the reference
+                card's inline On/Off switch. */}
             <div className="absolute right-3 top-3 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                {!retired && (
+                    <button
+                        type="button"
+                        title="Try in chat"
+                        aria-label={`Try ${skill.name} in chat`}
+                        onClick={e => { e.stopPropagation(); trySkillInChat(skill.name); }}
+                        className="rounded-md p-1 text-zinc-600 hover:text-zinc-200"
+                    >
+                        <MessageSquarePlus className="h-3.5 w-3.5" />
+                    </button>
+                )}
                 <button
                     type="button"
                     title={pinned ? 'Unpin' : 'Pin to top'}
@@ -117,14 +139,9 @@ const SkillsCard: React.FC<{
                 >
                     <PinIcon className="h-3.5 w-3.5" />
                 </button>
-                <button
-                    type="button"
-                    title={retired ? 'Restore skill' : 'Retire skill'}
-                    onClick={e => { e.stopPropagation(); onToggleRetire(); }}
-                    className="rounded-md p-1 text-zinc-600 hover:text-rose-400"
-                >
-                    <TrashIcon className="h-3.5 w-3.5" />
-                </button>
+                <div onClick={e => e.stopPropagation()}>
+                    <ToggleSwitch checked={!retired} onChange={onToggleRetire} label={`Toggle ${skill.name} active`} />
+                </div>
             </div>
         </div>
     );

@@ -2,8 +2,7 @@ import React, { useMemo } from 'react';
 import { ProviderConfig } from '../../types/provider';
 import { AnalystRole } from '../../types/enums';
 import { AnalystLensConfig } from '../../types/lens';
-import { EnsembleModelSelection } from '../../services/ui/AnalystLensService';
-import GlobalLearningService from '../../services/learning/GlobalLearningService';
+import { EnsembleModelSelection, autoAssignLenses } from '../../services/ui/AnalystLensService';
 import { RegimeProviderStatsMap } from '../../services/learning/SetupMemoryService';
 import { ANALYST_ROLE_DEFINITIONS } from '../../services/ui/AnalystLensService';
 import { CloseIcon, EditIcon } from '../shared/Icons';
@@ -76,31 +75,9 @@ const TeamModal: React.FC<TeamModalProps> = ({
 
     const setMode = (next: 'normal' | 'lenses') => {
         if (next === 'lenses' && lensConfig.assignments.length === 0) {
-            let providerOrder = [...readyProviders];
-            try {
-                if (regimeProviderStats && regimeProviderStats.size > 0) {
-                    providerOrder = [...readyProviders].sort((a, b) =>
-                        (regimeProviderStats.get(b.id)?.wr ?? -1) - (regimeProviderStats.get(a.id)?.wr ?? -1)
-                    );
-                } else {
-                    const byProvider = GlobalLearningService.getCalibration()?.granular?.byProvider;
-                    if (byProvider) {
-                        providerOrder = [...readyProviders].sort((a, b) => {
-                            const wa = byProvider[a.id]?.total >= 3 ? byProvider[a.id].wins / byProvider[a.id].total : -1;
-                            const wb = byProvider[b.id]?.total >= 3 ? byProvider[b.id].wins / byProvider[b.id].total : -1;
-                            return wb - wa;
-                        });
-                    }
-                }
-            } catch { /* calibration read is best-effort */ }
-            const distinct = [...new Map(providerOrder.map(p => [p.id, p])).values()].slice(0, 3);
-            if (distinct.length > 0) {
-                const assignments = LENS_ROLES.map((r, i) => ({
-                    role: r.role,
-                    assignedProvider: distinct[i % distinct.length]?.id ?? null,
-                    assignedModel: distinct[i % distinct.length]?.models[0] ?? undefined,
-                }));
-                setLensConfig({ ...lensConfig, enabled: true, assignments: assignments as AnalystLensConfig['assignments'] });
+            const auto = autoAssignLenses(lensConfig, readyProviders, regimeProviderStats);
+            if (auto) {
+                setLensConfig(auto);
                 setIsEnsembleEnabled(true);
                 return;
             }

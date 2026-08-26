@@ -229,6 +229,10 @@ describe('conductRealDebate (real inter-model debate)', () => {
   beforeEach(() => {
     streamMock.mockReset();
     sendMock.mockReset();
+    // D2.3 protocol lane is DETERMINISTIC (ROUND-39/D6): hashed from the setup
+    // seed — unseeded engine calls (like these tests) take the control lane,
+    // so no Math.random pin is needed. Kept as belt-and-braces in case a
+    // future change reintroduces randomness into the structure.
   });
 
   const realAnalyst = (id: string, name: string, model: string) => ({
@@ -272,6 +276,11 @@ describe('conductRealDebate (real inter-model debate)', () => {
         yield 'Verdict: Long on breakout with tight stop.\n';
         yield '</DEBATE_END>\n';
         yield MARKDOWN_PLAN('Long', 'Medium', 60);
+      } else if (/CONVICTION/.test(user) && user.includes('ENTIRE reply')) {
+        // D12 conviction retry nudge — the seat answers with just the line.
+        yield `CONVICTION: ${isFloorSeat(system, 'Analyst One') ? 70 : 40}`;
+      } else if (user.includes('FINAL CONVICTION LINE')) {
+        yield `rebuttal-final-${isFloorSeat(system, 'Analyst One') ? 'one' : 'two'}\n\nCONVICTION: ${isFloorSeat(system, 'Analyst One') ? 72 : 45}`;
       } else {
         yield `rebuttal-${isFloorSeat(system, 'Analyst One') ? 'one' : 'two'}`;
       }
@@ -492,6 +501,10 @@ describe('conductRealDebate (real inter-model debate)', () => {
         yield '<CLARIFICATION_DONE>';
       } else if (messages[0].content.includes('debate moderator')) {
         yield 'Moderator verdict text.\n</DEBATE_END>\n' + MARKDOWN_PLAN('Long', 'Medium', 60);
+      } else if (/CONVICTION/.test(messages[1].content) && messages[1].content.includes('ENTIRE reply')) {
+        yield 'CONVICTION: 65';
+      } else if (messages[1].content.includes('FINAL CONVICTION LINE')) {
+        yield 'rebuttal-final\n\nCONVICTION: 66';
       } else {
         yield 'rebuttal-from-analyst';
       }
@@ -616,6 +629,16 @@ describe('conductRealDebate (real inter-model debate)', () => {
       if (system.includes('debate moderator')) {
         yield 'Moderator verdict.\n</DEBATE_END>\n';
         yield verdictJson;
+        return;
+      }
+      // D12: final-round seats must carry the sealed conviction line, and the
+      // retry nudge expects a bare CONVICTION reply.
+      if (/CONVICTION/.test(user) && user.includes('ENTIRE reply')) {
+        yield `CONVICTION: ${isFloorSeat(system, 'Analyst One') ? 70 : 45}`;
+        return;
+      }
+      if (user.includes('FINAL CONVICTION LINE')) {
+        yield `rebuttal\n\nCONVICTION: ${isFloorSeat(system, 'Analyst One') ? 72 : 48}`;
         return;
       }
       yield 'rebuttal';
@@ -817,6 +840,12 @@ describe('conductRealDebate (real inter-model debate)', () => {
       } else if (system.includes('debate moderator')) {
         yield 'Verdict for three.\n</DEBATE_END>\n';
         yield verdictJson;
+      } else if (/CONVICTION/.test(user) && user.includes('ENTIRE reply')) {
+        const name = floorSeatName(system, ['Analyst One', 'Analyst Two', 'Analyst Three']);
+        yield `CONVICTION: ${name === 'Analyst One' ? 70 : name === 'Analyst Two' ? 50 : 40}`;
+      } else if (user.includes('FINAL CONVICTION LINE')) {
+        const name = floorSeatName(system, ['Analyst One', 'Analyst Two', 'Analyst Three']);
+        yield `rebuttal-${name}\n\nCONVICTION: ${name === 'Analyst One' ? 72 : name === 'Analyst Two' ? 52 : 44}`;
       } else {
         const name = floorSeatName(system, ['Analyst One', 'Analyst Two', 'Analyst Three']);
         yield `rebuttal-${name}`;
@@ -895,6 +924,16 @@ describe('conductRealDebate (real inter-model debate)', () => {
         analystThreeCalls++;
         if (analystThreeCalls === 1) throw new Error('Analyst Three provider exploded');
       }
+      // D12: final-round seats must carry the sealed conviction line.
+      const threeName = floorSeatName(system, ['Analyst One', 'Analyst Two', 'Analyst Three']);
+      if (/CONVICTION/.test(user) && user.includes('ENTIRE reply')) {
+        yield `CONVICTION: ${threeName === 'Analyst One' ? 70 : 45}`;
+        return;
+      }
+      if (user.includes('FINAL CONVICTION LINE')) {
+        yield `rebuttal\n\nCONVICTION: ${threeName === 'Analyst One' ? 72 : 48}`;
+        return;
+      }
       yield 'rebuttal';
     });
 
@@ -938,6 +977,16 @@ describe('conductRealDebate (real inter-model debate)', () => {
       if (isFloorSeat(system, dropAnalyst)) {
         droppedCalls++;
         if (droppedCalls === 1) throw new Error(`${dropAnalyst} provider exploded`);
+      }
+      // D12: final-round seats must carry the sealed conviction line.
+      const seatName = floorSeatName(system, ['Analyst One', 'Analyst Two', 'Analyst Three']);
+      if (/CONVICTION/.test(user) && user.includes('ENTIRE reply')) {
+        yield `CONVICTION: ${seatName === 'Analyst One' ? 70 : 45}`;
+        return;
+      }
+      if (user.includes('FINAL CONVICTION LINE')) {
+        yield `rebuttal\n\nCONVICTION: ${seatName === 'Analyst One' ? 72 : 48}`;
+        return;
       }
       yield 'rebuttal';
     });
@@ -1257,6 +1306,15 @@ describe('conductRealDebate — transient-failure retry (streamWithTransientRetr
           err.status = 429;
           throw err;
         }
+        // D12: the final round must carry the sealed conviction line.
+        if (/CONVICTION/.test(user) && user.includes('ENTIRE reply')) {
+          yield `CONVICTION: ${isFloorSeat(system, 'Analyst One') ? 70 : 45}`;
+          return;
+        }
+        if (user.includes('FINAL CONVICTION LINE') || user.includes('ROUND 3')) {
+          yield `rebuttal-${isFloorSeat(system, 'Analyst One') ? 'one' : 'two'}-round-3\n\nCONVICTION: ${isFloorSeat(system, 'Analyst One') ? 72 : 48}`;
+          return;
+        }
         yield `rebuttal-${isFloorSeat(system, 'Analyst One') ? 'one' : 'two'}-round-${user.includes('ROUND 3') ? '3' : '2'}`;
       }
     });
@@ -1304,6 +1362,15 @@ describe('conductRealDebate — transient-failure retry (streamWithTransientRetr
           // Analyst One's first rebuttal: partial output THEN a network failure.
           yield 'partial rebuttal text';
           throw new Error('NetworkError: failed to fetch');
+        }
+        // D12: the final round must carry the sealed conviction line.
+        if (/CONVICTION/.test(user) && user.includes('ENTIRE reply')) {
+          yield `CONVICTION: ${isFloorSeat(system, 'Analyst One') ? 70 : 45}`;
+          return;
+        }
+        if (user.includes('FINAL CONVICTION LINE') || user.includes('ROUND 3')) {
+          yield `rebuttal-${isFloorSeat(system, 'Analyst One') ? 'one' : 'two'}-final\n\nCONVICTION: ${isFloorSeat(system, 'Analyst One') ? 72 : 48}`;
+          return;
         }
         yield `rebuttal-${isFloorSeat(system, 'Analyst One') ? 'one' : 'two'}`;
       }

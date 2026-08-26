@@ -7,7 +7,7 @@ import { initMemoryFiles, getMemoryFiles, computeTopLessons, TopLesson } from '.
 import { summarizeSimilarSetups, COLD_START_MIN } from '../../services/learning/SetupMemoryService';
 import { computeEvidenceQualityStats } from '../../utils/analysisQuality';
 import { summarizePromptVersions, summarizePromptLanes } from '../../utils/promptVersionStats';
-import { listSkills, reviewSkillEffectiveness, applyReviewRecommendation } from '../../services/learning/SkillMemoryService';
+import { listSkills, reviewSkillEffectiveness, applyReviewRecommendation, refineSkillNow } from '../../services/learning/SkillMemoryService';
 import { computeAllSkillLifts } from '../../services/learning/MemoryProvenanceService';
 import { getRecentMemoryInjections, type MemoryInjectionRecord } from '../../services/learning/MemoryInjectionService';
 import { useToastActions } from '../shared/Toast';
@@ -123,6 +123,26 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
             setApplyingFileId(null);
         }
     }, [username, toast]);
+
+    /** S10 (ROUND-39): run the on-demand refine pass for a 'refine' row.
+     *  Review fix: only toast success when the skill actually changed. */
+    const handleRefineSkill = useCallback(async (fileId: string, fileName: string) => {
+        const user = username || getActiveUsername();
+        setApplyingFileId(fileId);
+        try {
+            const changed = await refineSkillNow(fileId, trades, user);
+            if (changed) {
+                toast.success('Skill refined', fileName.replace(/\.md$/i, ''));
+                bumpNotebook();
+            } else {
+                toast.warning?.('Nothing to refine', 'No provider was available, or the skill is already tight.');
+            }
+        } catch {
+            toast.warning?.('Refine failed', 'The skill was left unchanged.');
+        } finally {
+            setApplyingFileId(null);
+        }
+    }, [username, toast, trades]);
 
     // Outcome-weighted clusters — losses first (fix list), then wins (repeat list).
     const topLessons = useMemo(() => computeTopLessons(trades, 6), [trades]);
@@ -632,8 +652,10 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
     };
 
     // ─── Review actions: apply what the causal review recommends ───────────
+    // S10 (ROUND-39): 'refine' rows are now actionable too — a Refine button
+    // runs the LLM tighten pass instead of rendering a dead-end recommendation.
     const actionableReviews = skillReview.filter(r =>
-        r.recommendation === 'promote' || r.recommendation === 'demote' || r.recommendation === 'retire');
+        r.recommendation === 'promote' || r.recommendation === 'demote' || r.recommendation === 'retire' || r.recommendation === 'refine');
     const reviewActionsSection = (
         <div className="bg-zinc-800 rounded-xl border border-white/5 p-3 sm:p-4">
             <h4 className="text-[10px] sm:text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">⚖️ Skill Review — Apply</h4>
@@ -646,19 +668,29 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
                     {actionableReviews.slice(0, 8).map(r => (
                         <div key={r.fileId} className="rounded-lg border border-white/5 bg-zinc-950/50 px-2.5 py-1.5 flex items-center gap-2">
                             <div className="min-w-0 flex-1">
-                                <span className={`text-[10px] font-bold uppercase tracking-wider ${r.recommendation === 'retire' || r.recommendation === 'demote' ? 'text-red-400' : 'text-emerald-400'}`}>
+                                <span className={`text-[10px] font-bold uppercase tracking-wider ${r.recommendation === 'retire' || r.recommendation === 'demote' ? 'text-red-400' : r.recommendation === 'refine' ? 'text-yellow-400' : 'text-emerald-400'}`}>
                                     {r.recommendation}
                                 </span>
                                 <span className="text-[11px] text-zinc-300 ml-1.5 truncate inline-block max-w-[45%] align-bottom">{r.title}</span>
                                 <p className="text-[10px] text-zinc-600 truncate" title={r.rationale}>{r.rationale}</p>
                             </div>
-                            <button
-                                onClick={() => handleApplyRecommendation(r.fileId, r.title, r.recommendation as 'promote' | 'demote' | 'retire')}
-                                disabled={applyingFileId === r.fileId}
-                                className="shrink-0 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider border border-white/10 bg-zinc-900 text-zinc-300 hover:text-white hover:border-white/25 disabled:opacity-40 transition-colors"
-                            >
-                                {applyingFileId === r.fileId ? '…' : 'Apply'}
-                            </button>
+                            {r.recommendation === 'refine' ? (
+                                <button
+                                    onClick={() => handleRefineSkill(r.fileId, r.title)}
+                                    disabled={applyingFileId === r.fileId}
+                                    className="shrink-0 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider border border-white/10 bg-zinc-900 text-zinc-300 hover:text-white hover:border-white/25 disabled:opacity-40 transition-colors"
+                                >
+                                    {applyingFileId === r.fileId ? '…' : 'Refine'}
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={() => handleApplyRecommendation(r.fileId, r.title, r.recommendation as 'promote' | 'demote' | 'retire')}
+                                    disabled={applyingFileId === r.fileId}
+                                    className="shrink-0 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider border border-white/10 bg-zinc-900 text-zinc-300 hover:text-white hover:border-white/25 disabled:opacity-40 transition-colors"
+                                >
+                                    {applyingFileId === r.fileId ? '…' : 'Apply'}
+                                </button>
+                            )}
                         </div>
                     ))}
                 </div>}

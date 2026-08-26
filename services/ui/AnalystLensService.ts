@@ -6,6 +6,8 @@
  */
 
 import { AnalystRole, AIProvider, AnalystRoleAssignment, AnalystLensConfig } from '../../types';
+import { ProviderConfig } from '../../types/provider';
+import GlobalLearningService from '../learning/GlobalLearningService';
 import {
     LENS_POSITION_PROMPTS,
     LENS_SCALP_PROMPTS,
@@ -294,6 +296,47 @@ export function getDefaultLensAssignments(): AnalystRoleAssignment[] {
         { role: AnalystRole.TECHNICAL_ANALYST, assignedProvider: null },
         { role: AnalystRole.RISK_EXECUTION, assignedProvider: null },
     ];
+}
+
+/**
+ * Auto-assign the three lens roles to ready providers, preferring whoever
+ * wins in the CURRENT market regime (regime-matched win rates), falling back
+ * to overall calibration, then plain configured order. Returns the updated
+ * config with lenses enabled — or null when there is no ready provider to
+ * assign. Shared by the Team side-sheet and the composer's Team roster
+ * dropdown so both entry points behave identically.
+ */
+export function autoAssignLenses(
+    lensConfig: AnalystLensConfig,
+    readyProviders: ProviderConfig[],
+    regimeProviderStats?: ReadonlyMap<string, { wr: number }>,
+): AnalystLensConfig | null {
+    if (readyProviders.length === 0) return null;
+    let providerOrder = [...readyProviders];
+    try {
+        if (regimeProviderStats && regimeProviderStats.size > 0) {
+            providerOrder = [...readyProviders].sort((a, b) =>
+                (regimeProviderStats.get(b.id)?.wr ?? -1) - (regimeProviderStats.get(a.id)?.wr ?? -1)
+            );
+        } else {
+            const byProvider = GlobalLearningService.getCalibration()?.granular?.byProvider;
+            if (byProvider) {
+                providerOrder = [...readyProviders].sort((a, b) => {
+                    const wa = byProvider[a.id]?.total >= 3 ? byProvider[a.id].wins / byProvider[a.id].total : -1;
+                    const wb = byProvider[b.id]?.total >= 3 ? byProvider[b.id].wins / byProvider[b.id].total : -1;
+                    return wb - wa;
+                });
+            }
+        }
+    } catch { /* calibration read is best-effort */ }
+    const distinct = [...new Map(providerOrder.map(p => [p.id, p])).values()].slice(0, 3);
+    if (distinct.length === 0) return null;
+    const assignments = getAvailableRoles().map((r, i) => ({
+        role: r.id,
+        assignedProvider: distinct[i % distinct.length]?.id ?? null,
+        assignedModel: distinct[i % distinct.length]?.models[0] ?? undefined,
+    }));
+    return { ...lensConfig, enabled: true, assignments: assignments as AnalystLensConfig['assignments'] };
 }
 
 /**

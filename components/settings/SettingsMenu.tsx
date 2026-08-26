@@ -349,7 +349,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                     </button>
                     <div className="flex-1 flex min-h-0 flex-col md:flex-row">
                         
-                        <div className="w-full md:w-64 max-h-[32vh] overflow-y-auto md:max-h-none md:overflow-y-auto border-b md:border-b-0 md:border-r border-white/10 bg-zinc-900 px-3 py-4 space-y-1 shrink-0 flex flex-col justify-between custom-scrollbar">
+                        <div className="w-full md:w-64 max-h-[32vh] overflow-y-auto md:max-h-none md:overflow-y-auto border-b md:border-b-0 md:border-r border-white/[0.06] bg-black/20 px-3 py-4 space-y-1 shrink-0 flex flex-col justify-between custom-scrollbar">
                             <div className="space-y-1">
                                 <div className="px-1 pb-4">
                                     <div className="flex items-center gap-2 rounded-lg border border-white/5 bg-zinc-800/80 px-3 py-2">

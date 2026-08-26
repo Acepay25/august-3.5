@@ -32,6 +32,7 @@ import {
   maybeUpsertSkill,
   applySkillEvidence,
   applyNotebookSkillsToAnalysis,
+  confirmedAvoidForSetup,
   parseSkillMarkdown,
   ingestIfThenFromTrade,
   MIN_CLUSTER_FOR_SKILL,
@@ -290,7 +291,10 @@ ${extra}tradeIds: a,b,c,d,e,f,g
     });
     expect(next.confidence).toBe('Low');
     expect(next.direction).toBe('Short');
-    expect(next.riskVeto).toMatch(/NOTEBOOK SKILL/);
+    // S8 (ROUND-39): candidate caps are a WARNING, not a hard risk veto —
+    // the setup stays tradeable at reduced size.
+    expect(next.riskVeto).toBeUndefined();
+    expect((next as { validationWarnings?: string[] }).validationWarnings?.join(' ')).toMatch(/NOTEBOOK SKILL/);
   });
 
   it('vetoes Long/Short when a confirmed avoid skill matches', async () => {
@@ -321,6 +325,42 @@ tradeIds: a,b,c,d,e,f,g
     expect(next.confidence).toBe('Avoid');
     expect(next.direction).toBe('Neutral');
     expect(next.riskVeto).toMatch(/NOTEBOOK SKILL VETO/);
+  });
+
+  it('does NOT veto a different coin that merely shares the direction (S1 strict enforcement)', async () => {
+    const folder = getMemoryFiles().folders.find(f => f.name === 'skills')!;
+    await createMemoryFile(folder.id, 'btc-long-avoid.md', `---
+status: confirmed
+kind: avoid
+coin: BTCUSDT
+direction: Long
+family: liquidity sweep
+wins: 1
+losses: 6
+tradeIds: a,b,c,d,e,f,g
+---
+
+# Avoid BTCUSDT Long liquidity sweep
+
+**Procedure:** Wait for the reclaim.
+`, 'test-user', true);
+    // Same direction (Long) but a DIFFERENT coin and family — under the old
+    // loose matcher this vetoed the setup; strictly it must not.
+    const next = applyNotebookSkillsToAnalysis({
+      coinName: 'ETHUSDT',
+      direction: 'Long',
+      confidence: 'High',
+      probability: 80,
+      detectedPatternFamily: 'range breakout',
+      riskVeto: undefined as string | undefined,
+    });
+    expect(next.confidence).toBe('High');
+    expect(next.direction).toBe('Long');
+    expect(next.riskVeto).toBeUndefined();
+    // The moderator-side skip_to_verdict veto is bound by the same rule.
+    expect(confirmedAvoidForSetup({ coin: 'ETHUSDT', direction: 'Long', family: 'range breakout' })).toBeNull();
+    // ...while its own setup still enforces.
+    expect(confirmedAvoidForSetup({ coin: 'BTCUSDT', direction: 'Long', family: 'liquidity sweep' })).not.toBeNull();
   });
 
   it('does not apply a disabled notebook skill to a setup', async () => {

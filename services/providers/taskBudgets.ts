@@ -8,8 +8,11 @@
 export const TASK_BUDGETS = {
   /** Full chart analysis (multi-timeframe + ensemble + accuracy modes). */
   analysis: 8192,
-  /** Per-analyst rebuttal round in the real debate (three short bullets). */
-  rebuttal: 1536,
+  /** Per-analyst rebuttal round in the real debate. ROUND-39/D12: raised
+   *  from 1536 — later rounds stack duties (devil's-advocate case, evidence
+   *  citation, name-addressed counters, the mandatory CONVICTION line), and
+   *  a truncated seat silently lost its sealed conviction from the auction. */
+  rebuttal: 2560,
   /** Clarification answers (60-100 words). */
   clarification: 400,
   /** Vision/OCR structured report — 6 sections; 1024 truncated mid-field. */

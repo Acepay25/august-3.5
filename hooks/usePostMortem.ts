@@ -9,7 +9,8 @@ import * as MemoryService from '../services/learning/MemoryService';
 import { jobQueue, JobType } from '../services/infrastructure/JobQueueService';
 import { buildSeverityPostMortemContext } from '../services/learning/InsightExtractionService';
 import { writeModelNote } from '../services/learning/MemoryFilesService';
-import { syncClosedTradeToNotebook } from '../services/learning/SkillMemoryService';
+import { getMemoryFiles } from '../services/learning/MemoryFilesService';
+import { syncClosedTradeToNotebook, parseSkillMarkdown } from '../services/learning/SkillMemoryService';
 import { writeNotebookNoteFromPostMortem } from '../services/learning/NotebookWriterService';
 import { craftSkillFromPostMortem } from '../services/learning/SkillCraftService';
 import { queueSkillDraft, isDraftTombstoned, draftTriggerKey } from '../utils/skillDrafts';
@@ -657,9 +658,32 @@ Please investigate this discrepancy in your analysis.
                         rootCauseClass: classifyRootCause(finalPostMortemReport, tradeToUpdate.outcome),
                     };
                     const craftConfig = memoryConfig ?? enabledProviders[0]?.config;
+                    // GOVERNANCE NOTE (review, ROUND-39): sync runs FIRST by
+                    // design — auto-ingested IF/THEN skills are evidence-backed
+                    // (they come from a CLOSED trade's own post-mortem) and
+                    // start as unenforced candidates that still need wins to
+                    // confirm. Only the *LLM-crafted* skill (a generative
+                    // artifact) goes through the human-approval inbox below.
+                    await syncClosedTradeToNotebook(closed, loggedTradesRef.current, notebookUser);
                     if (craftConfig) {
                         const crafted = await craftSkillFromPostMortem(closed, craftConfig);
-                        if (crafted && !isDraftTombstoned(draftTriggerKey(closed.analysis?.coinName, crafted), notebookUser)) {
+                        // S4 (ROUND-39): one post-mortem must not spawn BOTH an
+                        // auto-ingested IF/THEN skill AND an inbox craft draft
+                        // from the same report. The reverse collision is guarded
+                        // inside ingestIfThenFromTradeUnlocked (it skips when a
+                        // draft for the trade exists); this direction checks the
+                        // notebook AFTER syncClosedTradeToNotebook ran — if the
+                        // trade's id already landed in some skill's evidence,
+                        // the auto path handled it and the draft is noise.
+                        const alreadyAutoIngested = crafted ? getMemoryFiles().files.some(f => {
+                            const m = parseSkillMarkdown(f.content);
+                            return Boolean(m && m.tradeIds.includes(closed.id));
+                        }) : false;
+                        if (
+                            crafted
+                            && !alreadyAutoIngested
+                            && !isDraftTombstoned(draftTriggerKey(closed.analysis?.coinName, crafted), notebookUser)
+                        ) {
                             queueSkillDraft({
                                 tradeId: closed.id,
                                 coin: closed.analysis?.coinName,
@@ -667,7 +691,6 @@ Please investigate this discrepancy in your analysis.
                             }, notebookUser);
                         }
                     }
-                    await syncClosedTradeToNotebook(closed, loggedTradesRef.current, notebookUser);
                 } catch (notebookError) {
                     console.warn('[TraderNotebook] Memory-file sync failed (non-fatal):', notebookError);
                 }

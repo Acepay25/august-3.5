@@ -19,7 +19,7 @@ import { TradeOutcome } from '../../types';
 import { getMemoryFiles } from './MemoryFilesService';
 import {
     parseSkillMarkdown,
-    skillMatchesSetup,
+    skillStrictlyMatchesSetup,
     isSkillFile,
 } from './SkillMemoryService';
 import type { MemoryInjectionRecord } from './MemoryInjectionService';
@@ -63,9 +63,12 @@ export const computeSkillLift = (
     };
 
     // Matching closed trades sorted oldest → newest.
+    // Review fix (ROUND-39): STRICT matcher — lift must be computed over the
+    // same population production enforcement acts on (S1), not every coin
+    // sharing the direction.
     const matched = trades
         .filter(t => (t.outcome === WIN || t.outcome === LOSS) && t.analysis)
-        .filter(t => skillMatchesSetup(meta, {
+        .filter(t => skillStrictlyMatchesSetup(meta, {
             coin: t.analysis?.coinName,
             direction: t.analysis?.direction === 'Long' || t.analysis?.direction === 'Short'
                 ? t.analysis.direction : undefined,

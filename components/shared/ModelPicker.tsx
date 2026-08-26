@@ -8,7 +8,13 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { ProviderConfig } from '../../types/provider';
-import { formatModelDisplayName, isFreeModelId, sortModelsFreeFirst } from '../../utils/providerUtils';
+import {
+    formatModelDisplayName,
+    isFreeModelId,
+    sortModelsFreeFirst,
+    readFreeOnlyPref,
+    writeFreeOnlyPref,
+} from '../../utils/providerUtils';
 import { ChevronRightIcon, ChevronDownIcon, CheckIcon } from './Icons';
 
 /** Viewport rect of the trigger at open time (kept so the flyout can be
@@ -56,23 +62,8 @@ function computeFlyoutPosition(anchor: AnchorRect, flyoutW: number, flyoutH: num
     return { top, left, maxHeight };
 }
 
-const FREE_ONLY_STORAGE_KEY = 'august_model_picker_free_only_v1';
-
-const readFreeOnlyPref = (): boolean => {
-    try {
-        return localStorage.getItem(FREE_ONLY_STORAGE_KEY) === '1';
-    } catch {
-        return false;
-    }
-};
-
-const writeFreeOnlyPref = (value: boolean): void => {
-    try {
-        localStorage.setItem(FREE_ONLY_STORAGE_KEY, value ? '1' : '0');
-    } catch {
-        // Ignore quota / private-mode failures — the toggle still works in-session.
-    }
-};
+// "Free models only" preference lives in utils/providerUtils.ts — shared with
+// the team roster menu so the toggle follows the user across flyouts.
 
 export type ModelPickerMode = 'provider-model' | 'model-only' | 'provider-only';
 
@@ -303,10 +294,12 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
             const a = { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
             setAnchor(a);
             setFlyoutPos(computeFlyoutPosition(a, 320, 360));
-            setHoveredProvider(currentProviderId);
+            // Providers-first: no provider pre-hovered, so the flyout opens as
+            // a single provider column and models appear only on hover.
+            setHoveredProvider(null);
         }
         setIsOpen(!isOpen);
-    }, [isOpen, currentProviderId]);
+    }, [isOpen]);
 
     return (
         <div ref={containerRef} className={`relative inline-block ${className}`}>
@@ -336,7 +329,9 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
                     ref={flyoutRef}
                     onMouseDownCapture={(e) => e.stopPropagation()}
                     onPointerDownCapture={(e) => e.stopPropagation()}
-                    className="fixed z-[100] flex flex-col bg-zinc-900 border border-white/10 rounded-xl shadow-2xl overflow-hidden animate-fade-in min-w-[320px]"
+                    className={`fixed z-[100] flex flex-col bg-zinc-900 border border-white/10 rounded-xl shadow-2xl overflow-hidden animate-fade-in ${
+                        mode !== 'provider-only' && hoveredProvider ? 'min-w-[320px]' : 'min-w-[192px]'
+                    }`}
                     style={{ top: flyoutPos.top, left: flyoutPos.left, maxHeight: flyoutPos.maxHeight }}
                 >
                     {mode !== 'provider-only' && (
@@ -392,50 +387,46 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
                         )}
                     </div>
 
-                    {/* Model list (shown on hover) */}
-                    {mode !== 'provider-only' && (
+                    {/* Model list — materializes only while a provider is
+                        hovered, so the flyout reads providers-first (the model
+                        column "appears" next to the list on hover). */}
+                    {mode !== 'provider-only' && hoveredProvider && (
                         <div
                             className="w-56 min-h-0 overflow-y-auto py-1 custom-scrollbar overscroll-contain"
                         >
-                            {hoveredProvider ? (
-                                visibleModels.length === 0 ? (
-                                    <div className="px-3 py-4 text-xs text-zinc-600 italic text-center">
-                                        {freeOnly && hoveredModels.length > 0
-                                            ? 'No free models in this provider'
-                                            : 'No models available'}
-                                    </div>
-                                ) : (
-                                    visibleModels.map(model => {
-                                        const fullValue = mode === 'provider-model' ? `${hoveredProvider}::${model}` : model;
-                                        const isCurrent = mode === 'provider-model'
-                                            ? hoveredProvider === currentProviderId && model === currentModelId
-                                            : model === currentModelId;
-                                        const disabled = isDisabled(fullValue);
-                                        return (
-                                            <button
-                                                key={model}
-                                                onClick={() => !disabled && handleSelectModel(hoveredProvider, model)}
-                                                disabled={disabled}
-                                                className={`w-full flex items-center justify-between px-3 py-2 text-[13px] transition-colors ${
-                                                    disabled
-                                                        ? 'text-zinc-600 cursor-not-allowed'
-                                                        : isCurrent
-                                                            ? 'text-white bg-zinc-800'
-                                                            : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'
-                                                }`}
-                                            >
-                                                <span className="truncate" title={model}>{formatModelDisplayName(model)}</span>
-                                                {isCurrent && (
-                                                    <CheckIcon className="w-3 h-3 text-zinc-100 shrink-0" />
-                                                )}
-                                            </button>
-                                        );
-                                    })
-                                )
-                            ) : (
+                            {visibleModels.length === 0 ? (
                                 <div className="px-3 py-4 text-xs text-zinc-600 italic text-center">
-                                    Hover a provider to see models
+                                    {freeOnly && hoveredModels.length > 0
+                                        ? 'No free models in this provider'
+                                        : 'No models available'}
                                 </div>
+                            ) : (
+                                visibleModels.map(model => {
+                                    const fullValue = mode === 'provider-model' ? `${hoveredProvider}::${model}` : model;
+                                    const isCurrent = mode === 'provider-model'
+                                        ? hoveredProvider === currentProviderId && model === currentModelId
+                                        : model === currentModelId;
+                                    const disabled = isDisabled(fullValue);
+                                    return (
+                                        <button
+                                            key={model}
+                                            onClick={() => !disabled && handleSelectModel(hoveredProvider, model)}
+                                            disabled={disabled}
+                                            className={`w-full flex items-center justify-between px-3 py-2 text-[13px] transition-colors ${
+                                                disabled
+                                                    ? 'text-zinc-600 cursor-not-allowed'
+                                                    : isCurrent
+                                                        ? 'text-white bg-zinc-800'
+                                                        : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                                            }`}
+                                        >
+                                            <span className="truncate" title={model}>{formatModelDisplayName(model)}</span>
+                                            {isCurrent && (
+                                                <CheckIcon className="w-3 h-3 text-zinc-100 shrink-0" />
+                                            )}
+                                        </button>
+                                    );
+                                })
                             )}
                         </div>
                     )}

@@ -8,6 +8,13 @@
  */
 
 export const MODERATOR_RETRY_MARKER = '<MODERATOR_RETRY>';
+/**
+ * D12 (ROUND-39): emitted by a seat BEFORE its conviction-retry reply. The
+ * pipeline strips the marker AND everything before it in that seat's turn —
+ * the truncated attempt is replaced, not concatenated with the retry.
+ */
+export const CONVICTION_RETRY_MARKER = '<CONVICTION_RETRY>';
+export const CONVICTION_RETRY_CUTOFF_RE = /^[\s\S]*?<CONVICTION_RETRY>\s*/i;
 export const REPLACEMENT_TIMEOUT_MARKER = '<REPLACEMENT_TIMEOUT>';
 export const CLARIFICATION_DONE_MARKER = '<CLARIFICATION_DONE>';
 export const CLARIFICATION_SATISFIED_MARKER = '<CLARIFICATION_SATISFIED>';
