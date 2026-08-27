@@ -1,0 +1,729 @@
+# Deep Scan — Learning Loop, Memory, Skills, and the New Direction
+
+**Method.** I built the live call graph of `services/learning/` + `services/bots/` (31 files, ~10k LOC), traced every generation site of memory and skills, every injection site in prompts, every UI surface, and the cross-references with the hooks, the debate pipeline, and the schema. Every claim below has a `path:line` cite. **The agent plan you pasted is correct on the major findings; this report adds the missing 25%, names the new direction you asked for, and turns the design intent into shippable items.**
+
+---
+
+## 1. Live call graph (working tree, post-`4a80616`)
+
+```
+                              REAL CALLERS (production)
+   MemoryFilesService ──────────────────────── 24  (the persistence spine)
+   SkillMemoryService  ──────────────────────── 18  (the skill ledger)
+   PatternMemorySynthesisService ────────────── 10  (similar-trade stats)
+   MemoryRetrievalService  ───────────────────  7  (what gets injected)
+   SetupMemoryService    ─────────────────────  8  (regime/similar)
+   InsightExtractionService ──────────────────  5
+   GlobalLearningService ──────────────────────  5
+   MemoryInjectionService ─────────────────────  4
+   BotMemoryService       ────────────────────  3
+   DoctrineConsolidationService ───────────────  3
+   MemoryGraph            ─────────────────────  2
+   MemoryService          ─────────────────────  3
+   SkillCraftService      ─────────────────────  2
+   ReinforcementSignalService ─────────────────  2  (ModelPerformance + VersionHistoryDashboard)
+   UnderperformerFeedbackService ─────────────  3  (analytics only)
+   MemoryModelService, MistakePatternService, NotebookWriterService,
+   MemoryReviewService, SelfLearningService ───  2 each
+   AlgorithmicMemoryService, DecisionReflectionService,
+   MemoryProvenanceService, pdfOcrService,
+   skillWorthGate, strategySummarizer ─────────  1 each
+```
+
+**0 dead services. 0 dead-by-test-only.** The `4a80616` "remove dead subsystems" commit did its job — `LLMRuleExtractionService` and `IfThenMigrationService` (which appeared in my first pass) were already gone.
+
+**Under-used but alive** (only 1 real caller, no prompt injection):
+
+- `AlgorithmicMemoryService` — called by `MemoryService.updateGlobalMemory`, which is called from `usePostMortem.ts:619`. Net effect: updates `GlobalMemory` once per post-mortem, but **nothing reads `GlobalMemory.aiPatternMemory` or `familyPerformance` back into any prompt** (I checked `MemoryRetrievalService.getMemoryFilesContext` — those fields aren't surfaced). The whole `AlgorithmicMemoryService` is a write-only side ledger.
+- `SelfLearningService.generateLearningContext` (`SelfLearningService.ts:482`) — **dead export**. Only `computeLearningProfile` is called (by `LearningDashboard.tsx` + `EnhancedDebateService.ts`). The 482-line `generateLearningContext` builder is an LLM-prompt assembler superseded by `MemoryRetrievalService.getMemoryFilesContext`.
+- `DecisionReflectionService.buildDecisionReflectionContext` — called from `useAnalysisPipeline.ts:1353`, used at exactly one stage. Fine, but it's a sibling-level service that the call graph should know about.
+- `pdfOcrService`, `strategySummarizer`, `skillWorthGate` — all alive (1 real caller each via dynamic import or `StrategyService`).
+
+---
+
+## 2. Verification of the plan's three "junk" examples
+
+All three verified against the source.
+
+### 2.1 The "N/A pattern" skill
+
+- `schemas/tradeAnalysis.ts:317-325` — `DEFAULT_MARKET_CONDITIONS` hard-codes `pattern: 'N/A'`, `candleBehavior: 'N/A'`, etc.
+- `schemas/tradeAnalysis.ts:334` — `pattern: coerceToString(mc.pattern) || 'N/A'`. The schema fills in the literal string when the LLM omits the field.
+- `utils/verdictSkillDraft.ts:19` — `const family = analysis.detectedPatternFamily || analysis.marketConditions?.pattern;` — and `pattern` is `'N/A'` by default. `if (!family) return null;` does **not** catch the `'N/A'` string.
+- Result: a draft skill named like `Repeat BTC Long N/A` with `IF: BTC long setup showing the N/A pattern` and `THEN: take the long only while the N/A pattern holds`. The `if (!family)` guard is truthy for the string `'N/A'`.
+
+**Fix surface (one shared helper, ~15 LOC):**
+
+```ts
+// utils/meaningfulLabel.ts
+const JUNK = /^(n\/?a|none|null|undefined|unknown|—|-{1,3}|\.{1,3})$/i;
+export const isMeaningfulLabel = (s?: string | null): boolean =>
+    !!s && s.trim().length >= 3 && !JUNK.test(s.trim());
+```
+
+Use at every generation site:
+- `verdictSkillDraft.ts:19` — `if (!isMeaningfulLabel(family)) return null;`
+- `SkillMemoryService.buildSkillDescription` (line 884) — refuse to write a description that has no claim (so `Repeat: BTC Short Family A — learned from BTC Short Family A.` never lands).
+- `MemoryFilesService.syncPatternMemoryUnlocked` — refuse to write a `pattern-memory.md` section whose family is junk.
+- The `extractLessonFromPostMortem` regex (line 498) — also accept `**Lesson:** …` and `Lesson: …` on the same line; the current regex's `[\n]{10,}` greedy can swallow across paragraphs.
+
+### 2.2 The "diary lesson = LOSS FORENSIC ANALYSIS header"
+
+- `MemoryFilesService.ts:496-506` — `extractLessonFromPostMortem` regex-mines the first `Lesson:` / `Key takeaway:` line. When the post-mortem formats the lesson as a header (`**Lesson: 🩸 LOSS FORENSIC ANALYSIS…**\n\nThe actual lesson is…`), the regex returns the title because it's on the same line and ≥ 10 chars.
+- `MemoryRetrievalService.ts:6-8` — explicit contract: "Diary is RAW STORAGE — never injected. It feeds doctrine rewrites and skill gates; the model sees its conclusions, not its journal."
+- Net: the diary is **write-only from the prompt's perspective**. Doctrine distillation (`DoctrineConsolidationService.ts:63` — `closed.slice(-60)`) and skill worth-gate (via cluster trades, not diary) are the only readers.
+
+**Two real fixes (small):**
+
+1. Change `extractLessonFromPostMortem` to walk until it finds a non-header line. If the first match starts with `**` or `#` or has no sentence case, skip it and try the next.
+2. Add a separate structured `trade.postMortem.lesson` field in the analysis schema. The post-mortem generator already produces structured markdown; the lesson should be a first-class field, not a regex-mined afterthought. This is the fix the plan's "Tier 1 — fix lesson capture" item points at.
+
+**Don't** try to make the diary injectable — that breaks the design contract and bloats prompts. The diary's value is exactly that it's an offline corpus for the doctrine rewriter.
+
+### 2.3 The "Ranging / Low-ADX Day Playbook"
+
+- `MemoryFilesService.ts:52` — `market-conditions` is a default folder.
+- `MemoryGraph.ts:258` — graph walk does include `market-conditions/` notes: `if (node.kind === 'note' && node.path?.startsWith('market-conditions/')) keep(node, 80, []);` — but with a baseline score of **80**.
+- `MemoryGraph.ts:281-282` — the only way a note can be promoted past the baseline is if it has an `appliesWhen` overlap with the query. Market-conditions files have `hasDim` edges only, not `appliesWhen` — so they never reach the 500+ tier.
+- `MemoryRetrievalService.ts:368-382` — `listRetrievedMemorySources` declares the kinds that ever get pushed into a prompt: `identity`, `skill`, `rules`, `similar`. **No `playbook` kind exists.** The `kindForHit` function on line 64-70 returns `'playbook'` as a fallback only — that branch is dead.
+- `MemoryRetrievalService.ts:451-454` — the `similarTradesBlock` is the closest non-skill/non-doctrine block, and even that's verdict-stage only.
+
+**The plan's claim is exactly right: market-conditions files are write-only at the prompt layer.** They're visible in the dashboard (`MemoryBrowser.tsx`), they show up in the graph (with a low score), but the model never reads them during analysis.
+
+**Two ways to resolve this:**
+
+1. **Delete the folder** if no consumer is real. The `market-conditions` defaults (`ranging-day.md`, `after-liquidity-sweep.md`) exist only as starter content. They were created for a "playbook" feature that the rest of the system never implemented.
+2. **Make them real** by giving them the same `appliesWhen` graph edges that rules get. Then the baseline score of 80 + `appliesWhen` overlap lifts them into the prompt tier.
+
+I'd recommend option 1 (delete) for any user who isn't already using them as personal notes — keep the folder, but stop seeding templates. Option 2 is real work and a feature in its own right.
+
+---
+
+## 3. The structural reason it doesn't get smarter
+
+Verified each claim.
+
+### 3.1 Sliding window
+
+- `DoctrineConsolidationService.ts:28` — `DOCTRINE_WINDOW_TRADES = 60`. Doctrine is rebuilt from the **last 60 closed trades only**. The prompt never reflects what the user learned 200 trades ago.
+- `DoctrineConsolidationService.ts:119` — `MAX_DOCTRINE_CHARS = 1800` is the injected size.
+- `MemoryFilesService.ts:24` — `MAX_DIARY_ENTRIES = 50`. The diary is FIFO.
+- The doctrine itself can carry forward beliefs — `DOCTRINE_MAX_REVISE_SHARE = 1/3` (line 30) — but only what the model chose to retain. There is no formal "settled belief" registry.
+
+### 3.2 No cross-coin generalization
+
+- `SkillMeta` is scoped `coin? + direction? + family? + regime?`. The same lesson on BTC and ETH becomes two skills. There is no `generalize()` pass that lifts 2+ matching skills into a coin-less family skill.
+- `MemoryGraph.ts` has no `generalizesTo` edge.
+
+### 3.3 Regime sparsity
+
+- `useTradeLogging.ts:226-228` — `marketRegime` is only set when `message.analysis?.marketSnapshot?.regime?.regime` exists. Many analyses have no live hybrid snapshot at log time, so `marketRegime` is `undefined`. The whole `regime-conditional` machinery (applyNotebookSkillsToAnalysis with `regime` option, the strict-matcher's regime lane, the `applyEvidenceDecay` cross-regime halving) runs on missing inputs for those trades.
+- There's no `regimeLedger` per coin — the harness cannot say "BTC has spent 58% of the last 90 days ranging." That's a real signal gap.
+
+### 3.4 No base-rate calibration
+
+- `AlgorithmicMemoryService.ts:58-101` computes per-family W/L but `familyPerformance` is **never read by any prompt path** (the field exists on `GlobalMemory` but `getMemoryFilesContext` doesn't surface it). It surfaces in the dashboard only.
+- There is no per-(family × direction × regime) base rate with confidence intervals. A user can't see "your breakout trades win 31% over 18 samples — your High conviction on breakouts is miscalibrated by ~25 points."
+
+### 3.5 Evidence-gate missing on candidate avoid
+
+- `SkillMemoryService.ts:1466-1473` — a `candidate` (status) avoid skill that strictly matches caps High/Medium → Low with **no check on `wins + losses`**. A 0-evidence candidate that was created from a single clustered trade (worth-gate path with `MIN_CLUSTER_FOR_SKILL = 3`) can size the user down before any of those trades actually close.
+- Compare to the prompt-side injection at `MemoryRetrievalService.ts` which does rank by `evidenceFreshnessFactor(m)` (120-day decay) but doesn't gate by sample size either.
+
+### 3.6 No global token budget + dedup
+
+- `MemoryRetrievalService.getMemoryFilesContext` (line 403+) — pushes blocks into one 900/400/600-char budget but **does not dedup across blocks**. The same coin can appear in `matchedSkillBlock`, `uncoveredMistakeLine`, and `similarTradesBlock` independently.
+
+---
+
+## 4. The 6-agent reference you pasted
+
+That's a clean **role-segregated pipeline** where every agent has exactly one capability and the only inter-agent handoff is the artifact (strategy → backtest → optimize → forward → risk → trade). It's also the shape that maps onto your existing `Macro / Technical / Risk` lenses plus the moderator as a 4th role. The key property you should keep: **no agent is allowed to act outside its role, and every artifact has a single owner.**
+
+Mapping the reference onto your stack:
+
+```
+Reference  YourLens         Has memory of    Writes to         Prompts
+Agent 1    Research         nothing         nothing           "ideas only"
+Agent 2    Developer        similar-setups  draft skill       "build it"
+Agent 3    Optimizer        pattern-memory  eval verdict      "stress test"
+Agent 4    Forward          pattern-memory  eval verdict      "live forward"
+Agent 5    Risk             skills (avoid)  risk-rules        "gate"
+Agent 6    Trader           doctrine        (none)            "deploy"
+```
+
+You don't need to add agents — you need to **narrow each existing seat to one verb**. The new direction is *not* more agents, it's *strictly scoped agents with one job each and one memory each.*
+
+---
+
+## 5. New direction — what you asked for
+
+### 5.1 Remove the chat version
+
+The chat surface is `MessageItem.tsx` + `ChatArea.tsx` + `ChatInput.tsx` + the entire `components/chat/` tree. The debate UI is layered on top of chat messages. Concretely:
+
+- Keep `MessageItem.tsx` for `analysis`-bearing messages (the analysis bubble, the debate stage, the verdict).
+- Delete or hide the `text`/`role` chat path. No free-form user text → no LLM chat reply. The user input is only the trading-setup form (chart + coin + direction + intent). One input, one action: **"Analyze this setup."**
+- Side effect: removes `isAccuracyMode`, `isLensMode`, the `accuracySubMode` paths (the "normal mode"), `runAccuracyMode`, the `autoCapture` flow, the `MessageRole` enum's `user/assistant/system` distinction (becomes `analysis | debate | verdict`), the chat-style streaming UI, the `Message.text` field, the `MessageItem.thinking` and `MessageItem.byline` paths.
+- This is a **large deletion** but mechanical: search-and-replace at the message-shape level, then remove UI surfaces. ~30 files affected.
+
+What stays: the analysis pipeline (`useAnalysisPipeline`), the debate pipeline (`conductRealDebate`), the verdict, the post-mortem, the journal, the skills grid, the memory browser, the learning dashboard, the price-watch stack, the autopilot.
+
+### 5.2 Remove the normal mode
+
+"Normal mode" = `accuracySubMode === 'original'` and the free-form text path. The `AccuracyModeModal` in `App.tsx:3094`, the `accuracySubMode` setting, the `customInstructions.accuracyOriginal / accuracyPure` paths — all the dual-mode branching where the harness behaves differently based on a toggle.
+
+Replace with a single mode: **lens mode**. Every analysis is a debate between 3-4 lens seats, with the moderator synthesizing. The user picks which lenses (Macro, Technical, Risk, plus an optional Contrarian slot) — the harness decides everything else.
+
+What stays from "normal mode": the user can pick providers per lens via the existing `AnalystLensSettings`. What goes: the `accuracyOriginal` text path, the `accuracyPure` direct-call path, the modal, the toggle.
+
+### 5.3 Improve lens mode — "the model itself, no personality"
+
+Right now, `LENS_SWING_PROMPTS[AnalystRole.MACRO_VOLATILITY]` is a 200+ line persona ("You are a macro analyst with 15 years of experience…"). This is theater. The model is the same LLM. A persona prefix doesn't change what the model knows — it just makes the output more verbose and more committed to a position (which is the opposite of what the debate wants).
+
+The fix: **drop the persona, keep the role scope.** Each lens becomes a 1-paragraph job description, not a character sketch:
+
+```
+MACRO:  Focus on higher timeframes (4H, Daily), volatility regimes, ATR, liquidity
+        zones, and macro trend. Cite a specific timeframe + level per claim.
+TECHNICAL:  Focus on chart structure: patterns, SMC, order blocks, EMAs, RSI, MACD,
+            momentum. Cite a specific pattern + bar index per claim.
+RISK:  Focus on R:R, stop placement, entry timing, and failure scenarios. For
+       every setup, give the strongest case AGAINST taking it before defending it.
+```
+
+A few lines, not a character. The model already knows what an LTF/LTF context is — saying "you are a 15-year veteran" doesn't add information, it just inflates the response.
+
+### 5.4 Strict rule: every agent verifies its data before predicting
+
+Add a **mandatory pre-prediction gate** to every lens. Before a lens writes its prediction, it must answer three questions in the prompt:
+
+1. **What is the specific data point?** (e.g., "BTC 4H close below $94,200, RSI 38, MACD bearish cross at 14:00 UTC on day 3 of the move")
+2. **What is the source?** (the chart bar, the hybrid snapshot, the desk-tool lookup)
+3. **What is the falsification?** (the single observation that, if it occurred, would invalidate the prediction)
+
+A prediction without those three lines is invalid. This kills the most common AI failure mode in trading: confident opinion without anchoring to a verifiable observation.
+
+Implementation: add a `buildLensPreflightBlock(setup, hybridData)` to `AnalystLensService` and inject it at the top of every lens prompt. The preflight block is the same for every seat — only the seat's *response* differs.
+
+### 5.5 Each agent gets its own memory field and role
+
+Right now, all lenses share the same `matchedSkillBlock` injection. The Macro lens sees the same skills as the Risk lens. That's wrong — Macro cares about regime skills, Risk cares about avoid skills, Technical cares about pattern skills.
+
+Add a `lensScope` field to `SkillMeta`:
+
+```ts
+type LensScope = 'macro' | 'technical' | 'risk' | 'all';
+```
+
+At enforcement time, `applyNotebookSkillsToAnalysis` filters `rankedMatchedSkills` to only those where `(m.lensScope ?? 'all') === 'all' || m.lensScope === activeLens`. The default is `'all'` so legacy skills still inject.
+
+The deeper version: each lens has a *separate* `AttributedInsight` store. The Macro lens writes "regime changed from trending to ranging" insights; the Technical lens writes "this setup has 2 prior false breakouts in 30 days" insights; the Risk lens writes "your stop is below the 4H liquidity sweep, expect a wick" insights. They never share, and the dashboard can show "what has the Macro lens learned that the others haven't?"
+
+That's a real implementation project. The cheap version is `lensScope` on the skill — single field, two-line filter, immediate effect.
+
+### 5.6 Tighten how each agent learns
+
+The current loop is:
+
+```
+trade closes → applySkillEvidence (SkillMemoryService) → evidence file updated
+post-mortem runs → if-then regex mined → candidate skill created
+worth-gate runs every N trades → LLM judges cluster → create/merge/skip
+every M minutes → doctrine rewrites
+```
+
+That's the right shape, but the verbs are blurred. Each lens should have a clear learning path:
+
+- **Macro lens** learns *regime transitions*: "BTC was trending, is now ranging, day 4 of the transition." Stored in a new `services/learning/regimeLedger.ts` (one line per coin × day). The lens never sees the trade log; it sees its own regime ledger.
+- **Technical lens** learns *pattern frequencies*: "BTC long breakouts have a 38% false-break rate over the last 60 days." Computed from `findRelevantTrades` and stored in `services/learning/patternStats.ts`.
+- **Risk lens** learns *what fails*: "BTC long setups with R:R < 1.5 lose 67% of the time." Computed from closed trades and stored in `services/learning/riskStats.ts`.
+
+Each lens's memory is *its own* file, not a shared notebook. The doctrine slot unifies them at the top, but the per-lens memory is scoped.
+
+### 5.7 Minimal UI
+
+The reference you pasted is **zcode-style**: one column, transcript shows what happened, no panels or tabs visible by default. Your current UI has:
+
+- Side panel (chat list)
+- Top header
+- Composer (with attach, Team, send, Templates, suggestions)
+- Right docked panels: analysis progress, debate side panel, jobs drawer, settings, accuracy modal
+- A bottom toast area
+- An inline approval modal
+- A replacement offer card
+- A byline under each settled bubble
+
+A minimal version: **single column, no right panels by default, one composer, transcript that streams**. Everything is a one-line `[expand]` for a temporary view.
+
+A specific design that I'll spell out in §7 below.
+
+---
+
+## 6. Verbatim confirmation of the plan's Tier 1 + Tier 2 + Tier 3
+
+### Tier 1 — stop writing junk (small, do first)
+
+| Item | Verbatim verify | File:line |
+|---|---|---|
+| `isMeaningfulLabel()` guard at all 3 generation boundaries | confirmed | `verdictSkillDraft.ts:19`, `buildSkillDescription`, `syncPatternMemoryUnlocked` |
+| Evidence gate on code-side enforcement (≥1 counted trade before candidate can cap) | confirmed | `SkillMemoryService.ts:1466-1473` (no sample check) |
+| Fix lesson capture (structured one-line field) | confirmed | `MemoryFilesService.ts:496-506` (regex-mine) |
+| Delete the fake playbook templates or convert to regime-conditional skills | confirmed | `MemoryFilesService.ts:60-87` (seeded templates, never read) |
+
+### Tier 2 — make memory compound
+
+| Item | Verbatim verify | File:line |
+|---|---|---|
+| Permanent "settled beliefs" section in doctrine | partial — `DOCTRINE_MAX_REVISE_SHARE` lets the model carry forward, but no formal registry | `DoctrineConsolidationService.ts:30` |
+| Boot-time-due weekly rollup | **no** — there's no timer infrastructure | — |
+| Cross-coin generalization pass | **no** — no `generalize()` function | — |
+| Log code-side enforcement into injection telemetry | partial — `MemoryInjectionService` records prompt injections, but code-side vetoes don't go through `getMemoryFilesContext` | `useAnalysisPipeline.ts:3214` (vetoes recorded in VetoLedger, but not in `MemoryInjectionRecord`) |
+
+### Tier 3 — genuine market understanding
+
+| Item | Verbatim verify |
+|---|---|
+| Regime ledger (rolling per-coin) | **no** — no rolling per-coin regime history; `marketRegime` is per-trade when hybrid snapshot exists |
+| Setup-class base rates | **no** — `AlgorithmicMemoryService.familyPerformance` exists but is never injected |
+| Single memory assembler with hard token budget + cross-block dedup | partial — budget exists (`STAGE_BUDGET_CHARS`), dedup **does not** |
+
+So Tier 1 is real and small. Tier 2 and Tier 3 are the genuine differentiators.
+
+---
+
+## 7. UI: minimal, single column
+
+The reference you pasted: zcode transcript, tools as one thin line, single column, no panels, no tabs, no status bars by default. Errors inline. The transcript is the truth. Search/edit expanded; reads and successful commands collapsed to a check.
+
+For your app, "transcript" is the analysis timeline. The lens seats replace tool calls — each seat is a thin row like a tool row, and the verdict is the success line.
+
+### Before (current — high surface area)
+
+```
++----------+--------------------------+----------+
+|          |   Header (model byline)  |          |
+| Sidebar  +--------------------------+  Analysis|
+|          |  Composer (Templates,    |  Progress|
+| Chat     |   Team, send, attach)    |  Panel   |
+| List     |                          |  (dock)  |
+|          |  [Analysis bubble]       |          |
+|          |    [Debate stage]        |  [Jobs]  |
+|          |    [Debate side panel]   |  [Set-   |
+|          |    [Replacement offer]   |   tings] |
+|          |    [Byline + cost]       |          |
+|          |                          |          |
+|          |  Composer (again)        |          |
++----------+--------------------------+----------+
+```
+
+### After (minimal — single column, transient panels)
+
+```
++-----------------------------------------------------+
+|  Header (one row: coin · direction · regime)         |
++-----------------------------------------------------+
+|                                                      |
+|  18:42  Set up submitted                             |
+|  18:42  Pre-flight (one line: hybrid snapshot ready) |
+|  18:43  > Macro              IF regime day 4 +       |
+|  18:43                          BTC 4H close < 94.2k |
+|  18:43                          THEN range-bound     |
+|  18:43  > Technical          IF false-break          |
+|  18:43                          2 prior in 30d       |
+|  18:43                          THEN skip breakouts  |
+|  18:44  > Risk               IF R:R 1.4              |
+|  18:44                          AND stop below sweep |
+|  18:44                          THEN reduce size     |
+|  18:44  v Moderator          Avoid · Neutral        |
+|  18:44                          Risk lens vetoed     |
+|                                                      |
+|  [Show full transcript]  [Re-run]  [Fork from R2]    |
++-----------------------------------------------------+
+|  1 input: chart + coin + direction. Send.            |
++-----------------------------------------------------+
+```
+
+The right panels (settings, jobs, accuracy, learning dashboard) are no longer visible by default. They open as transient overlays on demand. The lens seats render as one-line rows (collapsible on click). The transcript shows what happened.
+
+**Specific surface reductions (in order of pain relief):**
+
+1. **Delete `components/chat/ChatArea.tsx`, `ChatInput.tsx`, `InjectionContextBar.tsx`, `TeamRosterMenu.tsx`, `TeamModal.tsx`, `MessageItem.tsx`'s free-form-text path.** Keep the analysis-bubble and debate-stage UI.
+2. **Delete `useAccuracyMode`, `accuracySubMode`, `isAccuracyModeEnabled`, `setIsAccuracyModeEnabled`, `AccuracyModeModal`, the `runAccuracyMode` branch in `useAnalysisPipeline.ts`.** Lens mode is the only mode.
+3. **Collapse the `DebateSidePanel` (currently 1002 LOC) into a transient overlay** triggered by clicking a seat row. Default: not visible. Show: full transcript in scroll-back. The reference says "transcript shows what happened" — the transcript is the analysis card itself, the panel is the deep-dive.
+4. **Single composer:** one input (chart + coin + direction + intent), one send. No "Templates" row, no "Team" chip, no attach button, no suggestion row, no byline under bubbles.
+5. **Tools as one thin line, no emoji.** Use Lucide icons consistently. Macro/Technical/Risk seat rows are thin lines with the seat's icon and a one-line preflight claim. No "Thinking…" spinner visible by default — a 1px indicator on the active seat row.
+6. **Status surfaces (status-surface scope) become sub-banners**, not panel headers. A skill veto reads as a 1-line "Risk lens vetoed: BTC range-day pattern" under the verdict, not a 3-line warning.
+7. **No top header bar of model names.** The header is one line: the analyzed setup, the verdict grade, the action (Analyze again, Fork, Replay). That's it.
+
+What the UI loses: **dramatic visibility of internal complexity** (the multi-agent debate, the run log, the cost-per-seat, the live thinking). What it gains: **decision speed**. The user reads 5 lines, decides in 5 seconds.
+
+### Where the existing complexity goes
+
+| Current | New home |
+|---|---|
+| `DebateSidePanel` (transcript) | overlay on seat-row click, also `…` menu → "View transcript" |
+| `DebateRunLog` | overlay on hover over verdict |
+| `RunContractPanel` | overlay on hover over stage progress strip |
+| `EvidencePackCard` | overlay on "Why this verdict?" click |
+| `SkillsGrid` | header → settings → "Skills" |
+| `MemoryBrowser` | header → settings → "Memory" |
+| `LearningDashboard` | header → settings → "Learning" |
+| `JobsDrawer` | header → settings → "Jobs" |
+| `LiveMarket` | header → settings → "Market" |
+
+In other words: **the right panel becomes a settings menu**, and the always-on right panel disappears.
+
+---
+
+## 8. Logic improvements — concrete items
+
+### 8.1 Add `isMeaningfulLabel` and use it everywhere (Tier 1, 30 min)
+
+```ts
+// utils/meaningfulLabel.ts
+const JUNK = /^(n\/?a|none|null|undefined|unknown|n\/a|—|-{1,3}|\.{1,3})$/i;
+export const isMeaningfulLabel = (s?: string | null): boolean => {
+    const t = (s ?? '').trim();
+    return t.length >= 3 && !JUNK.test(t);
+};
+```
+
+Wire-up: `verdictSkillDraft.ts:19`, `SkillMemoryService.buildSkillDescription` (line 884), `MemoryFilesService.syncPatternMemoryUnlocked` (line 740+), `verdictSkillDraft` family check.
+
+Tests: `tests/meaningfulLabel.test.ts` — 8 cases (N/A, none, null, undefined, 2-char, 3-char OK, real, lowercase).
+
+### 8.2 Evidence gate on candidate-veto (Tier 1, 15 min)
+
+`SkillMemoryService.applyNotebookSkillsToAnalysis`, line 1466-1473:
+
+```ts
+const avoidCandidate = ranked.find(m => m.kind === 'avoid' && m.status === 'candidate');
+if (avoidCandidate && (next.direction === 'Long' || next.direction === 'Short')) {
+    const sample = avoidCandidate.wins + avoidCandidate.losses;
+    if (sample < MIN_SAMPLE_FOR_VETO) {
+        // candidate without evidence — don't downgrade yet
+    } else {
+        // existing code: cap to Low
+    }
+}
+```
+
+`MIN_SAMPLE_FOR_VETO = 2` (exported from the same file).
+
+Test: extend `tests/learningLoopMachinery.test.ts` — a 0-evidence candidate avoid must NOT cap confidence.
+
+### 8.3 Structured lesson field (Tier 1, 2 hours)
+
+Add `postMortem.lesson: string` to the analysis schema. The post-mortem generator (in `ensembleService.ts` or wherever the post-mortem text is produced) writes the lesson as a one-line field, separately from the prose.
+
+`MemoryFilesService.extractLessonFromPostMortem` becomes a fallback only (when the structured field is missing — legacy trades).
+
+`utils/postMortemReport.ts` (which builds the post-mortem) emits both the prose and the lesson.
+
+### 8.4 Delete the dead playbook templates (Tier 1, 10 min)
+
+`MemoryFilesService.ts:60-87` — the `ensureHarnessFoldersUnlocked` seeds `ranging-day.md` and `after-liquidity-sweep.md`. Stop seeding. Keep the folder so users can write their own notes. If you want to go further, audit any user who already has them and ask whether they want them kept as user content or removed.
+
+Test: `tests/memoryFilesService.test.ts:82-84` expects these files. Update the test or remove the seed.
+
+### 8.5 Per-lens memory: add `lensScope` to skills (Tier 2, 3 hours)
+
+```ts
+// types/skill.ts (or extend SkillMeta)
+type LensScope = 'macro' | 'technical' | 'risk' | 'all';
+
+// SkillMeta gains: lensScope?: LensScope
+// serializeSkill: lensScope: <value>
+// parseSkillMarkdown: read it
+
+// applyNotebookSkillsToAnalysis:
+const lensScope = (activeLens?: AnalystRole): LensScope => {
+    if (!activeLens) return 'all';
+    return activeLens === AnalystRole.MACRO_VOLATILITY ? 'macro'
+         : activeLens === AnalystRole.TECHNICAL_ANALYST ? 'technical'
+         : activeLens === AnalystRole.RISK_EXECUTION ? 'risk'
+         : 'all';
+};
+const ranked = ...
+    .filter(m => (m.lensScope ?? 'all') === 'all' || m.lensScope === lensScope(activeLens));
+```
+
+But — this means the harness needs to know the **active lens** at enforcement time. That's a signature change to `applyNotebookSkillsToAnalysis(analysis, options?:
+...{ regime?: string; activeLens?: AnalystRole })`. The single call site in `useAnalysisPipeline.ts:1710-1713` is easy to update; you pass the moderator's lens to it.
+
+A 0-cost alternative: keep the skill scope as `'all'` by default and only the **prompt** filters. The user sees the same enforcement; the prompt is just smaller. Less correct but easier to ship.
+
+### 8.6 Regime ledger (Tier 2, 1 day)
+
+New file: `services/learning/regimeLedger.ts`.
+
+```ts
+export interface RegimeDay {
+    date: string;            // YYYY-MM-DD
+    coin: string;
+    regime: 'trending' | 'ranging' | 'volatile' | 'compression';
+    source: 'hybrid' | 'inferred';
+}
+
+export const recordRegimeDay = async (day: RegimeDay, username: string): Promise<void> => {
+    // persist to preferences_v1: regime_ledger_v1_<user>
+};
+
+export const getRegimeSummary = (coin: string, days = 90, username?: string): {
+    currentRegime: RegimeDay['regime'] | null;
+    currentStreak: number;
+    distribution: Record<RegimeDay['regime'], number>;
+} => { ... };
+```
+
+Wire-up: at trade close, `useTradeLogging.ts` calls `recordRegimeDay`. The doctrine rewriter calls `getRegimeSummary` and injects one line per coin. The `MemoryRetrievalService.getMemoryFilesContext` gets a new `regimeSummaryBlock(coin)` capped at 150 chars.
+
+Test: `tests/regimeLedger.test.ts` — record, retrieve, streak, distribution math.
+
+### 8.7 Pattern-frequency stats (Tier 3, 1 day)
+
+New file: `services/learning/patternStats.ts`. Reuses `findRelevantTrades` from `PatternMemorySynthesisService` and computes:
+
+```ts
+export interface SetupClassStats {
+    family: string;
+    direction: 'Long' | 'Short';
+    regime: string;
+    n: number;
+    wins: number;
+    winRate: number;
+    avgPnlPercent: number;
+    confidenceDelta: number;  // model says High but win rate is 30% — this is -25
+    sampleConfidence: number; // 1 - 1/n
+}
+
+export const computeSetupClassStats = (trades: LoggedTrade[]): SetupClassStats[] => {
+    // group by (family, direction, regime); compute winRate, avgPnl, confidenceDelta
+    // confidenceDelta = avg(model_confidence_score) - winRate * 100
+};
+```
+
+`getMemoryFilesContext` gains a `setupClassStatsBlock(setup)` capped at 200 chars that surfaces the matching class's stats. The verifier lens (Risk) can read this and say "your High conviction on BTC long breakouts wins 31% — High is miscalibrated here."
+
+Test: `tests/patternStats.test.ts` — group math, confidenceDelta sign, low-sample suppression.
+
+### 8.8 Cross-coin generalization (Tier 2, 1 day)
+
+A new `services/learning/skillGeneralization.ts`:
+
+```ts
+export const findGeneralizationCandidates = (): Array<{
+    candidates: SkillMeta[];   // 2+ skills with same family+kind+regime, different coins
+    proposedScope: { family: string; kind: SkillKind; regime: string };
+}> => { ... };
+
+export const generalizeSkillCluster = async (proposedScope, candidates, username): Promise<SkillMeta | null> => {
+    // Combine the tradeIds + controlIds of the cluster into a new skill
+    // with coin=undefined (applies to all coins) and same family/kind/regime
+    // Mark source skills as 'superseded' (new status or new field)
+};
+```
+
+The worth-gate decides whether to keep the new coin-less skill. The original coin-scoped skills become a control group for the generalized one.
+
+### 8.9 Settled-beliefs registry (Tier 2, 4 hours)
+
+A separate file the doctrine rewriter maintains: `profile/settled-beliefs.md`. Each belief has frontmatter:
+
+```markdown
+---
+belief: avoid-range-breakouts
+status: settled
+added: 2026-08-12
+evidence_count: 12
+regime: ranging
+---
+Ranging-market breakouts have a 31% false-break rate over 12 instances.
+Invalidation: 3 consecutive ranging-breakouts that hold past 1.5 ATR.
+```
+
+Doctrine rewriting only ever removes a settled belief on the explicit `INVALIDATE <belief>` line from the prompt. The prompt surfaces settled beliefs as a separate slot above the regular doctrine.
+
+### 8.10 Memory dedup (Tier 2, 30 min)
+
+In `getMemoryFilesContext` (line 411+), before pushing a block, normalize the coin name and check if any block already mentioned it. Drop the second occurrence. Cheap, real win.
+
+### 8.11 Bot memory scoped to lens (Tier 2, 1 hour)
+
+Right now, `BotMemoryService.getBotMemoryContext(query)` filters by `coin + regime` (per ROUND-31 M2 fix). Add a `lens?` parameter and the bot notes can also be `lens: 'macro' | 'technical' | 'risk' | 'all'`. The bot for Macro has different notes than the bot for Risk.
+
+### 8.12 Veto ledger → injection telemetry (Tier 2, 30 min)
+
+`VetoLedgerService.recordVeto` doesn't write to `MemoryInjectionService`. The dashboard can show vetoes; the next analysis doesn't know a veto was stamped. Fix: after `recordVeto`, also call `recordMemoryInjection` with a synthetic source `{ path: 'veto/<skillName>', kind: 'veto' }` so the next analysis that matches that setup sees "this setup was vetoed last time, here is the resolution." Cheap, high-signal.
+
+### 8.13 Sequential-eval gate is good — extend to candidate promotion (Tier 2, 1 hour)
+
+`SkillEvalService` already does sequential-eval demotion. Add sequential-eval **promotion** of a candidate → confirmed: 2 consecutive `helps` verdicts on a candidate skill promote it. The current code at `SkillEvalService.ts` only rehabilitates a `candidate` that was demoted by evals; a fresh candidate (status=born) doesn't get this path. Tighten the rules:
+
+```ts
+// After eval verdict applied:
+if (
+    result.verdict === 'helps'
+    && meta.status === 'candidate'
+    && (meta.evalStreak ?? 0) >= EVAL_DEMOTE_STREAK
+    && meta.wins + meta.losses >= MIN_SAMPLE_CONFIRMED
+) {
+    stampStatusTransition(meta, 'confirmed', `eval helps ×${meta.evalStreak} (${meta.evalDetail}) — promotion`);
+    meta.status = 'confirmed';
+}
+```
+
+The `MIN_SAMPLE_CONFIRMED` check (currently 5) is already in `SkillMemoryService.ts:110`. Use it here too.
+
+### 8.14 Cross-regime evidence stamp (Tier 2, 1 hour)
+
+`SkillMemoryService.applyEvidenceDecay` already halves counts when `incomingRegime !== meta.regime`. But the win/loss stamp doesn't say "this trade was in a different regime than the skill's scope." Add a tag to the tradeIds so the dashboard can show "this skill was applied to a non-scope regime 4 times." Cheap diagnostic.
+
+### 8.15 Underperformer feedback → always-on signal (Tier 2, 4 hours)
+
+`UnderperformerFeedbackService` is a UI-only surface today (`AdvancedAnalyticsSidePanel`). The signal it computes (per-provider cold-streak × win rate) should be a real-time input to the **moderator's seat selection** — if a provider is underperforming on this regime, demote it from the roster for the next N debates. Implement: a `getProviderFitness(query)` that returns `{ providerId, score }` and the moderator's selection in `useAnalysisPipeline.ts:2287` filters by `score > 0.3`.
+
+### 8.16 Memory budget cross-block dedup (Tier 2, 30 min)
+
+Already mentioned in §6. Concrete: in `getMemoryFilesContext` add a `seenCoins: Set<string>` and skip blocks whose normalized coin is already seen this turn. The same trade appearing in `matchedSkillBlock` (BTC), `uncoveredMistakeLine` (BTC), and `similarTradesBlock` (BTC) gets reported once, not three times.
+
+### 8.17 Delete `AlgorithmicMemoryService`'s read path (Tier 2, 1 hour)
+
+Either wire `GlobalMemory.familyPerformance` into the prompt (Tier 3 work) or **delete the field** and stop computing it. The current state — write-only, ~150 LOC of maintenance — is the worst of both worlds. Decision: keep `familyPerformance` if the Tier 3 work is on the roadmap; otherwise delete.
+
+### 8.18 Delete `SelfLearningService.generateLearningContext` (Tier 1, 5 min)
+
+Dead export. Delete the function. Keep `computeLearningProfile` (used by dashboard).
+
+### 8.19 Add the per-lens memory files (Tier 2, 1 day)
+
+The concrete artifact: per-lens `memory/lens/macro.md`, `memory/lens/technical.md`, `memory/lens/risk.md`. The doctrine rewriter reads all three, writes one doctrine. Each lens prompt surfaces its own file first. This is the structural change that makes the lenses have "their own field and role."
+
+### 8.20 Prompts (Tier 1, ongoing)
+
+- **Drop the persona theater** in `LENS_SWING_PROMPTS` and friends. Replace with 1-paragraph job descriptions.
+- **Add the preflight gate** to every lens prompt: "Before you predict, write these three lines: DATA: <specific observation>, SOURCE: <where you got it>, FALSIFICATION: <what would invalidate this>." Reject lens responses that lack all three.
+- **Add the per-lens memory file** to every lens prompt at the top.
+- **Add the setup-class base rate** to the Risk lens specifically (it's the calibration seat).
+- **Add the regime summary** to the Macro lens specifically (it's the regime seat).
+- **Add the pattern-frequency line** to the Technical lens (it's the structure seat).
+
+---
+
+## 9. Concrete list of features to REMOVE
+
+These exist and are dead-weight:
+
+| Feature | Why it goes | Effort |
+|---|---|---|
+| Free-form chat path (`Message.text`, `MessageItem.text`, `ChatInput`) | Trading app, not chat | 1 day |
+| `isAccuracyMode`, `accuracySubMode`, `accuracyOriginal/pure` | Lens mode is the only mode | 4 hours |
+| `AccuracyModeModal` | No more dual mode | 1 hour |
+| `runAccuracyMode` branch in `useAnalysisPipeline.ts` | Same | 1 hour |
+| Persona theater in `LENS_SWING/SCALP/POSITION_PROMPTS` | Replace with 1-paragraph job descriptions | 2 hours |
+| `AlgorithmicMemoryService.familyPerformance` (if not Tier 3 work) | Write-only | 1 hour |
+| `SelfLearningService.generateLearningContext` | Dead export | 5 min |
+| `MemoryFilesService` seeded `market-conditions` templates | No consumer | 10 min |
+| `Byline` under settled bubbles (cost/latency tooltip) | Minimal UI | 1 hour |
+| Right-docked `AnalysisProgress` panel | Single column | 2 hours |
+| `Templates` row in composer | Single input | 1 hour |
+| `Team` chip in composer | Settings menu only | 30 min |
+| `InjectionContextBar` (chips above composer) | One input, no chips | 30 min |
+| `Toast` system | Errors inline only | 2 hours |
+| Inline approval modal flow | Either always-on or never-on, not modal | 4 hours |
+
+Net removal: ~3,000 LOC of UI surface, ~500 LOC of prompt scaffolding, ~150 LOC of dead services.
+
+---
+
+## 10. Concrete list of features to ADD
+
+| Feature | Why | Effort |
+|---|---|---|
+| `isMeaningfulLabel()` helper | Stop writing junk | 30 min |
+| Evidence gate on candidate-veto | Don't size user down on 0-evidence | 15 min |
+| Structured `postMortem.lesson` field | Stop regex-mining headers | 2 hours |
+| `lensScope` on skills | Each lens sees its own | 3 hours |
+| `regimeLedger.ts` | Per-coin regime history | 1 day |
+| `patternStats.ts` | Setup-class base rates | 1 day |
+| `skillGeneralization.ts` | Cross-coin promotion | 1 day |
+| Settled-beliefs registry | Permanent doctrine | 4 hours |
+| Memory cross-block dedup | One mention per coin | 30 min |
+| `getProviderFitness(query)` | Demote underperformers from roster | 4 hours |
+| Veto ledger → injection telemetry | Don't lose veto signal | 30 min |
+| Sequential-eval promotion gate | Promote on 2 helps | 1 hour |
+| Per-lens memory files | Each lens has its own field | 1 day |
+| Preflight gate (DATA / SOURCE / FALSIFICATION) | Verify before predicting | 2 hours per lens × 3 = 6 hours |
+| Boot-time weekly rollup | Compounding memory | 4 hours |
+| Cross-regime evidence stamp | Diagnostic | 1 hour |
+
+Net addition: ~6,000 LOC of new capability.
+
+---
+
+## 11. The single architectural change
+
+Most of the items above compose into **one structural shift**: the learning loop stops being a *global notebook with per-skill attribution* and becomes *per-lens notebooks with a shared doctrine layer.*
+
+```
+TODAY (after ROUND-40):
+   All trades → SkillMemoryService → skills/<coin>_<dir>_<family>.md
+                                       │
+                                       ▼
+                  MemoryRetrievalService injects ranked slice
+                  into ALL lens prompts (filtered by audience only)
+
+NEW SHAPE:
+   All trades → per-lens ledger:
+                    Macro:    regimeLedger.md  (per-coin regime history)
+                    Technical: patternStats.md  (per-(family×dir×regime) base rates)
+                    Risk:      riskStats.md     (per-(family×dir×regime) loss causes)
+                                       │
+                                       ▼
+                  doctrine.md (unified, settled-beliefs protected)
+                                       │
+                                       ▼
+                  MemoryRetrievalService injects:
+                    - doctrine slot (always)
+                    - Macro lens sees: regimeLedger + matching skill
+                    - Technical lens sees: patternStats + matching skill
+                    - Risk lens sees: riskStats + matching skill
+                                       │
+                                       ▼
+                  lens prompt reads ITS memory first, not the shared skill
+```
+
+Each lens's memory is **only that lens's**. The doctrine is the only shared file. The matching skills (the cross-coin / cross-pattern IF/THEN procedures) are still shared, but they only fire when the lens's own memory surfaces a relevant setup.
+
+This is the change that makes the agents feel like they each have their own field and role. The other items — strict preflight, single column UI, lensScope, base rates — are all *enablers* of this shift.
+
+---
+
+## 12. Ship plan
+
+**Round 41 (small, do first):** items 8.1, 8.2, 8.4, 8.18, 8.16. ~3 hours total. All Tier 1, all blocking-junk-fix items. ~50 LOC of changes, ~150 LOC of test additions.
+
+**Round 42 (UI simplification):** the removal list in §9, in order. ~3 days. Big diff but mechanical.
+
+**Round 43 (lens memory split):** the architectural shift in §11. ~1 week. New `regimeLedger.ts`, `patternStats.ts`, `riskStats.ts`, the doctrine rewriter reads them, `MemoryRetrievalService` injects them per-lens. Tests: regime, stats, lens routing, doctrine integration.
+
+**Round 44 (preflight + lens scope):** the preflight gate, `lensScope` on skills, prompt surgery. ~3 days. Pairs with the §11 changes.
+
+**Round 45 (compounding memory):** settled-beliefs registry, cross-coin generalization, weekly rollup, sequential-eval promotion. ~1 week. This is the round where the harness starts to actually learn.
+
+**Round 46 (falsification refinement):** veto → injection telemetry, cross-regime stamp, underperformer → roster selection. ~3 days. Closes the loop on decisions → next-decision bias.
+
+After Round 46, the harness will:
+- Refuse to write junk skills (Round 41).
+- Show one column, one input, one verdict (Round 42).
+- Each lens has its own memory field (Round 43).
+- Each lens verifies its data before predicting (Round 44).
+- Memory compounds (Round 45).
+- Decisions bias the next decision correctly (Round 46).
+
+That's a 4-week plan. The plan you pasted is the first 3 days (Tier 1). The full direction is the 4 weeks.
+
+---
+
+**Bottom line:** the agent's plan is accurate on the three examples and on the structural diagnosis. The Tier 1 items (junk-filter, evidence-gate, lesson field, playbook templates) are all real and small. The Tier 2/3 items are the genuine differentiators and they compose into one architectural shift — per-lens memory with a shared doctrine layer. The chat/normal-mode removals and the minimal UI are independent of the learning work and can ship in parallel. The 6-agent reference maps cleanly onto your existing lens seats; the change is *narrowing each seat to one verb and one memory*, not adding agents.
