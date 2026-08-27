@@ -54,6 +54,8 @@ const DEFAULT_FOLDERS: MemoryFolder[] = [
     { id: 'rules', name: 'rules', order: 3 },
     { id: 'skills', name: 'skills', order: 4 },
     { id: 'bots', name: 'bots', order: 5 },
+    { id: 'lens', name: 'lens', order: 6 },
+    { id: 'settled-beliefs', name: 'settled-beliefs', order: 7 },
 ];
 
 const SEED_FILES: Omit<MemoryFile, 'id' | 'createdAt' | 'updatedAt'>[] = [
