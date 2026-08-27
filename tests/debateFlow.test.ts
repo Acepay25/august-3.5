@@ -272,6 +272,12 @@ describe('conductRealDebate (real inter-model debate)', () => {
         yield '<CLARIFICATION_SATISFIED>';
       } else if (user.includes('CLARIFICATION ROUND')) {
         yield '<CLARIFICATION_DONE>';
+      } else if (user.includes('Master Strategist routing a debate between analysts')) {
+        // The pre-rebuttal moderator routing call — distinct from the verdict
+        // (its user prompt begins with "Route the next round"). The mock
+        // yields no charges so the test asserts that the engine survives a
+        // routing call without adding a charge; the call is still counted
+        // because the production behavior is the extra provider request.
       } else if (system.includes('debate moderator')) {
         yield 'Verdict: Long on breakout with tight stop.\n';
         yield '</DEBATE_END>\n';
@@ -309,8 +315,10 @@ describe('conductRealDebate (real inter-model debate)', () => {
     );
 
     // 2 rebuttal rounds × 2 analysts + clarification questions + verdict.
-    expect(calls.length).toBe(2 * REAL_DEBATE_RESPONSE_ROUNDS + 2);
-    expect(calls.length).toBe(6);
+    // +1 for the pre-rebuttal moderator routing call (C12 chief-of-staff).
+    expect(calls.length).toBe(2 * REAL_DEBATE_RESPONSE_ROUNDS + 3);
+    // +1 for the pre-rebuttal moderator routing call.
+    expect(calls.length).toBe(7);
 
     // Rebuttal calls carry the DEBATE_RESPONSE_PROMPT with the speaker and round.
     const firstRebuttal = calls.find(c => !c.system.includes('debate moderator'))!;
@@ -354,7 +362,9 @@ describe('conductRealDebate (real inter-model debate)', () => {
       null, config, 'model-a',
     ));
 
-    // Openings identically long with spread 0 → tight-alignment shortcut trims one rebuttal round.
+    // Openings identically long with spread 0 → tight-alignment shortcut
+    // trims one rebuttal round AND the routing call is skipped (no
+    // divergence), so the call count is unchanged from the pre-routing era.
     expect(calls.length).toBe(2 * (REAL_DEBATE_RESPONSE_ROUNDS - 1) + 1);
     expect(calls.some(c => c.user.includes('CLARIFICATION ROUND'))).toBe(false);
     // The verdict still lands.
@@ -373,7 +383,9 @@ describe('conductRealDebate (real inter-model debate)', () => {
       calls.push({ system, user });
       if (user.includes('CLARIFICATION ROUND')) { yield '<CLARIFICATION_DONE>'; return; }
       if (user.includes('CLARIFICATION JUDGMENT')) { yield '<CLARIFICATION_SATISFIED>'; return; }
-      if (system.includes('debate moderator')) {
+      if (user.includes('Master Strategist routing a debate between analysts')) {
+        // Pre-rebuttal moderator routing call — yields no charges in the test.
+      } else if (system.includes('debate moderator')) {
         yield '</DEBATE_END>\n' + MARKDOWN_PLAN('Long', 'Medium', 60);
         return;
       }
@@ -435,7 +447,9 @@ describe('conductRealDebate (real inter-model debate)', () => {
         yield '<CLARIFICATION_SATISFIED>';
         return;
       }
-      if (system.includes('debate moderator')) {
+      if (user.includes('Master Strategist routing a debate between analysts')) {
+        // Pre-rebuttal moderator routing call — yields no charges in the test.
+      } else if (system.includes('debate moderator')) {
         yield '</DEBATE_END>\n' + MARKDOWN_PLAN('Short', 'Low', 45);
         return;
       }
@@ -499,6 +513,8 @@ describe('conductRealDebate (real inter-model debate)', () => {
       calls.push(messages[0].content);
       if (messages[1].content.includes('CLARIFICATION ROUND')) {
         yield '<CLARIFICATION_DONE>';
+      } else if (messages[0].content.includes('Master Strategist routing a debate between analysts')) {
+        // Pre-rebuttal moderator routing call — yields no charges in the test.
       } else if (messages[0].content.includes('debate moderator')) {
         yield 'Moderator verdict text.\n</DEBATE_END>\n' + MARKDOWN_PLAN('Long', 'Medium', 60);
       } else if (/CONVICTION/.test(messages[1].content) && messages[1].content.includes('ENTIRE reply')) {
@@ -520,9 +536,11 @@ describe('conductRealDebate (real inter-model debate)', () => {
     ));
 
     // 2 rebuttal rounds × 2 analysts + clarification questions + verdict.
-    const moderatorCalls = calls.filter(c => c.includes('debate moderator'));
-    expect(calls.length).toBe(2 * REAL_DEBATE_RESPONSE_ROUNDS + 2);
-    expect(moderatorCalls.length).toBe(2);
+    const moderatorCalls = calls.filter(c =>
+        c.includes('debate moderator') || c.includes('Master Strategist routing a debate between analysts'));
+    // +1 for the pre-rebuttal moderator routing call (C12 chief-of-staff).
+    expect(calls.length).toBe(2 * REAL_DEBATE_RESPONSE_ROUNDS + 3);
+    expect(moderatorCalls.length).toBe(3);
 
     // The moderator's output is its own scripted verdict — never the analyst's
     // rebuttal text, even though the same model id backs both roles.
@@ -543,7 +561,9 @@ describe('conductRealDebate (real inter-model debate)', () => {
         yield '<CLARIFICATION_DONE>';
         return;
       }
-      if (system.includes('debate moderator')) {
+      if (user.includes('Master Strategist routing a debate between analysts')) {
+        // Pre-rebuttal moderator routing call — yields no charges in the test.
+      } else if (system.includes('debate moderator')) {
         moderatorCalls++;
         moderatorPrompts.push(user);
         if (moderatorCalls === 1) {
@@ -563,6 +583,9 @@ describe('conductRealDebate (real inter-model debate)', () => {
       null, config, 'model-a',
     ));
 
+    // The moderator makes a first attempt (which errors) and a compact
+    // retry — both are moderator-system calls; the pre-rebuttal routing
+    // call uses a different user prompt and is NOT counted here.
     expect(moderatorCalls).toBe(2);
     // Second attempt uses the compact prompt (no full context blocks).
     expect(moderatorPrompts[1]).toContain('COMPACT');
@@ -574,7 +597,9 @@ describe('conductRealDebate (real inter-model debate)', () => {
   it('still completes the stream when both moderator attempts fail (hook falls back)', async () => {
     streamMock.mockImplementation(async function* (...args: any[]) {
       const messages = args[1] as { role: string; content: string }[];
-      if (messages[0].content.includes('debate moderator')) {
+      if (messages[0].content.includes('Master Strategist routing a debate between analysts')) {
+        // Pre-rebuttal moderator routing call — yields no charges in the test.
+      } else if (messages[0].content.includes('debate moderator')) {
         yield '<MODERATOR_ERROR>still down</MODERATOR_ERROR>';
       } else {
         yield 'rebuttal';
@@ -626,7 +651,9 @@ describe('conductRealDebate (real inter-model debate)', () => {
         yield isFloorSeat(system, 'Analyst One') ? '**Analyst One:** 123.40 confirms.' : '**Analyst Two:** 121.90 invalidates.';
         return;
       }
-      if (system.includes('debate moderator')) {
+      if (user.includes('Master Strategist routing a debate between analysts')) {
+        // Pre-rebuttal moderator routing call — yields no charges in the test.
+      } else if (system.includes('debate moderator')) {
         yield 'Moderator verdict.\n</DEBATE_END>\n';
         yield verdictJson;
         return;
@@ -650,7 +677,8 @@ describe('conductRealDebate (real inter-model debate)', () => {
     const calls = scriptedClarificationStreams(['<CLARIFICATION_SATISFIED>']);
     const events = await collectEvents(conductRealDebate(clarificationAnalysts(), 'Analyze BTCUSDT', null, config, 'model-a'));
 
-    expect(calls.length).toBe(9);
+    // +1 for the pre-rebuttal moderator routing call.
+    expect(calls.length).toBe(10);
     expect([...new Set(events.map(event => event.round))]).toEqual([1, 2, 3, 4, 5, 6]);
     expect(events.some(event => event.round === 4 && event.speaker === 'Moderator')).toBe(true);
     expect(events.some(event => event.round === 5 && event.speaker === 'Analyst One')).toBe(true);
@@ -740,7 +768,8 @@ describe('conductRealDebate (real inter-model debate)', () => {
     const calls = scriptedClarificationStreams(['<CLARIFICATION_UNSATISFIED>', '<CLARIFICATION_SATISFIED>']);
     const events = await collectEvents(conductRealDebate(clarificationAnalysts(), 'Analyze BTCUSDT', null, config, 'model-a'));
 
-    expect(calls.length).toBe(13);
+    // +1 for the pre-rebuttal moderator routing call.
+    expect(calls.length).toBe(14);
     expect([...new Set(events.map(event => event.round))]).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
   });
 
@@ -751,7 +780,8 @@ describe('conductRealDebate (real inter-model debate)', () => {
     ]);
     const events = await collectEvents(conductRealDebate(clarificationAnalysts(), 'Analyze BTCUSDT', null, config, 'model-a'));
 
-    expect(calls.length).toBe(16);
+    // +1 for the pre-rebuttal moderator routing call.
+    expect(calls.length).toBe(17);
     expect([...new Set(events.map(event => event.round))]).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     expect(calls.filter(call => call.user.includes('CLARIFICATION JUDGMENT')).length).toBe(2);
   });
@@ -760,7 +790,8 @@ describe('conductRealDebate (real inter-model debate)', () => {
     const calls = scriptedClarificationStreams([], { done: true });
     const events = await collectEvents(conductRealDebate(clarificationAnalysts(), 'Analyze BTCUSDT', null, config, 'model-a'));
 
-    expect(calls.length).toBe(6);
+    // +1 for the pre-rebuttal moderator routing call.
+    expect(calls.length).toBe(7);
     expect(events.some(event => event.text.includes('<CLARIFICATION_DONE>'))).toBe(true);
     expect(events.some(event => event.round === 4 && event.speaker === 'Moderator')).toBe(true);
   });
@@ -779,7 +810,8 @@ describe('conductRealDebate (real inter-model debate)', () => {
     const calls = scriptedClarificationStreams([], { failQuestion: true });
     const events = await collectEvents(conductRealDebate(clarificationAnalysts(), 'Analyze BTCUSDT', null, config, 'model-a'));
 
-    expect(calls.length).toBe(6);
+    // +1 for the pre-rebuttal moderator routing call.
+    expect(calls.length).toBe(7);
     expect(events.some(event => event.speaker === 'Moderator' && event.text.includes('Moderator verdict'))).toBe(true);
   });
 
@@ -787,7 +819,8 @@ describe('conductRealDebate (real inter-model debate)', () => {
     const calls = scriptedClarificationStreams([], { failJudgment: true });
     const events = await collectEvents(conductRealDebate(clarificationAnalysts(), 'Analyze BTCUSDT', null, config, 'model-a'));
 
-    expect(calls.length).toBe(9);
+    // +1 for the pre-rebuttal moderator routing call.
+    expect(calls.length).toBe(10);
     expect(events.some(event => event.round === 6 && event.speaker === 'Moderator')).toBe(true);
   });
 
@@ -837,6 +870,8 @@ describe('conductRealDebate (real inter-model debate)', () => {
       calls.push({ system, user });
       if (user.includes('CLARIFICATION ROUND')) {
         yield '<CLARIFICATION_DONE>';
+      } else if (user.includes('Master Strategist routing a debate between analysts')) {
+        // Pre-rebuttal moderator routing call — yields no charges in the test.
       } else if (system.includes('debate moderator')) {
         yield 'Verdict for three.\n</DEBATE_END>\n';
         yield verdictJson;
@@ -863,7 +898,8 @@ describe('conductRealDebate (real inter-model debate)', () => {
     }
 
     // 2 rebuttal rounds × 3 analysts + clarification questions + verdict.
-    expect(calls.length).toBe(2 * 3 + 2);
+    // +1 for the pre-rebuttal moderator routing call.
+    expect(calls.length).toBe(2 * 3 + 3);
 
     const moderatorEvents = events.filter(e => e.speaker === 'Moderator');
     expect(moderatorEvents.length).toBeGreaterThan(0);
@@ -887,6 +923,8 @@ describe('conductRealDebate (real inter-model debate)', () => {
         yield '<CLARIFICATION_SATISFIED>';
       } else if (user.includes('CLARIFICATION ROUND')) {
         yield '**Analyst One:** justify your entry? **Analyst Two:** justify your stop? **Analyst Three:** justify your target?';
+      } else if (user.includes('Master Strategist routing a debate between analysts')) {
+        // Pre-rebuttal moderator routing call — yields no charges in the test.
       } else if (system.includes('debate moderator')) {
         yield 'Verdict for three.\n</DEBATE_END>\n';
         yield verdictJson;
@@ -915,7 +953,9 @@ describe('conductRealDebate (real inter-model debate)', () => {
         yield '<CLARIFICATION_DONE>';
         return;
       }
-      if (system.includes('debate moderator')) {
+      if (user.includes('Master Strategist routing a debate between analysts')) {
+        // Pre-rebuttal moderator routing call — yields no charges in the test.
+      } else if (system.includes('debate moderator')) {
         yield 'Verdict for three.\n</DEBATE_END>\n';
         yield verdictJson;
         return;
@@ -969,7 +1009,9 @@ describe('conductRealDebate (real inter-model debate)', () => {
         yield '<CLARIFICATION_SATISFIED>';
         return;
       }
-      if (system.includes('debate moderator')) {
+      if (user.includes('Master Strategist routing a debate between analysts')) {
+        // Pre-rebuttal moderator routing call — yields no charges in the test.
+      } else if (system.includes('debate moderator')) {
         yield 'Moderator verdict.\n</DEBATE_END>\n';
         yield verdictJson;
         return;
@@ -1077,10 +1119,16 @@ describe('conductRealDebate (real inter-model debate)', () => {
     expect(events.some(e => e.speaker === 'System' && e.text.includes('Analyst Two dropped out'))).toBe(true);
 
     // Resuming the generator invokes the replacement callback and suspends on
-    // it — the moderator must NOT be called while the user is choosing.
+    // it — the moderator must NOT be called for the VERDICT while the user is
+    // choosing. (The pre-rebuttal routing call IS counted by the predicate
+    // below and is allowed to have happened before the drop — only the
+    // verdict matters for "we suspended before the moderator judged".)
     const pending = gen.next();
     expect(onReplacementRequested).toHaveBeenCalledTimes(1);
-    expect(calls.filter(c => c.system.includes('debate moderator')).length).toBe(0);
+    const verdictCalls = calls.filter(c =>
+        c.system.includes('debate moderator')
+        && !c.user.includes('Master Strategist routing a debate between analysts'));
+    expect(verdictCalls.length).toBe(0);
 
     // The user picks a replacement: the wait resolves and the debate continues.
     pendingReplacement.resolve?.(realAnalyst('prov-c', 'Analyst Three', 'model-c'));
@@ -1090,8 +1138,10 @@ describe('conductRealDebate (real inter-model debate)', () => {
     const all = [...events, resumed.value, ...rest];
     expect(all.some(e => e.speaker === 'Analyst Three')).toBe(true);
     expect(all.some(e => e.speaker === 'Moderator')).toBe(true);
-    // The moderator call happened only after the wait resolved.
-    expect(calls.filter(c => c.system.includes('debate moderator')).length).toBeGreaterThan(0);
+    // The moderator verdict call happened only after the wait resolved.
+    expect(calls.filter(c =>
+        c.system.includes('debate moderator')
+        && !c.user.includes('Master Strategist routing a debate between analysts')).length).toBeGreaterThan(0);
   });
 
   it('offers a replacement when an analyst drops while answering a clarification question', async () => {
@@ -1183,6 +1233,8 @@ describe('conductRealDebate (real inter-model debate)', () => {
         // Moderator questions — think first, then (short-circuit) no questions.
         options?.onReasoning?.('Moderator thinking about what to ask');
         yield '<CLARIFICATION_DONE>';
+      } else if (user.includes('Master Strategist routing a debate between analysts')) {
+        // Pre-rebuttal moderator routing call — yields no charges in the test.
       } else if (system.includes('debate moderator')) {
         // Moderator verdict — think first, then the verdict prose + plan.
         options?.onReasoning?.('Moderator weighing the verdict');
@@ -1294,6 +1346,8 @@ describe('conductRealDebate — transient-failure retry (streamWithTransientRetr
         yield '<CLARIFICATION_SATISFIED>';
       } else if (user.includes('CLARIFICATION ROUND')) {
         yield '<CLARIFICATION_DONE>';
+      } else if (user.includes('Master Strategist routing a debate between analysts')) {
+        // Pre-rebuttal moderator routing call — yields no charges in the test.
       } else if (system.includes('debate moderator')) {
         yield 'Verdict: Long on breakout with tight stop.\n';
         yield '</DEBATE_END>\n';
@@ -1352,6 +1406,8 @@ describe('conductRealDebate — transient-failure retry (streamWithTransientRetr
         yield '<CLARIFICATION_SATISFIED>';
       } else if (user.includes('CLARIFICATION ROUND')) {
         yield '<CLARIFICATION_DONE>';
+      } else if (user.includes('Master Strategist routing a debate between analysts')) {
+        // Pre-rebuttal moderator routing call — yields no charges in the test.
       } else if (system.includes('debate moderator')) {
         yield 'Verdict: Long on breakout with tight stop.\n';
         yield '</DEBATE_END>\n';

@@ -839,7 +839,7 @@ const ANALYST_ROLE_MENTION_RE = /\b(?:macro(?:\s*&\s*volatility)?\s+analyst|tech
 
 /**
  * Last-round moderator essays that recap the debate (role-by-role, round
- * numbers, a "Moderator Verdict" heading). Those belong in DebateChat, not
+ * numbers, a "Moderator Verdict" heading). Those belong in the debate floor, not
  * in the trading-signal Strategy block.
  */
 export const looksLikeModeratorVerdictDump = (text: string): boolean => {

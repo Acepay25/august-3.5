@@ -135,6 +135,23 @@ const evidenceDecay = (meta: SkillMeta): number => {
     return Math.exp(-ageDays / 120);
 };
 
+/**
+ * Rough per-run token cost of memory injection (Zed's "may increase token
+ * costs" disclosure, made concrete). Worst case = doctrine slot + skill body
+ * + risk rules + mistake line + verdict extras; typical opening ≈ half that.
+ * ~4 chars/token for English prose. Display-only.
+ */
+export const estimateMemoryTokensPerRun = (): { worstCase: number; typical: number } => {
+    const chars =
+        DOCTRINE_SLOT_CHARS +
+        SKILL_BLOCK_MAX +
+        RISK_RULES_MAX +
+        MISTAKE_LINE_MAX +
+        VERDICT_EXTRA_SKILLS * 160;
+    const worstCase = Math.round(chars / 4);
+    return { worstCase, typical: Math.round(worstCase / 2) };
+};
+
 const bestMatchedSkill = (
     query?: MemoryRetrievalQuery,
     audience?: 'analyst' | 'moderator',
@@ -195,9 +212,13 @@ export const substituteSkillContext = (text: string, query?: MemoryRetrievalQuer
 
 /** One-line index entry (progressive disclosure tier 1 — near-zero tokens). */
 const skillIndexLine = (name: string, meta: SkillMeta): string => {
-    const rule = meta.ifCondition
-        ? `IF ${meta.ifCondition} THEN ${meta.thenAction}`
-        : meta.body.split('\n').find(l => l.trim())?.replace(/^#+\s*/, '').slice(0, 100) || name;
+    // The stored one-sentence description wins when present (zcode memory
+    // pattern) — it was written to be read by models and humans alike.
+    const rule = meta.description
+        ? meta.description
+        : meta.ifCondition
+            ? `IF ${meta.ifCondition} THEN ${meta.thenAction}`
+            : meta.body.split('\n').find(l => l.trim())?.replace(/^#+\s*/, '').slice(0, 100) || name;
     return `${meta.kind === 'avoid' ? 'AVOID' : 'REPEAT'} [${meta.status} · ${Math.round(meta.wins)}W/${Math.round(meta.losses)}L · ${evidenceFreshness(meta)}] ${rule}`;
 };
 

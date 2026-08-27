@@ -32,7 +32,6 @@ vi.mock('../components/shared/Icons', () => ({
     CheckIcon: ({ className }: { className?: string }) => <span className={className} />,
 }));
 vi.mock('../components/market/LiveMarketDataView', () => ({ default: () => null }));
-vi.mock('../components/analysis/EnsembleProgressChat', () => ({ default: () => <div data-testid="floor" /> }));
 vi.mock('../components/analysis/DebateSummary', () => ({ default: () => null }));
 vi.mock('../components/analysis/TradingSignalCard', () => ({
     default: ({ analysis }: { analysis?: { direction?: string } }) => (

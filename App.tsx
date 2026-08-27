@@ -102,9 +102,9 @@ import { saveLensConfig, initAnalystLensService, loadLensConfig, saveEnsembleMod
 import { checkDataIntegrity, createStartupBackup, logIntegrityEvent, runMigrations } from './services/validation/DataIntegrityService';
 import { startAutoBackup, stopAutoBackup, createBackup } from './services/infrastructure/BackupService';
 import { storageService } from './services/infrastructure/StorageService';
-import { initInvalidationRuleService } from './services/validation/InvalidationRuleService';
 import { PriceAlertService } from './services/ui/PriceAlertService';
 import { SetupWatchService, describeWatchTrigger } from './services/ui/SetupWatchService';
+import { VetoLedgerService } from './services/ui/VetoLedgerService';
 import { OutcomeAutopilotService, AutopilotResolution } from './services/ui/OutcomeAutopilotService';
 import { useWatchSideEffects } from './hooks/useWatchSideEffects';
 import { getThinkingTradeId, updateThinkingOutcome, deleteThinkingByTrade } from './services/infrastructure/ThinkingStoreService';
@@ -1174,16 +1174,6 @@ const App: React.FC = () => {
         // user's markdown memory into the sync cache (seeds the default
         // folders + starter templates on first boot).
         await initMemoryFiles(username);
-        // One-time mechanical migration: legacy IF/THEN rules
-        // become candidate skills so lessons live in one system. Idempotent.
-        try {
-            const { migrateIfThenRulesToSkills } = await import('./services/learning/IfThenMigrationService');
-            const userProfile = await dbService.getUserProfile(username).catch(() => null);
-            const res = await migrateIfThenRulesToSkills(username, userProfile?.tradeLog ?? []);
-            if (res.created > 0) console.log('[IfThenMigration] Created', res.created, 'candidate skills from legacy rules.');
-        } catch (e) {
-            console.warn('[IfThenMigration] skipped:', e instanceof Error ? e.message : e);
-        }
         // Native (Capacitor) loads the lens config asynchronously, after the
         // useAppSettings lazy initializer already ran with an empty default —
         // push the cached config into React state so the lens dropdowns don't
@@ -1203,10 +1193,13 @@ const App: React.FC = () => {
         } catch (e) {
             console.warn('[App] Failed to sync ensemble model selection:', e);
         }
-        await initInvalidationRuleService();
         await PriceAlertService.init();
         await SetupWatchService.init();
         await OutcomeAutopilotService.init();
+        // Veto falsification ledger: load this user's pending vetoes, settle
+        // anything already expired, and pin the price feed to this user so
+        // tick-driven settlement grades the right ledger.
+        await VetoLedgerService.init(username);
         await initConfluenceService();
         await initPatternMemoryService();
         await GlobalLearningService.setActiveUser(username);
@@ -1234,7 +1227,7 @@ const App: React.FC = () => {
                     // page that was running them. Clear live debate state so a
                     // message saved mid-debate doesn't render a stuck
                     // "thinking" indicator or permanently hide its turns
-                    // (DebateChat filters turns by activeDebateSpeakers).
+                    // (the debate floor filters turns by activeDebateSpeakers).
                     const normalized: Message = msg.isDebating || msg.activeDebateSpeakers
                         ? { ...msg, isDebating: false, activeDebateSpeakers: undefined }
                         : msg;
@@ -3492,7 +3485,7 @@ const App: React.FC = () => {
                 </aside>
 
                 <main
-                    className={`flex-1 flex flex-col min-h-0 min-w-0 relative transition-[margin,padding] duration-200 ${isAnalysisProgressVisible ? 'lg:mr-[21rem] lg:px-8 xl:px-16' : ''}`}
+                    className={`chat-main flex-1 flex flex-col min-h-0 min-w-0 relative transition-[margin,padding] duration-200 ${isAnalysisProgressVisible ? 'lg:mr-[21rem] lg:px-8 xl:px-16' : ''}`}
                 >
                     {/* Mistake Warning Banner - Global Risk Reminder */}
                     {loggedTrades.length > 0 && (

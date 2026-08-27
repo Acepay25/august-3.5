@@ -2487,7 +2487,7 @@ export const buildLivePriceRefreshBlock = (price: number | null | undefined, lab
 // Machine-readable markers emitted by the clarification phase. The questions
 // call may short-circuit with <CLARIFICATION_DONE>; the (internal) judgment
 // call outputs one of the SATISFIED/UNSATISFIED markers.
-import { turnAddressedTo } from '../../utils/debateReplyTo';
+import { turnAddressedTo, nearMissReplyTo } from '../../utils/debateReplyTo';
 
 const CLARIFICATION_MARKERS = CLARIFICATION_MARKERS_RE; // single home: constants/debateMarkers
 
@@ -3092,27 +3092,8 @@ export const conductRealDebate = async function* (
         // ── Devil's advocate rotation (B1) ──
         // One seat per debate is ASSIGNED the contra position for its first
         // rebuttal, regardless of its own read — kills premature agreement.
-        // Seeded from the prompt hash so it rotates per setup, not per run.
-        // The existing synthetic-dissent protocol still covers full echo
-        // chambers; this guarantees exactly one structured counter-voice even
-        // when divergence is moderate.
-        // 'efficient' lane: skip the devil assignment when openings
-        // already disagree — the counter-case exists without forcing one.
-        const floorAgrees = (() => {
-            const dirs = debateRoster.map(a => (a.result.analysis.direction || '').toLowerCase());
-            return dirs.length >= 2 && dirs.every(d => d === dirs[0]);
-        })();
-        if (debateProtocol === 'efficient' && floorAgrees) {
-            // fall through with no devil seat: devilName stays undefined below
-        }
-        const devilSeatIndex = (() => {
-            let h = 0;
-            for (let i = 0; i < userPrompt.length; i++) h = (h * 31 + userPrompt.charCodeAt(i)) >>> 0;
-            return h % Math.max(debateRoster.length, 1);
-        })();
-        const devilName = (debateProtocol === 'efficient' && floorAgrees)
-            ? undefined
-            : debateRoster[devilSeatIndex]?.provider.name;
+        // The assignment itself is hoisted above the pump (devilName) so the
+        // run log can label the round and the prompt stays in sync with it.
         const isDevilSeat = analyst.provider.name === devilName && round === rebuttalStart;
 
         // The lens persona must survive into the rebuttal rounds —
@@ -3157,6 +3138,9 @@ export const conductRealDebate = async function* (
             `${others}\n\n` +
             (levelsSnap ? `**LEVELS SNAPSHOT:**\n${levelsSnap}\n\n` : '') +
             (buildLossPrimingBlock(similarTrades) ? buildLossPrimingBlock(similarTrades) + `\n\n` : '') +
+            (round === rebuttalStart && seatCharges.has(analyst.provider.name)
+                ? `**MODERATOR'S CHARGE (your assignment this round):** ${seatCharges.get(analyst.provider.name)}\n\n`
+                : '') +
             (isDevilSeat
                 ? "**DEVIL'S ADVOCATE ASSIGNMENT (this round only):** You are assigned the CONTRA position for this round. Argue the strongest honest case AGAINST the emerging floor consensus - what invalidates it, where it fails, who is on the wrong side of the levels. You may concede afterwards, but this round your job is the counter-case. Do not strawman: use real levels and timeframes.\n\n"
                 : '') +
@@ -3302,6 +3286,12 @@ export const conductRealDebate = async function* (
                     roundTexts[analyst.provider.name][round] = (roundTexts[analyst.provider.name]?.[round] || '') + line;
                     pumpPush({ kind: 'delta', name: analyst.provider.name, round, text: line });
                 }
+                // Routing hygiene: a malformed REPLY-TO marker silently
+                // broadcasts the turn to the whole floor — surface the miss
+                // in the run log instead of letting it vanish.
+                if (nearMissReplyTo(roundTexts[analyst.provider.name]?.[round] || '')) {
+                    emitLog('tool', `${analyst.provider.name} emitted a malformed REPLY-TO marker — turn broadcast floor-wide`, round, analyst.provider.name);
+                }
             })
             .catch((e: any) => {
                 const isAbort = e?.name === 'AbortError' || e?.code === 'ABORT_ERR' || e?.name === 'TimeoutError';
@@ -3380,6 +3370,89 @@ export const conductRealDebate = async function* (
             }
         }
     };
+
+    // ── Round markers (computed ONCE — the run log labels rounds from these,
+    //    and buildRebuttalTask reads the same devilName so the prompt and the
+    //    log can never diverge) ──
+    const floorAgreesAtOpen = (() => {
+        const dirs = debateRoster.map(a => (a.result.analysis.direction || '').toLowerCase());
+        return dirs.length >= 2 && dirs.every(d => d === dirs[0]);
+    })();
+    // Seeded from the prompt hash so the devil seat rotates per setup, not
+    // per run. 'efficient' lane: no forced contra when openings already
+    // disagree — the counter-case exists without manufacturing one.
+    const devilName = (!skipRebuttals && !(debateProtocol === 'efficient' && floorAgreesAtOpen))
+        ? debateRoster[(() => {
+            let h = 0;
+            for (let i = 0; i < userPrompt.length; i++) h = (h * 31 + userPrompt.charCodeAt(i)) >>> 0;
+            return h % Math.max(debateRoster.length, 1);
+        })()]?.provider.name
+        : undefined;
+    if (devilName) emitLog('round', `Devil's advocate: ${devilName}`, rebuttalStart, devilName);
+    if (!skipRebuttals && rebuttalStart + 1 <= totalRounds) {
+        emitLog('round', 'Evidence round — each seat cites one concrete data point', rebuttalStart + 1);
+    }
+    if (!skipRebuttals && totalRounds >= rebuttalStart) {
+        emitLog('round', 'Final rebuttal round — sealed conviction line required', totalRounds);
+    }
+
+    // ── MODERATOR'S CHARGE (chief-of-staff routing) ──
+    // One bounded call before the first rebuttal round: when openings
+    // genuinely diverge, the moderator assigns each seat its focus ("answer
+    // X's challenge on SL", "defend your TP2 with evidence"). Skipped on the
+    // efficient lane and on aligned floors.
+    const seatCharges = new Map<string, string>();
+    if (!skipRebuttals && debateProtocol !== 'efficient' && openingDivergence.score >= 15) {
+        const chargeRows = debateRoster
+            .filter(o => roundTexts[o.provider.name]?.[1])
+            .map(o => extractDebateLevels(o.provider.name, roundTexts[o.provider.name][1]));
+        const chargeSystem =
+            'You are the Master Strategist routing a debate between analysts: ' + names.join(', ') + '. '
+            + 'For EACH seat output exactly one line formatted "<SeatName>: <focus>" — the single most valuable thing that seat must do in the next rebuttal round '
+            + '(answer a specific challenge, defend a contested level with evidence, or fix an internal contradiction). '
+            + 'Max 20 words per line. No preamble, no extra lines.';
+        const chargeUser =
+            `**CURRENT POSITIONS:**\n${formatDebateLevelsTable(chargeRows)}\n\n`
+            + `Openings diverged (score ${openingDivergence.score}). Route the next round.`
+            + buildLivePriceRefreshBlock(getLivePrice?.() ?? null, 'before the routing call');
+        try {
+            if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+            onSpeakerStatus?.('Moderator', rebuttalStart, true);
+            let chargeText = '';
+            for await (const chunk of getModeratorAnalysisStream(
+                moderatorConfig, moderatorModel,
+                `${chargeSystem}\n\n${chargeUser}`,
+                signal,
+                moderatorReasoningFor(rebuttalStart),
+                resolveDefaultSymbol(userPrompt),
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+            )) {
+                if (chunk) chargeText += chunk;
+            }
+            onSpeakerStatus?.('Moderator', rebuttalStart, false);
+            for (const name of names) {
+                const lineRe = new RegExp(`^\\s*\\*{0,2}@?${escapeRegExp(name)}\\*{0,2}\\s*:\\s*(.+)$`, 'im');
+                const m = chargeText.match(lineRe);
+                if (m?.[1]?.trim()) seatCharges.set(name, m[1].trim().slice(0, 240));
+            }
+            if (seatCharges.size > 0) {
+                emitLog('round', `Moderator routed the round — charges to ${[...seatCharges.keys()].join(', ')}`, rebuttalStart, 'Moderator');
+                yield {
+                    speaker: 'Moderator',
+                    round: rebuttalStart,
+                    text: `**Floor routing for Round ${rebuttalStart}:**\n${[...seatCharges.entries()].map(([n, c]) => `- **${n}:** ${c}`).join('\n')}`,
+                };
+            }
+        } catch (e: any) {
+            const isAbort = e?.name === 'AbortError' || e?.code === 'ABORT_ERR' || e?.name === 'TimeoutError';
+            if (isAbort) throw e;
+            console.warn('[RealDebate] Moderator charge failed; rebuttals proceed unrouted.', e?.message || e);
+            onSpeakerStatus?.('Moderator', rebuttalStart, false);
+        }
+    }
 
     if (!skipRebuttals) {
         scheduleReadySeats();

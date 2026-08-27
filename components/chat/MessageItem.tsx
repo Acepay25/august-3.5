@@ -12,6 +12,7 @@ import VerdictSkeletonCard from '../analysis/VerdictSkeletonCard';
 import DebateReplay from '../analysis/DebateReplay';
 import DebateStage, { DebateStageActor } from '../analysis/DebateStage';
 import DebateSidePanel from '../analysis/DebateSidePanel';
+import ReplacementOfferCard from '../analysis/ReplacementOfferCard';
 import DebateRunLog from '../analysis/DebateRunLog';
 import RunContractPanel from '../analysis/RunContractPanel';
 import EvidencePackCard from '../analysis/EvidencePackCard';
@@ -179,6 +180,8 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
         onResumeDebate,
         onSteerSeat,
         onStopSeat,
+        onReplacementChoice,
+        onForkDebate,
         inlineApprovals,
         onApprovalAllow,
         onApprovalDeny,
@@ -239,16 +242,18 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
             const last = debateTurns.slice().reverse().find(t => t.speaker === name);
             const isActive = Boolean(message.isDebating) && (active[name] ?? 0) > 0;
             const addressedTo = (last as { to?: string[] } | undefined)?.to;
+            const speechText = (last?.text ?? '').replace(/\s+/g, ' ').trim();
             return {
                 id: name,
                 name,
                 toneKey: name,
                 live: Boolean(message.isDebating),
-                // Bubbles show the thinking animation only — the output text
-                // streams in the side panel, never in the chat bubble.
-                thinking: isActive,
-                speaking: false,
-                speech: '',
+                // Bubbles show the debate itself: "thinking…" until the first
+                // tokens land, then the newest lines of the seat's live turn.
+                // The full transcript streams in the side panel.
+                thinking: isActive && !speechText,
+                speaking: isActive && Boolean(speechText),
+                speech: speechText ? speechText.slice(-110) : '',
                 // Activity chip: "replying to X" from the
                 // REPLY-TO routing, else the NEWEST live desk-tool line
                 // (liveToolEvents is a newest-first rolling feed).
@@ -257,18 +262,66 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                     : (message.liveToolEvents ?? {})[name]?.split('\n')[0],
                 thought: (last?.reasoning ?? '').replace(/\s+/g, ' ').slice(0, 72),
                 // Quiet cost/latency tooltip from the run ledger —
-                // "Macro · gemini-2.5-pro · 41s · 1.2k out".
+                // "Macro · gemini-2.5-pro · 41s · 1.2k out · ~$0.012".
+                // The per-seat dollar figure is the run total prorated by
+                // the seat's token share (chars when tokens are missing) —
+                // an estimate, hence the tilde.
                 meta: (() => {
                     const seat = (message.runStats?.analysts ?? []).find(a =>
                         a.displayName === name || name.includes(a.displayName));
                     if (!seat) return undefined;
                     const secs = seat.durationMs ? `${Math.round(seat.durationMs / 1000)}s` : null;
                     const out = seat.charsOut ? `${(seat.charsOut / 1000).toFixed(1)}k out` : null;
-                    return [seat.displayName, seat.modelId, secs, out].filter(Boolean).join(' · ');
+                    const usd = (() => {
+                        const rs = message.runStats;
+                        if (!rs?.costUsd || !rs.analysts?.length) return null;
+                        const tokOf = (a: { promptTokens?: number; completionTokens?: number }): number =>
+                            (a.promptTokens ?? 0) + (a.completionTokens ?? 0);
+                        const totalTokens = rs.analysts.reduce((s, a) => s + tokOf(a), 0);
+                        const seatTokens = tokOf(seat);
+                        if (totalTokens > 0 && seatTokens > 0) return `~$${(rs.costUsd * seatTokens / totalTokens).toFixed(3)}`;
+                        const totalChars = rs.analysts.reduce((s, a) => s + (a.charsOut ?? 0), 0);
+                        if (totalChars > 0 && seat.charsOut) return `~$${(rs.costUsd * seat.charsOut / totalChars).toFixed(3)}`;
+                        return null;
+                    })();
+                    return [seat.displayName, seat.modelId, secs, out, usd].filter(Boolean).join(' · ');
                 })(),
             };
         });
-    }, [isEnsembleMessage, debateTurns, message.activeDebateSpeakers, message.isDebating]);
+    }, [isEnsembleMessage, debateTurns, message.activeDebateSpeakers, message.isDebating, message.runStats]);
+
+    // Live phase line for the floor caption — "Round 2 · Rebuttal rounds" —
+    // so the watcher always knows where in the protocol the debate is.
+    const livePhase = React.useMemo(() => {
+        if (!message.isDebating) return undefined;
+        const maxRound = debateTurns.reduce((m, t) => Math.max(m, t.round ?? 0), 0);
+        const running = (message.runContract ?? []).find(s => s.state === 'running');
+        const bits: string[] = [];
+        if (maxRound > 0) bits.push(`Round ${maxRound}`);
+        if (running) bits.push(running.label);
+        return bits.length > 0 ? bits.join(' · ') : undefined;
+    }, [message.isDebating, message.runContract, debateTurns]);
+
+    // Exchange map: directed addressing edges (who replied to whom, how
+    // often) — real back-and-forth vs parallel monologues at a glance.
+    const debateExchanges = React.useMemo(() => {
+        const counts = new Map<string, number>();
+        for (const t of debateTurns) {
+            if (!t.to?.length || t.speaker === 'System' || t.speaker === 'Moderator') continue;
+            for (const target of t.to) {
+                if (!target || target.toLowerCase() === t.speaker.toLowerCase()) continue;
+                const key = `${t.speaker}\u0000${target}`;
+                counts.set(key, (counts.get(key) ?? 0) + 1);
+            }
+        }
+        return [...counts.entries()]
+            .map(([key, count]) => {
+                const sep = key.indexOf('\u0000');
+                return { from: key.slice(0, sep), to: key.slice(sep + 1), count };
+            })
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 6);
+    }, [debateTurns]);
 
     // While the debate is live, open the side transcript once so the full
     // thinking/output is visible beside the thinking bubbles.
@@ -423,11 +476,25 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     <DebateStage
                                         actors={stageActors}
                                         caption={message.isDebating ? 'Debate in progress' : 'Debate floor'}
+                                        phase={livePhase}
+                                        stages={message.isDebating ? message.runContract : undefined}
+                                        exchanges={debateExchanges}
                                         live={Boolean(message.isDebating)}
                                         onOpenActor={id => setDebatePanelActor(id)}
                                         onSteerSeat={message.isDebating ? onSteerSeat : undefined}
                                         onStopSeat={message.isDebating ? onStopSeat : undefined}
                                     />
+                                    {/* Mid-debate replacement: the engine suspends
+                                        until a candidate is picked or skipped — the
+                                        choice must be visible or the wait is wasted.
+                                        Shared card also renders inside the side panel. */}
+                                    {message.replacementOffer && onReplacementChoice && (
+                                        <ReplacementOfferCard
+                                            offer={message.replacementOffer}
+                                            onChoice={providerId => onReplacementChoice(message.id, providerId)}
+                                            className="mt-2"
+                                        />
+                                    )}
                                     <DebateSidePanel
                                         open={debatePanelActor !== null}
                                         onClose={() => setDebatePanelActor(null)}
@@ -438,6 +505,14 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                         isLive={Boolean(message.isDebating)}
                                         liveToolEvents={message.liveToolEvents}
                                         reasoningProcesses={message.reasoningProcesses}
+                                        runLog={message.debateRunLog}
+                                        analysis={message.analysis}
+                                        messageId={message.id}
+                                        onForkDebate={onForkDebate}
+                                        replacementOffer={message.replacementOffer}
+                                        onReplacementChoice={onReplacementChoice
+                                            ? providerId => onReplacementChoice(message.id, providerId)
+                                            : undefined}
                                     />
                                 </div>
                             )}

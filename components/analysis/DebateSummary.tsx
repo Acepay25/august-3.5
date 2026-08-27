@@ -16,6 +16,21 @@ const callFromText = (text: string): 'Long' | 'Short' | 'Neutral' => {
     return 'Neutral';
 };
 
+const CONVICTION_RE = /^\s*CONVICTION:\s*(\d{1,3})\b/im;
+
+/** Each seat's LAST sealed conviction line across the transcript — the
+ *  auction the Moderator alone sees at verdict time, made visible. */
+const convictionsFromTurns = (debateTurns: DebateTurn[]): Array<{ name: string; value: number }> => {
+    const bySeat = new Map<string, number>();
+    for (const t of debateTurns) {
+        if (t.speaker === 'Moderator' || t.speaker === 'System') continue;
+        const m = (t.text || '').match(CONVICTION_RE);
+        if (!m) continue;
+        bySeat.set(t.speaker, Math.min(100, Math.max(0, parseInt(m[1], 10))));
+    }
+    return [...bySeat.entries()].map(([name, value]) => ({ name, value }));
+};
+
 /**
  * Compact board: each analyst's opening call plus the moderator merge line.
  * Levels stay on the trading signal.
@@ -52,6 +67,7 @@ const DebateSummary: React.FC<DebateSummaryProps> = ({ debateTurns, analysis }) 
             confidence: analysis.confidence,
             grade: analysis.grade,
             rows: displayRows,
+            convictions: convictionsFromTurns(debateTurns),
             mergeLine: uniqueDirections.length > 1
                 ? `Moderator kept ${analysis.direction}, dropped ${droppedCalls.join(' / ') || 'the rest'}.`
                 : `Openings aligned ${analysis.direction}.`,
@@ -114,6 +130,38 @@ const DebateSummary: React.FC<DebateSummaryProps> = ({ debateTurns, analysis }) 
                 {board.mergeLine}
                 {board.rosterNote ? ` ${board.rosterNote}` : ''}
             </p>
+            {/* Sealed conviction auction — each seat's private 0-100 stake in
+                its own stance, unsealed for the trader after the verdict. */}
+            {board.convictions.length > 0 && (() => {
+                const values = board.convictions.map(c => c.value);
+                const spread = Math.max(...values) - Math.min(...values);
+                return (
+                    <div className="mt-3">
+                        <p className="mb-1.5 flex items-baseline gap-2 text-[10px] font-bold uppercase tracking-widest text-zinc-500">
+                            Conviction auction
+                            <span
+                                className="font-medium normal-case tracking-normal text-zinc-500"
+                                title="Spread between the highest and lowest sealed conviction. Tight = the floor genuinely agrees; wide = the verdict sided with a minority."
+                            >
+                                {spread <= 10
+                                    ? `tight spread (${spread}) — the floor genuinely agreed`
+                                    : `wide spread (${spread}) — the floor did NOT agree`}
+                            </span>
+                        </p>
+                        <div className="space-y-1">
+                            {board.convictions.map(c => (
+                                <div key={c.name} className="flex items-center gap-2">
+                                    <span className="w-20 shrink-0 truncate text-[11px] text-zinc-400" title={c.name}>{c.name}</span>
+                                    <span className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-zinc-800">
+                                        <span className="block h-full rounded-full bg-zinc-400" style={{ width: `${c.value}%` }} />
+                                    </span>
+                                    <span className="w-7 shrink-0 text-right text-[11px] font-semibold tabular-nums text-zinc-300">{c.value}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                );
+            })()}
             {board.skills.length > 0 && (
                 <ul className="mt-3 flex flex-wrap gap-2">
                     {board.skills.map(s => (

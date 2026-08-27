@@ -190,11 +190,12 @@ tradeIds: a,b,c
         expect(isSkillDueForEval(meta, trades)).toBe(false);
     });
 
-    it('a stale hurts verdict expires: healthy stats re-confirm on the next evidence pass', async () => {
+    it('hurts demotions respect the sequential streak gate and the staleness expiry on evidence passes', async () => {
         await initMemoryFiles('stale-user');
         const skills = getMemoryFiles().folders.find(f => f.name === 'skills')!;
-        // Healthy avoid skill (winRate 0.25 ≤ 0.4 → confirmed by outcomes alone).
-        const seed = async (username: string, lastEvalAt: string): Promise<string> => {
+        // Healthy avoid skill (winRate ≤ 0.4 → confirmed by outcomes alone).
+        // lastEvidenceAt is fresh so evidence decay stays out of the picture.
+        const seed = async (username: string, lastEvalAt: string, evalStreak?: number): Promise<string> => {
             const file = await createMemoryFile(skills.id, `stale-${username}.md`, `---
 status: confirmed
 kind: avoid
@@ -207,6 +208,8 @@ ifCondition: BTC short setup in Family A
 thenAction: skip the short
 evalVerdict: hurts (0/2)
 lastEvalAt: ${lastEvalAt}
+lastEvidenceAt: ${new Date().toISOString()}
+${evalStreak ? `evalStreak: ${evalStreak}` : ''}
 tradeIds: a,b,c
 ---
 
@@ -220,17 +223,29 @@ tradeIds: a,b,c
         const { updateMemoryFile } = await import('../services/learning/MemoryFilesService');
         const win = makeTrade({ id: 'fresh-win', outcome: 'WIN' as never });
 
-        // Fresh verdict (2 days old): demotion still active.
+        // Fresh verdict (2 days old) with the streak bar REACHED: demotion
+        // still active — the evidence pass keeps the skill benched.
         await initMemoryFiles('stale-fresh');
-        const freshId = await seed('stale-fresh', new Date(Date.now() - 2 * 86_400_000).toISOString());
+        const freshId = await seed('stale-fresh', new Date(Date.now() - 2 * 86_400_000).toISOString(), 2);
         const freshMeta = parseSkillMarkdown(getMemoryFiles().files.find(f => f.id === freshId)!.content)!;
         await updateMemoryFile(freshId, { content: serializeSkill(freshMeta, titleFromMeta(freshMeta)) }, 'stale-fresh');
         await applySkillEvidence(win, 'stale-fresh', [win]);
         expect(parseSkillMarkdown(getMemoryFiles().files.find(f => f.id === freshId)!.content)!.status).toBe('candidate');
 
-        // Stale verdict (40 days old): expired — outcomes alone decide, and they say confirmed.
+        // Fresh verdict but a SINGLE 'hurts' (no streak yet): the sequential
+        // gate holds — one noisy A/B run cannot bench a confirmed skill, so
+        // outcomes alone decide, and they say confirmed.
+        await initMemoryFiles('stale-single');
+        const singleId = await seed('stale-single', new Date(Date.now() - 2 * 86_400_000).toISOString());
+        const singleMeta = parseSkillMarkdown(getMemoryFiles().files.find(f => f.id === singleId)!.content)!;
+        await updateMemoryFile(singleId, { content: serializeSkill(singleMeta, titleFromMeta(singleMeta)) }, 'stale-single');
+        await applySkillEvidence(win, 'stale-single', [win]);
+        expect(parseSkillMarkdown(getMemoryFiles().files.find(f => f.id === singleId)!.content)!.status).toBe('confirmed');
+
+        // Stale verdict (40 days old), streak reached but EXPIRED — outcomes
+        // alone decide, and they say confirmed.
         await initMemoryFiles('stale-old');
-        const oldId = await seed('stale-old', new Date(Date.now() - 40 * 86_400_000).toISOString());
+        const oldId = await seed('stale-old', new Date(Date.now() - 40 * 86_400_000).toISOString(), 2);
         const oldMeta = parseSkillMarkdown(getMemoryFiles().files.find(f => f.id === oldId)!.content)!;
         await updateMemoryFile(oldId, { content: serializeSkill(oldMeta, titleFromMeta(oldMeta)) }, 'stale-old');
         await applySkillEvidence(win, 'stale-old', [win]);

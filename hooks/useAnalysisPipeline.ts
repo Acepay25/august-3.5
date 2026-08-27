@@ -66,13 +66,14 @@ const SEAT_LAUNCH_STAGGER_MS = 700;
 // Learning services
 import { generateWeightedVotingContext } from '../services/backtesting/ModelPerformanceService';
 import { PriceAlertService } from '../services/ui/PriceAlertService';
-import { getMemoryFilesContext, writeModelNote, extractLessonFromPostMortem } from '../services/learning/MemoryFilesService';
+import { getMemoryFilesContext, writeModelNote, extractLessonFromPostMortem, slugifyName } from '../services/learning/MemoryFilesService';
 import { listRetrievedMemorySources } from '../services/learning/MemoryRetrievalService';
 import { getBotMemoryContext } from '../services/bots/BotMemoryService';
 import { writeNotebookNoteFromRequest } from '../services/learning/NotebookWriterService';
 import { buildSimilarSetupsContext, buildRegimeWeightingContext } from '../services/learning/SetupMemoryService';
 import { generateMandatoryPatternCheck, generatePatternMemoryEnforcementContext } from '../services/learning/PatternMemorySynthesisService';
-import { applyNotebookSkillsToAnalysis, confirmedAvoidForSetup, titleFromMeta } from '../services/learning/SkillMemoryService';
+import { applyNotebookSkillsToAnalysis, confirmedAvoidForSetup, titleFromMeta, skillFileNameFor } from '../services/learning/SkillMemoryService';
+import { VetoLedgerService } from '../services/ui/VetoLedgerService';
 import { ANALYST_ROLE_DEFINITIONS, getLensPromptForStyle, getRoleForProvider, EnsembleModelSelection } from '../services/ui/AnalystLensService';
 import { buildHybridEnvelope, buildOcrEnvelope, envelopeKindForRole } from '../utils/debateEnvelopes';
 import { buildRecommendationContract } from '../utils/recommendationContract';
@@ -576,7 +577,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     // — tiny stage bubbles / a click-to-open seat. That left "the three
     // models thinking" invisible in the transcript. This coalesces the
     // accumulated reasoning (and the visible answer forming) into round-1
-    // (openings) turns and marks them live, so DebateChat streams each
+    // (openings) turns and marks them live, so the debate floor streams each
     // model's thinking + output exactly the way it streams later debate
     // turns. Guarded to the analysis phase: once the debate loop starts it
     // owns the transcript.
@@ -1706,7 +1707,12 @@ ${reflectionBlock}`
                     } catch (validationError) {
                         console.error('[ValidationGate] Validation failed:', validationError);
                     }
-                    Object.assign(finalAnalysis, applyNotebookSkillsToAnalysis(finalAnalysis));
+                    // Regime-conditional enforcement: the live
+                    // hybrid regime flows into the strict matcher so a skill
+                    // scoped to one market regime doesn't veto in another.
+                    Object.assign(finalAnalysis, applyNotebookSkillsToAnalysis(finalAnalysis, {
+                        regime: freshHybridData?.regime?.regime,
+                    }));
                     finalAnalysis.levelCitations = buildLevelCitations(finalAnalysis);
                     Object.assign(finalAnalysis, enforceUngroundedLevels(finalAnalysis));
                     Object.assign(finalAnalysis, applyHybridChartDrift(finalAnalysis, freshHybridData || currentHybridData));
@@ -2283,8 +2289,52 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                         direction: fulfilledAnalysts[0]?.result?.analysis?.direction,
                         family: fulfilledAnalysts[0]?.result?.analysis?.detectedPatternFamily,
                         pattern: fulfilledAnalysts[0]?.result?.analysis?.marketConditions?.pattern,
+                        // Regime-conditional enforcement.
+                        regime: freshHybridData?.regime?.regime,
                     });
                     const skillVeto = skillVetoMeta ? titleFromMeta(skillVetoMeta) : undefined;
+
+                    // ── Veto falsification ledger ──
+                    // A vetoed setup produces no trade outcome, so an avoid
+                    // skill can never be refuted by evidence. Build the veto
+                    // record now (the blocked setup's TP/SL targets come from
+                    // the analyst's preliminary plan) but DEFER the stamp to
+                    // the verdict commit below — only a verdict that actually
+                    // stays blocked belongs in the ledger. If the floor defies
+                    // the veto end-to-end and ships an actionable Long/Short,
+                    // nothing was blocked and the trade takes the normal
+                    // evidence path instead of a phantom ledger entry.
+                    let vetoRecordParams: Parameters<typeof VetoLedgerService.recordVeto>[0] | null = null;
+                    if (skillVetoMeta) {
+                        const vetoAnalysis = fulfilledAnalysts[0]?.result?.analysis;
+                        // Key the ledger by the skill's REAL file name — a
+                        // title-derived slug drifts from fileNameFromMeta's
+                        // [coin, direction, family, kind] ordering and would
+                        // never match the file the dashboard links to.
+                        const vetoSkillName = skillFileNameFor(skillVetoMeta)
+                            ?? `${slugifyName([
+                                skillVetoMeta.coin,
+                                skillVetoMeta.direction,
+                                skillVetoMeta.family,
+                                skillVetoMeta.kind,
+                            ].filter(Boolean).join(' ')) || 'skill'}.md`;
+                        vetoRecordParams = {
+                            username: getActiveUsername(),
+                            skill: skillVetoMeta,
+                            skillName: vetoSkillName,
+                            coinName: vetoAnalysis?.coinName || finalSymbol,
+                            direction: vetoAnalysis?.direction === 'Long' || vetoAnalysis?.direction === 'Short'
+                                ? vetoAnalysis.direction
+                                : 'Neutral',
+                            entryPrice: parseFloat(String(vetoAnalysis?.entryPoints?.[0]?.price ?? '').replace(/[^0-9.]/g, '')) || 0,
+                            takeProfits: (vetoAnalysis?.takeProfit ?? []).map((t: { price: number | string }) => ({
+                                price: parseFloat(String(t.price).replace(/[^0-9.]/g, '')) || 0,
+                            })).filter((t: { price: number }) => t.price > 0),
+                            stopLoss: parseFloat(String(vetoAnalysis?.stopLoss ?? '').replace(/[^0-9.]/g, '')) || 0,
+                            regime: freshHybridData?.regime?.regime,
+                            reason: titleFromMeta(skillVetoMeta),
+                        };
+                    }
 
                     if (runAccuracyMode) {
                         // ACCURACY MODE — the moderator autoplays the whole
@@ -2323,7 +2373,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                     // Accuracy/autoplay has no per-speaker
                                     // status callback. Push the global
                                     // moderator trace immediately so the Floor
-                                    // and DebateChat can show thinking before
+                                    // and the debate floor can show thinking before
                                     // the transcript parser sees public text.
                                     throttledDebateUpdate(
                                         requestConversationId,
@@ -3144,15 +3194,17 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                         processedAnalysis.recommendationContract = buildRecommendationContract(processedAnalysis);
                     }
 
-                    // Each debater reviews their own transcript and
-                    // proposes skill creates/updates — filed by the Memory Model
-                    // as candidates. Best-effort; never blocks the verdict.
-                    void import('../services/learning/DebateSkillProposalService')
-                        .then(m => m.proposeSkillsFromDebate(
-                            (typeof localStorage !== 'undefined' ? localStorage.getItem('last_active_user') : null) || 'default',
-                            debateTurnsRef.current,
-                        ))
-                        .catch(e => console.warn('[DebateSkills] deferred:', e instanceof Error ? e.message : e));
+                    // Veto falsification ledger — stamp the deferred
+                    // veto only if the final verdict actually stayed blocked. An
+                    // actionable Long/Short here means the floor defied the veto
+                    // end-to-end, so nothing was blocked and the trade earns
+                    // normal evidence attribution instead of a phantom entry.
+                    if (vetoRecordParams
+                        && processedAnalysis.direction !== 'Long'
+                        && processedAnalysis.direction !== 'Short') {
+                        void VetoLedgerService.recordVeto(vetoRecordParams)
+                            .catch(() => { /* ledger must never break the debate */ });
+                    }
 
                     updateRequestMessages(prev => {
                         const messageIndex = prev.findIndex(m => m.id === debateMessageId);

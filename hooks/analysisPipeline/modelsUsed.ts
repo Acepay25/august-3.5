@@ -10,7 +10,7 @@
  * ONE provider with different models the second entry would overwrite the
  * first (one analyst silently disappears from the model attribution). The
  * UI's per-bubble lookup already accepts `providerId:model` keys
- * (DebateChat.tsx), so colliding keys fall back to thoughtsKey form.
+ * (the debate floor), so colliding keys fall back to thoughtsKey form.
  */
 export const buildModelsUsedRecord = (analysts: { config: { id: string }; model: string; thoughtsKey: string }[]): Record<string, string> => {
     const record: Record<string, string> = {};

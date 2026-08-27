@@ -33,3 +33,16 @@ export const applyReplyTo = <T extends { text: string }>(turn: T): T & Pick<Deba
     if (!to) return turn;
     return { ...turn, text: turn.text.replace(REPLY_TO_RE, '').trimEnd(), to };
 };
+
+/**
+ * Near-miss detection: the seat TRIED to emit a routing marker but malformed
+ * it (space instead of hyphen, missing colon, "REPLY TO:" …). parseReplyTo
+ * silently treats that as a floor-wide broadcast; this lets the orchestrator
+ * log the miss so a routing bug is visible instead of invisible.
+ */
+const NEAR_MISS_RE = /(^|\n)\s*(?:REPLY[\s_]+TO\s*:|REPLY[\s_-]*TO\s+(?=[A-Z@]))/im;
+
+export const nearMissReplyTo = (text: string): boolean => {
+    if (parseReplyTo(text)) return false;
+    return NEAR_MISS_RE.test(text);
+};

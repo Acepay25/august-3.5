@@ -37,6 +37,16 @@ export type SkillKind = 'repeat' | 'avoid';
 export interface SkillMeta {
     status: SkillStatus;
     kind: SkillKind;
+    /** One-sentence semantic summary (zcode memory pattern): what this skill
+     *  claims, in prose. Generated at creation from the worth-gate rationale
+     *  (or the IF/THEN pair), consumed by index lines, the recall tool, the
+     *  grid subtitle and LLM judges. Absent on legacy skills. */
+    description?: string;
+    /** Provenance: id of the LOGGED TRADE whose closed-out cluster produced
+     *  this skill — the deep-link back to "where did this belief come from".
+     *  (Trades carry no link to their originating ensemble message, so the
+     *  trade id is the deepest provenance available.) */
+    originMessageId?: string;
     coin?: string;
     direction?: string;
     family?: string;
@@ -48,6 +58,16 @@ export interface SkillMeta {
      *  LLM refinement pass instead of silently bleeding. */
     consecutiveLosses: number;
     tradeIds: string[];
+    /** Consecutive runs of the SAME eval verdict (helps/hurts). A 'hurts'
+     *  demotion requires a streak >= 2 — one noisy A/B run must not bench a
+     *  confirmed skill (sequential-evidence gating). Absent ⇒ legacy behavior
+     *  (treated as confirmed). */
+    evalStreak?: number;
+    /** Matched-but-NOT-injected closed-trade ids (tail-capped). These are the
+     *  CONTROL group for attribution: setups the skill could have influenced
+     *  but provably didn't (no injection record in the window). They never
+     *  enter wins/losses. */
+    controlIds?: string[];
     /** Total trades EVER counted for this skill. `tradeIds` is a
      *  tail-20 list; without this counter the verdict block's "learned from
      *  N logged trade(s)" understates long-lived skills forever. */
@@ -179,6 +199,22 @@ export const parseSkillMarkdown = (content: string): SkillMeta | null => {
         })(),
         evalDetail: pick('evalVerdict')?.replace(/^(helps|mixed|hurts|inconclusive)\s*/i, '').replace(/^\(|\)$/g, '') || undefined,
         lastEvalAt: pick('lastEvalAt'),
+        // One-sentence semantic summary + debate provenance.
+        description: pick('description')?.slice(0, 300) || undefined,
+        originMessageId: pick('originMessageId') || undefined,
+        // Sequential-eval streak: consecutive runs of the same
+        // verdict. Absent on legacy skills ⇒ treated as confirmed.
+        evalStreak: (() => {
+            const n = parseInt(pick('evalStreak') || '', 10);
+            return Number.isFinite(n) && n > 0 ? n : undefined;
+        })(),
+        // Control group: matched-but-not-injected trade ids.
+        controlIds: (() => {
+            const raw = pick('controlIds');
+            if (!raw) return undefined;
+            const ids = raw.split(',').map(s => s.trim()).filter(Boolean);
+            return ids.length > 0 ? ids : undefined;
+        })(),
         lastEvidenceAt: pick('lastEvidenceAt'),
         previousVersion,
         // Temporal ledger: JSON array in frontmatter.
@@ -280,6 +316,10 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
         ...(meta.audience && meta.audience !== 'all' ? [`audience: ${meta.audience}`] : []),
         ...(meta.evalVerdict ? [`evalVerdict: ${meta.evalVerdict}${meta.evalDetail ? ` (${meta.evalDetail})` : ''}`] : []),
         ...(meta.lastEvalAt ? [`lastEvalAt: ${meta.lastEvalAt}`] : []),
+        ...(meta.description ? [`description: ${meta.description.replace(/\n/g, ' ').slice(0, 300)}`] : []),
+        ...(meta.originMessageId ? [`originMessageId: ${meta.originMessageId}`] : []),
+        ...(meta.evalStreak ? [`evalStreak: ${meta.evalStreak}`] : []),
+        ...(meta.controlIds && meta.controlIds.length > 0 ? [`controlIds: ${meta.controlIds.slice(-20).join(',')}`] : []),
         ...(meta.history && meta.history.length > 0 ? [`history: ${JSON.stringify(meta.history)}`] : []),
         ...(meta.previousVersion ? [`previousVersion: ${JSON.stringify(meta.previousVersion)}`] : []),
         `tradeIds: ${meta.tradeIds.slice(-20).join(',')}`,
@@ -382,6 +422,16 @@ const enabledSkillMeta = (file: MemoryFile): SkillMeta | null => {
 export const EVAL_VERDICT_STALE_MS = 30 * 86_400_000;
 
 /**
+ * Sequential-evidence gating: a status change driven by an automated eval
+ * verdict requires the SAME verdict on this many consecutive runs. One noisy
+ * A/B run must not bench (or rehabilitate) a skill on its own. Shared with
+ * SkillEvalService, which owns the streak bookkeeping; the deriveStatus
+ * override below must honor the same bar or it re-introduces the one-run
+ * demotion through the evidence path.
+ */
+export const EVAL_DEMOTE_STREAK = 2;
+
+/**
  * TRUE while an automated-eval 'hurts' verdict still outranks outcome
  * correlation. Undated or unparseable verdicts stay active — conservative,
  * since there is no timestamp from which they could expire.
@@ -399,8 +449,17 @@ const deriveStatus = (meta: SkillMeta): SkillStatus => {
     // An automated A/B eval that shows the skill HURTS decisions demotes it
     // regardless of outcome correlation — injection-causation outranks
     // co-occurrence. The override expires after EVAL_VERDICT_STALE_MS so a
-    // single noisy eval cannot bench a skill forever.
-    if (meta.evalVerdict === 'hurts' && meta.status === 'confirmed' && evalDemotionActive(meta)) return 'candidate';
+    // stale verdict cannot bench a skill forever, and it respects the
+    // sequential-evidence bar: a SINGLE 'hurts' run (evalStreak 1) must not
+    // demote through this path either — otherwise the streak gate in
+    // SkillEvalService.recordEvalVerdict would be bypassed on the very next
+    // evidence trade.
+    if (
+        meta.evalVerdict === 'hurts'
+        && meta.status === 'confirmed'
+        && evalDemotionActive(meta)
+        && (meta.evalStreak ?? 0) >= EVAL_DEMOTE_STREAK
+    ) return 'candidate';
 
     const sample = meta.wins + meta.losses;
     const winRate = sample > 0 ? meta.wins / sample : 0;
@@ -467,12 +526,15 @@ const applySkillEvidenceUnlocked = async (trade: LoggedTrade, username: string, 
         // no new status machinery needed.
         applyEvidenceDecay(meta, trade.marketRegime);
 
-        // ── Weighted attribution ──
-        // Full credit when retrieval actually injected this skill AROUND THE
-        // TIME OF THIS TRADE; half when it merely matched the setup. Unknown
-        // telemetry (empty log) keeps full credit so tiering cannot starve
-        // on missing data. Scoping to the trade window means one injection
-        // can no longer upgrade credit for unrelated setups forever.
+        // ── Weighted attribution (injected vs. CONTROL) ──
+        // Full credit ONLY when retrieval actually injected this skill around
+        // the time of this trade. A matched-but-NOT-injected trade is no
+        // longer half-counted as evidence — it becomes a CONTROL observation
+        // (recorded in controlIds): the skill could have influenced it but
+        // provably didn't, so its outcome belongs to the baseline, not to the
+        // skill. Unknown telemetry (empty log) keeps full credit so tiering
+        // cannot starve on missing data. Scoping to the trade window means
+        // one injection can no longer upgrade credit for unrelated setups.
         const tradeTs = Date.parse(trade.timestamp || '');
         const sinceMs = Number.isFinite(tradeTs) ? Math.max(0, Date.now() - tradeTs) : undefined;
         let injected: boolean | null;
@@ -481,23 +543,54 @@ const applySkillEvidenceUnlocked = async (trade: LoggedTrade, username: string, 
         } catch {
             injected = null;
         }
-        const credit = injected === false ? 0.5 : 1;
+        if (injected === false) {
+            // CONTROL group: record and move on — never inflate wins/losses
+            // with outcomes this skill did not shape.
+            const control = meta.controlIds ?? [];
+            if (!control.includes(trade.id)) {
+                meta.controlIds = [...control, trade.id].slice(-20);
+                meta.modifiedAt = new Date().toISOString();
+                await updateMemoryFileUnlocked(file.id, {
+                    content: serializeSkill(meta, titleFromMeta(meta)),
+                    enabled: meta.status !== 'retired',
+                }, username);
+            }
+            continue;
+        }
 
         if (trade.outcome === TradeOutcome.WIN) {
-            meta.wins += credit;
+            meta.wins += 1;
             meta.consecutiveLosses = 0;
         } else {
-            meta.losses += credit;
+            meta.losses += 1;
             meta.consecutiveLosses += 1;
         }
         meta.tradeIds = [...meta.tradeIds, trade.id];
         // Track the freshest evidence and the regime it came from.
         meta.lastEvidenceAt = trade.timestamp ?? new Date().toISOString();
         meta.modifiedAt = new Date().toISOString();
-        if (trade.marketRegime) meta.regime = trade.marketRegime;
+        // Gap-fill only: the FIRST regime a skill is evidenced in is its scope.
+        // A later trade in a different regime must not silently re-scope the
+        // belief (last-write-wins drift) — cross-regime evidence is already
+        // discounted by applyEvidenceDecay, and a genuine re-scope belongs in a
+        // refinement pass, not an evidence append.
+        if (trade.marketRegime && !meta.regime) meta.regime = trade.marketRegime;
         {
             const derived = deriveStatus(meta);
-            stampStatusTransition(meta, derived, 'evidence');
+            // A demotion driven by the eval causal override (not by the
+            // win-rate math) must read as an EVAL demotion in the temporal
+            // ledger — rehabilitation looks for /^eval hurts/ on the last
+            // transition and would never find it under a bare 'evidence'.
+            const evalOverrideDemotion = derived === 'candidate'
+                && meta.status === 'confirmed'
+                && meta.evalVerdict === 'hurts'
+                && evalDemotionActive(meta)
+                && (meta.evalStreak ?? 0) >= EVAL_DEMOTE_STREAK;
+            stampStatusTransition(
+                meta,
+                derived,
+                evalOverrideDemotion ? `eval hurts ×${meta.evalStreak} (evidence)` : 'evidence',
+            );
             meta.status = derived;
         }
         await updateMemoryFileUnlocked(file.id, {
@@ -783,6 +876,26 @@ export const refineSkillNow = async (
 };
 
 /**
+ * One-sentence semantic summary for a new skill (zcode memory pattern).
+ * Prefers the validated IF/THEN clause; falls back to scope + procedure.
+ * Kept to one line — it feeds index lines and LLM judges, not essays.
+ */
+const buildSkillDescription = (
+    kind: SkillKind,
+    setup: { coin?: string; direction?: string; family?: string; regime?: string },
+    ifCondition?: string,
+    thenAction?: string,
+    lesson?: string,
+): string => {
+    const scope = [setup.coin, setup.direction, setup.family, setup.regime].filter(Boolean).join(' ');
+    const claim = ifCondition && thenAction
+        ? `IF ${ifCondition.replace(/\s+/g, ' ').trim()} THEN ${thenAction.replace(/\s+/g, ' ').trim()}`
+        : lesson?.replace(/\s+/g, ' ').trim() || '';
+    const verb = kind === 'avoid' ? 'Avoid:' : 'Repeat:';
+    return `${verb} ${claim || scope} — learned from ${scope || 'matching setups'}.`.replace(/\s+/g, ' ').slice(0, 280);
+};
+
+/**
  * Create a skill when a similar cluster reaches MIN_CLUSTER_FOR_SKILL and
  * no matching skill exists yet. Evidence-gated — not a free-form LLM spawn.
  */
@@ -838,6 +951,11 @@ const maybeUpsertSkillUnlocked = async (
     const meta: SkillMeta = {
         status: 'candidate',
         kind,
+        // One-sentence semantic summary (zcode pattern): derived from the
+        // clauses when present, else the scope + procedure. The worth-gate's
+        // judged clause is the best source — it was validated, not parsed.
+        description: buildSkillDescription(kind, setup, clause?.ifCondition, clause?.thenAction, lesson),
+        originMessageId: trade.id,
         coin: trade.analysis?.coinName,
         direction: setup.direction,
         family: trade.analysis?.detectedPatternFamily,
@@ -1173,7 +1291,15 @@ export const syncClosedTradeToNotebook = async (
         const key = clusterKey(trade);
         const cluster = allTrades.filter(t => (t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS) && clusterKey(t) === key);
         if (cluster.length >= MIN_CLUSTER_FOR_SKILL) {
-            const setup = { coin: trade.analysis?.coinName, direction: trade.analysis?.direction, family: trade.analysis?.detectedPatternFamily };
+            const setup = {
+                coin: trade.analysis?.coinName,
+                direction: trade.analysis?.direction,
+                family: trade.analysis?.detectedPatternFamily,
+                // Worth-gate matching honors the regime too — a cluster
+                // earned in trending markets shouldn't suppress creating a
+                // differently-scoped skill for the same coin in chop.
+                regime: trade.marketRegime,
+            };
             const hasMatch = getMemoryFiles().files.filter(isSkillFile).some(f => {
                 const m = parseSkillMarkdown(f.content);
                 return m ? skillMatchesSetup(m, setup) : false;
@@ -1285,12 +1411,16 @@ export const applyNotebookSkillsToAnalysis = <T extends {
     originalConfidence?: string;
     riskVeto?: string;
     validationWarnings?: string[];
-}>(analysis: T): T => {
+}>(analysis: T, options?: { regime?: string }): T => {
     const setup = {
         coin: analysis.coinName,
         direction: analysis.direction,
         family: analysis.detectedPatternFamily,
         pattern: analysis.marketConditions?.pattern,
+        // Regime-conditional enforcement: the live hybrid regime
+        // activates the strict matcher's direction+regime lane and feeds the
+        // ranking overlap. Absent ⇒ same behavior as before (no new lane).
+        ...(options?.regime ? { regime: options.regime } : {}),
     };
     // Code-side enforcement now honors the same invocation
     // controls as prompt injection — `audience: moderator` skills no longer
@@ -1352,12 +1482,14 @@ export const applyNotebookSkillsToAnalysis = <T extends {
 
 export const listAppliedSkills = (
     analysis: { coinName?: string; direction?: string; detectedPatternFamily?: string; marketConditions?: { pattern?: string } },
+    options?: { regime?: string },
 ): Array<{ title: string; kind: SkillKind; status: SkillStatus; wins: number; losses: number; hitRate: number | null; procedure?: string }> => {
     const setup = {
         coin: analysis.coinName,
         direction: analysis.direction,
         family: analysis.detectedPatternFamily,
         pattern: analysis.marketConditions?.pattern,
+        ...(options?.regime ? { regime: options.regime } : {}),
     };
     return getMemoryFiles().files
         .map(enabledSkillMeta)
@@ -1374,7 +1506,7 @@ export const listAppliedSkills = (
 };
 
 export const confirmedAvoidForSetup = (
-    setup: { coin?: string; direction?: string; family?: string; pattern?: string },
+    setup: { coin?: string; direction?: string; family?: string; pattern?: string; regime?: string },
 ): SkillMeta | null => {
     // Strict matching — this result drives the moderator's
     // skip_to_verdict veto, so a "BTC long" avoid must never HALT an ETH
@@ -1383,6 +1515,30 @@ export const confirmedAvoidForSetup = (
         .map(enabledSkillMeta)
         .filter((m): m is SkillMeta => Boolean(m && skillStrictlyMatchesSetup(m, setup)));
     return matches.find(m => m.kind === 'avoid' && m.status === 'confirmed') ?? null;
+};
+
+/**
+ * The ACTUAL file name of the skill a parsed meta came from. Ledgers that
+ * key skills by name (veto falsification) must use this, not a slug derived
+ * from the title — title-derived slugs drift from fileNameFromMeta's
+ * [coin, direction, family, kind] ordering and would never match.
+ */
+export const skillFileNameFor = (meta: SkillMeta): string | null => {
+    for (const file of getMemoryFiles().files.filter(isSkillFile)) {
+        const m = parseSkillMarkdown(file.content);
+        if (!m) continue;
+        if (
+            m.kind === meta.kind
+            && (m.coin ?? '') === (meta.coin ?? '')
+            && (m.direction ?? '') === (meta.direction ?? '')
+            && (m.family ?? '') === (meta.family ?? '')
+            && (m.ifCondition ?? '') === (meta.ifCondition ?? '')
+            && (m.thenAction ?? '') === (meta.thenAction ?? '')
+        ) {
+            return file.name;
+        }
+    }
+    return null;
 };
 
 // ─── Skill effectiveness review ─────────────────────────────────────────────

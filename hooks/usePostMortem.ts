@@ -386,7 +386,7 @@ Please investigate this discrepancy in your analysis.
                 let debateStream;
                 // The post-mortem debate is a single moderator-driven stream,
                 // so any chain-of-thought captured from it keys to lowercase
-                // 'moderator' — the same key DebateChat.getReasoning reads for
+                // 'moderator' — the same key the debate side panel reads for
                 // the Master Strategist (harness-style thinking blocks).
 
                 if (results.length === 2) {
@@ -616,7 +616,7 @@ Please investigate this discrepancy in your analysis.
 
                     const insightConfig = memoryConfig ?? moderatorConfig;
                     if (insightConfig) {
-                        const newMemory = await MemoryService.updateGlobalMemory([{ ...tradeToUpdate, postMortem: finalPostMortemReport }], globalMemory, insightConfig);
+                        const newMemory = await MemoryService.updateGlobalMemory([{ ...tradeToUpdate, postMortem: finalPostMortemReport }], globalMemory);
                         // Re-check after the await
                         if (isRunStale(myRunId)) {
                             console.log('[PostMortem] Discarding global memory update — user switched');

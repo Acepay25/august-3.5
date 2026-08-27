@@ -1142,3 +1142,15 @@ select {
     cursor: not-allowed;
   }
 }
+
+/* Docked debate transcript (DebateSidePanel). On wide screens the open panel
+   toggles body.debate-panel-docked; the main chat column then reserves the
+   panel's 480px so the transcript sits BESIDE the conversation instead of
+   covering it — the same dock the analysis-progress panel uses (mr-[21rem]).
+   Below the breakpoint the panel overlays as before. Unlayered on purpose so
+   it wins over the Tailwind margin utilities on <main>. */
+@media (min-width: 1280px) {
+  body.debate-panel-docked .chat-main {
+    margin-right: 30rem;
+  }
+}

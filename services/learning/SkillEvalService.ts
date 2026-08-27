@@ -33,6 +33,7 @@ import {
     skillMatchesSetup,
     skillStrictlyMatchesSetup,
     stampStatusTransition,
+    EVAL_DEMOTE_STREAK,
     type SkillMeta,
 } from './SkillMemoryService';
 
@@ -69,6 +70,11 @@ export interface SkillEvalResult {
     /** Flips that moved against the skill's intent. */
     misalignedFlips: number;
     verdict: 'helps' | 'mixed' | 'hurts' | 'inconclusive';
+    /** Control-group baseline: settled win rate on matched setups
+     *  where this skill was NOT injected (controlIds) — the real-world
+     *  comparison for the A/B flip verdict. Absent when no control trades have
+     *  a WIN/LOSS outcome yet. */
+    controlBaseline?: { trades: number; wins: number; winRate: number };
     error?: string;
 }
 
@@ -96,7 +102,9 @@ const outcomeOf = (t: LoggedTrade): SkillEvalCase['actualOutcome'] =>
 
 /** Pick the historical trades this skill applies to (newest first, capped).
  *  Uses the STRICT matcher — the audit must measure
- *  the same population production enforcement acts on (S1). */
+ *  the same population production enforcement acts on (S1). Regime flows in
+ *  from each trade's persisted `marketRegime` so a skill scoped to one
+ *  regime is audited on that regime's trades only. */
 export const selectEvalTrades = (meta: SkillMeta, trades: LoggedTrade[]): LoggedTrade[] => {
     return trades
         .filter(t => (t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS) && t.analysis)
@@ -106,6 +114,7 @@ export const selectEvalTrades = (meta: SkillMeta, trades: LoggedTrade[]): Logged
                 ? t.analysis.direction
                 : undefined,
             family: t.analysis?.detectedPatternFamily,
+            regime: t.marketRegime,
         }))
         .sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''))
         .slice(0, SKILL_EVAL_MAX_TRADES);
@@ -206,6 +215,24 @@ export const evaluateSkill = async (
         else if (misalignedFlips > alignedFlips && misalignedFlips >= directionalFlipsNeeded) verdict = 'hurts';
         else verdict = 'mixed';
     }
+
+    // Control-group baseline: controlIds are matched setups where this skill
+    // was NOT injected — the natural comparison arm the loop already records.
+    // Their settled win rate tells us what the skill's setups did WITHOUT its
+    // guidance, so the dashboard can weigh the A/B flip verdict against reality.
+    const controlIdSet = new Set(base.controlIds ?? []);
+    let controlTrades = 0;
+    let controlWins = 0;
+    for (const t of trades) {
+        if (!controlIdSet.has(t.id)) continue;
+        if (t.outcome !== TradeOutcome.WIN && t.outcome !== TradeOutcome.LOSS) continue;
+        controlTrades += 1;
+        if (t.outcome === TradeOutcome.WIN) controlWins += 1;
+    }
+    const controlBaseline = controlTrades > 0
+        ? { trades: controlTrades, wins: controlWins, winRate: Math.round((controlWins / controlTrades) * 1000) / 1000 }
+        : undefined;
+
     return {
         fileId,
         name: file.name,
@@ -214,6 +241,7 @@ export const evaluateSkill = async (
         alignedFlips,
         misalignedFlips,
         verdict,
+        controlBaseline,
     };
 };
 
@@ -244,6 +272,16 @@ const emptyResult = (fileId: string, name: string, error: string): SkillEvalResu
 /**
  * Persist an eval verdict into the skill frontmatter as `evalVerdict:` so the
  * dashboard and the effectiveness review can weigh it.
+ *
+ * Sequential-evidence gating: a single noisy A/B run must not
+ * bench a confirmed skill. A 'hurts' verdict only DEMOTES when the same
+ * verdict has now landed on consecutive runs (evalStreak >= 2); otherwise it
+ * is recorded as evidence and the streak increments, with the previous
+ * verdict's demotion left untouched. Any different verdict resets the
+ * streak. 'helps' clears a lingering hurts demotion once its own streak
+ * reaches 2 (rehabilitation by repeated confirmation). The bar itself is
+ * EVAL_DEMOTE_STREAK, shared with SkillMemoryService so the deriveStatus
+ * causal override cannot demote on a single run through the evidence path.
  */
 const recordEvalVerdictUnlocked = async (
     fileId: string,
@@ -254,15 +292,54 @@ const recordEvalVerdictUnlocked = async (
     const meta = file ? parseSkillMarkdown(file.content) : null;
     if (!file || !meta) return;
     meta.modifiedAt = new Date().toISOString();
+    const prevVerdict = meta.evalVerdict;
+    const prevEvalAt = meta.lastEvalAt;
     meta.evalVerdict = result.verdict;
     meta.evalDetail = `${result.alignedFlips}/${result.flips}`;
     meta.lastEvalAt = new Date().toISOString();
-    meta.modifiedAt = meta.lastEvalAt;
-    // Temporal ledger: an eval demotion is exactly the kind of
-    // belief change that must stay queryable for replay audits.
-    if (result.verdict === 'hurts' && meta.status === 'confirmed') {
-        stampStatusTransition(meta, 'candidate', `eval hurts (${meta.evalDetail})`);
+    // Streak bookkeeping. A re-confirmation stamped AFTER the previous eval
+    // (manual promote or evidence crossing the bar) breaks the chain: the
+    // demotion gate must re-arm instead of firing on one legacy 'hurts'.
+    const reconfirmedSinceLastEval = (() => {
+        if (!prevEvalAt || !meta.history?.length) return false;
+        const prevEval = Date.parse(prevEvalAt);
+        if (!Number.isFinite(prevEval)) return false;
+        const last = meta.history[meta.history.length - 1];
+        const at = Date.parse(last.validFrom);
+        return last.status === 'confirmed' && Number.isFinite(at) && at > prevEval;
+    })();
+    const continues = prevVerdict === result.verdict
+        && (result.verdict === 'helps' || result.verdict === 'hurts')
+        && !reconfirmedSinceLastEval;
+    if (continues) {
+        meta.evalStreak = (meta.evalStreak ?? 1) + 1;
+    } else {
+        meta.evalStreak = (result.verdict === 'helps' || result.verdict === 'hurts') ? 1 : undefined;
+    }
+    // Temporal ledger: an eval DEMOTION (streak reached) is exactly the kind
+    // of belief change that must stay queryable for replay audits.
+    if (
+        result.verdict === 'hurts'
+        && meta.status === 'confirmed'
+        && (meta.evalStreak ?? 0) >= EVAL_DEMOTE_STREAK
+    ) {
+        stampStatusTransition(meta, 'candidate', `eval hurts ×${meta.evalStreak} (${meta.evalDetail})`);
         meta.status = 'candidate';
+    }
+    // Rehabilitation by repeated confirmation: two consecutive 'helps' runs
+    // restore a skill that evals demoted (and only one evals demoted — a
+    // candidate demoted by evidence decay or manual review is not ours to
+    // promote back).
+    if (
+        result.verdict === 'helps'
+        && meta.status === 'candidate'
+        && (meta.evalStreak ?? 0) >= EVAL_DEMOTE_STREAK
+    ) {
+        const last = meta.history?.[meta.history.length - 1];
+        if (last?.status === 'candidate' && /^eval hurts/i.test(last.reason ?? '')) {
+            stampStatusTransition(meta, 'confirmed', `eval helps ×${meta.evalStreak} (${meta.evalDetail})`);
+            meta.status = 'confirmed';
+        }
     }
     await updateMemoryFileUnlocked(fileId, {
         content: serializeSkill(meta, titleFromMeta(meta)),
