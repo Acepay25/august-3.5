@@ -68,7 +68,7 @@ class PriceAlertServiceClass {
     // Symbols that must stay in the feed without owning a price alert
     // (setup watches, live-price refresh). Merged into the WebSocket stream
     // list and the polling loop so ticks reach emitPriceTick for them.
-    private trackedSymbols: Set<string> = new Set();
+    private trackedSymbols: Map<string, number> = new Map();
 
     constructor() {
         // P1-10: Wire native app lifecycle (pause/resume) so we stop the
@@ -287,26 +287,36 @@ class PriceAlertServiceClass {
 
     /**
      * Register a symbol that must stay in the price feed even without a
-     * price alert (setup watches). Starts monitoring when it wasn't running.
+     * price alert (setup watches, veto ledger). Ref-counted: several
+     * consumers may track the same symbol, and one consumer releasing must
+     * not drop the feed for the others. Starts monitoring on first holder.
      */
     trackSymbol(symbol: string): boolean {
         const normalized = this.normalizeSymbol(symbol);
         if (!normalized) return false;
-        if (this.trackedSymbols.has(normalized)) return false;
-        this.trackedSymbols.add(normalized);
+        const count = this.trackedSymbols.get(normalized) ?? 0;
+        this.trackedSymbols.set(normalized, count + 1);
+        if (count > 0) return false;
         this.ensureMonitoring();
         return true;
     }
 
     /**
-     * Stop tracking a symbol. Monitoring stops only when alerts, holders,
-     * and tracked symbols are all gone.
+     * Release one tracking claim on a symbol. The symbol leaves the feed
+     * only when the LAST holder releases. Monitoring stops only when
+     * alerts, holders, and tracked symbols are all gone.
      */
     untrackSymbol(symbol: string): boolean {
         const normalized = this.normalizeSymbol(symbol);
-        const removed = this.trackedSymbols.delete(normalized);
-        if (removed) this.maybeStopMonitoring();
-        return removed;
+        const count = this.trackedSymbols.get(normalized) ?? 0;
+        if (count <= 0) return false;
+        if (count > 1) {
+            this.trackedSymbols.set(normalized, count - 1);
+            return false;
+        }
+        this.trackedSymbols.delete(normalized);
+        this.maybeStopMonitoring();
+        return true;
     }
 
     /**
@@ -336,7 +346,7 @@ class PriceAlertServiceClass {
         try {
             const symbols = [...new Set([
                 ...Array.from(this.alerts.values()).map(a => a.symbol.toLowerCase()),
-                ...Array.from(this.trackedSymbols).map(s => s.toLowerCase()),
+                ...Array.from(this.trackedSymbols.keys()).map(s => s.toLowerCase()),
             ])];
             if (symbols.length === 0) return;
 
@@ -391,7 +401,7 @@ class PriceAlertServiceClass {
         this.pollingInterval = setInterval(async () => {
             const symbols = [...new Set([
                 ...Array.from(this.alerts.values()).map(a => a.symbol),
-                ...Array.from(this.trackedSymbols),
+                ...Array.from(this.trackedSymbols.keys()),
             ])];
 
             for (const symbol of symbols) {

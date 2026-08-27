@@ -192,6 +192,61 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
     );
     const calibrationSummaries = useMemo(() => getCalibrationSummaries().filter(c => c.samples > 0), []);
 
+    // Veto falsification rollup: per-skill hits/runs/pending
+    // from the veto ledger — refreshed with the notebook.
+    const [vetoAccuracy, setVetoAccuracy] = useState<Record<string, { hits: number; runs: number; pending: number }>>({});
+    useEffect(() => {
+        let cancelled = false;
+        const user = username || getActiveUsername();
+        import('../../services/ui/VetoLedgerService').then(({ VetoLedgerService }) =>
+            VetoLedgerService.getAccuracyBySkill(user).then(acc => {
+                if (!cancelled) setVetoAccuracy(acc);
+            }));
+        return () => { cancelled = true; };
+    }, [username, notebook]);
+
+    // Weekly memory-changes digest: aggregate every temporal
+    // ledger entry stamped in the last 7 days across all skills. Pure
+    // read-side aggregation — the ledgers themselves are already persisted.
+    const memoryChanges = useMemo(() => {
+        const cutoff = Date.now() - 7 * 86_400_000;
+        const out: Array<{ name: string; action: string; why: string; color: string; at: number }> = [];
+        for (const { meta, file } of notebookSkills) {
+            for (const h of meta.history ?? []) {
+                const t = Date.parse(h.validFrom);
+                if (!Number.isFinite(t) || t < cutoff) continue;
+                const name = file.name.replace(/\.md$/i, '');
+                if (h.status === 'confirmed') {
+                    out.push({
+                        name,
+                        action: 'confirmed',
+                        why: h.reason || 'evidence crossed the bar',
+                        color: 'text-emerald-400',
+                        at: t,
+                    });
+                } else if (h.status === 'candidate') {
+                    out.push({
+                        name,
+                        action: 'demoted',
+                        why: h.reason || 'lost authority',
+                        color: 'text-yellow-500',
+                        at: t,
+                    });
+                } else if (h.status === 'retired') {
+                    out.push({
+                        name,
+                        action: 'retired',
+                        why: h.reason || 'evidence said stop',
+                        color: 'text-red-400',
+                        at: t,
+                    });
+                }
+            }
+        }
+        // Newest belief change first — this is a timeline, not an alphabet.
+        return out.sort((a, b) => b.at - a.at).slice(0, 12);
+    }, [notebookSkills]);
+
     // Conviction auction history: scan stored debate transcripts for each
     // seat's sealed CONVICTION lines and average them.
     const convictionSummaries = useMemo(() => {
@@ -886,6 +941,39 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
                         };
                     })}
                     emptyText="Run debates to see each seat's average sealed conviction (0-100)"
+                />
+                <StatCard
+                    title="Veto accuracy"
+                    items={Object.entries(vetoAccuracy)
+                        .filter(([, a]) => a.hits + a.runs + a.pending > 0)
+                        .sort((x, y) => (y[1].hits + y[1].runs) - (x[1].hits + x[1].runs))
+                        .slice(0, 6)
+                        .map(([name, a]) => {
+                            const settled = a.hits + a.runs;
+                            return {
+                                name: name.replace(/\.md$/i, ''),
+                                value: settled > 0 ? `${Math.round((a.hits / settled) * 100)}%` : '…',
+                                subtext: `${a.hits} vindicated · ${a.runs} blocked a winner${a.pending ? ` · ${a.pending} watching` : ''}`,
+                                color: settled === 0
+                                    ? 'text-zinc-500'
+                                    : a.hits / settled >= 0.6
+                                        ? 'text-emerald-400'
+                                        : a.runs > a.hits
+                                            ? 'text-red-400'
+                                            : 'text-yellow-500',
+                            };
+                        })}
+                    emptyText="Vetoes appear once an avoid skill blocks a setup — price paths grade them afterward"
+                />
+                <StatCard
+                    title="Memory changes (7d)"
+                    items={memoryChanges.length > 0 ? memoryChanges.slice(0, 6).map(c => ({
+                        name: c.name,
+                        value: c.action,
+                        subtext: c.why,
+                        color: c.color,
+                    })) : []}
+                    emptyText="No belief changes this week — evidence, evals and merges stamp the ledger here"
                 />
             </div>
 

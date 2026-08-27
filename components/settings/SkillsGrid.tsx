@@ -50,6 +50,9 @@ const KIND_BADGE: Record<string, { label: string; className: string }> = {
     repeat: { label: 'REPEAT', className: 'bg-zinc-800 text-zinc-300' },
 };
 
+/** localStorage key for the user's pinned-skill order. */
+const PIN_STORAGE_KEY = 'skills_grid_pins_v1';
+
 /** First prose line of the skill body, used as the card/detail description. */
 const descriptionOf = (body: string): string =>
     body
@@ -70,7 +73,9 @@ const SkillsCard: React.FC<{
     const wins = Math.round(skill.meta?.wins ?? 0);
     const losses = Math.round(skill.meta?.losses ?? 0);
     const sample = wins + losses;
-    const description = descriptionOf(skill.body);
+    // Stored description wins (written for exactly this); body first-line is
+    // the legacy fallback.
+    const description = skill.meta?.description || descriptionOf(skill.body);
 
     return (
         <div
@@ -179,7 +184,7 @@ const SkillDetail: React.FC<{
                 <div className="min-w-0">
                     <h3 className="truncate text-xl font-bold tracking-tight text-zinc-100">{skill.name}</h3>
                     <p className="mt-1 text-sm leading-relaxed text-zinc-500">
-                        {descriptionOf(skill.body) || 'No description.'}
+                        {meta?.description || descriptionOf(skill.body) || 'No description.'}
                     </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-3 pt-1">
@@ -197,6 +202,17 @@ const SkillDetail: React.FC<{
                 <MetaField label="Evidence" value={`${wins}W / ${losses}L`} />
                 <MetaField label="Trigger" value={meta?.ifCondition || '—'} wide />
             </div>
+
+            {/* Provenance: where this belief came from. */}
+            {(meta?.originMessageId || meta?.regime) && (
+                <p className="shrink-0 text-[11px] text-zinc-600">
+                    {meta?.originMessageId
+                        ? <>Learned from trade <span className="font-mono text-zinc-500">{meta.originMessageId.slice(0, 20)}</span></>
+                        : null}
+                    {meta?.originMessageId && meta?.regime ? ' · ' : ''}
+                    {meta?.regime ? <>scoped to <span className="text-zinc-500">{meta.regime}</span> markets</> : null}
+                </p>
+            )}
 
             {refined && meta?.previousVersion && (
                 <div className="mt-4 shrink-0 space-y-1 rounded-xl border border-zinc-800 bg-zinc-900 p-4 font-mono text-[11px] leading-5">
@@ -234,7 +250,25 @@ const SkillsGrid: React.FC = () => {
     const [skills, setSkills] = useState<SkillCardData[]>([]);
     const [query, setQuery] = useState('');
     const [selectedId, setSelectedId] = useState<string | null>(null);
-    const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
+    // Persist pin order across remounts — otherwise pinning a skill and
+    // navigating away loses the order on the way back.
+    const [pinnedIds, setPinnedIds] = useState<Set<string>>(() => {
+        try {
+            const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(PIN_STORAGE_KEY) : null;
+            const arr = raw ? (JSON.parse(raw) as string[]) : [];
+            return new Set(arr);
+        } catch {
+            return new Set();
+        }
+    });
+
+    useEffect(() => {
+        try {
+            if (typeof localStorage !== 'undefined') {
+                localStorage.setItem(PIN_STORAGE_KEY, JSON.stringify(Array.from(pinnedIds)));
+            }
+        } catch { /* quota errors never break the grid */ }
+    }, [pinnedIds]);
 
     const refresh = (): void => {
         const files = getMemoryFiles().files.filter(f =>

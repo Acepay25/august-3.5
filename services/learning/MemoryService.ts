@@ -1,109 +1,43 @@
-import { Message, GlobalMemory, LoggedTrade, ProviderConfig } from '../../types';
+
+import { GlobalMemory, LoggedTrade, ProviderConfig } from '../../types';
 import { generateAlgorithmicTradeSummary } from '../ui/AlgorithmicSummaryService';
 import { updateGlobalMemoryAlgorithmically } from './AlgorithmicMemoryService';
-import { compressChatHistoryAlgorithmically } from '../ui/AlgorithmicChatService';
-
-import {
-    compressChatHistory as genericCompressChatHistory,
-    updateGlobalMemory as genericUpdateGlobalMemory,
-    summarizeTrade as genericSummarizeTrade,
-} from '../providers/GenericAnalysisService';
+import { summarizeTrade as genericSummarizeTrade } from '../providers/GenericAnalysisService';
 
 /**
- * Compress chat history using the selected provider
- */
-export const compressChatHistory = async (
-    messages: Message[],
-    currentSummary: string = "",
-    config: ProviderConfig
-): Promise<string> => {
-    // NEW: Always use Algorithmic Chat Compression to save tokens
-    // "Smart Sliding Window" approach (Head + Tail)
-    console.log('[MemoryService] Using Algorithmic Chat Compression (Token Saver Active)');
-
-    try {
-        return compressChatHistoryAlgorithmically(messages, currentSummary);
-    } catch (e) {
-        console.error('[MemoryService] Algorithmic compression failed, falling back to AI:', e);
-        // Fallback below
-    }
-
-    console.log(`[MemoryService] compressChatHistory using provider: ${config.name}`);
-
-    return genericCompressChatHistory(config, messages, currentSummary);
-};
-
-/**
- * Update global memory using the selected provider
+ * Update global memory from a fresh batch of closed trades. Always uses
+ * the deterministic algorithmic path — the previous AI-fallback branch was
+ * unreachable in practice (the algorithmic path never throws) and added
+ * provider cost + latency on every post-mortem completion.
  */
 export const updateGlobalMemory = async (
     recentTrades: LoggedTrade[],
     currentMemory: GlobalMemory | undefined,
-    config: ProviderConfig
-): Promise<GlobalMemory> => {
-    // NEW: Always use Algorithmic Global Memory Manager to save tokens
-    // This replaces the massive AI prompt for compiling stats
-    console.log('[MemoryService] Using Algorithmic Global Memory Manager (Token Saver Active)');
-
-    try {
-        return updateGlobalMemoryAlgorithmically(recentTrades, currentMemory);
-    } catch (e) {
-        console.error('[MemoryService] Algorithmic memory update failed, falling back to AI:', e);
-        // Fallback to AI logic below
-    }
-
-    console.log(`[MemoryService] updateGlobalMemory using provider: ${config.name}`);
-
-    try {
-        return await genericUpdateGlobalMemory(config, recentTrades, currentMemory);
-    } catch (error: any) {
-        console.error(`[MemoryService] Primary provider ${config.name} failed:`, error);
-
-        // Auto-fallback logic for Rate Limits or API errors
-        if (error.status === 429 || error.message?.includes('429') || error.message?.includes('quota')) {
-            console.warn(`[MemoryService] Provider quota exceeded: ${config.name}.`);
-        }
-
-        throw error;
-    }
-};
+): Promise<GlobalMemory> => updateGlobalMemoryAlgorithmically(recentTrades, currentMemory);
 
 /**
- * Summarize trade using the selected provider
+ * Summarize a single trade. The user can opt out of the algorithmic path
+ * (`useAlgorithmic = false`) so a configured provider produces a richer
+ * natural-language summary when available; on any failure we fall back to
+ * the deterministic local summary so the loop never stalls.
  */
 export const summarizeTrade = async (
     trade: LoggedTrade,
     modelName: string,
     config: ProviderConfig,
-    useAlgorithmic: boolean = true // New param to toggle between Algo and AI
+    useAlgorithmic: boolean = true,
 ): Promise<string> => {
-    // Check toggle before using Algo
     if (useAlgorithmic) {
-        console.log('[MemoryService] Using Algorithmic Summary (Token Saver Active)');
-        try {
-            const summary = generateAlgorithmicTradeSummary(trade);
-            return summary;
-        } catch (e) {
-            console.error('[MemoryService] Algorithmic summary failed, falling back to AI:', e);
-            // Fallback to original AI logic if algo fails (unlikely)
-        }
-    } else {
-        console.log('[MemoryService] Algorithmic Summary DISABLED by user. Using AI Model for insight generation.');
+        return generateAlgorithmicTradeSummary(trade);
     }
 
     const selectedModel = (modelName || config?.selectedModel || '').trim();
-    const insightConfig: ProviderConfig = {
-        ...config,
-        selectedModel,
-    };
-
-    if (!insightConfig.baseUrl?.trim() || !selectedModel) {
+    if (!config?.baseUrl?.trim() || !selectedModel) {
         console.warn('[MemoryService] Insight provider/model incomplete; using algorithmic summary');
         return generateAlgorithmicTradeSummary(trade);
     }
 
-    console.log(`[MemoryService] summarizeTrade using provider: ${insightConfig.name} · ${selectedModel}`);
-
+    const insightConfig: ProviderConfig = { ...config, selectedModel };
     try {
         return await genericSummarizeTrade(insightConfig, trade);
     } catch (error) {

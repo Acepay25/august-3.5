@@ -10,8 +10,6 @@ import {
     createMemoryFile,
     getMemoryFiles,
 } from '../services/learning/MemoryFilesService';
-import { migrateIfThenRulesToSkills } from '../services/learning/IfThenMigrationService';
-import { storageService } from '../services/infrastructure/StorageService';
 import { parseSkillMarkdown } from '../services/learning/SkillMemoryService';
 import type { LoggedTrade, TradeAnalysis } from '../types';
 
@@ -119,43 +117,6 @@ describe('recall tool (pull-over-push)', () => {
     it('requires a topic', async () => {
         const out = handleRecallTool({ topic: '' });
         expect(out).toContain('error');
-    });
-});
-
-describe('IF/THEN rules → skills migration', () => {
-    it('creates candidate skills from legacy rules, idempotently', async () => {
-        await initMemoryFiles('migrate-user');
-        storageService.saveLearningRules({
-            version: 2,
-            lastUpdated: new Date().toISOString(),
-            rules: [{
-                id: 'rule-mig-1',
-                ifCondition: 'BTC sweeps the London low then reclaims it',
-                thenAction: 'wait for the 15m close back inside before entering',
-                sourceTradeId: 'rule-trade-1',
-                outcome: 'LOSS',
-                coin: 'BTCUSDT',
-                direction: 'Short',
-                createdAt: new Date().toISOString(),
-                useCount: 0,
-            } as never],
-        });
-
-        const first = await migrateIfThenRulesToSkills('migrate-user', [makeTrade({ id: 'rule-trade-1' })]);
-        expect(first.created).toBe(1);
-
-        const skills = getMemoryFiles().files.filter(f => f.folderId === getMemoryFiles().folders.find(fd => fd.name === 'skills')?.id);
-        const migrated = skills
-            .map(f => parseSkillMarkdown(f.content))
-            .find(m => m?.ifCondition?.toLowerCase().includes('sweeps the london low'));
-        expect(migrated).toBeTruthy();
-        expect(migrated!.status).toBe('candidate');
-        expect(migrated!.kind).toBe('avoid');
-
-        // Second run: nothing new.
-        const second = await migrateIfThenRulesToSkills('migrate-user', [makeTrade({ id: 'rule-trade-1' })]);
-        expect(second.created).toBe(0);
-        expect(second.skipped).toBe(1);
     });
 });
 

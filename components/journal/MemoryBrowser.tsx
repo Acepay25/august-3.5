@@ -9,6 +9,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { MemoryFile, MemoryFolder } from '../../types';
 import { initMemoryFiles, getMemoryFiles } from '../../services/learning/MemoryFilesService';
+import { estimateMemoryTokensPerRun } from '../../services/learning/MemoryRetrievalService';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
 import MarkdownContent from '../shared/MarkdownContent';
 import {
@@ -17,6 +18,7 @@ import {
     RefreshIcon,
     FolderIcon,
     FileTextIcon,
+    SearchIcon,
 } from '../shared/Icons';
 
 interface MemoryBrowserProps {
@@ -37,8 +39,13 @@ const MemoryBrowser: React.FC<MemoryBrowserProps> = ({
     const [files, setFiles] = useState<MemoryFile[]>([]);
     const [selectedFolder, setSelectedFolder] = useState<MemoryFolder | null>(null);
     const [selectedFile, setSelectedFile] = useState<MemoryFile | null>(null);
+    // Zed-style search over the current file list (name + content).
+    const [searchQuery, setSearchQuery] = useState('');
 
     const activeUser = username || 'default';
+
+    // Display-only token estimate for the cost disclosure line.
+    const memoryCost = useMemo(() => estimateMemoryTokensPerRun(), []);
 
     // Load data on mount
     useEffect(() => {
@@ -56,13 +63,15 @@ const MemoryBrowser: React.FC<MemoryBrowserProps> = ({
         setFiles(store.files);
     }, []);
 
-    // Files in the selected folder (sorted by name)
+    // Files in the selected folder (sorted by name), filtered by the search box.
     const folderFiles = useMemo(() => {
         if (!selectedFolder) return [];
+        const q = searchQuery.trim().toLowerCase();
         return files
             .filter(f => f.folderId === selectedFolder.id)
+            .filter(f => !q || f.name.toLowerCase().includes(q) || f.content.toLowerCase().includes(q))
             .sort((a, b) => a.name.localeCompare(b.name));
-    }, [files, selectedFolder]);
+    }, [files, selectedFolder, searchQuery]);
 
     // File count per folder
     const folderFileCounts = useMemo(() => {
@@ -141,6 +150,10 @@ const MemoryBrowser: React.FC<MemoryBrowserProps> = ({
                                 <p className="text-xs text-zinc-400 mt-1">
                                     Save and reuse long-term context in workspaces. Applies to new
                                     sessions and may increase model requests and token costs.
+                                </p>
+                                {/* Zed-style cost disclosure — made concrete from the budget slots. */}
+                                <p className="text-[10px] text-zinc-600 mt-1">
+                                    ≈{memoryCost.typical}–{memoryCost.worstCase} tokens per analysis when enabled
                                 </p>
                             </div>
                             <div className="ml-4 shrink-0">
@@ -235,12 +248,22 @@ const MemoryBrowser: React.FC<MemoryBrowserProps> = ({
                         </button>
                     </div>
 
-                    {/* Folder header */}
+                    {/* Folder header — count + search, Zed memory-panel style */}
                     <div>
                         <h2 className="text-xl font-bold text-white">{selectedFolder.name}</h2>
                         <p className="text-xs text-zinc-500 mt-0.5">
-                            {folderFiles.length} {folderFiles.length === 1 ? 'file' : 'files'}
+                            {folderFiles.length} of {files.filter(f => f.folderId === selectedFolder.id).length}{' '}
+                            {folderFiles.length === 1 ? 'file' : 'files'}
                         </p>
+                        <div className="relative mt-3">
+                            <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-600" />
+                            <input
+                                value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)}
+                                placeholder="Search memory files..."
+                                className="w-full rounded-lg bg-zinc-900 border border-white/5 pl-8 pr-3 py-1.5 text-xs text-zinc-200 placeholder-zinc-600 focus:border-zinc-600 focus:outline-none"
+                            />
+                        </div>
                     </div>
 
                     {/* File list */}
@@ -261,6 +284,10 @@ const MemoryBrowser: React.FC<MemoryBrowserProps> = ({
                                             auto
                                         </span>
                                     )}
+                                    {/* Relative recency under the name (Zed pattern). */}
+                                    <span className="block text-[11px] text-zinc-500 mt-0.5">
+                                        Updated {formatRelativeTime(file.updatedAt)}
+                                    </span>
                                 </div>
                                 <ChevronRightIcon className="w-4 h-4 text-zinc-600 group-hover:text-zinc-400 shrink-0" />
                             </button>
