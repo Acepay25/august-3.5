@@ -224,7 +224,7 @@ ${extra}tradeIds: a,b,c,d,e,f,g
     expect(REFINE_AFTER_CONSECUTIVE_LOSSES).toBe(3);
   });
 
-  it('retrieves a matching skill and ranging playbook for the setup', async () => {
+  it('retrieves a matching skill for the setup (tier-1 index, not body)', async () => {
     const trades = Array.from({ length: MIN_CLUSTER_FOR_SKILL }, (_, i) =>
       makeTrade({ id: `t-${i}` })
     );

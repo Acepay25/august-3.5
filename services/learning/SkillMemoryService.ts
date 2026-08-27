@@ -109,6 +109,13 @@ export interface SkillMeta {
 export const MIN_CLUSTER_FOR_SKILL = 3;
 export const MIN_SAMPLE_CONFIRMED = 5;
 export const MIN_SAMPLE_RETIRE = 6;
+/**
+ * Counted trades a CANDIDATE avoid skill needs before code-side enforcement
+ * may size a trade down. Prompt injection already excludes zero-evidence
+ * skills; enforcement must not reach further than the model can see, or a
+ * freshly-spawned candidate with no record caps confidence on a single match.
+ */
+export const MIN_SAMPLE_FOR_VETO = 2;
 /** Consecutive losses on a CONFIRMED skill before the LLM refinement pass. */
 export const REFINE_AFTER_CONSECUTIVE_LOSSES = 3;
 /**
@@ -877,8 +884,10 @@ export const refineSkillNow = async (
 
 /**
  * One-sentence semantic summary for a new skill (zcode memory pattern).
- * Prefers the validated IF/THEN clause; falls back to scope + procedure.
+ * Prefers the validated IF/THEN clause; falls back to the extracted lesson.
  * Kept to one line — it feeds index lines and LLM judges, not essays.
+ * Returns '' when there is no claim at all (no clause, no lesson) — a
+ * scope-only description is content-free, and callers refuse to persist it.
  */
 const buildSkillDescription = (
     kind: SkillKind,
@@ -891,8 +900,9 @@ const buildSkillDescription = (
     const claim = ifCondition && thenAction
         ? `IF ${ifCondition.replace(/\s+/g, ' ').trim()} THEN ${thenAction.replace(/\s+/g, ' ').trim()}`
         : lesson?.replace(/\s+/g, ' ').trim() || '';
+    if (!claim) return '';
     const verb = kind === 'avoid' ? 'Avoid:' : 'Repeat:';
-    return `${verb} ${claim || scope} — learned from ${scope || 'matching setups'}.`.replace(/\s+/g, ' ').slice(0, 280);
+    return `${verb} ${claim} — learned from ${scope || 'matching setups'}.`.replace(/\s+/g, ' ').slice(0, 280);
 };
 
 /**
@@ -944,10 +954,12 @@ const maybeUpsertSkillUnlocked = async (
         : parseIfThenClauses(trade.postMortem ?? '')[0];
     const lesson = clause
         ? formatSkillProcedure(clause)
-        : extractLessonFromPostMortem(trade.postMortem ?? '')
-            || (kind === 'avoid'
-                ? 'Do not repeat this setup until structure and invalidation are clearer.'
-                : 'Repeat this setup only when the same confluence is present.');
+        : extractLessonFromPostMortem(trade.postMortem ?? '');
+    // No clause AND no extractable lesson = no actual claim about the
+    // market. Cluster statistics alone do not form a procedure, and
+    // fabricating a boilerplate one here is exactly the junk the
+    // worth-gate exists to prevent — refuse to write the skill.
+    if (!lesson) return null;
     const meta: SkillMeta = {
         status: 'candidate',
         kind,
@@ -1399,7 +1411,9 @@ const countClosedTrades = (trades: LoggedTrade[]): number =>
 /**
  * Code-side skill enforcement so markdown skills actually move the signal,
  * not only the prompt. Confirmed avoid skills veto Long/Short; candidate
- * avoid skills cap High/Medium down to Low.
+ * avoid skills cap High/Medium down to Low once they have at least
+ * MIN_SAMPLE_FOR_VETO counted trades of evidence (zero-evidence candidates
+ * never reach the model, so they must not reach the trade either).
  */
 export const applyNotebookSkillsToAnalysis = <T extends {
     coinName?: string;
@@ -1463,7 +1477,8 @@ export const applyNotebookSkillsToAnalysis = <T extends {
         return next;
     }
 
-    const avoidCandidate = ranked.find(m => m.kind === 'avoid' && m.status === 'candidate');
+    const avoidCandidate = ranked.find(m => m.kind === 'avoid' && m.status === 'candidate'
+        && (m.wins + m.losses) >= MIN_SAMPLE_FOR_VETO);
     if (avoidCandidate && (next.direction === 'Long' || next.direction === 'Short')) {
         next.originalConfidence = next.originalConfidence ?? next.confidence;
         if (next.confidence === 'High' || next.confidence === 'Medium') next.confidence = 'Low';
