@@ -8,6 +8,7 @@
 import { AnalystRole, AIProvider, AnalystRoleAssignment, AnalystLensConfig } from '../../types';
 import { ProviderConfig } from '../../types/provider';
 import GlobalLearningService from '../learning/GlobalLearningService';
+import { filterUnfitProviders } from '../learning/providerFitness';
 import {
     LENS_POSITION_PROMPTS,
     LENS_SCALP_PROMPTS,
@@ -301,16 +302,19 @@ export function getDefaultLensAssignments(): AnalystRoleAssignment[] {
 /**
  * Auto-assign the three lens roles to ready providers, preferring whoever
  * wins in the CURRENT market regime (regime-matched win rates), falling back
- * to overall calibration, then plain configured order. Returns the updated
+ * to overall calibration, then plain configured order. Providers with enough
+ * evidence and a fitness score at/below the threshold (cold streaks, low win
+ * rate, failing preflight) are demoted from the roster — unless everyone is
+ * unfit, in which case the original order is kept. Returns the updated
  * config with lenses enabled — or null when there is no ready provider to
  * assign. Shared by the Team side-sheet and the composer's Team roster
  * dropdown so both entry points behave identically.
  */
-export function autoAssignLenses(
+export async function autoAssignLenses(
     lensConfig: AnalystLensConfig,
     readyProviders: ProviderConfig[],
     regimeProviderStats?: ReadonlyMap<string, { wr: number }>,
-): AnalystLensConfig | null {
+): Promise<AnalystLensConfig | null> {
     if (readyProviders.length === 0) return null;
     let providerOrder = [...readyProviders];
     try {
@@ -329,6 +333,13 @@ export function autoAssignLenses(
             }
         }
     } catch { /* calibration read is best-effort */ }
+    try {
+        const { kept, dropped } = await filterUnfitProviders(providerOrder);
+        if (dropped.length > 0) {
+            console.log(`[LensAssign] Demoted underperforming provider(s) from auto-roster: ${dropped.map(p => p.id).join(', ')}`);
+        }
+        providerOrder = kept;
+    } catch { /* fitness read is best-effort */ }
     const distinct = [...new Map(providerOrder.map(p => [p.id, p])).values()].slice(0, 3);
     if (distinct.length === 0) return null;
     const assignments = getAvailableRoles().map((r, i) => ({

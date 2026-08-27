@@ -23,6 +23,7 @@
 
 import { getPreferenceObject, setPreferenceObject } from '../infrastructure/PreferencesService';
 import { PriceAlertService } from '../ui/PriceAlertService';
+import { recordMemoryInjection } from '../learning/MemoryInjectionService';
 import type { SkillMeta } from '../learning/SkillMemoryService';
 
 export type VetoOutcome = 'PENDING' | 'WOULD_TP' | 'WOULD_SL' | 'EXPIRED';
@@ -140,6 +141,19 @@ class VetoLedgerServiceClass {
             PriceAlertService.trackSymbol(symbol);
             this.ensureFeed();
             this.notifyChange();
+            // Decision-bias closure: a veto is a decision the harness made, but
+            // until now the NEXT analysis never knew it happened — the skill got
+            // no attribution and the setup silently re-presented as if unblocked.
+            // Record a synthetic injection source so attribution, lift and the
+            // dashboard see the veto, and a future matching setup can surface
+            // "this was vetoed last time, here is how it resolved". Fire-and-
+            // forget: telemetry must never break the veto path.
+            void recordMemoryInjection(params.username, {
+                stage: 'verdict',
+                audience: 'moderator',
+                coin: params.coinName,
+                sources: [{ path: `veto/${params.skillName}`, kind: 'veto' }],
+            }).catch(() => { /* telemetry is best-effort */ });
             return rec;
         } catch (e) {
             console.warn('[VetoLedger] recordVeto failed:', e);

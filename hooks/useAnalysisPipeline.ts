@@ -73,6 +73,7 @@ import { writeNotebookNoteFromRequest } from '../services/learning/NotebookWrite
 import { buildSimilarSetupsContext, buildRegimeWeightingContext } from '../services/learning/SetupMemoryService';
 import { generateMandatoryPatternCheck, generatePatternMemoryEnforcementContext } from '../services/learning/PatternMemorySynthesisService';
 import { applyNotebookSkillsToAnalysis, confirmedAvoidForSetup, titleFromMeta, skillFileNameFor } from '../services/learning/SkillMemoryService';
+import { sortByFitness } from '../services/learning/providerFitness';
 import { VetoLedgerService } from '../services/ui/VetoLedgerService';
 import { ANALYST_ROLE_DEFINITIONS, getLensPromptForStyle, getRoleForProvider, EnsembleModelSelection } from '../services/ui/AnalystLensService';
 import { buildHybridEnvelope, buildOcrEnvelope, envelopeKindForRole } from '../utils/debateEnvelopes';
@@ -1710,8 +1711,10 @@ ${reflectionBlock}`
                     // Regime-conditional enforcement: the live
                     // hybrid regime flows into the strict matcher so a skill
                     // scoped to one market regime doesn't veto in another.
+                    // username opts this run into enforcement telemetry.
                     Object.assign(finalAnalysis, applyNotebookSkillsToAnalysis(finalAnalysis, {
                         regime: freshHybridData?.regime?.regime,
+                        username: getActiveUsername(),
                     }));
                     finalAnalysis.levelCitations = buildLevelCitations(finalAnalysis);
                     Object.assign(finalAnalysis, enforceUngroundedLevels(finalAnalysis));
@@ -2426,8 +2429,15 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                             const usedProviderIds = new Set<string>();
                             for (const a of allFulfilledAnalysts) usedProviderIds.add(a.provider.config.id);
                             usedProviderIds.add(runModeratorConfig.id);
-                            const candidates = providerConfigs
-                                .filter(p => p.isEnabled !== false && !usedProviderIds.has(p.id) && (p.selectedModel || p.models?.[0]))
+                            let replacementPool = providerConfigs
+                                .filter(p => p.isEnabled !== false && !usedProviderIds.has(p.id) && (p.selectedModel || p.models?.[0]));
+                            // Fittest first: outcome record + preflight pass
+                            // rate order the offer, so the user's top pick is
+                            // the provider with the best recent evidence.
+                            try {
+                                replacementPool = await sortByFitness(replacementPool, getActiveUsername());
+                            } catch { /* fitness read is best-effort */ }
+                            const candidates = replacementPool
                                 .map(p => ({
                                     providerId: p.id,
                                     displayName: p.name,

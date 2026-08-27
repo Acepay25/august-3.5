@@ -211,14 +211,14 @@ const TeamRosterMenu: React.FC<TeamRosterMenuProps> = ({
         return () => document.removeEventListener('keydown', onKey);
     }, [onClose]);
 
-    const setMode = (next: 'normal' | 'lenses') => {
+    const setMode = async (next: 'normal' | 'lenses') => {
         if (next === mode) return;
         setHoveredSeat(null);
         setHoveredProviderId(null);
         if (next === 'lenses' && (lensConfig.assignments ?? []).length === 0) {
             // Seed an empty roster only — a populated one keeps the user's
             // manual picks (matches the Team modal entry point).
-            const auto = autoAssignLenses(lensConfig, readyProviders, regimeProviderStats);
+            const auto = await autoAssignLenses(lensConfig, readyProviders, regimeProviderStats);
             if (auto) {
                 setLensConfig(auto);
                 return;
