@@ -21,6 +21,12 @@ import {
     withNotebookWriteLock,
 } from './MemoryFilesService';
 import { sendChatTurn } from '../providers/GenericProviderService';
+import {
+    settledBeliefsBlock,
+    extractInvalidations,
+    stripInvalidationLines,
+    invalidateSettledBeliefUnlocked,
+} from './settledBeliefs';
 
 /** Rewrite the doctrine after every N newly-closed trades. */
 const DOCTRINE_EVERY_N_TRADES = 15;
@@ -32,6 +38,8 @@ export const DOCTRINE_MAX_REVISE_SHARE = 1 / 3;
 const MAX_DOCTRINE_CHARS = 1800;
 
 export const DOCTRINE_FILE_NAME = 'doctrine.md';
+/** Weekly rollup output lands here and feeds the next doctrine rewrite. */
+export const ROLLUP_NOTES_FILE_NAME = 'rollup-notes.md';
 
 export interface DoctrineResult {
     updated: boolean;
@@ -58,7 +66,11 @@ export const shouldConsolidateDoctrine = (trades: LoggedTrade[]): boolean => {
     return closed - lastCount >= DOCTRINE_EVERY_N_TRADES;
 };
 
-export const buildDoctrinePrompt = (trades: LoggedTrade[], currentDoctrine: string): string => {
+export const buildDoctrinePrompt = (
+    trades: LoggedTrade[],
+    currentDoctrine: string,
+    extras?: { settledBeliefs?: string; rollupNotes?: string },
+): string => {
     const closed = trades.filter(t => t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS);
     const recent = closed.slice(-DOCTRINE_WINDOW_TRADES).map(t => {
         const a = t.analysis ?? {};
@@ -66,7 +78,10 @@ export const buildDoctrinePrompt = (trades: LoggedTrade[], currentDoctrine: stri
         return `- ${new Date(t.timestamp).toLocaleDateString()} ${a.coinName ?? '?'} ${a.direction ?? '?'} ${t.outcome}${typeof t.pnlPercent === 'number' ? ` (${t.pnlPercent > 0 ? '+' : ''}${t.pnlPercent}%)` : ''}${post ? ` — ${post}` : ''}`;
     }).join('\n');
 
-    return `You maintain your own trading doctrine — the settled beliefs you bring to every analysis.
+    const settled = extras?.settledBeliefs?.trim();
+    const rollup = extras?.rollupNotes?.trim();
+
+    return `You maintain your own trading doctrine — the revisable beliefs you bring to every analysis.
 
 Below are your recent closed trades with their outcomes and lessons. Distill them into your UPDATED doctrine.
 
@@ -76,6 +91,15 @@ RULES:
 - Keep what still holds from the CURRENT doctrine; revise what the new evidence contradicts. Carry forward all but at most one third of the current bullets verbatim — a doctrine that flips every pass is noise, not belief.
 - Attach recent exceptions where a belief did NOT hold recently.
 - Maximum 25 lines. Plain markdown bullets. No preamble, no JSON.
+${settled ? `
+SETTLED BELIEFS (permanent registry — you may NOT delete, reword, or absorb these into the doctrine):
+${settled}
+If the recent trades CONTRADICT one of them, do not edit it — emit a standalone line exactly in the form
+INVALIDATE <slug>: <short reason>
+after the doctrine bullets. At most one invalidation per pass, and only on strong, direct contradiction.` : ''}
+${rollup ? `
+ROLLOUP NOTES (patterns aggregated from the past week — fold the durable ones into the doctrine):
+${rollup}` : ''}
 
 CURRENT DOCTRINE:
 ${currentDoctrine || '(none yet — write the first one)'}
@@ -83,7 +107,7 @@ ${currentDoctrine || '(none yet — write the first one)'}
 RECENT CLOSED TRADES (oldest → newest):
 ${recent || '(no closed trades)'}
 
-Output ONLY the new doctrine markdown.`;
+Output ONLY the new doctrine markdown${settled ? ' (plus any INVALIDATE line)' : ''}.`;
 };
 
 const consolidateDoctrineUnlocked = async (
@@ -106,7 +130,16 @@ const consolidateDoctrineUnlocked = async (
             return { updated: false, reason: 'not enough new evidence' };
         }
 
-        const prompt = buildDoctrinePrompt(trades, current);
+        // Compounding-memory inputs: the permanent belief registry (which the
+        // rewriter must not touch, only invalidate) and last week's rollup
+        // notes (aggregated patterns to fold in). Both optional.
+        const settled = settledBeliefsBlock();
+        const rollupNotes = (() => {
+            const f = files.find(f => f.name === ROLLUP_NOTES_FILE_NAME && f.folderId === profileFolder.id);
+            return f?.enabled ? f.content : '';
+        })();
+
+        const prompt = buildDoctrinePrompt(trades, current, { settledBeliefs: settled, rollupNotes });
         const result = await sendChatTurn(config, [{ role: 'user', content: prompt }], {
             temperature: 0.3,
             maxTokens: 700,
@@ -116,6 +149,23 @@ const consolidateDoctrineUnlocked = async (
 
         // Strip code fences if the model wrapped the output.
         text = text.replace(/^```(?:markdown)?\n?/, '').replace(/\n```$/, '').trim();
+
+        // INVALIDATE protocol: the rewriter's only move against a settled
+        // belief is a standalone directive line. Apply it to the registry
+        // (already under the write lock — use the Unlocked variant) and keep
+        // the directive OUT of the doctrine text itself.
+        const invalidations = extractInvalidations(text);
+        text = stripInvalidationLines(text);
+        for (const inv of invalidations.slice(0, 1)) {
+            try {
+                const applied = await invalidateSettledBeliefUnlocked(inv.slug, inv.reason, username);
+                if (applied) console.log(`[Doctrine] Settled belief "${inv.slug}" invalidated: ${inv.reason}`);
+            } catch (e) {
+                console.warn('[Doctrine] belief invalidation failed:', e instanceof Error ? e.message : e);
+            }
+        }
+        if (!text) return { updated: false, reason: 'model returned only invalidations' };
+
         if (text.length > MAX_DOCTRINE_CHARS) text = `${text.slice(0, MAX_DOCTRINE_CHARS).trimEnd()}\n…`;
 
         const stamped = `<!-- trades: ${countClosed(trades)} -->\n${text}`;

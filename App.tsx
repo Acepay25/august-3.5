@@ -9,6 +9,7 @@ import { initPromptOverrides } from './services/infrastructure/PromptOverrideSer
 import { initStrategyDocs } from './services/infrastructure/StrategyService';
 import { initMemoryFiles, syncPatternMemory, syncProfileMemory, syncRecurringMistakes, subscribeMemoryFilesChanged } from './services/learning/MemoryFilesService';
 import { runNotebookReview } from './services/learning/MemoryReviewService';
+import { runWeeklyRollupIfDue } from './services/learning/weeklyRollup';
 import { computeRegimeProviderStats } from './services/learning/SetupMemoryService';
 import { AnalystRole } from './types/enums';
 import { BotRegistry } from './services/bots/BotRegistry';
@@ -1174,6 +1175,15 @@ const App: React.FC = () => {
         // user's markdown memory into the sync cache (seeds the default
         // folders + starter templates on first boot).
         await initMemoryFiles(username);
+        // Compounding memory: once a week, distill the strongest confirmed
+        // skills into settled beliefs, generalize cross-coin clusters, and
+        // leave rollup notes for the next doctrine rewrite. Fire-and-forget —
+        // it must never block startup, and any failure retries next boot.
+        void runWeeklyRollupIfDue(username).then(res => {
+            if (res) console.log('[WeeklyRollup] pass complete:', res);
+        }).catch(e => {
+            console.warn('[WeeklyRollup] boot pass failed:', e instanceof Error ? e.message : e);
+        });
         // Native (Capacitor) loads the lens config asynchronously, after the
         // useAppSettings lazy initializer already ran with an empty default —
         // push the cached config into React state so the lens dropdowns don't

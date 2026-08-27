@@ -34,6 +34,7 @@ import {
     skillStrictlyMatchesSetup,
     stampStatusTransition,
     EVAL_DEMOTE_STREAK,
+    MIN_SAMPLE_CONFIRMED,
     type SkillMeta,
 } from './SkillMemoryService';
 
@@ -326,18 +327,27 @@ const recordEvalVerdictUnlocked = async (
         stampStatusTransition(meta, 'candidate', `eval hurts ×${meta.evalStreak} (${meta.evalDetail})`);
         meta.status = 'candidate';
     }
-    // Rehabilitation by repeated confirmation: two consecutive 'helps' runs
-    // restore a skill that evals demoted (and only one evals demoted — a
-    // candidate demoted by evidence decay or manual review is not ours to
-    // promote back).
+    // Promotion by repeated confirmation. Two paths share the same gate
+    // (two consecutive 'helps' runs on a candidate):
+    //   • REHABILITATION — the candidate was demoted by evals. Restore it
+    //     (and only one evals demoted — a candidate demoted by evidence decay
+    //     or manual review is not ours to promote back). No sample gate: it
+    //     was confirmed before, so it already proved its sample.
+    //   • FRESH PROMOTION — a never-confirmed candidate earns its first
+    //     promotion. This one IS sample-gated (MIN_SAMPLE_CONFIRMED) so a
+    //     skill born yesterday cannot confirm on two lucky A/B runs.
     if (
         result.verdict === 'helps'
         && meta.status === 'candidate'
         && (meta.evalStreak ?? 0) >= EVAL_DEMOTE_STREAK
     ) {
         const last = meta.history?.[meta.history.length - 1];
-        if (last?.status === 'candidate' && /^eval hurts/i.test(last.reason ?? '')) {
+        const isRehabilitation = last?.status === 'candidate' && /^eval hurts/i.test(last.reason ?? '');
+        if (isRehabilitation) {
             stampStatusTransition(meta, 'confirmed', `eval helps ×${meta.evalStreak} (${meta.evalDetail})`);
+            meta.status = 'confirmed';
+        } else if (meta.wins + meta.losses >= MIN_SAMPLE_CONFIRMED) {
+            stampStatusTransition(meta, 'confirmed', `eval helps ×${meta.evalStreak} (${meta.evalDetail}) — promotion`);
             meta.status = 'confirmed';
         }
     }
