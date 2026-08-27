@@ -73,9 +73,9 @@ const TeamModal: React.FC<TeamModalProps> = ({
 
     const mode = lensConfig.enabled ? 'lenses' : 'normal';
 
-    const setMode = (next: 'normal' | 'lenses') => {
+    const setMode = async (next: 'normal' | 'lenses') => {
         if (next === 'lenses' && lensConfig.assignments.length === 0) {
-            const auto = autoAssignLenses(lensConfig, readyProviders, regimeProviderStats);
+            const auto = await autoAssignLenses(lensConfig, readyProviders, regimeProviderStats);
             if (auto) {
                 setLensConfig(auto);
                 setIsEnsembleEnabled(true);

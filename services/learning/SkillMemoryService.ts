@@ -28,7 +28,7 @@ import { formatCraftedSkillBody, refineSkillFromLosses } from './SkillCraftServi
 import { listSkillDrafts } from '../../utils/skillDrafts';
 import { tradeAdmitsTechnicalStrategyRule } from '../../utils/rootCause';
 import { familiesRelate } from '../../utils/patternMatch';
-import { skillInjectedSince } from './MemoryInjectionService';
+import { skillInjectedSince, recordMemoryInjection } from './MemoryInjectionService';
 import { resolveMemoryConfig } from './MemoryModelService';
 
 export type SkillStatus = 'candidate' | 'confirmed' | 'retired';
@@ -74,6 +74,12 @@ export interface SkillMeta {
      *  but provably didn't (no injection record in the window). They never
      *  enter wins/losses. */
     controlIds?: string[];
+    /** Counted trade ids whose market regime DIFFERED from the skill's scope
+     *  regime (tail-capped). applyEvidenceDecay already discounts these counts;
+     *  this list just makes the discount VISIBLE — the dashboard can show "this
+     *  belief was applied to a non-scope regime N times" so a skill that only
+     *  "works" outside its stated regime is caught. */
+    crossRegimeIds?: string[];
     /** Total trades EVER counted for this skill. `tradeIds` is a
      *  tail-20 list; without this counter the verdict block's "learned from
      *  N logged trade(s)" understates long-lived skills forever. */
@@ -240,6 +246,13 @@ export const parseSkillMarkdown = (content: string): SkillMeta | null => {
             const ids = raw.split(',').map(s => s.trim()).filter(Boolean);
             return ids.length > 0 ? ids : undefined;
         })(),
+        // Cross-regime diagnostic: counted trades outside the scope regime.
+        crossRegimeIds: (() => {
+            const raw = pick('crossRegimeIds');
+            if (!raw) return undefined;
+            const ids = raw.split(',').map(s => s.trim()).filter(Boolean);
+            return ids.length > 0 ? ids : undefined;
+        })(),
         lastEvidenceAt: pick('lastEvidenceAt'),
         previousVersion,
         // Temporal ledger: JSON array in frontmatter.
@@ -347,6 +360,7 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
         ...(meta.supersededBy ? [`supersededBy: ${meta.supersededBy}`] : []),
         ...(meta.evalStreak ? [`evalStreak: ${meta.evalStreak}`] : []),
         ...(meta.controlIds && meta.controlIds.length > 0 ? [`controlIds: ${meta.controlIds.slice(-20).join(',')}`] : []),
+        ...(meta.crossRegimeIds && meta.crossRegimeIds.length > 0 ? [`crossRegimeIds: ${meta.crossRegimeIds.slice(-20).join(',')}`] : []),
         ...(meta.history && meta.history.length > 0 ? [`history: ${JSON.stringify(meta.history)}`] : []),
         ...(meta.previousVersion ? [`previousVersion: ${JSON.stringify(meta.previousVersion)}`] : []),
         `tradeIds: ${meta.tradeIds.slice(-20).join(',')}`,
@@ -593,6 +607,14 @@ const applySkillEvidenceUnlocked = async (trade: LoggedTrade, username: string, 
             meta.consecutiveLosses += 1;
         }
         meta.tradeIds = [...meta.tradeIds, trade.id];
+        // Cross-regime diagnostic: this counted trade came from OUTSIDE the
+        // skill's scope regime. The evidence still counts (applyEvidenceDecay
+        // already halved it), but the ids let review passes see how much of a
+        // skill's support was earned in foreign regimes.
+        if (trade.marketRegime && meta.regime && trade.marketRegime !== meta.regime) {
+            const cross = meta.crossRegimeIds ?? [];
+            if (!cross.includes(trade.id)) meta.crossRegimeIds = [...cross, trade.id].slice(-20);
+        }
         // Track the freshest evidence and the regime it came from.
         meta.lastEvidenceAt = trade.timestamp ?? new Date().toISOString();
         meta.modifiedAt = new Date().toISOString();
@@ -1468,7 +1490,7 @@ export const applyNotebookSkillsToAnalysis = <T extends {
     originalConfidence?: string;
     riskVeto?: string;
     validationWarnings?: string[];
-}>(analysis: T, options?: { regime?: string; activeLens?: string }): T => {
+}>(analysis: T, options?: { regime?: string; activeLens?: string; username?: string }): T => {
     const setup = {
         coin: analysis.coinName,
         direction: analysis.direction,
@@ -1510,6 +1532,26 @@ export const applyNotebookSkillsToAnalysis = <T extends {
         // a HARD blocker in the WhyAvoidPanel.
         next.validationWarnings = [...(next.validationWarnings ?? []), note];
     };
+    // Enforcement telemetry: code-side enforcement is a decision the harness
+    // made, but without a record the enforced skill gets no attribution —
+    // applySkillEvidence cannot tell it shaped the trade. Log it like a real
+    // injection (skills/<file> path) so attribution, lift and the dashboard
+    // see it. Only when a username is supplied: tests and synthetic paths
+    // stay silent unless they opt in.
+    const recordEnforcement = (metas: SkillMeta[]): void => {
+        if (!options?.username || metas.length === 0) return;
+        const username = options.username;
+        const sources = metas.map(m => ({
+            path: `skills/${skillFileNameFor(m) ?? fileNameFromMeta(m)}`,
+            kind: 'skill',
+        }));
+        void recordMemoryInjection(username, {
+            stage: 'verdict',
+            audience: 'moderator',
+            coin: analysis.coinName,
+            sources,
+        }).catch(() => { /* telemetry is best-effort */ });
+    };
 
     const avoidConfirmed = ranked.find(m => m.kind === 'avoid' && m.status === 'confirmed');
     if (avoidConfirmed && (next.direction === 'Long' || next.direction === 'Short')) {
@@ -1521,6 +1563,7 @@ export const applyNotebookSkillsToAnalysis = <T extends {
         warn(vetoNote);
         // Hard vetoes DO belong in riskVeto — this path genuinely blocks.
         next.riskVeto = [next.riskVeto, vetoNote].filter(Boolean).join(' ');
+        recordEnforcement([avoidConfirmed]);
         return next;
     }
 
@@ -1532,12 +1575,14 @@ export const applyNotebookSkillsToAnalysis = <T extends {
         // Candidate caps stay a WARNING: the setup remains tradeable at
         // reduced size — not a hard avoidance.
         warn(`NOTEBOOK SKILL: candidate avoid ${titleFromMeta(avoidCandidate)} — size down until the cluster confirms or retires.`);
+        recordEnforcement([avoidCandidate]);
         return next;
     }
 
     const repeat = ranked.find(m => m.kind === 'repeat' && m.status === 'confirmed');
     if (repeat) {
         warn(`NOTEBOOK SKILL: confirmed repeat ${titleFromMeta(repeat)} — follow the procedure in skills, do not invent a new tape.`);
+        recordEnforcement([repeat]);
     }
     return next;
 };
