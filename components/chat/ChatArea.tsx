@@ -6,6 +6,7 @@ import { RegimeProviderStatsMap } from '../../services/learning/SetupMemoryServi
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
 import ErrorBoundary from '../shared/ErrorBoundary';
 import MessageItem, { ChatContextProps } from './MessageItem';
+import TranscriptRow from './TranscriptRow';
 import { ChatInput } from './ChatInput';
 import { ArrowUpIcon, ArrowDownIcon, CloseIcon, LoadingIcon, EyeIcon, BrainIcon, EditIcon, CheckIcon, TrashIcon } from '../shared/Icons';
 import HybridDataPanel from '../analysis/HybridDataPanel';
@@ -490,9 +491,17 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 // Per-message error boundary: one message that fails to render
                 // (e.g. odd analysis data) collapses to an inline fallback
                 // instead of taking the whole app to the black error screen.
+                //
+                // Row dispatch: a settled analysis row renders as a
+                // TranscriptRow (summary + signal card + deep surfaces); every
+                // other row — user, streaming, debating, post-mortem, system —
+                // renders as a MessageItem. The predicate is the presence of a
+                // settled `analysis` object, which post-mortem rows never carry.
                 itemContent={(index, message, context) => (
                     <ErrorBoundary compact>
-                        <MessageItem message={message} context={context} />
+                        {message.analysis
+                            ? <TranscriptRow message={message} context={context} />
+                            : <MessageItem message={message} context={context} />}
                     </ErrorBoundary>
                 )}
                 // Follow the stream only while the user is at the bottom.

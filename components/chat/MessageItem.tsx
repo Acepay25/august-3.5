@@ -6,26 +6,16 @@ import MarkdownContent from '../shared/MarkdownContent';
 import StreamingMarkdown from '../shared/StreamingMarkdown';
 import ReasoningRow from '../shared/ReasoningRow';
 import LiveMarketDataView from '../market/LiveMarketDataView';
-import DebateSummary from '../analysis/DebateSummary';
 import TradingSignalCard from '../analysis/TradingSignalCard';
 import VerdictSkeletonCard from '../analysis/VerdictSkeletonCard';
-import DebateReplay from '../analysis/DebateReplay';
 import DebateStage, { DebateStageActor } from '../analysis/DebateStage';
 import DebateSidePanel from '../analysis/DebateSidePanel';
 import ReplacementOfferCard from '../analysis/ReplacementOfferCard';
-import DebateRunLog from '../analysis/DebateRunLog';
-import RunContractPanel from '../analysis/RunContractPanel';
-import EvidencePackCard from '../analysis/EvidencePackCard';
 import ModelByline from '../shared/ModelByline';
-import InlineApprovalCard from './InlineApprovalCard';
-import AnalysisTracePanel from '../analysis/AnalysisTracePanel';
-import AnalysisDetails from './AnalysisDetails';
-import SetupLifecycleCard from '../analysis/SetupLifecycleCard';
 import TodayReassessmentPanel from './TodayReassessmentPanel';
-import { buildSupplementMarkdown, extractModeratorThinking } from '../../utils/analysisUtils';
-import { extractAndStripThinkBlocks } from '../../utils/thinkingSplit';
-import { formatModelDisplayName } from '../../utils/providerUtils';
+import { extractModeratorThinking } from '../../utils/analysisUtils';
 import { isEnsembleMessage as isEnsembleMessageOf, stageActorsForMessage } from '../../utils/debateStageActors';
+import { deriveMessageDisplayText } from '../../utils/messageDisplayText';
 import { AutopilotResolution } from '../../services/ui/OutcomeAutopilotService';
 
 // Helper to validate URLs (XSS prevention)
@@ -199,22 +189,19 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
 
     const isHighlighted = highlightedAnalysisId === message.id;
     const isUserMessage = message.role === MessageRole.USER;
-    const [isRunLedgerOpen, setIsRunLedgerOpen] = React.useState(false);
     const [isMemoryGateExpanded, setIsMemoryGateExpanded] = React.useState(false);
     // Inline edit of a sent user message (history correction).
     const [editingMessageId, setEditingMessageId] = React.useState<string | null>(null);
     const [editDraft, setEditDraft] = React.useState('');
-    // Which deep surface is open on the settled card — 'replay' |
-    // 'runlog' | 'audit' | null. Replaces the scattered toggles.
-    const [paneTab, setPaneTab] = React.useState<string | null>(null);
     // Track whether this bubble streamed live — once text has been revealed
     // incrementally, the settle must not replay the SmoothText animation.
     const wasStreamingRef = React.useRef(false);
     if (message.isStreaming) wasStreamingRef.current = true;
-    // Peel any think-tag scaffolding out of the stored text at render time so
-    // it never shows in the bubble; the peeled CoT joins the Thinking row.
-    const peeled = extractAndStripThinkBlocks(message.text);
-    const leakedThinking = peeled.leaked;
+    // Bubble-text derivation is shared with TranscriptRow (the settled
+    // analysis row) via utils/messageDisplayText so the strip chain can
+    // never drift between the two row components.
+    const { displayContent, leakedThinking, liveMarketJson } =
+        deriveMessageDisplayText(message);
     const thinkingEntries = Object.entries({
         ...(message.thoughtProcesses ?? {}),
         ...(message.reasoningProcesses ?? {}),
@@ -281,49 +268,6 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
     // final verdict PROSE does NOT render in the chat area: the
     // TradingSignalCard below is the moderator's only chat-area output.
     const moderatorThinking = extractModeratorThinking(message.reasoningProcesses, message.thoughtProcesses);
-
-    // Extract embedded Live Market JSON if present
-    const liveMarketMatch = message.text.match(/\*\*LIVE MARKET DATA\*\*\s*```json\s*([\s\S]*?)\s*```/);
-    const liveMarketJson = liveMarketMatch ? liveMarketMatch[1] : null;
-
-    // Clean text to hide JSON blocks from view
-    let displayContent = peeled.visible;
-
-    // Hide Live Market Data JSON block if component is rendering it
-    if (liveMarketJson) {
-        displayContent = displayContent.replace(/\*\*LIVE MARKET DATA\*\*\s*```json[\s\S]*?```/, '').trim();
-    }
-
-    // Hide JSON_PLAN block if we have an analysis object to render it
-    if (message.analysis) {
-        displayContent = displayContent.replace(/<JSON_PLAN>[\s\S]*?<\/JSON_PLAN>/g, '').trim();
-    }
-
-    // Legacy prompt formats wrapped output in <THINKING>/<FINAL_OUTPUT> tags
-    // or header-style labels. Strip residual scaffolding from cached and
-    // historical messages so it never renders in the bubble.
-    displayContent = displayContent
-        .replace(/<THINKING>[\s\S]*?<\/THINKING>/gi, '')
-        .replace(/<FINAL_OUTPUT>[\s\S]*?<\/FINAL_OUTPUT>/gi, '')
-        .replace(/<\/?(?:THINKING|FINAL_OUTPUT)>/gi, '')
-        .replace(/^\s*(?:\*\*)?(?:THINKING|FINAL OUTPUT|FINAL_OUTPUT)(?:\*\*)?\s*:?\s*$/gim, '')
-        .replace(/\n{3,}/g, '\n\n')
-        .trim();
-
-    // Structured Trading signal card (levels grid + verdict + plan).
-    // Fallback to the raw display text only when there is no analysis object.
-
-    // Accuracy-mode verification note — the stub sentence plus an optional
-    // note ("Plan verified by the accuracy pass."); show only the note.
-    const ensembleNote = displayContent.includes('The ensemble has concluded its debate.')
-        ? displayContent.replace('The ensemble has concluded its debate.', '').trim()
-        : '';
-
-    // Harness-side data (gate, calibration, team verdict, memory insight,
-    // freshness) — rendered as markdown sections inside the same card.
-    const supplementMarkdown = React.useMemo(() => {
-        return message.analysis ? buildSupplementMarkdown(message.analysis, confidenceCalibration) : '';
-    }, [message.analysis, confidenceCalibration]);
 
     // Determine Bubble Styling - Clean modern design like ChatGPT/Gemini
     const bubbleClass = isUserMessage
@@ -604,123 +548,12 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                     </div>
                                 </div>
                             ) : message.analysis ? (
-                                <div className="ui-panel">
-                                <DebateSummary debateTurns={debateTurns} analysis={message.analysis} />
-                                {/* The settled run's deep surfaces live in one
-                                    tab strip — Replay · Run log · Audit — instead
-                                    of scattered toggles down the card. */}
-                                {(() => {
-                                    const tabs: Array<{ id: string; label: string }> = [];
-                                    if (debateTurns.length > 0) tabs.push({ id: 'replay', label: 'Replay' });
-                                    if ((message.debateRunLog?.length ?? 0) > 0 || message.runStats) tabs.push({ id: 'runlog', label: 'Run log' });
-                                    if (message.runContract || message.evidencePack) tabs.push({ id: 'audit', label: 'Audit' });
-                                    if (tabs.length === 0) return null;
-                                    const activeTab = paneTab && tabs.some(t => t.id === paneTab) ? paneTab : null;
-                                    return (
-                                        <div className="flex items-center gap-1 border-b border-white/5 px-3 py-1.5">
-                                            {tabs.map(tab => (
-                                                <button
-                                                    key={tab.id}
-                                                    type="button"
-                                                    onClick={() => setPaneTab(activeTab === tab.id ? null : tab.id)}
-                                                    aria-pressed={activeTab === tab.id}
-                                                    className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest transition-colors ${
-                                                        activeTab === tab.id
-                                                            ? 'bg-zinc-700/70 text-zinc-100'
-                                                            : 'text-zinc-500 hover:bg-white/[0.06] hover:text-zinc-200'
-                                                    }`}
-                                                >
-                                                    {tab.label}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    );
-                                })()}
-                                {paneTab === 'replay' && debateTurns.length > 0 && (
-                                    <div className="border-b border-white/5 px-4 py-3">
-                                        <DebateReplay turns={debateTurns} onClose={() => setPaneTab(null)} />
-                                    </div>
-                                )}
-                                <div className="border-t border-white/5">
-                                <TradingSignalCard
-                                    analysis={message.analysis}
-                                    debateTurns={message.debateTurns}
-                                    isLatest={context.latestMessageId === message.id}
-                                    onReRun={onReRunAnalysis ? () => onReRunAnalysis(message.id) : undefined}
-                                    supplementMarkdown={supplementMarkdown}
-                                    ensembleNote={ensembleNote}
-                                    calibration={confidenceCalibration}
-                                    modelsUsed={message.modelsUsed}
-                                    priorAnalysis={context.priorAnalysisById?.[message.id]}
-                                    promptLane={message.runStats?.promptLane}
-                                    runStats={message.runStats}
-                                    onFollowUp={context.onFollowUpTicket ? (text) => context.onFollowUpTicket!(message.id, text) : undefined}
-                                    leverage={leverage}
-                                    bare
-                                />
-                                <AnalysisTracePanel message={message} />
-                                </div>
-                                <SetupLifecycleCard
-                                    analysis={message.analysis}
-                                    outcome={message.outcome}
-                                    compact
-                                    embedded
-                                />
-                                <div className="border-t border-white/5 px-4 pb-4">
-                                {/* Inline approval cards — same actions
-                                    as the Inbox modal, surfaced where the user is. */}
-                                {(() => {
-                                    const mine = (inlineApprovals ?? []).filter(i => i.messageId === message.id);
-                                    return mine.length > 0 && onApprovalAllow && onApprovalDeny ? (
-                                        <div className="mb-3 space-y-2">
-                                            {mine.map(item => (
-                                                <InlineApprovalCard
-                                                    key={item.id}
-                                                    item={item}
-                                                    onAllow={onApprovalAllow}
-                                                    onDeny={onApprovalDeny}
-                                                    onAlways={onApprovalAlways}
-                                                    onNever={onApprovalNever}
-                                                    onShow={onApprovalShow}
-                                                />
-                                            ))}
-                                        </div>
-                                    ) : null;
-                                })()}
-                                <AnalysisDetails
-                                    messageId={message.id}
-                                    analysis={message.analysis}
-                                    outcome={message.outcome}
-                                    autopilotResolution={autopilotResolutions?.[message.id]}
-                                    onLogTrade={handleInitiateLogTrade}
-                                    onSkipTrade={handleInitiateSkipTrade}
-                                    onConfirmAutopilot={onConfirmAutopilot}
-                                    onDismissAutopilot={onDismissAutopilot}
-                                    onSelectForProbability={onSelectMessageForProbability}
-                                    onCompare={onCompareAnalysis}
-                                    watched={Boolean(message.watched)}
-                                    onToggleWatch={(id: string) => onToggleWatch?.(id)}
-                                    message={message}
-                                    tradingStyle={message.tradingStyle}
-                                    highlighted={isHighlighted}
-                                >
-                                    {/* Audit surfaces: run contract + verdict evidence. */}
-                                    <RunContractPanel stages={message.runContract} />
-                                    <EvidencePackCard pack={message.evidencePack} />
-                                </AnalysisDetails>
-                                </div>
-                                {(message.debateRunLog && message.debateRunLog.length > 0) || message.runStats ? (
-                                    paneTab === 'runlog'
-                                        ? <DebateRunLog events={message.debateRunLog ?? []} runStats={message.runStats} defaultOpen />
-                                        : null
-                                ) : null}
-                                {paneTab === 'audit' && (message.runContract || message.evidencePack) && (
-                                    <div className="border-t border-white/5 px-4 py-3">
-                                        <RunContractPanel stages={message.runContract} />
-                                        <EvidencePackCard pack={message.evidencePack} />
-                                    </div>
-                                )}
-                                </div>
+                                // Settled analysis rows render via TranscriptRow —
+                                // ChatArea's row dispatch routes every message.analysis
+                                // row there, so this arm is unreachable. Kept as a
+                                // documented no-op so the dispatch contract stays
+                                // visible at the ternary.
+                                null
                             ) : message.isPostMortem ? (
                                 <div className="overflow-x-auto min-w-0">
                                     <MarkdownContent content={displayContent} className="text-zinc-100" />
@@ -834,63 +667,6 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
                                             </button>
                                         ))}
                                     </div>
-                                </div>
-                            )}
-
-                            {message.analysis && message.runStats?.analysts && message.runStats.analysts.length > 0 && (
-                                <div className="mb-2">
-                                    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-zinc-500">
-                                        <button
-                                            type="button"
-                                            onClick={() => setIsRunLedgerOpen(o => !o)}
-                                            aria-expanded={isRunLedgerOpen}
-                                            className="text-zinc-500 hover:text-zinc-300 transition-colors"
-                                            title="Per-analyst cost & latency ledger"
-                                        >
-                                            {isRunLedgerOpen ? '▾ Run ledger' : '▸ Run ledger'}
-                                        </button>
-                                        {message.text && (
-                                            <button
-                                                type="button"
-                                                onClick={() => handleCopy(message)}
-                                                className="text-zinc-500 hover:text-zinc-300 transition-colors"
-                                                title="Copy the full analysis text"
-                                                aria-label="Copy analysis text"
-                                            >
-                                                {copiedMessageId === message.id ? '✓ Copied' : '⧉ Copy'}
-                                            </button>
-                                        )}
-                                    </div>
-                                    {isRunLedgerOpen && (
-                                        <div className="mt-1.5 overflow-x-auto rounded-lg border border-white/10 bg-zinc-900/60">
-                                            <table className="w-full text-left text-[11px] border-collapse">
-                                                <thead>
-                                                    <tr className="text-zinc-500">
-                                                        <th className="px-2 py-1 font-medium">Analyst</th>
-                                                        <th className="px-2 py-1 font-medium">Model</th>
-                                                        <th className="px-2 py-1 font-medium">Time</th>
-                                                        <th className="px-2 py-1 font-medium">Chars</th>
-                                                        <th className="px-2 py-1 font-medium">Est. tok</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {message.runStats.analysts.map(a => (
-                                                        <tr key={`${a.providerId}::${a.modelId}`} className="border-t border-white/5 text-zinc-300">
-                                                            <td className="px-2 py-1 whitespace-nowrap max-w-[160px] truncate" title={a.displayName}>{a.displayName}</td>
-                                                            <td className="px-2 py-1 whitespace-nowrap max-w-[140px] truncate text-zinc-400" title={a.modelId}>{formatModelDisplayName(a.modelId)}</td>
-                                                            <td className="px-2 py-1 whitespace-nowrap">{a.durationMs !== undefined ? `${(a.durationMs / 1000).toFixed(1)}s` : '—'}</td>
-                                                            <td className="px-2 py-1 whitespace-nowrap">{a.charsOut !== undefined ? a.charsOut.toLocaleString() : '—'}</td>
-                                                            <td className="px-2 py-1 whitespace-nowrap">{
-                                                                a.promptTokens !== undefined || a.completionTokens !== undefined
-                                                                    ? ((a.promptTokens ?? 0) + (a.completionTokens ?? 0)).toLocaleString()
-                                                                    : (a.charsOut !== undefined ? `~${Math.round(a.charsOut / 4).toLocaleString()}` : '—')
-                                                            }</td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    )}
                                 </div>
                             )}
 

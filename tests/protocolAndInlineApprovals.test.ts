@@ -41,8 +41,8 @@ describe('Inline approval cards', () => {
         const ap = items.find(i => i.kind === 'autopilot');
         expect(ap).toBeTruthy();
         expect(ap!.messageId).toBe('msg1');
-        // MessageItem filters inlineApprovals by messageId — this is what the
-        // inline card renders.
+        // TranscriptRow (the settled-analysis row) filters inlineApprovals by
+        // messageId — this is what the inline card renders.
         const mine = items.filter(i => i.messageId === 'msg1');
         expect(mine.length).toBeGreaterThan(0);
     });

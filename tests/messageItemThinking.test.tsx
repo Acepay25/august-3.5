@@ -2,6 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeAll } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import MessageItem, { ChatContextProps } from '../components/chat/MessageItem';
+import TranscriptRow from '../components/chat/TranscriptRow';
 import { Message, MessageRole } from '../types';
 
 // jsdom does not implement matchMedia (SmoothText reads it for reduced motion).
@@ -92,11 +93,12 @@ describe('MessageItem — ensemble thinking + final output in the chat area', ()
     });
 
     it('renders ONLY the signal card once settled — no moderator prose in chat', () => {
-        // A settled ensemble message always carries its parsed analysis.
+        // A settled ensemble message always carries its parsed analysis. ChatArea's
+        // row dispatch routes it to TranscriptRow (not MessageItem).
         const settled = ensembleMessage({
             analysis: { coinName: 'BTC', direction: 'Long', confidence: 'High' } as any,
         });
-        render(<MessageItem message={settled} context={baseContext} />);
+        render(<TranscriptRow message={settled} context={baseContext} />);
         // The verdict prose is NOT a chat-area surface anymore.
         expect(screen.queryByText('Final output')).toBeNull();
         expect(screen.queryByText(/Verdict: Long BTC/)).toBeNull();
@@ -159,7 +161,9 @@ describe('MessageItem — ensemble thinking + final output in the chat area', ()
     });
 
     it('does not render the provisional card once the final analysis lands', () => {
-        render(<MessageItem message={ensembleMessage({
+        // Settled → TranscriptRow via the row dispatch; the provisional
+        // "Verdict drafting" surface only exists on the live-debate path.
+        render(<TranscriptRow message={ensembleMessage({
             isDebating: false,
             analysis: provisional,
             provisionalAnalysis: provisional,
