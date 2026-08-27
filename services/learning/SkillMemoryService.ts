@@ -47,6 +47,12 @@ export interface SkillMeta {
      *  (Trades carry no link to their originating ensemble message, so the
      *  trade id is the deepest provenance available.) */
     originMessageId?: string;
+    /** Set when this coin-scoped skill was absorbed into a coin-less
+     *  generalized skill (skillGeneralization). Points at the generalized
+     *  skill's file slug. A superseded skill is retired from matching but its
+     *  evidence stays queryable — it is the control group for the generalized
+     *  belief. */
+    supersededBy?: string;
     coin?: string;
     direction?: string;
     family?: string;
@@ -220,6 +226,7 @@ export const parseSkillMarkdown = (content: string): SkillMeta | null => {
         // One-sentence semantic summary + debate provenance.
         description: pick('description')?.slice(0, 300) || undefined,
         originMessageId: pick('originMessageId') || undefined,
+        supersededBy: pick('supersededBy') || undefined,
         // Sequential-eval streak: consecutive runs of the same
         // verdict. Absent on legacy skills ⇒ treated as confirmed.
         evalStreak: (() => {
@@ -337,6 +344,7 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
         ...(meta.lastEvalAt ? [`lastEvalAt: ${meta.lastEvalAt}`] : []),
         ...(meta.description ? [`description: ${meta.description.replace(/\n/g, ' ').slice(0, 300)}`] : []),
         ...(meta.originMessageId ? [`originMessageId: ${meta.originMessageId}`] : []),
+        ...(meta.supersededBy ? [`supersededBy: ${meta.supersededBy}`] : []),
         ...(meta.evalStreak ? [`evalStreak: ${meta.evalStreak}`] : []),
         ...(meta.controlIds && meta.controlIds.length > 0 ? [`controlIds: ${meta.controlIds.slice(-20).join(',')}`] : []),
         ...(meta.history && meta.history.length > 0 ? [`history: ${JSON.stringify(meta.history)}`] : []),
@@ -359,7 +367,7 @@ export const skillMatchesSetup = (
     meta: SkillMeta,
     setup: { coin?: string; direction?: string; family?: string; pattern?: string; regime?: string }
 ): boolean => {
-    if (meta.status === 'retired') return false;
+    if (meta.status === 'retired' || meta.supersededBy) return false;
     let hits = 0;
     const coin = setup.coin?.toUpperCase().replace(/USDT?$/, '');
     const skillCoin = meta.coin?.toUpperCase().replace(/USDT?$/, '');
@@ -384,7 +392,7 @@ export const skillStrictlyMatchesSetup = (
     meta: SkillMeta,
     setup: { coin?: string; direction?: string; family?: string; pattern?: string; regime?: string },
 ): boolean => {
-    if (meta.status === 'retired') return false;
+    if (meta.status === 'retired' || meta.supersededBy) return false;
     const coin = setup.coin?.toUpperCase().replace(/USDT?$/, '');
     const skillCoin = meta.coin?.toUpperCase().replace(/USDT?$/, '');
     const sameCoin = Boolean(coin && skillCoin && coin === skillCoin);

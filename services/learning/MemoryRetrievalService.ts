@@ -19,6 +19,7 @@
 import { LoggedTrade } from '../../types';
 import { getMemoryFiles } from './MemoryFilesService';
 import { readDoctrineForInjection } from './DoctrineConsolidationService';
+import { settledBeliefsBlock } from './settledBeliefs';
 import { findRelevantTrades } from './PatternMemorySynthesisService';
 import {
     isSkillFile,
@@ -365,12 +366,45 @@ const similarTradesBlock = (query: MemoryRetrievalQuery | undefined, trades?: Lo
 const cap = (text: string, n: number): string =>
     text.length <= n ? text : `${text.slice(0, n).trimEnd()}\n…`;
 
+/** Cross-block dedup key: lowercase alphanumerics only. */
+const dedupKey = (line: string): string =>
+    line.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+/**
+ * Drop substantive lines that an EARLIER block already injected. Skills,
+ * risk rules, similar trades and the doctrine are written independently and
+ * routinely phrase the same lesson twice — the second copy only burns budget
+ * and teaches the model nothing. Short/structural lines (headers, bullets
+ * under 12 normalized chars) are always kept.
+ */
+const dedupeContentLines = (sections: string[]): string[] => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const section of sections) {
+        const kept: string[] = [];
+        for (const line of section.split('\n')) {
+            const key = dedupKey(line);
+            if (key.length >= 12) {
+                if (seen.has(key)) continue;
+                seen.add(key);
+            }
+            kept.push(line);
+        }
+        const text = kept.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+        if (text) out.push(text);
+    }
+    return out;
+};
+
 export const listRetrievedMemorySources = (
     query?: MemoryRetrievalQuery,
     trades?: LoggedTrade[],
     audience: 'analyst' | 'moderator' = 'analyst',
 ): RetrievedMemorySource[] => {
     const out: RetrievedMemorySource[] = [];
+    try {
+        if (settledBeliefsBlock()) out.push({ path: 'profile/settled-beliefs', kind: 'identity' });
+    } catch { /* registry unreadable — skip the source line */ }
     if (doctrineBlock()) out.push({ path: 'profile/doctrine', kind: 'identity' });
     if (identityBlock()) out.push({ path: 'profile/memory', kind: 'identity' });
     const skillMatch = matchedSkillBlock(query, audience);
@@ -455,7 +489,14 @@ export const getMemoryFilesContext = (
     }
 
     const doctrine = doctrineBlock();
-    if (blocks.length === 0 && !doctrine) return '';
+    // Settled beliefs ride in their own always-on slot ABOVE the doctrine —
+    // permanent convictions the model reads before the revisable doctrine.
+    // Like doctrine, they do not count against the stage budget.
+    const beliefs = (() => {
+        try { return settledBeliefsBlock(); } catch { return ''; }
+    })();
+    if (blocks.length === 0 && !doctrine && !beliefs) return '';
+    if (beliefs) injected.unshift({ path: 'profile/settled-beliefs', kind: 'identity' });
     if (doctrine) injected.unshift({ path: 'profile/doctrine', kind: 'identity' });
 
     // Telemetry (fire-and-forget): record what was REALLY injected so skill
@@ -479,6 +520,7 @@ export const getMemoryFilesContext = (
     }
 
     const parts: string[] = [];
+    if (beliefs) parts.push(beliefs);
     if (doctrine) parts.push(doctrine);
     if (blocks.length > 0) parts.push(blocks.join('\n\n'));
 
@@ -488,7 +530,7 @@ export const getMemoryFilesContext = (
 Do not contradict a confirmed rule without strong new evidence. Need more
 history? Call the recall tool with this setup's coin/topic.
 ═══════════════════════════════════════════════════════════════
-${parts.join('\n\n---\n\n')}`;
+${dedupeContentLines(parts).join('\n\n---\n\n')}`;
 };
 
 // ─── recall tool (pull-over-push) ───────────────────────────────────────────
