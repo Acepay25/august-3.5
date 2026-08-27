@@ -12,7 +12,6 @@ import TeamModal from './TeamModal';
 import TeamRosterMenu from './TeamRosterMenu';
 import { LeverageSection } from './LeverageSection';
 import ModelPicker from '../shared/ModelPicker';
-import InjectionContextBar, { InjectionChipKind } from './InjectionContextBar';
 
 import { parseComposerIntent } from '../../utils/composerMentions';
 import { formatModelDisplayName } from '../../utils/providerUtils';
@@ -261,28 +260,9 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
             });
     }, [chatProviders, ensembleModelSelection, lensConfig]);
 
-    const handleInjectionChip = (kind: InjectionChipKind): void => {
-        if (kind === 'team') {
-            setIsEnsembleEnabled(true);
-            setIsTeamModalOpen(true);
-            return;
-        }
-        if (kind === 'notebook') {
-            onOpenSettings?.('memory');
-            return;
-        }
-        if (kind === 'strategies') {
-            onOpenSettings?.('strategies');
-            return;
-        }
-        if (kind === 'accuracy') {
-            onOpenSettings?.('lenses');
-            return;
-        }
-        if (kind === 'hybrid' || kind === 'regime') {
-            onOpenLiveMarket?.();
-        }
-    };
+    // The injection-chip quick actions moved to the header `⋯` menu in
+    // Phase 2 (composer simplification). The Settings menu now owns the
+    // surfaces: notebook, strategies, lenses, live market.
 
     // --- PROMPT EDITOR (view / modify each mode's prompt) ---
     type PromptEditorTarget =
@@ -516,18 +496,12 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                         </div>
                     </div>
 
-                    {isEnsembleEnabled && (
-                        <div className="mt-1.5 flex flex-col items-end gap-1 px-1">
-                            <InjectionContextBar
-                                providers={providers}
-                                isEnsembleEnabled={isEnsembleEnabled}
-                                isAccuracyModeEnabled={isAccuracyModeEnabled}
-                                hybridConnectionStatus={hybridConnectionStatus}
-                                hybridData={hybridData}
-                                onChip={handleInjectionChip}
-                            />
-                        </div>
-                    )}
+                    {/* Phase 2 composer simplification: the InjectionContextBar
+                        chips above the input are gone. The same context lives
+                        in the new "view injected" affordance inside the
+                        SettingsMenu and in the desk overlay; surfacing it
+                        again at the composer was redundant with the model
+                        picker and the Team chip. */}
                 </div>
             </div>
 
