@@ -19,8 +19,10 @@
 import { AnalystRole } from '../../types';
 import type { MemoryFile } from '../../types';
 import {
-    ensureHarnessFolders,
+    createMemoryFileUnlocked,
+    ensureHarnessFoldersUnlocked,
     getMemoryFiles,
+    updateMemoryFileUnlocked,
     withNotebookWriteLock,
 } from './MemoryFilesService';
 
@@ -68,6 +70,9 @@ export const readLensMemory = (role: string | AnalystRole): string => {
  *  own per-stage budget. */
 export const LENS_MEMORY_BLOCK_MAX = 250;
 
+/** Lens files stay bounded: keep only the newest N bullet lines. */
+export const MAX_LENS_MEMORY_LINES = 40;
+
 export const summarizeLensMemory = (role: string | AnalystRole, max = LENS_MEMORY_BLOCK_MAX): string => {
     const content = readLensMemory(role);
     if (!content) return '';
@@ -99,35 +104,41 @@ export const appendLensMemoryLine = async (
     if (!filename) return;
     const cleaned = line.replace(/\s+/g, ' ').trim();
     if (!cleaned) return;
-    await ensureHarnessFolders(username);
     await withNotebookWriteLock(async () => {
+        await ensureHarnessFoldersUnlocked(username);
         const { files, folders } = getMemoryFiles();
         const folder = folders.find(f => f.name === LENS_FOLDER);
         if (!folder) return;
+        const stamp = new Date().toISOString().slice(0, 10);
         const existing = files.find(f => f.folderId === folder.id && f.name === filename);
         if (existing) {
-            const stamped = `${existing.content.trimEnd()}\n- ${cleaned} · ${new Date().toISOString().slice(0, 10)}`;
-            existing.content = stamped;
-            existing.updatedAt = Date.now();
+            // Persist through the unlocked API — mutating the cache object
+            // alone never reaches Preferences, so the line would be lost on
+            // next load. Keep the file bounded: header + newest N lines.
+            const lines = existing.content.split('\n');
+            const header: string[] = [];
+            const body: string[] = [];
+            for (const l of lines) {
+                if (body.length === 0 && !l.startsWith('- ')) header.push(l);
+                else body.push(l);
+            }
+            const kept = [...body, `- ${cleaned} · ${stamp}`].filter(l => l.trim() !== '').slice(-MAX_LENS_MEMORY_LINES);
+            const stamped = `${header.join('\n').trimEnd()}\n\n${kept.join('\n')}`;
+            await updateMemoryFileUnlocked(existing.id, { content: stamped }, username);
         } else {
-            const headerByRole: Record<string, string> = {
-                [AnalystRole.MACRO_VOLATILITY]: '# Macro Lens Memory',
-                [AnalystRole.TECHNICAL_ANALYST]: '# Technical Lens Memory',
-                [AnalystRole.RISK_EXECUTION]: '# Risk Lens Memory',
+            const headerByFile: Record<string, string> = {
+                'macro.md': '# Macro Lens Memory',
+                'technical.md': '# Technical Lens Memory',
+                'risk.md': '# Risk Lens Memory',
             };
-            const header = headerByRole[lensFileForRole(role) === filename ? role : ''] ?? '# Lens Memory';
-            const now = Date.now();
-            const created: MemoryFile = {
-                id: `${now.toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-                folderId: folder.id,
-                name: filename,
-                content: `${header}\n\n- ${cleaned} · ${new Date().toISOString().slice(0, 10)}`,
-                enabled: true,
-                autoManaged: true,
-                createdAt: now,
-                updatedAt: now,
-            };
-            getMemoryFiles().files.push(created);
+            const header = headerByFile[filename] ?? '# Lens Memory';
+            await createMemoryFileUnlocked(
+                folder.id,
+                filename,
+                `${header}\n\n- ${cleaned} · ${stamp}`,
+                username,
+                true,
+            );
         }
     });
 };

@@ -10,6 +10,7 @@ import { initStrategyDocs } from './services/infrastructure/StrategyService';
 import { initMemoryFiles, syncPatternMemory, syncProfileMemory, syncRecurringMistakes, subscribeMemoryFilesChanged } from './services/learning/MemoryFilesService';
 import { runNotebookReview } from './services/learning/MemoryReviewService';
 import { runWeeklyRollupIfDue } from './services/learning/weeklyRollup';
+import { hydrateRegimeLedger } from './services/learning/regimeLedger';
 import { computeRegimeProviderStats } from './services/learning/SetupMemoryService';
 import { AnalystRole } from './types/enums';
 import { BotRegistry } from './services/bots/BotRegistry';
@@ -1175,6 +1176,10 @@ const App: React.FC = () => {
         // user's markdown memory into the sync cache (seeds the default
         // folders + starter templates on first boot).
         await initMemoryFiles(username);
+        // Regime ledger (Macro-lens memory): hydrate the per-coin regime
+        // history into the sync cache so prompt-side readers (regime summary
+        // block, doctrine) see it this session. Fire-and-forget.
+        void hydrateRegimeLedger(username).catch(() => { /* ledger is best-effort */ });
         // Compounding memory: once a week, distill the strongest confirmed
         // skills into settled beliefs, generalize cross-coin clusters, and
         // leave rollup notes for the next doctrine rewrite. Fire-and-forget —

@@ -9,6 +9,9 @@ import { AnalystRole, AIProvider, AnalystRoleAssignment, AnalystLensConfig } fro
 import { ProviderConfig } from '../../types/provider';
 import GlobalLearningService from '../learning/GlobalLearningService';
 import { filterUnfitProviders } from '../learning/providerFitness';
+import { summarizeLensMemory } from '../learning/lensMemory';
+import { regimeSummaryBlock } from '../learning/regimeLedger';
+import { lensSkillSupplementLine, type MemoryRetrievalQuery } from '../learning/MemoryRetrievalService';
 import {
     LENS_POSITION_PROMPTS,
     LENS_SCALP_PROMPTS,
@@ -440,6 +443,45 @@ export function getLensPromptForStyle(
     }
 
     return getLensPromptForRole(role, style);
+}
+
+/**
+ * Append this seat's OWN memory to its lens prompt: the per-lens notebook
+ * file first (lens/macro.md | technical.md | risk.md), then — seat-specific
+ * extras — the regime ledger line for the Macro seat and the seat's best
+ * in-scope skill index line when it differs from the shared slice's global
+ * best. Returns the prompt unchanged for UNASSIGNED seats or when the seat
+ * has no memory yet. Every piece is best-effort: a broken notebook must
+ * never break prompt assembly.
+ */
+export function appendLensMemoryToPrompt(
+    providerKey: AIProvider,
+    config: AnalystRoleAssignment[],
+    prompt: string,
+    opts?: { coin?: string; memoryQuery?: MemoryRetrievalQuery },
+): string {
+    if (!prompt) return prompt;
+    try {
+        const role = getRoleForProvider(providerKey, config);
+        if (role === AnalystRole.UNASSIGNED) return prompt;
+        const parts: string[] = [];
+        const memory = summarizeLensMemory(role);
+        if (memory) {
+            parts.push(`MY LENS MEMORY (this seat's own record — weigh it before answering):\n${memory}`);
+        }
+        if (role === AnalystRole.MACRO_VOLATILITY) {
+            const regimeLine = regimeSummaryBlock(opts?.coin);
+            if (regimeLine) parts.push(regimeLine);
+        }
+        const supplement = lensSkillSupplementLine(opts?.memoryQuery, role);
+        if (supplement) {
+            parts.push(`MY LENS'S BEST MATCHING SKILL (in-scope for this seat):\n${supplement}`);
+        }
+        if (parts.length === 0) return prompt;
+        return `${prompt}\n\n${parts.join('\n\n')}`;
+    } catch {
+        return prompt;
+    }
 }
 
 // =============================================================================
