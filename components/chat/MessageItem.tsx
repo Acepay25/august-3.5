@@ -25,6 +25,7 @@ import TodayReassessmentPanel from './TodayReassessmentPanel';
 import { buildSupplementMarkdown, extractModeratorThinking } from '../../utils/analysisUtils';
 import { extractAndStripThinkBlocks } from '../../utils/thinkingSplit';
 import { formatModelDisplayName } from '../../utils/providerUtils';
+import { isEnsembleMessage as isEnsembleMessageOf, stageActorsForMessage } from '../../utils/debateStageActors';
 import { AutopilotResolution } from '../../services/ui/OutcomeAutopilotService';
 
 // Helper to validate URLs (XSS prevention)
@@ -221,74 +222,18 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
     }).filter(([, content]) => Boolean(content));
     // Ensemble reasoning is presented in the analyst progress/output card.
     // Do not duplicate it in the generic chat-level Thinking disclosure.
-    const isEnsembleMessage = Boolean(
-        message.ensembleProgress ||
-        message.isDebating ||
-        Object.keys(message.modelsUsed ?? {}).length > 1
-    );
+    const isEnsembleMessage = isEnsembleMessageOf(message);
     const debateTurns = message.debateTurns ?? message.postMortemDebateTurns ?? [];
 
     // Debate floor: one thinking bubble per debater in the chat
     // area; the full transcript streams in the right-hand side panel.
+    // Actor derivation lives in utils/debateStageActors so the opt-in
+    // DeskScene overlay projects the exact same debate state.
     const [debatePanelActor, setDebatePanelActor] = React.useState<string | null>(null);
-    const stageActors = React.useMemo((): DebateStageActor[] => {
-        if (!isEnsembleMessage) return [];
-        const active = message.activeDebateSpeakers ?? {};
-        const names: string[] = [];
-        for (const t of debateTurns) if (!names.includes(t.speaker)) names.push(t.speaker);
-        for (const k of Object.keys(active)) if (!names.includes(k)) names.push(k);
-        if (names.length === 0 && message.isDebating) names.push('Moderator');
-        return names.map(name => {
-            const last = debateTurns.slice().reverse().find(t => t.speaker === name);
-            const isActive = Boolean(message.isDebating) && (active[name] ?? 0) > 0;
-            const addressedTo = (last as { to?: string[] } | undefined)?.to;
-            const speechText = (last?.text ?? '').replace(/\s+/g, ' ').trim();
-            return {
-                id: name,
-                name,
-                toneKey: name,
-                live: Boolean(message.isDebating),
-                // Bubbles show the debate itself: "thinking…" until the first
-                // tokens land, then the newest lines of the seat's live turn.
-                // The full transcript streams in the side panel.
-                thinking: isActive && !speechText,
-                speaking: isActive && Boolean(speechText),
-                speech: speechText ? speechText.slice(-110) : '',
-                // Activity chip: "replying to X" from the
-                // REPLY-TO routing, else the NEWEST live desk-tool line
-                // (liveToolEvents is a newest-first rolling feed).
-                toolChip: addressedTo?.length
-                    ? `replying to ${addressedTo.join(', ')}`
-                    : (message.liveToolEvents ?? {})[name]?.split('\n')[0],
-                thought: (last?.reasoning ?? '').replace(/\s+/g, ' ').slice(0, 72),
-                // Quiet cost/latency tooltip from the run ledger —
-                // "Macro · gemini-2.5-pro · 41s · 1.2k out · ~$0.012".
-                // The per-seat dollar figure is the run total prorated by
-                // the seat's token share (chars when tokens are missing) —
-                // an estimate, hence the tilde.
-                meta: (() => {
-                    const seat = (message.runStats?.analysts ?? []).find(a =>
-                        a.displayName === name || name.includes(a.displayName));
-                    if (!seat) return undefined;
-                    const secs = seat.durationMs ? `${Math.round(seat.durationMs / 1000)}s` : null;
-                    const out = seat.charsOut ? `${(seat.charsOut / 1000).toFixed(1)}k out` : null;
-                    const usd = (() => {
-                        const rs = message.runStats;
-                        if (!rs?.costUsd || !rs.analysts?.length) return null;
-                        const tokOf = (a: { promptTokens?: number; completionTokens?: number }): number =>
-                            (a.promptTokens ?? 0) + (a.completionTokens ?? 0);
-                        const totalTokens = rs.analysts.reduce((s, a) => s + tokOf(a), 0);
-                        const seatTokens = tokOf(seat);
-                        if (totalTokens > 0 && seatTokens > 0) return `~$${(rs.costUsd * seatTokens / totalTokens).toFixed(3)}`;
-                        const totalChars = rs.analysts.reduce((s, a) => s + (a.charsOut ?? 0), 0);
-                        if (totalChars > 0 && seat.charsOut) return `~$${(rs.costUsd * seat.charsOut / totalChars).toFixed(3)}`;
-                        return null;
-                    })();
-                    return [seat.displayName, seat.modelId, secs, out, usd].filter(Boolean).join(' · ');
-                })(),
-            };
-        });
-    }, [isEnsembleMessage, debateTurns, message.activeDebateSpeakers, message.isDebating, message.runStats]);
+    const stageActors = React.useMemo(
+        (): DebateStageActor[] => stageActorsForMessage(message),
+        [message],
+    );
 
     // Live phase line for the floor caption — "Round 2 · Rebuttal rounds" —
     // so the watcher always knows where in the protocol the debate is.

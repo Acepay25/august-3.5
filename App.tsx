@@ -66,6 +66,7 @@ const UpdateOverlay = React.lazy(() => import('./components/shared/UpdateOverlay
 const CompareModal = React.lazy(() => import('./components/analysis/CompareModal'));
 const SavedAnalysesGallery = React.lazy(() => import('./components/dashboards/SavedAnalysesGallery'));
 const MistakeWarningBanner = React.lazy(() => import('./components/shared/MistakeWarningBanner'));
+const DeskScene = React.lazy(() => import('./components/desk/DeskScene'));
 import CommandPalette, { PaletteAction } from './components/shared/CommandPalette';
 import AnalysisProgress from './components/analysis/AnalysisProgress';
 import { DEFAULT_FRAMEWORKS } from './constants/models';
@@ -79,6 +80,7 @@ import { takeSkillDraft, tombstoneSkillDraftKey, draftTriggerKey } from './utils
 import { ingestCraftedSkill, ingestCraftedSkillFromDraft } from './services/learning/SkillMemoryService';
 import { buildRiskBook, formatRiskBookBadge } from './utils/riskBook';
 import { reconstructOpenings } from './utils/debateResume';
+import { isEnsembleMessage, stageActorsForMessage } from './utils/debateStageActors';
 import { processImagesForSummarization } from './utils/imageProcessor';
 import { extractLastJson } from './utils/jsonUtils';
 import { parseLevelProbabilities } from './schemas/tradeAnalysis';
@@ -1044,6 +1046,26 @@ const App: React.FC = () => {
     // ─── Saved analyses gallery ────────────────────────────────────────────
     const [isSavedGalleryOpen, setIsSavedGalleryOpen] = useState(false);
 
+    // ─── Desk view (opt-in overlay projecting the current debate) ──────────
+    const [isDeskSceneOpen, setIsDeskSceneOpen] = useState(false);
+
+    // The debate the desk view projects: the message currently debating, else
+    // the most recent ensemble message. Actors derive through the SAME builder
+    // MessageItem uses, so the desk view never drifts from the transcript.
+    const deskSceneMessage = useMemo(() => {
+        const debating = messages.find(m => m.isDebating);
+        if (debating) return debating;
+        for (let i = messages.length - 1; i >= 0; i--) {
+            const m = messages[i];
+            if (isEnsembleMessage(m) || (m.debateTurns?.length ?? 0) > 0) return m;
+        }
+        return null;
+    }, [messages]);
+    const deskSceneActors = useMemo(
+        () => (deskSceneMessage ? stageActorsForMessage(deskSceneMessage) : []),
+        [deskSceneMessage],
+    );
+
     // Esc cancels an in-progress analysis (including the debate phase). Never
     // fires while the user is typing in an input/textarea/contenteditable, and
     // never while an overlay is open — overlays close themselves on Esc (their
@@ -1055,7 +1077,7 @@ const App: React.FC = () => {
             const target = e.target as HTMLElement | null;
             const isTyping = !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable);
             if (isTyping) return;
-            const anyOverlayOpen = isSettingsMenuVisible || isLiveMarketVisible || isCommandPaletteOpen || isSavedGalleryOpen || isUserModalOpen || isAdvancedAnalyticsOpen || isVisionDataVisible || isStrategySearchVisible || isSavedAnalysesVisible || isVersionHistoryVisible || isWatchListVisible || isApprovalInboxVisible;
+            const anyOverlayOpen = isSettingsMenuVisible || isLiveMarketVisible || isCommandPaletteOpen || isSavedGalleryOpen || isUserModalOpen || isAdvancedAnalyticsOpen || isVisionDataVisible || isStrategySearchVisible || isSavedAnalysesVisible || isVersionHistoryVisible || isWatchListVisible || isApprovalInboxVisible || isDeskSceneOpen;
             if (anyOverlayOpen) {
                 // Overlays with their own document-level Esc handlers
                 // (SettingsMenu, command palette, Journal, LiveMarket, dialogs)
@@ -1081,7 +1103,7 @@ const App: React.FC = () => {
         };
         document.addEventListener('keydown', onKeyDown);
         return () => document.removeEventListener('keydown', onKeyDown);
-    }, [isAnalysisInProgress, isPostMortemInProgress, handleCancelAll, toast, isSettingsMenuVisible, isLiveMarketVisible, isCommandPaletteOpen, isSavedGalleryOpen, isUserModalOpen, isAdvancedAnalyticsOpen, isVisionDataVisible, isStrategySearchVisible, isSavedAnalysesVisible, isVersionHistoryVisible, isWatchListVisible, isApprovalInboxVisible]);
+    }, [isAnalysisInProgress, isPostMortemInProgress, handleCancelAll, toast, isSettingsMenuVisible, isLiveMarketVisible, isCommandPaletteOpen, isSavedGalleryOpen, isUserModalOpen, isAdvancedAnalyticsOpen, isVisionDataVisible, isStrategySearchVisible, isSavedAnalysesVisible, isVersionHistoryVisible, isWatchListVisible, isApprovalInboxVisible, isDeskSceneOpen]);
 
     const {
         comparePrimary,
@@ -2403,6 +2425,13 @@ const App: React.FC = () => {
             run: () => handleSetLensConfig({ ...lensConfig, enabled: !lensConfig.enabled }),
         },
         {
+            id: 'desk-view',
+            label: isDeskSceneOpen ? 'Close desk view' : 'Open desk view',
+            hint: 'Debate',
+            // Opt-in overlay projecting the current debate as a room of seat cards.
+            run: () => setIsDeskSceneOpen(v => !v),
+        },
+        {
             id: 'watch-list',
             label: 'Open Watch list',
             hint: `${watchedSignals.filter(s => !s.outcome || s.outcome === TradeOutcome.PENDING).length} open`,
@@ -3684,6 +3713,25 @@ const App: React.FC = () => {
                 )}
 
                 </div>
+
+            {/* Desk view — opt-in projection of the current debate as a room of
+                seat cards. Toggled from the command palette ("desk view" action);
+                hidden by default. Projects the same debate state the transcript
+                renders. */}
+            {isDeskSceneOpen && deskSceneMessage && (
+                <React.Suspense fallback={null}>
+                    <DeskScene
+                        actors={deskSceneActors}
+                        caption={deskSceneMessage.analysis?.coinName
+                            ? `${deskSceneMessage.analysis.coinName} · ${deskSceneMessage.isDebating ? 'debate in progress' : 'debate floor'}`
+                            : (deskSceneMessage.isDebating ? 'Debate in progress' : 'Debate floor')}
+                        verdict={deskSceneMessage.analysis
+                            ? `${deskSceneMessage.analysis.direction} · confidence ${deskSceneMessage.analysis.confidence}`
+                            : undefined}
+                        onClose={() => setIsDeskSceneOpen(false)}
+                    />
+                </React.Suspense>
+            )}
 
             {/* Command palette — Ctrl/Cmd+K */}
             <CommandPalette
