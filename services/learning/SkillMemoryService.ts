@@ -84,6 +84,13 @@ export interface SkillMeta {
     /** Invocation control (Agent Skills frontmatter port): which debate
      *  audience may load this skill. Default 'all'. */
     audience?: 'analyst' | 'moderator' | 'all';
+    /** Lens scope (Phase 3): which analyst seat this skill is meant for.
+     *  Default 'all' (any seat may load it). Used to filter skills per seat
+     *  at retrieval so a risk-scoped skill does not bleed into the macro
+     *  lens. The lens filter is advisory by default: when the calling code
+     *  passes `activeLens` to retrieval, scope-'risk' skills are dropped
+     *  from non-risk seat prompts. */
+    lensScope?: 'macro' | 'technical' | 'risk' | 'all';
     /** Latest automated A/B verdict (SkillEvalService). 'hurts' demotes a
      *  confirmed skill back to candidate on the next evidence pass. */
     evalVerdict?: 'helps' | 'mixed' | 'hurts' | 'inconclusive';
@@ -195,6 +202,10 @@ export const parseSkillMarkdown = (content: string): SkillMeta | null => {
         audience: (() => {
             const a = pick('audience');
             return a === 'analyst' || a === 'moderator' ? a : 'all';
+        })(),
+        lensScope: (() => {
+            const s = (pick('lensScope') || '').toLowerCase();
+            return s === 'macro' || s === 'technical' || s === 'risk' ? s : 'all';
         })(),
         evalVerdict: (() => {
             const v = (pick('evalVerdict') || '').toLowerCase();
@@ -321,6 +332,7 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
         ...(meta.lastEvidenceAt ? [`lastEvidenceAt: ${meta.lastEvidenceAt}`] : []),
         `modified: ${meta.modifiedAt ?? new Date().toISOString()}`,
         ...(meta.audience && meta.audience !== 'all' ? [`audience: ${meta.audience}`] : []),
+        ...(meta.lensScope && meta.lensScope !== 'all' ? [`lensScope: ${meta.lensScope}`] : []),
         ...(meta.evalVerdict ? [`evalVerdict: ${meta.evalVerdict}${meta.evalDetail ? ` (${meta.evalDetail})` : ''}`] : []),
         ...(meta.lastEvalAt ? [`lastEvalAt: ${meta.lastEvalAt}`] : []),
         ...(meta.description ? [`description: ${meta.description.replace(/\n/g, ' ').slice(0, 300)}`] : []),
@@ -1415,6 +1427,29 @@ const countClosedTrades = (trades: LoggedTrade[]): number =>
  * MIN_SAMPLE_FOR_VETO counted trades of evidence (zero-evidence candidates
  * never reach the model, so they must not reach the trade either).
  */
+export type LensScopeForAnalysis = 'macro' | 'technical' | 'risk' | 'all';
+
+/** Map a `ModeratorLens` / `AnalystRole` to its lensScope string. */
+const lensScopeFromRole = (role?: string): LensScopeForAnalysis => {
+    if (!role) return 'all';
+    const r = role.toLowerCase();
+    if (r.includes('macro') || r.includes('volatility')) return 'macro';
+    if (r.includes('technical') || r.includes('chart')) return 'technical';
+    if (r.includes('risk') || r.includes('execution')) return 'risk';
+    return 'all';
+};
+
+/** A skill is in-scope for an active lens when its lensScope is 'all' or
+ *  matches the active lens. When no active lens is provided, the filter
+ *  is permissive (legacy call sites that don't pass an active lens should
+ *  keep seeing the same skills as before — the lens filter is opt-in). */
+const skillInScopeForLens = (m: SkillMeta, activeLens?: string): boolean => {
+    if (!activeLens) return true;
+    const scope = m.lensScope ?? 'all';
+    if (scope === 'all') return true;
+    return scope === lensScopeFromRole(activeLens);
+};
+
 export const applyNotebookSkillsToAnalysis = <T extends {
     coinName?: string;
     direction?: string;
@@ -1425,7 +1460,7 @@ export const applyNotebookSkillsToAnalysis = <T extends {
     originalConfidence?: string;
     riskVeto?: string;
     validationWarnings?: string[];
-}>(analysis: T, options?: { regime?: string }): T => {
+}>(analysis: T, options?: { regime?: string; activeLens?: string }): T => {
     const setup = {
         coin: analysis.coinName,
         direction: analysis.direction,
@@ -1446,6 +1481,10 @@ export const applyNotebookSkillsToAnalysis = <T extends {
         .map(enabledSkillMeta)
         .filter((m): m is SkillMeta => Boolean(m && skillStrictlyMatchesSetup(m, setup)))
         .filter(m => (m.audience ?? 'all') !== 'moderator')
+        // Phase 3: lens-scope filter — a 'risk'-scoped skill is dropped
+        // when the active lens is the macro seat, and vice versa. Default
+        // 'all' skills still pass through unchanged.
+        .filter(m => skillInScopeForLens(m, options?.activeLens))
         .map(m => ({
             m,
             score: (m.status === 'confirmed' ? 2 : 1)
