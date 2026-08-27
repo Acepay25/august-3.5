@@ -25,6 +25,7 @@ import {
     isSkillFile,
     parseSkillMarkdown,
     skillMatchesSetup,
+    skillInScopeForLens,
     type SkillMeta,
 } from './SkillMemoryService';
 import {
@@ -78,6 +79,7 @@ const kindForHit = (hit: WalkedMemoryHit): RetrievedMemorySource['kind'] => {
 const rankedMatchedSkills = (
     query?: MemoryRetrievalQuery,
     audience?: 'analyst' | 'moderator',
+    activeLens?: string,
 ): Array<{ file: ReturnType<typeof getMemoryFiles>['files'][number]; meta: SkillMeta; score: number }> => {
     if (!query) return [];
     const setup = {
@@ -96,6 +98,11 @@ const rankedMatchedSkills = (
         // Audience filtering happens BEFORE ranking (#4 invocation control): a
         // blocked best-match must surface the second-best skill, not an empty slot.
         if (audience && !skillAllowedFor(meta, audience)) continue;
+        // Lens-scope filtering (prompt side of the lensScope contract): a
+        // risk-scoped skill must not occupy the macro seat's prompt budget.
+        // Like the audience filter it runs BEFORE ranking so a blocked
+        // best-match surfaces the next in-scope skill. No activeLens ⇒ no-op.
+        if (!skillInScopeForLens(meta, activeLens)) continue;
         // Zero-evidence skills stay OUT of prompt injection.
         // A 0W/0L draft is an unproven hunch; injecting it gave the model no
         // basis to weigh it against — and contradicted the dashboard's own
@@ -156,8 +163,9 @@ export const estimateMemoryTokensPerRun = (): { worstCase: number; typical: numb
 const bestMatchedSkill = (
     query?: MemoryRetrievalQuery,
     audience?: 'analyst' | 'moderator',
+    activeLens?: string,
 ): { file: ReturnType<typeof getMemoryFiles>['files'][number]; meta: SkillMeta } | null =>
-    rankedMatchedSkills(query, audience)[0] ?? null;
+    rankedMatchedSkills(query, audience, activeLens)[0] ?? null;
 
 /**
  * Doctrine block — the ONE narrative voice, fixed slot on every stage.
@@ -231,8 +239,9 @@ const matchedSkillBlock = (
     query?: MemoryRetrievalQuery,
     audience: 'analyst' | 'moderator' = 'analyst',
     stage: MemoryStage = 'opening',
+    activeLens?: string,
 ): { text: string; meta: SkillMeta | null; name: string } => {
-    const match = bestMatchedSkill(query, audience);
+    const match = bestMatchedSkill(query, audience, activeLens);
     if (!match) return { text: '', meta: null, name: '' };
     const header = `[skills/${match.file.name} · ${match.meta.status} · ${Math.round(match.meta.wins)}W/${Math.round(match.meta.losses)}L]`;
     if (stage !== 'verdict') {
@@ -253,6 +262,24 @@ const matchedSkillBlock = (
         meta: match.meta,
         name: match.file.name,
     };
+};
+
+/**
+ * Per-lens skill supplement: the best IN-SCOPE skill index line for one lens
+ * seat, or '' when that seat's best in-scope skill is already the global
+ * best (the shared analyst slice shows it to every seat anyway). This is
+ * how a lens seat sees its OWN top skill even when a higher-ranked
+ * out-of-scope skill occupies the shared slot.
+ */
+export const lensSkillSupplementLine = (
+    query: MemoryRetrievalQuery | undefined,
+    activeLens: string,
+): string => {
+    const globalBest = rankedMatchedSkills(query, 'analyst')[0] ?? null;
+    const lensBest = rankedMatchedSkills(query, 'analyst', activeLens)[0] ?? null;
+    if (!lensBest) return '';
+    if (globalBest && globalBest.file.name === lensBest.file.name) return '';
+    return `[skills/${lensBest.file.name} · ${lensBest.meta.status} · ${Math.round(lensBest.meta.wins)}W/${Math.round(lensBest.meta.losses)}L]\n${skillIndexLine(lensBest.file.name, lensBest.meta)}`;
 };
 
 /**
@@ -400,6 +427,7 @@ export const listRetrievedMemorySources = (
     query?: MemoryRetrievalQuery,
     trades?: LoggedTrade[],
     audience: 'analyst' | 'moderator' = 'analyst',
+    activeLens?: string,
 ): RetrievedMemorySource[] => {
     const out: RetrievedMemorySource[] = [];
     try {
@@ -407,7 +435,7 @@ export const listRetrievedMemorySources = (
     } catch { /* registry unreadable — skip the source line */ }
     if (doctrineBlock()) out.push({ path: 'profile/doctrine', kind: 'identity' });
     if (identityBlock()) out.push({ path: 'profile/memory', kind: 'identity' });
-    const skillMatch = matchedSkillBlock(query, audience);
+    const skillMatch = matchedSkillBlock(query, audience, 'opening', activeLens);
     if (skillMatch.meta) out.push({ path: `skills/${skillMatch.name}`, kind: 'skill' });
     if (riskRulesBlock()) out.push({ path: 'rules/risk-rules', kind: 'rules' });
     if (uncoveredMistakeLine(query)) out.push({ path: 'rules/recurring-mistakes', kind: 'rules' });
@@ -432,6 +460,10 @@ export interface MemoryContextOptions {
      *  (A/B evals) must not pollute the attribution telemetry that
      *  applySkillEvidence trusts for credit-granting windows. */
     recordInjections?: boolean;
+    /** Active lens seat ('macro' | 'technical' | 'risk' | role-shaped string).
+     *  Prompt-side half of the lensScope contract: lens-scoped skills only
+     *  reach the prompt of their own seat. Omitted ⇒ filter is a no-op. */
+    activeLens?: string;
 }
 
 export const getMemoryFilesContext = (
@@ -456,11 +488,12 @@ export const getMemoryFilesContext = (
     };
 
     const exclude = options?.excludeSkillName?.toLowerCase().replace(/\.md$/i, '');
+    const activeLens = options?.activeLens;
     if (push(identityBlock())) injected.push({ path: 'profile/memory', kind: 'identity' });
     if (stage === 'verdict') push(conflictNote(query)); // a flag, not a notebook source
     const primary = (() => {
-        if (!exclude) return matchedSkillBlock(query, audience, stage);
-        const firstNonExcluded = rankedMatchedSkills(query, audience)
+        if (!exclude) return matchedSkillBlock(query, audience, stage, activeLens);
+        const firstNonExcluded = rankedMatchedSkills(query, audience, activeLens)
             .find(m => m.file.name.toLowerCase().replace(/\.md$/i, '') !== exclude);
         return firstNonExcluded
             ? { text: `[skills/${firstNonExcluded.file.name}] ${skillIndexLine(firstNonExcluded.file.name, firstNonExcluded.meta)}`, meta: firstNonExcluded.meta, name: firstNonExcluded.file.name }
@@ -472,7 +505,7 @@ export const getMemoryFilesContext = (
         // lines — one matching skill is a coincidence, two a pattern.
         // The primary skill is already pushed above — skip it
         // here so it never renders twice when no exclusion is set.
-        const ranked = rankedMatchedSkills(query).filter(
+        const ranked = rankedMatchedSkills(query, undefined, activeLens).filter(
             m => (!exclude || m.file.name.toLowerCase().replace(/\.md$/i, '') !== exclude)
                 && m.file.name !== primary.name,
         );

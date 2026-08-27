@@ -1460,7 +1460,7 @@ const countClosedTrades = (trades: LoggedTrade[]): number =>
 export type LensScopeForAnalysis = 'macro' | 'technical' | 'risk' | 'all';
 
 /** Map a `ModeratorLens` / `AnalystRole` to its lensScope string. */
-const lensScopeFromRole = (role?: string): LensScopeForAnalysis => {
+export const lensScopeFromRole = (role?: string): LensScopeForAnalysis => {
     if (!role) return 'all';
     const r = role.toLowerCase();
     if (r.includes('macro') || r.includes('volatility')) return 'macro';
@@ -1473,7 +1473,7 @@ const lensScopeFromRole = (role?: string): LensScopeForAnalysis => {
  *  matches the active lens. When no active lens is provided, the filter
  *  is permissive (legacy call sites that don't pass an active lens should
  *  keep seeing the same skills as before — the lens filter is opt-in). */
-const skillInScopeForLens = (m: SkillMeta, activeLens?: string): boolean => {
+export const skillInScopeForLens = (m: SkillMeta, activeLens?: string): boolean => {
     if (!activeLens) return true;
     const scope = m.lensScope ?? 'all';
     if (scope === 'all') return true;

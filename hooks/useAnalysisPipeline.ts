@@ -74,8 +74,9 @@ import { buildSimilarSetupsContext, buildRegimeWeightingContext } from '../servi
 import { generateMandatoryPatternCheck, generatePatternMemoryEnforcementContext } from '../services/learning/PatternMemorySynthesisService';
 import { applyNotebookSkillsToAnalysis, confirmedAvoidForSetup, titleFromMeta, skillFileNameFor } from '../services/learning/SkillMemoryService';
 import { sortByFitness } from '../services/learning/providerFitness';
+import { recordRegimeDay, marketRegimeToLedger } from '../services/learning/regimeLedger';
 import { VetoLedgerService } from '../services/ui/VetoLedgerService';
-import { ANALYST_ROLE_DEFINITIONS, getLensPromptForStyle, getRoleForProvider, EnsembleModelSelection } from '../services/ui/AnalystLensService';
+import { ANALYST_ROLE_DEFINITIONS, getLensPromptForStyle, getRoleForProvider, appendLensMemoryToPrompt, EnsembleModelSelection } from '../services/ui/AnalystLensService';
 import { buildHybridEnvelope, buildOcrEnvelope, envelopeKindForRole } from '../utils/debateEnvelopes';
 import { buildRecommendationContract } from '../utils/recommendationContract';
 import { buildRunContractStages, type RunContractStage } from '../utils/runContract';
@@ -1214,6 +1215,20 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
                         devLog('[Hybrid Intelligence] SUCCESS - Got data for:', hybridResult.data.symbol);
 
+                        // Regime ledger (Macro-lens memory): record today's
+                        // regime for this coin so the regime seat can say "day 4
+                        // of ranging" instead of starting blank every run.
+                        // Fire-and-forget; deduped per coin×day.
+                        try {
+                            const ledgerRegime = marketRegimeToLedger(hybridResult.data.regime?.regime);
+                            if (hybridResult.data.symbol && ledgerRegime) {
+                                void recordRegimeDay(
+                                    { coin: hybridResult.data.symbol, regime: ledgerRegime, source: 'hybrid' },
+                                    getActiveUsername(),
+                                ).catch(() => { /* ledger is best-effort */ });
+                            }
+                        } catch { /* ledger is best-effort */ }
+
                         devLog('[Hybrid Intelligence] Injection length:', hybridDataInjection.length);
                         devLog('[Hybrid Intelligence] Injection preview:', hybridDataInjection.substring(0, 500));
                     } else {
@@ -1814,13 +1829,22 @@ ${reflectionBlock}`
                         // resolvedAssignments (not lensConfig.assignments): a stale
                         // persisted model id would otherwise make the role lookup
                         // return UNASSIGNED and drop the persona silently.
+                        // appendLensMemoryToPrompt then prepends this seat's OWN
+                        // memory file (lens/*.md) + seat extras (regime line for
+                        // Macro, in-scope skill supplement) so each lens reads its
+                        // own record before answering.
                         rolePrompt: runLensConfig.enabled && provider.thoughtsKey
-                            ? (customLensPrompts?.[getRoleForProvider(`${provider.config.id}::${provider.model}`, resolvedAssignments)]
+                            ? appendLensMemoryToPrompt(
+                                `${provider.config.id}::${provider.model}`,
+                                resolvedAssignments,
+                                customLensPrompts?.[getRoleForProvider(`${provider.config.id}::${provider.model}`, resolvedAssignments)]
                                 || getLensPromptForStyle(
                                     `${provider.config.id}::${provider.model}`,
                                     resolvedAssignments,
                                     effectiveTradingStyle
-                                ))
+                                ),
+                                { coin: finalSymbol ?? undefined, memoryQuery },
+                            )
                             : undefined,
                         // Normal mode (Lenses off): custom base prompt override.
                         systemPromptOverride: runLensConfig.enabled ? undefined : (customEnsemblePrompt || undefined),
@@ -3539,14 +3563,20 @@ ${accuracyVerificationNote}`
                                 isFamiliesEnabledInPureAI,
                                 isMemoryEnabledInPureAI,
                                 // Analyst Lens: pass role-specific prompt based on trading style
-                                // (custom prompt overrides from the prompt editor win).
+                                // (custom prompt overrides from the prompt editor win), then
+                                // prepend this seat's own lens memory (see multi-path note).
                                 rolePrompt: runLensConfig.enabled && provider.thoughtsKey
-                                    ? (customLensPrompts?.[getRoleForProvider(`${provider.config.id}::${provider.model}`, resolvedAssignments)]
+                                    ? appendLensMemoryToPrompt(
+                                        `${provider.config.id}::${provider.model}`,
+                                        resolvedAssignments,
+                                        customLensPrompts?.[getRoleForProvider(`${provider.config.id}::${provider.model}`, resolvedAssignments)]
                                         || getLensPromptForStyle(
                                             `${provider.config.id}::${provider.model}`,
                                             resolvedAssignments,
                                             effectiveTradingStyle
-                                        ))
+                                        ),
+                                        { coin: finalSymbol ?? undefined, memoryQuery },
+                                    )
                                     : undefined,
                                 // Normal mode (Lenses off): custom base prompt override.
                                 systemPromptOverride: runLensConfig.enabled ? undefined : (customEnsemblePrompt || undefined),
