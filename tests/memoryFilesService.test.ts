@@ -79,10 +79,12 @@ describe('MemoryFilesService', () => {
       expect(folders.map(f => f.name)).toEqual(['profile', 'trader-diary', 'market-conditions', 'rules', 'skills', 'bots']);
     });
 
-    it('seeds starter templates in market-conditions and rules', async () => {
-      expect(findFile('ranging-day.md', 'market-conditions')).toBeDefined();
-      expect(findFile('after-liquidity-sweep.md', 'market-conditions')).toBeDefined();
+    it('seeds only the risk-rules starter — the unread market-conditions playbooks are gone', async () => {
       expect(findFile('risk-rules.md', 'rules')).toBeDefined();
+      expect(findFile('ranging-day.md', 'market-conditions')).toBeUndefined();
+      expect(findFile('after-liquidity-sweep.md', 'market-conditions')).toBeUndefined();
+      // The folder itself stays — user notes there are still indexed.
+      expect(getMemoryFiles().folders.some(f => f.name === 'market-conditions')).toBe(true);
     });
 
     it('persists the seed so a reload does not reseed', async () => {
@@ -376,9 +378,8 @@ describe('MemoryFilesService', () => {
       expect(index).toContain('memory.md');
       expect(index).toContain('📁 trader-diary/');
       expect(index).toContain('BTCUSDT.md');
-      expect(index).toContain('📁 market-conditions/');
-      expect(index).toContain('ranging-day.md');
-      expect(index).toContain('Ranging / Low-ADX Day Playbook');
+      expect(index).toContain('📁 rules/');
+      expect(index).toContain('risk-rules.md');
       expect(index).toContain('**Graph**');
     });
 

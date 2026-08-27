@@ -9,6 +9,7 @@
 import { TradeAnalysis } from '../types';
 import { CraftedSkill } from '../schemas/learning';
 import { listSkills, skillMatchesSetup } from '../services/learning/SkillMemoryService';
+import { isMeaningfulLabel } from './meaningfulLabel';
 import { queueSkillDraft, isDraftTombstoned, draftTriggerKey, SkillDraft } from './skillDrafts';
 
 const cleanLine = (text: string, max: number): string =>
@@ -17,7 +18,10 @@ const cleanLine = (text: string, max: number): string =>
 /** Build the draft's IF/THEN from the verdict's pattern citation. */
 export const craftedSkillFromVerdict = (analysis: TradeAnalysis): CraftedSkill | null => {
     const family = analysis.detectedPatternFamily || analysis.marketConditions?.pattern;
-    if (!family) return null;
+    // The schema defaults missing pattern fields to the literal 'N/A' — a
+    // truthy string. Drafting a skill about the "N/A pattern" is junk, so
+    // placeholder labels are treated as no citation at all.
+    if (!isMeaningfulLabel(family)) return null;
     const coin = analysis.coinName?.toUpperCase().replace(/USDT?$/, '') || 'the asset';
     const direction = analysis.direction === 'Long' || analysis.direction === 'Short'
         ? analysis.direction

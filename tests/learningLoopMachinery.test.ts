@@ -37,6 +37,8 @@ import {
     serializeSkill,
     titleFromMeta,
     applyReviewRecommendation,
+    applyNotebookSkillsToAnalysis,
+    MIN_SAMPLE_FOR_VETO,
     type SkillMeta,
 } from '../services/learning/SkillMemoryService';
 import { initMemoryFiles, createMemoryFile, getMemoryFiles, updateMemoryFile } from '../services/learning/MemoryFilesService';
@@ -621,5 +623,81 @@ describe('new frontmatter fields round-trip', () => {
         const parsed = parseSkillMarkdown(serializeSkill(meta, titleFromMeta(meta)))!;
         expect(parsed.evalStreak).toBe(2);
         expect(parsed.controlIds).toEqual(['c1', 'c2']);
+    });
+});
+
+// ─── 5. Candidate-avoid sample gate ─────────────────────────────────────────
+
+describe('candidate avoid enforcement needs MIN_SAMPLE_FOR_VETO evidence', () => {
+    beforeEach(() => {
+        // Other describes in this file seed confirmed skills into the same
+        // store — enforcement must see ONLY this describe's candidate.
+        store = {};
+    });
+
+    const seedCandidate = async (name: string, wins: number, losses: number): Promise<void> => {
+        await initMemoryFiles(USER);
+        const skills = getMemoryFiles().folders.find(f => f.name === 'skills')!;
+        await createMemoryFile(skills.id, name, `---
+status: candidate
+kind: avoid
+coin: BTCUSDT
+direction: Short
+family: Family A
+wins: ${wins}
+losses: ${losses}
+ifCondition: BTC short setup
+thenAction: skip the short
+tradeIds: ${Array.from({ length: wins + losses }, (_, i) => `t${i}`).join(',')}
+---
+
+# Candidate avoid BTC short
+
+**When:** BTC short setup
+**What I do:** skip.
+`, USER, true);
+    };
+
+    const analysis = (): {
+        coinName: string;
+        direction: string;
+        confidence: string;
+        probability: number;
+        detectedPatternFamily: string;
+        riskVeto?: string;
+        validationWarnings?: string[];
+    } => ({
+        coinName: 'BTCUSDT',
+        direction: 'Short',
+        confidence: 'High',
+        probability: 82,
+        detectedPatternFamily: 'Family A',
+        riskVeto: undefined,
+    });
+
+    it('a zero-evidence candidate does NOT cap confidence', async () => {
+        // Verdict-sourced drafts start at 0W/0L. Zero-evidence candidates
+        // never reach the model in the prompt — code-side enforcement must
+        // not reach further than injection does.
+        await seedCandidate('zero-ev-avoid.md', 0, 0);
+        const next = applyNotebookSkillsToAnalysis(analysis());
+        expect(next.confidence).toBe('High');
+        expect(next.validationWarnings ?? []).toEqual([]);
+    });
+
+    it('a single-evidence candidate stays quiet too (below the sample gate)', async () => {
+        await seedCandidate('one-ev-avoid.md', 1, 0);
+        const next = applyNotebookSkillsToAnalysis(analysis());
+        expect(next.confidence).toBe('High');
+    });
+
+    it('caps High → Low once the candidate has MIN_SAMPLE_FOR_VETO counted trades', async () => {
+        expect(MIN_SAMPLE_FOR_VETO).toBe(2);
+        await seedCandidate('two-ev-avoid.md', 1, 1);
+        const next = applyNotebookSkillsToAnalysis(analysis());
+        expect(next.confidence).toBe('Low');
+        // Still a size-down warning, never a hard veto.
+        expect(next.riskVeto).toBeUndefined();
+        expect(next.validationWarnings?.join(' ')).toMatch(/NOTEBOOK SKILL/);
     });
 });

@@ -1,3 +1,5 @@
+import { isMeaningfulLabel } from './meaningfulLabel';
+
 export interface IfThenClause {
     ifCondition: string;
     thenAction: string;
@@ -14,6 +16,9 @@ export const parseIfThenClauses = (text: string): IfThenClause[] => {
         const ifCondition = clean(rawIf).slice(0, 240);
         const thenAction = clean(rawThen).slice(0, 240);
         if (ifCondition.length < 8 || thenAction.length < 8) return;
+        // A clause whose whole side is a placeholder ("not applicable",
+        // "unknown", …) carries no tradable claim — drop it.
+        if (!isMeaningfulLabel(ifCondition) || !isMeaningfulLabel(thenAction)) return;
         if (found.some(x => x.ifCondition.toLowerCase() === ifCondition.toLowerCase())) return;
         found.push({ ifCondition, thenAction });
     };

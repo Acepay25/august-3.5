@@ -18,6 +18,7 @@
 
 import { getPreferenceObject, setPreferenceObject, removePreference } from '../infrastructure/PreferencesService';
 import { LoggedTrade, MemoryFile, MemoryFolder, TradeOutcome, UserProfile } from '../../types';
+import { isMeaningfulLabel } from '../../utils/meaningfulLabel';
 
 const MEMORY_KEY_PREFIX = 'memory_files_v1_';
 /** Diaries keep only the most recent entries so the injected file stays tight. */
@@ -56,35 +57,10 @@ const DEFAULT_FOLDERS: MemoryFolder[] = [
 ];
 
 const SEED_FILES: Omit<MemoryFile, 'id' | 'createdAt' | 'updatedAt'>[] = [
-    {
-        folderId: 'market-conditions',
-        name: 'ranging-day.md',
-        enabled: true,
-        content: `# Ranging / Low-ADX Day Playbook
-
-Edit this file with YOUR experience — the model reads it on every analysis.
-
-When the market is ranging (ADX < 20, price inside a 2×ATR range):
-- Trade the range edges, not the middle. Buy support, sell resistance.
-- Take profit at the opposite edge — do not expect a breakout.
-- Use a wider stop than on a trend day (ranges chop through stops).
-- If a range-edge candle closes beyond the level, the range may be breaking — stand aside and let it confirm.
-
-Remember: fading a fresh breakout is how range days turn into loss days.`,
-    },
-    {
-        folderId: 'market-conditions',
-        name: 'after-liquidity-sweep.md',
-        enabled: true,
-        content: `# After a Liquidity Sweep (stop hunt)
-
-- A sweep = a wick through a swing high/low that closes back inside.
-- Do NOT chase the wick. Wait for a 15m close back inside + reclaim of the level.
-- Enter on the first retest that holds, not on the spike itself.
-- Sweeps often precede reversals — but only if the sweep fails to close beyond the level.
-
-Edit with your own observations — the model reads this on every analysis.`,
-    },
+    // The market-conditions starter playbooks (ranging-day.md,
+    // after-liquidity-sweep.md) were removed: no retrieval path ever read
+    // them, so they only posed as knowledge. The folder stays — user
+    // notes there are still welcome, and the memory graph indexes them.
     {
         folderId: 'rules',
         name: 'risk-rules.md',
@@ -492,15 +468,52 @@ export const getMemoryFilesStats = (): { enabledCount: number; charCount: number
  * Pull a one-line lesson out of a post-mortem report: the first "Lesson:" /
  * "Key takeaway:" style line if present, else the first meaningful sentence.
  * Mirrors the reflection-injection lesson style (DecisionReflectionService).
+ *
+ * Header-mining guard: post-mortems often format the lesson as a TITLE —
+ * `**Lesson: 🩸 LOSS FORENSIC ANALYSIS…**` or `# Lesson: bold takeaway` —
+ * with the substance on later lines. Matching the wrapper line stored the
+ * title and dropped the lesson, so heading/bold-wrapped matches are
+ * rejected, and captures that are themselves title-shaped (all-caps
+ * forensics headers) are skipped in favor of the first real sentence.
  */
+const LESSON_TITLE_PREFIX = /^(loss forensic|forensic analysis|key takeaway|post[- ]?mortem)/i;
+
+/** True when the captured text reads as a section title, not a sentence. */
+const isTitleShapedLesson = (text: string): boolean => {
+    const t = text.trim();
+    if (LESSON_TITLE_PREFIX.test(t)) return true;
+    const words = t.match(/[A-Za-z]{2,}/g) ?? [];
+    return words.length >= 2 && words.every(w => w === w.toUpperCase());
+};
+
 export const extractLessonFromPostMortem = (postMortem: string): string => {
     if (!postMortem) return '';
     const LESSON_PATTERN = /(?:key\s+)?(?:lesson|lesson\s+learned|takeaway|actionable\s+takeaway|key\s+insight|what\s+(?:should|to)\s+(?:i\s+)?do\s+(?:differently\s+)?(?:next|next\s+time)?)\s*[:\-–]\s*([^\n]{10,})/i;
-    const match = postMortem.match(LESSON_PATTERN);
-    if (match) return match[1].replace(/^[\s*_\-–:：]+/, '').replace(/\s+/g, ' ').trim().slice(0, 200);
-    // Fallback: the first non-header, non-list line that looks like a sentence.
+    for (const rawLine of postMortem.split('\n')) {
+        const line = rawLine.trim();
+        if (!line) continue;
+        const isHeading = /^#{1,6}\s/.test(line);
+        const isBoldWrapped = line.startsWith('**') && line.endsWith('**');
+        // Strip heading/bold wrappers so a "Lesson:" inside them can match…
+        const stripped = line.replace(/^#{1,6}\s+/, '').replace(/^\*\*(.+?)\*\*$/, '$1').trim();
+        const match = stripped.match(LESSON_PATTERN);
+        if (!match) continue;
+        // …but the wrapper line itself is a title — the substance is below.
+        if (isHeading || isBoldWrapped) continue;
+        const capture = match[1]
+            .replace(/^[\s*_\-–:：]+/, '')
+            .replace(/[*_]+/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+        if (capture.length < 10 || isTitleShapedLesson(capture)) continue;
+        return capture.slice(0, 200);
+    }
+    // Fallback: the first non-header, non-list line that looks like a
+    // sentence. Label-shaped lines ("Lesson: …") are excluded too — if the
+    // loop above rejected their capture, the label itself is not the lesson.
+    const LESSON_LABEL = /^(?:key\s+)?(?:lesson(?:\s+learned)?|takeaway|actionable\s+takeaway|key\s+insight)\s*[:\-–]/i;
     const line = postMortem.split('\n').map(l => l.trim()).find(l =>
-        l.length > 20 && !l.startsWith('#') && !l.startsWith('**') && !l.startsWith('-') && !l.startsWith('*') && !l.startsWith('>')
+        l.length > 20 && !l.startsWith('#') && !l.startsWith('**') && !l.startsWith('-') && !l.startsWith('*') && !l.startsWith('>') && !LESSON_LABEL.test(l)
     );
     return line ? line.replace(/\s+/g, ' ').slice(0, 200) : '';
 };
@@ -709,7 +722,7 @@ const promotePatternMemoryHeadings = (body: string): string => {
     }).join('\n');
 };
 
-/** Drop product sections whose only content is None / N/A / blank. */
+/** Drop product sections whose heading is a placeholder ("N/A", "None") or whose only content is None / N/A / blank. */
 export const collapseEmptyPatternMemorySections = (markdown: string): string => {
     const lines = markdown.split('\n');
     const chunks: { heading: string | null; lines: string[] }[] = [{ heading: null, lines: [] }];
@@ -730,7 +743,7 @@ export const collapseEmptyPatternMemorySections = (markdown: string): string => 
         }
         const body = chunk.lines.join('\n').trim();
         const keepAlways = PATTERN_MEMORY_KEEP.has(chunk.heading.toLowerCase());
-        if (!keepAlways && EMPTY_SECTION.test(body)) continue;
+        if (!keepAlways && (!isMeaningfulLabel(chunk.heading) || EMPTY_SECTION.test(body))) continue;
         kept.push(`## ${chunk.heading}\n${chunk.lines.join('\n')}`.trimEnd());
     }
     return kept.join('\n\n').trim();
