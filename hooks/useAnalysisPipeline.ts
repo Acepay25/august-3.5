@@ -73,7 +73,8 @@ import { writeNotebookNoteFromRequest } from '../services/learning/NotebookWrite
 import { buildSimilarSetupsContext, buildRegimeWeightingContext } from '../services/learning/SetupMemoryService';
 import { generateMandatoryPatternCheck, generatePatternMemoryEnforcementContext } from '../services/learning/PatternMemorySynthesisService';
 import { applyNotebookSkillsToAnalysis, confirmedAvoidForSetup, titleFromMeta, skillFileNameFor } from '../services/learning/SkillMemoryService';
-import { sortByFitness } from '../services/learning/providerFitness';
+import { sortByFitness, recordPreflightResult } from '../services/learning/providerFitness';
+import { buildPreflightBlock, applyPreflightGate } from '../services/learning/preflight';
 import { recordRegimeDay, marketRegimeToLedger } from '../services/learning/regimeLedger';
 import { VetoLedgerService } from '../services/ui/VetoLedgerService';
 import { ANALYST_ROLE_DEFINITIONS, getLensPromptForStyle, getRoleForProvider, appendLensMemoryToPrompt, EnsembleModelSelection } from '../services/ui/AnalystLensService';
@@ -1832,9 +1833,12 @@ ${reflectionBlock}`
                         // appendLensMemoryToPrompt then prepends this seat's OWN
                         // memory file (lens/*.md) + seat extras (regime line for
                         // Macro, in-scope skill supplement) so each lens reads its
-                        // own record before answering.
+                        // own record before answering. buildPreflightBlock goes
+                        // FIRST: the seat must open with DATA / SOURCE /
+                        // FALSIFICATION or its claim is substituted (validated
+                        // in the .then below, recorded to provider fitness).
                         rolePrompt: runLensConfig.enabled && provider.thoughtsKey
-                            ? appendLensMemoryToPrompt(
+                            ? `${buildPreflightBlock()}\n\n${appendLensMemoryToPrompt(
                                 `${provider.config.id}::${provider.model}`,
                                 resolvedAssignments,
                                 customLensPrompts?.[getRoleForProvider(`${provider.config.id}::${provider.model}`, resolvedAssignments)]
@@ -1844,7 +1848,7 @@ ${reflectionBlock}`
                                     effectiveTradingStyle
                                 ),
                                 { coin: finalSymbol ?? undefined, memoryQuery },
-                            )
+                            )}`
                             : undefined,
                         // Normal mode (Lenses off): custom base prompt override.
                         systemPromptOverride: runLensConfig.enabled ? undefined : (customEnsemblePrompt || undefined),
@@ -1992,10 +1996,25 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                          durationMs: Math.round(performance.now() - runStartedAtMs),
                                          charsOut: (result.finalOutput?.length ?? 0) + (result.thoughtProcess?.length ?? 0),
                                      });
+                                     // Preflight gate (lens mode): the seat's prompt
+                                     // demanded DATA / SOURCE / FALSIFICATION. Validate
+                                     // the opening claim; on failure substitute a NO
+                                     // CLAIM placeholder so the debate argues with the
+                                     // seat's actual (missing) evidence instead of a
+                                     // hallucinated call, and record the outcome to
+                                     // provider fitness (best-effort, never throws).
+                                     let gated = result;
+                                     if (runLensConfig.enabled && provider.thoughtsKey) {
+                                         const gate = applyPreflightGate(result.finalOutput);
+                                         void recordPreflightResult(getActiveUsername(), provider.config.id, gate.passed);
+                                         if (!gate.passed) {
+                                             gated = { ...result, finalOutput: gate.output };
+                                         }
+                                     }
                                      if (isStagedEnsemble) {
                                          const split = splitThinkingFromOutput(
-                                             reasoningMapRef.current[provider.thoughtsKey || provider.name] || result.thoughtProcess || '',
-                                             result.finalOutput || '',
+                                             reasoningMapRef.current[provider.thoughtsKey || provider.name] || gated.thoughtProcess || '',
+                                             gated.finalOutput || '',
                                          );
                                          updateEnsembleProgress(progress => ({
                                              ...progress,
@@ -2004,13 +2023,13 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                                      ...analyst,
                                                      status: 'complete',
                                                      finalOutput: split.output,
-                                                     thoughtProcess: split.thinking || result.thoughtProcess,
+                                                     thoughtProcess: split.thinking || gated.thoughtProcess,
                                                      reasoning: split.thinking,
                                                  }
                                                  : analyst),
                                          }));
                                      }
-                                     return result;
+                                     return gated;
                                  })
                                  .catch((err: any) => {
                                      const errorMsg = err instanceof Error ? err.message : String(err);
@@ -3565,8 +3584,11 @@ ${accuracyVerificationNote}`
                                 // Analyst Lens: pass role-specific prompt based on trading style
                                 // (custom prompt overrides from the prompt editor win), then
                                 // prepend this seat's own lens memory (see multi-path note).
+                                // Preflight block first, as in the multi path — solo runs
+                                // record the same pass/fail telemetry but never substitute
+                                // the output (there is no debate to absorb a NO CLAIM).
                                 rolePrompt: runLensConfig.enabled && provider.thoughtsKey
-                                    ? appendLensMemoryToPrompt(
+                                    ? `${buildPreflightBlock()}\n\n${appendLensMemoryToPrompt(
                                         `${provider.config.id}::${provider.model}`,
                                         resolvedAssignments,
                                         customLensPrompts?.[getRoleForProvider(`${provider.config.id}::${provider.model}`, resolvedAssignments)]
@@ -3576,7 +3598,7 @@ ${accuracyVerificationNote}`
                                             effectiveTradingStyle
                                         ),
                                         { coin: finalSymbol ?? undefined, memoryQuery },
-                                    )
+                                    )}`
                                     : undefined,
                                 // Normal mode (Lenses off): custom base prompt override.
                                 systemPromptOverride: runLensConfig.enabled ? undefined : (customEnsemblePrompt || undefined),
@@ -3590,6 +3612,14 @@ ${accuracyVerificationNote}`
                             },
                         );
                     if (!isCurrentRequest()) assertCurrentRequest();
+                    // Preflight telemetry (lens mode): the solo run is validated
+                    // exactly like a debate seat and its pass/fail is recorded
+                    // to provider fitness, but its output is never substituted —
+                    // a solo transcript has no debate to absorb a NO CLAIM.
+                    if (runLensConfig.enabled && provider.thoughtsKey) {
+                        const soloGate = applyPreflightGate(result.finalOutput);
+                        void recordPreflightResult(getActiveUsername(), provider.config.id, soloGate.passed);
+                    }
                     const soloAiMessage: Message = {
                         id: `ai-${Date.now()}`, role: MessageRole.AI, text: result.finalOutput || result.thoughtProcess, createdAt: new Date().toISOString(), analysis: processNewAnalysis(result.analysis), sources: result.sources || [], outcome: TradeOutcome.PENDING, ocrModelUsed: userMessage.ocrModelUsed,
                         imageSummaries: userMessage.imageSummaries,
