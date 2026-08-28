@@ -160,12 +160,21 @@ export interface UndoEntry {
 }
 
 const undoStack: UndoEntry[] = [];
+/** Redo stack — entries the user has undone and could re-apply with a
+ *  Redo click or Shift+Ctrl/Cmd+Z. Cleared as soon as the user makes
+ *  a fresh edit (any pushUndo clears the redo stack — branching, not
+ *  linear history). The redo entry carries the same shape as the
+ *  undo entry it was born from, so applyUndoEntries can re-use it. */
+const redoStack: UndoEntry[] = [];
 const undoListeners = new Set<Listener>();
 
 /** Push an undo entry. Use the previous position returned by
- *  `getSeatPosition`, or `null` if the seat was at its default. */
+ *  `getSeatPosition`, or `null` if the seat was at its default.
+ *  Any fresh edit clears the redo stack — branching history, not
+ *  linear. */
 export const pushUndo = (entry: UndoEntry): void => {
     undoStack.push(entry);
+    redoStack.length = 0;
     for (const l of undoListeners) l();
 };
 
@@ -177,6 +186,12 @@ export const popUndo = (): UndoEntry | null => undoStack.pop() ?? null;
  * than the stack depth). Returns an empty array when the stack is
  * empty. Used by the multi-level Undo button — each click pops one
  * entry, so a user can keep clicking to peel back further.
+ *
+ * The popped entries are AUTOMATICALLY pushed onto the redo stack
+ * (most-recent-redo at the top). The caller is expected to apply
+ * them via `applyUndoEntries` to actually mutate the layout; the
+ * redo stack is bookkeeping, not a guarantee that the layout
+ * matches it.
  */
 export const popUndoN = (n: number): UndoEntry[] => {
     if (n <= 0) return [];
@@ -188,6 +203,7 @@ export const popUndoN = (n: number): UndoEntry[] => {
         out.push(entry);
     }
     if (out.length > 0) {
+        for (const entry of out) redoStack.push(entry);
         for (const l of undoListeners) l();
     }
     return out;
@@ -209,6 +225,46 @@ export const applyUndoEntries = (names: string[], entries: UndoEntry[]): void =>
         }
     }
 };
+
+/**
+ * Pop the most recent N redo entries (or all of them). Each popped
+ * entry is also pushed BACK onto the undo stack so the user can
+ * undo the redo. This implements the editor-standard "branching
+ * history" pattern: a Redo can itself be Undone.
+ */
+export const popRedoN = (n: number): UndoEntry[] => {
+    if (n <= 0) return [];
+    const out: UndoEntry[] = [];
+    const take = Math.min(n, redoStack.length);
+    for (let i = 0; i < take; i += 1) {
+        const entry = redoStack.pop();
+        if (!entry) break;
+        out.push(entry);
+    }
+    if (out.length > 0) {
+        for (const l of undoListeners) l();
+    }
+    return out;
+};
+
+/**
+ * Apply a batch of redo entries by writing each entry's `next`
+ * position (and pushing the entry back onto the undo stack so it
+ * can be undone again). Walks in the order popped (most-recent
+ * redo first).
+ */
+export const applyRedoEntries = (names: string[], entries: UndoEntry[]): void => {
+    for (const entry of entries) {
+        setSeatPosition(names, entry.seatName, entry.next);
+        // Re-arm undo: push the same entry back so the user can
+        // undo this redo. (Doesn't clear the redo stack — that
+        // would defeat the purpose.)
+        undoStack.push(entry);
+    }
+};
+
+/** Number of pending redos. */
+export const redoDepth = (): number => redoStack.length;
 
 /** Number of pending undos. */
 export const undoDepth = (): number => undoStack.length;

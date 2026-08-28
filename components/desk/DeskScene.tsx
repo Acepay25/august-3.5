@@ -21,6 +21,7 @@
 
 import React from 'react';
 import { X, Maximize2, Minimize2 } from 'lucide-react';
+import { useConfirmDialog } from '../shared/ConfirmDialog';
 import type {
     DebateStageActor,
     DebateExchange,
@@ -43,7 +44,10 @@ import {
     pushUndo,
     popUndoN,
     applyUndoEntries,
+    popRedoN,
+    applyRedoEntries,
     undoDepth,
+    redoDepth,
     clearUndoStack,
     subscribeUndo,
     type RoomLayout,
@@ -86,6 +90,26 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
     const [zoom, setZoom] = React.useState(false);
     const [now, setNow] = React.useState(() => Date.now());
     const [bubbleVisibleUntil, setBubbleVisibleUntil] = React.useState<Record<string, number>>({});
+    // Reset confirmation: a small dialog that requires the user to type
+    // "RESET" before the room layout is wiped. We mount the dialog's
+    // component into the same tree as the desk overlay (z-100 floats
+    // above the dialog's own backdrop).
+    const { confirm: confirmReset, ConfirmDialogComponent: ResetDialog } = useConfirmDialog();
+    const askReset = React.useCallback((): void => {
+        void confirmReset({
+            title: 'Reset room layout?',
+            message: 'This wipes every saved seat position and the undo stack. The room returns to the default role-anchor arrangement.',
+            confirmLabel: 'Reset room',
+            destructive: true,
+            typedConfirm: 'RESET',
+            typedConfirmHint: 'Type RESET to confirm',
+        }).then(ok => {
+            if (!ok) return;
+            resetRoomLayout(actorsRef.current.map(a => a.id));
+            setDragPositions({});
+            clearUndoStack();
+        });
+    }, [confirmReset]);
     // Re-render when the user edits role overrides (Settings → Roles).
     // We bump a counter and pass nothing to the consumer — the
     // `layoutFloor` call below reads overrides fresh on each render.
@@ -117,14 +141,33 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
     // so the seat visibly follows the cursor without writing to
     // localStorage on every pointermove (one write on pointerup).
     const [dragPositions, setDragPositions] = React.useState<Record<string, { x: number; y: number }>>({});
+    const [dragTick, setDragTick] = React.useState(0);
     const floorRef = React.useRef<HTMLDivElement | null>(null);
     const draggingSeatRef = React.useRef<string | null>(null);
+    // `isDragging` is read from the ref during render — refs don't
+    // trigger re-renders on their own, so we bump `dragTick` on every
+    // drag lifecycle event. The render computes isDragging = ref
+    // === name AND uses dragTick to ensure the React commit fires.
     const handleSeatPointerDown = (seatName: string) => (e: React.PointerEvent<HTMLDivElement>): void => {
         if (!editRoom) return;
         e.preventDefault();
         e.stopPropagation();
         draggingSeatRef.current = seatName;
-        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+        // Schedule a paint in the next animation frame so the seat
+        // visibly "lifts" (scales, gains the amber ring) BEFORE the
+        // first pointermove arrives. Without this, the first frame
+        // of a touch/mouse drag is invisible because the render
+        // hadn't been scheduled yet.
+        if (typeof window !== 'undefined') {
+            window.requestAnimationFrame(() => {
+                setDragTick(t => t + 1);
+            });
+        } else {
+            setDragTick(t => t + 1);
+        }
+        // Pointer capture isn't implemented in jsdom and isn't
+        // available on every element type in older browsers; guard.
+        try { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); } catch { /* noop */ }
     };
     const handleFloorPointerMove = (e: React.PointerEvent<HTMLDivElement>): void => {
         const seatName = draggingSeatRef.current;
@@ -137,6 +180,10 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
     const handleFloorPointerUp = (e: React.PointerEvent<HTMLDivElement>): void => {
         const seatName = draggingSeatRef.current;
         draggingSeatRef.current = null;
+        // Bump the tick so the next render sees the ref cleared and
+        // the seat visibly "un-lifts" the same frame the pointer is
+        // released (no lingering scale-110 ghost).
+        setDragTick(t => t + 1);
         if (!seatName) return;
         const final = dragPositions[seatName];
         if (final) {
@@ -168,24 +215,39 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
     // Multi-level undo: each click pops ONE entry (the most recent).
     // The user can keep clicking to peel back further. The keyboard
     // shortcut (Ctrl/Cmd+Z) is also single-step — matches the editor
-    // convention; Shift+Ctrl/Cmd+Z is the natural "redo" but we
-    // don't have a redo stack, so the shortcut is a no-op past empty.
+    // convention; Shift+Ctrl/Cmd+Z is the Redo shortcut.
     const handleUndo = React.useCallback((): void => {
         const entries = popUndoN(1);
         if (entries.length === 0) return;
         const names = actorsRef.current.map(a => a.id);
         applyUndoEntries(names, entries);
     }, []);
+    // Redo: pop the most recent redo entry, write its `next` position,
+    // and re-arm the undo stack so the user can undo the redo.
+    const handleRedo = React.useCallback((): void => {
+        const entries = popRedoN(1);
+        if (entries.length === 0) return;
+        const names = actorsRef.current.map(a => a.id);
+        applyRedoEntries(names, entries);
+    }, []);
 
     // Esc closes; the floor's own buttons (steer, etc.) handle their own keys.
     // Ctrl/Cmd+Z undoes the last drag while the desk is open.
+    // Shift+Ctrl/Cmd+Z redoes.
     React.useEffect(() => {
         const onKey = (e: KeyboardEvent): void => {
             if (e.key === 'Escape') {
                 onClose();
                 return;
             }
-            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+            const isModZ = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z';
+            if (!isModZ) return;
+            if (e.shiftKey) {
+                if (redoDepth() > 0) {
+                    e.preventDefault();
+                    handleRedo();
+                }
+            } else {
                 if (undoDepth() > 0) {
                     e.preventDefault();
                     handleUndo();
@@ -194,7 +256,7 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
         };
         document.addEventListener('keydown', onKey);
         return () => document.removeEventListener('keydown', onKey);
-    }, [onClose, handleUndo]);
+    }, [onClose, handleUndo, handleRedo]);
 
     // Reset the undo stack when the desk closes — the next open should
     // start clean. We clear on unmount.
@@ -233,6 +295,7 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
     // `undoDepth()` which reads the same store.
     void undoTick;
     const canUndo = undoDepth() > 0;
+    const canRedo = redoDepth() > 0;
 
     // Speech-bubble lifecycle: when any seat starts speaking, mark its
     // bubble as visible for SPEECH_BUBBLE_FADE_MS. We re-render every second
@@ -289,6 +352,7 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
             className="fixed inset-0 z-40 flex items-center justify-center bg-zinc-950/85 backdrop-blur-sm"
             onClick={onClose}
         >
+            {ResetDialog}
             <div
                 className={`relative flex flex-col gap-2 rounded-2xl border border-white/10 bg-zinc-950 p-3 shadow-2xl ${seatContainerClass}`}
                 onClick={(e) => e.stopPropagation()}
@@ -386,13 +450,30 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
                             </button>
                         )}
                         {editRoom && (
-                            <ResetButton
-                                onConfirm={() => {
-                                    resetRoomLayout(actors.map(a => a.id));
-                                    setDragPositions({});
-                                    clearUndoStack();
-                                }}
-                            />
+                            <button
+                                type="button"
+                                onClick={handleRedo}
+                                disabled={!canRedo}
+                                title={canRedo
+                                    ? `Redo last undone drag (Shift+Ctrl/Cmd+Z, ${redoDepth()} pending)`
+                                    : 'Nothing to redo'}
+                                aria-label="Redo last drag"
+                                data-testid="desk-redo-drag"
+                                className="flex h-7 items-center gap-1 rounded-md border border-white/10 bg-zinc-950 px-2 text-[10px] text-zinc-300 enabled:hover:bg-zinc-800 enabled:hover:text-zinc-100 disabled:text-zinc-600"
+                            >
+                                Redo{canRedo ? ` (${redoDepth()})` : ''}
+                            </button>
+                        )}
+                        {editRoom && (
+                            <button
+                                type="button"
+                                onClick={askReset}
+                                title="Reset to default positions"
+                                data-testid="desk-reset-layout"
+                                className="flex h-7 items-center gap-1 rounded-md border border-white/10 bg-zinc-950 px-2 text-[10px] text-zinc-400 hover:text-rose-300"
+                            >
+                                Reset
+                            </button>
                         )}
                         <button
                             type="button"
@@ -566,50 +647,6 @@ export { livePhaseForMessage, exchangesForTurns, convictionsFromTurns };
 export default DeskScene;
 
 /**
- * ResetButton — two-click confirm. First click arms the button
- * (label flips to "Click again to confirm" and turns rose); a second
- * click within 1.5s confirms and fires `onConfirm`. If the timer
- * expires the button disarms itself. The implementation lives
- * outside the main DeskScene so the armed-state timer doesn't
- * re-render the whole floor on every tick.
+ * (ResetButton removed — Reset now opens a typed-confirm modal
+ * via the shared ConfirmDialog, see `askReset` in the main component.)
  */
-const RESET_ARM_MS = 1500;
-const ResetButton: React.FC<{ onConfirm: () => void }> = ({ onConfirm }) => {
-    const [armed, setArmed] = React.useState(false);
-    const armTimer = React.useRef<number | null>(null);
-    React.useEffect(() => () => {
-        if (armTimer.current !== null) window.clearTimeout(armTimer.current);
-    }, []);
-    const handleClick = (): void => {
-        if (armed) {
-            if (armTimer.current !== null) {
-                window.clearTimeout(armTimer.current);
-                armTimer.current = null;
-            }
-            setArmed(false);
-            onConfirm();
-            return;
-        }
-        setArmed(true);
-        armTimer.current = window.setTimeout(() => {
-            setArmed(false);
-            armTimer.current = null;
-        }, RESET_ARM_MS);
-    };
-    return (
-        <button
-            type="button"
-            onClick={handleClick}
-            title={armed ? 'Click again to confirm — resets all seat positions' : 'Reset to default positions'}
-            data-testid="desk-reset-layout"
-            data-armed={armed ? '1' : '0'}
-            className={`flex h-7 items-center gap-1 rounded-md border px-2 text-[10px] font-semibold transition-colors ${
-                armed
-                    ? 'border-rose-400/50 bg-rose-500/15 text-rose-300'
-                    : 'border-white/10 bg-zinc-950 text-zinc-400 hover:text-rose-300'
-            }`}
-        >
-            {armed ? 'Click again…' : 'Reset'}
-        </button>
-    );
-};

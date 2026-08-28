@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
 import React from 'react';
-import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, act, waitFor } from '@testing-library/react';
 
 import { DeskScene } from '../components/desk/DeskScene';
 import type { DebateStageActor } from '../components/analysis/DebateStage';
@@ -26,59 +26,57 @@ afterEach(() => {
     if (typeof window !== 'undefined') window.localStorage.clear();
     window.localStorage.setItem('last_active_user', 'default');
     clearUndoStack();
-    vi.useRealTimers();
 });
 
 const actor = (over: Partial<DebateStageActor>): DebateStageActor => ({
     id: 'macro', name: 'Macro', ...over,
 });
 
-describe('DeskScene — Reset two-click confirm', () => {
-    it('first click arms the button without resetting', () => {
-        const names = ['macro'];
-        setSeatPosition(names, 'macro', { x: 0.5, y: 0.5 });
+describe('DeskScene — Reset typed-confirm modal', () => {
+    it('clicking Reset opens a modal with a typed-confirm input', () => {
         render(<DeskScene actors={[actor({})]} onClose={() => {}} />);
         fireEvent.click(screen.getByTestId('desk-edit-room'));
-        const reset = screen.getByTestId('desk-reset-layout');
-        // Initial label.
-        expect(reset.textContent).toBe('Reset');
-        expect(reset.getAttribute('data-armed')).toBe('0');
-        // First click arms.
-        fireEvent.click(reset);
-        expect(reset.textContent).toBe('Click again…');
-        expect(reset.getAttribute('data-armed')).toBe('1');
-        // Layout NOT yet wiped.
-        expect(getRoomLayout(names).macro).toBeTruthy();
+        fireEvent.click(screen.getByTestId('desk-reset-layout'));
+        // The modal renders the typed input. Default hint is the
+        // typedConfirm value.
+        const input = screen.getByTestId('confirm-typed-input');
+        expect(input).toBeTruthy();
+        expect(input.getAttribute('placeholder')).toBe('RESET');
+        // The confirm button is disabled until the input matches.
+        const confirmBtn = screen.getByTestId('confirm-dialog-confirm');
+        expect((confirmBtn as HTMLButtonElement).disabled).toBe(true);
     });
 
-    it('second click within 1.5s confirms and resets', () => {
-        const names = ['macro'];
-        setSeatPosition(names, 'macro', { x: 0.5, y: 0.5 });
+    it('the confirm button stays disabled while the typed input is wrong', () => {
         render(<DeskScene actors={[actor({})]} onClose={() => {}} />);
         fireEvent.click(screen.getByTestId('desk-edit-room'));
-        const reset = screen.getByTestId('desk-reset-layout');
-        fireEvent.click(reset);
-        // Click again to confirm.
-        fireEvent.click(reset);
-        expect(getRoomLayout(names).macro).toBeUndefined();
+        fireEvent.click(screen.getByTestId('desk-reset-layout'));
+        const input = screen.getByTestId('confirm-typed-input');
+        const confirmBtn = screen.getByTestId('confirm-dialog-confirm');
+        fireEvent.change(input, { target: { value: 'reset' } });
+        expect((confirmBtn as HTMLButtonElement).disabled).toBe(true);
     });
 
-    it('the armed state expires after 1.5s without a second click', () => {
-        vi.useFakeTimers();
+    it('typing the correct string enables the confirm button and resets on click', async () => {
         const names = ['macro'];
         setSeatPosition(names, 'macro', { x: 0.5, y: 0.5 });
+        expect(getRoomLayout(names).macro).toBeTruthy();
         render(<DeskScene actors={[actor({})]} onClose={() => {}} />);
         fireEvent.click(screen.getByTestId('desk-edit-room'));
-        const reset = screen.getByTestId('desk-reset-layout');
-        // Arm.
-        fireEvent.click(reset);
-        expect(reset.getAttribute('data-armed')).toBe('1');
-        // Advance past the 1.5s timer.
-        act(() => { vi.advanceTimersByTime(1600); });
-        // Disarmed without a second click.
-        expect(reset.getAttribute('data-armed')).toBe('0');
-        // Layout NOT wiped.
-        expect(getRoomLayout(names).macro).toBeTruthy();
+        fireEvent.click(screen.getByTestId('desk-reset-layout'));
+        const input = screen.getByTestId('confirm-typed-input');
+        const confirmBtn = screen.getByTestId('confirm-dialog-confirm');
+        fireEvent.change(input, { target: { value: 'RESET' } });
+        expect((confirmBtn as HTMLButtonElement).disabled).toBe(false);
+        await act(async () => {
+            fireEvent.click(confirmBtn);
+            // Let the promise microtask run.
+            await Promise.resolve();
+        });
+        // Layout wiped.
+        await waitFor(() => {
+            expect(getRoomLayout(names).macro).toBeUndefined();
+        });
     });
 
     it('the reset button does NOT render when editRoom is off', () => {

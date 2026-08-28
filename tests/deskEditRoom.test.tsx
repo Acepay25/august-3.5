@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
 import React from 'react';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, act, waitFor } from '@testing-library/react';
 
 import { DeskScene } from '../components/desk/DeskScene';
 import type { DebateStageActor } from '../components/analysis/DebateStage';
@@ -62,15 +62,22 @@ describe('DeskScene — Edit room polish', () => {
         expect(screen.getByTestId('desk-undo-drag')).toBeTruthy();
     });
 
-    it('Reset wipes the saved layout (after a confirm click)', () => {
+    it('Reset wipes the saved layout (after a typed confirm)', async () => {
         const names = ['macro'];
         setSeatPosition(names, 'macro', { x: 0.5, y: 0.5 });
         expect(getRoomLayout(names).macro).toBeTruthy();
         render(<DeskScene actors={[actor({})]} onClose={() => {}} />);
         fireEvent.click(screen.getByTestId('desk-edit-room'));
-        // Two-click confirm.
+        // Reset opens a modal with a typed-confirm input.
         fireEvent.click(screen.getByTestId('desk-reset-layout'));
-        fireEvent.click(screen.getByTestId('desk-reset-layout'));
-        expect(getRoomLayout(names).macro).toBeUndefined();
+        const input = screen.getByTestId('confirm-typed-input');
+        fireEvent.change(input, { target: { value: 'RESET' } });
+        await act(async () => {
+            fireEvent.click(screen.getByTestId('confirm-dialog-confirm'));
+            await Promise.resolve();
+        });
+        await waitFor(() => {
+            expect(getRoomLayout(names).macro).toBeUndefined();
+        });
     });
 });
