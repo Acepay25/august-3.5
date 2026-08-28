@@ -61,6 +61,25 @@ describe('CompanyRoom', () => {
         // The header label "Autonomous AI Company" should not appear.
         expect(screen.queryByText('Autonomous AI Company')).toBeNull();
     });
+
+    it('shows the Autonomous AI Company header label and live count by default', () => {
+        render(<CompanyRoom activeProviderCount={2} />);
+        expect(screen.getByText('Autonomous AI Company')).toBeTruthy();
+        // 2 of 6 default names are live.
+        expect(screen.getByText('2 / 6 live')).toBeTruthy();
+    });
+
+    it('renders the four task-flow gauges in the header', () => {
+        render(<CompanyRoom activeProviderCount={3} />);
+        for (const label of ['Tasks', 'Running', 'Shipped', 'Approvals']) {
+            expect(screen.getByText(label)).toBeTruthy();
+        }
+    });
+
+    it('shows a centered human-approval-queue panel between the header and the desks', () => {
+        render(<CompanyRoom activeProviderCount={2} />);
+        expect(screen.getByText('Human approval queue')).toBeTruthy();
+    });
 });
 
 describe('AgentChatView', () => {
