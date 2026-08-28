@@ -682,6 +682,22 @@ body {
   animation: seat-live-glow 1.8s ease-in-out infinite;
 }
 
+/* Touch drag tactile feedback — when the seat is being dragged we
+   hint the browser to allocate a transform layer (avoids first-frame
+   jank on iOS). On drop we play a 180ms settle pulse so the seat
+   visibly "lands" instead of snapping. */
+.is-dragging {
+  will-change: transform;
+}
+@keyframes seat-tactile-pulse {
+  0%   { transform: translate(-50%, -50%) scale(1.10); }
+  50%  { transform: translate(-50%, -50%) scale(1.18); }
+  100% { transform: translate(-50%, -50%) scale(1.00); }
+}
+.desk-tactile-pulse {
+  animation: seat-tactile-pulse 180ms ease-out 1;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .pixelArt, .pixelArt > span { image-rendering: auto; }
   /* Disable the bubble pop so reduced-motion users see a static snap. */
@@ -689,6 +705,7 @@ body {
   .is-speaking > .pixelArt,
   .is-thinking .seat-monitor-overlay,
   .is-live { animation: none; }
+  .desk-tactile-pulse { animation: none; }
 }
 .debate-seat-modal {
   position: absolute;

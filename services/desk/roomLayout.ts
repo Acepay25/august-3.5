@@ -269,6 +269,21 @@ export const redoDepth = (): number => redoStack.length;
 /** Number of pending undos. */
 export const undoDepth = (): number => undoStack.length;
 
+/** Peek the most recent N undo entries without mutating the stack
+ *  (newest first). Used by the Undo popover to show what would be
+ *  reverted if the user clicks Undo. */
+export const peekUndo = (n: number): UndoEntry[] => {
+    if (n <= 0) return [];
+    return undoStack.slice(-n).reverse();
+};
+
+/** Peek the most recent N redo entries without mutating the stack
+ *  (newest first). Used by the Redo popover. */
+export const peekRedo = (n: number): UndoEntry[] => {
+    if (n <= 0) return [];
+    return redoStack.slice(-n).reverse();
+};
+
 /** Clear the undo stack (e.g. when the desk closes). */
 export const clearUndoStack = (): void => {
     undoStack.length = 0;
