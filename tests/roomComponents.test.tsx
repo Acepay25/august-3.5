@@ -138,25 +138,30 @@ describe('CompanyRoom', () => {
         expect(screen.getByText('4')).toBeTruthy();
     });
 
-    it('honors a per-user seat-name override from Settings -> Roles (no label change)', () => {
+    it('honors a per-user seat-name override from Settings -> Roles (avatar color routes)', () => {
         // The override map (`getRoleOverrides`) is keyed by seat name
         // and stores a RolePreset. The display label is the seat name
-        // itself; the override changes the AVATAR's role color, not
-        // the text. So the test asserts that the label stays the same
-        // and that getRoleOverrides is consulted (no error). This is
-        // a smoke test rather than a full color-routing check.
-        setRoleOverride('Chief', 'risk');
+        // itself; the override changes the AVATAR's role color. The
+        // heuristic gives 'Chief' the 'unknown' (grayscale) accent —
+        // pinning it to 'risk' must repaint the avatar with the risk
+        // accent (#f87171) without touching the name plate.
         const { container } = render(
             <CompanyRoom seatNames={['Chief', 'Sales', 'Research']} />,
         );
-        // The label is rendered as a <span> with the
-        // bg-zinc-900/80 class (the desk plate). Filter to those.
-        const labels = Array.from(container.querySelectorAll(
-            '[data-testid^="company-desk-"] span.bg-zinc-900\\/80',
-        )).map(el => el.textContent);
-        // The first desk still says "Chief" (the override is about
-        // the avatar's role, not the displayed text).
-        expect(labels).toContain('Chief');
+        const chiefDesk = container.querySelector(
+            '[data-testid="company-desk-0"]',
+        ) as HTMLElement;
+        const chiefRole = (): string | null =>
+            chiefDesk.querySelector('button')?.getAttribute('data-role') ?? null;
+        // Heuristic: 'Chief' → 'unknown' (grayscale accent).
+        expect(chiefRole()).toBe('unknown');
+
+        // The override lands without a remount (subscription → tick)
+        // and data-role is what colorForToken reads, so this proves
+        // the avatar repaints with the pinned role's accent.
+        act(() => { setRoleOverride('Chief', 'risk'); });
+        expect(chiefRole()).toBe('risk');
+        expect(chiefDesk.textContent).toContain('Chief');
         // Cleanup so other tests aren't affected.
         clearRoleOverride('Chief');
     });

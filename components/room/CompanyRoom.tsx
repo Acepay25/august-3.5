@@ -33,7 +33,7 @@ import {
     setSeatPosition,
     subscribeRoomLayout,
 } from '../../services/desk/roomLayout';
-import { getRoleOverrides } from '../../services/desk/roleOverrides';
+import { getRoleOverrides, subscribeRoleOverrides } from '../../services/desk/roleOverrides';
 
 export interface CompanyRoomProps {
     /** Number of ready providers; controls how many desks are lit. */
@@ -79,18 +79,18 @@ export const CompanyRoom: React.FC<CompanyRoomProps> = ({
     // Resolved names: the props.seatNames list wins, else the
     // built-in default list. The per-user override map from
     // Settings → Roles doesn't change the displayed name (it maps
-    // custom names to RolePresets for the avatar's accent color).
-    // We DO read the map here so the office consults it on every
-    // render — the userOverrides value is then passed to PixelSeat's
-    // role-detection so the avatar's color follows the saved mapping.
-    const userOverrides = React.useMemo(() => getRoleOverrides(), []);
+    // custom names to RolePresets for the avatar's accent color);
+    // it is read on every render and handed to each PixelSeat's
+    // roleOverride below. subscribeRoleOverrides keeps the map
+    // live so a Settings edit re-colors the seats without a reload
+    // (same tick pattern as the desk view).
+    const [overridesTick, setOverridesTick] = React.useState(0);
+    React.useEffect(() => subscribeRoleOverrides(() => setOverridesTick(t => t + 1)), []);
+    const userOverrides = React.useMemo(() => getRoleOverrides(), [overridesTick]);
     const names = React.useMemo(() => {
         const base = (seatNames && seatNames.length > 0 ? seatNames : DEFAULT_NAMES);
-        // Re-read userOverrides in the dep list so the office picks
-        // up Settings edits when the user switches back to it.
-        void userOverrides;
         return base.slice(0, deskCount);
-    }, [seatNames, deskCount, userOverrides]);
+    }, [seatNames, deskCount]);
 
     // Subscribe to the roomLayout store so a saved drag propagates
     // back to the office without a reload. Re-render on every change.
@@ -297,6 +297,7 @@ export const CompanyRoom: React.FC<CompanyRoomProps> = ({
                             <div className="relative">
                                 <PixelSeat
                                     name={seat.name}
+                                    roleOverride={userOverrides[seat.name]}
                                     live
                                     thinking={idx === activeProviderCount - 1}
                                     pixelSize={3}
