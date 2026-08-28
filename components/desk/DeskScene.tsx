@@ -33,6 +33,13 @@ import { layoutFloor, FLOOR_REFERENCE_W, FLOOR_REFERENCE_H } from './floorLayout
 import { convictionsFromTurns, exchangesForTurns, livePhaseForMessage } from '../../utils/debateStageActors';
 import { roleForName } from './pixelAvatars';
 import { subscribeRoleOverrides } from '../../services/desk/roleOverrides';
+import {
+    getRoomLayout,
+    setSeatPosition,
+    subscribeRoomLayout,
+    resetRoomLayout,
+    type RoomLayout,
+} from '../../services/desk/roomLayout';
 
 export interface DeskSceneProps {
     actors: DebateStageActor[];
@@ -86,6 +93,52 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
         return () => window.removeEventListener('storage', onStorage);
     }, []);
 
+    // Per-room layout (per-user, per-roster). When the trader drags a
+    // seat in "Edit room" mode, the new x/y is saved here. The floor
+    // re-derives the seat list on every tick.
+    const [roomLayoutTick, setRoomLayoutTick] = React.useState(0);
+    React.useEffect(() => subscribeRoomLayout(() => setRoomLayoutTick(t => t + 1)), []);
+    const [editRoom, setEditRoom] = React.useState(false);
+    const roomLayout: RoomLayout = React.useMemo(
+        () => getRoomLayout(actors.map(a => a.id)),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [actors, roomLayoutTick, overridesTick],
+    );
+    // While a seat is being dragged we hold a transient override here
+    // so the seat visibly follows the cursor without writing to
+    // localStorage on every pointermove (one write on pointerup).
+    const [dragPositions, setDragPositions] = React.useState<Record<string, { x: number; y: number }>>({});
+    const floorRef = React.useRef<HTMLDivElement | null>(null);
+    const draggingSeatRef = React.useRef<string | null>(null);
+    const handleSeatPointerDown = (seatName: string) => (e: React.PointerEvent<HTMLDivElement>): void => {
+        if (!editRoom) return;
+        e.preventDefault();
+        e.stopPropagation();
+        draggingSeatRef.current = seatName;
+        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    };
+    const handleFloorPointerMove = (e: React.PointerEvent<HTMLDivElement>): void => {
+        const seatName = draggingSeatRef.current;
+        if (!seatName || !floorRef.current) return;
+        const rect = floorRef.current.getBoundingClientRect();
+        const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        const y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+        setDragPositions(prev => ({ ...prev, [seatName]: { x, y } }));
+    };
+    const handleFloorPointerUp = (e: React.PointerEvent<HTMLDivElement>): void => {
+        const seatName = draggingSeatRef.current;
+        draggingSeatRef.current = null;
+        if (!seatName) return;
+        const final = dragPositions[seatName];
+        if (final) {
+            const names = actors.map(a => a.id);
+            setSeatPosition(names, seatName, final);
+        }
+        // Release the pointer capture; the floor div had it from
+        // pointerdown on the seat.
+        try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); } catch { /* noop */ }
+    };
+
     // Esc closes; the floor's own buttons (steer, etc.) handle their own keys.
     React.useEffect(() => {
         const onKey = (e: KeyboardEvent): void => {
@@ -123,7 +176,11 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
         return () => window.clearInterval(id);
     }, []);
 
-    const seats = React.useMemo(() => layoutFloor(actors.map(a => a.id)), [actors, overridesTick]);
+    const seats = React.useMemo(
+        () => layoutFloor(actors.map(a => a.id), roomLayout),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [actors, overridesTick, roomLayoutTick],
+    );
 
     const liveSeatNames = React.useMemo(
         () => actors.filter(a => a.live).map(a => a.name),
@@ -214,6 +271,35 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
                     <div className="flex items-center gap-1">
                         <button
                             type="button"
+                            onClick={() => setEditRoom(v => !v)}
+                            aria-label={editRoom ? 'Done editing room' : 'Edit room layout'}
+                            aria-pressed={editRoom}
+                            title={editRoom ? 'Done editing' : 'Edit room (drag seats)'}
+                            data-testid="desk-edit-room"
+                            className={`flex h-7 items-center gap-1 rounded-md px-2 text-[10px] font-semibold uppercase tracking-wider transition-colors ${
+                                editRoom
+                                    ? 'bg-amber-400/20 text-amber-300 ring-1 ring-amber-400/50'
+                                    : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
+                            }`}
+                        >
+                            {editRoom ? 'Done' : 'Edit room'}
+                        </button>
+                        {editRoom && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    resetRoomLayout(actors.map(a => a.id));
+                                    setDragPositions({});
+                                }}
+                                title="Reset to default positions"
+                                data-testid="desk-reset-layout"
+                                className="flex h-7 items-center gap-1 rounded-md border border-white/10 bg-zinc-950 px-2 text-[10px] text-zinc-400 hover:text-rose-300"
+                            >
+                                Reset
+                            </button>
+                        )}
+                        <button
+                            type="button"
                             onClick={() => setZoom(z => !z)}
                             aria-label={zoom ? 'Restore desk view' : 'Expand desk view'}
                             title={zoom ? 'Restore' : 'Expand'}
@@ -234,12 +320,19 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
 
                 {/* Floor canvas — relative so absolute seat anchors map to it. */}
                 <div
-                    className="relative min-h-0 flex-1 overflow-hidden rounded-xl border border-white/5 bg-gradient-to-b from-zinc-900/40 to-zinc-950/60"
+                    ref={floorRef}
+                    className={`relative min-h-0 flex-1 overflow-hidden rounded-xl border bg-gradient-to-b from-zinc-900/40 to-zinc-950/60 ${
+                        editRoom ? 'border-amber-400/40' : 'border-white/5'
+                    }`}
                     data-testid="desk-floor"
+                    onPointerMove={handleFloorPointerMove}
+                    onPointerUp={handleFloorPointerUp}
+                    onPointerCancel={handleFloorPointerUp}
                     style={{
                         // The reference canvas is 960×540; we preserve aspect
                         // ratio and let it scale inside the dialog.
                         aspectRatio: `${FLOOR_REFERENCE_W} / ${FLOOR_REFERENCE_H}`,
+                        touchAction: editRoom ? 'none' : 'auto',
                     }}
                 >
                     {/* Subtle stage floor lines (no character art). */}
@@ -271,13 +364,24 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
                             const actor = actors.find(a => a.id === seat.id);
                             if (!actor) return null;
                             const role = roleForName(seat.name);
-                            const leftPct = `${seat.anchor.x * 100}%`;
-                            const topPct = `${seat.anchor.y * 100}%`;
+                            // Active drag position wins over the saved layout
+                            // and the role anchor — the seat visibly follows
+                            // the cursor while the trader drags it.
+                            const dragPos = dragPositions[seat.name];
+                            const anchor = dragPos ?? seat.anchor;
+                            const leftPct = `${anchor.x * 100}%`;
+                            const topPct = `${anchor.y * 100}%`;
+                            const isDragging = draggingSeatRef.current === seat.name;
                             return (
                                 <div
                                     key={seat.id}
-                                    className="absolute -translate-x-1/2 -translate-y-1/2"
+                                    className={`absolute -translate-x-1/2 -translate-y-1/2 ${
+                                        editRoom ? 'cursor-grab' : ''
+                                    } ${isDragging ? 'cursor-grabbing z-30' : ''}`}
                                     style={{ left: leftPct, top: topPct }}
+                                    onPointerDown={handleSeatPointerDown(seat.name)}
+                                    data-testid={`seat-${seat.name}`}
+                                    data-edit-room={editRoom ? '1' : '0'}
                                 >
                                     <div className="relative">
                                         {isBubbleVisible(seat.id) && actor.speech && (
@@ -294,7 +398,7 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
                                             live={actor.live}
                                             thinking={actor.thinking}
                                             speaking={actor.speaking}
-                                            onClick={() => onOpenActor?.(actor.id)}
+                                            onClick={editRoom ? undefined : () => onOpenActor?.(actor.id)}
                                             statusText={
                                                 actor.speaking
                                                     ? 'speaking…'

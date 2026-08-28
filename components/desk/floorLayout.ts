@@ -17,6 +17,7 @@
 
 import { roleForName, type RolePreset } from './pixelAvatars';
 import { resolveRole } from '../../services/desk/roleOverrides';
+import { applyRoomLayout, type RoomLayout, type SeatPosition } from '../../services/desk/roomLayout';
 
 export interface SeatAnchor {
     x: number; // 0..1
@@ -92,9 +93,10 @@ const RIGHT_WINGS: SeatAnchor[] = [
 /**
  * Map a list of actor names to FloorSeats. Honors the role preset when
  * known, and falls back to fan-out anchors for unknown roles. Per-user
- * overrides (Settings → Roles) win over the heuristic.
+ * overrides (Settings → Roles) win over the heuristic. Per-user room
+ * layouts (dragged positions) win over the role anchor.
  */
-export const layoutFloor = (names: string[]): FloorSeat[] => {
+export const layoutFloor = (names: string[], layout?: RoomLayout): FloorSeat[] => {
     const seats: FloorSeat[] = [];
     const taken = new Set<RolePreset>();
     const unknownNames: string[] = [];
@@ -127,6 +129,9 @@ export const layoutFloor = (names: string[]): FloorSeat[] => {
             anchor,
             side: i % 2 === 0 ? 'left' : 'right',
         });
+    }
+    if (layout && Object.keys(layout).length > 0) {
+        return applyRoomLayout(seats, layout);
     }
     return seats;
 };
