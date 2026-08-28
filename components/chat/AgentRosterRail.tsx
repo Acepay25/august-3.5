@@ -113,7 +113,7 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
         <aside
             data-testid="agent-roster-rail"
             aria-label="Agents"
-            className="hidden w-72 shrink-0 flex-col border-r border-white/[0.06] bg-zinc-900/50 lg:flex"
+            className="relative z-10 hidden w-72 shrink-0 flex-col border-r border-white/[0.06] bg-zinc-900/50 lg:flex"
         >
             {/* Search */}
             <div className="p-3 pb-2">
