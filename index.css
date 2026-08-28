@@ -601,6 +601,39 @@ body {
 .bot-avatar.is-thinking { border-color: rgba(255,255,255,0.18); }
 .bot-avatar-fallback { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
 .bot-avatar img ~ .bot-avatar-fallback { display: none; }
+
+/* Pixel-art avatars in the desk view. The grid is a 16x20 char matrix
+   rendered as absolutely-positioned CSS pixels; `image-rendering: pixelated`
+   keeps the shape crisp at any zoom level. The `.pixelArt` container is
+   the only element that needs the rendering hint — child pixels inherit
+   it. */
+.pixelArt {
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+  -ms-interpolation-mode: nearest-neighbor;
+  shape-rendering: crispEdges;
+}
+.pixelArt > span {
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+  shape-rendering: crispEdges;
+}
+
+/* Speech-bubble pop-in. The bubble is mounted/unmounted as the seat's
+   speech changes; the animation gives a clean "appeared" feel without
+   a heavy re-render. */
+@keyframes bubble-pop {
+  0%   { opacity: 0; transform: translateY(4px) scale(0.96); }
+  60%  { opacity: 1; transform: translateY(0)   scale(1.02); }
+  100% { opacity: 1; transform: translateY(0)   scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pixelArt, .pixelArt > span { image-rendering: auto; }
+  /* Disable the bubble pop so reduced-motion users see a static snap. */
+  [class*="animate-[bubble-pop"] { animation: none; }
+}
 .debate-seat-modal {
   position: absolute;
   inset: 0;

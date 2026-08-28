@@ -80,7 +80,7 @@ import { takeSkillDraft, tombstoneSkillDraftKey, draftTriggerKey } from './utils
 import { ingestCraftedSkill, ingestCraftedSkillFromDraft } from './services/learning/SkillMemoryService';
 import { buildRiskBook, formatRiskBookBadge } from './utils/riskBook';
 import { reconstructOpenings } from './utils/debateResume';
-import { isEnsembleMessage, stageActorsForMessage } from './utils/debateStageActors';
+import { isEnsembleMessage, stageActorsForMessage, exchangesForTurns, convictionsFromTurns, livePhaseForMessage } from './utils/debateStageActors';
 import { processImagesForSummarization } from './utils/imageProcessor';
 import { extractLastJson } from './utils/jsonUtils';
 import { parseLevelProbabilities } from './schemas/tradeAnalysis';
@@ -1065,6 +1065,35 @@ const App: React.FC = () => {
         () => (deskSceneMessage ? stageActorsForMessage(deskSceneMessage) : []),
         [deskSceneMessage],
     );
+    // The desk view renders the same exchanges, sealed convictions, and
+    // run-contract stages the in-transcript DebateStage renders. Building
+    // them from the shared helpers keeps the room and the transcript
+    // perfectly aligned — one source of truth.
+    const deskSceneExchanges = useMemo(
+        () => (deskSceneMessage
+            ? exchangesForTurns(deskSceneMessage.debateTurns ?? deskSceneMessage.postMortemDebateTurns ?? [])
+            : []),
+        [deskSceneMessage],
+    );
+    const deskSceneConvictions = useMemo(
+        () => (deskSceneMessage
+            ? convictionsFromTurns(deskSceneMessage.debateTurns ?? deskSceneMessage.postMortemDebateTurns ?? [])
+            : []),
+        [deskSceneMessage],
+    );
+    const deskScenePhase = useMemo(
+        () => (deskSceneMessage ? livePhaseForMessage(deskSceneMessage) : undefined),
+        [deskSceneMessage],
+    );
+    const deskSceneStages = useMemo(
+        () => (deskSceneMessage?.isDebating ? deskSceneMessage.runContract : undefined),
+        [deskSceneMessage],
+    );
+    const deskSceneVerdictDetail = useMemo(() => {
+        const a = deskSceneMessage?.analysis;
+        if (!a) return undefined;
+        return { direction: a.direction, confidence: a.confidence, grade: (a as { grade?: string | null }).grade ?? null };
+    }, [deskSceneMessage]);
 
     // Esc cancels an in-progress analysis (including the debate phase). Never
     // fires while the user is typing in an input/textarea/contenteditable, and
@@ -3714,10 +3743,10 @@ const App: React.FC = () => {
 
                 </div>
 
-            {/* Desk view — opt-in projection of the current debate as a room of
-                seat cards. Toggled from the command palette ("desk view" action);
-                hidden by default. Projects the same debate state the transcript
-                renders. */}
+            {/* Desk view — opt-in projection of the current debate as a 2D
+                room of pixel-art seats. Toggled from the command palette
+                ("desk view" action); hidden by default. Projects the same
+                debate state the transcript renders. */}
             {isDeskSceneOpen && deskSceneMessage && (
                 <React.Suspense fallback={null}>
                     <DeskScene
@@ -3725,9 +3754,12 @@ const App: React.FC = () => {
                         caption={deskSceneMessage.analysis?.coinName
                             ? `${deskSceneMessage.analysis.coinName} · ${deskSceneMessage.isDebating ? 'debate in progress' : 'debate floor'}`
                             : (deskSceneMessage.isDebating ? 'Debate in progress' : 'Debate floor')}
-                        verdict={deskSceneMessage.analysis
-                            ? `${deskSceneMessage.analysis.direction} · confidence ${deskSceneMessage.analysis.confidence}`
-                            : undefined}
+                        phase={deskScenePhase}
+                        stages={deskSceneStages}
+                        exchanges={deskSceneExchanges}
+                        convictions={deskSceneConvictions}
+                        verdictDetail={deskSceneVerdictDetail}
+                        onSteerSeat={handleSteerSeat}
                         onClose={() => setIsDeskSceneOpen(false)}
                     />
                 </React.Suspense>

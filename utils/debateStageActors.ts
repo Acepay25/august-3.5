@@ -5,10 +5,17 @@
  * overlay project the SAME debate state, so they must derive their actors the
  * exact same way. This module owns that derivation; MessageItem and App both
  * call it rather than each keeping a copy that could drift.
+ *
+ * The shared module also exposes the small `exchanges` and `convictions`
+ * derivations the in-transcript DebateStage and the DeskScene both need,
+ * so the room and the transcript never disagree about who replied to whom
+ * or what each seat's sealed conviction was.
  */
 
 import type { Message, DebateTurn } from '../types';
-import type { DebateStageActor } from '../components/analysis/DebateStage';
+import type { DebateStageActor, DebateExchange } from '../components/analysis/DebateStage';
+
+const CONVICTION_LINE_RE = /^\s*CONVICTION:\s*(\d{1,3})\b[^\n]*$/im;
 
 /** True when a message represents an ensemble (multi-model) run. */
 export const isEnsembleMessage = (message: Message): boolean =>
@@ -71,4 +78,60 @@ export const stageActorsForMessage = (message: Message): DebateStageActor[] => {
             })(),
         };
     });
+};
+
+/**
+ * Each seat's LAST sealed CONVICTION line across the transcript — the
+ * auction the Moderator alone sees at verdict time, made visible.
+ * Mirrors the helper DebateSummary uses, lifted here so DeskScene can
+ * show the same auction in the floor's verdict card.
+ */
+export const convictionsFromTurns = (
+    debateTurns: DebateTurn[],
+): Array<{ name: string; value: number }> => {
+    const bySeat = new Map<string, number>();
+    for (const t of debateTurns) {
+        if (t.speaker === 'Moderator' || t.speaker === 'System') continue;
+        const m = (t.text || '').match(CONVICTION_LINE_RE);
+        if (!m) continue;
+        bySeat.set(t.speaker, Math.min(100, Math.max(0, parseInt(m[1], 10))));
+    }
+    return [...bySeat.entries()].map(([name, value]) => ({ name, value }));
+};
+
+/**
+ * Build the directed addressing map (who replied to whom, and how many
+ * times) for a debate. Mirrors the helper MessageItem uses; the DeskScene
+ * reads it from the same source so the room and the transcript never
+ * disagree about the shape of the conversation.
+ */
+export const exchangesForTurns = (debateTurns: DebateTurn[]): DebateExchange[] => {
+    const counts = new Map<string, number>();
+    for (const t of debateTurns) {
+        const from = t.speaker;
+        if (!from) continue;
+        const targets = (t as { to?: string[] }).to ?? [];
+        if (!targets || targets.length === 0) continue;
+        for (const to of targets) {
+            if (!to || to === from) continue;
+            const key = `${from}→${to}`;
+            counts.set(key, (counts.get(key) ?? 0) + 1);
+        }
+    }
+    return [...counts.entries()].map(([key, count]) => {
+        const [from, to] = key.split('→');
+        return { from, to, count };
+    });
+};
+
+/** Live "round N · stage" caption the floor renders above the canvas. */
+export const livePhaseForMessage = (message: Message): string | undefined => {
+    if (!message.isDebating) return undefined;
+    const debateTurns: DebateTurn[] = message.debateTurns ?? message.postMortemDebateTurns ?? [];
+    const maxRound = debateTurns.reduce((m, t) => Math.max(m, t.round ?? 0), 0);
+    const running = (message.runContract ?? []).find(s => s.state === 'running');
+    const bits: string[] = [];
+    if (maxRound > 0) bits.push(`Round ${maxRound}`);
+    if (running) bits.push(running.label);
+    return bits.length > 0 ? bits.join(' · ') : undefined;
 };
