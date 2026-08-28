@@ -1,8 +1,25 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeAll, vi } from 'vitest';
 import React from 'react';
 import { render, screen, cleanup } from '@testing-library/react';
 
 import { PixelSeat } from '../components/desk/PixelSeat';
+
+// jsdom does not implement matchMedia (PixelSeat reads it for reduced
+// motion). Provide a no-op stub that reports "no reduced motion".
+beforeAll(() => {
+    if (typeof window !== 'undefined' && !window.matchMedia) {
+        window.matchMedia = ((query: string) => ({
+            matches: false,
+            media: query,
+            onchange: null,
+            addListener: vi.fn(),
+            removeListener: vi.fn(),
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+            dispatchEvent: vi.fn(),
+        })) as any;
+    }
+});
 
 afterEach(() => cleanup());
 

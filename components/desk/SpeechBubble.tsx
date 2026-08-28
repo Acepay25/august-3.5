@@ -104,14 +104,47 @@ export const SpeechBubble: React.FC<SpeechBubbleProps> = ({
                         </span>
                     </span>
                 )}
-                {/* Tail — points DOWN at the seat. */}
-                <span
+                {/* Tail — side-aware triangular pointer toward the seat.
+                    Inline SVG so the path can be tuned per side without a
+                    second stylesheet. */}
+                <svg
                     aria-hidden="true"
-                    className={`absolute -bottom-1.5 ${tailClass} h-3 w-3 rotate-45 border-b border-r border-white/15 bg-zinc-900/95`}
-                />
+                    data-testid="speech-bubble-tail"
+                    data-side={side}
+                    className={`pointer-events-none absolute -bottom-2 ${tailClass} h-3 w-4`}
+                    viewBox="0 0 16 12"
+                    preserveAspectRatio="none"
+                >
+                    <path
+                        d={tailPath(side)}
+                        fill="rgba(24,24,27,0.95)"
+                        stroke="rgba(255,255,255,0.15)"
+                        strokeWidth="1"
+                    />
+                </svg>
             </div>
         </div>
     );
+};
+
+/**
+ * Tail path for each side. The bubble is `bottom-full` of the seat, so
+ * the tail is on the bubble's BOTTOM edge and points DOWN at the seat.
+ * - left   : tail hugs the bubble's left edge, points down-left.
+ * - right  : tail hugs the bubble's right edge, points down-right.
+ * - center : tail is centered, points straight down.
+ */
+const tailPath = (side: 'left' | 'right' | 'center'): string => {
+    if (side === 'left') {
+        // Triangle with hypotenuse running from the bubble's left side
+        // down to the seat. Origin at top-left of the SVG.
+        return 'M 2 0 L 14 0 L 2 12 Z';
+    }
+    if (side === 'right') {
+        return 'M 14 0 L 2 0 L 14 12 Z';
+    }
+    // center: symmetric downward triangle.
+    return 'M 0 0 L 16 0 L 8 12 Z';
 };
 
 /** Default fade — exported for the floor's bubble lifecycle. */

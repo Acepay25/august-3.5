@@ -62,7 +62,20 @@ export const PixelSeat: React.FC<PixelSeatProps> = ({
     'data-testid': testId,
 }) => {
     const role = roleOverride ?? roleForName(name);
-    const grid = buildGridForRole(role);
+    // While the seat is speaking, swap between the idle and speaking
+    // grids at ~2 Hz so the head visibly "talks" (mouth open / body
+    // lean). Reduced-motion users see only the idle frame.
+    const [tick, setTick] = React.useState(0);
+    const reducedMotion = React.useRef(
+        typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+    ).current;
+    React.useEffect(() => {
+        if (!speaking || reducedMotion) return undefined;
+        const id = window.setInterval(() => setTick(t => (t + 1) % 2), 480);
+        return () => window.clearInterval(id);
+    }, [speaking, reducedMotion]);
+    const frame: 'idle' | 'speaking' = speaking && !reducedMotion && tick === 1 ? 'speaking' : 'idle';
+    const grid = buildGridForRole(role, frame);
     if (!isValidGrid(grid)) {
         // Bad grid means a developer broke the hand-authored table. Fail loud.
         return (

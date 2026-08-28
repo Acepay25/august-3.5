@@ -9,7 +9,7 @@ import {
 } from '../services/desk/roleOverrides';
 import { roleForName } from '../components/desk/pixelAvatars';
 
-const STORAGE_KEY = 'desk_role_overrides_v1';
+const STORAGE_KEY = 'desk_role_overrides_v1_default';
 
 describe('roleOverrides', () => {
     beforeEach(() => {
@@ -90,5 +90,30 @@ describe('roleOverrides', () => {
         setRoleOverride('B', 'macro');
         expect(cb1).toHaveBeenCalledTimes(1);
         expect(cb2).toHaveBeenCalledTimes(2);
+    });
+
+    it('isolates the table per active user (last_active_user keying)', () => {
+        // User A pins "Satoshi" → risk.
+        window.localStorage.setItem('last_active_user', 'alice');
+        setRoleOverride('Satoshi', 'risk');
+        expect(getRoleOverrides()).toEqual({ Satoshi: 'risk' });
+
+        // Switch user; the new user should see an empty table.
+        window.localStorage.setItem('last_active_user', 'bob');
+        expect(getRoleOverrides()).toEqual({});
+
+        // User B pins "Fibonacci" → macro.
+        setRoleOverride('Fibonacci', 'macro');
+        expect(getRoleOverrides()).toEqual({ Fibonacci: 'macro' });
+
+        // Switch back to Alice — her table is intact.
+        window.localStorage.setItem('last_active_user', 'alice');
+        expect(getRoleOverrides()).toEqual({ Satoshi: 'risk' });
+
+        // Resolve from each user's perspective.
+        expect(resolveRole('Satoshi')).toBe('risk');
+        window.localStorage.setItem('last_active_user', 'bob');
+        expect(resolveRole('Satoshi')).toBe('unknown'); // Alice's override, but we're Bob
+        expect(resolveRole('Fibonacci')).toBe('macro');
     });
 });
