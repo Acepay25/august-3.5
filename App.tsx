@@ -1048,6 +1048,13 @@ const App: React.FC = () => {
 
     // ─── Desk view (opt-in overlay projecting the current debate) ──────────
     const [isDeskSceneOpen, setIsDeskSceneOpen] = useState(false);
+    // External open-actor request: when the desk view's seat is clicked,
+    // we publish {messageId, actorId} + bump a nonce so the matching
+    // MessageItem mirrors the actor into its local side-panel state and
+    // the per-message DebateSidePanel pops. Clicking another seat (or
+    // re-clicking the same seat) bumps the nonce to re-fire the effect.
+    const [externalOpenActor, setExternalOpenActor] = useState<{ messageId: string; actorId: string } | null>(null);
+    const [externalOpenActorNonce, setExternalOpenActorNonce] = useState(0);
 
     // The debate the desk view projects: the message currently debating, else
     // the most recent ensemble message. Actors derive through the SAME builder
@@ -3107,7 +3114,12 @@ const App: React.FC = () => {
         onTodayReassessment: startTodayReassessment,
         todayReassessmentInFlight,
         lensConfig,
-    }), [typingMessageState, highlightedAnalysisId, expandedPostMortems, expandedPostMortemImages, savedAnalyses, activeFrameworks, copiedMessageId, modelIdToName, providerNameToId, handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy, handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, confidenceCalibration, handleRetryPostMortem, chatLeverage, autopilotResolutions, handleConfirmAutopilot, handleDismissAutopilot, handleCompareAnalysis, handleViewReasoning, handleReRunAnalysis, handleResumeDebate, handleFollowUpTicket, handleForkDebate, handleToggleWatch, handleReplacementChoice, startTodayReassessment, todayReassessmentInFlight, lensConfig, handleSteerSeat, handleStopSeat,
+        // External open-actor request — the desk view publishes this and
+        // the matching MessageItem mirrors the actor into its local
+        // side-panel state.
+        externalOpenActor,
+        externalOpenActorNonce,
+    }), [typingMessageState, highlightedAnalysisId, expandedPostMortems, expandedPostMortemImages, savedAnalyses, activeFrameworks, copiedMessageId, modelIdToName, providerNameToId, handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy, handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, confidenceCalibration, handleRetryPostMortem, chatLeverage, autopilotResolutions, handleConfirmAutopilot, handleDismissAutopilot, handleCompareAnalysis, handleViewReasoning, handleReRunAnalysis, handleResumeDebate, handleFollowUpTicket, handleForkDebate, handleToggleWatch, handleReplacementChoice, startTodayReassessment, todayReassessmentInFlight, lensConfig, handleSteerSeat, handleStopSeat, externalOpenActor, externalOpenActorNonce,
         // The inline-approval surface reads these —
         // missing them froze cards on stale drafts/handlers.
         approvalItems, approvalHandlers]);
@@ -3760,6 +3772,16 @@ const App: React.FC = () => {
                         convictions={deskSceneConvictions}
                         verdictDetail={deskSceneVerdictDetail}
                         onSteerSeat={handleSteerSeat}
+                        onOpenActor={actorId => {
+                            // Publish a {messageId, actorId} request so
+                            // the matching MessageItem's per-message side
+                            // panel opens with this actor selected. Then
+                            // close the desk overlay so the trader lands
+                            // on the panel.
+                            setExternalOpenActor({ messageId: deskSceneMessage.id, actorId });
+                            setExternalOpenActorNonce(n => n + 1);
+                            setIsDeskSceneOpen(false);
+                        }}
                         onClose={() => setIsDeskSceneOpen(false)}
                     />
                 </React.Suspense>
