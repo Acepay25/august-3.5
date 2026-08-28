@@ -73,6 +73,7 @@ const SavedAnalysesGallery = React.lazy(() => import('./components/dashboards/Sa
 const MistakeWarningBanner = React.lazy(() => import('./components/shared/MistakeWarningBanner'));
 const DeskScene = React.lazy(() => import('./components/desk/DeskScene'));
 const AgentChatView = React.lazy(() => import('./components/room/AgentChatView'));
+const FloorScene = React.lazy(() => import('./components/floor/FloorScene'));
 import CommandPalette, { PaletteAction } from './components/shared/CommandPalette';
 import AnalysisProgress from './components/analysis/AnalysisProgress';
 import { DEFAULT_FRAMEWORKS } from './constants/models';
@@ -117,6 +118,8 @@ import { SetupWatchService, describeWatchTrigger } from './services/ui/SetupWatc
 import { VetoLedgerService } from './services/ui/VetoLedgerService';
 import { OutcomeAutopilotService, AutopilotResolution } from './services/ui/OutcomeAutopilotService';
 import { useWatchSideEffects } from './hooks/useWatchSideEffects';
+import { useUiMode } from './hooks/useUiMode';
+import type { FloorPosition, FloorSquawkEvent } from './components/floor/FloorScene';
 import { getThinkingTradeId, updateThinkingOutcome, deleteThinkingByTrade } from './services/infrastructure/ThinkingStoreService';
 import { initNativeStatusBar } from './services/infrastructure/NativeStatusBar';
 import { initConfluenceService, syncConfluenceFromTradeLog } from './services/analysis/TimeframeConfluenceService';
@@ -363,6 +366,8 @@ const App: React.FC = () => {
             // Preferences are optional in restricted browser contexts.
         }
     }, [isSidebarCollapsed]);
+    // Chat vs floor presentation mode (see hooks/useUiMode.ts).
+    const { uiMode, setUiMode, toggleUiMode } = useUiMode();
     const ensembleInitializedRef = useRef(false);
     // Persisted per-profile ensemble choice (loaded by loadUserData, possibly
     // after this effect fires on first mount — the ref bridges that race).
@@ -1202,10 +1207,16 @@ const App: React.FC = () => {
                 e.preventDefault();
                 setIsCommandPaletteOpen(prev => !prev);
             }
+            // Ctrl/Cmd+Shift+F toggles chat ↔ floor mode (useUiMode's
+            // toggle is a stable callback, so a [] dep list is safe).
+            if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'f') {
+                e.preventDefault();
+                toggleUiMode();
+            }
         };
         document.addEventListener('keydown', onKey);
         return () => document.removeEventListener('keydown', onKey);
-    }, []);
+    }, [toggleUiMode]);
 
     // F3: Ctrl/Cmd+N = new conversation; "/" focuses the composer (unless
     // already typing or an overlay is open).
@@ -2445,6 +2456,12 @@ const App: React.FC = () => {
             run: () => setIsLiveMarketVisible(true),
         },
         {
+            id: 'floor-mode',
+            label: uiMode === 'floor' ? 'Switch to chat mode' : 'Open floor mode',
+            hint: 'View',
+            run: toggleUiMode,
+        },
+        {
             id: 'settings',
             label: 'Open Settings',
             hint: 'Providers',
@@ -2897,6 +2914,52 @@ const App: React.FC = () => {
         shipped: messages.filter(m => m.analysis).length,
         approvals: approvalItems.length,
     }), [messages, isAnalysisInProgress, isPostMortemInProgress, approvalItems]);
+
+    // ─── Floor mode data (components/floor/FloorScene.tsx) ────────────────
+    // Positions: newest trades first for the rail's positions table.
+    const floorPositions = useMemo<FloorPosition[]>(
+        () => loggedTrades.slice(0, 20).map(t => ({
+            id: t.id,
+            symbol: t.analysis.coinName || '—',
+            direction: t.analysis.direction,
+            pnl: t.pnlAmount,
+            outcome: t.outcome,
+        })),
+        [loggedTrades],
+    );
+    // Squawk: newest-first tape derived from the conversation —
+    // printed analyses and filed post-mortems. Capped so the memo
+    // stays cheap on long threads.
+    const floorSquawk = useMemo<FloorSquawkEvent[]>(() => {
+        const events: FloorSquawkEvent[] = [];
+        for (let i = messages.length - 1; i >= 0 && events.length < 30; i -= 1) {
+            const m = messages[i];
+            const time = new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+            if (m.analysis) {
+                events.push({
+                    id: `print-${m.id}`,
+                    time,
+                    text: `PRINT ${m.analysis.coinName} · ${m.analysis.direction} · ${m.analysis.confidence} confidence`,
+                });
+            } else if (m.postMortem) {
+                events.push({ id: `review-${m.id}`, time, text: 'REVIEW post-mortem filed' });
+            }
+        }
+        return events;
+    }, [messages]);
+    // Tickers: symbols from recent analyses topped up with the majors.
+    // Prices arrive via the floor market hook (floor phase).
+    const floorTickers = useMemo<{ symbol: string; last?: number; changePct?: number }[]>(() => {
+        const syms: string[] = [];
+        const push = (s?: string | null): void => {
+            if (s && !syms.includes(s)) syms.push(s);
+        };
+        for (let i = messages.length - 1; i >= 0 && syms.length < 6; i -= 1) {
+            push(messages[i].analysis?.coinName);
+        }
+        for (const major of ['BTC', 'ETH', 'SOL']) push(major);
+        return syms.slice(0, 8).map(symbol => ({ symbol }));
+    }, [messages]);
 
 
     useWatchSideEffects({
@@ -3427,6 +3490,8 @@ const App: React.FC = () => {
                 onOpenApprovals={() => setIsApprovalInboxVisible(true)}
                 approvalCount={approvalItems.length}
                 onOpenJobs={() => setIsJobsDrawerVisible(true)}
+                uiMode={uiMode}
+                onSetUiMode={setUiMode}
             />
 
             {/* Journal overlay — REMOVED: now rendered inside Settings → Journal tab */}
@@ -3807,6 +3872,32 @@ const App: React.FC = () => {
                             setIsDeskSceneOpen(false);
                         }}
                         onClose={() => setIsDeskSceneOpen(false)}
+                    />
+                </React.Suspense>
+            )}
+
+            {/* Floor mode — the debate UI. A full-screen trading floor
+                (hooks/useUiMode.ts toggles chat ↔ floor; Ctrl/Cmd+Shift+F).
+                Projects the same debate/approval/trade state the chat pane
+                renders, as desks + a right rail. Chunk loads on first open. */}
+            {uiMode === 'floor' && (
+                <React.Suspense fallback={null}>
+                    <FloorScene
+                        open
+                        onClose={() => setUiMode('chat')}
+                        isDebating={isAnalysisInProgress || isPostMortemInProgress}
+                        phase={deskScenePhase}
+                        actors={deskSceneActors}
+                        exchanges={deskSceneExchanges}
+                        stages={deskSceneStages}
+                        convictions={deskSceneConvictions}
+                        verdictDetail={deskSceneVerdictDetail}
+                        gaugeStats={gaugeStats}
+                        approvalItems={approvalItems}
+                        positions={floorPositions}
+                        squawk={floorSquawk}
+                        tickers={floorTickers}
+                        staff={readyProviders.map(p => ({ id: p.id, name: p.name }))}
                     />
                 </React.Suspense>
             )}

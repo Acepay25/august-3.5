@@ -52,6 +52,11 @@ interface HeaderProps {
     approvalCount?: number;
     /** Open the background-jobs drawer. */
     onOpenJobs?: () => void;
+    /** Presentation mode: 'chat' (converse with agents) vs 'floor'
+     *  (watch them work). The toggle renders only when onSetUiMode is
+     *  provided. Type kept inline to avoid a header↔hook import cycle. */
+    uiMode?: 'chat' | 'floor';
+    onSetUiMode?: (mode: 'chat' | 'floor') => void;
 }
 
 // Memoized: Header re-renders every time App does (typing, progress ticks);
@@ -91,6 +96,8 @@ export const Header: React.FC<HeaderProps> = memo(({
     onOpenApprovals,
     approvalCount = 0,
     onOpenJobs,
+    uiMode,
+    onSetUiMode,
 }) => {
     const [sessionContext, setSessionContext] = useState<SessionContext | null>(null);
     const [allSessions, setAllSessions] = useState<SessionStatus[]>([]);
@@ -196,6 +203,36 @@ export const Header: React.FC<HeaderProps> = memo(({
                     <div className="flex flex-col justify-center">
                         <div className="flex items-center gap-3">
                             <h1 className="text-base sm:text-lg font-semibold tracking-tight text-zinc-100 leading-none">August 3.5</h1>
+
+                            {/* Chat / Floor mode toggle — the two ways to
+                                see the company: converse (chat) or watch
+                                the agents work (floor). */}
+                            {onSetUiMode && (
+                                <div
+                                    role="group"
+                                    aria-label="Interface mode"
+                                    data-testid="ui-mode-toggle"
+                                    className="flex items-center rounded-lg border border-white/10 bg-zinc-900/80 p-0.5"
+                                >
+                                    {(['chat', 'floor'] as const).map(mode => (
+                                        <button
+                                            key={mode}
+                                            type="button"
+                                            onClick={() => onSetUiMode(mode)}
+                                            aria-pressed={uiMode === mode}
+                                            data-testid={`ui-mode-${mode}`}
+                                            title={mode === 'chat' ? 'Chat mode — talk to your agents' : 'Floor mode — watch your agents work (Esc exits)'}
+                                            className={`rounded-md px-2 py-1 text-[10px] font-semibold uppercase tracking-widest transition-colors ${
+                                                uiMode === mode
+                                                    ? 'bg-zinc-700/80 text-zinc-100'
+                                                    : 'text-zinc-500 hover:text-zinc-300'
+                                            }`}
+                                        >
+                                            {mode === 'chat' ? 'Chat' : 'Floor'}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
 
                             {/* Session Display */}
                             {sessionContext && (
