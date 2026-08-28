@@ -82,3 +82,4 @@ TOOLS.md
 USER.md
 scripts/check_grids.cjs.bak
 .commit-msg.txt
+.commit-msg*.txt
