@@ -41,6 +41,7 @@ import {
     subscribeRoomLayout,
     resetRoomLayout,
     snapSeatPosition,
+    isNoopPositionChange,
     pushUndo,
     popUndoN,
     applyUndoEntries,
@@ -200,8 +201,15 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
             const snapped = snapSeatPosition(final, 0.05);
             const prevLayout = getRoomLayout(names);
             const previous = prevLayout[seatName] ?? null;
-            setSeatPosition(names, seatName, snapped);
-            if (!previous || previous.x !== snapped.x || previous.y !== snapped.y) {
+            // Skip no-op drags: if the seat ends up on the same cell it
+            // started on, do nothing. Avoids polluting the undo stack
+            // with zero-effect entries when a trader clicks-and-
+            // releases without moving. The helper snaps both
+            // positions to the same step so a tiny cursor drift
+            // within one cell is still treated as a noop.
+            const isNoop = isNoopPositionChange(previous, snapped);
+            if (!isNoop) {
+                setSeatPosition(names, seatName, snapped);
                 pushUndo({ seatName, previous, next: snapped });
             }
             // The seat should land on the snapped cell, not the raw
@@ -211,19 +219,21 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
             // Tactile feedback: 180ms settle pulse so the seat visibly
             // "lands" instead of snapping. Reduced-motion users see
             // a static snap (the CSS rule disables the keyframe).
-            setPulsingSeats(prev => {
-                const next = new Set(prev);
-                next.add(seatName);
-                return next;
-            });
-            window.setTimeout(() => {
+            if (!isNoop) {
                 setPulsingSeats(prev => {
-                    if (!prev.has(seatName)) return prev;
                     const next = new Set(prev);
-                    next.delete(seatName);
+                    next.add(seatName);
                     return next;
                 });
-            }, 200);
+                window.setTimeout(() => {
+                    setPulsingSeats(prev => {
+                        if (!prev.has(seatName)) return prev;
+                        const next = new Set(prev);
+                        next.delete(seatName);
+                        return next;
+                    });
+                }, 200);
+            }
         }
         // Release the pointer capture; the floor div had it from
         // pointerdown on the seat.
@@ -251,6 +261,22 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
         if (entries.length === 0) return;
         const names = actorsRef.current.map(a => a.id);
         applyRedoEntries(names, entries);
+    }, []);
+    // Rewind: from a popover row, undo or redo EVERY entry down to
+    // (and including) the chosen row. `idx=0` is equivalent to the
+    // button's primary action. `idx=N` rewinds N+1 entries.
+    const handleRewindTo = React.useCallback((idx: number, kind: 'undo' | 'redo'): void => {
+        const count = idx + 1;
+        const names = actorsRef.current.map(a => a.id);
+        if (kind === 'undo') {
+            const entries = popUndoN(count);
+            if (entries.length === 0) return;
+            applyUndoEntries(names, entries);
+        } else {
+            const entries = popRedoN(count);
+            if (entries.length === 0) return;
+            applyRedoEntries(names, entries);
+        }
     }, []);
 
     // Esc closes; the floor's own buttons (steer, etc.) handle their own keys.
@@ -464,6 +490,7 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
                                 ariaLabel="Undo last drag"
                                 disabled={!canUndo}
                                 onActivate={handleUndo}
+                                onActivateAt={(idx) => handleRewindTo(idx, 'undo')}
                                 title={canUndo
                                     ? `Undo last drag — click again to peel back further (Ctrl/Cmd+Z, ${undoDepth()} pending)`
                                     : 'Nothing to undo'}
@@ -479,6 +506,7 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
                                 ariaLabel="Redo last drag"
                                 disabled={!canRedo}
                                 onActivate={handleRedo}
+                                onActivateAt={(idx) => handleRewindTo(idx, 'redo')}
                                 title={canRedo
                                     ? `Redo last undone drag (Shift+Ctrl/Cmd+Z, ${redoDepth()} pending)`
                                     : 'Nothing to redo'}
@@ -688,8 +716,10 @@ const HistoryButton: React.FC<{
     title: string;
     entries: UndoEntry[];
     depth: number;
-}> = ({ kind, label, testId, ariaLabel, disabled, onActivate, title, entries, depth }) => {
+    onActivateAt?: (idx: number) => void;
+}> = ({ kind, label, testId, ariaLabel, disabled, onActivate, title, entries, depth, onActivateAt }) => {
     const [open, setOpen] = React.useState(false);
+    const [focusIndex, setFocusIndex] = React.useState(0);
     const containerRef = React.useRef<HTMLDivElement | null>(null);
     // Click-outside + Escape close.
     React.useEffect(() => {
@@ -712,6 +742,11 @@ const HistoryButton: React.FC<{
     React.useEffect(() => {
         if (depth === 0) setOpen(false);
     }, [depth]);
+    // Reset the focus index whenever the popover (re-)opens so it
+    // starts at the top (the most recent entry).
+    React.useEffect(() => {
+        if (open) setFocusIndex(0);
+    }, [open, depth]);
     const handleClick = (): void => {
         if (disabled) return;
         onActivate();
@@ -720,6 +755,27 @@ const HistoryButton: React.FC<{
     const handleToggle = (): void => {
         if (disabled) return;
         setOpen(o => !o);
+    };
+    const handleRowClick = (idx: number): void => {
+        if (onActivateAt) onActivateAt(idx);
+    };
+    const handleRowKey = (e: React.KeyboardEvent<HTMLLIElement>, idx: number): void => {
+        if (e.key === 'ArrowDown' || (e.key === 'j' && !e.metaKey && !e.ctrlKey)) {
+            e.preventDefault();
+            setFocusIndex(i => Math.min(entries.length - 1, i + 1));
+        } else if (e.key === 'ArrowUp' || (e.key === 'k' && !e.metaKey && !e.ctrlKey)) {
+            e.preventDefault();
+            setFocusIndex(i => Math.max(0, i - 1));
+        } else if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            if (onActivateAt) onActivateAt(idx);
+        } else if (e.key === 'Home') {
+            e.preventDefault();
+            setFocusIndex(0);
+        } else if (e.key === 'End') {
+            e.preventDefault();
+            setFocusIndex(entries.length - 1);
+        }
     };
     return (
         <div ref={containerRef} className="relative">
@@ -740,26 +796,53 @@ const HistoryButton: React.FC<{
             {open && entries.length > 0 && (
                 <div
                     data-testid={`${testId}-popover`}
-                    role="tooltip"
+                    role="menu"
+                    aria-label={`${kind === 'undo' ? 'Pending undos' : 'Pending redos'}`}
+                    // Per-row onKeyDown handles ArrowUp/Down/Enter; the
+                    // global Escape listener set up by `useEffect`
+                    // (above) catches Escape and closes the popover.
                     className="absolute right-0 top-full z-30 mt-1 w-56 rounded-md border border-white/15 bg-zinc-950/95 px-2 py-1.5 shadow-2xl backdrop-blur"
                 >
                     <p className="px-1 pb-1 text-[9px] font-semibold uppercase tracking-widest text-zinc-500">
                         {kind === 'undo' ? 'Next to undo' : 'Next to redo'} · {depth}
+                        <span className="ml-1 font-normal normal-case tracking-normal text-zinc-600">↑↓ to navigate · Enter to apply</span>
                     </p>
-                    <ul className="space-y-0.5">
-                        {entries.map((e, idx) => (
-                            <li
-                                key={`${e.seatName}-${idx}-${e.next.x.toFixed(2)}`}
-                                className="flex items-center justify-between gap-2 rounded px-1.5 py-1 text-[10px] text-zinc-300"
-                            >
-                                <span className="min-w-0 truncate font-mono">{e.seatName}</span>
-                                <span className="shrink-0 tabular-nums text-zinc-500">
-                                    {e.previous
-                                        ? `${(e.previous.x * 100).toFixed(0)}→${(e.next.x * 100).toFixed(0)}`
-                                        : `default→${(e.next.x * 100).toFixed(0)}`}
-                                </span>
-                            </li>
-                        ))}
+                    <ul className="space-y-0.5" role="none">
+                        {entries.map((e, idx) => {
+                            const isFocused = idx === focusIndex;
+                            return (
+                                <li
+                                    key={`${e.seatName}-${idx}-${e.next.x.toFixed(2)}`}
+                                    role="menuitem"
+                                    tabIndex={isFocused ? 0 : -1}
+                                    data-testid={`${testId}-row-${idx}`}
+                                    onMouseEnter={() => setFocusIndex(idx)}
+                                    onClick={() => handleRowClick(idx)}
+                                    onKeyDown={e => handleRowKey(e, idx)}
+                                    ref={el => {
+                                        // Auto-scroll the focused row into view
+                                        // when the focus index changes. Guarded
+                                        // because jsdom (and some older browsers)
+                                        // don't implement scrollIntoView.
+                                        if (el && isFocused && typeof el.scrollIntoView === 'function') {
+                                            el.scrollIntoView({ block: 'nearest' });
+                                        }
+                                    }}
+                                    className={`flex items-center justify-between gap-2 rounded px-1.5 py-1 text-[10px] cursor-pointer outline-none ${
+                                        isFocused
+                                            ? 'bg-zinc-800 text-zinc-100 ring-1 ring-amber-400/40'
+                                            : 'text-zinc-300 hover:bg-zinc-800/60'
+                                    }`}
+                                >
+                                    <span className="min-w-0 truncate font-mono">{e.seatName}</span>
+                                    <span className="shrink-0 tabular-nums text-zinc-500">
+                                        {e.previous
+                                            ? `${(e.previous.x * 100).toFixed(0)}→${(e.next.x * 100).toFixed(0)}`
+                                            : `default→${(e.next.x * 100).toFixed(0)}`}
+                                    </span>
+                                </li>
+                            );
+                        })}
                     </ul>
                 </div>
             )}

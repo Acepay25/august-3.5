@@ -40,6 +40,23 @@ export const snapSeatPosition = (pos: SeatPosition, step = 0.05): SeatPosition =
     y: snapToGrid(pos.y, step),
 });
 
+/** True iff the snapped position equals the previous saved position.
+ *  Used by the desk drag flow to skip no-op drags (click-and-release
+ *  on the same cell) — avoids polluting the undo stack with
+ *  zero-effect entries. Both positions are snapped to the same step
+ *  before comparison so a tiny cursor drift within the same cell
+ *  still counts as a noop. */
+export const isNoopPositionChange = (
+    previous: SeatPosition | null,
+    next: SeatPosition,
+    step = 0.05,
+): boolean => {
+    if (previous === null) return false;
+    const prevSnap = snapSeatPosition(previous, step);
+    const nextSnap = snapSeatPosition(next, step);
+    return prevSnap.x === nextSnap.x && prevSnap.y === nextSnap.y;
+};
+
 const isFinite01 = (n: unknown): n is number =>
     typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= 1;
 
