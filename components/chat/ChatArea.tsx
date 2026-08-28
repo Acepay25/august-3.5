@@ -12,6 +12,7 @@ import { ArrowUpIcon, ArrowDownIcon, CloseIcon, LoadingIcon, EyeIcon, BrainIcon,
 import HybridDataPanel from '../analysis/HybridDataPanel';
 import ImageViewerModal from '../modals/ImageViewerModal';
 import WorkspaceWelcome, { WorkspaceWelcomeProps } from './WorkspaceWelcome';
+import { CompanyRoom } from '../room/CompanyRoom';
 
 // Hoisted list components to prevent re-creation on each render
 const ListHeader = () => <div className="h-16"></div>;
@@ -118,6 +119,8 @@ interface ChatAreaProps {
     // Analysis Progress (Task UI)
     analysisSteps?: AnalysisStep[];
     isAnalysisActive?: boolean;
+    /** Open the per-agent chat slide-over from the composer's "Per-agent" button. */
+    onOpenAgentChat?: () => void;
 }
 
 const ChatAreaInner: React.FC<ChatAreaProps> = ({
@@ -192,6 +195,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     entryTimingScore,
     onOpenSettings,
     onOpenLiveMarket,
+    onOpenAgentChat,
     onInteract,
     onSelectMessageForProbability,
     homeDashboard,
@@ -412,7 +416,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         isEnsembleEnabled, setIsEnsembleEnabled, selectedChatModel,
         setSelectedChatModel, regimeProviderStats,
         moderatorProviderId, moderatorModel, onSetModeratorProvider, onSetModeratorModel,
-        onOpenSettings, onOpenLiveMarket, isAccuracyModeEnabled,
+        onOpenSettings, onOpenLiveMarket, onOpenAgentChat, isAccuracyModeEnabled,
         hybridConnectionStatus, hybridData,
     ]);
 
@@ -422,6 +426,15 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
             onClick={onInteract}
             onTouchStart={onInteract}
         >
+            {/* Autonomous AI Company office — fixed background.
+                Sits at z-0 behind the messages. Renders even when the
+                trader is in the empty state (the room is the home view). */}
+            <CompanyRoom
+                activeProviderCount={
+                    providers.filter(p => p.isEnabled && p.apiKey.trim().length > 0).length
+                }
+            />
+
             {/* Selection Toolbar */}
             {isSelectionMode ? (
                 <div className="absolute top-4 left-4 right-4 z-40 bg-zinc-900 border border-white/10 rounded-xl p-3 flex items-center justify-between shadow-2xl animate-fade-in">
