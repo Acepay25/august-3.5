@@ -172,6 +172,44 @@ export const pushUndo = (entry: UndoEntry): void => {
 /** Pop the most recent undo entry. Returns null when empty. */
 export const popUndo = (): UndoEntry | null => undoStack.pop() ?? null;
 
+/**
+ * Pop the most recent N undo entries (or all of them when N is larger
+ * than the stack depth). Returns an empty array when the stack is
+ * empty. Used by the multi-level Undo button — each click pops one
+ * entry, so a user can keep clicking to peel back further.
+ */
+export const popUndoN = (n: number): UndoEntry[] => {
+    if (n <= 0) return [];
+    const out: UndoEntry[] = [];
+    const take = Math.min(n, undoStack.length);
+    for (let i = 0; i < take; i += 1) {
+        const entry = undoStack.pop();
+        if (!entry) break;
+        out.push(entry);
+    }
+    if (out.length > 0) {
+        for (const l of undoListeners) l();
+    }
+    return out;
+};
+
+/**
+ * Apply an array of undo entries in REVERSE order (most recent first),
+ * restoring each seat to its previous position (or clearing if the
+ * previous was null). This is the natural inverse of a series of
+ * pushes and matches the way the user thinks about Undo: "undo the
+ * last thing, then the thing before that, etc."
+ */
+export const applyUndoEntries = (names: string[], entries: UndoEntry[]): void => {
+    for (const entry of entries) {
+        if (entry.previous) {
+            setSeatPosition(names, entry.seatName, entry.previous);
+        } else {
+            clearSeatPosition(names, entry.seatName);
+        }
+    }
+};
+
 /** Number of pending undos. */
 export const undoDepth = (): number => undoStack.length;
 

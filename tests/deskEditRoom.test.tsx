@@ -62,12 +62,14 @@ describe('DeskScene — Edit room polish', () => {
         expect(screen.getByTestId('desk-undo-drag')).toBeTruthy();
     });
 
-    it('Reset wipes the saved layout', () => {
+    it('Reset wipes the saved layout (after a confirm click)', () => {
         const names = ['macro'];
         setSeatPosition(names, 'macro', { x: 0.5, y: 0.5 });
         expect(getRoomLayout(names).macro).toBeTruthy();
         render(<DeskScene actors={[actor({})]} onClose={() => {}} />);
         fireEvent.click(screen.getByTestId('desk-edit-room'));
+        // Two-click confirm.
+        fireEvent.click(screen.getByTestId('desk-reset-layout'));
         fireEvent.click(screen.getByTestId('desk-reset-layout'));
         expect(getRoomLayout(names).macro).toBeUndefined();
     });
