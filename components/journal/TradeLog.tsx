@@ -10,6 +10,7 @@ import { EmptyState } from '../ui/EmptyState';
 import { ReasoningPanel } from './ReasoningPanel';
 import { getThinkingTradeId } from '../../services/infrastructure/ThinkingStoreService';
 import { DEFAULT_LEVERAGE } from '../../utils/conversationUtils';
+import { useConfirmDialog } from '../shared/ConfirmDialog';
 import SetupLifecycleCard from '../analysis/SetupLifecycleCard';
 import MarkdownContent from '../shared/MarkdownContent';
 import { getMemoryFiles, toPatternMemoryMarkdown, patternMemoryStatsFromTrades } from '../../services/learning/MemoryFilesService';
@@ -501,6 +502,20 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
     const [viewerImageUrl, setViewerImageUrl] = useState<string | null>(null);
     const [tradeTypeFilter, setTradeTypeFilter] = useState<'all' | 'scalp' | 'swing'>('all');
     const [outcomeFilter, setOutcomeFilter] = useState<'all' | TradeOutcome>('all');
+    // Typed-confirm: the "Clear all" button requires the user to type
+    // CLEAR before the modal's confirm button enables. The dialog
+    // floats above the trade list at z-100.
+    const { confirm: confirmClear, ConfirmDialogComponent: ClearDialog } = useConfirmDialog();
+    const askClearAll = (): void => {
+        void confirmClear({
+            title: 'Clear all logged trades?',
+            message: `This permanently deletes ${trades.length} trade${trades.length === 1 ? '' : 's'}. Pattern memory built from these trades is preserved.`,
+            confirmLabel: 'Clear all',
+            destructive: true,
+            typedConfirm: 'CLEAR',
+            typedConfirmHint: 'Type CLEAR to confirm',
+        }).then(ok => { if (ok) onClearAllTrades(); });
+    };
 
     const detailTrade = trades.find(t => t.id === detailTradeId);
 
@@ -631,9 +646,9 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
                 <div className="px-8 pb-3 shrink-0 flex items-center justify-end">
                     <button
                         type="button"
-                        onClick={onClearAllTrades}
+                        onClick={askClearAll}
                         className="text-xs text-zinc-500 hover:text-rose-400 transition-colors"
-                        title="Delete all logged trades (with 5s undo)"
+                        title="Delete all logged trades (typed confirm)"
                     >
                         Clear all
                     </button>
@@ -754,6 +769,7 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
                 imageUrl={viewerImageUrl}
                 onClose={() => setViewerImageUrl(null)}
             />
+            {ClearDialog}
         </div>
     );
 };

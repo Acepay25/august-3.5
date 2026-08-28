@@ -13,9 +13,11 @@ import {
     getRoleOverrides,
     setRoleOverride,
     clearRoleOverride,
+    setRoleOverrides,
     subscribeRoleOverrides,
     getOverridesUser,
 } from '../../services/desk/roleOverrides';
+import { useConfirmDialog } from '../shared/ConfirmDialog';
 import { roleForName, type RolePreset } from '../../components/desk/pixelAvatars';
 
 const ROLES: RolePreset[] = [
@@ -83,9 +85,27 @@ export const DeskSeatMappingEditor: React.FC = () => {
     const handleReset = (name: string): void => {
         clearRoleOverride(name);
     };
+    // Typed-confirm: the Reset button wipes the whole override table
+    // for the active user. Modal requires "RESET" before the confirm
+    // button enables.
+    const { confirm: confirmReset, ConfirmDialogComponent: ResetDialog } = useConfirmDialog();
+    const askResetAll = (): void => {
+        void confirmReset({
+            title: 'Reset all seat mappings?',
+            message: `This clears every per-user override for "${activeUser}" and returns every seat to the default heuristic.`,
+            confirmLabel: 'Reset mappings',
+            destructive: true,
+            typedConfirm: 'RESET',
+            typedConfirmHint: 'Type RESET to confirm',
+        }).then(ok => {
+            if (!ok) return;
+            setRoleOverrides({});
+        });
+    };
 
     return (
         <div className="space-y-4">
+            {ResetDialog}
             <div className="flex items-baseline justify-between gap-2">
                 <div>
                     <h4 className="text-sm font-semibold text-zinc-100">Desk seat mapping</h4>
@@ -180,8 +200,9 @@ export const DeskSeatMappingEditor: React.FC = () => {
                 {entries.length > 0 && (
                     <button
                         type="button"
-                        onClick={() => entries.forEach(([n]) => handleReset(n))}
-                        title="Remove all overrides"
+                        onClick={askResetAll}
+                        title="Remove all overrides (typed confirm)"
+                        data-testid="desk-mapping-reset"
                         className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-zinc-950 px-2.5 py-1.5 text-[12px] text-zinc-400 hover:text-rose-300"
                     >
                         <RotateCcw className="h-3.5 w-3.5" /> Reset

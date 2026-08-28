@@ -50,6 +50,8 @@ import {
     redoDepth,
     clearUndoStack,
     subscribeUndo,
+    peekUndo,
+    peekRedo,
     type RoomLayout,
     type UndoEntry,
 } from '../../services/desk/roomLayout';
@@ -142,6 +144,10 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
     // localStorage on every pointermove (one write on pointerup).
     const [dragPositions, setDragPositions] = React.useState<Record<string, { x: number; y: number }>>({});
     const [dragTick, setDragTick] = React.useState(0);
+    // Names of seats currently running the 180ms settle-pulse animation
+    // (added on drop, auto-removed when the animation ends). A Set
+    // so multiple seats can pulse at once.
+    const [pulsingSeats, setPulsingSeats] = React.useState<Set<string>>(new Set());
     const floorRef = React.useRef<HTMLDivElement | null>(null);
     const draggingSeatRef = React.useRef<string | null>(null);
     // `isDragging` is read from the ref during render — refs don't
@@ -202,6 +208,22 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
             // cursor pixel; replace the transient drag position with
             // the snapped value so the next render uses it.
             setDragPositions(prev => ({ ...prev, [seatName]: snapped }));
+            // Tactile feedback: 180ms settle pulse so the seat visibly
+            // "lands" instead of snapping. Reduced-motion users see
+            // a static snap (the CSS rule disables the keyframe).
+            setPulsingSeats(prev => {
+                const next = new Set(prev);
+                next.add(seatName);
+                return next;
+            });
+            window.setTimeout(() => {
+                setPulsingSeats(prev => {
+                    if (!prev.has(seatName)) return prev;
+                    const next = new Set(prev);
+                    next.delete(seatName);
+                    return next;
+                });
+            }, 200);
         }
         // Release the pointer capture; the floor div had it from
         // pointerdown on the seat.
@@ -435,34 +457,34 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
                             {editRoom ? 'Done' : 'Edit room'}
                         </button>
                         {editRoom && (
-                            <button
-                                type="button"
-                                onClick={handleUndo}
+                            <HistoryButton
+                                kind="undo"
+                                label={`Undo${canUndo ? ` (${undoDepth()})` : ''}`}
+                                testId="desk-undo-drag"
+                                ariaLabel="Undo last drag"
                                 disabled={!canUndo}
+                                onActivate={handleUndo}
                                 title={canUndo
                                     ? `Undo last drag — click again to peel back further (Ctrl/Cmd+Z, ${undoDepth()} pending)`
                                     : 'Nothing to undo'}
-                                aria-label="Undo last drag"
-                                data-testid="desk-undo-drag"
-                                className="flex h-7 items-center gap-1 rounded-md border border-white/10 bg-zinc-950 px-2 text-[10px] text-zinc-300 enabled:hover:bg-zinc-800 enabled:hover:text-zinc-100 disabled:text-zinc-600"
-                            >
-                                Undo{canUndo ? ` (${undoDepth()})` : ''}
-                            </button>
+                                entries={peekUndo(5)}
+                                depth={undoDepth()}
+                            />
                         )}
                         {editRoom && (
-                            <button
-                                type="button"
-                                onClick={handleRedo}
+                            <HistoryButton
+                                kind="redo"
+                                label={`Redo${canRedo ? ` (${redoDepth()})` : ''}`}
+                                testId="desk-redo-drag"
+                                ariaLabel="Redo last drag"
                                 disabled={!canRedo}
+                                onActivate={handleRedo}
                                 title={canRedo
                                     ? `Redo last undone drag (Shift+Ctrl/Cmd+Z, ${redoDepth()} pending)`
                                     : 'Nothing to redo'}
-                                aria-label="Redo last drag"
-                                data-testid="desk-redo-drag"
-                                className="flex h-7 items-center gap-1 rounded-md border border-white/10 bg-zinc-950 px-2 text-[10px] text-zinc-300 enabled:hover:bg-zinc-800 enabled:hover:text-zinc-100 disabled:text-zinc-600"
-                            >
-                                Redo{canRedo ? ` (${redoDepth()})` : ''}
-                            </button>
+                                entries={peekRedo(5)}
+                                depth={redoDepth()}
+                            />
                         )}
                         {editRoom && (
                             <button
@@ -560,6 +582,7 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
                             const leftPct = `${anchor.x * 100}%`;
                             const topPct = `${anchor.y * 100}%`;
                             const isDragging = draggingSeatRef.current === seat.name;
+                            const isPulsing = pulsingSeats.has(seat.name);
                             return (
                                 <div
                                     key={seat.id}
@@ -567,6 +590,8 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
                                         editRoom ? 'cursor-grab' : ''
                                     } ${isDragging ? 'cursor-grabbing z-30 scale-110' : ''} ${
                                         isDragging ? 'rounded-md ring-2 ring-amber-400/60 shadow-lg shadow-amber-400/20' : ''
+                                    } ${isDragging ? 'is-dragging' : ''} ${
+                                        isPulsing ? 'desk-tactile-pulse' : ''
                                     }`}
                                     style={{ left: leftPct, top: topPct }}
                                     onPointerDown={handleSeatPointerDown(seat.name)}
@@ -645,6 +670,102 @@ export { extractConvictions };
 export { livePhaseForMessage, exchangesForTurns, convictionsFromTurns };
 
 export default DeskScene;
+
+/**
+ * HistoryButton — Undo/Redo trigger with a hover-activated popover
+ * that shows the next 5 pending entries (newest first). The popover
+ * closes on click-outside, on Escape, or when the trigger is pressed
+ * again. Pure presentational; the caller owns the action and the
+ * stack.
+ */
+const HistoryButton: React.FC<{
+    kind: 'undo' | 'redo';
+    label: string;
+    testId: string;
+    ariaLabel: string;
+    disabled: boolean;
+    onActivate: () => void;
+    title: string;
+    entries: UndoEntry[];
+    depth: number;
+}> = ({ kind, label, testId, ariaLabel, disabled, onActivate, title, entries, depth }) => {
+    const [open, setOpen] = React.useState(false);
+    const containerRef = React.useRef<HTMLDivElement | null>(null);
+    // Click-outside + Escape close.
+    React.useEffect(() => {
+        if (!open) return undefined;
+        const onDoc = (e: MouseEvent): void => {
+            const t = e.target as Node | null;
+            if (t && containerRef.current && !containerRef.current.contains(t)) setOpen(false);
+        };
+        const onKey = (e: KeyboardEvent): void => {
+            if (e.key === 'Escape') setOpen(false);
+        };
+        document.addEventListener('mousedown', onDoc);
+        document.addEventListener('keydown', onKey);
+        return () => {
+            document.removeEventListener('mousedown', onDoc);
+            document.removeEventListener('keydown', onKey);
+        };
+    }, [open]);
+    // Auto-close when the stack empties.
+    React.useEffect(() => {
+        if (depth === 0) setOpen(false);
+    }, [depth]);
+    const handleClick = (): void => {
+        if (disabled) return;
+        onActivate();
+        // Don't auto-close: trader may want to undo several in a row.
+    };
+    const handleToggle = (): void => {
+        if (disabled) return;
+        setOpen(o => !o);
+    };
+    return (
+        <div ref={containerRef} className="relative">
+            <button
+                type="button"
+                onClick={handleClick}
+                onContextMenu={e => { e.preventDefault(); handleToggle(); }}
+                disabled={disabled}
+                title={title}
+                aria-label={ariaLabel}
+                aria-haspopup="true"
+                aria-expanded={open}
+                data-testid={testId}
+                className="flex h-7 items-center gap-1 rounded-md border border-white/10 bg-zinc-950 px-2 text-[10px] text-zinc-300 enabled:hover:bg-zinc-800 enabled:hover:text-zinc-100 disabled:text-zinc-600"
+            >
+                {label}
+            </button>
+            {open && entries.length > 0 && (
+                <div
+                    data-testid={`${testId}-popover`}
+                    role="tooltip"
+                    className="absolute right-0 top-full z-30 mt-1 w-56 rounded-md border border-white/15 bg-zinc-950/95 px-2 py-1.5 shadow-2xl backdrop-blur"
+                >
+                    <p className="px-1 pb-1 text-[9px] font-semibold uppercase tracking-widest text-zinc-500">
+                        {kind === 'undo' ? 'Next to undo' : 'Next to redo'} · {depth}
+                    </p>
+                    <ul className="space-y-0.5">
+                        {entries.map((e, idx) => (
+                            <li
+                                key={`${e.seatName}-${idx}-${e.next.x.toFixed(2)}`}
+                                className="flex items-center justify-between gap-2 rounded px-1.5 py-1 text-[10px] text-zinc-300"
+                            >
+                                <span className="min-w-0 truncate font-mono">{e.seatName}</span>
+                                <span className="shrink-0 tabular-nums text-zinc-500">
+                                    {e.previous
+                                        ? `${(e.previous.x * 100).toFixed(0)}→${(e.next.x * 100).toFixed(0)}`
+                                        : `default→${(e.next.x * 100).toFixed(0)}`}
+                                </span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+        </div>
+    );
+};
 
 /**
  * (ResetButton removed — Reset now opens a typed-confirm modal
