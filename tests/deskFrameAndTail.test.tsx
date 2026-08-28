@@ -97,6 +97,28 @@ describe('pixelAvatars — second-frame grids', () => {
         }
     });
 
+    it('every role has a valid 16x20 thinking frame', () => {
+        const roles = [
+            'risk', 'macro', 'technical', 'sentiment',
+            'moderator', 'followup', 'postmortem', 'execution', 'unknown',
+        ] as const;
+        for (const role of roles) {
+            const grid = buildGridForRole(role, 'thinking');
+            expect(isValidGrid(grid), `thinking grid invalid for role ${role}`).toBe(true);
+        }
+    });
+
+    it('every role has a valid 16x20 lean_back frame', () => {
+        const roles = [
+            'risk', 'macro', 'technical', 'sentiment',
+            'moderator', 'followup', 'postmortem', 'execution', 'unknown',
+        ] as const;
+        for (const role of roles) {
+            const grid = buildGridForRole(role, 'lean_back');
+            expect(isValidGrid(grid), `lean_back grid invalid for role ${role}`).toBe(true);
+        }
+    });
+
     it('the speaking frame differs from the idle frame for every non-unknown role', () => {
         const roles = [
             'risk', 'macro', 'technical', 'sentiment',

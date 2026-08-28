@@ -62,19 +62,66 @@ export const PixelSeat: React.FC<PixelSeatProps> = ({
     'data-testid': testId,
 }) => {
     const role = roleOverride ?? roleForName(name);
-    // While the seat is speaking, swap between the idle and speaking
-    // grids at ~2 Hz so the head visibly "talks" (mouth open / body
-    // lean). Reduced-motion users see only the idle frame.
+    // While the seat is speaking or thinking, swap between the idle
+    // and the active grid at ~2 Hz so the head visibly "talks" (mouth
+    // open / body lean) or "reads" (mouth slightly open / body
+    // settled toward the monitor). After the seat stops speaking, a
+    // brief "post-speaking settle" window plays the lean_back frame
+    // so the seat visibly relaxes before going idle.
+    // Reduced-motion users see only the idle frame.
     const [tick, setTick] = React.useState(0);
+    // settledUntil = timestamp until which the lean_back frame is
+    // shown after a speaking tick ends. We use a ref so the effect
+    // that sets it doesn't depend on the periodic tick.
+    const settledUntilRef = React.useRef(0);
+    const [settleTick, setSettleTick] = React.useState(0);
+    const wasSpeakingRef = React.useRef(false);
     const reducedMotion = React.useRef(
         typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
     ).current;
+
+    // Detect a speaking → not-speaking transition while still live and
+    // arm a 1.5s lean_back window. Reduced-motion users skip the
+    // settle; they go straight to idle.
     React.useEffect(() => {
-        if (!speaking || reducedMotion) return undefined;
+        if (wasSpeakingRef.current && !speaking && live && !reducedMotion) {
+            settledUntilRef.current = Date.now() + 1500;
+            setSettleTick(t => t + 1);
+        }
+        wasSpeakingRef.current = speaking;
+    }, [speaking, live, reducedMotion]);
+
+    React.useEffect(() => {
+        if (reducedMotion) return undefined;
+        const active = speaking || thinking;
+        if (!active) return undefined;
         const id = window.setInterval(() => setTick(t => (t + 1) % 2), 480);
         return () => window.clearInterval(id);
-    }, [speaking, reducedMotion]);
-    const frame: 'idle' | 'speaking' = speaking && !reducedMotion && tick === 1 ? 'speaking' : 'idle';
+    }, [speaking, thinking, reducedMotion]);
+
+    // Drive the settle window's redraws so it actually expires.
+    React.useEffect(() => {
+        if (reducedMotion) return undefined;
+        const id = window.setInterval(() => {
+            if (settledUntilRef.current > 0 && Date.now() > settledUntilRef.current) {
+                settledUntilRef.current = 0;
+                setSettleTick(t => t + 1);
+            }
+        }, 200);
+        return () => window.clearInterval(id);
+    }, [reducedMotion]);
+
+    const frame: 'idle' | 'speaking' | 'thinking' | 'lean_back' = (() => {
+        if (reducedMotion) return 'idle';
+        if (speaking) return tick === 1 ? 'speaking' : 'idle';
+        if (thinking) return tick === 1 ? 'thinking' : 'idle';
+        if (live && settledUntilRef.current > Date.now()) return 'lean_back';
+        return 'idle';
+    })();
+    // Touch the state vars so the linter doesn't drop them; the
+    // computed frame above is what the render uses.
+    void settleTick;
+
     const grid = buildGridForRole(role, frame);
     if (!isValidGrid(grid)) {
         // Bad grid means a developer broke the hand-authored table. Fail loud.
