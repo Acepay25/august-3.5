@@ -145,6 +145,15 @@ export const PixelSeat: React.FC<PixelSeatProps> = ({
                 : 'bg-zinc-600';
     const PipIcon = speaking ? Mic : thinking ? Loader2 : (speech?.trim() ? MessageSquare : MicOff);
 
+    // Stagger the breath cycle per seat so the room doesn't look like
+    // a synchronized marching band. The hash is deterministic on the
+    // name so the same seat always gets the same delay.
+    const breathDelaySec = React.useMemo(() => {
+        let h = 0;
+        for (let i = 0; i < name.length; i += 1) h = (h * 31 + name.charCodeAt(i)) | 0;
+        // Spread across the 4s breath cycle (0..4s).
+        return (Math.abs(h) % 4000) / 1000;
+    }, [name]);
     return (
         <button
             type="button"
@@ -154,7 +163,12 @@ export const PixelSeat: React.FC<PixelSeatProps> = ({
             aria-label={`Open ${name} seat`}
             className={`group/seat relative flex flex-col items-center gap-1 rounded-md p-1 text-center transition-transform hover:scale-[1.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/50 ${
                 speaking ? 'is-speaking' : thinking ? 'is-thinking' : live ? 'is-live' : ''
-            }`}
+            } ${role === 'moderator' ? 'is-moderator' : ''}`}
+            // The inline animationDelay staggers the breath + sway
+            // keyframes so seats don't all rise and fall on the same
+            // beat. Stored as a CSS custom prop so both the breath
+            // and the moderator-sway keyframes can read it.
+            style={{ ['--seat-anim-delay' as string]: `-${breathDelaySec}s` }}
         >
             {/* Status pip — top-right of the avatar box. */}
             <span
