@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
 import React from 'react';
-import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, act } from '@testing-library/react';
 
 import { CompanyRoom } from '../components/room/CompanyRoom';
 import { AgentChatView } from '../components/room/AgentChatView';
+import { getRoleOverrides, setRoleOverride, clearRoleOverride } from '../services/desk/roleOverrides';
+import { getRoomLayout, setSeatPosition, clearUndoStack } from '../services/desk/roomLayout';
 import type { ProviderConfig } from '../types/provider';
 
 beforeAll(() => {
@@ -17,7 +19,14 @@ beforeAll(() => {
     }
 });
 
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    if (typeof window !== 'undefined') {
+        window.localStorage.clear();
+        window.localStorage.setItem('last_active_user', 'default');
+        clearUndoStack();
+    }
+});
 
 const provider = (over: Partial<ProviderConfig>): ProviderConfig => ({
     id: over.id ?? 'p1',
@@ -79,6 +88,77 @@ describe('CompanyRoom', () => {
     it('shows a centered human-approval-queue panel between the header and the desks', () => {
         render(<CompanyRoom activeProviderCount={2} />);
         expect(screen.getByText('Human approval queue')).toBeTruthy();
+    });
+
+    it('positions desks at the default 6-cell grid when no saved layout exists', () => {
+        const { container } = render(<CompanyRoom />);
+        const desks = container.querySelectorAll('[data-testid^="company-desk-"]');
+        // 6 desks, each with `left: NN%` and `top: 78%` (the default).
+        expect(desks).toHaveLength(6);
+        for (let i = 0; i < desks.length; i += 1) {
+            const el = desks[i] as HTMLElement;
+            expect(el.style.left).toMatch(/^\d+(\.\d+)?%$/);
+            expect(el.style.top).toBe('78%');
+        }
+    });
+
+    it('honors a saved roomLayout from the store (overrides default cells)', () => {
+        setSeatPosition(
+            ['Chief', 'Sales', 'Research', 'Build', 'Test', 'Verify'],
+            'Chief',
+            { x: 0.5, y: 0.5 },
+        );
+        const { container } = render(<CompanyRoom />);
+        const chiefDesk = container.querySelector('[data-testid="company-desk-0"]') as HTMLElement;
+        expect(chiefDesk.style.left).toBe('50%');
+        expect(chiefDesk.style.top).toBe('50%');
+    });
+
+    it('renders the live gauge stats with raw counts when gaugeStats is provided', () => {
+        render(
+            <CompanyRoom
+                activeProviderCount={3}
+                gaugeStats={{
+                    tasks: 24,
+                    running: 1,
+                    shipped: 17,
+                    approvals: 4,
+                }}
+            />,
+        );
+        // The four labels.
+        expect(screen.getByText('Tasks')).toBeTruthy();
+        expect(screen.getByText('Running')).toBeTruthy();
+        expect(screen.getByText('Shipped')).toBeTruthy();
+        expect(screen.getByText('Approvals')).toBeTruthy();
+        // The raw counts (when gaugeStats is set, the bar shows a
+        // monospace digit so the trader can read the exact number).
+        expect(screen.getByText('24')).toBeTruthy();
+        expect(screen.getByText('17')).toBeTruthy();
+        expect(screen.getByText('4')).toBeTruthy();
+    });
+
+    it('honors a per-user seat-name override from Settings -> Roles (no label change)', () => {
+        // The override map (`getRoleOverrides`) is keyed by seat name
+        // and stores a RolePreset. The display label is the seat name
+        // itself; the override changes the AVATAR's role color, not
+        // the text. So the test asserts that the label stays the same
+        // and that getRoleOverrides is consulted (no error). This is
+        // a smoke test rather than a full color-routing check.
+        setRoleOverride('Chief', 'risk');
+        const { container } = render(
+            <CompanyRoom seatNames={['Chief', 'Sales', 'Research']} />,
+        );
+        // The label is rendered as a <span> with the
+        // bg-zinc-900/80 class (the desk plate). Filter to those.
+        const labels = Array.from(container.querySelectorAll(
+            '[data-testid^="company-desk-"] span.bg-zinc-900\\/80',
+        )).map(el => el.textContent);
+        // The first desk still says "Chief" (the override is about
+        // the avatar's role, not the displayed text).
+        expect(labels).toContain('Chief');
+        // Cleanup so other tests aren't affected.
+        clearRoleOverride('Chief');
     });
 });
 
