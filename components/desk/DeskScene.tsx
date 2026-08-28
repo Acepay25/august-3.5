@@ -41,7 +41,8 @@ import {
     resetRoomLayout,
     snapSeatPosition,
     pushUndo,
-    popUndo,
+    popUndoN,
+    applyUndoEntries,
     undoDepth,
     clearUndoStack,
     subscribeUndo,
@@ -164,15 +165,16 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
     // sees the current roster (no stale closure).
     const actorsRef = React.useRef(actors);
     React.useEffect(() => { actorsRef.current = actors; }, [actors]);
+    // Multi-level undo: each click pops ONE entry (the most recent).
+    // The user can keep clicking to peel back further. The keyboard
+    // shortcut (Ctrl/Cmd+Z) is also single-step — matches the editor
+    // convention; Shift+Ctrl/Cmd+Z is the natural "redo" but we
+    // don't have a redo stack, so the shortcut is a no-op past empty.
     const handleUndo = React.useCallback((): void => {
-        const entry = popUndo();
-        if (!entry) return;
+        const entries = popUndoN(1);
+        if (entries.length === 0) return;
         const names = actorsRef.current.map(a => a.id);
-        if (entry.previous) {
-            setSeatPosition(names, entry.seatName, entry.previous);
-        } else {
-            clearSeatPosition(names, entry.seatName);
-        }
+        applyUndoEntries(names, entries);
     }, []);
 
     // Esc closes; the floor's own buttons (steer, etc.) handle their own keys.
@@ -197,6 +199,32 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
     // Reset the undo stack when the desk closes — the next open should
     // start clean. We clear on unmount.
     React.useEffect(() => () => { clearUndoStack(); }, []);
+
+    // Touch-drag hardening: while editRoom is on, register a NON-PASSIVE
+    // touchstart listener on the floor that calls preventDefault().
+    // React's onTouchStart is registered as passive by default, so
+    // we need a raw addEventListener to get the non-passive option
+    // (the only way to actually cancel the browser's default
+    // scroll/zoom gesture on iOS Safari). Without this, the first
+    // touch frame can be hijacked by the OS before our pointerdown
+    // handler runs.
+    React.useEffect(() => {
+        if (!editRoom) return undefined;
+        if (typeof window === 'undefined') return undefined;
+        const node = floorRef.current;
+        if (!node) return undefined;
+        const onTouchStart = (e: TouchEvent): void => {
+            // Allow the OS to take the touch ONLY if the user is
+            // targeting something that genuinely needs default
+            // behavior (e.g. a button outside the floor). The
+            // pointerdown handler on the seat already prevents the
+            // default, so this is a belt-and-suspenders for the iOS
+            // Safari first-frame case.
+            e.preventDefault();
+        };
+        node.addEventListener('touchstart', onTouchStart, { passive: false });
+        return () => node.removeEventListener('touchstart', onTouchStart);
+    }, [editRoom]);
 
     // Undo button enable state — bump on every push / pop / clear.
     const [undoTick, setUndoTick] = React.useState(0);
@@ -347,28 +375,24 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
                                 type="button"
                                 onClick={handleUndo}
                                 disabled={!canUndo}
-                                title={canUndo ? 'Undo last drag (Ctrl/Cmd+Z)' : 'Nothing to undo'}
+                                title={canUndo
+                                    ? `Undo last drag — click again to peel back further (Ctrl/Cmd+Z, ${undoDepth()} pending)`
+                                    : 'Nothing to undo'}
                                 aria-label="Undo last drag"
                                 data-testid="desk-undo-drag"
                                 className="flex h-7 items-center gap-1 rounded-md border border-white/10 bg-zinc-950 px-2 text-[10px] text-zinc-300 enabled:hover:bg-zinc-800 enabled:hover:text-zinc-100 disabled:text-zinc-600"
                             >
-                                Undo
+                                Undo{canUndo ? ` (${undoDepth()})` : ''}
                             </button>
                         )}
                         {editRoom && (
-                            <button
-                                type="button"
-                                onClick={() => {
+                            <ResetButton
+                                onConfirm={() => {
                                     resetRoomLayout(actors.map(a => a.id));
                                     setDragPositions({});
                                     clearUndoStack();
                                 }}
-                                title="Reset to default positions"
-                                data-testid="desk-reset-layout"
-                                className="flex h-7 items-center gap-1 rounded-md border border-white/10 bg-zinc-950 px-2 text-[10px] text-zinc-400 hover:text-rose-300"
-                            >
-                                Reset
-                            </button>
+                            />
                         )}
                         <button
                             type="button"
@@ -540,3 +564,52 @@ export { extractConvictions };
 export { livePhaseForMessage, exchangesForTurns, convictionsFromTurns };
 
 export default DeskScene;
+
+/**
+ * ResetButton — two-click confirm. First click arms the button
+ * (label flips to "Click again to confirm" and turns rose); a second
+ * click within 1.5s confirms and fires `onConfirm`. If the timer
+ * expires the button disarms itself. The implementation lives
+ * outside the main DeskScene so the armed-state timer doesn't
+ * re-render the whole floor on every tick.
+ */
+const RESET_ARM_MS = 1500;
+const ResetButton: React.FC<{ onConfirm: () => void }> = ({ onConfirm }) => {
+    const [armed, setArmed] = React.useState(false);
+    const armTimer = React.useRef<number | null>(null);
+    React.useEffect(() => () => {
+        if (armTimer.current !== null) window.clearTimeout(armTimer.current);
+    }, []);
+    const handleClick = (): void => {
+        if (armed) {
+            if (armTimer.current !== null) {
+                window.clearTimeout(armTimer.current);
+                armTimer.current = null;
+            }
+            setArmed(false);
+            onConfirm();
+            return;
+        }
+        setArmed(true);
+        armTimer.current = window.setTimeout(() => {
+            setArmed(false);
+            armTimer.current = null;
+        }, RESET_ARM_MS);
+    };
+    return (
+        <button
+            type="button"
+            onClick={handleClick}
+            title={armed ? 'Click again to confirm — resets all seat positions' : 'Reset to default positions'}
+            data-testid="desk-reset-layout"
+            data-armed={armed ? '1' : '0'}
+            className={`flex h-7 items-center gap-1 rounded-md border px-2 text-[10px] font-semibold transition-colors ${
+                armed
+                    ? 'border-rose-400/50 bg-rose-500/15 text-rose-300'
+                    : 'border-white/10 bg-zinc-950 text-zinc-400 hover:text-rose-300'
+            }`}
+        >
+            {armed ? 'Click again…' : 'Reset'}
+        </button>
+    );
+};
