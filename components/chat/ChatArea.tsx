@@ -121,6 +121,13 @@ interface ChatAreaProps {
     isAnalysisActive?: boolean;
     /** Open the per-agent chat slide-over from the composer's "Per-agent" button. */
     onOpenAgentChat?: () => void;
+    /** Live task-flow stats for the office header gauges. */
+    gaugeStats?: {
+        tasks: number;
+        running: number;
+        shipped: number;
+        approvals: number;
+    };
 }
 
 const ChatAreaInner: React.FC<ChatAreaProps> = ({
@@ -196,6 +203,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     onOpenSettings,
     onOpenLiveMarket,
     onOpenAgentChat,
+    gaugeStats,
     onInteract,
     onSelectMessageForProbability,
     homeDashboard,
@@ -433,6 +441,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 activeProviderCount={
                     providers.filter(p => p.isEnabled && p.apiKey.trim().length > 0).length
                 }
+                gaugeStats={gaugeStats}
             />
 
             {/* Selection Toolbar */}

@@ -2886,6 +2886,17 @@ const App: React.FC = () => {
         () => collectApprovalItems(messages, autopilotResolutions, activeUsername || undefined),
         [messages, autopilotResolutions, skillDraftNonce, activeUsername],
     );
+    // Live task-flow stats for the office header gauges. The four
+    // values are normalized inside CompanyRoom, so we feed raw counts
+    // here. "Shipped" = total settled analyses; "Running" = in-flight
+    // (debate or post-mortem); "Tasks" = everything; "Approvals" =
+    // queued approval cards awaiting the trader.
+    const gaugeStats = useMemo(() => ({
+        tasks: messages.length,
+        running: isAnalysisInProgress || isPostMortemInProgress ? 1 : 0,
+        shipped: messages.filter(m => m.analysis).length,
+        approvals: approvalItems.length,
+    }), [messages, isAnalysisInProgress, isPostMortemInProgress, approvalItems]);
 
 
     useWatchSideEffects({
@@ -3676,6 +3687,7 @@ const App: React.FC = () => {
                 onOpenSettings={(tab) => { setSettingsInitialTab(tab || 'models'); setIsSettingsMenuVisible(true); }}
                 onOpenLiveMarket={handleOpenLiveMarket}
                 onOpenAgentChat={openAgentChat}
+                gaugeStats={gaugeStats}
                 homeDashboard={homeDashboard}
                 onInteract={handleInteract}
             />
