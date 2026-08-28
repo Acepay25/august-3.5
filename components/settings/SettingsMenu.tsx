@@ -16,6 +16,7 @@ import { BackupManager } from './BackupManager';
 import { AlertManager } from './AlertManager';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
 import { ActivityIcon, AISettingsIcon, HistoryIcon, SettingsIcon, SwitchUserIcon, CodeIcon, SearchIcon, CloseIcon } from '../shared/Icons';
+import { getIdleMotionEnabled, setIdleMotionEnabled, subscribeIdleMotion } from '../../services/desk/idleMotion';
 import PromptManager from './PromptManager';
 import StrategiesManager from './StrategiesManager';
 import MemoryFilesManager from './MemoryFilesManager';
@@ -257,6 +258,10 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
     });
     const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
     const [deskToolsEnabled, setDeskToolsEnabled] = useState(() => getHarnessSettings().deskToolsEnabled);
+    // Idle motion (breath / fidget / blink / sway). Default ON. The
+    // toggle is per-user, persisted via services/desk/idleMotion.
+    const [idleMotionEnabled, setIdleMotionState] = useState(() => getIdleMotionEnabled());
+    useEffect(() => subscribeIdleMotion(setIdleMotionState), []);
     const [activeInstructionTab, setActiveInstructionTab] = useState<InstructionTab>('general');
     const [isDirty, setIsDirty] = useState(false);
     const [navQuery, setNavQuery] = useState('');
@@ -733,6 +738,23 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                                     saveHarnessSettings({ deskToolsEnabled: next });
                                                 }}
                                                 label="Toggle Desk Tools"
+                                            />
+                                        </div>
+
+                                        {/* Desk idle motion — breath, fidget, blink, sway. */}
+                                        <div className="flex items-center justify-between gap-6 border-b border-white/5 py-5">
+                                            <div>
+                                                <h4 className="text-sm font-semibold text-zinc-100">Desk idle motion</h4>
+                                                <p className="text-xs text-zinc-500 mt-1">
+                                                    Subtle micro-motion on the pixel seats (breath, cap-tilt, eye-blink while thinking, moderator sway).
+                                                    Disabling this makes the desk perfectly still — useful during high-stakes analysis.
+                                                    Equivalent to the OS-level “reduce motion” but per-user. Default: on.
+                                                </p>
+                                            </div>
+                                            <ToggleSwitch
+                                                checked={idleMotionEnabled}
+                                                onChange={() => setIdleMotionEnabled(!idleMotionEnabled)}
+                                                label="Toggle desk idle motion"
                                             />
                                         </div>
 

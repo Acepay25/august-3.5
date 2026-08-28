@@ -1,6 +1,11 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { VirtuosoHandle } from 'react-virtuoso';
+import { reapplyIdleMotionClass } from './services/desk/idleMotion';
+
+// Apply the user's persisted idle-motion preference to <body> on app
+// startup so the desk view mounts with the correct class.
+reapplyIdleMotionClass();
 import { Message, MessageRole, TradeOutcome, ImageMetadata, AIProvider, UserProfile, SavedAnalysis, TradeSummary, CustomInstructionsMap, AnalystLensConfig, LoggedTrade, SetupWatch, SetupWatchTriggerEvent } from './types';
 import * as ensembleService from './services/providers/ensembleService';
 import { generateFinalSummary } from './services/providers/GenericAnalysisService';

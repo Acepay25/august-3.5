@@ -693,10 +693,6 @@ body {
   50%  { transform: translateY(0.5px); }
   100% { transform: translateY(0); }
 }
-.is-live:not(.is-speaking):not(.is-thinking) > .pixelArt {
-  animation: seat-breath 4s ease-in-out infinite;
-  animation-delay: var(--seat-anim-delay, 0s);
-}
 
 /* Slower moderator-only sway — the referee's chair rocks a hair
    while waiting. 6s cycle, barely noticeable. We mark the moderator
@@ -707,6 +703,50 @@ body {
   0%   { transform: translateX(0); }
   50%  { transform: translateX(0.5px); }
   100% { transform: translateX(0); }
+}
+
+/* Eye-blink on thinking seats — a 120ms vertical scale dip every
+   3.5s (per-seat delay so the room doesn't blink in sync). We
+   scale the WHOLE avatar briefly because the pixel grid is
+   rendered as one element; the visual effect reads as a quick
+   "squint" while the analyst reads data. Reuses the per-seat
+   --seat-anim-delay variable (which already has a name hash) but
+   offsets it slightly so the blink doesn't always fire on the
+   same phase as the breath. */
+@keyframes seat-blink {
+  0%, 90%, 100% { transform: scaleY(1); }
+  93%, 97%      { transform: scaleY(0.18); }
+}
+.is-thinking:not(.is-speaking) > .pixelArt {
+  animation: seat-blink 3.5s ease-in-out infinite;
+  animation-delay: calc(var(--seat-anim-delay, 0s) - 1.7s);
+}
+
+/* Animator-style idle motion — a slow 8s cycle that briefly
+   tilts the cap and shifts the shoulder (the `transform-origin`
+   on the head makes the tilt read as a small cap-tip). Runs
+   alongside the breath (different period = no visible repetition
+   cycle). The animation-delay uses --seat-anim-delay + an offset
+   so the per-seat stagger carries over. */
+@keyframes seat-fidget {
+  0%, 88%, 100% { transform: rotate(0deg) translateY(0); }
+  91%           { transform: rotate(1deg)  translateY(-0.5px); }
+  94%           { transform: rotate(-0.5deg) translateY(0.5px); }
+  97%           { transform: rotate(0deg)  translateY(0); }
+}
+.is-live:not(.is-speaking):not(.is-thinking):not(.is-moderator) > .pixelArt {
+  /* Layer a second animation on top of the breath. The
+     animation-name space is comma-separated; the first
+     keyframe + delay wins for the matching window. The
+     `:not(.is-moderator)` carve-out lets the moderator-sway
+     rule below win (same specificity, later in source). */
+  animation:
+    seat-breath 4s ease-in-out infinite,
+    seat-fidget 8s ease-in-out infinite;
+  animation-delay:
+    var(--seat-anim-delay, 0s),
+    calc(var(--seat-anim-delay, 0s) - 3.2s);
+  transform-origin: 50% 25%;
 }
 .is-moderator:not(.is-speaking):not(.is-thinking) > .pixelArt {
   animation: seat-moderator-sway 6s ease-in-out infinite;
@@ -738,6 +778,23 @@ body {
   [class*="animate-[bubble-pop"] { animation: none; }
   .is-speaking > .pixelArt,
   .is-thinking .seat-monitor-overlay,
+  .is-thinking:not(.is-speaking) > .pixelArt,
+  .is-moderator:not(.is-speaking):not(.is-thinking) > .pixelArt,
+  .is-live:not(.is-speaking):not(.is-thinking) > .pixelArt,
+  .is-live { animation: none; }
+  .desk-tactile-pulse { animation: none; }
+}
+
+/* User-toggleable equivalent of prefers-reduced-motion. When the
+   trader turns idle motion OFF in Settings, we add the
+   `desk-idle-motion-off` class to <body>. This rule then disables
+   the same set of keyframes as the system-level media query. */
+body.desk-idle-motion-off {
+  .is-speaking > .pixelArt,
+  .is-thinking .seat-monitor-overlay,
+  .is-thinking:not(.is-speaking) > .pixelArt,
+  .is-moderator:not(.is-speaking):not(.is-thinking) > .pixelArt,
+  .is-live:not(.is-speaking):not(.is-thinking) > .pixelArt,
   .is-live { animation: none; }
   .desk-tactile-pulse { animation: none; }
 }
