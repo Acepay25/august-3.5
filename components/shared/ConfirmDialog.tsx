@@ -17,6 +17,12 @@ import { TrashIcon, CloseIcon } from './Icons';
  * For undo support, pass `onUndo` — when the user clicks Undo within the grace
  * period, onUndo fires and the result becomes `false` (so the caller treats
  * the action as not-performed). The undo toast auto-dismisses after 5s.
+ *
+ * For typed confirmation (destructive ops where a misclick is too easy),
+ * pass `typedConfirm: 'RESET'` (or any string). The dialog renders an
+ * input; the confirm button stays disabled until the user types the exact
+ * string. Use `typedConfirmHint` to override the default instruction
+ * ("Type X to confirm").
  */
 
 interface ConfirmOptions {
@@ -28,6 +34,11 @@ interface ConfirmOptions {
     /** If provided, an Undo button is shown for this many ms after confirm. */
     undoGraceMs?: number;
     onUndo?: () => void | Promise<void>;
+    /** If set, the confirm button is disabled until the user types this
+     *  exact string into the modal's input field. Case-sensitive. */
+    typedConfirm?: string;
+    /** Override the default hint text shown above the input. */
+    typedConfirmHint?: string;
 }
 
 interface ConfirmState extends ConfirmOptions {
@@ -35,7 +46,7 @@ interface ConfirmState extends ConfirmOptions {
     resolve?: (ok: boolean) => void;
 }
 
-const DEFAULTS: Required<Omit<ConfirmOptions, 'onUndo' | 'message'>> = {
+const DEFAULTS: Required<Omit<ConfirmOptions, 'onUndo' | 'message' | 'typedConfirm' | 'typedConfirmHint'>> = {
     title: 'Confirm',
     confirmLabel: 'Confirm',
     cancelLabel: 'Cancel',
@@ -45,6 +56,7 @@ const DEFAULTS: Required<Omit<ConfirmOptions, 'onUndo' | 'message'>> = {
 
 export function useConfirmDialog() {
     const [state, setState] = useState<ConfirmState>({ ...DEFAULTS, open: false });
+    const [typedInput, setTypedInput] = useState('');
     const [undoVisible, setUndoVisible] = useState(false);
     const dialogRef = useRef<HTMLDivElement>(null);
     const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -58,6 +70,7 @@ export function useConfirmDialog() {
                 open: true,
                 resolve,
             });
+            setTypedInput('');
         });
     }, []);
 
@@ -66,6 +79,7 @@ export function useConfirmDialog() {
             prev.resolve?.(ok);
             return { ...prev, open: false, resolve: undefined };
         });
+        setTypedInput('');
     }, []);
 
     const handleCancel = useCallback(() => {
@@ -158,6 +172,33 @@ export function useConfirmDialog() {
                                     {state.message && (
                                         <p className="mt-1.5 text-sm text-zinc-400 leading-relaxed">{state.message}</p>
                                     )}
+                                    {state.typedConfirm && (
+                                        <div className="mt-4">
+                                            <label
+                                                htmlFor="confirm-typed-input"
+                                                className="block text-[11px] font-semibold uppercase tracking-widest text-zinc-500"
+                                            >
+                                                {state.typedConfirmHint ?? `Type ${state.typedConfirm} to confirm`}
+                                            </label>
+                                            <input
+                                                id="confirm-typed-input"
+                                                data-testid="confirm-typed-input"
+                                                type="text"
+                                                value={typedInput}
+                                                onChange={e => setTypedInput(e.target.value)}
+                                                onKeyDown={e => {
+                                                    if (e.key === 'Enter' && typedInput === state.typedConfirm) {
+                                                        handleConfirm();
+                                                    }
+                                                }}
+                                                autoComplete="off"
+                                                spellCheck={false}
+                                                autoFocus
+                                                className="mt-1.5 w-full rounded-md border border-white/15 bg-zinc-950 px-2.5 py-1.5 font-mono text-sm text-zinc-100 placeholder-zinc-600 focus:border-rose-400/50 focus:outline-none"
+                                                placeholder={state.typedConfirm}
+                                            />
+                                        </div>
+                                    )}
                                 </div>
                                 <button
                                     onClick={handleCancel}
@@ -177,9 +218,11 @@ export function useConfirmDialog() {
                             </button>
                             <button
                                 onClick={handleConfirm}
+                                disabled={state.typedConfirm !== undefined && typedInput !== state.typedConfirm}
+                                data-testid="confirm-dialog-confirm"
                                 className={`px-4 py-2 text-sm font-semibold rounded-lg transition-colors ${state.destructive
-                                    ? 'bg-red-500 hover:bg-red-600 text-white'
-                                    : 'bg-cyan-500 hover:bg-cyan-600 text-white'
+                                    ? 'bg-red-500 enabled:hover:bg-red-600 text-white disabled:bg-zinc-700 disabled:text-zinc-500'
+                                    : 'bg-cyan-500 enabled:hover:bg-cyan-600 text-white disabled:bg-zinc-700 disabled:text-zinc-500'
                                     }`}
                             >
                                 {state.confirmLabel}
