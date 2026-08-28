@@ -73,8 +73,18 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
     // Re-render when the user edits role overrides (Settings → Roles).
     // We bump a counter and pass nothing to the consumer — the
     // `layoutFloor` call below reads overrides fresh on each render.
+    // Also re-render when the active user switches so a different
+    // profile's override table is honored.
     const [overridesTick, setOverridesTick] = React.useState(0);
     React.useEffect(() => subscribeRoleOverrides(() => setOverridesTick(t => t + 1)), []);
+    React.useEffect(() => {
+        if (typeof window === 'undefined') return undefined;
+        const onStorage = (e: StorageEvent): void => {
+            if (e.key === 'last_active_user') setOverridesTick(t => t + 1);
+        };
+        window.addEventListener('storage', onStorage);
+        return () => window.removeEventListener('storage', onStorage);
+    }, []);
 
     // Esc closes; the floor's own buttons (steer, etc.) handle their own keys.
     React.useEffect(() => {

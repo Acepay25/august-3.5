@@ -1,9 +1,26 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeAll } from 'vitest';
 import React from 'react';
 import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
 
 import { DeskScene } from '../components/desk/DeskScene';
 import type { DebateStageActor } from '../components/analysis/DebateStage';
+
+// jsdom does not implement matchMedia (PixelSeat reads it for reduced
+// motion). Provide a no-op stub that reports "no reduced motion".
+beforeAll(() => {
+    if (typeof window !== 'undefined' && !window.matchMedia) {
+        window.matchMedia = ((query: string) => ({
+            matches: false,
+            media: query,
+            onchange: null,
+            addListener: vi.fn(),
+            removeListener: vi.fn(),
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+            dispatchEvent: vi.fn(),
+        })) as any;
+    }
+});
 
 const actor = (over: Partial<DebateStageActor>): DebateStageActor => ({
     id: 'macro',

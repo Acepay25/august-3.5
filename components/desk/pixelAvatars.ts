@@ -102,10 +102,15 @@ export const roleForName = (name: string): RolePreset => {
     return 'unknown';
 };
 
-/** Build a 16×20 grid for a role. Each role has a HAND-AUTHORED grid so
- *  the visual identity is distinct (Risk wears red on the cap, Macro has
- *  glasses, Moderator has a gold sash, etc.). */
-export const buildGridForRole = (role: RolePreset): PixelGrid => GRIDS[role];
+/** Build a 16×20 grid for a role, with an optional second frame for
+ *  the speaking pose. The second frame swaps the mouth + visor shadow
+ *  to suggest speech. The body bob is driven by CSS; the frame swap
+ *  is driven by JS at ~2 Hz so the head visibly "talks" while a seat
+ *  is speaking. */
+export const buildGridForRole = (
+    role: RolePreset,
+    frame: 'idle' | 'speaking' = 'idle',
+): PixelGrid => (frame === 'speaking' && SPEAKING_GRIDS[role] ? SPEAKING_GRIDS[role] : GRIDS[role]);
 
 /** Resolve a token to its final CSS color for a given role. */
 export const colorForToken = (token: PixelToken, role: RolePreset): string => {
@@ -329,6 +334,217 @@ const GRIDS: Record<RolePreset, PixelGrid> = {
         '..33333333334...',
     ],
     // Unknown: a generic analyst — used when we can't classify the seat.
+    unknown: [
+        '................',
+        '................',
+        '....HHHHHH......',
+        '...HSSSSSSH.....',
+        '...HSSSSSSH.....',
+        '...HHHHMMHH.....',
+        '...HSEPSESH.....',
+        '...HSPPPSH......',
+        '...HSSMMSH......',
+        '...HSSSSSH......',
+        '...HHMMHHH......',
+        '....VVVVV.......',
+        '...VVTTTTV......',
+        '...VTTWTTV......',
+        '...VTTTTTV......',
+        '...VVVVVVV......',
+        '....VVVVV.......',
+        '..3333333333....',
+        '.3332222223334..',
+        '..33333333334...',
+    ],
+};
+
+/**
+ * Speaking frames — one per role. The mouth row (index 10) opens to
+ * suggest speech; rows 14-16 (vest) shift one column to suggest a body
+ * lean. Used by PixelSeat when `speaking=true` and swapped on a tick
+ * at ~2 Hz so the head visibly "talks".
+ *
+ * The grids stay 16 wide; we just rearrange tokens in those rows. The
+ * validator still runs, so a typo would fail at the desk render.
+ */
+const SPEAKING_GRIDS: Record<RolePreset, PixelGrid> = {
+    risk: [
+        '................',
+        '...CCCCCC.......',
+        '..CHHHHHHHC.....',
+        '..CHSSSSSSHC....',
+        '..CHSSSSSSHC....',
+        '..CHHHMMHHHC....',
+        '..CHSPPPSSC.....',
+        '..CHSPPPSSC.....',
+        '..CHSSMMSMC.....', // mouth open (center gap)
+        '..CHSSSSSSC.....',
+        '..CHHMMHHHC.....',
+        '...VVVVVVV......',
+        '..VVTTTTTVV.....',
+        '.VVTTWWWTTV.....', // body lean right
+        '.VTTTTTTTV......',
+        '..VVVVVVVVV.....',
+        '...VVWWVVV......',
+        '..3333333333....',
+        '.3332222223334..',
+        '..33333333334...',
+    ],
+    macro: [
+        '................',
+        '................',
+        '...CCCCCC.......',
+        '..CHHHHHHHC.....',
+        '..CHSSSSSSHC....',
+        '..CHSSSSSSHC....',
+        '..CHEEEEEC......',
+        '..CHPPPPPPC.....',
+        '..CHSSMMSMC.....', // open mouth
+        '..CHSSSSSSC.....',
+        '..CHHMMHHHC.....',
+        '...VVVVVVV......',
+        '..VVTTTTTVV.....',
+        '.VVTTWWWTV......',
+        '.VTTTTTTTVV.....',
+        '..VVVVVVVVV.....',
+        '...VVWWVVV......',
+        '..3333333333....',
+        '.3332222223334..',
+        '..33333333334...',
+    ],
+    technical: [
+        '................',
+        '...CCCCCC.......',
+        '..CHHHHHHHC.....',
+        '..CHSSSSSSHC....',
+        '..CHSSSSSSHC....',
+        '..CHHHMMHHHC....',
+        '..CHSEPSESC.....',
+        '..CHSPPPSSC.....',
+        '..CHSSMMSMC.....', // open mouth
+        '..CHSSSSSSC.....',
+        '..CHHMMHHHC.....',
+        '...VVVVVVV......',
+        '..VVVVVVVV......',
+        '..VVTTTTVV......',
+        '.VVTTTTTVV......', // lean right
+        '..VVTTTTVV......',
+        '...VVWWVVV......',
+        '..3333333333....',
+        '.3332222223334..',
+        '..33333333334...',
+    ],
+    sentiment: [
+        '................',
+        '...CCCCCC.......',
+        '..CHHHHHHHC.....',
+        '..CHSSSSSSHC....',
+        '..CHSSSSSSHC....',
+        '..CHHHMMHHHC....',
+        '..CHSEPSESC.....',
+        '..CHSPPPSSC.....',
+        '..CHSSMMSMC.....',
+        '..CHSSSSSSC.....',
+        '..CHHMMHHHC.....',
+        '...VVVVVVV......',
+        '..VVTTTTTVV.....',
+        '.VVTTWWWTV......',
+        '.VTTTTTTTVV.....',
+        '..VVVVVVVVV.....',
+        '...VVVVVVV......',
+        '..3333333333....',
+        '.3332222223334..',
+        '..33333333334...',
+    ],
+    moderator: [
+        '................',
+        '...CCCCCC.......',
+        '..CHHHHHHHC.....',
+        '..CHSSSSSSHC....',
+        '..CHSSSSSSHC....',
+        '..CHHHMMHHHC....',
+        '..CHSEPSESC.....',
+        '..CHSPPPSSC.....',
+        '..CHSSMMSMC.....',
+        '..CHSSSSSSC.....',
+        '..CHHMMHHHC.....',
+        '...VVVVVVV......',
+        '..VVTTTTVV......',
+        '.VVTTTTTTVV.....',
+        '.VTTWWWTTVV.....',
+        '.VTTTTTTVV......',
+        '..VVTTTTVV......',
+        '..3333333333....',
+        '.3332222223334..',
+        '..33333333334...',
+    ],
+    followup: [
+        '....C...........',
+        '...CCCCCC.......',
+        '..CHHHHHHHC.....',
+        '..CHSSSSSSHC....',
+        '..CHSSSSSSHC....',
+        '..CHHHMMHHHC....',
+        '..CHSEPSESC.....',
+        '..CHSPPPSSC.....',
+        '..CHSSMMSMC.....',
+        '..CHSSSSSSC.....',
+        '..CHHMMHHHC.....',
+        '...VVVVVVV......',
+        '..VVTTTTTVV.....',
+        '.VVTTWWWTV......',
+        '.VTTTTTTTVV.....',
+        '..VVVVVVVVV.....',
+        '...VVWWVVV......',
+        '..3333333333....',
+        '.3332222223334..',
+        '..33333333334...',
+    ],
+    postmortem: [
+        '................',
+        '...CCCCCC.......',
+        '..CHHHHHHHC.....',
+        '..CHSSSSSSHC....',
+        '..CHSSSSSSHC....',
+        '..CHHHMMHHHC....',
+        '..CHSEPSESC.....',
+        '..CHSPPPSSC.....',
+        '..CHSSMMSMC.....',
+        '..CHSSSSSSC.....',
+        '..CHHMMHHHC.....',
+        '...VVVVVVV......',
+        '..VVVVVVVV......',
+        '.VVVWWVVVV......',
+        '..VVVWWVVV......',
+        '..VVVVVVVV......',
+        '...VVWWVVV......',
+        '..3333333333....',
+        '.3332222223334..',
+        '..33333333334...',
+    ],
+    execution: [
+        '................',
+        '...CCCCCC.......',
+        '..CHHHHHHHC.....',
+        '..CHSSSSSSHC....',
+        '..CHSSSSSSHC....',
+        '..CHHHMMHHHC....',
+        '..CHSEPSESC.....',
+        '..CHSPPPSSC.....',
+        '..CHSSMMSMC.....',
+        '..CHSSSSSSC.....',
+        '..CHHMMHHHC.....',
+        '...VVVVVVV......',
+        '..VVTTTTTVV.....',
+        '.VVWWWWWVV......',
+        '.VTTTTTTTVV.....',
+        '..VVVVVVVVV.....',
+        '...VVWWVVV......',
+        '..3333333333....',
+        '.3332222223334..',
+        '..33333333334...',
+    ],
+    // Unknown stays the same — we have no character to animate.
     unknown: [
         '................',
         '................',

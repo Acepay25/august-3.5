@@ -14,6 +14,7 @@ import {
     setRoleOverride,
     clearRoleOverride,
     subscribeRoleOverrides,
+    getOverridesUser,
 } from '../../services/desk/roleOverrides';
 import { roleForName, type RolePreset } from '../../components/desk/pixelAvatars';
 
@@ -48,12 +49,21 @@ const ROLE_SWATCH: Record<RolePreset, string> = {
 
 export const DeskSeatMappingEditor: React.FC = () => {
     const [overrides, setOverrides] = React.useState<Record<string, RolePreset>>(() => getRoleOverrides());
+    const [activeUser, setActiveUser] = React.useState<string>(() => getOverridesUser());
     const [draftName, setDraftName] = React.useState('');
     const [draftRole, setDraftRole] = React.useState<RolePreset>('risk');
 
     // Re-render when the store mutates from another surface (e.g. the
-    // desk view sets an override programmatically).
-    React.useEffect(() => subscribeRoleOverrides(() => setOverrides(getRoleOverrides())), []);
+    // desk view sets an override programmatically). Also re-read when the
+    // user switches — localStorage is a synchronous store, but we need
+    // to redraw the list with the new user's entries.
+    React.useEffect(() => {
+        const refresh = (): void => {
+            setOverrides(getRoleOverrides());
+            setActiveUser(getOverridesUser());
+        };
+        return subscribeRoleOverrides(refresh);
+    }, []);
 
     const entries = React.useMemo(() => {
         return Object.entries(overrides).sort((a, b) => a[0].localeCompare(b[0]));
@@ -76,13 +86,21 @@ export const DeskSeatMappingEditor: React.FC = () => {
 
     return (
         <div className="space-y-4">
-            <div>
-                <h4 className="text-sm font-semibold text-zinc-100">Desk seat mapping</h4>
-                <p className="text-xs text-zinc-500 mt-1">
-                    Pin a custom actor name to one of the 8 desk-view roles so it lands on a colored cap
-                    instead of the wing fan-out. The default 8 names (Macro, Technical, Risk, …) are
-                    already mapped by name; only override the names that don't auto-resolve.
-                </p>
+            <div className="flex items-baseline justify-between gap-2">
+                <div>
+                    <h4 className="text-sm font-semibold text-zinc-100">Desk seat mapping</h4>
+                    <p className="text-xs text-zinc-500 mt-1">
+                        Pin a custom actor name to one of the 8 desk-view roles so it lands on a colored cap
+                        instead of the wing fan-out. The default 8 names (Macro, Technical, Risk, …) are
+                        already mapped by name; only override the names that don't auto-resolve.
+                    </p>
+                </div>
+                <span
+                    className="shrink-0 rounded border border-white/10 bg-zinc-950 px-1.5 py-0.5 font-mono text-[10px] text-zinc-400"
+                    title="The override table is per-user; this is the user it will be saved under."
+                >
+                    user: {activeUser}
+                </span>
             </div>
 
             <div className="rounded-md border border-white/10 bg-zinc-950/40">
