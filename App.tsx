@@ -2982,6 +2982,21 @@ const App: React.FC = () => {
         }
         return events;
     }, [messages]);
+    // Day PnL for the floor top bar: today's settled tickets only.
+    const floorDayPnl = useMemo(() => {
+        const today = new Date().toDateString();
+        return loggedTrades
+            .filter(t => new Date(t.timestamp).toDateString() === today)
+            .reduce((sum, t) => sum + (t.pnlAmount ?? 0), 0);
+    }, [loggedTrades]);
+    // Floor seat click → open that agent's 1:1 thread in chat mode.
+    // Seat names are actor/role names; match a provider by display name.
+    const openSeatChat = useCallback((seatName: string) => {
+        const match = providerConfigs.find(p => p.name.toLowerCase() === seatName.trim().toLowerCase());
+        if (!match) return;
+        selectAgentThread(match.id);
+        setUiMode('chat');
+    }, [providerConfigs, selectAgentThread, setUiMode]);
     // Tickers: symbols from recent analyses topped up with the majors.
     // Prices arrive via the floor market hook (floor phase).
     const floorTickers = useMemo<{ symbol: string; last?: number; changePct?: number }[]>(() => {
@@ -3951,6 +3966,8 @@ const App: React.FC = () => {
                         squawk={floorSquawk}
                         tickers={floorTickers}
                         staff={readyProviders.map(p => ({ id: p.id, name: p.name }))}
+                        dayPnl={floorDayPnl}
+                        onOpenSeatChat={openSeatChat}
                     />
                 </React.Suspense>
             )}
