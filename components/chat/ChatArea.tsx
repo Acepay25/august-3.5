@@ -13,6 +13,7 @@ import HybridDataPanel from '../analysis/HybridDataPanel';
 import ImageViewerModal from '../modals/ImageViewerModal';
 import WorkspaceWelcome, { WorkspaceWelcomeProps } from './WorkspaceWelcome';
 import { CompanyRoom } from '../room/CompanyRoom';
+import { threadForProvider } from '../../utils/agentThreads';
 
 // Hoisted list components to prevent re-creation on each render
 const ListHeader = () => <div className="h-16"></div>;
@@ -119,8 +120,6 @@ interface ChatAreaProps {
     // Analysis Progress (Task UI)
     analysisSteps?: AnalysisStep[];
     isAnalysisActive?: boolean;
-    /** Open the per-agent chat slide-over from the composer's "Per-agent" button. */
-    onOpenAgentChat?: () => void;
     /** Live task-flow stats for the office header gauges. */
     gaugeStats?: {
         tasks: number;
@@ -128,6 +127,11 @@ interface ChatAreaProps {
         shipped: number;
         approvals: number;
     };
+    /** Chat-mode 1:1 thread: render only this provider's slice of the
+     *  conversation (utils/agentThreads.ts). Null/absent = Team view. */
+    visibleAgentId?: string | null;
+    /** Display name for the visible agent — drives the composer placeholder. */
+    visibleAgentName?: string | null;
 }
 
 const ChatAreaInner: React.FC<ChatAreaProps> = ({
@@ -202,8 +206,9 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     entryTimingScore,
     onOpenSettings,
     onOpenLiveMarket,
-    onOpenAgentChat,
     gaugeStats,
+    visibleAgentId,
+    visibleAgentName,
     onInteract,
     onSelectMessageForProbability,
     homeDashboard,
@@ -342,7 +347,22 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
 
     // Fresh sessions start with zero messages (no hardcoded intro bubble),
     // so no intro-text substitution is needed — messages pass through as-is.
-    const processedMessages = messages;
+    // Chat-mode 1:1: when an agent thread is selected, render only that
+    // provider's derived slice (utils/agentThreads.ts). Identity-based
+    // context (priorAnalysisById etc.) still sees the FULL conversation,
+    // which is correct — the thread is a view, not a separate store.
+    const processedMessages = useMemo(
+        () => (visibleAgentId ? threadForProvider(messages, visibleAgentId) : messages),
+        [messages, visibleAgentId],
+    );
+
+    // Leaving a thread (or switching agents) cancels any in-progress
+    // bulk-selection — selection operates on conversation ids the row
+    // list may no longer show, which is a silent-delete footgun.
+    React.useEffect(() => {
+        setIsSelectionMode(false);
+        setSelectedIds(new Set());
+    }, [visibleAgentId]);
 
     // Fresh-session hero: time-of-day serif greeting.
     // Late-evening variant ("Up late") starts at 22:00.
@@ -410,6 +430,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         isAccuracyModeEnabled,
         hybridConnectionStatus,
         hybridData,
+        placeholderOverride: visibleAgentName ? `Message ${visibleAgentName}` : undefined,
     }), [
         images, removeImage,
         leverageInput, handleLeverageChange, handleLeverageBlur,
@@ -424,8 +445,8 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         isEnsembleEnabled, setIsEnsembleEnabled, selectedChatModel,
         setSelectedChatModel, regimeProviderStats,
         moderatorProviderId, moderatorModel, onSetModeratorProvider, onSetModeratorModel,
-        onOpenSettings, onOpenLiveMarket, onOpenAgentChat, isAccuracyModeEnabled,
-        hybridConnectionStatus, hybridData,
+        onOpenSettings, onOpenLiveMarket, isAccuracyModeEnabled,
+        hybridConnectionStatus, hybridData, visibleAgentName,
     ]);
 
     return (
@@ -444,8 +465,10 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 gaugeStats={gaugeStats}
             />
 
-            {/* Selection Toolbar */}
-            {isSelectionMode ? (
+            {/* Selection Toolbar — Team view only: bulk-select operates on
+                conversation-wide ids, which an agent thread view doesn't
+                fully render (silent-delete footgun). */}
+            {!visibleAgentId && (isSelectionMode ? (
                 <div className="absolute top-4 left-4 right-4 z-40 bg-zinc-900 border border-white/10 rounded-xl p-3 flex items-center justify-between shadow-2xl animate-fade-in">
                     <div className="flex items-center gap-3">
                         <button
@@ -487,13 +510,22 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                         <EditIcon className="w-4 h-4" />
                     </button>
                 )
-            )}
+            ))}
 
             <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
                 {loadingMessage || (messages.length > 0 ? `${messages.length} messages in conversation` : 'New conversation')}
             </div>
 
-            {messages.length > 0 && (
+            {messages.length > 0 && visibleAgentId && processedMessages.length === 0 ? (
+                /* 1:1 thread with no messages yet — keep the composer
+                    usable without implying the conversation is empty. */
+                <div className="flex h-full w-full items-center justify-center px-6">
+                    <p className="max-w-xs text-center text-[12px] leading-relaxed text-zinc-500">
+                        No messages with <span className="font-semibold text-zinc-300">{visibleAgentName ?? 'this agent'}</span> yet —
+                        say hello. Team debates stay in the Team thread.
+                    </p>
+                </div>
+            ) : messages.length > 0 && (
             <div
                 className="h-full w-full min-h-0"
                 onWheelCapture={(event) => lockFollowIfScrollingUp(event.deltaY)}

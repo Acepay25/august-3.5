@@ -3,7 +3,6 @@ import React from 'react';
 import { render, screen, cleanup, fireEvent, act } from '@testing-library/react';
 
 import { CompanyRoom } from '../components/room/CompanyRoom';
-import { AgentChatView } from '../components/room/AgentChatView';
 import { getRoleOverrides, setRoleOverride, clearRoleOverride } from '../services/desk/roleOverrides';
 import { getRoomLayout, setSeatPosition, clearUndoStack } from '../services/desk/roomLayout';
 import type { ProviderConfig } from '../types/provider';
@@ -167,96 +166,3 @@ describe('CompanyRoom', () => {
     });
 });
 
-describe('AgentChatView', () => {
-    it('renders nothing when open is false', () => {
-        const { container } = render(
-            <AgentChatView
-                open={false}
-                onClose={() => {}}
-                providers={[]}
-                agents={[]}
-                activeAgentId={null}
-                onSelectAgent={() => {}}
-            />,
-        );
-        expect(container.firstChild).toBeNull();
-    });
-
-    it('lists every ready provider as an agent when open', () => {
-        const providers = [
-            provider({ id: 'p1', name: 'OpenAI' }),
-            provider({ id: 'p2', name: 'Anthropic', apiKey: '' }),  // not ready
-            provider({ id: 'p3', name: 'Google', models: ['gem-1'] }),
-        ];
-        const agents = providers
-            .filter(p => p.isEnabled && p.apiKey.trim().length > 0)
-            .map((p, idx) => ({ providerId: p.id, displayName: p.name }));
-        render(
-            <AgentChatView
-                open
-                onClose={() => {}}
-                providers={providers}
-                agents={agents}
-                activeAgentId="p1"
-                onSelectAgent={() => {}}
-            />,
-        );
-        expect(screen.getByTestId('agent-chat-item-p1')).toBeTruthy();
-        expect(screen.getByTestId('agent-chat-item-p3')).toBeTruthy();
-        // p2 has no apiKey so it must NOT appear in the agent list.
-        expect(screen.queryByTestId('agent-chat-item-p2')).toBeNull();
-    });
-
-    it('marks the active agent with data-active="1" and the others with "0"', () => {
-        render(
-            <AgentChatView
-                open
-                onClose={() => {}}
-                providers={[]}
-                agents={[
-                    { providerId: 'a', displayName: 'A' },
-                    { providerId: 'b', displayName: 'B' },
-                ]}
-                activeAgentId="b"
-                onSelectAgent={() => {}}
-            />,
-        );
-        expect(screen.getByTestId('agent-chat-item-a').getAttribute('data-active')).toBe('0');
-        expect(screen.getByTestId('agent-chat-item-b').getAttribute('data-active')).toBe('1');
-    });
-
-    it('clicking an agent row calls onSelectAgent with its id', () => {
-        const onSelect = vi.fn();
-        render(
-            <AgentChatView
-                open
-                onClose={() => {}}
-                providers={[]}
-                agents={[
-                    { providerId: 'a', displayName: 'A' },
-                    { providerId: 'b', displayName: 'B' },
-                ]}
-                activeAgentId={null}
-                onSelectAgent={onSelect}
-            />,
-        );
-        fireEvent.click(screen.getByTestId('agent-chat-item-b'));
-        expect(onSelect).toHaveBeenCalledWith('b');
-    });
-
-    it('clicking the close button calls onClose', () => {
-        const onClose = vi.fn();
-        render(
-            <AgentChatView
-                open
-                onClose={onClose}
-                providers={[]}
-                agents={[]}
-                activeAgentId={null}
-                onSelectAgent={() => {}}
-            />,
-        );
-        fireEvent.click(screen.getByRole('button', { name: /close per-agent chat/i }));
-        expect(onClose).toHaveBeenCalledTimes(1);
-    });
-});

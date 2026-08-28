@@ -72,7 +72,7 @@ const CompareModal = React.lazy(() => import('./components/analysis/CompareModal
 const SavedAnalysesGallery = React.lazy(() => import('./components/dashboards/SavedAnalysesGallery'));
 const MistakeWarningBanner = React.lazy(() => import('./components/shared/MistakeWarningBanner'));
 const DeskScene = React.lazy(() => import('./components/desk/DeskScene'));
-const AgentChatView = React.lazy(() => import('./components/room/AgentChatView'));
+const AgentRosterRail = React.lazy(() => import('./components/chat/AgentRosterRail'));
 const FloorScene = React.lazy(() => import('./components/floor/FloorScene'));
 import CommandPalette, { PaletteAction } from './components/shared/CommandPalette';
 import AnalysisProgress from './components/analysis/AnalysisProgress';
@@ -83,6 +83,7 @@ import { recalculateAnalysisMetrics } from './utils/analysisUtils';
 import { parseAppHash, serializeAppHash } from './utils/appHash';
 import { collectWatchedSignals, toggleWatchOnMessage } from './utils/watchList';
 import { collectApprovalItems, setAutoJournalRule, type ApprovalItem } from './utils/approvalInbox';
+import { markThreadOpened, type AgentThreadOpenedMap } from './utils/agentThreads';
 import { takeSkillDraft, tombstoneSkillDraftKey, draftTriggerKey } from './utils/skillDrafts';
 import { ingestCraftedSkill, ingestCraftedSkillFromDraft } from './services/learning/SkillMemoryService';
 import { buildRiskBook, formatRiskBookBadge } from './utils/riskBook';
@@ -102,7 +103,7 @@ import { useUserProfiles } from './hooks/useUserProfiles';
 import { useSaveOnUnload } from './hooks/useSaveOnUnload';
 import { offlineQueue } from './services/infrastructure/OfflineQueueService';
 import { jobQueue, JobType } from './services/infrastructure/JobQueueService';
-import { getPreference, setPreference, removePreference, getPreferenceObject, PREF_KEYS } from './services/infrastructure/PreferencesService';
+import { getPreference, setPreference, removePreference, getPreferenceObject, setPreferenceObject, PREF_KEYS } from './services/infrastructure/PreferencesService';
 // AI Learning Services - Adaptive Learning, Mistake Patterns, Insight Extraction
 import { storeInsights } from './services/learning/InsightExtractionService';
 import * as MemoryService from './services/learning/MemoryService';
@@ -1060,10 +1061,44 @@ const App: React.FC = () => {
     // ─── Desk view (opt-in overlay projecting the current debate) ──────────
     const [isDeskSceneOpen, setIsDeskSceneOpen] = useState(false);
 
-    // ─── Per-agent chat slide-over (one-by-one) ─────────────────────────────
-    const [isAgentChatOpen, setIsAgentChatOpen] = useState(false);
-    const openAgentChat = useCallback(() => setIsAgentChatOpen(true), []);
-    const closeAgentChat = useCallback(() => setIsAgentChatOpen(false), []);
+    // ─── Chat mode: per-agent 1:1 threads (AgentRosterRail) ────────────────
+    // activeAgentId === null → Team view (full conversation); a provider id
+    // selects that agent's derived 1:1 slice (utils/agentThreads.ts).
+    const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
+    // Per-provider last-opened ISO timestamps for the rail's unread dots.
+    // Loaded once from Preferences; saved on every change (the loaded ref
+    // guards against clobbering the stored map before the read resolves).
+    const [agentOpenedMap, setAgentOpenedMap] = useState<AgentThreadOpenedMap>({});
+    const agentOpenedLoadedRef = useRef(false);
+    useEffect(() => {
+        let cancelled = false;
+        getPreferenceObject<AgentThreadOpenedMap>('agent_thread_opened_v1')
+            .then(v => {
+                if (!cancelled) {
+                    setAgentOpenedMap(v ?? {});
+                    agentOpenedLoadedRef.current = true;
+                }
+            })
+            .catch(() => { agentOpenedLoadedRef.current = true; });
+        return () => { cancelled = true; };
+    }, []);
+    useEffect(() => {
+        if (!agentOpenedLoadedRef.current) return;
+        setPreferenceObject('agent_thread_opened_v1', agentOpenedMap).catch(() => { /* optional */ });
+    }, [agentOpenedMap]);
+    // Selecting an agent also flips the composer target to that provider's
+    // first model with ensemble off — the thread then shows exactly what a
+    // send will do (single-model 1:1 reply via streamQuickResponse).
+    const selectAgentThread = useCallback((providerId: string) => {
+        setActiveAgentId(providerId);
+        setAgentOpenedMap(prev => markThreadOpened(prev, providerId));
+        const provider = providerConfigs.find(p => p.id === providerId);
+        if (provider?.models[0]) {
+            setSelectedChatModel(provider.models[0]);
+            setIsEnsembleEnabled(false);
+        }
+    }, [providerConfigs, setSelectedChatModel, setIsEnsembleEnabled]);
+    const selectTeamThread = useCallback(() => setActiveAgentId(null), []);
     // External open-actor request: when the desk view's seat is clicked,
     // we publish {messageId, actorId} + bump a nonce so the matching
     // MessageItem mirrors the actor into its local side-panel state and
@@ -3656,6 +3691,23 @@ const App: React.FC = () => {
                     />
                 </aside>
 
+                {/* Chat mode: agent roster rail — the agents as contacts.
+                    Team (full debate conversation) + one row per ready
+                    provider. Floor mode hides it; the floor is the surface. */}
+                {uiMode === 'chat' && (
+                    <React.Suspense fallback={null}>
+                        <AgentRosterRail
+                            providers={readyProviders}
+                            messages={messages}
+                            selection={activeAgentId ? { kind: 'provider', providerId: activeAgentId } : { kind: 'team' }}
+                            onSelectTeam={selectTeamThread}
+                            onSelectProvider={selectAgentThread}
+                            openedMap={agentOpenedMap}
+                            activeUsername={activeUsername}
+                        />
+                    </React.Suspense>
+                )}
+
                 <main
                     className={`chat-main flex-1 flex flex-col min-h-0 min-w-0 relative transition-[margin,padding] duration-200 ${isAnalysisProgressVisible ? 'lg:mr-[21rem] lg:px-8 xl:px-16' : ''}`}
                 >
@@ -3751,8 +3803,9 @@ const App: React.FC = () => {
                 entryTimingScore={currentEntryTimingScore}
                 onOpenSettings={(tab) => { setSettingsInitialTab(tab || 'models'); setIsSettingsMenuVisible(true); }}
                 onOpenLiveMarket={handleOpenLiveMarket}
-                onOpenAgentChat={openAgentChat}
                 gaugeStats={gaugeStats}
+                visibleAgentId={activeAgentId}
+                visibleAgentName={activeAgentId ? providerConfigs.find(p => p.id === activeAgentId)?.name ?? null : null}
                 homeDashboard={homeDashboard}
                 onInteract={handleInteract}
             />
@@ -3898,38 +3951,6 @@ const App: React.FC = () => {
                         squawk={floorSquawk}
                         tickers={floorTickers}
                         staff={readyProviders.map(p => ({ id: p.id, name: p.name }))}
-                    />
-                </React.Suspense>
-            )}
-
-            {/* Per-agent chat slide-over — opens from the composer's
-                "Per-agent" button. Shows a list of ready providers and
-                focuses the composer on whichever one the trader picks. */}
-            {isAgentChatOpen && (
-                <React.Suspense fallback={null}>
-                    <AgentChatView
-                        open={isAgentChatOpen}
-                        onClose={closeAgentChat}
-                        providers={providerConfigs}
-                        agents={providerConfigs
-                            .filter(p => p.isEnabled && p.apiKey.trim().length > 0)
-                            .map((p, idx) => ({
-                                providerId: p.id,
-                                displayName: p.name,
-                                tagline: `${p.models.length} model${p.models.length === 1 ? '' : 's'}`,
-                                messageCount: idx,
-                                lastActiveAt: Date.now() - idx * 60_000,
-                            }))}
-                        activeAgentId={selectedChatModel
-                            ? (providerConfigs.find(p => p.models.includes(selectedChatModel))?.id ?? null)
-                            : null}
-                        onSelectAgent={(providerId) => {
-                            const provider = providerConfigs.find(p => p.id === providerId);
-                            if (provider?.models[0]) {
-                                setSelectedChatModel(provider.models[0]);
-                                setIsEnsembleEnabled(false);
-                            }
-                        }}
                     />
                 </React.Suspense>
             )}
