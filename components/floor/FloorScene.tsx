@@ -5,42 +5,39 @@
  *
  * Layout (top → bottom, mirroring the Wall-Street / memecoin-desk
  * references):
- *   ┌─ TOP BAR — brand · LIVE tag · session stats · clock ─────┐
- *   ├─ TICKER STRIP — watched symbols, last + change % ────────┤
- *   ├─ FLOOR CANVAS — desks + seats + speech bubbles ─────────┤
- *   │     + pipeline lane (desk → risk gate → exec → print)   │
- *   ├─ RIGHT RAIL — chief card · order flow · positions ·
- *   │               squawk feed                                │
- *   └─ footer rule ────────────────────────────────────────────┘
+ *   ┌─ TOP BAR — brand · LIVE tag · day PnL · counters · clock ──┐
+ *   ├─ TICKER STRIP — watched symbols, last + change % ──────────┤
+ *   ├─ FLOOR CANVAS — Big Board · desks + bubbles · pipeline ────┤
+ *   ├─ RIGHT RAIL — chief card · order flow · tickets ·
+ *   │               positions · squawk feed                       │
+ *   └─ footer rule ───────────────────────────────────────────────┘
  *
  * Everything on the floor is a projection of state the app already
  * computes: desk-scene actors/phases/convictions for the debate,
  * approvalItems for the risk gate, gaugeStats for the order-flow
- * counters, loggedTrades for positions. Monochrome zinc per the
- * workspace theme; status colors only where meaning would be lost.
- * All color tokens live in floorTheme.ts so a reskin is one file.
+ * counters, loggedTrades for positions, message events for the
+ * squawk tape. Monochrome zinc per the workspace theme; status
+ * colors only where meaning would be lost. All floor color tokens
+ * live in floorTheme.ts so a reskin is one file.
  */
 
 import React from 'react';
 import { PixelSeat } from '../desk/PixelSeat';
+import { SpeechBubble } from '../desk/SpeechBubble';
+import { VerdictCard } from '../desk/VerdictCard';
+import { layoutFloor, type FloorSeat } from '../desk/floorLayout';
+import { roleForName } from '../desk/pixelAvatars';
+import {
+    applyRoomLayout,
+    getRoomLayout,
+    subscribeRoomLayout,
+} from '../../services/desk/roomLayout';
 import type { DebateStageActor, DebateExchange } from '../analysis/DebateStage';
 import type { RunContractStage } from '../../utils/runContract';
 import type { ApprovalItem } from '../../utils/approvalInbox';
-import type { LoggedTrade } from '../../types/trade';
 import type { ProviderConfig } from '../../types/provider';
 import { FLOOR_THEME } from './floorTheme';
-
-export interface FloorTicket {
-    id: string;
-    /** Short verb for the ticket row: BUY/SELL/REVIEW/… */
-    side: string;
-    /** Primary label — usually the coin or the action. */
-    label: string;
-    /** One-line detail. */
-    detail: string;
-    /** Status chip: RISK (awaiting human) / FILL (done) / RUN (in flight). */
-    status: 'RISK' | 'FILL' | 'RUN';
-}
+import { useFloorMarketData } from '../../hooks/useFloorMarketData';
 
 export interface FloorPosition {
     id: string;
@@ -79,12 +76,14 @@ export interface FloorSceneProps {
     positions: FloorPosition[];
     /** Live event feed (newest first). */
     squawk: FloorSquawkEvent[];
-    /** Ticker strip symbols with optional last price / change percent. */
+    /** Ticker strip symbols; prices arrive via useFloorMarketData. */
     tickers: { symbol: string; last?: number; changePct?: number }[];
     /** Ready providers — the staff roster for the chief card. */
     staff: { id: string; name: string }[];
+    /** Signed PnL from today's settled tickets (top bar). */
+    dayPnl?: number;
     /** Clicking a seat opens that agent's 1:1 chat thread. */
-    onOpenSeatChat?: (providerId: string) => void;
+    onOpenSeatChat?: (seatName: string) => void;
 }
 
 export const FloorScene: React.FC<FloorSceneProps> = ({
@@ -93,13 +92,17 @@ export const FloorScene: React.FC<FloorSceneProps> = ({
     isDebating,
     phase,
     actors,
+    exchanges,
     convictions,
+    verdictDetail,
     gaugeStats,
     approvalItems,
     positions,
     squawk,
     tickers,
     staff,
+    dayPnl,
+    onOpenSeatChat,
 }) => {
     // Esc exits the floor (mirrors DeskScene's overlay contract).
     React.useEffect(() => {
@@ -119,10 +122,37 @@ export const FloorScene: React.FC<FloorSceneProps> = ({
         return () => window.clearInterval(id);
     }, [open]);
 
+    // Live prices for the ticker + Big Board. Polls only while the
+    // floor is open; rows degrade to dashes when the API is unreachable.
+    const symbols = React.useMemo(() => tickers.map(t => t.symbol), [tickers]);
+    const quotes = useFloorMarketData(symbols, open);
+
+    // Desks: stage actors on the shared floor layout. The roomLayout
+    // store is the same one the office (CompanyRoom) and desk view use,
+    // so a drag anywhere moves the desk everywhere. layoutTick makes
+    // the memo re-run when the store changes.
+    const [layoutTick, setLayoutTick] = React.useState(0);
+    React.useEffect(() => subscribeRoomLayout(() => setLayoutTick(t => t + 1)), []);
+    const actorNames = React.useMemo(() => actors.map(a => a.name), [actors]);
+    const seats = React.useMemo<FloorSeat[]>(
+        () => (actorNames.length === 0 ? [] : applyRoomLayout(layoutFloor(actorNames), getRoomLayout(actorNames))),
+        [actorNames, layoutTick], // eslint-disable-line react-hooks/exhaustive-deps
+    );
+
+    // The one actor the floor is listening to right now: whoever is
+    // speaking (bubble shows their speech), else whoever is thinking
+    // (bubble shows their thought). Everyone else just shows a chip.
+    const spotlight = React.useMemo(() => {
+        return actors.find(a => a.speaking && a.speech)
+            ?? actors.find(a => a.thinking && (a.thought || a.speech))
+            ?? null;
+    }, [actors]);
+
     if (!open) return null;
 
     const clockText = clock.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
     const openApprovals = approvalItems.length;
+    const lastPrint = squawk.find(ev => ev.text.startsWith('PRINT')) ?? null;
 
     return (
         <div
@@ -157,13 +187,21 @@ export const FloorScene: React.FC<FloorSceneProps> = ({
                     )}
                 </div>
                 <div className="flex items-center gap-3">
-                    <span data-testid="floor-stat-staff" className="text-[11px] font-medium text-zinc-400">
+                    {dayPnl !== undefined && (
+                        <span
+                            data-testid="floor-day-pnl"
+                            className={`status-surface text-[11px] font-semibold tabular-nums ${dayPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}
+                        >
+                            Day {dayPnl >= 0 ? '+' : '−'}${Math.abs(dayPnl).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                        </span>
+                    )}
+                    <span data-testid="floor-stat-staff" className="hidden text-[11px] font-medium text-zinc-400 sm:block">
                         Staff <span className="font-mono tabular-nums text-zinc-200">{staff.length}</span>
                     </span>
-                    <span data-testid="floor-stat-tasks" className="text-[11px] font-medium text-zinc-400">
+                    <span data-testid="floor-stat-tasks" className="hidden text-[11px] font-medium text-zinc-400 sm:block">
                         Tickets <span className="font-mono tabular-nums text-zinc-200">{gaugeStats.tasks}</span>
                     </span>
-                    <span data-testid="floor-stat-shipped" className="text-[11px] font-medium text-zinc-400">
+                    <span data-testid="floor-stat-shipped" className="hidden text-[11px] font-medium text-zinc-400 md:block">
                         Printed <span className="font-mono tabular-nums text-zinc-200">{gaugeStats.shipped}</span>
                     </span>
                     <span className="font-mono text-sm tabular-nums text-zinc-300" data-testid="floor-clock">
@@ -189,24 +227,24 @@ export const FloorScene: React.FC<FloorSceneProps> = ({
                         data-testid="floor-ticker"
                         className="flex items-center gap-4 overflow-x-auto border-b border-white/5 bg-zinc-900/40 px-4 py-1.5"
                     >
-                        {tickers.length === 0 ? (
+                        {quotes.length === 0 ? (
                             <span className="text-[10px] uppercase tracking-widest text-zinc-600">
                                 No watched symbols
                             </span>
                         ) : (
-                            tickers.map(t => (
-                                <span key={t.symbol} className="flex items-center gap-1.5 whitespace-nowrap text-[11px]">
-                                    <span className="font-semibold text-zinc-300">{t.symbol}</span>
+                            quotes.map(q => (
+                                <span key={q.symbol} className="flex items-center gap-1.5 whitespace-nowrap text-[11px]">
+                                    <span className="font-semibold text-zinc-300">{q.symbol}</span>
                                     <span className="font-mono tabular-nums text-zinc-500">
-                                        {t.last !== undefined ? t.last.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—'}
+                                        {q.last !== undefined ? q.last.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—'}
                                     </span>
-                                    {t.changePct !== undefined && (
+                                    {q.changePct !== undefined && (
                                         <span
                                             className={`font-mono tabular-nums ${
-                                                t.changePct >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                                                q.changePct >= 0 ? 'text-emerald-400' : 'text-rose-400'
                                             }`}
                                         >
-                                            {t.changePct >= 0 ? '▲' : '▼'} {Math.abs(t.changePct).toFixed(2)}%
+                                            {q.changePct >= 0 ? '▲' : '▼'} {Math.abs(q.changePct).toFixed(2)}%
                                         </span>
                                     )}
                                 </span>
@@ -214,14 +252,166 @@ export const FloorScene: React.FC<FloorSceneProps> = ({
                         )}
                     </div>
 
-                    {/* Floor canvas — desks + pipeline. Filled in by the
-                        floor phase: seats, bubbles, verdict, risk gate. */}
+                    {/* Floor canvas */}
                     <div className="relative min-h-0 flex-1 overflow-hidden">
-                        <FloorCanvas
-                            actors={actors}
-                            convictions={convictions}
-                            isDebating={isDebating}
-                        />
+                        {/* Big Board — top-left card (watched symbols). */}
+                        {quotes.length > 0 && (
+                            <div
+                                data-testid="floor-big-board"
+                                className="absolute left-4 top-4 z-10 w-56 rounded-md border border-white/10 bg-zinc-950/80 p-3 backdrop-blur"
+                            >
+                                <p className="text-[9px] font-semibold uppercase tracking-widest text-zinc-500">
+                                    The Big Board
+                                </p>
+                                <ul className="mt-2 space-y-1.5">
+                                    {quotes.slice(0, 5).map(q => (
+                                        <li key={q.symbol} className="flex items-baseline justify-between gap-2 text-[11px]">
+                                            <span className="font-mono font-semibold text-zinc-300">{q.symbol}</span>
+                                            <span className="flex items-baseline gap-2">
+                                                <span className="font-mono tabular-nums text-zinc-400">
+                                                    {q.last !== undefined ? q.last.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—'}
+                                                </span>
+                                                <span
+                                                    className={`w-14 text-right font-mono tabular-nums ${
+                                                        q.changePct === undefined
+                                                            ? 'text-zinc-600'
+                                                            : q.changePct >= 0
+                                                                ? 'text-emerald-400'
+                                                                : 'text-rose-400'
+                                                    }`}
+                                                >
+                                                    {q.changePct !== undefined ? `${q.changePct >= 0 ? '+' : ''}${q.changePct.toFixed(2)}%` : '—'}
+                                                </span>
+                                            </span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
+
+                        {/* Pipeline lane — right side of the canvas:
+                            desk → risk gate → execution → print. */}
+                        <div
+                            data-testid="floor-pipeline"
+                            className="absolute bottom-4 right-4 z-10 flex w-60 flex-col gap-2"
+                        >
+                            {/* RISK GATE — the human approval queue. */}
+                            <div className="rounded-md border border-white/10 bg-zinc-950/80 p-3 backdrop-blur">
+                                <div className="flex items-baseline justify-between">
+                                    <p className="text-[9px] font-semibold uppercase tracking-widest text-zinc-500">
+                                        Risk gate
+                                    </p>
+                                    <p className="font-mono text-[10px] tabular-nums text-zinc-400">
+                                        {openApprovals} in queue
+                                    </p>
+                                </div>
+                                {openApprovals === 0 ? (
+                                    <p className="mt-1.5 text-[10px] text-zinc-600">Queue clear.</p>
+                                ) : (
+                                    <ul className="mt-1.5 space-y-1">
+                                        {approvalItems.slice(0, 3).map(item => (
+                                            <li key={item.id} className="flex items-center justify-between gap-2 text-[10px]">
+                                                <span className="min-w-0 truncate text-zinc-400">{item.title}</span>
+                                                <span className="status-surface shrink-0 rounded border border-amber-500/40 px-1 text-[8px] font-bold uppercase tracking-widest text-amber-300">
+                                                    Risk
+                                                </span>
+                                            </li>
+                                        ))}
+                                        {openApprovals > 3 && (
+                                            <li className="text-[10px] text-zinc-600">+{openApprovals - 3} more</li>
+                                        )}
+                                    </ul>
+                                )}
+                            </div>
+                            {/* EXECUTION — what's running right now. */}
+                            <div className="rounded-md border border-white/10 bg-zinc-950/80 p-3 backdrop-blur">
+                                <div className="flex items-baseline justify-between">
+                                    <p className="text-[9px] font-semibold uppercase tracking-widest text-zinc-500">
+                                        Execution
+                                    </p>
+                                    <p className="font-mono text-[10px] tabular-nums text-zinc-400">
+                                        routing {gaugeStats.running > 0 ? '1' : '0'}
+                                    </p>
+                                </div>
+                                <p className="mt-1.5 truncate text-[10px] text-zinc-400">
+                                    {gaugeStats.running > 0
+                                        ? (phase ?? 'Debate in progress')
+                                        : exchanges.length > 0
+                                            ? `${exchanges.length} replies this session`
+                                            : 'Floor idle'}
+                                </p>
+                            </div>
+                            {/* PRINT — the latest settled verdict. */}
+                            <div className="rounded-md border border-white/10 bg-zinc-950/80 p-3 backdrop-blur">
+                                <p className="text-[9px] font-semibold uppercase tracking-widest text-zinc-500">
+                                    Print
+                                </p>
+                                <p className="mt-1.5 truncate text-[10px] text-zinc-400">
+                                    {lastPrint ? lastPrint.text.replace(/^PRINT\s+/, '') : 'Nothing printed yet'}
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Desks — stage actors on the shared floor layout. */}
+                        <div className="absolute inset-0" style={{ background: FLOOR_THEME.canvasBackdrop }}>
+                            {seats.length === 0 ? (
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                    <p className="max-w-sm text-center text-[11px] uppercase tracking-widest text-zinc-600">
+                                        The floor is empty — send a setup from chat mode to put the desk to work
+                                    </p>
+                                </div>
+                            ) : (
+                                seats.map(seat => {
+                                    const actor = actors.find(a => a.name === seat.name || a.id === seat.id);
+                                    if (!actor) return null;
+                                    const role = roleForName(seat.name);
+                                    const isSpotlight = spotlight?.id === actor.id;
+                                    const bubbleText = actor.speech || actor.thought || '';
+                                    return (
+                                        <div
+                                            key={seat.id}
+                                            data-testid={`floor-desk-${seat.name}`}
+                                            className="absolute -translate-x-1/2 -translate-y-1/2"
+                                            style={{ left: `${seat.anchor.x * 100}%`, top: `${seat.anchor.y * 100}%` }}
+                                        >
+                                            <div className="relative">
+                                                {isSpotlight && bubbleText && (
+                                                    <SpeechBubble
+                                                        text={bubbleText}
+                                                        speaker={actor.name}
+                                                        side={seat.side}
+                                                        toneKey={role}
+                                                    />
+                                                )}
+                                                <PixelSeat
+                                                    name={actor.name}
+                                                    speech={actor.speech}
+                                                    live={actor.live}
+                                                    thinking={actor.thinking}
+                                                    speaking={actor.speaking}
+                                                    statusText={actor.speaking ? 'speaking…' : actor.thinking ? 'thinking…' : actor.toolChip}
+                                                    roleOverride={role}
+                                                    onClick={onOpenSeatChat ? () => onOpenSeatChat(seat.name) : undefined}
+                                                />
+                                            </div>
+                                        </div>
+                                    );
+                                })
+                            )}
+
+                            {/* Verdict banner — pinned bottom-center when a
+                                settled verdict exists on the projected run. */}
+                            {verdictDetail && (
+                                <div className="absolute bottom-[6%] left-1/2 -translate-x-1/2">
+                                    <VerdictCard
+                                        direction={verdictDetail.direction}
+                                        confidence={verdictDetail.confidence}
+                                        grade={verdictDetail.grade ?? undefined}
+                                        seats={convictions.map(c => ({ name: c.name, value: c.value }))}
+                                    />
+                                </div>
+                            )}
+                        </div>
                     </div>
 
                     {/* Footer rule */}
@@ -269,6 +459,28 @@ export const FloorScene: React.FC<FloorSceneProps> = ({
                             ))}
                         </div>
                     </div>
+
+                    {/* Live tickets — the approval queue as ticket rows. */}
+                    {approvalItems.length > 0 && (
+                        <div className="border-b border-white/5 p-4" data-testid="floor-tickets">
+                            <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
+                                Tickets
+                            </p>
+                            <ul className="mt-2 space-y-1.5">
+                                {approvalItems.slice(0, 5).map(item => (
+                                    <li key={item.id} className="flex items-start justify-between gap-2 text-[11px]">
+                                        <span className="min-w-0">
+                                            <span className="block truncate font-medium text-zinc-300">{item.title}</span>
+                                            <span className="block truncate text-[10px] text-zinc-500">{item.detail}</span>
+                                        </span>
+                                        <span className="status-surface shrink-0 rounded border border-amber-500/40 px-1 text-[8px] font-bold uppercase tracking-widest text-amber-300">
+                                            Risk
+                                        </span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
 
                     {/* Positions */}
                     <div className="border-b border-white/5 p-4" data-testid="floor-positions">
@@ -336,45 +548,6 @@ const formatPnl = (pnl: number): string => {
 const floorPnlColor = (pnl: number | undefined): string => {
     if (pnl === undefined) return 'text-zinc-500';
     return pnl >= 0 ? 'text-emerald-400' : 'text-rose-400';
-};
-
-/** Internal canvas subcomponent — replaced by the full floor phase. */
-const FloorCanvas: React.FC<{
-    actors: DebateStageActor[];
-    convictions: { name: string; value: number }[];
-    isDebating: boolean;
-}> = ({ actors }) => {
-    return (
-        <div className="absolute inset-0" style={{ background: FLOOR_THEME.canvasBackdrop }}>            <svg
-                className="absolute inset-0 h-full w-full opacity-30"
-                viewBox="0 0 1200 720"
-                preserveAspectRatio="xMidYMid slice"
-                aria-hidden="true"
-            >
-                <defs>
-                    <pattern id="floor-canvas-grid" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
-                        <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#27272a" strokeWidth="0.5" />
-                    </pattern>
-                </defs>
-                <rect x="0" y="0" width="1200" height="720" fill="url(#floor-canvas-grid)" />
-            </svg>
-            {actors.length === 0 ? (
-                <div className="absolute inset-0 flex items-center justify-center">
-                    <p className="max-w-sm text-center text-[11px] uppercase tracking-widest text-zinc-600">
-                        The floor is empty — send a setup from chat mode to put the desk to work
-                    </p>
-                </div>
-            ) : (
-                <div className="absolute inset-x-0 bottom-[12%] flex flex-wrap items-end justify-center gap-6 px-6">
-                    {actors.map(actor => (
-                        <div key={actor.id} className="flex flex-col items-center gap-1">
-                            <PixelSeat name={actor.name} live={actor.live} speaking={actor.speaking} thinking={actor.thinking} pixelSize={3} compact />
-                        </div>
-                    ))}
-                </div>
-            )}
-        </div>
-    );
 };
 
 export default FloorScene;
