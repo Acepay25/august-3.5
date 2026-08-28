@@ -85,6 +85,8 @@ interface ChatInputProps {
     regimeProviderStats?: RegimeProviderStatsMap;
     onOpenSettings?: (tab?: string) => void;
     onOpenLiveMarket?: () => void;
+    /** Open the per-agent chat slide-over. */
+    onOpenAgentChat?: () => void;
     isAccuracyModeEnabled?: boolean;
     hybridConnectionStatus?: 'disconnected' | 'connecting' | 'connected' | 'error';
     hybridData?: unknown;
@@ -136,6 +138,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
     onSetModeratorModel,
     onOpenSettings,
     onOpenLiveMarket,
+    onOpenAgentChat,
     isAccuracyModeEnabled = false,
     hybridConnectionStatus,
     hybridData,
@@ -383,90 +386,63 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             >
                                 <PlusIcon className="h-[18px] w-[18px]" />
                             </button>
-                            {/* Chat | Trade — bare mode pills:
-                                no capsule around them; the ACTIVE mode reads
-                                from a lighter fill, the inactive is plain text. */}
-                            <div
-                                role="tablist"
-                                aria-label="Composer mode"
-                                className="flex items-center gap-1"
+                            {/* Talk-to selector — picks the chat target.
+                                "Team" routes to the existing ensemble debate;
+                                any single provider routes to a casual 1:1 chat
+                                with that model. We use a real <select> so the
+                                keyboard and screen-reader experience is
+                                predictable (arrow keys, type-ahead). */}
+                            <label
+                                className="flex items-center gap-1.5 rounded-full bg-zinc-800/80 px-2.5 py-1 text-[11px] font-semibold text-zinc-200"
+                                data-testid="talk-to-selector"
                             >
-                                <button
-                                    type="button"
-                                    role="tab"
-                                    aria-selected={!isEnsembleEnabled}
-                                    onClick={() => setIsEnsembleEnabled(false)}
-                                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ${
-                                        !isEnsembleEnabled ? 'bg-zinc-700/80 text-zinc-100' : 'bg-transparent text-zinc-500 hover:text-zinc-300'
-                                    }`}
+                                <span className="text-[10px] uppercase tracking-widest text-zinc-500">
+                                    Talk to
+                                </span>
+                                <select
+                                    aria-label="Talk to"
+                                    value={isEnsembleEnabled ? '__team__' : (effectiveChatModel || '')}
+                                    onChange={e => {
+                                        const v = e.target.value;
+                                        if (v === '__team__') {
+                                            setIsEnsembleEnabled(true);
+                                        } else {
+                                            setIsEnsembleEnabled(false);
+                                            setSelectedChatModel(v);
+                                        }
+                                    }}
+                                    className="bg-transparent text-[12px] text-zinc-100 outline-none"
                                 >
-                                    Chat
-                                </button>
-                                <button
-                                    type="button"
-                                    role="tab"
-                                    aria-selected={isEnsembleEnabled}
-                                    onClick={() => setIsEnsembleEnabled(true)}
-                                    title="Analyst team debates and issues a verdict"
-                                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ${
-                                        isEnsembleEnabled ? 'bg-zinc-700/80 text-zinc-100' : 'bg-transparent text-zinc-500 hover:text-zinc-300'
-                                    }`}
-                                >
-                                    Trade
-                                </button>
-                            </div>
+                                    <option value="__team__" className="bg-zinc-900 text-zinc-100">
+                                        Team ({rosterSlots.length})
+                                    </option>
+                                    {chatModelOptions.map(opt => {
+                                        const value = `${opt.providerName}::${opt.modelId}`;
+                                        const selected = opt.modelId === effectiveChatModel;
+                                        return (
+                                            <option
+                                                key={value}
+                                                value={opt.modelId}
+                                                className="bg-zinc-900 text-zinc-100"
+                                            >
+                                                {opt.providerName} · {formatModelDisplayName(opt.modelId)}
+                                            </option>
+                                        );
+                                    })}
+                                </select>
+                            </label>
 
-                            {isEnsembleEnabled && (
-                                /* The team opens as a clean dropdown
-                                   (model-selector style), not a modal. */
-                                <div className="relative">
-                                    <button
-                                        type="button"
-                                        onClick={() => setIsTeamMenuOpen(o => !o)}
-                                        className="flex items-center gap-1.5 rounded-full px-3 py-1 text-xs transition-colors bg-zinc-700 text-zinc-100 hover:bg-zinc-600"
-                                        aria-haspopup="menu"
-                                        aria-expanded={isTeamMenuOpen}
-                                        title="Choose the analyst team"
-                                    >
-                                        <span className="font-medium">Team</span>
-                                        <span className="flex -space-x-1.5">
-                                            {(rosterSlots.length > 0 ? rosterSlots : [{ initial: '?', label: 'Unassigned', model: '' }]).map((slot, index) => (
-                                                <span
-                                                    key={`${slot.label}-${index}`}
-                                                    className="flex h-5 w-5 items-center justify-center rounded-full border border-zinc-950 bg-zinc-700 text-[9px] font-semibold text-zinc-200"
-                                                    title={slot.model ? `${slot.label} · ${slot.model}` : slot.label}
-                                                >
-                                                    {slot.initial}
-                                                </span>
-                                            ))}
-                                        </span>
-                                        <ChevronDownIcon className={`h-3 w-3 text-zinc-500 transition-transform ${isTeamMenuOpen ? 'rotate-180' : ''}`} />
-                                    </button>
-                                    {isTeamMenuOpen && (
-                                        <TeamRosterMenu
-                                            providers={providers}
-                                            lensConfig={lensConfig}
-                                            setLensConfig={setLensConfig}
-                                            ensembleModelSelection={ensembleModelSelection}
-                                            setEnsembleModelSelection={setEnsembleModelSelection}
-                                            moderatorProviderId={moderatorProviderId}
-                                            moderatorModel={moderatorModel}
-                                            onSetModeratorProvider={onSetModeratorProvider}
-                                            onSetModeratorModel={onSetModeratorModel}
-                                            regimeProviderStats={regimeProviderStats}
-                                            leverageSection={isEnsembleEnabled ? (
-                                                <LeverageSection
-                                                    value={leverageInput}
-                                                    onChange={handleLeverageChange}
-                                                    onBlur={handleLeverageBlur}
-                                                    onPreset={handlePresetLeverage}
-                                                />
-                                            ) : undefined}
-                                            onClose={() => setIsTeamMenuOpen(false)}
-                                        />
-                                    )}
-                                </div>
-                            )}
+                            {/* Per-agent chat — opens the slide-over with the
+                                agent sidebar (one-by-one per the user's request). */}
+                            <button
+                                type="button"
+                                onClick={onOpenAgentChat}
+                                data-testid="open-agent-chat"
+                                title="Open per-agent chat (one-by-one)"
+                                className="rounded-full bg-zinc-800/80 px-2.5 py-1 text-[11px] font-semibold text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100"
+                            >
+                                Per-agent
+                            </button>
 
                         </div>
 

@@ -72,6 +72,7 @@ const CompareModal = React.lazy(() => import('./components/analysis/CompareModal
 const SavedAnalysesGallery = React.lazy(() => import('./components/dashboards/SavedAnalysesGallery'));
 const MistakeWarningBanner = React.lazy(() => import('./components/shared/MistakeWarningBanner'));
 const DeskScene = React.lazy(() => import('./components/desk/DeskScene'));
+const AgentChatView = React.lazy(() => import('./components/room/AgentChatView'));
 import CommandPalette, { PaletteAction } from './components/shared/CommandPalette';
 import AnalysisProgress from './components/analysis/AnalysisProgress';
 import { DEFAULT_FRAMEWORKS } from './constants/models';
@@ -1053,6 +1054,11 @@ const App: React.FC = () => {
 
     // ─── Desk view (opt-in overlay projecting the current debate) ──────────
     const [isDeskSceneOpen, setIsDeskSceneOpen] = useState(false);
+
+    // ─── Per-agent chat slide-over (one-by-one) ─────────────────────────────
+    const [isAgentChatOpen, setIsAgentChatOpen] = useState(false);
+    const openAgentChat = useCallback(() => setIsAgentChatOpen(true), []);
+    const closeAgentChat = useCallback(() => setIsAgentChatOpen(false), []);
     // External open-actor request: when the desk view's seat is clicked,
     // we publish {messageId, actorId} + bump a nonce so the matching
     // MessageItem mirrors the actor into its local side-panel state and
@@ -3669,6 +3675,7 @@ const App: React.FC = () => {
                 entryTimingScore={currentEntryTimingScore}
                 onOpenSettings={(tab) => { setSettingsInitialTab(tab || 'models'); setIsSettingsMenuVisible(true); }}
                 onOpenLiveMarket={handleOpenLiveMarket}
+                onOpenAgentChat={openAgentChat}
                 homeDashboard={homeDashboard}
                 onInteract={handleInteract}
             />
@@ -3788,6 +3795,38 @@ const App: React.FC = () => {
                             setIsDeskSceneOpen(false);
                         }}
                         onClose={() => setIsDeskSceneOpen(false)}
+                    />
+                </React.Suspense>
+            )}
+
+            {/* Per-agent chat slide-over — opens from the composer's
+                "Per-agent" button. Shows a list of ready providers and
+                focuses the composer on whichever one the trader picks. */}
+            {isAgentChatOpen && (
+                <React.Suspense fallback={null}>
+                    <AgentChatView
+                        open={isAgentChatOpen}
+                        onClose={closeAgentChat}
+                        providers={providerConfigs}
+                        agents={providerConfigs
+                            .filter(p => p.isEnabled && p.apiKey.trim().length > 0)
+                            .map((p, idx) => ({
+                                providerId: p.id,
+                                displayName: p.name,
+                                tagline: `${p.models.length} model${p.models.length === 1 ? '' : 's'}`,
+                                messageCount: idx,
+                                lastActiveAt: Date.now() - idx * 60_000,
+                            }))}
+                        activeAgentId={selectedChatModel
+                            ? (providerConfigs.find(p => p.models.includes(selectedChatModel))?.id ?? null)
+                            : null}
+                        onSelectAgent={(providerId) => {
+                            const provider = providerConfigs.find(p => p.id === providerId);
+                            if (provider?.models[0]) {
+                                setSelectedChatModel(provider.models[0]);
+                                setIsEnsembleEnabled(false);
+                            }
+                        }}
                     />
                 </React.Suspense>
             )}
