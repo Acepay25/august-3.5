@@ -21,6 +21,25 @@ const STORAGE_KEY_PREFIX = 'desk_room_layout_v1';
 export interface SeatPosition { x: number; y: number; }
 export type RoomLayout = Record<string, SeatPosition>;
 
+/** Snap a normalized coordinate to the nearest grid cell. `step` is in
+ *  0..1 units; default 0.05 (5% of the canvas, ~50px on a 960-wide floor).
+ *  Values are clamped to [0, 1] AFTER snapping so the result is always
+ *  in-range. The `+ 0` trick normalizes the result to non-negative zero
+ *  (Object.is(-0, 0) is false; tests rely on a positive zero). */
+export const snapToGrid = (n: number, step = 0.05): number => {
+    if (!Number.isFinite(n)) return 0;
+    const snapped = Math.round(n / step) * step;
+    if (snapped <= 0) return 0;
+    if (snapped >= 1) return 1;
+    return snapped + 0;
+};
+
+/** Snap a seat position to the grid. Convenience wrapper. */
+export const snapSeatPosition = (pos: SeatPosition, step = 0.05): SeatPosition => ({
+    x: snapToGrid(pos.x, step),
+    y: snapToGrid(pos.y, step),
+});
+
 const isFinite01 = (n: unknown): n is number =>
     typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= 1;
 
@@ -127,3 +146,42 @@ export const applyRoomLayout = <T extends { name: string; anchor: SeatPosition }
     seats: T[],
     layout: RoomLayout,
 ): T[] => seats.map(s => (layout[s.name] ? { ...s, anchor: layout[s.name] } : s));
+
+// ─── Undo stack ────────────────────────────────────────────────────────────
+
+/** One undo entry: a single seat's previous + next position. The
+ *  undo stack is a per-desk-session in-memory LIFO; it doesn't
+ *  survive a reload by design (a stale undo on a fresh session
+ *  would be confusing). */
+export interface UndoEntry {
+    seatName: string;
+    previous: SeatPosition | null;
+    next: SeatPosition;
+}
+
+const undoStack: UndoEntry[] = [];
+const undoListeners = new Set<Listener>();
+
+/** Push an undo entry. Use the previous position returned by
+ *  `getSeatPosition`, or `null` if the seat was at its default. */
+export const pushUndo = (entry: UndoEntry): void => {
+    undoStack.push(entry);
+    for (const l of undoListeners) l();
+};
+
+/** Pop the most recent undo entry. Returns null when empty. */
+export const popUndo = (): UndoEntry | null => undoStack.pop() ?? null;
+
+/** Number of pending undos. */
+export const undoDepth = (): number => undoStack.length;
+
+/** Clear the undo stack (e.g. when the desk closes). */
+export const clearUndoStack = (): void => {
+    undoStack.length = 0;
+    for (const l of undoListeners) l();
+};
+
+export const subscribeUndo = (l: Listener): (() => void) => {
+    undoListeners.add(l);
+    return () => { undoListeners.delete(l); };
+};

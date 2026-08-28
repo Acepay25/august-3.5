@@ -36,9 +36,17 @@ import { subscribeRoleOverrides } from '../../services/desk/roleOverrides';
 import {
     getRoomLayout,
     setSeatPosition,
+    clearSeatPosition,
     subscribeRoomLayout,
     resetRoomLayout,
+    snapSeatPosition,
+    pushUndo,
+    popUndo,
+    undoDepth,
+    clearUndoStack,
+    subscribeUndo,
     type RoomLayout,
+    type UndoEntry,
 } from '../../services/desk/roomLayout';
 
 export interface DeskSceneProps {
@@ -132,21 +140,71 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
         const final = dragPositions[seatName];
         if (final) {
             const names = actors.map(a => a.id);
-            setSeatPosition(names, seatName, final);
+            // Snap to the 5% grid for tactile landings. Read the
+            // previous position BEFORE writing the new one so the
+            // undo stack can restore it.
+            const snapped = snapSeatPosition(final, 0.05);
+            const prevLayout = getRoomLayout(names);
+            const previous = prevLayout[seatName] ?? null;
+            setSeatPosition(names, seatName, snapped);
+            if (!previous || previous.x !== snapped.x || previous.y !== snapped.y) {
+                pushUndo({ seatName, previous, next: snapped });
+            }
+            // The seat should land on the snapped cell, not the raw
+            // cursor pixel; replace the transient drag position with
+            // the snapped value so the next render uses it.
+            setDragPositions(prev => ({ ...prev, [seatName]: snapped }));
         }
         // Release the pointer capture; the floor div had it from
         // pointerdown on the seat.
         try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); } catch { /* noop */ }
     };
 
+    // Track the latest actors in a ref so the keydown handler always
+    // sees the current roster (no stale closure).
+    const actorsRef = React.useRef(actors);
+    React.useEffect(() => { actorsRef.current = actors; }, [actors]);
+    const handleUndo = React.useCallback((): void => {
+        const entry = popUndo();
+        if (!entry) return;
+        const names = actorsRef.current.map(a => a.id);
+        if (entry.previous) {
+            setSeatPosition(names, entry.seatName, entry.previous);
+        } else {
+            clearSeatPosition(names, entry.seatName);
+        }
+    }, []);
+
     // Esc closes; the floor's own buttons (steer, etc.) handle their own keys.
+    // Ctrl/Cmd+Z undoes the last drag while the desk is open.
     React.useEffect(() => {
         const onKey = (e: KeyboardEvent): void => {
-            if (e.key === 'Escape') onClose();
+            if (e.key === 'Escape') {
+                onClose();
+                return;
+            }
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+                if (undoDepth() > 0) {
+                    e.preventDefault();
+                    handleUndo();
+                }
+            }
         };
         document.addEventListener('keydown', onKey);
         return () => document.removeEventListener('keydown', onKey);
-    }, [onClose]);
+    }, [onClose, handleUndo]);
+
+    // Reset the undo stack when the desk closes — the next open should
+    // start clean. We clear on unmount.
+    React.useEffect(() => () => { clearUndoStack(); }, []);
+
+    // Undo button enable state — bump on every push / pop / clear.
+    const [undoTick, setUndoTick] = React.useState(0);
+    React.useEffect(() => subscribeUndo(() => setUndoTick(t => t + 1)), []);
+    // Touch the tick so the linter doesn't drop it; the consumer is
+    // `undoDepth()` which reads the same store.
+    void undoTick;
+    const canUndo = undoDepth() > 0;
 
     // Speech-bubble lifecycle: when any seat starts speaking, mark its
     // bubble as visible for SPEECH_BUBBLE_FADE_MS. We re-render every second
@@ -287,9 +345,23 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
                         {editRoom && (
                             <button
                                 type="button"
+                                onClick={handleUndo}
+                                disabled={!canUndo}
+                                title={canUndo ? 'Undo last drag (Ctrl/Cmd+Z)' : 'Nothing to undo'}
+                                aria-label="Undo last drag"
+                                data-testid="desk-undo-drag"
+                                className="flex h-7 items-center gap-1 rounded-md border border-white/10 bg-zinc-950 px-2 text-[10px] text-zinc-300 enabled:hover:bg-zinc-800 enabled:hover:text-zinc-100 disabled:text-zinc-600"
+                            >
+                                Undo
+                            </button>
+                        )}
+                        {editRoom && (
+                            <button
+                                type="button"
                                 onClick={() => {
                                     resetRoomLayout(actors.map(a => a.id));
                                     setDragPositions({});
+                                    clearUndoStack();
                                 }}
                                 title="Reset to default positions"
                                 data-testid="desk-reset-layout"
@@ -337,7 +409,9 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
                 >
                     {/* Subtle stage floor lines (no character art). */}
                     <svg
-                        className="pointer-events-none absolute inset-0 h-full w-full opacity-30"
+                        className={`pointer-events-none absolute inset-0 h-full w-full transition-opacity ${
+                            editRoom ? 'opacity-50' : 'opacity-30'
+                        }`}
                         viewBox="0 0 960 540"
                         preserveAspectRatio="none"
                         aria-hidden="true"
@@ -347,8 +421,17 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
                                 <stop offset="0%" stopColor="rgba(63,63,70,0.0)" />
                                 <stop offset="100%" stopColor="rgba(63,63,70,0.35)" />
                             </linearGradient>
+                            <pattern id="floor-grid" x="0" y="0" width="48" height="27" patternUnits="userSpaceOnUse">
+                                <path d="M 48 0 L 0 0 0 27" fill="none" stroke="rgba(251,191,36,0.18)" strokeWidth="0.5" />
+                            </pattern>
                         </defs>
                         <rect x="0" y="0" width="960" height="540" fill="url(#floor-vignette)" />
+                        {/* 5%-grid overlay — only visible while the trader is
+                            editing the room. Helps the seat land on a clean
+                            cell when snap-to-grid is engaged. */}
+                        {editRoom ? (
+                            <rect x="0" y="0" width="960" height="540" fill="url(#floor-grid)" />
+                        ) : null}
                         {/* Faint horizon line behind the moderator. */}
                         <line x1="120" y1="297" x2="840" y2="297" stroke="#27272a" strokeWidth="1" strokeDasharray="4 4" />
                     </svg>
@@ -375,9 +458,11 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
                             return (
                                 <div
                                     key={seat.id}
-                                    className={`absolute -translate-x-1/2 -translate-y-1/2 ${
+                                    className={`absolute -translate-x-1/2 -translate-y-1/2 transition-transform ${
                                         editRoom ? 'cursor-grab' : ''
-                                    } ${isDragging ? 'cursor-grabbing z-30' : ''}`}
+                                    } ${isDragging ? 'cursor-grabbing z-30 scale-110' : ''} ${
+                                        isDragging ? 'rounded-md ring-2 ring-amber-400/60 shadow-lg shadow-amber-400/20' : ''
+                                    }`}
                                     style={{ left: leftPct, top: topPct }}
                                     onPointerDown={handleSeatPointerDown(seat.name)}
                                     data-testid={`seat-${seat.name}`}
