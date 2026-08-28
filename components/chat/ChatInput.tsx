@@ -85,8 +85,8 @@ interface ChatInputProps {
     regimeProviderStats?: RegimeProviderStatsMap;
     onOpenSettings?: (tab?: string) => void;
     onOpenLiveMarket?: () => void;
-    /** Open the per-agent chat slide-over. */
-    onOpenAgentChat?: () => void;
+    /** Overrides the computed placeholder (e.g. "Message Sales" in a 1:1 thread). */
+    placeholderOverride?: string;
     isAccuracyModeEnabled?: boolean;
     hybridConnectionStatus?: 'disconnected' | 'connecting' | 'connected' | 'error';
     hybridData?: unknown;
@@ -138,7 +138,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
     onSetModeratorModel,
     onOpenSettings,
     onOpenLiveMarket,
-    onOpenAgentChat,
+    placeholderOverride,
     isAccuracyModeEnabled = false,
     hybridConnectionStatus,
     hybridData,
@@ -361,7 +361,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && (!e.shiftKey || e.ctrlKey || e.metaKey) ? (e.preventDefault(), handleSendMessage()) : undefined}
-                            placeholder={isAnalysisInProgress ? 'Add a note for the next debate step…' : images.length > 0 ? 'Analyze charts...' : isEnsembleEnabled ? 'Describe the setup or upload charts…' : 'How can I help you today?'}
+                            placeholder={placeholderOverride ?? (isAnalysisInProgress ? 'Add a note for the next debate step…' : images.length > 0 ? 'Analyze charts...' : isEnsembleEnabled ? 'Describe the setup or upload charts…' : 'How can I help you today?')}
                             className="flex-1 min-w-0 bg-transparent px-2 py-2 text-[15px] text-white placeholder-zinc-400 outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 min-h-[24px] max-h-28 resize-none leading-6 placeholder:text-center focus:placeholder:text-left"
                             rows={1}
                             disabled={isRateLimited}
@@ -431,18 +431,6 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                                     })}
                                 </select>
                             </label>
-
-                            {/* Per-agent chat — opens the slide-over with the
-                                agent sidebar (one-by-one per the user's request). */}
-                            <button
-                                type="button"
-                                onClick={onOpenAgentChat}
-                                data-testid="open-agent-chat"
-                                title="Open per-agent chat (one-by-one)"
-                                className="rounded-full bg-zinc-800/80 px-2.5 py-1 text-[11px] font-semibold text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100"
-                            >
-                                Per-agent
-                            </button>
 
                         </div>
 
