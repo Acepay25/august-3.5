@@ -103,6 +103,17 @@ export interface ChatContextProps {
     priorAnalysisById?: Record<string, TradeAnalysis>;
     /** id of the user message immediately before each message (thread "You" bubble). */
     priorUserMessageById?: Record<string, Pick<Message, 'text' | 'createdAt'>>;
+    /** External request to open the per-message side panel for a specific
+     *  actor. The MessageItem whose `message.id` matches the field's
+     *  `messageId` will mirror the requested `actorId` into its local
+     *  panel-actor state; the App uses this to let the desk view (or
+     *  any other surface) open the same side panel a user would open
+     *  by clicking an actor on the in-transcript DebateStage. */
+    externalOpenActor?: { messageId: string; actorId: string } | null;
+    /** Counter bumped by the App when it sets `externalOpenActor`, so the
+     *  MessageItem effect re-syncs even if the same {messageId,actorId}
+     *  pair is requested twice in a row. */
+    externalOpenActorNonce?: number;
 }
 
 const SmoothText: React.FC<{ text: string; animate: boolean }> = ({ text, animate }) => {
@@ -185,6 +196,11 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
         handleCopy,
         onTodayReassessment,
         todayReassessmentInFlight,
+        // External open-actor request — the desk view (or any other
+        // surface) publishes {messageId, actorId} and the matching
+        // MessageItem mirrors the actor into its local panel state.
+        externalOpenActor,
+        externalOpenActorNonce,
     } = context;
 
     const isHighlighted = highlightedAnalysisId === message.id;
@@ -217,6 +233,14 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
     // Actor derivation lives in utils/debateStageActors so the opt-in
     // DeskScene overlay projects the exact same debate state.
     const [debatePanelActor, setDebatePanelActor] = React.useState<string | null>(null);
+    // External open-actor request (e.g. from the desk view). The App
+    // publishes a {messageId, actorId} pair + a nonce; only the message
+    // whose id matches the request mirrors the actor into its local
+    // panel-actor state.
+    React.useEffect(() => {
+        if (!externalOpenActor || externalOpenActor.messageId !== message.id) return;
+        setDebatePanelActor(externalOpenActor.actorId);
+    }, [externalOpenActor, externalOpenActorNonce, message.id]);
     const stageActors = React.useMemo(
         (): DebateStageActor[] => stageActorsForMessage(message),
         [message],

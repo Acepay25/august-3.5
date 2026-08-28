@@ -629,10 +629,66 @@ body {
   60%  { opacity: 1; transform: translateY(0)   scale(1.02); }
   100% { opacity: 1; transform: translateY(0)   scale(1); }
 }
+
+/* Speaking bob — the head + shoulders shift down 1 pixel and back, on
+   a 480ms cycle, while the seat is speaking. Reads as "talking" without
+   redrawing the pixel grid. We translate only the avatar box, not the
+   status line / name plate, so the seat's anchor stays put. */
+@keyframes seat-speaking-bob {
+  0%   { transform: translateY(0); }
+  50%  { transform: translateY(1px); }
+  100% { transform: translateY(0); }
+}
+.is-speaking > .pixelArt {
+  animation: seat-speaking-bob 480ms ease-in-out infinite;
+  transform-origin: center bottom;
+}
+
+/* Thinking monitor flicker — the monitor "screen" row (token 2) gets
+   a 1.4s opacity flicker, suggesting data scrolling. We can't repaint
+   the grid, so we layer a translucent overlay on the avatar box. The
+   overlay is a 2px-tall strip in the monitor's screen region. */
+@keyframes seat-monitor-flicker {
+  0%   { opacity: 0.0; }
+  20%  { opacity: 0.45; }
+  35%  { opacity: 0.05; }
+  55%  { opacity: 0.5; }
+  80%  { opacity: 0.0; }
+  100% { opacity: 0.3; }
+}
+.is-thinking .seat-monitor-overlay {
+  /* The overlay strip is positioned over the monitor row of the grid
+     (row 18 of 20). We measure the seat's pixelSize in JS; the overlay
+     just inherits position from CSS custom props. */
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(18 * var(--avatar-cell-h, 5px));
+  height: calc(2 * var(--avatar-cell-h, 5px));
+  background: linear-gradient(90deg, transparent 0%, rgba(14,116,144,0.55) 50%, transparent 100%);
+  pointer-events: none;
+  animation: seat-monitor-flicker 1.4s ease-in-out infinite;
+}
+
+/* Live glow — the seat's outer halo pulses a soft amber while the
+   seat is live but neither speaking nor thinking. Reads as "I am
+   here, waiting my turn." */
+@keyframes seat-live-glow {
+  0%   { box-shadow: 0 0 0 0 rgba(16,185,129,0.0); }
+  50%  { box-shadow: 0 0 0 4px rgba(16,185,129,0.25); }
+  100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.0); }
+}
+.is-live {
+  animation: seat-live-glow 1.8s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .pixelArt, .pixelArt > span { image-rendering: auto; }
   /* Disable the bubble pop so reduced-motion users see a static snap. */
   [class*="animate-[bubble-pop"] { animation: none; }
+  .is-speaking > .pixelArt,
+  .is-thinking .seat-monitor-overlay,
+  .is-live { animation: none; }
 }
 .debate-seat-modal {
   position: absolute;

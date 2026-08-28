@@ -9,6 +9,7 @@ import ProviderManager from './ProviderManager';
 import AnalystLensSettings from './AnalystLensSettings';
 import CustomInstructionsEditor, { InstructionTab } from './CustomInstructionsEditor';
 import SkillsGrid from './SkillsGrid';
+import DeskSeatMappingEditor from './DeskSeatMappingEditor';
 import { DiagnosticsPanel } from './DiagnosticsPanel';
 import SessionUsagePanel from './SessionUsagePanel';
 import { BackupManager } from './BackupManager';
@@ -733,6 +734,14 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                                 }}
                                                 label="Toggle Desk Tools"
                                             />
+                                        </div>
+
+                                        {/* Desk seat mapping — pin custom actor names
+                                            to a role preset so they land on a colored
+                                            cap in the desk view instead of the wing
+                                            fan-out. */}
+                                        <div className="border-b border-white/5 py-5">
+                                            <DeskSeatMappingEditor />
                                         </div>
                                     </div>
 

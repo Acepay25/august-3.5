@@ -16,6 +16,7 @@
  */
 
 import { roleForName, type RolePreset } from './pixelAvatars';
+import { resolveRole } from '../../services/desk/roleOverrides';
 
 export interface SeatAnchor {
     x: number; // 0..1
@@ -90,14 +91,15 @@ const RIGHT_WINGS: SeatAnchor[] = [
 
 /**
  * Map a list of actor names to FloorSeats. Honors the role preset when
- * known, and falls back to fan-out anchors for unknown roles.
+ * known, and falls back to fan-out anchors for unknown roles. Per-user
+ * overrides (Settings → Roles) win over the heuristic.
  */
 export const layoutFloor = (names: string[]): FloorSeat[] => {
     const seats: FloorSeat[] = [];
     const taken = new Set<RolePreset>();
     const unknownNames: string[] = [];
     for (const n of names) {
-        const role = roleForName(n);
+        const role = resolveRole(n);
         if (role === 'unknown' || taken.has(role)) {
             unknownNames.push(n);
             continue;

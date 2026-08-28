@@ -32,6 +32,7 @@ import { DeskSteerInput } from './DeskSteerInput';
 import { layoutFloor, FLOOR_REFERENCE_W, FLOOR_REFERENCE_H } from './floorLayout';
 import { convictionsFromTurns, exchangesForTurns, livePhaseForMessage } from '../../utils/debateStageActors';
 import { roleForName } from './pixelAvatars';
+import { subscribeRoleOverrides } from '../../services/desk/roleOverrides';
 
 export interface DeskSceneProps {
     actors: DebateStageActor[];
@@ -69,6 +70,11 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
     const [zoom, setZoom] = React.useState(false);
     const [now, setNow] = React.useState(() => Date.now());
     const [bubbleVisibleUntil, setBubbleVisibleUntil] = React.useState<Record<string, number>>({});
+    // Re-render when the user edits role overrides (Settings → Roles).
+    // We bump a counter and pass nothing to the consumer — the
+    // `layoutFloor` call below reads overrides fresh on each render.
+    const [overridesTick, setOverridesTick] = React.useState(0);
+    React.useEffect(() => subscribeRoleOverrides(() => setOverridesTick(t => t + 1)), []);
 
     // Esc closes; the floor's own buttons (steer, etc.) handle their own keys.
     React.useEffect(() => {
@@ -107,7 +113,7 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
         return () => window.clearInterval(id);
     }, []);
 
-    const seats = React.useMemo(() => layoutFloor(actors.map(a => a.id)), [actors]);
+    const seats = React.useMemo(() => layoutFloor(actors.map(a => a.id)), [actors, overridesTick]);
 
     const liveSeatNames = React.useMemo(
         () => actors.filter(a => a.live).map(a => a.name),

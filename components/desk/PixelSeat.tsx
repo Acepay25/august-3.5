@@ -110,8 +110,11 @@ export const PixelSeat: React.FC<PixelSeatProps> = ({
                 style={{
                     width: avatarW,
                     height: avatarH,
-                    // Each cell is absolutely positioned by row/col below.
-                }}
+                    // The thinking-monitor overlay in index.css uses
+                    // --avatar-cell-h to position itself over the monitor
+                    // row of the grid (row 18 of 20).
+                    ['--avatar-cell-h' as string]: `${cellH}px`,
+                } as React.CSSProperties}
                 aria-hidden="true"
             >
                 {grid.map((row, rIdx) => (
@@ -135,6 +138,9 @@ export const PixelSeat: React.FC<PixelSeatProps> = ({
                         })}
                     </React.Fragment>
                 ))}
+                {/* Thinking monitor overlay — a horizontal cyan flicker
+                    that rides the monitor row while the seat is thinking. */}
+                {thinking ? <span className="seat-monitor-overlay" /> : null}
             </span>
 
             {/* Name plate — kept visible at all sizes; the role is implied
