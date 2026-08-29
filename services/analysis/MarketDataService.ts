@@ -372,7 +372,8 @@ export const fetchOHLCV = async (
             high: parseFloat(k[2]),
             low: parseFloat(k[3]),
             close: parseFloat(k[4]),
-            volume: parseFloat(k[5])
+            volume: parseFloat(k[5]),
+            takerBuyVolume: Number.isFinite(parseFloat(k[9])) ? parseFloat(k[9]) : undefined
         }));
 
         setCache(cacheKey, klines);
@@ -428,7 +429,8 @@ export const fetchOHLCVFromTime = async (
                 high: parseFloat(k[2]),
                 low: parseFloat(k[3]),
                 close: parseFloat(k[4]),
-                volume: parseFloat(k[5])
+                volume: parseFloat(k[5]),
+                takerBuyVolume: Number.isFinite(parseFloat(k[9])) ? parseFloat(k[9]) : undefined
             }));
 
             console.log(`[MarketDataService] Fetched ${klines.length} historical candles for ${normalizedSymbol}`);
@@ -491,7 +493,8 @@ export const fetchFuturesOHLCVFromTime = async (
                 high: parseFloat(k[2]),
                 low: parseFloat(k[3]),
                 close: parseFloat(k[4]),
-                volume: parseFloat(k[5])
+                volume: parseFloat(k[5]),
+                takerBuyVolume: Number.isFinite(parseFloat(k[9])) ? parseFloat(k[9]) : undefined
             }));
 
             console.log(`[MarketDataService] Fetched ${klines.length} FUTURES historical candles for ${normalizedSymbol}`);

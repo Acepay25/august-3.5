@@ -59,6 +59,11 @@ import {
 } from './CandlePatternDetector';
 
 import { parsePrice as canonicalParsePrice } from '../../utils/analysisUtils';
+import {
+    SmcStructureRead,
+    buildSmcStructureRead,
+    formatSmcStructureBlock,
+} from '../../utils/smcStructure';
 
 import { getSessionContext, SessionContext } from '../infrastructure/SessionService';
 import { ConfidenceCalibration } from '../../types';
@@ -197,6 +202,12 @@ export interface HybridDataPacket {
     // Level-anchored price-action events from the last completed candle per
     // timeframe (wick-through-and-reject, or close-beyond breaks).
     liquiditySweeps: LiquiditySweep[];
+
+    // ========== SMC STRUCTURE DETECTORS ==========
+    // Deterministic smart-money-concepts reads (Batch 3): equal highs/lows
+    // pools, FVG/imbalance, order blocks, premium/discount, draw-on-liquidity
+    // targets, session CVD, measured-move projection, seasonality flags.
+    smcStructure?: SmcStructureRead;
 
     // ========== MARKET CONTEXT ==========
     // The "where are we in the week/month" layer every human trader checks
@@ -478,6 +489,27 @@ export const fetchHybridData = async (symbol: string): Promise<HybridDataPacket>
         console.log(`  - Liquidity Sweeps: ${liquiditySweeps.length} (${liquiditySweeps[0].timeframe}: ${liquiditySweeps[0].type})`);
     }
 
+    // SMC structure detectors (Batch 3): equal H/L pools, FVG, OBs,
+    // premium/discount, draw-on-liquidity, session CVD, measured move,
+    // seasonality — all deterministic over the snapshot's klines. DOL
+    // "tested" = price has already traded through the level this period
+    // (the current-period ranges carry that; prev-period extremes start
+    // untested and flip once price reaches them).
+    const priceNow = snapshot.marketData.currentPrice;
+    const dolLevels = [
+        marketContext?.prevWeek ? { label: 'PWH', price: marketContext.prevWeek.high, tested: priceNow >= marketContext.prevWeek.high } : null,
+        marketContext?.prevWeek ? { label: 'PWL', price: marketContext.prevWeek.low, tested: priceNow <= marketContext.prevWeek.low } : null,
+        marketContext?.prevMonth ? { label: 'PDH', price: marketContext.prevMonth.high, tested: priceNow >= marketContext.prevMonth.high } : null,
+        marketContext?.prevMonth ? { label: 'PDL', price: marketContext.prevMonth.low, tested: priceNow <= marketContext.prevMonth.low } : null,
+        marketContext?.week ? { label: 'weekly open', price: marketContext.week.open, tested: false } : null,
+    ].filter((l): l is { label: string; price: number; tested: boolean } => l !== null);
+    const smcStructure = buildSmcStructureRead({
+        klines1h: snapshot.klines['1h'],
+        klines4h: snapshot.klines['4h'],
+        currentPrice: priceNow,
+        dolLevels,
+    });
+
     // Create partial packet for classification (circular dependency workaround)
     const partialData: any = {
         symbol: snapshot.marketData.symbol,
@@ -551,6 +583,8 @@ export const fetchHybridData = async (symbol: string): Promise<HybridDataPacket>
         detectedPatterns,
         // Level-anchored liquidity sweep events (last completed candle per TF)
         liquiditySweeps,
+        // SMC structure detectors (equal H/L, FVG, OB, P/D, DOL, CVD, AB=CD)
+        smcStructure,
         // Weekly/monthly market context
         marketContext,
         live1h
@@ -985,6 +1019,9 @@ export const generateHybridPromptInjection = (data: HybridDataPacket, options?: 
         options?.compact ? '' : formatCandleHistoryInsight(data.candleHistory),
         mdTable(['TF', 'Pattern', 'Dir', 'Str', 'Level', 'Note'], patternRows),
         options?.compact ? '' : ohlcBlocks,
+        data.smcStructure
+            ? formatSmcStructureBlock(data.smcStructure, data.marketData.currentPrice)
+            : '',
         `### Read rules`,
         `- Numbers above are code-calculated. Cite a table cell when you name a level.`,
         `- ADX regime is authoritative vs the chart-structure table. ${adxRule}`,

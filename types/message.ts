@@ -36,6 +36,10 @@ export interface Kline {
   low: number;
   close: number;
   volume: number;
+  /** Taker-buy base-asset volume (Binance kline field 9) — present on
+   *  spot/futures klines fetched after the CVD detector; older cached rows
+   *  and synthetic tests may omit it. volume − takerBuyVolume = taker sell. */
+  takerBuyVolume?: number;
 }
 
 export interface GroundingChunk {
