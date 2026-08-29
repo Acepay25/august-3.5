@@ -310,6 +310,9 @@ const getModeratorAnalysisStream = async function* (
     /** Which debate round the moderator turn belongs
      *  to — DM receipts used to print "(Round 0)" in the verdict transcript. */
     mailboxRound?: number,
+    /** P5 audit sink — receives the applied reasoning-route label so the
+     *  run log explains the verdict's reasoning depth. */
+    onWireAudit?: (entry: import('./reasoningControls').WireAuditEntry) => void,
 ): AsyncGenerator<string> {
     const effectiveConfig: ProviderConfig = { ...config, selectedModel: model || config.selectedModel };
     const messages: ChatMessage[] = [
@@ -326,6 +329,12 @@ const getModeratorAnalysisStream = async function* (
         for await (const chunk of streamChatWithDeskTools(effectiveConfig, messages, {
             temperature: 0.1,
             maxTokens: 12288,
+            // P2: the moderator's final verdict is the run's single most
+            // important output — schedule it at the maximum effort tier.
+            reasoningEffort: 'max',
+            // P5: label what the wire actually received (applied route or
+            // fail-closed no-op) so the run log explains the verdict's depth.
+            onWireAudit,
             signal,
             onReasoning,
             onToolEvent,
@@ -3181,6 +3190,12 @@ export const conductRealDebate = async function* (
                     signal,
                     trades: fullTradesForRecall,
                     maxTokens: TASK_BUDGETS.rebuttal,
+                    // P2: rebuttals keep depth — the seat must argue its case
+                    // under attack, not phone in a summary.
+                    reasoningEffort: 'high',
+                    // P5: every seat turn is labeled with the wire route that
+                    // carried it (or why no knob applied).
+                    onWireAudit: entry => emitLog('budget', `wire: ${analyst.provider.name} r${round} ${entry.applied ? 'applied' : 'no-op'} — ${entry.reason}`, round, analyst.provider.name),
                     onReasoning: (reasoning: string) => onAnalystReasoning?.(analyst.provider.name, reasoning, round),
                     onToolEvent: (line: string) => {
                         emitLog('tool', line, round, analyst.provider.name);
@@ -3429,6 +3444,8 @@ export const conductRealDebate = async function* (
                 undefined,
                 undefined,
                 undefined,
+                undefined,
+                entry => emitLog('budget', `wire: Moderator routing ${entry.applied ? 'applied' : 'no-op'} — ${entry.reason}`, rebuttalStart, 'Moderator'),
             )) {
                 if (chunk) chargeText += chunk;
             }
@@ -3622,6 +3639,7 @@ export const conductRealDebate = async function* (
                 },
                 // DM receipts carry the real debate round.
                 questionRound,
+                entry => emitLog('budget', `wire: Moderator questions ${entry.applied ? 'applied' : 'no-op'} — ${entry.reason}`, questionRound, 'Moderator'),
             )) {
                 if (chunk) {
                     questionText += chunk;
@@ -3714,6 +3732,12 @@ export const conductRealDebate = async function* (
                             signal,
                             trades: fullTradesForRecall,
                             maxTokens: TASK_BUDGETS.clarification,
+                            // P2: clarifications are 60-100 word answers —
+                            // explicitly turn thinking OFF (thinking-default
+                            // models otherwise burn a full reasoning budget
+                            // on one-liners).
+                            reasoningEffort: 'low',
+                            onWireAudit: entry => emitLog('budget', `wire: ${analyst.provider.name} clarification ${entry.applied ? 'applied' : 'no-op'} — ${entry.reason}`, answerRound, analyst.provider.name),
                             onReasoning: (reasoning: string) => onAnalystReasoning?.(analyst.provider.name, reasoning, answerRound),
                             onToolEvent: (line: string) => {
                                 emitLog('tool', line, answerRound, analyst.provider.name);
@@ -3855,6 +3879,11 @@ export const conductRealDebate = async function* (
                     emitLog('tool', line, judgmentRound, 'Moderator');
                     onToolEvent?.('Moderator', judgmentRound, line);
                 },
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                entry => emitLog('budget', `wire: Moderator judgment ${entry.applied ? 'applied' : 'no-op'} — ${entry.reason}`, judgmentRound, 'Moderator'),
             )) {
                 if (chunk) judgmentText += chunk;
             }
@@ -4030,7 +4059,7 @@ export const conductRealDebate = async function* (
                 });
                 emitLog('tool', dmLine, finalRound, 'Moderator');
                 onToolEvent?.('Moderator', finalRound, dmLine);
-            }, finalRound)) {
+            }, finalRound, entry => emitLog('budget', `wire: Moderator verdict ${entry.applied ? 'applied' : 'no-op'} — ${entry.reason}`, finalRound, 'Moderator'))) {
                 if (chunk) {
                     moderatorText += chunk;
                     yield { speaker: 'Moderator', round: finalRound, text: chunk };

@@ -124,6 +124,7 @@ import { insightTextForTrade } from './utils/tradeInsightBrief';
 import { ProviderConfig } from './types/provider';
 import { syncFromTradeLog, syncRollingWindowFromTradeLog, initModelPerformanceService } from './services/backtesting/ModelPerformanceService';
 import { saveLensConfig, initAnalystLensService, loadLensConfig, saveEnsembleModelSelection, loadLastModeratorPick, saveLastModeratorPick, EnsembleModelSelection, saveCustomEnsemblePrompt, saveCustomLensPrompts } from './services/ui/AnalystLensService';
+import { isProviderOnCooldown, providerCooldownRemainingMs } from './services/infrastructure/ProviderHealthService';
 import { checkDataIntegrity, createStartupBackup, logIntegrityEvent, runMigrations } from './services/validation/DataIntegrityService';
 import { startAutoBackup, stopAutoBackup, createBackup } from './services/infrastructure/BackupService';
 import { storageService } from './services/infrastructure/StorageService';
@@ -279,19 +280,25 @@ const App: React.FC = () => {
     // Derive the moderator ProviderConfig from readyProviders. When the user
     // never picked a moderator, prefer a provider that is NOT one of the
     // analyst providers — the old readyProviders[0] fallback often WAS an
-    // analyst, so the moderator debated itself.
+    // analyst, so the moderator debated itself. A benched provider (P4
+    // cooldown: ≥3 persisted errors in 15 min) is skipped even when the
+    // user picked it — a failing moderator sinks every run's verdict.
     const moderatorConfig: ProviderConfig = useMemo(() => {
         const selected = readyProviders.find(p => p.id === moderatorProviderId);
-        if (selected) return selected;
+        if (selected && !isProviderOnCooldown(selected.id)) return selected;
+        if (selected) {
+            const remainingMin = Math.ceil(providerCooldownRemainingMs(selected.id) / 60000);
+            console.warn(`[Moderator] ${selected.name} benched (error cooldown, ~${remainingMin}m left) — using a fallback moderator this run.`);
+        }
         const analystIds = new Set(
             (lensConfig?.assignments ?? []).map(a => a.assignedProvider).filter(Boolean)
         );
-        const nonAnalystModerator = readyProviders.find(p => !analystIds.has(p.id));
+        const nonAnalystModerator = readyProviders.find(p => !analystIds.has(p.id) && !isProviderOnCooldown(p.id));
         if (nonAnalystModerator) {
             console.warn('[Moderator] No moderator selected — fell back to', nonAnalystModerator.name);
             return nonAnalystModerator;
         }
-        return readyProviders[0] || {
+        return readyProviders.find(p => !isProviderOnCooldown(p.id)) || readyProviders[0] || {
             id: 'none', name: 'None', apiKey: '', baseUrl: '', apiFormat: 'chat_completions' as const,
             isEnabled: false, isBuiltIn: true, models: [], selectedModel: '',
         };

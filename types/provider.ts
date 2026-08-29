@@ -28,12 +28,19 @@ export interface ProviderConfig {
   models: string[];              // Available model IDs
   selectedModel: string;         // Currently selected model ID
   /** Models included when Ensemble mode is enabled (maximum three total). */
-  /** Models included when Ensemble mode is enabled (maximum three total). */
   ensembleModels?: string[];
   /** Optional USD per 1k prompt tokens for run cost estimates. */
   inputUsdPer1k?: number;
   /** Optional USD per 1k completion tokens for run cost estimates. */
   outputUsdPer1k?: number;
+  /**
+   * Override for Anthropic extended-thinking eligibility on this provider
+   * (apiFormat 'messages'). undefined = decide by model-id regex;
+   * true = always request thinking (thinking-capable ids the regex can't
+   * know yet); false = never (older Claude models that 400 on the thinking
+   * block). Set from the provider editor.
+   */
+  thinkingCapable?: boolean;
 }
 
 /**

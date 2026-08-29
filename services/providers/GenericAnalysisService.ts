@@ -29,6 +29,7 @@ import {
     sendChatRequest, streamChatRequest, ChatMessage, ContentPart, ChatRequestOptions,
 } from './GenericProviderService';
 import { TASK_BUDGETS } from './taskBudgets';
+import { EFFORT_BY_TASK, WireAuditEntry } from './reasoningControls';
 import { getPrompt } from '../infrastructure/PromptOverrideService';
 import { getMemoryFilesContext } from '../learning/MemoryFilesService';
 import { composePrompt } from '../../utils/composePrompt';
@@ -284,6 +285,9 @@ export interface AnalyzeTradingViewParams {
     /** Visible content deltas as they stream — lets the Floor show the
      *  answer (and any untagged thinking) forming live, not just at the end. */
     onPartialOutput?: (chunk: string) => void;
+    /** Wire-audit sink (P5) — receives the applied reasoning-route label for
+     *  this call so the debate run log can show what the wire received. */
+    onWireAudit?: (entry: WireAuditEntry) => void;
 }
 
 export async function analyzeTradingView(
@@ -294,7 +298,7 @@ export async function analyzeTradingView(
         prompt, images, imageSummaries, chatHistory, finalTradeSummary, recentInsights,
         activeFrameworks, globalMemory, threadSummary, subMode, customInstructions,
         isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI,
-        rolePrompt, systemPromptOverride, seatDirective, userStrategies, signal, temperature, onReasoning, onPartialOutput,
+        rolePrompt, systemPromptOverride, seatDirective, userStrategies, signal, temperature, onReasoning, onPartialOutput, onWireAudit,
     } = params;
 
     const modelName = config.selectedModel;
@@ -492,7 +496,9 @@ export async function analyzeTradingView(
     // when each seat carries a distinct persona. The ensemble passes a
     // per-seat temperature (0.55–0.85) when Lenses are OFF so three seats
     // sharing one prompt still sample independently.
-    const options: ChatRequestOptions = { jsonMode: false, maxTokens: TASK_BUDGETS.analysis, temperature: temperature ?? 0.35, signal, onReasoning };
+    // P2: the analysis phase IS the opening-statements phase — schedule it
+    // at high effort (seat opinions are the debate's raw material).
+    const options: ChatRequestOptions = { jsonMode: false, maxTokens: TASK_BUDGETS.analysis, temperature: temperature ?? 0.35, signal, onReasoning, reasoningEffort: EFFORT_BY_TASK.analysis, onWireAudit };
     let responseText = '';
     let reasoningAccumulated = '';
     try {

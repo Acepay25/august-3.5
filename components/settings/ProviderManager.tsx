@@ -13,6 +13,7 @@ import { GOOGLE_GEMINI_DEFAULT_BASE } from '../../utils/googleGeminiFormat';
 import { testConnection } from '../../services/providers/GenericProviderService';
 import { discoverProviderModels } from '../../services/infrastructure/ProviderConfigService';
 import { resetProviderHealth } from '../../services/infrastructure/ProviderHealthService';
+import { probeAndLearn } from '../../services/learning/harnessLessons';
 import { validateProviderUrl } from '../../utils/providerUrlValidation';
 import { mergeDiscoveredModels, sortModelsFreeFirst } from '../../utils/providerUtils';
 import { useConfirmDialog } from '../shared/ConfirmDialog';
@@ -141,6 +142,10 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
     const [draftUrl, setDraftUrl] = useState('');
     const [draftFormat, setDraftFormat] = useState<ApiFormat>('chat_completions');
     const [draftModel, setDraftModel] = useState('');
+    // Tri-state thinking override for Anthropic-style 'messages' endpoints:
+    // 'auto' = detect from the model id (thinkingCapable: undefined), 'on' =
+    // always request a thinking budget (true), 'off' = never (false).
+    const [draftThinking, setDraftThinking] = useState<'auto' | 'on' | 'off'>('auto');
     const [draftInputUsd, setDraftInputUsd] = useState('');
     const [draftOutputUsd, setDraftOutputUsd] = useState('');
     const [showKey, setShowKey] = useState(false);
@@ -182,6 +187,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
             setDraftUrl(selected.baseUrl);
             setDraftFormat(selected.apiFormat);
             setDraftModel(selected.selectedModel);
+            setDraftThinking(selected.thinkingCapable === true ? 'on' : selected.thinkingCapable === false ? 'off' : 'auto');
             setDraftInputUsd(selected.inputUsdPer1k !== undefined ? String(selected.inputUsdPer1k) : '');
             setDraftOutputUsd(selected.outputUsdPer1k !== undefined ? String(selected.outputUsdPer1k) : '');
             setNameDraft(selected.name);
@@ -198,6 +204,14 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
     const draftUrlValidation = useMemo(() => validateProviderUrl(draftUrl), [draftUrl]);
     const newUrlValidation = useMemo(() => validateProviderUrl(newUrl), [newUrl]);
 
+    // The control only exists for the messages endpoint — under any other
+    // DRAFT format the saved override is what Save will write back (undefined),
+    // so the draft must compare as 'auto' rather than count as a hidden edit.
+    const draftThinkingEffective = draftFormat === 'messages'
+        ? draftThinking
+        : 'auto';
+    const draftThinkingDirty = draftThinkingEffective !== (selected.thinkingCapable === true ? 'on' : selected.thinkingCapable === false ? 'off' : 'auto');
+
     const isDirty = useMemo(() => {
         if (!selected) return false;
         return (
@@ -205,11 +219,12 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
             draftUrl !== selected.baseUrl ||
             draftFormat !== selected.apiFormat ||
             draftModel !== selected.selectedModel ||
+            draftThinkingDirty ||
             draftInputUsd !== (selected.inputUsdPer1k !== undefined ? String(selected.inputUsdPer1k) : '') ||
             draftOutputUsd !== (selected.outputUsdPer1k !== undefined ? String(selected.outputUsdPer1k) : '') ||
             (!!nameDraft.trim() && nameDraft.trim() !== selected.name)
         );
-        }, [selected, draftKey, draftUrl, draftFormat, draftModel, draftInputUsd, draftOutputUsd, nameDraft]);
+        }, [selected, draftKey, draftUrl, draftFormat, draftModel, draftThinkingDirty, draftInputUsd, draftOutputUsd, nameDraft]);
 
     // Surface dirtiness to the host (SettingsMenu) so closing the modal while
     // a draft is staged can warn instead of silently discarding edits.
@@ -227,6 +242,12 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
             baseUrl: draftUrl.trim(),
             apiFormat: draftFormat,
             selectedModel: draftModel,
+            // Only 'messages' (Anthropic-style) endpoints have a thinking
+            // gate; switching to another format must clear any stale override
+            // so it doesn't resurrect if the user switches back.
+            thinkingCapable: draftFormat === 'messages' && draftThinking !== 'auto'
+                ? draftThinking === 'on'
+                : undefined,
             inputUsdPer1k: draftInputUsd.trim() ? Number(draftInputUsd) : undefined,
             outputUsdPer1k: draftOutputUsd.trim() ? Number(draftOutputUsd) : undefined,
         };
@@ -247,7 +268,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
             setTestResult({ success: false, message: error instanceof Error ? error.message : 'Provider settings could not be saved.' });
             return;
         }
-    }, [selected, draftKey, draftUrl, draftFormat, draftModel, draftInputUsd, draftOutputUsd, nameDraft, draftUrlValidation, onUpdateProvider]);
+    }, [selected, draftKey, draftUrl, draftFormat, draftModel, draftThinking, draftInputUsd, draftOutputUsd, nameDraft, draftUrlValidation, onUpdateProvider]);
 
     const handleTestModel = useCallback(async (modelId: string): Promise<{ success: boolean; message: string }> => {
         if (!selected || !draftUrlValidation.valid) {
@@ -296,7 +317,23 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                 : `${passed}/${selected.models.length} models passed.${lastFail ? ` Last error: ${lastFail}` : ''}`,
         });
         setIsTesting(false);
-    }, [selected, draftUrlValidation, handleTestModel]);
+        // P6: known-answer probe on the SELECTED model — behavior-proves the
+        // reasoning knob (a 200 without the knob being honored is
+        // indistinguishable from a stripped body at the provider side). The
+        // result feeds the harness lesson store; failures never fail the test.
+        if (passed > 0 && draftModel) {
+            try {
+                const probe = await probeAndLearn({
+                    ...selected,
+                    apiKey: draftKey.trim() || selected.apiKey,
+                    baseUrl: draftUrlValidation.normalizedUrl,
+                    apiFormat: draftFormat,
+                    selectedModel: draftModel,
+                });
+                console.info(`[ProviderManager] wire probe (${draftModel}): route=${probe.audit.route} honored=${probe.honored} — ${probe.evidence}`);
+            } catch { /* best-effort — the test result stands alone */ }
+        }
+    }, [selected, draftKey, draftFormat, draftModel, draftUrlValidation, handleTestModel]);
 
     const handleAddProvider = useCallback(async () => {
         if (!newName.trim() || !newUrlValidation.valid) return;
@@ -630,6 +667,25 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                     </button>
                                 </div>
                             </div>
+                            {draftFormat === 'messages' && (
+                                <div>
+                                    <FieldLabel>Extended thinking</FieldLabel>
+                                    <select
+                                        value={draftThinking}
+                                        onChange={(e) => setDraftThinking(e.target.value as 'auto' | 'on' | 'off')}
+                                        className={selectBase}
+                                    >
+                                        <option value="auto">Auto-detect from model id</option>
+                                        <option value="on">Always request thinking budget</option>
+                                        <option value="off">Never request thinking</option>
+                                    </select>
+                                    <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">
+                                        Auto-detect matches known Claude thinking models; force it on if your endpoint
+                                        supports thinking on a model the detection misses, or off if the extra
+                                        request field causes errors.
+                                    </p>
+                                </div>
+                            )}
 
                             <div>
                                 <FieldLabel>Model list</FieldLabel>

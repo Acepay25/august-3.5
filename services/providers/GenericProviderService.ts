@@ -21,6 +21,14 @@ import { withRetry, ProviderName } from '../../utils/apiErrorUtils';
 import { assertValidProviderUrl } from '../../utils/providerUrlValidation';
 
 import { recordProviderSuccess, recordProviderError } from '../infrastructure/ProviderHealthService';
+import { applyReasoningToChatParams, buildReasoningPatch } from './reasoningControls';
+// Side-effect import: harnessLessons registers the wire-route pin checker
+// into reasoningControls at module init (P7 read path). Importing here (the
+// transport) guarantees the registration happens before any reasoning patch
+// is built — harnessLessons imports buildReasoningPatch from
+// reasoningControls, so the checker flows in through this module instead of
+// a static cycle.
+import '../learning/harnessLessons';
 import { emitTokenUsage, extractTokenUsage, TokenUsage } from '../../utils/tokenUsage';
 import { chatMessagesToGemini, googleGenerateUrl, parseGeminiResponse } from '../../utils/googleGeminiFormat';
 import { createThinkingStreamGate, extractAndStripThinkBlocks } from '../../utils/thinkingSplit';
@@ -235,25 +243,40 @@ export function extractResponsesReasoning(output: unknown): string {
 /**
  * Anthropic extended-thinking-capable Claude models. The `thinking` request
  * block is only valid on these — older Claude models reject it with a 400, so
- * the gate is model-id based rather than opt-in.
+ * the gate is model-id based (with a manual override flag below).
+ * Covers 3.7 / 4 / 4.5 and the 5-series ids (the old regex missed opus-5 /
+ * sonnet-5, silently disabling thinking on them).
  */
-const EXTENDED_THINKING_MODEL_RE = /claude-(?:3-7|sonnet-4|opus-4|haiku-4-5)/i;
+const EXTENDED_THINKING_MODEL_RE = /claude-(?:3-7|3\.7|sonnet-4|opus-4|haiku-4-5|sonnet-5|opus-5|4-5)/i;
 
 /** Chain-of-thought budget as a fraction of max_tokens (always kept below it). */
 const THINKING_BUDGET_FRACTION = 0.35;
 
 /**
  * Whether to request extended thinking on an Anthropic messages call.
- * Gated on: a thinking-capable Claude model id, a non-trivial token budget
- * (connection tests use maxTokens 10 — no thinking needed, and Anthropic
- * requires 1024 <= budget_tokens < max_tokens), and no JSON mode
- * (structured output and extended thinking are mutually exclusive).
+ * Gated on: a thinking-capable Claude model id (or the explicit
+ * `thinkingCapable` override on the provider config — the regex can't know
+ * every future id), no JSON mode (structured output and extended thinking
+ * are mutually exclusive), and enough headroom for Anthropic's
+ * 1024 <= budget_tokens < max_tokens constraint.
+ *
+ * The old `maxTokens >= 4096` floor silently excluded every rebuttal round
+ * (TASK_BUDGETS.rebuttal = 2560), so Claude seats never thought during
+ * debates. 2560 already fits the Anthropic constraint — the floor only needs
+ * to keep budget_tokens under max_tokens, which THINKING_BUDGET_FRACTION
+ * guarantees for any maxTokens > 1576 (0.35×2560 ≈ 896 clamps to 1024).
+ * Connection tests still pass maxTokens 10: the real floor is
+ * MIN_EFFECTIVE_THINKING_TOKENS, below which thinking is pointless.
  */
+const MIN_EFFECTIVE_THINKING_TOKENS = 1024;
+
 export function shouldRequestExtendedThinking(config: ProviderConfig, options?: ChatRequestOptions): boolean {
     if (config.apiFormat !== 'messages') return false;
     if (options?.jsonMode) return false;
     const maxTokens = options?.maxTokens ?? 4096;
-    if (maxTokens < 4096) return false;
+    if (maxTokens <= MIN_EFFECTIVE_THINKING_TOKENS) return false;
+    if (config.thinkingCapable === false) return false;
+    if (config.thinkingCapable === true) return true;
     return EXTENDED_THINKING_MODEL_RE.test(config.selectedModel || '');
 }
 
@@ -371,6 +394,7 @@ async function chatCompletionsTurn(
         (params as any).tool_choice = options.toolChoice ?? 'auto';
     }
     requestReasoningSideChannel(config, params);
+    applyReasoningToChatParams(config, params as unknown as Record<string, unknown>, options);
     let response: OpenAI.Chat.Completions.ChatCompletion;
     try {
         response = await client.chat.completions.create(params, { signal: withTimeoutSignal(options?.signal) });
@@ -456,6 +480,7 @@ async function* chatCompletionsStream(
         (params as any).response_format = { type: 'json_object' };
     }
     requestReasoningSideChannel(config, params);
+    applyReasoningToChatParams(config, params as unknown as Record<string, unknown>, options);
     const stream = await client.chat.completions.create(params, { signal: withStreamTimeoutSignal(options?.signal) });
     const gate = createThinkingStreamGate();
     for await (const chunk of stream) {
@@ -511,6 +536,7 @@ async function messagesCall(
         max_tokens: options?.maxTokens ?? 4096,
         messages: nonSystemMsgs.map(m => ({ role: m.role, content: toAnthropicContent(m.content) })),
     };
+    const maxTokensForBody = body.max_tokens as number;
     if (systemMsg) {
         body.system = typeof systemMsg.content === 'string' ? systemMsg.content : (systemMsg.content as ContentPart[]).map(p => p.type === 'text' ? p.text : '').join('');
     }
@@ -525,7 +551,10 @@ async function messagesCall(
     if (shouldRequestExtendedThinking(config, options)) {
         body.thinking = {
             type: 'enabled',
-            budget_tokens: Math.max(1024, Math.floor((options?.maxTokens ?? 4096) * THINKING_BUDGET_FRACTION)),
+            budget_tokens: Math.min(
+                maxTokensForBody - 1,
+                Math.max(1024, Math.floor(maxTokensForBody * THINKING_BUDGET_FRACTION)),
+            ),
         };
         delete body.temperature;
     }
@@ -599,6 +628,8 @@ async function responsesCall(
             ? systemMsg.content
             : (systemMsg.content as ContentPart[]).map(p => p.type === 'text' ? p.text : '').join('')
         : undefined;
+    const reasoningPatch = buildReasoningPatch(config, options?.reasoningEffort ?? 'auto');
+    options?.onWireAudit?.(reasoningPatch.audit);
     const response = await fetch(url, {
         method: 'POST',
         headers: {
@@ -611,6 +642,7 @@ async function responsesCall(
             ...(instructions ? { instructions } : {}),
             max_output_tokens: options?.maxTokens ?? 4096,
             temperature: options?.temperature ?? 0.7,
+            ...reasoningPatch.patch,
         }),
         signal: options?.signal,
     });

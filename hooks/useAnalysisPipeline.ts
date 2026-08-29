@@ -9,6 +9,7 @@ import {
 
 import { ProviderConfig } from '../types/provider';
 import { analyzeTradingView, getQuickResponse, streamQuickResponse } from '../services/providers/GenericAnalysisService';
+import { WireAuditEntry } from '../services/providers/reasoningControls';
 import * as ensembleService from '../services/providers/ensembleService';
 import { BotRegistry } from '../services/bots/BotRegistry';
 import { defaultToolsForRole } from '../types/bot';
@@ -328,6 +329,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         onReasoning: (reasoning: string) => void;
         /** Visible content deltas — surfaces the answer forming live. */
         onPartialOutput: (chunk: string) => void;
+        /** Wire-audit sink (P5) — applied reasoning-route label per call. */
+        onWireAudit?: (entry: WireAuditEntry) => void;
     }
 
     const runAnalyzeTradingView = useCallback(async (
@@ -372,6 +375,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             trades: loggedTradesRef.current.length > 0 ? loggedTradesRef.current : undefined,
             onReasoning: params.onReasoning,
             onPartialOutput: params.onPartialOutput,
+            onWireAudit: params.onWireAudit,
         });
         return result;
     }, []);
@@ -1909,6 +1913,17 @@ ${reflectionBlock}`
                                 reasoningMapRef.current,
                                 openingTextRef.current,
                             );
+                        },
+                        // P5: the openings' wire labels ride the same
+                        // debateRunLog the engine writes — one "budget" line
+                        // per seat explaining which reasoning route applied.
+                        onWireAudit: (entry: WireAuditEntry) => {
+                            const event: DebateRunEvent = {
+                                at: new Date().toISOString(),
+                                kind: 'budget',
+                                detail: `wire: ${provider.name} opening ${entry.applied ? 'applied' : 'no-op'} — ${entry.reason}`,
+                            };
+                            debateRunLogRef.current = [...debateRunLogRef.current, event].slice(-100);
                         },
                     });
                     const analysisPromises = enabledProviders.map((provider, analystIndex) => {
