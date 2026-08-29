@@ -23,6 +23,9 @@ interface AnalysisDetailsProps {
     autopilotResolution?: AutopilotResolution;
     onLogTrade: (messageId: string, outcome: TradeOutcome.WIN | TradeOutcome.LOSS) => void;
     onSkipTrade?: (messageId: string) => void;
+    /** Today's cap usage from SessionGuard — rendered as a chip beside the
+     *  Win/Loss buttons so the counter is visible at the moment of logging. */
+    sessionTradeCount?: { tradesToday: number; maxTradesPerDay: number };
     onConfirmAutopilot?: (messageId: string) => void;
     onDismissAutopilot?: (messageId: string) => void;
     onSelectForProbability?: (messageId: string) => void;
@@ -43,6 +46,7 @@ const AnalysisDetails: React.FC<AnalysisDetailsProps> = ({
     autopilotResolution,
     onLogTrade,
     onSkipTrade,
+    sessionTradeCount,
     onConfirmAutopilot,
     onDismissAutopilot,
     onSelectForProbability,
@@ -234,6 +238,18 @@ const AnalysisDetails: React.FC<AnalysisDetailsProps> = ({
                             >
                                 Skip
                             </button>
+                        )}
+                        {sessionTradeCount && (
+                            <span
+                                className={`self-center rounded-md border px-2 py-1 text-[10px] font-medium tabular-nums ${
+                                    sessionTradeCount.tradesToday >= sessionTradeCount.maxTradesPerDay
+                                        ? 'border-white/25 bg-zinc-800 text-zinc-200'
+                                        : 'border-white/10 bg-zinc-900 text-zinc-500'
+                                }`}
+                                title={`SessionGuard: ${sessionTradeCount.maxTradesPerDay} trades per UTC day (advisory — the trade still logs)`}
+                            >
+                                {sessionTradeCount.tradesToday}/{sessionTradeCount.maxTradesPerDay} today
+                            </span>
                         )}
                     </>
                 )}

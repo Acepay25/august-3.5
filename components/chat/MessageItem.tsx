@@ -84,6 +84,9 @@ export interface ChatContextProps {
      *  earlier run is ignored. */
     onReplacementChoice?: (messageId: string, providerId: string | null) => void;
     onForkDebate?: (messageId: string, round: number) => void;
+    /** SessionGuard trade counter — rides the context so the log-trade action
+     *  strip can show today's cap usage right next to the Win/Loss buttons. */
+    sessionTradeCount?: { tradesToday: number; maxTradesPerDay: number };
     // Selection Mode Props
     isSelectionMode?: boolean;
     selectedMessageIds?: Set<string>;
