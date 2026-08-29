@@ -124,3 +124,84 @@ export const computeLiquidationBuffer = (
         line: `Liq buffer ${bufferPct.toFixed(1)}% · SL uses ${stopMovePct.toFixed(1)}% of ${liquidationMovePct.toFixed(1)}% to liq`,
     };
 };
+
+// ─── Grade-tiered risk + Kelly advisory (Batch 2) ─────────────────────────────
+
+export interface RiskTier {
+    /** Risk percent the grade scales the base riskPercent to. */
+    riskPercent: number;
+    /** Short card line explaining the tier. */
+    line: string;
+}
+
+/**
+ * Grade-tiered risk: the moderator's setup grade scales the base risk —
+ * A → full base (a verified trader's A-setup runs the stated risk),
+ * B → half, C/D → no-trade guidance (the sizing already reflects a fraction
+ * of 0 via ticket vetoes in most C/D cases; this tier makes the rule explicit
+ * for the card). Deterministic — the app computes, the card displays.
+ */
+export const gradeRiskTier = (
+    grade: TradeAnalysis['grade'],
+    baseRiskPercent: number,
+): RiskTier => {
+    const base = Number.isFinite(baseRiskPercent) && baseRiskPercent > 0 ? baseRiskPercent : 1;
+    if (grade === 'A') return { riskPercent: base, line: `Grade A — full ${base}% risk` };
+    if (grade === 'B') return { riskPercent: base / 2, line: `Grade B — half risk (${(base / 2).toFixed(2)}%)` };
+    if (grade === 'C' || grade === 'D' || grade === 'F') {
+        return { riskPercent: base / 4, line: `Grade ${grade} — quarter risk only (${(base / 4).toFixed(2)}%), treat as no-trade guidance` };
+    }
+    return { riskPercent: base, line: `${base}% risk` };
+};
+
+export interface KellyAdvisory {
+    /** Full-Kelly fraction of equity (0 when history is too thin). */
+    fullKelly: number;
+    /** Quarter- and half-Kelly fractions (the displayed, saner numbers). */
+    quarterKelly: number;
+    halfKelly: number;
+    /** Trades the estimate is built on (wins + losses). */
+    sampleSize: number;
+    /** Advisory line for the ticket sheet; empty when history is too thin. */
+    line: string;
+}
+
+/**
+ * Kelly advisory from journaled history: f* = W − (1−W)/R, where R is the
+ * realized payoff ratio (average win dollars ÷ average loss dollars).
+ * Displayed at quarter/half Kelly with a noisy-edge warning — a small journal
+ * makes Kelly a random number generator, so the advisory only renders with
+ * ≥ 20 closed trades.
+ */
+export const kellyAdvisory = (
+    wins: number,
+    losses: number,
+    avgWinUsd: number,
+    avgLossUsd: number,
+): KellyAdvisory => {
+    const n = wins + losses;
+    if (wins < 1 || losses < 1 || n < 20 || avgWinUsd <= 0 || avgLossUsd <= 0) {
+        return { fullKelly: 0, quarterKelly: 0, halfKelly: 0, sampleSize: n, line: '' };
+    }
+    const w = wins / n;
+    const r = avgWinUsd / avgLossUsd;
+    const full = w - (1 - w) / r;
+    if (full <= 0) {
+        return {
+            fullKelly: full,
+            quarterKelly: 0,
+            halfKelly: 0,
+            sampleSize: n,
+            line: `Journal edge is negative (W=${(w * 100).toFixed(0)}%, R=${r.toFixed(2)}) — Kelly says no size; risk the minimum or paper-trade.`,
+        };
+    }
+    const half = full / 2;
+    const quarter = full / 4;
+    return {
+        fullKelly: full,
+        quarterKelly: quarter,
+        halfKelly: half,
+        sampleSize: n,
+        line: `Kelly f*=${(full * 100).toFixed(1)}% · half ${(half * 100).toFixed(1)}% · quarter ${(quarter * 100).toFixed(1)}% (n=${n}, ${n < 40 ? 'noisy edge — trust the smaller fractions' : 'journal-derived'})`,
+    };
+};

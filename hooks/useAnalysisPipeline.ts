@@ -95,7 +95,8 @@ import { buildLevelCitations } from '../utils/levelEvidence';
 import { enforceUngroundedLevels } from '../utils/ungroundedGate';
 import { rescueSoftAvoid } from '../utils/avoidReason';
 import { applyHybridChartDrift } from '../utils/hybridChartDrift';
-import { computeContractSize } from '../utils/ticketSize';
+import { computeContractSize, gradeRiskTier, kellyAdvisory } from '../utils/ticketSize';
+import { assessSession, formatGuardContextBlock } from '../services/validation/SessionGuardService';
 import { getHarnessSettings } from '../utils/harnessSettings';
 import { beginPromptLane, endPromptLane } from '../services/infrastructure/PromptOverrideService';
 import { buildEnsembleAnalysts, buildAnalystFailureReport, findDuplicateAnalystOutputs, AnalystOutputSample } from '../services/ui/EnsembleAnalystService';
@@ -1757,11 +1758,27 @@ ${reflectionBlock}`
                         });
                     }
                     // ========== END SOFT AVOID RESCUE ==========
+                    // Grade-tiered risk (Batch 2): the moderator's setup grade
+                    // scales the base risk — A full, B half, C/D quarter (the
+                    // no-trade guidance case). Kelly advisory rides the journaled
+                    // history; the session-guard verdict is snapshotted onto the
+                    // analysis so the journal records the state the moderator saw.
+                    const harnessSettingsNow = getHarnessSettings();
+                    const tier = gradeRiskTier(finalAnalysis.grade, harnessSettingsNow.riskPercent);
+                    const guardVerdict = assessSession(loggedTradesRef.current, harnessSettingsNow.equityUsd);
+                    const closedTrades = loggedTradesRef.current.filter(t =>
+                        t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS);
+                    const wins = closedTrades.filter(t => t.outcome === TradeOutcome.WIN);
+                    const losses = closedTrades.filter(t => t.outcome === TradeOutcome.LOSS);
+                    const avg = (xs: typeof closedTrades) => xs.length > 0
+                        ? xs.reduce((s, t) => s + (t.pnlAmount ?? 0), 0) / xs.length
+                        : 0;
+                    const kelly = kellyAdvisory(wins.length, losses.length, avg(wins), avg(losses));
                     const sized = computeContractSize(
                         finalAnalysis,
-                        getHarnessSettings().equityUsd,
+                        harnessSettingsNow.equityUsd,
                         activeConversation?.leverage || DEFAULT_LEVERAGE,
-                        getHarnessSettings().riskPercent,
+                        tier.riskPercent,
                     );
                     finalAnalysis.positionSize = {
                         line: sized.line,
@@ -1769,6 +1786,13 @@ ${reflectionBlock}`
                         fraction: sized.fraction,
                         label: sized.label,
                     };
+                    finalAnalysis.sessionGuard = {
+                        level: guardVerdict.level,
+                        summary: guardVerdict.warnings.length > 0
+                            ? guardVerdict.warnings.join(' ')
+                            : `Trades today: ${guardVerdict.tradesToday} · Day P&L ${guardVerdict.dayPnlUsd >= 0 ? '+' : ''}$${Math.round(guardVerdict.dayPnlUsd)}`,
+                    };
+                    if (kelly.line) finalAnalysis.kellyAdvisory = kelly.line;
                     finalAnalysis.recommendationContract = buildRecommendationContract(finalAnalysis);
                     // ========== END VALIDATION GATE ==========
 
@@ -2759,6 +2783,12 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                             centralizedSnapshot,
                             lossPrimingRows,
                             loggedTrades,
+                            // Session-guard facts (Batch 2): the moderator weighs
+                            // "trader is at the daily-loss limit" when grading.
+                            formatGuardContextBlock(assessSession(
+                                loggedTrades,
+                                getHarnessSettings().equityUsd,
+                            )),
                         );
                     }
 

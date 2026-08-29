@@ -125,6 +125,8 @@ import { ProviderConfig } from './types/provider';
 import { syncFromTradeLog, syncRollingWindowFromTradeLog, initModelPerformanceService } from './services/backtesting/ModelPerformanceService';
 import { saveLensConfig, initAnalystLensService, loadLensConfig, saveEnsembleModelSelection, loadLastModeratorPick, saveLastModeratorPick, EnsembleModelSelection, saveCustomEnsemblePrompt, saveCustomLensPrompts } from './services/ui/AnalystLensService';
 import { isProviderOnCooldown, providerCooldownRemainingMs } from './services/infrastructure/ProviderHealthService';
+import { assessSession, DEFAULT_SESSION_GUARD } from './services/validation/SessionGuardService';
+import { getHarnessSettings } from './utils/harnessSettings';
 import { checkDataIntegrity, createStartupBackup, logIntegrityEvent, runMigrations } from './services/validation/DataIntegrityService';
 import { startAutoBackup, stopAutoBackup, createBackup } from './services/infrastructure/BackupService';
 import { storageService } from './services/infrastructure/StorageService';
@@ -684,6 +686,14 @@ const App: React.FC = () => {
     const regimeProviderStats = useMemo(
         () => computeRegimeProviderStats(loggedTrades, (currentHybridData as any)?.regime?.regime),
         [loggedTrades, currentHybridData]
+    );
+
+    // Session-guard verdict (Batch 2): deterministic day-P&L/trade-cap/streak
+    // state over the journal — drives the composer banner and is injected
+    // into the debate context so the moderator weighs it when grading.
+    const sessionGuard = useMemo(
+        () => assessSession(loggedTrades, getHarnessSettings().equityUsd),
+        [loggedTrades],
     );
 
     // Toggling Trade on no longer warns about missing setup — incomplete
@@ -3434,10 +3444,15 @@ const App: React.FC = () => {
         // side-panel state.
         externalOpenActor,
         externalOpenActorNonce,
+        // SessionGuard trade counter — the log-trade strip chip (Batch 2).
+        sessionTradeCount: sessionGuard ? {
+            tradesToday: sessionGuard.tradesToday,
+            maxTradesPerDay: DEFAULT_SESSION_GUARD.maxTradesPerDay,
+        } : undefined,
     }), [typingMessageState, highlightedAnalysisId, expandedPostMortems, expandedPostMortemImages, savedAnalyses, activeFrameworks, copiedMessageId, modelIdToName, providerNameToId, handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy, handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, confidenceCalibration, handleRetryPostMortem, chatLeverage, autopilotResolutions, handleConfirmAutopilot, handleDismissAutopilot, handleCompareAnalysis, handleViewReasoning, handleReRunAnalysis, handleResumeDebate, handleFollowUpTicket, handleForkDebate, handleToggleWatch, handleReplacementChoice, startTodayReassessment, todayReassessmentInFlight, lensConfig, handleSteerSeat, handleStopSeat, externalOpenActor, externalOpenActorNonce,
         // The inline-approval surface reads these —
         // missing them froze cards on stale drafts/handlers.
-        approvalItems, approvalHandlers]);
+        approvalItems, approvalHandlers, sessionGuard]);
 
     // ... (Rest of component remains unchanged) ...
     const isAnalysisProgressVisible = Boolean(
@@ -3971,6 +3986,12 @@ const App: React.FC = () => {
                 isAnalysisInProgress={isAnalysisInProgress}
                 steeringNotes={steeringNotes}
                 onRemoveSteeringNote={handleRemoveSteeringNote}
+                sessionGuard={{
+                    level: sessionGuard.level,
+                    warnings: sessionGuard.warnings,
+                    tradesToday: sessionGuard.tradesToday,
+                    maxTradesPerDay: DEFAULT_SESSION_GUARD.maxTradesPerDay,
+                }}
                 isPostMortemInProgress={isPostMortemInProgress}
                 setIsLivePostMortemVisible={setIsLivePostMortemVisible}
                 handleCancelAnalysis={handleCancelAll}

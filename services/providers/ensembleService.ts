@@ -2847,6 +2847,10 @@ export const conductRealDebate = async function* (
     similarTrades?: { outcome?: string; keyLesson?: string; coin?: string; direction?: string; timestamp?: string }[],
     /** Full closed-trade log — powers the `recall` notebook desk tool. */
     fullTradesForRecall?: LoggedTrade[],
+    /** Session-guard state block (Batch 2): deterministic day-P&L/trade-cap/
+     *  streak facts the moderator must weigh when grading. Built by
+     *  formatGuardContextBlock in the pipeline. */
+    sessionGuardBlock?: string,
 ): AsyncGenerator<RealDebateTurnEvent, void, unknown> {
 
     if (analysts.length < 2) {
@@ -3147,6 +3151,7 @@ export const conductRealDebate = async function* (
             `${others}\n\n` +
             (levelsSnap ? `**LEVELS SNAPSHOT:**\n${levelsSnap}\n\n` : '') +
             (buildLossPrimingBlock(similarTrades) ? buildLossPrimingBlock(similarTrades) + `\n\n` : '') +
+            (sessionGuardBlock ? sessionGuardBlock + `\n\n` : '') +
             (round === rebuttalStart && seatCharges.has(analyst.provider.name)
                 ? `**MODERATOR'S CHARGE (your assignment this round):** ${seatCharges.get(analyst.provider.name)}\n\n`
                 : '') +

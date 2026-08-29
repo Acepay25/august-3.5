@@ -46,6 +46,14 @@ interface ChatAreaProps {
     /** Notes queued while a debate is running — shown as chips on the composer. */
     steeringNotes?: string[];
     onRemoveSteeringNote?: (index: number) => void;
+    /** Session-guard verdict (Batch 2) — renders the rose banner above the
+     *  composer when any guard (day P&L, trade cap, streak, cooldown) fires. */
+    sessionGuard?: {
+        level: 'clear' | 'notice' | 'warning' | 'standdown';
+        warnings: string[];
+        tradesToday: number;
+        maxTradesPerDay: number;
+    };
     isPostMortemInProgress: boolean;
     setIsLivePostMortemVisible: (val: boolean) => void;
     handleCancelAnalysis: () => void;
@@ -150,6 +158,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     loadingMessage,
     isAnalysisInProgress,
     steeringNotes = [],
+    sessionGuard,
     onRemoveSteeringNote,
     isPostMortemInProgress,
     setIsLivePostMortemVisible,
@@ -696,6 +705,23 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                         )}
                     </div>
                 </div>
+                {sessionGuard && sessionGuard.level !== 'clear' && (
+                    <div className={`status-surface border-t px-4 py-2 sm:px-6 ${
+                        sessionGuard.level === 'standdown'
+                            ? 'border-rose-500/30 bg-rose-500/10'
+                            : sessionGuard.level === 'warning'
+                                ? 'border-amber-500/30 bg-amber-500/10'
+                                : 'border-zinc-700 bg-zinc-900/80'
+                    }`}>
+                        <p className={`text-[11px] font-medium leading-relaxed ${sessionGuard.level === 'standdown' ? 'text-rose-300' : sessionGuard.level === 'warning' ? 'text-amber-300' : 'text-zinc-300'}`}>
+                            <span className="font-bold uppercase tracking-wide">
+                                Session {sessionGuard.level === 'standdown' ? 'stand-down' : sessionGuard.level}
+                            </span>
+                            {' · '}
+                            {sessionGuard.warnings[0] ?? `${sessionGuard.tradesToday}/${sessionGuard.maxTradesPerDay} trades today`}
+                        </p>
+                    </div>
+                )}
                 <ChatInput {...chatInputProps} />
                 </>
             ) : messages.length === 0 && !visibleBot ? (

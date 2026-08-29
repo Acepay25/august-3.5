@@ -7,7 +7,7 @@ import { describeModelCalibration } from '../../utils/avoidReason';
 import { WhyAvoidPanel, WaitForConfirmationBanner } from './WhyAvoidPanel';
 import { getCalibrationDrift } from '../../services/validation/ConfidenceCalibrationService';
 import { citeLevel } from '../../utils/levelEvidence';
-import { computeContractSize, computeLiquidationBuffer } from '../../utils/ticketSize';
+import { computeContractSize, computeLiquidationBuffer, gradeRiskTier } from '../../utils/ticketSize';
 import { getHarnessSettings, saveHarnessSettings } from '../../utils/harnessSettings';
 import { ticketExpiryLine } from '../../utils/paperPnl';
 import { buildTicketSheet } from '../../utils/analysisReport';
@@ -197,9 +197,16 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
 
     const [equityUsd, setEquityUsd] = useState(() => getHarnessSettings().equityUsd);
     const [riskPercent, setRiskPercent] = useState(() => getHarnessSettings().riskPercent);
+    // Grade tier over the user's base risk — the pipeline sizes the actual
+    // verdict through this same tier, so the card's what-if calculator applies
+    // it too (the two lines must never disagree).
+    const tier = useMemo(
+        () => gradeRiskTier(analysis.grade, riskPercent),
+        [analysis.grade, riskPercent],
+    );
     const size = useMemo(
-        () => computeContractSize(analysis, equityUsd, leverage || 1, riskPercent),
-        [analysis, equityUsd, leverage, riskPercent],
+        () => computeContractSize(analysis, equityUsd, leverage || 1, tier.riskPercent),
+        [analysis, equityUsd, leverage, tier.riskPercent],
     );
     const liq = useMemo(
         () => computeLiquidationBuffer(analysis.entryPoints?.[0]?.price, analysis.stopLoss, leverage || 1),
@@ -352,6 +359,9 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
                     {` · ${lev}x`}
                 </p>
                 {size.fraction > 0 && (
+                    <p className="text-xs text-zinc-500">{tier.line}</p>
+                )}
+                {size.fraction > 0 && (
                     <div className="grid grid-cols-2 gap-2">
                         <label className="block text-[11px] text-zinc-500">
                             Balance $
@@ -390,6 +400,25 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
                 )}
                 {size.fraction > 0 && liq && (
                     <p className="text-xs text-zinc-600">{liq.line}</p>
+                )}
+                {/* Leverage guard (Batch 2): liquidation must clear the stop
+                    with margin — a buffer under 1.5× the stop distance is
+                    crypto's #1 account killer. */}
+                {size.fraction > 0 && liq && liq.bufferPct < liq.stopMovePct * 1.5 && (
+                    <p className="status-surface text-xs font-medium text-rose-400">
+                        Leverage guard: liquidation buffer is only {liq.bufferPct.toFixed(1)}% vs a {liq.stopMovePct.toFixed(1)}% stop move — cut leverage so the stop hits BEFORE liquidation.
+                    </p>
+                )}
+                {/* Session-guard verdict the moderator weighed (Batch 2). */}
+                {analysis.sessionGuard && analysis.sessionGuard.level !== 'clear' && (
+                    <p className={`status-surface text-xs font-medium ${analysis.sessionGuard.level === 'standdown' ? 'text-rose-400' : analysis.sessionGuard.level === 'warning' ? 'text-amber-400' : 'text-zinc-300'}`}>
+                        Session {analysis.sessionGuard.level}: {analysis.sessionGuard.summary}
+                    </p>
+                )}
+                {/* Kelly advisory — quarter/half fractions with the noisy-edge
+                    caveat; hidden when the journal is too thin to trust. */}
+                {analysis.kellyAdvisory && size.fraction > 0 && (
+                    <p className="text-xs text-zinc-500">{analysis.kellyAdvisory}</p>
                 )}
 
                 {noTrade ? (

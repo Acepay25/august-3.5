@@ -53,6 +53,7 @@ const TranscriptRow = React.memo(({ message, context }: { message: Message, cont
         onStopSeat,
         onReplacementChoice,
         onForkDebate,
+        sessionTradeCount,
         inlineApprovals,
         onApprovalAllow,
         onApprovalDeny,
@@ -411,6 +412,7 @@ const TranscriptRow = React.memo(({ message, context }: { message: Message, cont
                                     autopilotResolution={autopilotResolutions?.[message.id]}
                                     onLogTrade={context.handleInitiateLogTrade}
                                     onSkipTrade={context.handleInitiateSkipTrade}
+                                    sessionTradeCount={sessionTradeCount}
                                     onConfirmAutopilot={onConfirmAutopilot}
                                     onDismissAutopilot={onDismissAutopilot}
                                     onSelectForProbability={onSelectMessageForProbability}

@@ -174,6 +174,16 @@ export interface TradeAnalysis {
     fraction: number;
     label: 'full' | 'half' | 'none';
   };
+  /**
+   * Session-guard verdict at analysis time (Batch 2): the deterministic
+   * day-P&L / trade-count / streak state the moderator was told to weigh.
+   */
+  sessionGuard?: {
+    level: 'clear' | 'notice' | 'warning' | 'standdown';
+    summary: string;
+  };
+  /** Kelly advisory line (empty string when journal history is too thin). */
+  kellyAdvisory?: string;
 }
 
 /**
