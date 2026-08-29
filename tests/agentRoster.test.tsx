@@ -141,3 +141,45 @@ describe('AgentRosterRail', () => {
         expect(screen.getByText('Trader')).toBeTruthy();
     });
 });
+
+import { FloorRail } from '../components/chat/FloorRail';
+
+describe('FloorRail (chat right rail)', () => {
+    const base = {
+        activeProviderCount: 3,
+        gaugeStats: { tasks: 12, running: 1, shipped: 4, approvals: 0 },
+        approvalItems: [] as import('../utils/approvalInbox').ApprovalItem[],
+        isDebating: false,
+        phase: undefined as string | undefined,
+    };
+
+    it('renders the office cast vertically with the live count', () => {
+        render(<FloorRail {...base} />);
+        const cast = screen.getByTestId('floor-rail-cast');
+        expect(cast.textContent).toContain('Chief');
+        expect(cast.textContent).toContain('Verify');
+        expect(cast.textContent).toContain('3 live');
+    });
+
+    it('surfaces the approval queue under "Needs you"', () => {
+        render(
+            <FloorRail
+                {...base}
+                gaugeStats={{ tasks: 12, running: 1, shipped: 4, approvals: 2 }}
+                approvalItems={[
+                    { id: 'a1', kind: 'autopilot', title: 'TP1 hit on NVDA', detail: 'd', messageId: 'm1' },
+                ]}
+            />,
+        );
+        const needs = screen.getByTestId('floor-rail-needs-you');
+        expect(needs.textContent).toContain('Needs you');
+        expect(needs.textContent).toContain('TP1 hit on NVDA');
+    });
+
+    it('shows the live debate phase while running, idle text otherwise', () => {
+        const { rerender } = render(<FloorRail {...base} />);
+        expect(screen.getByTestId('floor-rail-status').textContent).toContain('Floor idle');
+        rerender(<FloorRail {...base} isDebating phase="Round 2 of 3" />);
+        expect(screen.getByTestId('floor-rail-status').textContent).toContain('Round 2 of 3');
+    });
+});

@@ -12,7 +12,6 @@ import { ArrowUpIcon, ArrowDownIcon, CloseIcon, LoadingIcon, EyeIcon, BrainIcon,
 import HybridDataPanel from '../analysis/HybridDataPanel';
 import ImageViewerModal from '../modals/ImageViewerModal';
 import WorkspaceWelcome, { WorkspaceWelcomeProps } from './WorkspaceWelcome';
-import { CompanyRoom } from '../room/CompanyRoom';
 import { AgentAvatar } from './AgentRosterRail';
 import { threadForProvider } from '../../utils/agentThreads';
 
@@ -121,13 +120,6 @@ interface ChatAreaProps {
     // Analysis Progress (Task UI)
     analysisSteps?: AnalysisStep[];
     isAnalysisActive?: boolean;
-    /** Live task-flow stats for the office header gauges. */
-    gaugeStats?: {
-        tasks: number;
-        running: number;
-        shipped: number;
-        approvals: number;
-    };
     /** Chat-mode 1:1 thread: render only this provider's slice of the
      *  conversation (utils/agentThreads.ts). Null/absent = Team view. */
     visibleAgentId?: string | null;
@@ -207,7 +199,6 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     entryTimingScore,
     onOpenSettings,
     onOpenLiveMarket,
-    gaugeStats,
     visibleAgentId,
     visibleAgentName,
     onInteract,
@@ -459,16 +450,6 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
             onClick={onInteract}
             onTouchStart={onInteract}
         >
-            {/* Autonomous AI Company office — fixed background.
-                Sits at z-0 behind the messages. Renders even when the
-                trader is in the empty state (the room is the home view). */}
-            <CompanyRoom
-                activeProviderCount={
-                    providers.filter(p => p.isEnabled && p.apiKey.trim().length > 0).length
-                }
-                gaugeStats={gaugeStats}
-            />
-
             {/* 1:1 thread header — the agent's identity bar, reference-style. */}
             {visibleAgentId && visibleAgentName && (
                 <div
