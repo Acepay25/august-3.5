@@ -1165,20 +1165,48 @@ const App: React.FC = () => {
         });
     }, [groups, bots, activeThread, confirmDialog, selectTeamThread]);
 
+    // Analyst Lens config handler - updates state and persists to storage.
+    // Defined above the teams block: activating a team switches the lenses
+    // off (lens assignments outrank Team seats in buildEnsembleAnalysts).
+    const handleSetLensConfig = useCallback((newConfig: AnalystLensConfig) => {
+        setLensConfig(newConfig);
+        saveLensConfig(newConfig);
+    }, []);
+
     // ─── Teams: the trader's own harness configurations ────────────────
     // Activating a team points the WHOLE pipeline (debate + hybrid
     // intelligence + trade log) at exactly that team's seats. There is
     // no fixed trio — seats are whatever the team defines (2–5).
+    // Lens assignments take priority over Team slots in
+    // buildEnsembleAnalysts, so switching to a team must also switch
+    // the lenses off — otherwise the lens trio silently runs instead.
     const syncTeamToHarness = useCallback((team: AgentTeam) => {
         const seats = team.seats.filter(s => s.providerId && s.modelId);
         const selection = seats.map(s => ({ providerId: s.providerId, model: s.modelId }));
+        if (lensConfig.enabled) handleSetLensConfig({ ...lensConfig, enabled: false });
         setEnsembleModelSelection(selection);
         saveEnsembleModelSelection(selection);
         if (team.moderator?.providerId && team.moderator.modelId) {
             handleSetModeratorProvider(team.moderator.providerId);
             handleSetModeratorModel(team.moderator.modelId);
         }
-    }, [setEnsembleModelSelection, handleSetModeratorProvider, handleSetModeratorModel]);
+    }, [lensConfig, handleSetLensConfig, setEnsembleModelSelection, handleSetModeratorProvider, handleSetModeratorModel]);
+    // The active team is persisted, but its seats are not — on boot, re-point
+    // the harness at the active team so a reload doesn't silently fall back
+    // to the last Settings selection while the rail still highlights the
+    // team. Runs once providers have loaded (seats reference provider ids).
+    const bootTeamSyncedRef = useRef(false);
+    useEffect(() => {
+        if (bootTeamSyncedRef.current || !providerConfigsLoaded) return;
+        const id = getActiveTeamId();
+        if (!id) { bootTeamSyncedRef.current = true; return; }
+        const team = getTeams().find(t => t.id === id);
+        if (team) {
+            bootTeamSyncedRef.current = true;
+            setActiveTeamIdState(id);
+            syncTeamToHarness(team);
+        }
+    }, [providerConfigsLoaded, syncTeamToHarness]);
     const activateTeam = useCallback((teamId: string) => {
         const team = teams.find(t => t.id === teamId);
         if (!team) return;
@@ -1888,12 +1916,6 @@ const App: React.FC = () => {
             if (!accuracySubMode) setAccuracySubMode('original');
         }
     };
-
-    // Analyst Lens config handler - updates state and persists to storage
-    const handleSetLensConfig = useCallback((newConfig: AnalystLensConfig) => {
-        setLensConfig(newConfig);
-        saveLensConfig(newConfig);
-    }, []);
 
     // Ordinary ensemble model selection (Lenses off) handler — persists the
     // picked models that drive the cards and the debate (a trader team
