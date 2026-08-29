@@ -73,6 +73,7 @@ const SavedAnalysesGallery = React.lazy(() => import('./components/dashboards/Sa
 const MistakeWarningBanner = React.lazy(() => import('./components/shared/MistakeWarningBanner'));
 const DeskScene = React.lazy(() => import('./components/desk/DeskScene'));
 const AgentRosterRail = React.lazy(() => import('./components/chat/AgentRosterRail'));
+const FloorRail = React.lazy(() => import('./components/chat/FloorRail'));
 const FloorScene = React.lazy(() => import('./components/floor/FloorScene'));
 import CommandPalette, { PaletteAction } from './components/shared/CommandPalette';
 import AnalysisProgress from './components/analysis/AnalysisProgress';
@@ -3818,13 +3819,27 @@ const App: React.FC = () => {
                 entryTimingScore={currentEntryTimingScore}
                 onOpenSettings={(tab) => { setSettingsInitialTab(tab || 'models'); setIsSettingsMenuVisible(true); }}
                 onOpenLiveMarket={handleOpenLiveMarket}
-                gaugeStats={gaugeStats}
                 visibleAgentId={activeAgentId}
                 visibleAgentName={activeAgentId ? providerConfigs.find(p => p.id === activeAgentId)?.name ?? null : null}
                 homeDashboard={homeDashboard}
                 onInteract={handleInteract}
             />
                 </main>
+
+                {/* Chat mode right rail — the office cast vertical beside the
+                    conversation (Hermes-style pane; replaces the old fixed
+                    office strip at the bottom of the chat). */}
+                {uiMode === 'chat' && (
+                    <React.Suspense fallback={null}>
+                        <FloorRail
+                            activeProviderCount={readyProviders.length}
+                            gaugeStats={gaugeStats}
+                            approvalItems={approvalItems}
+                            isDebating={isAnalysisInProgress || isPostMortemInProgress}
+                            phase={deskScenePhase}
+                        />
+                    </React.Suspense>
+                )}
 
                 {/* Desktop activity card: float progress over the
                     right side so the conversation keeps its width while a run
