@@ -15,7 +15,7 @@ import React from 'react';
 import { MessageRole } from '../../types/enums';
 import { Message } from '../../types/message';
 import { ProviderConfig } from '../../types/provider';
-import { buildGridForRole, colorForToken, PIXEL_GRID_H, PIXEL_GRID_W, roleForName } from '../desk/pixelAvatars';
+import { buildGridForRole, colorForToken, PIXEL_GRID_H, PIXEL_GRID_W, ROLE_ACCENTS, roleForName } from '../desk/pixelAvatars';
 import {
     AgentThreadOpenedMap,
     previewTextFor,
@@ -46,33 +46,44 @@ const formatRelative = (iso: string | null): string => {
     return new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric' });
 };
 
-/** Tiny pixel avatar (16×20 grid at 1.5px) — no seat chrome, no button. */
-const MiniAvatar: React.FC<{ name: string; live?: boolean }> = ({ name, live }) => {
+/**
+ * AgentAvatar — the roster's contact-style avatar: a disc tinted with
+ * the seat's role accent (the same palette the pixel seats use) with
+ * the pixel figure on top, plus a live pip. Exported so the thread
+ * header in ChatArea can reuse the exact same identity mark.
+ */
+export const AgentAvatar: React.FC<{ name: string; live?: boolean; size?: number }> = ({ name, live, size = 40 }) => {
     const role = roleForName(name);
     const grid = React.useMemo(() => buildGridForRole(role, 'idle'), [role]);
-    const cell = 1.5;
+    const cell = size / 26;
     return (
-        <span className="relative block shrink-0" aria-hidden="true" style={{ width: PIXEL_GRID_W * cell, height: PIXEL_GRID_H * cell }}>
-            {grid.map((row, r) =>
-                row.split('').map((c, ci) => {
-                    if (c === '.') return null;
-                    return (
-                        <span
-                            key={`${r}-${ci}`}
-                            style={{
-                                position: 'absolute',
-                                left: ci * cell,
-                                top: r * cell,
-                                width: cell,
-                                height: cell,
-                                background: colorForToken(c as Parameters<typeof colorForToken>[0], role),
-                            }}
-                        />
-                    );
-                }),
-            )}
+        <span
+            className="relative flex shrink-0 items-center justify-center rounded-full"
+            style={{ width: size, height: size, backgroundColor: ROLE_ACCENTS[role].T }}
+            aria-hidden="true"
+        >
+            <span className="relative block" style={{ width: PIXEL_GRID_W * cell, height: PIXEL_GRID_H * cell }}>
+                {grid.map((row, r) =>
+                    row.split('').map((c, ci) => {
+                        if (c === '.') return null;
+                        return (
+                            <span
+                                key={`${r}-${ci}`}
+                                style={{
+                                    position: 'absolute',
+                                    left: ci * cell,
+                                    top: r * cell,
+                                    width: cell,
+                                    height: cell,
+                                    background: colorForToken(c as Parameters<typeof colorForToken>[0], role),
+                                }}
+                            />
+                        );
+                    }),
+                )}
+            </span>
             {live && (
-                <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-zinc-900 bg-emerald-400" />
             )}
         </span>
     );
@@ -94,7 +105,7 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
         [providers, q],
     );
 
-    const rowBase = 'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors';
+    const rowBase = 'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors';
     const rowActive = 'bg-zinc-800 text-zinc-100';
     const rowIdle = 'text-zinc-300 hover:bg-zinc-800/50';
 
@@ -146,17 +157,17 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
                             data-active={selection.kind === 'team' ? '1' : '0'}
                             className={`${rowBase} ${selection.kind === 'team' ? rowActive : rowIdle}`}
                         >
-                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/10 bg-zinc-800 text-[9px] font-bold uppercase tracking-wider text-zinc-300">
+                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-zinc-800 text-[10px] font-bold uppercase tracking-wider text-zinc-300">
                                 Team
                             </span>
                             <span className="min-w-0 flex-1">
                                 <span className="flex items-baseline gap-2">
-                                    <span className="truncate text-[13px] font-semibold">Team</span>
-                                    <span className="ml-auto shrink-0 text-[10px] text-zinc-500">
+                                    <span className="truncate text-[14px] font-semibold">Team</span>
+                                    <span className="ml-auto shrink-0 text-[11px] text-zinc-500">
                                         {messages.length > 0 ? formatRelative(messages[messages.length - 1]?.createdAt ?? null) : ''}
                                     </span>
                                 </span>
-                                <span className="mt-0.5 block truncate text-[11px] text-zinc-500">
+                                <span className="mt-0.5 block truncate text-[12px] text-zinc-500">
                                     {messages.length > 0
                                         ? previewTextFor(messages[messages.length - 1])
                                         : 'Debates and team analysis'}
@@ -183,15 +194,15 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
                                     data-active={active ? '1' : '0'}
                                     className={`${rowBase} ${active ? rowActive : rowIdle}`}
                                 >
-                                    <MiniAvatar name={p.name} live={p.isEnabled && p.apiKey.trim().length > 0} />
+                                    <AgentAvatar name={p.name} live={p.isEnabled && p.apiKey.trim().length > 0} />
                                     <span className="min-w-0 flex-1">
                                         <span className="flex items-baseline gap-2">
-                                            <span className="truncate text-[13px] font-semibold">{p.name}</span>
-                                            <span className="ml-auto shrink-0 text-[10px] text-zinc-500">
+                                            <span className="truncate text-[14px] font-semibold">{p.name}</span>
+                                            <span className="ml-auto shrink-0 text-[11px] text-zinc-500">
                                                 {formatRelative(last?.createdAt ?? null)}
                                             </span>
                                         </span>
-                                        <span className="mt-0.5 block truncate text-[11px] text-zinc-500">
+                                        <span className="mt-0.5 block truncate text-[12px] text-zinc-500">
                                             {last ? previewTextFor(last) : 'No messages yet'}
                                         </span>
                                     </span>
@@ -208,14 +219,14 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
                 </ul>
             </nav>
 
-            {/* Trader identity footer */}
+            {/* Trader identity footer — reference-style profile row. */}
             <div className="border-t border-white/[0.06] p-3">
-                <div className="flex items-center gap-2.5">
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-[10px] font-bold uppercase text-zinc-300">
+                <div className="flex items-center gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-[12px] font-bold uppercase text-zinc-300">
                         {(activeUsername || 'You').slice(0, 2)}
                     </span>
                     <span className="min-w-0">
-                        <span className="block truncate text-[13px] font-semibold text-zinc-200">
+                        <span className="block truncate text-[14px] font-semibold text-zinc-200">
                             {activeUsername || 'You'}
                         </span>
                         <span className="block text-[10px] uppercase tracking-widest text-zinc-500">
