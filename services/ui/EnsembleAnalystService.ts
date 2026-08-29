@@ -14,6 +14,7 @@ import { ProviderConfig } from '../../types/provider';
 import { AnalystLensConfig, AnalystRole, AnalystRoleAssignment } from '../../types';
 import { ANALYST_ROLE_DEFINITIONS, EnsembleModelSelection } from './AnalystLensService';
 import { formatModelDisplayName } from '../../utils/providerUtils';
+import { isProviderOnCooldown } from '../infrastructure/ProviderHealthService';
 
 /** One ensemble participant — a model-level entry (several per provider possible). */
 export interface EnsembleAnalystEntry {
@@ -86,12 +87,15 @@ export const buildEnsembleAnalysts = (
 
     // A role is "missing" when it has no assigned provider, its provider is
     // NOT ready (disabled / no API key — a role on a disabled provider used
-    // to count as "complete", so the run silently launched 2 analysts), or
-    // its resolved model no longer exists anywhere on that provider.
+    // to count as "complete", so the run silently launched 2 analysts), its
+    // resolved model no longer exists anywhere on that provider, or the
+    // provider is benched on the P4 error cooldown. A benched lens provider
+    // must disable the lens branch (falling back to Team slots / ensemble
+    // defaults), NOT silently shrink the lens roster mid-branch.
     const missingAnalystRoles = REQUIRED_ANALYST_ROLES.filter(role => {
         const assignment = assignmentForRole(role);
         const provider = providerConfigs.find(item => item.id === assignment?.assignedProvider);
-        const providerReady = !!provider && provider.isEnabled && provider.apiKey.trim().length > 0;
+        const providerReady = !!provider && provider.isEnabled && provider.apiKey.trim().length > 0 && !isProviderOnCooldown(provider.id);
         return !assignment?.assignedProvider || !providerReady || resolveAssignedModel(assignment, provider) === null;
     });
 
@@ -117,8 +121,16 @@ export const buildEnsembleAnalysts = (
             return resolved ? { ...a, assignedModel: resolved } : a;
         });
 
-    const ready = (id: string | null | undefined): ProviderConfig | undefined =>
-        providerConfigs.find(c => c.id === id && c.isEnabled && c.apiKey.trim().length > 0);
+    const ready = (id: string | null | undefined): ProviderConfig | undefined => {
+        const c = providerConfigs.find(p => p.id === id && p.isEnabled && p.apiKey.trim().length > 0);
+        // Cooldown consult (P4): a provider with ≥3 persisted errors in the
+        // last 15 min is benched for 10 min — it loses seats here instead of
+        // sabotaging every run while it keeps failing. A bench that empties
+        // the roster falls through to the same "not enough analysts" path as
+        // a disabled provider, which the pipeline already surfaces.
+        if (c && isProviderOnCooldown(c.id)) return undefined;
+        return c;
+    };
 
     const toEntry = (c: ProviderConfig, model: string, name: string): EnsembleAnalystEntry => ({
         config: { ...c, selectedModel: model },
@@ -171,7 +183,7 @@ export const buildEnsembleAnalysts = (
             });
         } else {
             analysts = providerConfigs
-                .filter(c => c.isEnabled && c.apiKey.trim().length > 0)
+                .filter(c => c.isEnabled && c.apiKey.trim().length > 0 && !isProviderOnCooldown(c.id))
                 .flatMap(c => {
                     const configuredModels = c.ensembleModels?.filter(model => c.models.includes(model)).slice(0, 3) || [];
                     if (configuredModels.length === 0 && c.selectedModel) configuredModels.push(c.selectedModel);
@@ -185,7 +197,7 @@ export const buildEnsembleAnalysts = (
         }
     } else {
         analysts = providerConfigs
-            .filter(c => c.isEnabled && c.apiKey.trim().length > 0)
+            .filter(c => c.isEnabled && c.apiKey.trim().length > 0 && !isProviderOnCooldown(c.id))
             .flatMap(c => (c.selectedModel ? [toEntry(c, c.selectedModel, c.name)] : []))
             .slice(0, 3);
     }
