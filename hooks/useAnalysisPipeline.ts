@@ -2601,11 +2601,11 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                             }
                         } catch { /* best-effort */ }
                         if (hybridDataInjection) {
-                            centralizedSnapshot = hybridDataInjection.slice(0, 1800);
+                            centralizedSnapshot = hybridDataInjection.slice(0, 2400);
                         } else if (freshHybridData) {
                             try {
                                 const { generateHybridPromptInjection } = await import('../services/analysis/HybridIntelligenceService');
-                                centralizedSnapshot = generateHybridPromptInjection(freshHybridData as any).slice(0, 1800);
+                                centralizedSnapshot = generateHybridPromptInjection(freshHybridData as any).slice(0, 2400);
                             } catch { /* ignore */ }
                         }
                         // The protocol lane is hashed from THIS
