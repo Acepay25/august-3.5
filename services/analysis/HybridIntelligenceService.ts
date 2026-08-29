@@ -64,6 +64,7 @@ import {
     buildSmcStructureRead,
     formatSmcStructureBlock,
 } from '../../utils/smcStructure';
+import { fundingCarrySnapshotLine } from '../../utils/trustSurface';
 
 import { getSessionContext, SessionContext } from '../infrastructure/SessionService';
 import { ConfidenceCalibration } from '../../types';
@@ -960,6 +961,7 @@ export const generateHybridPromptInjection = (data: HybridDataPacket, options?: 
             : 'Sell walls: none',
         `Liquidations (1h)`,
         formatLiquidationsBlock(data.liquidations),
+        fundingCarrySnapshotLine(data.fundingRate),
         `### Volume / Ichimoku / VWAP / momentum`,
         mdTable(
             ['RVOL', 'OBV', 'OBV div', 'CVD', 'POC', 'vs POC', 'VA', 'VA pos', 'Bias'],

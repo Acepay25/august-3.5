@@ -8,6 +8,7 @@ import { WhyAvoidPanel, WaitForConfirmationBanner } from './WhyAvoidPanel';
 import { getCalibrationDrift } from '../../services/validation/ConfidenceCalibrationService';
 import { citeLevel } from '../../utils/levelEvidence';
 import { computeContractSize, computeLiquidationBuffer, gradeRiskTier } from '../../utils/ticketSize';
+import { fundingCarryCost } from '../../utils/trustSurface';
 import { getHarnessSettings, saveHarnessSettings } from '../../utils/harnessSettings';
 import { ticketExpiryLine } from '../../utils/paperPnl';
 import { buildTicketSheet } from '../../utils/analysisReport';
@@ -212,6 +213,12 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
         () => computeLiquidationBuffer(analysis.entryPoints?.[0]?.price, analysis.stopLoss, leverage || 1),
         [analysis.entryPoints, analysis.stopLoss, leverage],
     );
+    // Funding carry relative to the verdict direction (Batch 7) — empty when
+    // funding wasn't snapshotted or the direction is neutral.
+    const carry = useMemo(
+        () => fundingCarryCost(analysis.direction, analysis.fundingRate),
+        [analysis.direction, analysis.fundingRate],
+    );
     const [nowMs, setNowMs] = useState(() => Date.now());
     const [followUp, setFollowUp] = useState('');
     useEffect(() => {
@@ -270,6 +277,16 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
                 )}
                 {rr !== undefined && (
                     <span className="text-xs tabular-nums text-zinc-300">R:R 1:{rr.toFixed(1)}</span>
+                )}
+                {/* Amendment stamp (Batch 7 §5b): a revised plan is an
+                    explicit version with a recorded diff, never a silent edit. */}
+                {(analysis.planVersion ?? 1) > 1 && (
+                    <span
+                        className="inline-flex items-center rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-300"
+                        title={analysis.planDiff ? `Amended: ${analysis.planDiff}` : 'This plan amends an earlier published version'}
+                    >
+                        v{analysis.planVersion} amended
+                    </span>
                 )}
                 {validityLine && <span className="text-xs text-zinc-500">{validityLine}</span>}
                 {gateLine && <span className="text-xs text-zinc-500">{gateLine}</span>}
@@ -419,6 +436,12 @@ const TradingSignalCard: React.FC<TradingSignalCardProps> = ({
                     caveat; hidden when the journal is too thin to trust. */}
                 {analysis.kellyAdvisory && size.fraction > 0 && (
                     <p className="text-xs text-zinc-500">{analysis.kellyAdvisory}</p>
+                )}
+                {/* Funding carry (Batch 7): the 8h rate framed relative to
+                    THIS verdict's direction — a long pays when funding is
+                    positive, a short receives, and it compounds on the hold. */}
+                {size.fraction > 0 && carry.line && (
+                    <p className="text-xs text-zinc-500">{carry.line}</p>
                 )}
 
                 {noTrade ? (

@@ -1,4 +1,5 @@
 import { DebateRunEvent, DebateTurn, Message, TradeAnalysis } from '../types';
+import { FINANCIAL_ADVICE_DISCLAIMER, sweepDeterministicClaims } from './trustSurface';
 
 const esc = (value: string): string =>
     value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -87,7 +88,9 @@ export const buildAnalysisReportMarkdown = (
 /** Phone-sized execution sheet — levels, size, validity, cites. No debate dump. */
 export const buildTicketSheet = (analysis: TradeAnalysis): string => {
     const cites = (analysis.levelCitations || []).map(c => `${c.label} ${c.price} (${c.sourceId})`).join('\n');
-    return [
+    // Rendered-copy sweep (Batch 7): soften any deterministic claim that
+    // survived the prompt-side ban and close with the standing framing.
+    const raw = [
         `${analysis.coinName || 'Ticket'} · ${analysis.direction || '—'} · ${analysis.confidence || '—'}`,
         `Entry ${analysis.entryPoints?.[0]?.price || '—'}  SL ${analysis.stopLoss || '—'}  TP ${(analysis.takeProfit || []).map(t => t.price).join(', ') || '—'}`,
         analysis.positionSize?.line ? `Size ${analysis.positionSize.line}` : '',
@@ -97,6 +100,8 @@ export const buildTicketSheet = (analysis: TradeAnalysis): string => {
         cites ? `Cites\n${cites}` : '',
         (analysis.invalidationCriteria || []).map(i => `Invalidate ${i.level} — ${i.condition}`).join('\n'),
     ].filter(Boolean).join('\n');
+    const swept = sweepDeterministicClaims(raw);
+    return `${swept.text}\n${FINANCIAL_ADVICE_DISCLAIMER}`;
 };
 
 export const buildAnalysisReportHtml = (message: Pick<Message, 'analysis' | 'debateTurns' | 'debateRunLog'> & { text?: string }): string => {

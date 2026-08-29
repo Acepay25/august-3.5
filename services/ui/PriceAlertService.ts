@@ -17,6 +17,7 @@ import { Capacitor } from '@capacitor/core';
 import { TradeAnalysis } from '../../types';
 import { getPreferenceObject, setPreferenceObject, PREF_KEYS } from '../infrastructure/PreferencesService';
 import { parsePrice as canonicalParsePrice } from '../../utils/analysisUtils';
+import { QuietHoursConfig, DEFAULT_QUIET_HOURS, isWithinQuietHours } from '../../utils/quietHours';
 
 export interface PriceAlert {
     id: string;
@@ -69,6 +70,13 @@ class PriceAlertServiceClass {
     // (setup watches, live-price refresh). Merged into the WebSocket stream
     // list and the polling loop so ticks reach emitPriceTick for them.
     private trackedSymbols: Map<string, number> = new Map();
+    // Quiet hours (Batch 7): alerts inside the silent window QUEUE instead of
+    // notifying — sleep protection for a 24/7 market. The in-app subscriber
+    // callback still fires (the transcript shows the trigger); only the
+    // notification is deferred until the window ends.
+    private quietHours: QuietHoursConfig = DEFAULT_QUIET_HOURS;
+    private pendingQuiet: AlertTrigger[] = [];
+    private static readonly MAX_PENDING_QUIET = 25;
 
     constructor() {
         // P1-10: Wire native app lifecycle (pause/resume) so we stop the
@@ -140,7 +148,41 @@ class PriceAlertServiceClass {
      */
     async init(): Promise<void> {
         await this.loadAlerts();
+        await this.loadQuietHours();
         await this.registerNativeLifecycle();
+    }
+
+    /**
+     * Quiet hours (Batch 7): load the silent window, expose get/set for the
+     * AlertManager settings row. Setting a window that is currently open does
+     * NOT flush (we're inside it); closing/shortening one flushes what queued.
+     */
+    private async loadQuietHours(): Promise<void> {
+        try {
+            const cfg = await getPreferenceObject<QuietHoursConfig>(PREF_KEYS.QUIET_HOURS);
+            if (cfg && typeof cfg.enabled === 'boolean'
+                && Number.isFinite(cfg.startHour) && Number.isFinite(cfg.endHour)) {
+                this.quietHours = cfg;
+            }
+        } catch { /* keep defaults */ }
+    }
+
+    getQuietHours(): QuietHoursConfig {
+        return { ...this.quietHours };
+    }
+
+    setQuietHours(cfg: QuietHoursConfig): void {
+        this.quietHours = cfg;
+        setPreferenceObject(PREF_KEYS.QUIET_HOURS, cfg).catch(e =>
+            console.warn('[PriceAlertService] Quiet hours save failed:', e)
+        );
+        if (!isWithinQuietHours(cfg)) this.flushQuietQueue();
+    }
+
+    private flushQuietQueue(): void {
+        if (this.pendingQuiet.length === 0) return;
+        const queued = this.pendingQuiet.splice(0, this.pendingQuiet.length);
+        for (const t of queued) this.sendNotification(t);
     }
 
     /**
@@ -446,6 +488,11 @@ class PriceAlertServiceClass {
         // Fan out the tick to external feed subscribers (setup watches etc.)
         this.emitPriceTick(symbol, currentPrice);
 
+        // The window may have just ended — deliver anything that queued.
+        if (this.pendingQuiet.length > 0 && !isWithinQuietHours(this.quietHours)) {
+            this.flushQuietQueue();
+        }
+
         for (const alert of this.alerts.values()) {
             if (!alert.enabled || alert.symbol !== symbol) continue;
 
@@ -529,6 +576,17 @@ class PriceAlertServiceClass {
                 console.error('[PriceAlertService] Subscriber error:', e);
             }
         });
+
+        // Quiet hours: queue instead of notifying — flushed when the window
+        // ends (next tick or an explicit settings change). Subscribers above
+        // already fired, so the in-app transcript is never silenced.
+        if (isWithinQuietHours(this.quietHours)) {
+            this.pendingQuiet.push(trigger);
+            if (this.pendingQuiet.length > PriceAlertServiceClass.MAX_PENDING_QUIET) {
+                this.pendingQuiet.splice(0, this.pendingQuiet.length - PriceAlertServiceClass.MAX_PENDING_QUIET);
+            }
+            return;
+        }
 
         // Send push notification
         this.sendNotification(trigger);
