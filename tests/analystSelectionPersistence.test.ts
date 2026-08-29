@@ -31,14 +31,16 @@ describe('Analyst model selection persistence (save → load round-trip)', () =>
         expect(loadEnsembleModelSelection()).toEqual(selection);
     });
 
-    it('caps the ensemble selection at 3 entries on save', () => {
+    it('caps the ensemble selection at 5 entries on save (a trader team seats 2–5)', () => {
         saveEnsembleModelSelection([
             { providerId: 'a', model: 'm1' },
             { providerId: 'b', model: 'm2' },
             { providerId: 'c', model: 'm3' },
             { providerId: 'd', model: 'm4' },
+            { providerId: 'e', model: 'm5' },
+            { providerId: 'f', model: 'm6' },
         ]);
-        expect(loadEnsembleModelSelection()).toHaveLength(3);
+        expect(loadEnsembleModelSelection()).toHaveLength(5);
     });
 
     it('mirrors the ensemble selection into localStorage for the sync loader', () => {

@@ -54,19 +54,23 @@ describe('loadEnsembleModelSelection', () => {
     expect(loadEnsembleModelSelection()).toEqual([]);
   });
 
-  it('filters malformed entries and caps the selection at 3', () => {
+  it('filters malformed entries and caps the selection at 5 (a trader team seats 2–5)', () => {
     localStorage.setItem('ensemble_model_selection', JSON.stringify([
       { providerId: 'gemini', model: 'm1' },
       { providerId: 'deepseek', model: 'm2' },
       { bad: 'entry' },
       { providerId: 'zhipu', model: 'm3' },
       { providerId: 'groq', model: 'm4' },
+      { providerId: 'openrouter', model: 'm5' },
+      { providerId: 'kilocode', model: 'm6' },
     ]));
 
     const selection = loadEnsembleModelSelection();
-    expect(selection).toHaveLength(3);
+    expect(selection).toHaveLength(5);
     expect(selection[0]).toEqual({ providerId: 'gemini', model: 'm1' });
     expect(selection[1]).toEqual({ providerId: 'deepseek', model: 'm2' });
     expect(selection[2]).toEqual({ providerId: 'zhipu', model: 'm3' });
+    expect(selection[3]).toEqual({ providerId: 'groq', model: 'm4' });
+    expect(selection[4]).toEqual({ providerId: 'openrouter', model: 'm5' });
   });
 });

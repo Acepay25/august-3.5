@@ -217,14 +217,16 @@ export function saveLensConfig(config: AnalystLensConfig): void {
 // =============================================================================
 
 /**
- * The plain "pick 3 models for the debate" selection shown in the chat input
+ * The plain "pick models for the debate" selection shown in the chat input
  * when Analyst Lenses are disabled. Mirrors lens role assignments: the chosen
- * models become the source of truth for the three cards and the debate.
+ * models become the source of truth for the cards and the debate. A trader
+ * team seats 2–5 analysts (3 was the legacy expert trio).
  */
 export type EnsembleModelSelection = { providerId: string; model: string }[];
 
 /**
- * Load the ordinary ensemble model selection (max 3 entries).
+ * Load the ordinary ensemble model selection (max 5 entries — a trader
+ * team seats 2–5 analysts; 3 was the legacy expert trio).
  * Web reads localStorage directly (matching loadLensConfig); native reads go
  * through initAnalystLensService's Preferences sync in App.tsx.
  */
@@ -236,7 +238,7 @@ export function loadEnsembleModelSelection(): EnsembleModelSelection {
             if (Array.isArray(parsed)) {
                 return parsed
                     .filter((e: any) => e && typeof e.providerId === 'string' && typeof e.model === 'string')
-                    .slice(0, 3);
+                    .slice(0, 5);
             }
         }
     } catch (e) {
@@ -275,9 +277,10 @@ export function saveLastModeratorPick(pick: LastModeratorPick): void {
     } catch { /* ignore */ }
 }
 
-/** Persist the ordinary ensemble model selection (capped at 3 entries). */
+/** Persist the ordinary ensemble model selection (capped at 5 entries —
+ *  a trader team seats 2–5 analysts). */
 export function saveEnsembleModelSelection(selection: EnsembleModelSelection): void {
-    setPreferenceObject(PREF_KEYS.ENSEMBLE_MODEL_SELECTION, selection.slice(0, 3)).catch(e =>
+    setPreferenceObject(PREF_KEYS.ENSEMBLE_MODEL_SELECTION, selection.slice(0, 5)).catch(e =>
         console.warn('[AnalystLens] Failed to save ensemble model selection:', e)
     );
     // localStorage mirror — same rationale as saveLensConfig: the sync load
@@ -285,7 +288,7 @@ export function saveEnsembleModelSelection(selection: EnsembleModelSelection): v
     // native (Capacitor) session sees an empty picker until the App startup
     // sync restores from Preferences.
     try {
-        localStorage.setItem(PREF_KEYS.ENSEMBLE_MODEL_SELECTION, JSON.stringify(selection.slice(0, 3)));
+        localStorage.setItem(PREF_KEYS.ENSEMBLE_MODEL_SELECTION, JSON.stringify(selection.slice(0, 5)));
     } catch (e) {
         console.warn('[AnalystLens] Failed to mirror ensemble model selection to localStorage:', e);
     }

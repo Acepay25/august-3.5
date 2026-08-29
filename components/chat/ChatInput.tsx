@@ -186,7 +186,13 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
             };
             return LENS_ROSTER_ROLES.map(r => map[r]).filter(Boolean);
         }
-        return (ensembleModelSelection || []).slice(0, 3).map((_, i) => ['@Macro', '@Technical', '@Risk'][i]).filter(Boolean) as string[];
+        // Team mode: one chip per live seat (a trader team seats 2–5),
+        // labeled by seat — @Macro/@Technical/@Risk for the first three,
+        // then @Seat4/@Seat5. The label is a steer hint, not an id: seat
+        // steering matches by analyst name at run time.
+        return (ensembleModelSelection || []).slice(0, 5).map((_, i) =>
+            ['@Macro', '@Technical', '@Risk'][i] ?? `@Seat${i + 1}`,
+        ).filter(Boolean) as string[];
     }, [isEnsembleEnabled, lensConfig.enabled, ensembleModelSelection, botMentionNames]);
     React.useEffect(() => {
         const handleEscape = (event: KeyboardEvent) => {
