@@ -10,6 +10,9 @@ v2 folds in (1) the companion six-phase "Debate Quality + Trader-Workflow" plan
 (Part 16 — written for a Python brain backend; ported to august's chassis, rulings
 on its open questions included). Every file:line anchor below was verified in this
 repo on 2026-08-29.
+v3 (same day) adds two items drawn from reviewing how the ZCode agent harness
+itself manages memory and skills: the harness-lessons store (§1.1 P7) and
+index-layer memory injection (§4.7).
 
 ---
 
@@ -80,6 +83,26 @@ number get cut at review.
 - **P5** applied-wire audit label per call into runStats, surfaced in DebateRunLog.
 - **P6** known-answer probe per provider + wire-shape assertions in debateFlow
   tests (200-accepted ≠ honored — behavior-prove every knob).
+- **P7 harness-lessons store** (new in v3 — the ZCode self-improvement pattern
+  applied to the harness's own knobs). Trading-skill memory already exists; what
+  has NO home is lessons about *harness/model behavior*: "seat fabricated a
+  funding number," "thinking-default models burn tokens on 60-word
+  clarifications," "provider X 200-accepts but ignores reasoning_effort," "seat
+  regurgitates veto text as if it were its own reasoning." Small typed store
+  (`services/learning/harnessLessons.ts`, same file-backed chassis as skills)
+  with fields {kind: fabrication|wire|injection|budget, scope, provider?,
+  pattern, lesson, evidenceId} — written by P5's audit labels, P6's probes, and
+  the §4.6 episode extractor, read by roster build, reasoningControls, and the
+  snapshot assembler (e.g. a wire lesson can pin a provider to thinking-off
+  until re-probed). Scoping rule (user correction, 2026-08-29): ANY model can
+  run on this harness — the roster is fully user-configured — so lessons key on
+  CAPABILITY CLASSES (`thinkingDefault`, wire format, jsonMode, vision), never
+  on provider identity; the provider id is evidence provenance only. A
+  provider-narrow lesson ("GLM thinks by default") would silently fail to cover
+  the next thinking-default model, repeating the hardcoded-constant mistake
+  the provider migration already removed. Class is the scope, provider is the
+  footnote. This is the memory layer that makes P1-P6 itself self-improving
+  instead of a one-time fix. Cheap, ships with Batch 1.
 
 ### 1.2 Structure changes
 - **a) Context-match first.** The debate's first exchange settles regime
@@ -285,6 +308,15 @@ episodes only (≤5%); normalized failure fingerprints that dedupe, count recurr
 and prove whether a shipped skill actually worked; three distill actions classified
 before drafting; improve-first; everything human-gated with provenance.**
 
+Scope discipline (the strong version of the concept): **outcome-linked episodes,
+not raw conversations.** Raw conversation review mines fluency — the judge rewards
+well-argued text, not correct text. Episodes must resolve against ground truth:
+closed-trade post-mortems (TP-vs-SL), skill-eval streaks, preflight NO CLAIM seats,
+veto misfires, user corrections. A general assistant persists lessons because
+someone judged them useful; august can persist them because price resolved. The
+outcome gate IS the safety story — a trading harness can and should run a stricter
+loop than a general one.
+
 August's episode substrate (different sources, same shape):
 - closed-trade post-mortems with `rootCauseClass` (types/trade.ts:34) — the
   failure+recovery window
@@ -366,6 +398,29 @@ recurrence → revision proposal appears).
 6. Episode retention: **180 days** default, configurable (fingerprints keep
    counts, not transcripts — disk stays flat).
 
+### 4.7 Index-layer memory injection (new in v3 — the ZCode memory pattern)
+
+August currently injects the whole GlobalMemory JSON into every seat's prompt. The
+agent-harness pattern that scales better: a **tiny always-loaded index + full
+content fetched on demand**. ZCode loads a one-line-per-memory index every session
+and reads full files only when relevant; august's equivalent of the fetch path is
+already built — the desk tools (`recall`, `recall_chat`) are exactly an on-demand
+memory fetch. The change is snapshot-side: inject a compact index (skill titles +
+one-line summaries + status), and let seats pull detail via the recall tool when a
+setup actually matches. Tokens saved scale with library size; salience goes UP
+because each seat sees a menu, not a wall.
+
+Migration constraint (from the six-phase review): `familyPerformance` rides inside
+the verbatim GlobalMemory injection and is genuinely read by the model — it must
+stay injected (or move to a compact computed-stats block), not silently drop.
+Snapshot-cap discipline (§2) applies: the index replaces bulk body text, so the
+~2400-char cap stays meaningful.
+
+Trade-off to note: a seat that never calls recall sees only summaries. That is
+acceptable — today's wall-of-JSON has the same failure mode with none of the token
+savings — but the enforceCitedVerdict must-quote rule should extend naturally:
+citing a skill in the verdict implies its detail was pulled.
+
 ## 5. Human command & trust surface
 
 - a) **Pre-read capture (cognitive forcing, opt-in training mode)** — before the
@@ -430,9 +485,10 @@ recurrence → revision proposal appears).
 ## 7. Implementation batches (each gated: typecheck + tests + build; one plain
 commit per batch)
 
-1. **Wire layer** (P1-P6) — reasoningControls.ts, effort schedule, Claude gate
-   fix, persisted-error cooldown, runStats wire audit; debateFlow wire-shape
-   assertions. Smallest, highest signal-quality leverage per token.
+1. **Wire layer** (P1-P7) — reasoningControls.ts, effort schedule, Claude gate
+   fix, persisted-error cooldown, runStats wire audit, harness-lessons store;
+   debateFlow wire-shape assertions. Smallest, highest signal-quality leverage
+   per token — and P7 makes it self-improving rather than a one-time fix.
 2. **Risk + sizing** — SessionGuardService + banner/chip/debate-context surfaces,
    grade-tiered risk + Kelly advisory layered on existing sizing, leverage guard,
    breaker/caps/streak/cooldown, pre-debate intake interstitial. Tests:
@@ -445,10 +501,12 @@ commit per batch)
    homogeneous-roster warning, targeted devil, Disagree-or-Commit markers, ensemble
    line + dual-Brier tracking, vocabulary ban, family checklists wired to detectors
    via the preflight gate.
-5. **Journal + review loop** — new LoggedTrade fields + quick-tag UI + pre-trade
-   checklist, MFE/capture/exit-efficiency, adherence + mistake-cost + time-of-day +
-   post-red + giveback analytics, WeeklyReviewService + monthly report card +
-   grade-the-panel, pre-read capture flow.
+5. **Journal + review loop + memory index** — new LoggedTrade fields + quick-tag
+   UI + pre-trade checklist, MFE/capture/exit-efficiency, adherence + mistake-cost
+   + time-of-day + post-red + giveback analytics, WeeklyReviewService + monthly
+   report card + grade-the-panel, pre-read capture flow, §4.7 index-layer memory
+   injection (compact skill index + recall-tool fetch; familyPerformance stays
+   injected).
 6. **Self-improvement loop** (Part 16 port, A→E above) — extractor → fingerprints →
    judge (precision-gated) → Learning queue/UI + pruning → measurement loop.
    Depends only on 4's ensemble-line stats for one episode type; can start its
@@ -457,6 +515,7 @@ commit per batch)
    quiet hours, calibration ledger dashboard, rendered-copy pass, version-stamped
    signal cards.
 
-Rough sizes: 1 small-medium; 2-3 medium; 4 medium-large; 5 large; 6 medium-large;
-7 small-medium. Order: 1 first (cheapest, sharpens every downstream round); 2 and 7
-next in either order; 6 can proceed from its Phase A alongside anything.
+Rough sizes: 1 small-medium; 2-3 medium; 4 medium-large; 5 large (index-layer
+injection adds a medium sub-task); 6 medium-large; 7 small-medium. Order: 1 first
+(cheapest, sharpens every downstream round); 2 and 7 next in either order; 6 can
+proceed from its Phase A alongside anything.
