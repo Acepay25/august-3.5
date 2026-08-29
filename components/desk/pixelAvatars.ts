@@ -76,7 +76,7 @@ export const PIXEL_PALETTE: Record<PixelToken, string> = {
 /** Per-role color overrides for the cap/visor (`C`), tie (`T`), and
  *  name plate (`W`). Status colors stay muted — see AGENTS.md "intentionally
  *  black/gray". */
-const ROLE_ACCENTS: Record<RolePreset, { C: string; T: string; W: string }> = {
+export const ROLE_ACCENTS: Record<RolePreset, { C: string; T: string; W: string }> = {
     risk:       { C: '#7f1d1d', T: '#fecaca', W: '#f87171' }, // rose
     macro:      { C: '#1e3a8a', T: '#bfdbfe', W: '#60a5fa' }, // blue
     technical:  { C: '#14532d', T: '#bbf7d0', W: '#4ade80' }, // green

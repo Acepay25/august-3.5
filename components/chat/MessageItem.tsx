@@ -101,6 +101,10 @@ export interface ChatContextProps {
     latestMessageId?: string | null;
     lensConfig?: AnalystLensConfig;
     priorAnalysisById?: Record<string, TradeAnalysis>;
+    /** True inside a chat-mode 1:1 agent thread: plain messages render
+     *  as reference-style chat bubbles (light right-aligned user bubble,
+     *  dark agent bubble) instead of the flat debate-transcript look. */
+    threadMode?: boolean;
     /** id of the user message immediately before each message (thread "You" bubble). */
     priorUserMessageById?: Record<string, Pick<Message, 'text' | 'createdAt'>>;
     /** External request to open the per-message side panel for a specific
@@ -293,13 +297,19 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
     // TradingSignalCard below is the moderator's only chat-area output.
     const moderatorThinking = extractModeratorThinking(message.reasoningProcesses, message.thoughtProcesses);
 
-    // Determine Bubble Styling - Clean modern design like ChatGPT/Gemini
+    // Determine Bubble Styling - Clean modern design like ChatGPT/Gemini.
+    // In a 1:1 agent thread (context.threadMode) plain messages render as
+    // reference-style bubbles: light right-aligned user bubble, dark agent
+    // bubble. Debate/analysis cards keep their own surfaces either way.
+    const threadBubble = context?.threadMode === true;
     const bubbleClass = isUserMessage
-        ? '' // user messages render as plain text (Cursor-style, no bubble)
+        ? (threadBubble ? 'bg-zinc-200 text-zinc-900 rounded-2xl px-4 py-2.5' : '') // user messages render as plain text (Cursor-style, no bubble)
         : message.role === MessageRole.AI
             ? (message.isPostMortem
                 ? 'bg-zinc-900/60 text-zinc-100 border border-white/10 rounded-xl'
-                : 'bg-transparent text-zinc-200')
+                : threadBubble
+                    ? 'bg-zinc-800/80 text-zinc-100 rounded-2xl px-4 py-3'
+                    : 'bg-transparent text-zinc-200')
             : 'bg-rose-500/10 text-rose-300 border border-rose-500/20 text-center rounded-xl';
 
     const isSelected = selectedMessageIds?.has(message.id);
@@ -342,7 +352,10 @@ const MessageItem = React.memo(({ message, context }: { message: Message, contex
             )}
 
             <div className={`${isUserMessage
-                ? 'py-1 pl-1 pr-6 max-w-[85%] sm:max-w-none w-full break-words relative group text-zinc-100'
+                ? threadBubble
+                    // Reference-style: the user bubble hugs its content.
+                    ? 'py-1 pl-1 pr-6 max-w-[85%] w-fit break-words relative group'
+                    : 'py-1 pl-1 pr-6 max-w-[85%] sm:max-w-none w-full break-words relative group text-zinc-100'
                 : 'w-full break-words relative group'
                 } ${isUserMessage ? '' : bubbleClass}`}>
 

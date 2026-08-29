@@ -13,6 +13,7 @@ import HybridDataPanel from '../analysis/HybridDataPanel';
 import ImageViewerModal from '../modals/ImageViewerModal';
 import WorkspaceWelcome, { WorkspaceWelcomeProps } from './WorkspaceWelcome';
 import { CompanyRoom } from '../room/CompanyRoom';
+import { AgentAvatar } from './AgentRosterRail';
 import { threadForProvider } from '../../utils/agentThreads';
 
 // Hoisted list components to prevent re-creation on each render
@@ -336,6 +337,9 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         latestMessageId,
         priorAnalysisById,
         priorUserMessageById,
+        // 1:1 agent thread: plain messages render as reference-style
+        // chat bubbles instead of the flat transcript look.
+        threadMode: visibleAgentId != null,
         isSelectionMode,
         selectedMessageIds: selectedIds,
         onToggleMessageSelection: handleToggleSelection,
@@ -343,7 +347,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         onSelectMessageForProbability,
         onRetryFailedRun,
         onEditUserMessage,
-    }), [chatContext, latestMessageId, priorAnalysisById, priorUserMessageById, isSelectionMode, selectedIds, handleToggleSelection, onSelectMessageForProbability, onRetryFailedRun, onEditUserMessage]);
+    }), [chatContext, latestMessageId, priorAnalysisById, priorUserMessageById, visibleAgentId, isSelectionMode, selectedIds, handleToggleSelection, onSelectMessageForProbability, onRetryFailedRun, onEditUserMessage]);
 
     // Fresh sessions start with zero messages (no hardcoded intro bubble),
     // so no intro-text substitution is needed — messages pass through as-is.
@@ -464,6 +468,20 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 }
                 gaugeStats={gaugeStats}
             />
+
+            {/* 1:1 thread header — the agent's identity bar, reference-style. */}
+            {visibleAgentId && visibleAgentName && (
+                <div
+                    data-testid="thread-header"
+                    className="relative z-10 flex items-center gap-3 border-b border-white/[0.06] bg-zinc-950/80 px-4 py-2.5 backdrop-blur"
+                >
+                    <AgentAvatar name={visibleAgentName} size={32} />
+                    <span className="text-[15px] font-semibold text-zinc-100">{visibleAgentName}</span>
+                    <span className="rounded border border-white/10 bg-zinc-900 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest text-zinc-500">
+                        1:1
+                    </span>
+                </div>
+            )}
 
             {/* Selection Toolbar — Team view only: bulk-select operates on
                 conversation-wide ids, which an agent thread view doesn't
