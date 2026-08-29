@@ -46,6 +46,7 @@ export const PREF_KEYS = {
     PRICE_ALERTS: 'price_alerts',
     SETUP_WATCHES: 'setup_watches',
     OUTCOME_AUTOPILOT_STATE: 'outcome_autopilot_state',
+    QUIET_HOURS: 'quiet_hours_v1',
 
     BOTS: 'bots_v1',
     // Data integrity

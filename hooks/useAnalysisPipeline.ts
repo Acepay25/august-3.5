@@ -96,6 +96,7 @@ import { enforceUngroundedLevels } from '../utils/ungroundedGate';
 import { rescueSoftAvoid } from '../utils/avoidReason';
 import { applyHybridChartDrift } from '../utils/hybridChartDrift';
 import { computeContractSize, gradeRiskTier, kellyAdvisory } from '../utils/ticketSize';
+import { planAmendmentDiff } from '../utils/trustSurface';
 import { assessSession, formatGuardContextBlock } from '../services/validation/SessionGuardService';
 import { getHarnessSettings } from '../utils/harnessSettings';
 import { beginPromptLane, endPromptLane } from '../services/infrastructure/PromptOverrideService';
@@ -704,6 +705,9 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     const handleSendMessage = useCallback(async (customPrompt?: string, customImages?: ImageMetadata[], hiddenContext?: string, options?: {
         isUpdate?: boolean;
         updateInterval?: string;
+        /** Version-stamped amendments (Batch 7): the plan this update revises. */
+        priorAnalysis?: TradeAnalysis;
+        priorMessageId?: string;
         presetHybridData?: HybridDataPacket | null;
         /**
          * Automation run: the analysis executes with the automation's own
@@ -1487,6 +1491,16 @@ ${reflectionBlock}`
                         if (options.updateInterval) {
                             finalAnalysis.updateInterval = options.updateInterval;
                         }
+                        // Version stamp (Batch 7): a revision is an explicit
+                        // amendment with a recorded diff, never an overwrite.
+                        finalAnalysis.planVersion = (options.priorAnalysis?.planVersion ?? 1) + 1;
+                        if (options.priorMessageId) {
+                            finalAnalysis.amendsMessageId = options.priorMessageId;
+                        }
+                        if (options.priorAnalysis) {
+                            const diff = planAmendmentDiff(options.priorAnalysis, finalAnalysis);
+                            if (diff) finalAnalysis.planDiff = diff;
+                        }
                     }
 
                     // ========== GATE KEEPER RESULT ==========
@@ -1793,6 +1807,11 @@ ${reflectionBlock}`
                             : `Trades today: ${guardVerdict.tradesToday} · Day P&L ${guardVerdict.dayPnlUsd >= 0 ? '+' : ''}$${Math.round(guardVerdict.dayPnlUsd)}`,
                     };
                     if (kelly.line) finalAnalysis.kellyAdvisory = kelly.line;
+                    // Funding carry snapshot (Batch 7): the rate the moderator
+                    // saw, framed verdict-relative on the card.
+                    if (typeof freshHybridData?.fundingRate === 'number') {
+                        finalAnalysis.fundingRate = freshHybridData.fundingRate;
+                    }
                     finalAnalysis.recommendationContract = buildRecommendationContract(finalAnalysis);
                     // ========== END VALIDATION GATE ==========
 

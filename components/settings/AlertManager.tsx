@@ -3,6 +3,7 @@ import { PriceAlertService, PriceAlert } from '../../services/ui/PriceAlertServi
 import { TrashIcon, LoadingIcon } from '../shared/Icons';
 import { useConfirmDialog } from '../shared/ConfirmDialog';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
+import { QuietHoursConfig, DEFAULT_QUIET_HOURS } from '../../utils/quietHours';
 
 interface AlertManagerProps {
   /** Called when the user toggles/removes an alert — lets callers refresh in-place state. */
@@ -19,11 +20,13 @@ export const AlertManager: React.FC<AlertManagerProps> = ({ onChanged }) => {
   const [alerts, setAlerts] = useState<PriceAlert[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [quiet, setQuiet] = useState<QuietHoursConfig>(DEFAULT_QUIET_HOURS);
 
   const refresh = useCallback(() => {
     setIsLoading(true);
     try {
       setAlerts(PriceAlertService.getAllAlerts());
+      setQuiet(PriceAlertService.getQuietHours());
     } finally {
       setIsLoading(false);
     }
@@ -65,6 +68,13 @@ export const AlertManager: React.FC<AlertManagerProps> = ({ onChanged }) => {
     if (alert.stopLoss > 0) parts.push(`SL ${alert.stopLoss.toLocaleString()}`);
     alert.takeProfits.forEach((tp, i) => parts.push(`TP${i + 1} ${tp.toLocaleString()}`));
     return parts.join(' · ') || 'No levels';
+  };
+
+  const hourOptions = Array.from({ length: 24 }, (_, i) => i);
+  const updateQuiet = (patch: Partial<QuietHoursConfig>) => {
+    const next = { ...quiet, ...patch };
+    setQuiet(next);
+    PriceAlertService.setQuietHours(next);
   };
 
   return (
@@ -119,6 +129,47 @@ export const AlertManager: React.FC<AlertManagerProps> = ({ onChanged }) => {
           ))}
         </div>
       )}
+
+      {/* Quiet hours (Batch 7): a silent window for a 24/7 market. Alerts
+          inside it queue instead of notifying — nothing is lost. */}
+      <div className="rounded-xl border border-white/5 bg-zinc-900/60 px-4 py-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-medium text-zinc-200">Quiet hours</p>
+            <p className="text-[10px] text-zinc-500 mt-0.5">
+              Alerts queue silently in this window instead of notifying.
+            </p>
+          </div>
+          <ToggleSwitch
+            checked={quiet.enabled}
+            onChange={() => updateQuiet({ enabled: !quiet.enabled })}
+            label="Toggle quiet hours"
+          />
+        </div>
+        {quiet.enabled && (
+          <div className="mt-3 flex items-center gap-2 text-xs text-zinc-400">
+            <span>From</span>
+            <select
+              value={quiet.startHour}
+              onChange={e => updateQuiet({ startHour: Number(e.target.value) })}
+              className="rounded-lg border border-white/10 bg-zinc-950 px-2 py-1 text-zinc-200"
+              aria-label="Quiet hours start"
+            >
+              {hourOptions.map(h => <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>)}
+            </select>
+            <span>to</span>
+            <select
+              value={quiet.endHour}
+              onChange={e => updateQuiet({ endHour: Number(e.target.value) })}
+              className="rounded-lg border border-white/10 bg-zinc-950 px-2 py-1 text-zinc-200"
+              aria-label="Quiet hours end"
+            >
+              {hourOptions.map(h => <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>)}
+            </select>
+            <span className="text-zinc-600">local time</span>
+          </div>
+        )}
+      </div>
     </div>
     {ConfirmDialogComponent}
     </>

@@ -184,6 +184,22 @@ export interface TradeAnalysis {
   };
   /** Kelly advisory line (empty string when journal history is too thin). */
   kellyAdvisory?: string;
+  /**
+   * Perpetual funding rate (8h, signed — positive = longs pay) snapshotted at
+   * analysis time (Batch 7). The card frames it as a carry cost relative to
+   * the verdict direction; the journal records what the moderator saw.
+   */
+  fundingRate?: number;
+  /**
+   * Plan version (Batch 7 §5b): 1 for the original publication, incrementing
+   * on each trade-update. A revision is an explicit amendment — the card
+   * shows the version chip and WHAT moved (planDiff) — never a silent edit.
+   */
+  planVersion?: number;
+  /** The message id of the plan this revision amends (undefined on v1). */
+  amendsMessageId?: string;
+  /** Human diff of what moved vs the prior version (empty when unchanged). */
+  planDiff?: string;
 }
 
 /**

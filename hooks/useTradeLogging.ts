@@ -757,7 +757,13 @@ ${JSON.stringify(originalAnalysis, null, 2)}
         setUpdateCandidate(null);
 
         // Trigger analysis with User Text + Hidden Context AND Update Flag with interval
-        handleSendMessage(text, metaImages, context, { isUpdate: true, updateInterval: updateIntervalString });
+        // (plus the prior plan — the amendment gets a version stamp + diff, Batch 7)
+        handleSendMessage(text, metaImages, context, {
+            isUpdate: true,
+            updateInterval: updateIntervalString,
+            priorAnalysis: originalAnalysis,
+            priorMessageId: updateCandidate.id,
+        });
 
     }, [updateCandidate, handleSendMessage]);
 

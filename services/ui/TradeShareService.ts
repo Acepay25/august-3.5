@@ -4,6 +4,7 @@
  */
 
 import { TradeAnalysis, TradeOutcome } from '../../types';
+import { FINANCIAL_ADVICE_DISCLAIMER } from '../../utils/trustSurface';
 
 export interface ShareCardOptions {
     width?: number;
@@ -274,11 +275,15 @@ class TradeShareServiceClass {
             ctx.textAlign = 'left';
         }
 
-        // Watermark
+        // Watermark + the standing not-financial-advice framing (Batch 7):
+        // shared verdicts read as analysis, never as certainty.
         if (opts.showWatermark) {
+            ctx.fillStyle = 'rgba(255,255,255,0.18)';
+            ctx.font = `${11 * s}px -apple-system, BlinkMacSystemFont, sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.fillText(FINANCIAL_ADVICE_DISCLAIMER, w / 2, h - 36 * s);
             ctx.fillStyle = 'rgba(255,255,255,0.25)';
             ctx.font = `${14 * s}px -apple-system, BlinkMacSystemFont, sans-serif`;
-            ctx.textAlign = 'center';
             ctx.fillText('Powered by August AI', w / 2, h - 20 * s);
             ctx.textAlign = 'left';
         }

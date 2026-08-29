@@ -11,6 +11,7 @@ import {
 import { BarChart3 } from 'lucide-react';
 import { LoggedTrade, TradeOutcome } from '../../types';
 import { EmptyState } from '../ui/EmptyState';
+import { buildCalibrationLedger, ledgerFramingLine, brierQuality } from '../../services/validation/CalibrationLedgerService';
 import {
     calculateOverallStats,
     calculatePerformanceByConfidence,
@@ -116,6 +117,13 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
     const coinStats = useMemo(() => calculatePerformanceByCoin(filteredTrades), [filteredTrades]);
     const familyStats = useMemo(() => calculatePerformanceByFamily(filteredTrades), [filteredTrades]);
     const streakData = useMemo(() => calculateStreakData(filteredTrades), [filteredTrades]);
+    // Calibration ledger (Batch 7): predicted vs realized, by grade + band.
+    const ledger = useMemo(() => buildCalibrationLedger(filteredTrades), [filteredTrades]);
+    const framingLine = useMemo(() => ledgerFramingLine(ledger), [ledger]);
+    const ledgerRows = useMemo(() => [
+        ...ledger.byGrade.map(r => ({ key: `g-${r.label}`, ...r, label: `Grade ${r.label}` })),
+        ...ledger.byBand.map(r => ({ key: `b-${r.label}`, ...r, label: `${r.label} confidence` })),
+    ], [ledger]);
     // Number of days the trend window should look back. The "All" preset (0) and
     // custom date ranges would otherwise be clamped to the 30-day default inside
     // calculateRecentTrends, silently dropping older trades from the trend chart.
@@ -258,6 +266,56 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                     <div className={`text-xl sm:text-3xl font-black ${overallStats.profitFactor >= 1.5 ? 'text-cyan-400' : overallStats.profitFactor >= 1 ? 'text-yellow-400' : 'text-rose-400'}`}>
                         {overallStats.profitFactor >= 999 ? '∞' : `${overallStats.profitFactor}x`}
                     </div>
+                </div>
+            </div>
+
+            {/* Calibration ledger (Batch 7): predicted vs realized hit rate by
+                grade and confidence band + Brier score. The trust research
+                says frequency format beats raw probability — "when the verdict
+                says High it hit X% over N" — and no consumer journaling tool
+                offers this view. */}
+            <div className="glass-panel p-3 sm:p-4 rounded-xl border border-white/5 bg-zinc-800">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                    <div className="text-[9px] sm:text-[10px] text-zinc-500 uppercase font-bold tracking-widest">Calibration Ledger</div>
+                    {ledger.overallBrier !== null && (
+                        <span
+                            className={`text-[10px] font-bold tabular-nums px-1.5 py-0.5 rounded ${
+                                brierQuality(ledger.overallBrier) === 'good'
+                                    ? 'text-emerald-400 bg-emerald-500/10'
+                                    : brierQuality(ledger.overallBrier) === 'fair'
+                                        ? 'text-yellow-400 bg-yellow-500/10'
+                                        : 'text-rose-400 bg-rose-500/10'
+                            }`}
+                            title={`Brier score over ${ledger.brierN} trades with a declared probability (lower is better; 0.25 = coin flip)`}
+                        >
+                            Brier {ledger.overallBrier.toFixed(3)}
+                        </span>
+                    )}
+                </div>
+                {framingLine && (
+                    <p className="text-[11px] text-zinc-300 mb-2">{framingLine}.</p>
+                )}
+                <div className="overflow-x-auto">
+                    <table className="w-full text-[11px]">
+                        <thead>
+                            <tr className="text-zinc-500 uppercase tracking-wider text-[9px]">
+                                <th className="text-left py-1 font-bold">Verdict</th>
+                                <th className="text-right py-1 font-bold">N</th>
+                                <th className="text-right py-1 font-bold">Hit</th>
+                                <th className="text-right py-1 font-bold">Said</th>
+                            </tr>
+                        </thead>
+                        <tbody className="font-mono">
+                            {ledgerRows.map(r => (
+                                <tr key={r.key} className="border-t border-white/5 text-zinc-300">
+                                    <td className="py-1 text-left">{r.label}</td>
+                                    <td className="py-1 text-right tabular-nums">{r.n}</td>
+                                    <td className="py-1 text-right tabular-nums text-white">{r.n > 0 ? `${r.winRate.toFixed(0)}%` : '—'}</td>
+                                    <td className="py-1 text-right tabular-nums text-zinc-500">{r.avgDeclaredPct !== null ? `${Math.round(r.avgDeclaredPct)}%` : '—'}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
                 </div>
             </div>
 
