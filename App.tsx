@@ -73,8 +73,11 @@ const SavedAnalysesGallery = React.lazy(() => import('./components/dashboards/Sa
 const MistakeWarningBanner = React.lazy(() => import('./components/shared/MistakeWarningBanner'));
 const DeskScene = React.lazy(() => import('./components/desk/DeskScene'));
 const AgentRosterRail = React.lazy(() => import('./components/chat/AgentRosterRail'));
-const FloorRail = React.lazy(() => import('./components/chat/FloorRail'));
 const FloorScene = React.lazy(() => import('./components/floor/FloorScene'));
+const NewBotDialog = React.lazy(() => import('./components/chat/NewBotDialog'));
+const NewGroupDialog = React.lazy(() => import('./components/chat/NewGroupDialog'));
+const GroupChatView = React.lazy(() => import('./components/chat/GroupChatView'));
+const TeamDialog = React.lazy(() => import('./components/chat/TeamDialog'));
 import CommandPalette, { PaletteAction } from './components/shared/CommandPalette';
 import AnalysisProgress from './components/analysis/AnalysisProgress';
 import { DEFAULT_FRAMEWORKS } from './constants/models';
@@ -84,7 +87,16 @@ import { recalculateAnalysisMetrics } from './utils/analysisUtils';
 import { parseAppHash, serializeAppHash } from './utils/appHash';
 import { collectWatchedSignals, toggleWatchOnMessage } from './utils/watchList';
 import { collectApprovalItems, setAutoJournalRule, type ApprovalItem } from './utils/approvalInbox';
-import { markThreadOpened, type AgentThreadOpenedMap } from './utils/agentThreads';
+import { type ThreadSelection } from './utils/agentThreads';
+import { buildTeamRoster, teamSlots } from './utils/teamRoster';
+import {
+    getBots, getGroups, saveBot, saveGroup, removeBot, removeGroup, subscribeAgentRoster,
+    getTeams, saveTeam, updateTeam as updateTeamStore, removeTeam as removeTeamStore,
+    getActiveTeamId, setActiveTeamId as setActiveTeamIdStore,
+    groupDisplayName, newId,
+    type AgentBot, type AgentGroup, type AgentTeam,
+} from './services/agents/agentRoster';
+import { useAgentGroups } from './hooks/useAgentGroups';
 import { takeSkillDraft, tombstoneSkillDraftKey, draftTriggerKey } from './utils/skillDrafts';
 import { ingestCraftedSkill, ingestCraftedSkillFromDraft } from './services/learning/SkillMemoryService';
 import { buildRiskBook, formatRiskBookBadge } from './utils/riskBook';
@@ -1062,44 +1074,175 @@ const App: React.FC = () => {
     // ─── Desk view (opt-in overlay projecting the current debate) ──────────
     const [isDeskSceneOpen, setIsDeskSceneOpen] = useState(false);
 
-    // ─── Chat mode: per-agent 1:1 threads (AgentRosterRail) ────────────────
-    // activeAgentId === null → Team view (full conversation); a provider id
-    // selects that agent's derived 1:1 slice (utils/agentThreads.ts).
-    const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
-    // Per-provider last-opened ISO timestamps for the rail's unread dots.
-    // Loaded once from Preferences; saved on every change (the loaded ref
-    // guards against clobbering the stored map before the read resolves).
-    const [agentOpenedMap, setAgentOpenedMap] = useState<AgentThreadOpenedMap>({});
-    const agentOpenedLoadedRef = useRef(false);
-    useEffect(() => {
-        let cancelled = false;
-        getPreferenceObject<AgentThreadOpenedMap>('agent_thread_opened_v1')
-            .then(v => {
-                if (!cancelled) {
-                    setAgentOpenedMap(v ?? {});
-                    agentOpenedLoadedRef.current = true;
-                }
-            })
-            .catch(() => { agentOpenedLoadedRef.current = true; });
-        return () => { cancelled = true; };
-    }, []);
-    useEffect(() => {
-        if (!agentOpenedLoadedRef.current) return;
-        setPreferenceObject('agent_thread_opened_v1', agentOpenedMap).catch(() => { /* optional */ });
-    }, [agentOpenedMap]);
-    // Selecting an agent also flips the composer target to that provider's
-    // first model with ensemble off — the thread then shows exactly what a
-    // send will do (single-model 1:1 reply via streamQuickResponse).
-    const selectAgentThread = useCallback((providerId: string) => {
-        setActiveAgentId(providerId);
-        setAgentOpenedMap(prev => markThreadOpened(prev, providerId));
-        const provider = providerConfigs.find(p => p.id === providerId);
-        if (provider?.models[0]) {
-            setSelectedChatModel(provider.models[0]);
+    // ─── Chat mode: named bots + group chats (Hermes Bot Mode layout) ──────
+    const [activeThread, setActiveThread] = useState<ThreadSelection>({ kind: 'team' });
+    const [bots, setBots] = useState<AgentBot[]>(() => getBots());
+    const [groups, setGroups] = useState<AgentGroup[]>(() => getGroups());
+    const [teams, setTeams] = useState<AgentTeam[]>(() => getTeams());
+    const [activeTeamId, setActiveTeamIdState] = useState<string | null>(() => getActiveTeamId());
+    useEffect(() => subscribeAgentRoster(() => {
+        setBots(getBots());
+        setGroups(getGroups());
+        setTeams(getTeams());
+    }), []);
+    const [isNewBotOpen, setIsNewBotOpen] = useState(false);
+    const [isNewGroupOpen, setIsNewGroupOpen] = useState(false);
+    const [isTeamDialogOpen, setIsTeamDialogOpen] = useState(false);
+    const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
+    // Opening a bot thread flips the composer target to that bot's model
+    // with ensemble off — the thread then shows exactly what a send does.
+    const selectBotThread = useCallback((botId: string) => {
+        setActiveThread({ kind: 'bot', botId });
+        const bot = bots.find(b => b.id === botId);
+        if (bot?.modelId) {
+            setSelectedChatModel(bot.modelId);
             setIsEnsembleEnabled(false);
         }
-    }, [providerConfigs, setSelectedChatModel, setIsEnsembleEnabled]);
-    const selectTeamThread = useCallback(() => setActiveAgentId(null), []);
+    }, [bots, setSelectedChatModel, setIsEnsembleEnabled]);
+    // Team IS the trading harness: returning to Team always re-arms the
+    // ensemble so a send runs the full pipeline (debate + hybrid
+    // intelligence + trade log + learning memory). A bot visit flips
+    // ensemble off for casual 1:1s — without this re-arm, a later Team
+    // send would silently bypass the entire harness.
+    const selectTeamThread = useCallback(() => {
+        setActiveThread({ kind: 'team' });
+        setIsEnsembleEnabled(true);
+    }, [setIsEnsembleEnabled]);
+    // The live ensemble roster — the Team row is derived from this,
+    // never hardcoded.
+    const teamMembers = useMemo(
+        () => buildTeamRoster(lensConfig, ensembleModelSelection, providerConfigs),
+        [lensConfig, ensembleModelSelection, providerConfigs],
+    );
+    const selectGroupThread = useCallback((groupId: string) => setActiveThread({ kind: 'group', groupId }), []);
+    const createBot = useCallback((draft: Omit<AgentBot, 'id' | 'createdAt'>) => {
+        const bot: AgentBot = { ...draft, id: `bot-${Date.now()}`, createdAt: new Date().toISOString() };
+        saveBot(bot);
+        // Select directly with the bot object: `bots` state is still stale
+        // here (the roster subscriber hasn't re-rendered yet), so
+        // selectBotThread would miss the lookup and skip the model flip.
+        setActiveThread({ kind: 'bot', botId: bot.id });
+        if (bot.modelId) {
+            setSelectedChatModel(bot.modelId);
+            setIsEnsembleEnabled(false);
+        }
+    }, [setSelectedChatModel, setIsEnsembleEnabled]);
+    const createGroup = useCallback((memberIds: string[]) => {
+        const group: AgentGroup = { id: `grp-${Date.now()}`, memberIds, createdAt: new Date().toISOString() };
+        saveGroup(group);
+        setActiveThread({ kind: 'group', groupId: group.id });
+    }, []);
+    // Deleting a bot pulls it from its groups (agentRoster.removeBot);
+    // deleting a group only drops the room. If the deleted surface is
+    // open, fall back to Team. The bot's messages stay in the
+    // conversation history — they just lose their byline.
+    const deleteBot = useCallback((botId: string) => {
+        const bot = bots.find(b => b.id === botId);
+        void confirmDialog({
+            title: `Delete ${bot?.name ?? 'bot'}?`,
+            message: 'The bot is removed from the roster and from any groups it belongs to. Its messages stay in your conversations.',
+            destructive: true,
+        }).then(ok => {
+            if (!ok) return;
+            removeBot(botId);
+            if (activeThread.kind === 'bot' && activeThread.botId === botId) {
+                selectTeamThread();
+            }
+        });
+    }, [bots, activeThread, confirmDialog, selectTeamThread]);
+    const deleteGroup = useCallback((groupId: string) => {
+        const group = groups.find(g => g.id === groupId);
+        void confirmDialog({
+            title: `Delete ${groupDisplayName(group ?? { id: groupId, memberIds: [], createdAt: '' }, bots)}?`,
+            message: 'The group room is removed. Member bots and their messages are untouched.',
+            destructive: true,
+        }).then(ok => {
+            if (!ok) return;
+            removeGroup(groupId);
+            if (activeThread.kind === 'group' && activeThread.groupId === groupId) {
+                selectTeamThread();
+            }
+        });
+    }, [groups, bots, activeThread, confirmDialog, selectTeamThread]);
+
+    // ─── Teams: the trader's own harness configurations ────────────────
+    // Activating a team points the WHOLE pipeline (debate + hybrid
+    // intelligence + trade log) at exactly that team's seats. There is
+    // no fixed trio — seats are whatever the team defines (2–5).
+    const syncTeamToHarness = useCallback((team: AgentTeam) => {
+        const seats = team.seats.filter(s => s.providerId && s.modelId);
+        const selection = seats.map(s => ({ providerId: s.providerId, model: s.modelId }));
+        setEnsembleModelSelection(selection);
+        saveEnsembleModelSelection(selection);
+        if (team.moderator?.providerId && team.moderator.modelId) {
+            handleSetModeratorProvider(team.moderator.providerId);
+            handleSetModeratorModel(team.moderator.modelId);
+        }
+    }, [setEnsembleModelSelection, handleSetModeratorProvider, handleSetModeratorModel]);
+    const activateTeam = useCallback((teamId: string) => {
+        const team = teams.find(t => t.id === teamId);
+        if (!team) return;
+        setActiveTeamIdStore(teamId);
+        setActiveTeamIdState(teamId);
+        syncTeamToHarness(team);
+        selectTeamThread();
+    }, [teams, syncTeamToHarness, selectTeamThread]);
+    const createTeam = useCallback((draft: Omit<AgentTeam, 'id' | 'createdAt'>) => {
+        const team: AgentTeam = { ...draft, id: newId('team'), createdAt: new Date().toISOString() };
+        saveTeam(team);
+        setTeams(getTeams());
+        // A new team becomes the harness immediately — instant feedback.
+        setActiveTeamIdStore(team.id);
+        setActiveTeamIdState(team.id);
+        syncTeamToHarness(team);
+        selectTeamThread();
+    }, [syncTeamToHarness, selectTeamThread]);
+    const updateTeamHandler = useCallback((id: string, patch: Partial<Omit<AgentTeam, 'id'>>) => {
+        updateTeamStore(id, patch);
+        setTeams(getTeams());
+        const merged = getTeams().find(t => t.id === id);
+        if (merged && getActiveTeamId() === id) syncTeamToHarness(merged);
+    }, [syncTeamToHarness]);
+    const deleteTeam = useCallback((teamId: string) => {
+        const team = teams.find(t => t.id === teamId);
+        void confirmDialog({
+            title: `Delete ${team?.name?.trim() || 'Team'}?`,
+            message: 'The team is removed from the roster. If it was active, the harness keeps its seats until you activate another team or change Settings → Models.',
+            destructive: true,
+        }).then(ok => {
+            if (!ok) return;
+            removeTeamStore(teamId);
+            setActiveTeamIdState(getActiveTeamId());
+        });
+    }, [teams, confirmDialog]);
+    const openNewTeamDialog = useCallback(() => { setEditingTeamId(null); setIsTeamDialogOpen(true); }, []);
+    const openEditTeamDialog = useCallback((teamId: string) => { setEditingTeamId(teamId); setIsTeamDialogOpen(true); }, []);
+    // Group runner: one prompt fans out to the members serially.
+    const appendGroupMessage = useCallback((msg: Message) => {
+        updateMessages(prev => [...prev, msg]);
+    }, [updateMessages]);
+    const patchGroupMessage = useCallback((id: string, patch: Partial<Message>) => {
+        updateMessages(prev => prev.map(m => (m.id === id ? { ...m, ...patch } : m)));
+    }, [updateMessages]);
+    const { workingBotId, isRunning: groupRunning, activity, runGroupThread } = useAgentGroups({
+        providerConfigs,
+        appendMessage: appendGroupMessage,
+        patchMessage: patchGroupMessage,
+    });
+    const sendGroupThread = useCallback((prompt: string) => {
+        if (activeThread.kind !== 'group') return;
+        const group = groups.find(g => g.id === activeThread.groupId);
+        if (group) void runGroupThread(group, prompt, bots);
+    }, [activeThread, groups, bots, runGroupThread]);
+    // The visible bot for ChatArea's scoped thread view.
+    const visibleBot = useMemo(() => {
+        if (activeThread.kind !== 'bot') return null;
+        const bot = bots.find(b => b.id === activeThread.botId);
+        return bot ? { providerId: bot.providerId, modelId: bot.modelId, name: bot.name, avatar: bot.avatar } : null;
+    }, [activeThread, bots]);
+    const activeGroup = useMemo(() => (
+        activeThread.kind === 'group' ? groups.find(g => g.id === activeThread.groupId) ?? null : null
+    ), [activeThread, groups]);
     // External open-actor request: when the desk view's seat is clicked,
     // we publish {messageId, actorId} + bump a nonce so the matching
     // MessageItem mirrors the actor into its local side-panel state and
@@ -1753,10 +1896,11 @@ const App: React.FC = () => {
     }, []);
 
     // Ordinary ensemble model selection (Lenses off) handler — persists the
-    // three picked models that drive the cards and the debate.
+    // picked models that drive the cards and the debate (a trader team
+    // seats 2–5; Settings pickers offer 3).
     const handleSetEnsembleModelSelection = useCallback((selection: EnsembleModelSelection) => {
-        setEnsembleModelSelection(selection.slice(0, 3));
-        saveEnsembleModelSelection(selection.slice(0, 3));
+        setEnsembleModelSelection(selection.slice(0, 5));
+        saveEnsembleModelSelection(selection.slice(0, 5));
     }, [setEnsembleModelSelection]);
 
     // Seed the ordinary (normal-mode) debate-model selection from the ready
@@ -2991,13 +3135,19 @@ const App: React.FC = () => {
             .reduce((sum, t) => sum + (t.pnlAmount ?? 0), 0);
     }, [loggedTrades]);
     // Floor seat click → open that agent's 1:1 thread in chat mode.
-    // Seat names are actor/role names; match a provider by display name.
+    // Seat names match a named bot first; without one, land on Team
+    // (the harness surface, ensemble re-armed).
     const openSeatChat = useCallback((seatName: string) => {
-        const match = providerConfigs.find(p => p.name.toLowerCase() === seatName.trim().toLowerCase());
-        if (!match) return;
-        selectAgentThread(match.id);
+        const name = seatName.trim().toLowerCase();
+        const botMatch = bots.find(b => b.name.toLowerCase() === name);
+        if (botMatch) {
+            selectBotThread(botMatch.id);
+        } else {
+            setActiveThread({ kind: 'team' });
+            setIsEnsembleEnabled(true);
+        }
         setUiMode('chat');
-    }, [providerConfigs, selectAgentThread, setUiMode]);
+    }, [bots, selectBotThread, setIsEnsembleEnabled, setUiMode]);
     // Tickers: symbols from recent analyses topped up with the majors.
     // Prices arrive via the floor market hook (floor phase).
     const floorTickers = useMemo<{ symbol: string; last?: number; changePct?: number }[]>(() => {
@@ -3713,13 +3863,26 @@ const App: React.FC = () => {
                 {uiMode === 'chat' && (
                     <React.Suspense fallback={null}>
                         <AgentRosterRail
-                            providers={readyProviders}
+                            bots={bots}
+                            groups={groups}
                             messages={messages}
-                            selection={activeAgentId ? { kind: 'provider', providerId: activeAgentId } : { kind: 'team' }}
+                            selection={activeThread}
+                            teamMembers={teamMembers}
+                            teams={teams.map(t => ({ team: t, slots: teamSlots(t, providerConfigs) }))}
+                            activeTeamId={activeTeamId}
+                            onActivateTeam={activateTeam}
+                            onEditTeam={openEditTeamDialog}
+                            onDeleteTeam={deleteTeam}
+                            onNewTeam={openNewTeamDialog}
                             onSelectTeam={selectTeamThread}
-                            onSelectProvider={selectAgentThread}
-                            openedMap={agentOpenedMap}
-                            activeUsername={activeUsername}
+                            onSelectBot={selectBotThread}
+                            onSelectGroup={selectGroupThread}
+                            onDeleteBot={deleteBot}
+                            onDeleteGroup={deleteGroup}
+                            onManageTeam={() => { setSettingsInitialTab('models'); setIsSettingsMenuVisible(true); }}
+                            onNewBot={() => setIsNewBotOpen(true)}
+                            onNewGroup={() => setIsNewGroupOpen(true)}
+                            workingBotId={workingBotId}
                         />
                     </React.Suspense>
                 )}
@@ -3743,6 +3906,19 @@ const App: React.FC = () => {
                         onOpenSettings={() => setIsSettingsMenuVisible(true)}
                     />
 
+            {activeGroup ? (
+                <React.Suspense fallback={null}>
+                    <GroupChatView
+                        group={activeGroup}
+                        bots={bots}
+                        messages={messages}
+                        activity={activity}
+                        workingBotId={workingBotId}
+                        isRunning={groupRunning}
+                        onSendThread={sendGroupThread}
+                    />
+                </React.Suspense>
+            ) : (
             <ChatArea
                 messages={messages}
                 analysisSteps={analysisSteps}
@@ -3819,27 +3995,15 @@ const App: React.FC = () => {
                 entryTimingScore={currentEntryTimingScore}
                 onOpenSettings={(tab) => { setSettingsInitialTab(tab || 'models'); setIsSettingsMenuVisible(true); }}
                 onOpenLiveMarket={handleOpenLiveMarket}
-                visibleAgentId={activeAgentId}
-                visibleAgentName={activeAgentId ? providerConfigs.find(p => p.id === activeAgentId)?.name ?? null : null}
+                visibleBot={visibleBot}
+                bots={bots}
+                onSelectBot={selectBotThread}
+                onNewBot={() => setIsNewBotOpen(true)}
                 homeDashboard={homeDashboard}
                 onInteract={handleInteract}
             />
+            )}
                 </main>
-
-                {/* Chat mode right rail — the office cast vertical beside the
-                    conversation (Hermes-style pane; replaces the old fixed
-                    office strip at the bottom of the chat). */}
-                {uiMode === 'chat' && (
-                    <React.Suspense fallback={null}>
-                        <FloorRail
-                            activeProviderCount={readyProviders.length}
-                            gaugeStats={gaugeStats}
-                            approvalItems={approvalItems}
-                            isDebating={isAnalysisInProgress || isPostMortemInProgress}
-                            phase={deskScenePhase}
-                        />
-                    </React.Suspense>
-                )}
 
                 {/* Desktop activity card: float progress over the
                     right side so the conversation keeps its width while a run
@@ -3981,8 +4145,44 @@ const App: React.FC = () => {
                         squawk={floorSquawk}
                         tickers={floorTickers}
                         staff={readyProviders.map(p => ({ id: p.id, name: p.name }))}
+                        bots={bots}
+                        workingBotId={workingBotId}
                         dayPnl={floorDayPnl}
                         onOpenSeatChat={openSeatChat}
+                    />
+                </React.Suspense>
+            )}
+
+            {/* New Bot / New Group Chat dialogs (Hermes Bot Mode) */}
+            {isNewBotOpen && (
+                <React.Suspense fallback={null}>
+                    <NewBotDialog
+                        open
+                        onClose={() => setIsNewBotOpen(false)}
+                        onCreate={createBot}
+                        providers={providerConfigs}
+                    />
+                </React.Suspense>
+            )}
+            {isNewGroupOpen && (
+                <React.Suspense fallback={null}>
+                    <NewGroupDialog
+                        open
+                        onClose={() => setIsNewGroupOpen(false)}
+                        onCreate={createGroup}
+                        bots={bots}
+                    />
+                </React.Suspense>
+            )}
+            {isTeamDialogOpen && (
+                <React.Suspense fallback={null}>
+                    <TeamDialog
+                        open
+                        onClose={() => setIsTeamDialogOpen(false)}
+                        onCreate={createTeam}
+                        onUpdate={updateTeamHandler}
+                        initial={editingTeamId ? teams.find(t => t.id === editingTeamId) ?? null : null}
+                        providers={providerConfigs}
                     />
                 </React.Suspense>
             )}

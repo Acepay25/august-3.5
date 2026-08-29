@@ -26,12 +26,13 @@ import { PixelSeat } from '../desk/PixelSeat';
 import { SpeechBubble } from '../desk/SpeechBubble';
 import { VerdictCard } from '../desk/VerdictCard';
 import { layoutFloor, type FloorSeat } from '../desk/floorLayout';
-import { roleForName } from '../desk/pixelAvatars';
+import { avatarRoleForName, roleForName } from '../desk/pixelAvatars';
 import {
     applyRoomLayout,
     getRoomLayout,
     subscribeRoomLayout,
 } from '../../services/desk/roomLayout';
+import type { AgentBot } from '../../services/agents/agentRoster';
 import type { DebateStageActor, DebateExchange } from '../analysis/DebateStage';
 import type { RunContractStage } from '../../utils/runContract';
 import type { ApprovalItem } from '../../utils/approvalInbox';
@@ -80,6 +81,11 @@ export interface FloorSceneProps {
     tickers: { symbol: string; last?: number; changePct?: number }[];
     /** Ready providers — the staff roster for the chief card. */
     staff: { id: string; name: string }[];
+    /** Named bots — seated on the floor live, even while the floor is
+     *  idle. A new bot appears here the moment it is created. */
+    bots?: AgentBot[];
+    /** Bot currently streaming a reply (its seat shows "working…"). */
+    workingBotId?: string | null;
     /** Signed PnL from today's settled tickets (top bar). */
     dayPnl?: number;
     /** Clicking a seat opens that agent's 1:1 chat thread. */
@@ -101,6 +107,8 @@ export const FloorScene: React.FC<FloorSceneProps> = ({
     squawk,
     tickers,
     staff,
+    bots = [],
+    workingBotId,
     dayPnl,
     onOpenSeatChat,
 }) => {
@@ -134,10 +142,21 @@ export const FloorScene: React.FC<FloorSceneProps> = ({
     const [layoutTick, setLayoutTick] = React.useState(0);
     React.useEffect(() => subscribeRoomLayout(() => setLayoutTick(t => t + 1)), []);
     const actorNames = React.useMemo(() => actors.map(a => a.name), [actors]);
-    const seats = React.useMemo<FloorSeat[]>(
-        () => (actorNames.length === 0 ? [] : applyRoomLayout(layoutFloor(actorNames), getRoomLayout(actorNames))),
-        [actorNames, layoutTick], // eslint-disable-line react-hooks/exhaustive-deps
+    // The floor's full cast: stage actors plus the named-bot roster.
+    // Bots are seated LIVE even while the floor is idle — creating a
+    // bot puts it on the floor immediately. A bot whose name matches a
+    // stage actor is absorbed into that seat (the actor's state wins).
+    const botNames = React.useMemo(
+        () => bots.filter(b => !actorNames.includes(b.name)).map(b => b.name),
+        [bots, actorNames],
     );
+    const seats = React.useMemo<FloorSeat[]>(
+        () => (actorNames.length + botNames.length === 0
+            ? []
+            : applyRoomLayout(layoutFloor([...actorNames, ...botNames]), getRoomLayout([...actorNames, ...botNames]))),
+        [actorNames, botNames, layoutTick], // eslint-disable-line react-hooks/exhaustive-deps
+    );
+    const botByName = React.useMemo(() => new Map(bots.map(b => [b.name, b])), [bots]);
 
     // The one actor the floor is listening to right now: whoever is
     // speaking (bubble shows their speech), else whoever is thinking
@@ -153,6 +172,8 @@ export const FloorScene: React.FC<FloorSceneProps> = ({
     const clockText = clock.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
     const openApprovals = approvalItems.length;
     const lastPrint = squawk.find(ev => ev.text.startsWith('PRINT')) ?? null;
+    // The full cast: model staff + named bots on the floor.
+    const castCount = staff.length + bots.length;
 
     return (
         <div
@@ -196,7 +217,7 @@ export const FloorScene: React.FC<FloorSceneProps> = ({
                         </span>
                     )}
                     <span data-testid="floor-stat-staff" className="hidden text-[11px] font-medium text-zinc-400 sm:block">
-                        Staff <span className="font-mono tabular-nums text-zinc-200">{staff.length}</span>
+                        Staff <span className="font-mono tabular-nums text-zinc-200">{castCount}</span>
                     </span>
                     <span data-testid="floor-stat-tasks" className="hidden text-[11px] font-medium text-zinc-400 sm:block">
                         Tickets <span className="font-mono tabular-nums text-zinc-200">{gaugeStats.tasks}</span>
@@ -352,21 +373,50 @@ export const FloorScene: React.FC<FloorSceneProps> = ({
                             </div>
                         </div>
 
-                        {/* Desks — stage actors on the shared floor layout. */}
+                        {/* Desks — stage actors + the live bot roster on
+                            the shared floor layout. */}
                         <div className="absolute inset-0" style={{ background: FLOOR_THEME.canvasBackdrop }}>
                             {seats.length === 0 ? (
                                 <div className="absolute inset-0 flex items-center justify-center">
                                     <p className="max-w-sm text-center text-[11px] uppercase tracking-widest text-zinc-600">
-                                        The floor is empty — send a setup from chat mode to put the desk to work
+                                        The floor is empty — add a bot or send a setup from chat mode to put the desk to work
                                     </p>
                                 </div>
                             ) : (
                                 seats.map(seat => {
                                     const actor = actors.find(a => a.name === seat.name || a.id === seat.id);
-                                    if (!actor) return null;
+                                    const bot = botByName.get(seat.name);
+                                    if (!actor && !bot) return null;
+                                    if (!actor && bot) {
+                                        // Named-bot seat: pixel-art identity via the
+                                        // bot's own pixel role (or a stable color for
+                                        // face-bots), live while the floor is open,
+                                        // "working…" while it streams a reply.
+                                        const working = workingBotId === bot.id;
+                                        const role = bot.avatar.kind === 'pixel'
+                                            ? bot.avatar.role
+                                            : avatarRoleForName(bot.name);
+                                        return (
+                                            <div
+                                                key={seat.id}
+                                                data-testid={`floor-desk-${seat.name}`}
+                                                className="absolute -translate-x-1/2 -translate-y-1/2"
+                                                style={{ left: `${seat.anchor.x * 100}%`, top: `${seat.anchor.y * 100}%` }}
+                                            >
+                                                <PixelSeat
+                                                    name={bot.name}
+                                                    live
+                                                    thinking={working}
+                                                    statusText={working ? 'working…' : undefined}
+                                                    roleOverride={role}
+                                                    onClick={onOpenSeatChat ? () => onOpenSeatChat(bot.name) : undefined}
+                                                />
+                                            </div>
+                                        );
+                                    }
                                     const role = roleForName(seat.name);
-                                    const isSpotlight = spotlight?.id === actor.id;
-                                    const bubbleText = actor.speech || actor.thought || '';
+                                    const isSpotlight = spotlight?.id === actor!.id;
+                                    const bubbleText = actor!.speech || actor!.thought || '';
                                     return (
                                         <div
                                             key={seat.id}
@@ -378,18 +428,18 @@ export const FloorScene: React.FC<FloorSceneProps> = ({
                                                 {isSpotlight && bubbleText && (
                                                     <SpeechBubble
                                                         text={bubbleText}
-                                                        speaker={actor.name}
+                                                        speaker={actor!.name}
                                                         side={seat.side}
                                                         toneKey={role}
                                                     />
                                                 )}
                                                 <PixelSeat
-                                                    name={actor.name}
-                                                    speech={actor.speech}
-                                                    live={actor.live}
-                                                    thinking={actor.thinking}
-                                                    speaking={actor.speaking}
-                                                    statusText={actor.speaking ? 'speaking…' : actor.thinking ? 'thinking…' : actor.toolChip}
+                                                    name={actor!.name}
+                                                    speech={actor!.speech}
+                                                    live={actor!.live}
+                                                    thinking={actor!.thinking}
+                                                    speaking={actor!.speaking}
+                                                    statusText={actor!.speaking ? 'speaking…' : actor!.thinking ? 'thinking…' : actor!.toolChip}
                                                     roleOverride={role}
                                                     onClick={onOpenSeatChat ? () => onOpenSeatChat(seat.name) : undefined}
                                                 />
@@ -437,7 +487,7 @@ export const FloorScene: React.FC<FloorSceneProps> = ({
                             {isDebating ? 'Running the floor — debate in progress' : 'Floor is quiet'}
                         </p>
                         <p className="mt-1 text-[10px] text-zinc-500">
-                            {staff.length} seated · {openApprovals} awaiting review
+                            {castCount} seated · {openApprovals} awaiting review
                         </p>
                     </div>
 

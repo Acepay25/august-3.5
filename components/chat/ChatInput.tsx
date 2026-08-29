@@ -15,12 +15,8 @@ import ModelPicker from '../shared/ModelPicker';
 
 import { parseComposerIntent } from '../../utils/composerMentions';
 import { formatModelDisplayName } from '../../utils/providerUtils';
-
-const LENS_ROSTER_ROLES: AnalystRole[] = [
-    AnalystRole.MACRO_VOLATILITY,
-    AnalystRole.TECHNICAL_ANALYST,
-    AnalystRole.RISK_EXECUTION,
-];
+import { buildTeamRoster, LENS_ROSTER_ROLES } from '../../utils/teamRoster';
+import type { AgentBot } from '../../services/agents/agentRoster';
 
 interface ChatInputProps {
     images: ImageMetadata[];
@@ -87,6 +83,16 @@ interface ChatInputProps {
     onOpenLiveMarket?: () => void;
     /** Overrides the computed placeholder (e.g. "Message Sales" in a 1:1 thread). */
     placeholderOverride?: string;
+    /** True inside a 1:1 agent thread: the Talk-to selector hides (the
+     *  thread header names the target) and the placeholder left-aligns. */
+    threadMode?: boolean;
+    /** Named bots — offered by the Talk-to selector ahead of raw models;
+     *  picking one opens that bot's 1:1 thread. */
+    bots?: AgentBot[];
+    /** Switch to a named bot's 1:1 thread (Talk-to / New bot flow). */
+    onSelectBot?: (botId: string) => void;
+    /** Open the New Bot dialog (Talk-to's "New bot…" entry). */
+    onNewBot?: () => void;
     isAccuracyModeEnabled?: boolean;
     hybridConnectionStatus?: 'disconnected' | 'connecting' | 'connected' | 'error';
     hybridData?: unknown;
@@ -139,6 +145,10 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
     onOpenSettings,
     onOpenLiveMarket,
     placeholderOverride,
+    threadMode = false,
+    bots,
+    onSelectBot,
+    onNewBot,
     isAccuracyModeEnabled = false,
     hybridConnectionStatus,
     hybridData,
@@ -231,37 +241,10 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
         || chatProviders[0]?.selectedModel
         || chatProviders[0]?.models[0]
         || '';
-    const rosterSlots = React.useMemo(() => {
-        if (lensConfig.enabled) {
-            return LENS_ROSTER_ROLES.map(role => {
-                const def = ANALYST_ROLE_DEFINITIONS[role];
-                const assignment = lensConfig.assignments?.find(item => item.role === role);
-                const provider = chatProviders.find(item => item.id === assignment?.assignedProvider);
-                const model = assignment?.assignedModel || provider?.models[0] || '';
-                return {
-                    // Lens seats keep their role glyph (M/T/R) —
-                    // role identity, not provider name.
-                    initial: def.shortName.charAt(0).toUpperCase(),
-                    label: def.shortName,
-                    model: provider && model ? `${provider.name} · ${formatModelDisplayName(model)}` : '',
-                };
-            }).filter(slot => slot.model);
-        }
-        return (ensembleModelSelection || [])
-            .filter(entry => entry?.providerId && entry.model)
-            .slice(0, 3)
-            .map((entry, index) => {
-                const provider = chatProviders.find(item => item.id === entry.providerId);
-                return {
-                    // Fixed SEAT glyphs (1/2/3), never provider-name
-                    // initials — three K-named providers used to spell an
-                    // unfortunate word in the avatar stack.
-                    initial: `${index + 1}`,
-                    label: provider?.name || `Expert ${index + 1}`,
-                    model: formatModelDisplayName(entry.model),
-                };
-            });
-    }, [chatProviders, ensembleModelSelection, lensConfig]);
+    const rosterSlots = React.useMemo(
+        () => buildTeamRoster(lensConfig, ensembleModelSelection, providers),
+        [providers, ensembleModelSelection, lensConfig],
+    );
 
     // The injection-chip quick actions moved to the header `⋯` menu in
     // Phase 2 (composer simplification). The Settings menu now owns the
@@ -362,7 +345,7 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             onChange={(e) => setInput(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && (!e.shiftKey || e.ctrlKey || e.metaKey) ? (e.preventDefault(), handleSendMessage()) : undefined}
                             placeholder={placeholderOverride ?? (isAnalysisInProgress ? 'Add a note for the next debate step…' : images.length > 0 ? 'Analyze charts...' : isEnsembleEnabled ? 'Describe the setup or upload charts…' : 'How can I help you today?')}
-                            className="flex-1 min-w-0 bg-transparent px-2 py-2 text-[15px] text-white placeholder-zinc-400 outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 min-h-[24px] max-h-28 resize-none leading-6 placeholder:text-center focus:placeholder:text-left"
+                            className={`flex-1 min-w-0 bg-transparent px-2 py-2 text-[15px] text-white placeholder-zinc-400 outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 min-h-[24px] max-h-28 resize-none leading-6 ${threadMode ? 'placeholder:text-left' : 'placeholder:text-center focus:placeholder:text-left'}`}
                             rows={1}
                             disabled={isRateLimited}
                             style={{ overflow: 'hidden' }}
@@ -388,49 +371,81 @@ const ChatInputInner: React.FC<ChatInputProps> = ({
                             </button>
                             {/* Talk-to selector — picks the chat target.
                                 "Team" routes to the existing ensemble debate;
-                                any single provider routes to a casual 1:1 chat
-                                with that model. We use a real <select> so the
+                                a named bot opens its 1:1 thread; any single
+                                provider routes to a casual 1:1 chat with that
+                                model (the legacy path — bots supersede it but
+                                stay for model-first senders). Hidden inside a
+                                1:1 thread: the thread header already names the
+                                target, and showing both read as a duplicated
+                                selector. We use a real <select> so the
                                 keyboard and screen-reader experience is
                                 predictable (arrow keys, type-ahead). */}
-                            <label
-                                className="flex items-center gap-1.5 rounded-full bg-zinc-800/80 px-2.5 py-1 text-[11px] font-semibold text-zinc-200"
-                                data-testid="talk-to-selector"
-                            >
-                                <span className="text-[10px] uppercase tracking-widest text-zinc-500">
-                                    Talk to
-                                </span>
-                                <select
-                                    aria-label="Talk to"
-                                    value={isEnsembleEnabled ? '__team__' : (effectiveChatModel || '')}
-                                    onChange={e => {
-                                        const v = e.target.value;
-                                        if (v === '__team__') {
-                                            setIsEnsembleEnabled(true);
-                                        } else {
-                                            setIsEnsembleEnabled(false);
-                                            setSelectedChatModel(v);
-                                        }
-                                    }}
-                                    className="bg-transparent text-[12px] text-zinc-100 outline-none"
+                            {!threadMode && (
+                                <label
+                                    className="flex items-center gap-1.5 rounded-full bg-zinc-800/80 px-2.5 py-1 text-[11px] font-semibold text-zinc-200"
+                                    data-testid="talk-to-selector"
                                 >
-                                    <option value="__team__" className="bg-zinc-900 text-zinc-100">
-                                        Team ({rosterSlots.length})
-                                    </option>
-                                    {chatModelOptions.map(opt => {
-                                        const value = `${opt.providerName}::${opt.modelId}`;
-                                        const selected = opt.modelId === effectiveChatModel;
-                                        return (
-                                            <option
-                                                key={value}
-                                                value={opt.modelId}
-                                                className="bg-zinc-900 text-zinc-100"
-                                            >
-                                                {opt.providerName} · {formatModelDisplayName(opt.modelId)}
+                                    <span className="text-[10px] uppercase tracking-widest text-zinc-500">
+                                        Talk to
+                                    </span>
+                                    <select
+                                        aria-label="Talk to"
+                                        value={isEnsembleEnabled ? '__team__' : (effectiveChatModel || '')}
+                                        onChange={e => {
+                                            const v = e.target.value;
+                                            if (v === '__team__') {
+                                                setIsEnsembleEnabled(true);
+                                            } else if (v.startsWith('bot:')) {
+                                                onSelectBot?.(v.slice(4));
+                                            } else if (v === '__new_bot__') {
+                                                onNewBot?.();
+                                            } else {
+                                                setIsEnsembleEnabled(false);
+                                                setSelectedChatModel(v);
+                                            }
+                                        }}
+                                        className="bg-transparent text-[12px] text-zinc-100 outline-none"
+                                    >
+                                        <option value="__team__" className="bg-zinc-900 text-zinc-100">
+                                            Team ({rosterSlots.length})
+                                        </option>
+                                        {(bots ?? []).map(bot => {
+                                            const value = `bot:${bot.id}`;
+                                            return (
+                                                <option
+                                                    key={value}
+                                                    value={value}
+                                                    className="bg-zinc-900 text-zinc-100"
+                                                >
+                                                    {bot.name} · {formatModelDisplayName(bot.modelId)}
+                                                </option>
+                                            );
+                                        })}
+                                        {(bots ?? []).length > 0 && chatModelOptions.length > 0 && (
+                                            <option key="bots-sep" disabled className="bg-zinc-900 text-zinc-500">
+                                                ─── models ───
                                             </option>
-                                        );
-                                    })}
-                                </select>
-                            </label>
+                                        )}
+                                        {chatModelOptions.map(opt => {
+                                            const value = `${opt.providerName}::${opt.modelId}`;
+                                            return (
+                                                <option
+                                                    key={value}
+                                                    value={opt.modelId}
+                                                    className="bg-zinc-900 text-zinc-100"
+                                                >
+                                                    {opt.providerName} · {formatModelDisplayName(opt.modelId)}
+                                                </option>
+                                            );
+                                        })}
+                                        {onNewBot && (
+                                            <option value="__new_bot__" className="bg-zinc-900 text-zinc-100">
+                                                ＋ New bot…
+                                            </option>
+                                        )}
+                                    </select>
+                                </label>
+                            )}
 
                         </div>
 

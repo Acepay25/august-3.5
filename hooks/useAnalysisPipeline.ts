@@ -1136,6 +1136,10 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         // reply) so the catch block can settle it on cancel/error instead of
         // leaving a stuck isStreaming placeholder.
         let casualMessageId: string | null = null;
+        // Casual chats attribute their error bubble to the provider that was
+        // tried (modelsUsed), so a failed 1:1 bot reply surfaces INSIDE that
+        // bot's thread instead of vanishing from the scoped view.
+        let casualErrorAttribution: Record<string, string> | undefined;
         try {
             promptLane = beginPromptLane();
             const currentMessages = isAutomationRun
@@ -3697,6 +3701,7 @@ ${accuracyVerificationNote}`
                 // speed) instead of appending it once after completion.
                 const streamingMessageId = `ai-${Date.now()}`;
                 casualMessageId = streamingMessageId;
+                casualErrorAttribution = { [provider.config.id]: provider.model };
                 updateRequestMessages(prev => [...prev, {
                     id: streamingMessageId,
                     role: MessageRole.AI,
@@ -3844,7 +3849,7 @@ ${accuracyVerificationNote}`
             // retryOf lets the error bubble rebuild the exact prompt + charts
             // (the send cleared the composer immediately, so a failure left
             // the user with no way to re-run the same setup).
-            updateRequestMessages(prev => [...prev, { id: `err-${Date.now()}`, role: MessageRole.SYSTEM, createdAt: new Date().toISOString(), text: safeMessage, retryOf: { userMessageId: userMessage.id } }]);
+            updateRequestMessages(prev => [...prev, { id: `err-${Date.now()}`, role: MessageRole.SYSTEM, createdAt: new Date().toISOString(), text: safeMessage, retryOf: { userMessageId: userMessage.id }, modelsUsed: casualErrorAttribution }]);
 
             // Automation runs surface failures through their own callback
             // (the error bubble above lands in the private list).

@@ -102,6 +102,23 @@ export const roleForName = (name: string): RolePreset => {
     return 'unknown';
 };
 
+/**
+ * Role for IDENTITY surfaces (named bots seated on the floor): the
+ * heuristic first, but 'unknown' names never fall through to gray —
+ * they get a deterministic accent from the colored roles instead, so
+ * every bot owns a distinct color. Stable per name.
+ */
+const AVATAR_ROLE_POOL: RolePreset[] = [
+    'macro', 'technical', 'sentiment', 'followup', 'execution', 'risk',
+];
+export const avatarRoleForName = (name: string): RolePreset => {
+    const heuristic = roleForName(name);
+    if (heuristic !== 'unknown') return heuristic;
+    let h = 0;
+    for (let i = 0; i < name.length; i += 1) h = (h * 31 + name.charCodeAt(i)) | 0;
+    return AVATAR_ROLE_POOL[Math.abs(h) % AVATAR_ROLE_POOL.length];
+};
+
 /** Build a 16×20 grid for a role, with an optional frame variant.
  *  Each role has up to four frames:
  *    - idle:        the default pose.
