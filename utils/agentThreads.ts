@@ -22,15 +22,21 @@
 import { MessageRole } from '../types/enums';
 import { Message } from '../types/message';
 
-/** 'team' selects the unfiltered conversation (debates etc.). */
-export type ThreadSelection = { kind: 'team' } | { kind: 'provider'; providerId: string };
+/** Which conversation surface is open. 'team' = the full ensemble
+ *  debate chat; 'bot' = a named bot's 1:1; 'group' = a bot group room. */
+export type ThreadSelection =
+    | { kind: 'team' }
+    | { kind: 'bot'; botId: string }
+    | { kind: 'group'; groupId: string };
 
 /**
- * Derive the per-agent thread slice for one provider. Returns the
+ * Derive the per-agent thread slice for one provider — optionally
+ * scoped to an exact model (a bot's model), so two bots on one
+ * provider with different models keep separate threads. Returns the
  * messages in conversation order (a subset of the input array —
  * same object identities, so memoization downstream stays cheap).
  */
-export const threadForProvider = (messages: Message[], providerId: string): Message[] => {
+export const threadForProvider = (messages: Message[], providerId: string, modelId?: string): Message[] => {
     const out: Message[] = [];
     // Prompts waiting for the next AI reply that claims them.
     let pendingUser: Message[] = [];
@@ -41,15 +47,30 @@ export const threadForProvider = (messages: Message[], providerId: string): Mess
             continue;
         }
         if (m.role === MessageRole.SYSTEM) {
-            // System rows ride along with whatever slice is open: they
-            // flush into our thread if the next AI reply is ours, and
-            // drop if it belongs to another provider.
+            // An attributed system row (a failed reply's error bubble) is
+            // claimable: it belongs to the thread whose provider/model it
+            // names, so the failure surfaces inside that thread.
+            const sysKeys = m.modelsUsed ? Object.keys(m.modelsUsed) : [];
+            if (sysKeys.length === 1 && sysKeys[0] === providerId
+                && (!modelId || m.modelsUsed?.[sysKeys[0]] === modelId)) {
+                out.push(...pendingUser, ...pendingSystem, m);
+                pendingUser = [];
+                pendingSystem = [];
+                continue;
+            }
+            // Unattributed system rows ride along with whatever slice is
+            // open: they flush into our thread if the next AI reply is
+            // ours, and drop if it belongs to another provider.
             pendingSystem.push(m);
             continue;
         }
         // AI message: single-provider replies claim the pending prompts.
         const keys = m.modelsUsed ? Object.keys(m.modelsUsed) : [];
-        if (keys.length === 1 && keys[0] === providerId) {
+        const model = keys.length === 1 ? m.modelsUsed?.[keys[0]] : undefined;
+        const mine = keys.length === 1
+            && keys[0] === providerId
+            && (!modelId || model === modelId);
+        if (mine) {
             out.push(...pendingUser, ...pendingSystem, m);
             pendingUser = [];
             pendingSystem = [];
@@ -63,6 +84,80 @@ export const threadForProvider = (messages: Message[], providerId: string): Mess
     // Trailing prompts with no reply yet: attribute to no agent thread
     // (they surface in Team so the trader never loses a draft's reply).
     return out;
+};
+
+/** A group member's claim key: provider + the bot's exact model. */
+export interface GroupMemberKey {
+    providerId: string;
+    modelId: string;
+}
+
+/**
+ * Derive a group's slice: prompts + replies from ANY member bot
+ * (matched by provider+model). Unlike 1:1 threads, trailing prompts
+ * are KEPT — a just-sent prompt with replies still streaming renders
+ * as an open thread ("X is thinking…").
+ */
+export const threadForGroup = (messages: Message[], members: GroupMemberKey[]): Message[] => {
+    const out: Message[] = [];
+    let pendingUser: Message[] = [];
+    for (const m of messages) {
+        if (m.role === MessageRole.USER) {
+            pendingUser.push(m);
+            continue;
+        }
+        if (m.role === MessageRole.SYSTEM) {
+            // Attributed system rows (failed replies) claim like member
+            // replies so the error lands inside the group thread.
+            const sysKeys = m.modelsUsed ? Object.keys(m.modelsUsed) : [];
+            const sysMine = sysKeys.length === 1 && members.some(
+                mem => sysKeys[0] === mem.providerId && (!mem.modelId || m.modelsUsed?.[sysKeys[0]] === mem.modelId),
+            );
+            if (sysMine) {
+                out.push(...pendingUser, m);
+                pendingUser = [];
+            }
+            continue;
+        }
+        const keys = m.modelsUsed ? Object.keys(m.modelsUsed) : [];
+        const mine = keys.length === 1 && members.some(
+            mem => keys[0] === mem.providerId && (!mem.modelId || m.modelsUsed?.[keys[0]] === mem.modelId),
+        );
+        if (mine) {
+            out.push(...pendingUser, m);
+            pendingUser = [];
+        } else if (pendingUser.length > 0) {
+            // A non-member replied first — the prompts belonged to it.
+            pendingUser = [];
+        }
+    }
+    return [...out, ...pendingUser];
+};
+
+export interface GroupThread {
+    prompt: Message;
+    /** Member replies in arrival order. */
+    replies: Message[];
+}
+
+/** Split a group slice into threads: each user prompt opens one. */
+export const splitGroupThreads = (slice: Message[]): GroupThread[] => {
+    const threads: GroupThread[] = [];
+    let current: GroupThread | null = null;
+    for (const m of slice) {
+        if (m.role === MessageRole.USER) {
+            current = { prompt: m, replies: [] };
+            threads.push(current);
+        } else {
+            if (!current) {
+                // Replies before any prompt (legacy slice) — synthesize a headless thread.
+                current = { prompt: m, replies: [] };
+                threads.push(current);
+            }
+            current.replies.push(m);
+        }
+    }
+    return threads;
 };
 
 export interface AgentThreadPreview {

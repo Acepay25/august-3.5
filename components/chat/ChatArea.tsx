@@ -12,7 +12,7 @@ import { ArrowUpIcon, ArrowDownIcon, CloseIcon, LoadingIcon, EyeIcon, BrainIcon,
 import HybridDataPanel from '../analysis/HybridDataPanel';
 import ImageViewerModal from '../modals/ImageViewerModal';
 import WorkspaceWelcome, { WorkspaceWelcomeProps } from './WorkspaceWelcome';
-import { AgentAvatar } from './AgentRosterRail';
+import { BotAvatar } from './BotAvatar';
 import { threadForProvider } from '../../utils/agentThreads';
 
 // Hoisted list components to prevent re-creation on each render
@@ -120,11 +120,16 @@ interface ChatAreaProps {
     // Analysis Progress (Task UI)
     analysisSteps?: AnalysisStep[];
     isAnalysisActive?: boolean;
-    /** Chat-mode 1:1 thread: render only this provider's slice of the
-     *  conversation (utils/agentThreads.ts). Null/absent = Team view. */
-    visibleAgentId?: string | null;
-    /** Display name for the visible agent — drives the composer placeholder. */
-    visibleAgentName?: string | null;
+    /** Chat-mode bot thread: render only this bot's slice of the
+     *  conversation (utils/agentThreads.ts, provider+model scoped).
+     *  Null/absent = Team view. */
+    visibleBot?: { providerId: string; modelId: string; name: string; avatar?: import('../../services/agents/agentRoster').AgentBot['avatar'] } | null;
+    /** Named bots for the composer's Talk-to selector. */
+    bots?: import('../../services/agents/agentRoster').AgentBot[];
+    /** Talk-to: open a named bot's 1:1 thread. */
+    onSelectBot?: (botId: string) => void;
+    /** Talk-to: open the New Bot dialog. */
+    onNewBot?: () => void;
 }
 
 const ChatAreaInner: React.FC<ChatAreaProps> = ({
@@ -199,8 +204,10 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     entryTimingScore,
     onOpenSettings,
     onOpenLiveMarket,
-    visibleAgentId,
-    visibleAgentName,
+    visibleBot,
+    bots,
+    onSelectBot,
+    onNewBot,
     onInteract,
     onSelectMessageForProbability,
     homeDashboard,
@@ -330,7 +337,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         priorUserMessageById,
         // 1:1 agent thread: plain messages render as reference-style
         // chat bubbles instead of the flat transcript look.
-        threadMode: visibleAgentId != null,
+        threadMode: visibleBot != null,
         isSelectionMode,
         selectedMessageIds: selectedIds,
         onToggleMessageSelection: handleToggleSelection,
@@ -338,7 +345,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         onSelectMessageForProbability,
         onRetryFailedRun,
         onEditUserMessage,
-    }), [chatContext, latestMessageId, priorAnalysisById, priorUserMessageById, visibleAgentId, isSelectionMode, selectedIds, handleToggleSelection, onSelectMessageForProbability, onRetryFailedRun, onEditUserMessage]);
+    }), [chatContext, latestMessageId, priorAnalysisById, priorUserMessageById, visibleBot, isSelectionMode, selectedIds, handleToggleSelection, onSelectMessageForProbability, onRetryFailedRun, onEditUserMessage]);
 
     // Fresh sessions start with zero messages (no hardcoded intro bubble),
     // so no intro-text substitution is needed — messages pass through as-is.
@@ -347,8 +354,8 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     // context (priorAnalysisById etc.) still sees the FULL conversation,
     // which is correct — the thread is a view, not a separate store.
     const processedMessages = useMemo(
-        () => (visibleAgentId ? threadForProvider(messages, visibleAgentId) : messages),
-        [messages, visibleAgentId],
+        () => (visibleBot ? threadForProvider(messages, visibleBot.providerId, visibleBot.modelId) : messages),
+        [messages, visibleBot],
     );
 
     // Leaving a thread (or switching agents) cancels any in-progress
@@ -357,7 +364,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
     React.useEffect(() => {
         setIsSelectionMode(false);
         setSelectedIds(new Set());
-    }, [visibleAgentId]);
+    }, [visibleBot]);
 
     // Fresh-session hero: time-of-day serif greeting.
     // Late-evening variant ("Up late") starts at 22:00.
@@ -425,7 +432,11 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         isAccuracyModeEnabled,
         hybridConnectionStatus,
         hybridData,
-        placeholderOverride: visibleAgentName ? `Message ${visibleAgentName}` : undefined,
+        placeholderOverride: visibleBot ? 'What’s next?' : undefined,
+        threadMode: visibleBot != null,
+        bots,
+        onSelectBot,
+        onNewBot,
     }), [
         images, removeImage,
         leverageInput, handleLeverageChange, handleLeverageBlur,
@@ -441,7 +452,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
         setSelectedChatModel, regimeProviderStats,
         moderatorProviderId, moderatorModel, onSetModeratorProvider, onSetModeratorModel,
         onOpenSettings, onOpenLiveMarket, isAccuracyModeEnabled,
-        hybridConnectionStatus, hybridData, visibleAgentName,
+        hybridConnectionStatus, hybridData, visibleBot, bots, onSelectBot, onNewBot,
     ]);
 
     return (
@@ -450,24 +461,24 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
             onClick={onInteract}
             onTouchStart={onInteract}
         >
-            {/* 1:1 thread header — the agent's identity bar, reference-style. */}
-            {visibleAgentId && visibleAgentName && (
+            {/* Bot thread header — identity bar, Hermes-style */}
+            {visibleBot && (
                 <div
                     data-testid="thread-header"
                     className="relative z-10 flex items-center gap-3 border-b border-white/[0.06] bg-zinc-950/80 px-4 py-2.5 backdrop-blur"
                 >
-                    <AgentAvatar name={visibleAgentName} size={32} />
-                    <span className="text-[15px] font-semibold text-zinc-100">{visibleAgentName}</span>
-                    <span className="rounded border border-white/10 bg-zinc-900 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest text-zinc-500">
-                        1:1
-                    </span>
+                    <BotAvatar bot={{ name: visibleBot.name, avatar: visibleBot.avatar ?? { kind: 'auto' } }} size={32} />
+                    <div className="min-w-0">
+                        <p className="truncate text-[15px] font-semibold leading-tight text-zinc-100">{visibleBot.name}</p>
+                        <p className="text-[11px] leading-tight text-zinc-500">Bot · {visibleBot.name.toLowerCase().replace(/\s+/g, '-')}</p>
+                    </div>
                 </div>
             )}
 
             {/* Selection Toolbar — Team view only: bulk-select operates on
                 conversation-wide ids, which an agent thread view doesn't
                 fully render (silent-delete footgun). */}
-            {!visibleAgentId && (isSelectionMode ? (
+            {!visibleBot && (isSelectionMode ? (
                 <div className="absolute top-4 left-4 right-4 z-40 bg-zinc-900 border border-white/10 rounded-xl p-3 flex items-center justify-between shadow-2xl animate-fade-in">
                     <div className="flex items-center gap-3">
                         <button
@@ -515,13 +526,13 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 {loadingMessage || (messages.length > 0 ? `${messages.length} messages in conversation` : 'New conversation')}
             </div>
 
-            {messages.length > 0 && visibleAgentId && processedMessages.length === 0 ? (
-                /* 1:1 thread with no messages yet — keep the composer
-                    usable without implying the conversation is empty. */
-                <div className="flex h-full w-full items-center justify-center px-6">
+            {visibleBot && processedMessages.length === 0 ? (
+                /* Bot thread with no messages yet — muted hint, composer
+                    stays docked at the bottom (Hermes layout). */
+                <div className="flex min-h-0 flex-1 items-center justify-center px-6">
                     <p className="max-w-xs text-center text-[12px] leading-relaxed text-zinc-500">
-                        No messages with <span className="font-semibold text-zinc-300">{visibleAgentName ?? 'this agent'}</span> yet —
-                        say hello. Team debates stay in the Team thread.
+                        No messages with <span className="font-semibold text-zinc-300">{visibleBot.name}</span> yet — say hello.
+                        Team debates stay in the Team thread.
                     </p>
                 </div>
             ) : messages.length > 0 && (
@@ -687,7 +698,7 @@ const ChatAreaInner: React.FC<ChatAreaProps> = ({
                 </div>
                 <ChatInput {...chatInputProps} />
                 </>
-            ) : messages.length === 0 ? (
+            ) : messages.length === 0 && !visibleBot ? (
                 <div className="flex flex-1 flex-col items-center justify-center bg-zinc-950 px-4 py-10">
                     {/* Home hero: serif greeting ALONE on the page
                         background — no spark/asterisk mark beside it. */}

@@ -1,0 +1,109 @@
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
+import React from 'react';
+import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+
+import { TeamDialog } from '../components/chat/TeamDialog';
+import { AgentTeam } from '../services/agents/agentRoster';
+import { ProviderConfig } from '../types/provider';
+
+beforeAll(() => {
+    if (typeof window !== 'undefined' && !window.matchMedia) {
+        window.matchMedia = ((query: string) => ({
+            matches: false, media: query, onchange: null,
+            addListener: () => {}, removeListener: () => {},
+            addEventListener: () => {}, removeEventListener: () => {},
+            dispatchEvent: () => false,
+        })) as unknown as typeof window.matchMedia;
+    }
+});
+
+afterEach(() => {
+    cleanup();
+    if (typeof window !== 'undefined') window.localStorage.clear();
+});
+
+const provider = (over: Partial<ProviderConfig> = {}): ProviderConfig => ({
+    id: over.id ?? 'p1',
+    name: over.name ?? 'OpenAI',
+    apiKey: over.apiKey ?? 'sk-test',
+    baseUrl: over.baseUrl ?? 'https://api.example.com',
+    apiFormat: over.apiFormat ?? 'chat_completions',
+    isEnabled: over.isEnabled ?? true,
+    isBuiltIn: over.isBuiltIn ?? false,
+    models: over.models ?? ['gpt-a', 'gpt-b'],
+    selectedModel: over.selectedModel ?? 'gpt-a',
+    ...over,
+});
+
+const base = {
+    onClose: () => {},
+    onCreate: vi.fn(),
+    onUpdate: vi.fn(),
+    providers: [provider(), provider({ id: 'p2', name: 'Anthropic', models: ['claude-1'], selectedModel: 'claude-1' })],
+};
+
+beforeEach(() => {
+    base.onCreate.mockClear();
+    base.onUpdate.mockClear();
+});
+
+describe('TeamDialog (the Team is user-created and modifiable)', () => {
+    it('creates a team from seeded seats', () => {
+        render(<TeamDialog {...base} open />);
+        fireEvent.change(screen.getByTestId('team-name'), { target: { value: 'Alpha Desk' } });
+        // Seeded with two usable seats — pick the second provider for seat 2.
+        fireEvent.change(screen.getByTestId('team-seat-provider-1'), { target: { value: 'p2' } });
+        fireEvent.click(screen.getByTestId('save-team'));
+        expect(base.onCreate).toHaveBeenCalledTimes(1);
+        const draft = base.onCreate.mock.calls[0][0];
+        expect(draft.name).toBe('Alpha Desk');
+        expect(draft.seats).toEqual([
+            { providerId: 'p1', modelId: 'gpt-a' },
+            { providerId: 'p2', modelId: 'claude-1' },
+        ]);
+    });
+
+    it('adds and removes seats within the 2–5 envelope', () => {
+        render(<TeamDialog {...base} open />);
+        // Remove is blocked at the floor of 2.
+        expect((screen.getByTestId('team-seat-remove-1') as HTMLButtonElement).disabled).toBe(true);
+        fireEvent.click(screen.getByTestId('add-team-seat'));
+        expect(screen.getByTestId('team-seat-2')).toBeTruthy();
+        // Fill the new seat, then remove seat 0 — still 2 valid seats.
+        fireEvent.change(screen.getByTestId('team-seat-model-2'), { target: { value: 'gpt-b' } });
+        fireEvent.click(screen.getByTestId('team-seat-remove-0'));
+        fireEvent.click(screen.getByTestId('save-team'));
+        const draft = base.onCreate.mock.calls[0][0];
+        expect(draft.seats).toHaveLength(2);
+    });
+
+    it('an optional moderator rides along', () => {
+        render(<TeamDialog {...base} open />);
+        fireEvent.click(screen.getByTestId('team-moderator-toggle'));
+        fireEvent.click(screen.getByTestId('save-team'));
+        const draft = base.onCreate.mock.calls[0][0];
+        expect(draft.moderator).toEqual({ providerId: 'p1', modelId: 'gpt-a' });
+    });
+
+    it('edit mode prefills and routes through onUpdate', () => {
+        const initial: AgentTeam = {
+            id: 't1',
+            name: 'Old Name',
+            seats: [{ providerId: 'p1', modelId: 'gpt-a' }, { providerId: 'p2', modelId: 'claude-1' }],
+            createdAt: new Date().toISOString(),
+        };
+        render(<TeamDialog {...base} open initial={initial} />);
+        expect((screen.getByTestId('team-name') as HTMLInputElement).value).toBe('Old Name');
+        fireEvent.change(screen.getByTestId('team-name'), { target: { value: 'New Name' } });
+        fireEvent.click(screen.getByTestId('save-team'));
+        expect(base.onUpdate).toHaveBeenCalledWith('t1', expect.objectContaining({ name: 'New Name' }));
+        expect(base.onCreate).not.toHaveBeenCalled();
+    });
+
+    it('invalid seats (no model) do not count toward the minimum', () => {
+        render(<TeamDialog {...base} open />);
+        // Blank out both seeded models → save disabled.
+        fireEvent.change(screen.getByTestId('team-seat-model-0'), { target: { value: '' } });
+        expect((screen.getByTestId('save-team') as HTMLButtonElement).disabled).toBe(true);
+    });
+});

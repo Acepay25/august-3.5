@@ -72,7 +72,7 @@ const resolveAssignedModel = (
  *   - otherwise + Team dropdown slots   → those models, in slot order
  *   - otherwise                         → per-provider ensembleModels
  *                                     (falling back to selectedModel)
- * Capped at 3 entries total.
+ * Capped at 5 entries total (a trader team seats 2–5 analysts).
  */
 export const buildEnsembleAnalysts = (
     providerConfigs: ProviderConfig[],
@@ -140,10 +140,11 @@ export const buildEnsembleAnalysts = (
             return [toEntry(provider, model, roleName)];
         });
     } else if (isEnsembleEnabled) {
-        // Normal mode: Team dropdown slots are the only roster. Do not fall
-        // back to provider.ensembleModels — those leftover defaults used to
-        // fill the first provider and hide the models the user just picked.
-        const slots = (ensembleModelSelection ?? []).filter(s => s?.providerId && s.model).slice(0, 3);
+        // Normal mode: Team slots are the only roster (a trader team
+        // seats 2–5 analysts). Do not fall back to provider.ensembleModels
+        // — those leftover defaults used to fill the first provider and
+        // hide the models the user just picked.
+        const slots = (ensembleModelSelection ?? []).filter(s => s?.providerId && s.model).slice(0, 5);
         if (slots.length > 0) {
             // The same provider+model can occupy several Team slots. Those
             // seats must stay distinguishable: identical names collapse the

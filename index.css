@@ -373,6 +373,11 @@ body {
   0%, 100% { opacity: 1; }
   50% { opacity: 0; }
 }
+/* BotFace eyes while the bot is working (Hermes: eyes scan/blip). */
+@keyframes botface-blink {
+  0%, 64%, 100% { opacity: 1; }
+  72%, 88% { opacity: 0; }
+}
 .reasoning-row-chevron {
   width: 12px;
   height: 12px;

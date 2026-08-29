@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
 import React from 'react';
-import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, within } from '@testing-library/react';
 
 import { FloorScene } from '../components/floor/FloorScene';
 import type { DebateStageActor } from '../components/analysis/DebateStage';
@@ -158,5 +158,64 @@ describe('FloorScene', () => {
     it('renders nothing when open is false', () => {
         const { container } = render(<FloorScene {...base} open={false} />);
         expect(container.firstChild).toBeNull();
+    });
+});
+
+describe('FloorScene live bot roster', () => {
+    const bot = (over: Partial<import('../services/agents/agentRoster').AgentBot> = {}) => ({
+        id: over.id ?? 'b1',
+        name: over.name ?? 'Scout',
+        providerId: over.providerId ?? 'p1',
+        modelId: over.modelId ?? 'model-a',
+        avatar: over.avatar ?? { kind: 'auto' as const },
+        createdAt: over.createdAt ?? new Date().toISOString(),
+        ...over,
+    });
+
+    it('seats named bots live on the floor even while idle', () => {
+        render(
+            <FloorScene
+                {...base}
+                bots={[bot({ id: 'b1', name: 'Scout' }), bot({ id: 'b2', name: 'Raven' })]}
+            />,
+        );
+        expect(screen.queryByText(/floor is empty/i)).toBeNull();
+        expect(screen.getByTestId('floor-desk-Scout')).toBeTruthy();
+        expect(screen.getByTestId('floor-desk-Raven')).toBeTruthy();
+        // Staff count covers the whole cast (providers + bots).
+        expect(screen.getByTestId('floor-stat-staff').textContent).toContain('3');
+    });
+
+    it('the working bot shows "working…" on its seat', () => {
+        render(
+            <FloorScene
+                {...base}
+                bots={[bot({ id: 'b1', name: 'Scout' }), bot({ id: 'b2', name: 'Raven' })]}
+                workingBotId="b1"
+            />,
+        );
+        expect(screen.getByTestId('floor-desk-Scout').textContent).toContain('working…');
+        expect(screen.getByTestId('floor-desk-Raven').textContent).not.toContain('working…');
+    });
+
+    it('a bot whose name matches a stage actor merges into that seat', () => {
+        const actors = [actor({ id: 'a1', name: 'Scout', speaking: true, speech: 'On it.' })];
+        render(<FloorScene {...base} actors={actors} bots={[bot({ id: 'b1', name: 'Scout' })]} />);
+        expect(screen.getAllByTestId('floor-desk-Scout')).toHaveLength(1);
+        // The actor's live state wins over the bot's idle seat.
+        expect(screen.getByTestId('floor-desk-Scout').textContent).toContain('speaking…');
+    });
+
+    it('clicking a bot seat opens that bot’s thread', () => {
+        const onOpenSeatChat = vi.fn();
+        render(
+            <FloorScene
+                {...base}
+                bots={[bot({ id: 'b1', name: 'Scout' })]}
+                onOpenSeatChat={onOpenSeatChat}
+            />,
+        );
+        fireEvent.click(within(screen.getByTestId('floor-desk-Scout')).getByRole('button'));
+        expect(onOpenSeatChat).toHaveBeenCalledWith('Scout');
     });
 });
