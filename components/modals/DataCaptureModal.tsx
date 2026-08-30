@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { Message, TradeOutcome } from '../../types';
 import { CaptureJournalTags } from '../../types/trade';
+import { loadChecklistConfig, summarizeChecklist } from '../../utils/checklist';
 
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
@@ -35,6 +36,16 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
 
     // Discipline quick-tags (Batch 5): optional, ≤3 taps, monochrome chips.
     // The mistake-cost and adherence analytics build themselves from these.
+    const checklistCfg = React.useMemo(() => loadChecklistConfig(), []);
+    const [checklistChecked, setChecklistChecked] = useState<Set<string>>(new Set());
+    // "Watched, chose not to" free-text on the skip path (plan §4.1).
+    const [skipNote, setSkipNote] = useState('');
+    const toggleChecklistItem = (id: string): void =>
+        setChecklistChecked(cur => {
+            const next = new Set(cur);
+            if (next.has(id)) next.delete(id); else next.add(id);
+            return next;
+        });
     const MISTAKE_TAGS: { id: NonNullable<CaptureJournalTags['mistakeTags']>[number]; label: string }[] = [
         { id: 'failed_thesis', label: 'Thesis failed' },
         { id: 'boredom', label: 'Boredom' },
@@ -97,12 +108,21 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
     const isPnlValid = !isNaN(pnlNum) && pnlNum >= 0 && pnl.trim() !== '';
 
     // Build feedback object
-    const buildFeedback = () => {
+    const buildFeedback = (skipReason?: string) => {
         const finalPnl = isWin ? Math.abs(pnlNum) : -Math.abs(pnlNum);
         const journalTags: CaptureJournalTags = {
             ...(mistakeTags.length > 0 ? { mistakeTags: mistakeTags as CaptureJournalTags['mistakeTags'] } : {}),
             ...(emotionalState ? { emotionalState } : {}),
             ...(followedPlan !== null ? { followedPlan } : {}),
+            // Checklist completion rides the tags only when the checklist is
+            // enabled AND the user actually engaged it (plan §4.3, off by
+            // default — untouched trades stay unrecorded, never {0,n}).
+            ...(checklistCfg.enabled && checklistChecked.size > 0
+                ? { checklistCompleted: summarizeChecklist(checklistCfg.items, checklistChecked) }
+                : {}),
+            // Passes become data (plan §4.1): the skip path carries the
+            // "watched, chose not to" reason onto the logged trade.
+            ...(skipReason && skipReason.trim() ? { skipReason: skipReason.trim() } : {}),
         };
         return {
             pnlAmount: finalPnl,
@@ -370,6 +390,32 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                                 </button>
                             ))}
                         </div>
+                        {/* Pre-trade checklist (plan §4.3) — only rendered when
+                            enabled in Settings; completion rides onto the trade. */}
+                        {checklistCfg.enabled && (
+                            <>
+                                <div className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 mt-2 mb-1.5">
+                                    Checklist ({checklistChecked.size}/{checklistCfg.items.length})
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                    {checklistCfg.items.map(item => (
+                                        <button
+                                            key={item.id}
+                                            type="button"
+                                            onClick={() => toggleChecklistItem(item.id)}
+                                            className={`flex items-center gap-2 rounded-md border px-2 py-1 text-left text-[10px] font-medium transition-colors ${
+                                                checklistChecked.has(item.id)
+                                                    ? 'border-white/25 bg-zinc-700 text-zinc-100'
+                                                    : 'border-white/10 bg-zinc-800 text-zinc-500 hover:text-zinc-300'
+                                            }`}
+                                        >
+                                            <span aria-hidden>{checklistChecked.has(item.id) ? '☑' : '☐'}</span>
+                                            {item.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
 

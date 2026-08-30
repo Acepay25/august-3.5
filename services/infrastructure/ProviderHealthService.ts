@@ -11,6 +11,12 @@
  * (429 backoff, network retry), so an error that reaches here survived
  * retries. 3+ persisted errors within 15 minutes → 10-minute cooldown,
  * cleared by the next success.
+ *
+ * Scope ruling (plan §14-10): the bench is IN-MEMORY by design — it is a
+ * live-run circuit breaker, not durable state; an app restart clears it
+ * (the errors that caused it are gone too). A success clearing the whole
+ * window is likewise intentional: a provider that answers one request
+ * correctly is not benched, even if it flaps.
  */
 
 export interface ProviderHealth {

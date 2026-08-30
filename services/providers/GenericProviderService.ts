@@ -558,6 +558,25 @@ async function messagesCall(
         };
         delete body.temperature;
     }
+    // P5 wire audit (plan §14-2): the messages transport previously emitted
+    // NO audit line, so Claude seats — the format whose thinking gate P3
+    // fixed — were invisible in the run log. Report the shim's actual
+    // decision: applied (thinking block sent), or why it wasn't.
+    {
+        const effort = options?.reasoningEffort ?? 'auto';
+        const thinkingSent = !!body.thinking;
+        options?.onWireAudit?.({
+            route: thinkingSent ? 'anthropic-thinking' : 'none',
+            effort,
+            applied: thinkingSent,
+            reason: thinkingSent
+                ? `thinking budget_tokens=${(body.thinking as { budget_tokens: number }).budget_tokens} (effort ${effort})`
+                : `no thinking block: ${options?.jsonMode ? 'jsonMode excludes thinking'
+                    : (options?.maxTokens ?? 4096) <= 1024 ? 'maxTokens below the 1024 thinking floor'
+                        : config.thinkingCapable === false ? 'thinkingCapable override = off'
+                            : 'model id not recognized as thinking-capable (set the override in Settings)'}`,
+        });
+    }
 
     const url = `${normalizeBaseUrl(config.baseUrl, 'messages')}/messages`;
     const response = await fetch(url, {
@@ -691,6 +710,15 @@ async function googleCall(
     const base = normalizeBaseUrl(config.baseUrl, config.apiFormat);
     const key = (config.apiKey || '').trim();
     const url = googleGenerateUrl(base, config.selectedModel, key, false);
+    // P5 audit (plan §14-2): Google generateContent has no verified effort
+    // knob — record the fail-closed no-op so the run log says so explicitly
+    // instead of staying silent for Gemini seats.
+    options?.onWireAudit?.({
+        route: 'none',
+        effort: options?.reasoningEffort ?? 'auto',
+        applied: false,
+        reason: 'google generateContent: no verified reasoning route (fail closed)',
+    });
     const body = chatMessagesToGemini(messages, {
         maxTokens: options?.maxTokens,
         temperature: options?.temperature,

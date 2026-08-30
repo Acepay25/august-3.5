@@ -15,6 +15,7 @@
 
 import { LoggedTrade } from '../types/trade';
 import { TradeOutcome } from '../types/enums';
+import { rowPnlUsd } from '../services/validation/SessionGuardService';
 
 export interface DisciplineRow {
     label: string;
@@ -48,16 +49,12 @@ export interface DisciplineAnalytics {
 const isClosed = (t: LoggedTrade): boolean =>
     t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS;
 
-/** Dollar PnL of a row — pnlAmount authoritative, pnlPercent via the risk base. */
-const pnlUsd = (t: LoggedTrade): number => {
-    if (typeof t.pnlAmount === 'number' && Number.isFinite(t.pnlAmount)) return t.pnlAmount;
-    if (typeof t.pnlPercent === 'number' && Number.isFinite(t.pnlPercent)) {
-        // Leveraged percent through the 1%-of-equity risk base (SessionGuard
-        // convention: -200 leveraged = -$200 on $10k).
-        return (t.pnlPercent / 100) * 10_000 * 0.01;
-    }
-    return 0;
-};
+/** Dollar PnL of a row — pnlAmount authoritative, pnlPercent converted
+ *  through the position's margin or the planned risk base (plan §14-7:
+ *  the old formula divided by 100 twice and treated a leveraged POSITION
+ *  percent as percent-of-equity, deflating autopilot rows ~100×). Shares
+ *  the SessionGuard converter so the two surfaces can't disagree. */
+const pnlUsd = (t: LoggedTrade): number => rowPnlUsd(t, 10_000, 1);
 
 const emptyRow = (label: string): DisciplineRow => ({
     label, n: 0, winRate: 0, profitFactor: 0, avgR: null, totalPnlUsd: 0,

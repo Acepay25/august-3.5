@@ -117,6 +117,8 @@ export interface LoggedTrade {
   maxFavorableExcursion?: number;
   /** Why a SKIPPED trade was passed on ("watched, chose not to") — passes become data. */
   skipReason?: string;
+  /** Pre-trade checklist completion at log time (plan §4.3): items checked / shown. */
+  checklistCompleted?: { done: number; total: number };
 }
 
 export interface StrategySearchResult {
@@ -137,6 +139,10 @@ export interface CaptureJournalTags {
   emotionalState?: LoggedTrade['emotionalState'];
   followedPlan?: boolean;
   planDeviationNote?: string;
+  /** Pre-trade checklist completion (plan §4.3): items checked / items shown. */
+  checklistCompleted?: { done: number; total: number };
+  /** Why a pass was taken (plan §4.1) — rides the capture modal's skip path. */
+  skipReason?: string;
 }
 
 export interface SavedAnalysis {

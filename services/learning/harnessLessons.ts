@@ -158,6 +158,50 @@ registerWireRoutePins((route, providerId) =>
         && l.pattern.toLowerCase().includes(`route=${route}`.toLowerCase())
     ));
 
+/**
+ * P7 write path from the P5 audit stream (plan §14-5): a clarification call
+ * on a chat_completions seat where NO reasoning knob could be applied
+ * (fail-closed 'none' route) is a budget lesson — the harness cannot tell
+ * this wire shape to stop thinking, so a thinking-default model on it will
+ * burn reasoning budget on 60-word answers. (The applied-thinking-off and
+ * shim-owned anthropic cases are correct behavior and record nothing.)
+ * Deduped by recordHarnessLesson's scope+kind+pattern match, so a provider
+ * that keeps doing this refreshes one belief instead of spamming events.
+ */
+export const recordBudgetLessonFromAudit = (
+    audit: WireAuditEntry,
+    task: string,
+    providerId: string,
+): void => {
+    if (task !== 'clarification') return;
+    if (audit.applied || audit.route !== 'none') return;
+    if (!audit.reason.includes('fail closed')) return;
+    recordHarnessLesson({
+        kind: 'budget',
+        scope: 'thinkingDefault',
+        provider: providerId,
+        pattern: 'clarification on an unverified wire shape (no thinking-off knob)',
+        lesson: 'A chat_completions seat with no verified reasoning route cannot be told to think less for fast tasks — if it thinks by default, clarifications burn reasoning budget. Probe this shape or prefer a provider with a verified thinking-off knob.',
+        evidenceId: `audit:${providerId}:clarification`,
+    });
+};
+
+/**
+ * P7 read path for the moderator (plan §14-5): a compact digest of the
+ * harness's own wire/budget beliefs, injected into the verdict context so
+ * the arbiter weighs known provider quirks ("this seat 200-accepts but
+ * ignores reasoning_effort"). Capability-class scoped, capped, newest
+ * first — the index, not the wall.
+ */
+export const formatHarnessNotesBlock = (max = 4): string => {
+    const notes = load()
+        .filter(l => l.kind === 'wire' || l.kind === 'budget')
+        .slice(0, max);
+    if (notes.length === 0) return '';
+    const lines = notes.map(l => `- [${l.kind}/${l.scope}] ${l.lesson}`);
+    return `**HARNESS NOTES (code-observed provider behavior — weigh seat outputs accordingly):**\n${lines.join('\n')}`;
+};
+
 // ─── P6: known-answer probes (200-accepted ≠ honored) ────────────────────────
 
 export interface WireProbeResult {
@@ -202,7 +246,11 @@ export const probeWireSupport = async (
             { ...config, apiKey: config.apiKey?.trim() || 'not-needed' },
             [{ role: 'user', content: 'Reply with exactly: OK' }],
             {
-                maxTokens: 64,
+                // 512, not 64 (plan §14-3): a thinking-default model spends
+                // part of the budget reasoning; at 64 the visible reply can
+                // legitimately come back empty and the probe would pin off
+                // a WORKING provider.
+                maxTokens: 512,
                 temperature: 0,
                 signal: AbortSignal.timeout(30_000),
                 reasoningEffort: effort,
@@ -212,7 +260,10 @@ export const probeWireSupport = async (
             honored = true;
             evidence = `knob sent (${audit.reason}) and the model replied OK`;
         } else if (audit.applied) {
-            evidence = `knob sent (${audit.reason}) but the model did not reply OK`;
+            // INCONCLUSIVE, not broken: the knob reached the wire (the call
+            // succeeded with it in the body) but the known-answer check
+            // missed. probeAndLearn must NOT pin a route off on this.
+            evidence = `inconclusive: knob sent (${audit.reason}) but the reply lacked OK — no lesson recorded`;
         } else {
             evidence = `no knob sent (fail-closed: ${audit.reason})`;
         }
@@ -222,7 +273,11 @@ export const probeWireSupport = async (
             : audit.route === 'glm-thinking' || audit.route === 'deepseek-thinking' ? 'thinking'
                 : audit.route === 'responses-effort' ? 'reasoning'
                     : 'thinking';
-        if (message.toLowerCase().includes(knobField)) {
+        // Tightened heuristic (plan §14-3): the provider must name the knob
+        // field in a REJECTION context — a bare substring match on
+        // 'thinking' caught unrelated error text.
+        const rejection = /unrecognized|invalid|not\s+(a\s+)?(valid|supported|allowed)|unsupported|unknown|extra.*argument|argument.*not|rejected/i.test(message);
+        if (rejection && message.toLowerCase().includes(knobField)) {
             // The provider read the field and rejected its VALUE — proof the
             // knob reaches the wire (the harness must exclude this shape).
             honored = true;
@@ -263,17 +318,22 @@ export const probeAndLearn = async (
         );
         for (const l of stale) clearHarnessLesson(l.id);
     } else if (result.audit.applied) {
-        // A knob was SENT but the call failed without the provider naming the
-        // knob field — behavioral evidence the route is broken on this
-        // endpoint. Pin it off until a re-probe clears the lesson.
-        recordHarnessLesson({
-            kind: 'wire',
-            scope: 'wireReasoningEffort',
-            provider: config.id,
-            pattern: `route=${routeLabel} broken on ${config.apiFormat}/${config.selectedModel}`,
-            lesson: `The ${routeLabel} reasoning knob failed on this endpoint — effort tiers are pinned off for this provider until a re-probe succeeds.`,
-            evidenceId: `probe:${result.providerId}:${Date.now()}`,
-        });
+        // Only HARD evidence pins: the call failed and the provider did not
+        // name the knob (a broken route). "200 + no OK" is INCONCLUSIVE
+        // (plan §14-3) — a thinking-default model can legitimately return
+        // no visible text — and must never pin off a working provider.
+        if (result.evidence.startsWith('inconclusive')) {
+            // No lesson; the probe simply taught nothing.
+        } else {
+            recordHarnessLesson({
+                kind: 'wire',
+                scope: 'wireReasoningEffort',
+                provider: config.id,
+                pattern: `route=${routeLabel} broken on ${config.apiFormat}/${config.selectedModel}`,
+                lesson: `The ${routeLabel} reasoning knob failed on this endpoint — effort tiers are pinned off for this provider until a re-probe succeeds.`,
+                evidenceId: `probe:${result.providerId}:${Date.now()}`,
+            });
+        }
     } else if (result.audit.route === 'none') {
         // The harness sent no knob where one may have applied — worth a
         // lesson ONLY if the reason indicates an unverified shape (not a

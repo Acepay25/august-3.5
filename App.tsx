@@ -15,6 +15,7 @@ import { initStrategyDocs } from './services/infrastructure/StrategyService';
 import { initMemoryFiles, syncPatternMemory, syncProfileMemory, syncRecurringMistakes, subscribeMemoryFilesChanged } from './services/learning/MemoryFilesService';
 import { runNotebookReview } from './services/learning/MemoryReviewService';
 import { runWeeklyRollupIfDue } from './services/learning/weeklyRollup';
+import { runWeeklyReviewIfDue } from './services/learning/weeklyReview';
 import { hydrateRegimeLedger } from './services/learning/regimeLedger';
 import { computeRegimeProviderStats } from './services/learning/SetupMemoryService';
 import { AnalystRole } from './types/enums';
@@ -125,8 +126,8 @@ import { ProviderConfig } from './types/provider';
 import { syncFromTradeLog, syncRollingWindowFromTradeLog, initModelPerformanceService } from './services/backtesting/ModelPerformanceService';
 import { saveLensConfig, initAnalystLensService, loadLensConfig, saveEnsembleModelSelection, loadLastModeratorPick, saveLastModeratorPick, EnsembleModelSelection, saveCustomEnsemblePrompt, saveCustomLensPrompts } from './services/ui/AnalystLensService';
 import { isProviderOnCooldown, providerCooldownRemainingMs } from './services/infrastructure/ProviderHealthService';
-import { assessSession, DEFAULT_SESSION_GUARD } from './services/validation/SessionGuardService';
-import { getHarnessSettings } from './utils/harnessSettings';
+import { assessSession } from './services/validation/SessionGuardService';
+import { getHarnessSettings, getSessionGuardConfig } from './utils/harnessSettings';
 import { checkDataIntegrity, createStartupBackup, logIntegrityEvent, runMigrations } from './services/validation/DataIntegrityService';
 import { startAutoBackup, stopAutoBackup, createBackup } from './services/infrastructure/BackupService';
 import { storageService } from './services/infrastructure/StorageService';
@@ -300,7 +301,12 @@ const App: React.FC = () => {
             console.warn('[Moderator] No moderator selected — fell back to', nonAnalystModerator.name);
             return nonAnalystModerator;
         }
-        return readyProviders.find(p => !isProviderOnCooldown(p.id)) || readyProviders[0] || {
+        return readyProviders.find(p => !isProviderOnCooldown(p.id)) || (() => {
+            // Every ready provider is benched (plan §14-10): the run still
+            // needs a moderator, but say so loudly instead of silently.
+            if (readyProviders.length > 0) console.warn('[Moderator] ALL providers are on error cooldown — using the first ready one anyway.');
+            return readyProviders[0];
+        })() || {
             id: 'none', name: 'None', apiKey: '', baseUrl: '', apiFormat: 'chat_completions' as const,
             isEnabled: false, isBuiltIn: true, models: [], selectedModel: '',
         };
@@ -692,7 +698,7 @@ const App: React.FC = () => {
     // state over the journal — drives the composer banner and is injected
     // into the debate context so the moderator weighs it when grading.
     const sessionGuard = useMemo(
-        () => assessSession(loggedTrades, getHarnessSettings().equityUsd),
+        () => assessSession(loggedTrades, getHarnessSettings().equityUsd, getSessionGuardConfig()),
         [loggedTrades],
     );
 
@@ -1492,6 +1498,15 @@ const App: React.FC = () => {
             if (res) console.log('[WeeklyRollup] pass complete:', res);
         }).catch(e => {
             console.warn('[WeeklyRollup] boot pass failed:', e instanceof Error ? e.message : e);
+        });
+        // Weekly review (Batch 5 §4.5): deterministic week-stats + ONE
+        // improvement impulse from a provider call, gated on >=7 days since
+        // the last digest AND >=3 closed trades. Fire-and-forget like the
+        // rollup — a missing provider or failed call leaves no digest.
+        void runWeeklyReviewIfDue(username, loggedTradesRef.current).then(res => {
+            if (res) console.log('[WeeklyReview] digest generated:', res.impulse.slice(0, 80));
+        }).catch(e => {
+            console.warn('[WeeklyReview] boot pass failed:', e instanceof Error ? e.message : e);
         });
         // Native (Capacitor) loads the lens config asynchronously, after the
         // useAppSettings lazy initializer already ran with an empty default —
@@ -3447,7 +3462,7 @@ const App: React.FC = () => {
         // SessionGuard trade counter — the log-trade strip chip (Batch 2).
         sessionTradeCount: sessionGuard ? {
             tradesToday: sessionGuard.tradesToday,
-            maxTradesPerDay: DEFAULT_SESSION_GUARD.maxTradesPerDay,
+            maxTradesPerDay: getSessionGuardConfig().maxTradesPerDay,
         } : undefined,
     }), [typingMessageState, highlightedAnalysisId, expandedPostMortems, expandedPostMortemImages, savedAnalyses, activeFrameworks, copiedMessageId, modelIdToName, providerNameToId, handleInitiateLogTrade, handleInitiateSkipTrade, handleViewStrategyDetails, handleApplyStrategy, handleSaveAnalysis, handleCopy, handleTypingComplete, handleInitiateUpdateTrade, confidenceCalibration, handleRetryPostMortem, chatLeverage, autopilotResolutions, handleConfirmAutopilot, handleDismissAutopilot, handleCompareAnalysis, handleViewReasoning, handleReRunAnalysis, handleResumeDebate, handleFollowUpTicket, handleForkDebate, handleToggleWatch, handleReplacementChoice, startTodayReassessment, todayReassessmentInFlight, lensConfig, handleSteerSeat, handleStopSeat, externalOpenActor, externalOpenActorNonce,
         // The inline-approval surface reads these —
@@ -3990,7 +4005,7 @@ const App: React.FC = () => {
                     level: sessionGuard.level,
                     warnings: sessionGuard.warnings,
                     tradesToday: sessionGuard.tradesToday,
-                    maxTradesPerDay: DEFAULT_SESSION_GUARD.maxTradesPerDay,
+                    maxTradesPerDay: getSessionGuardConfig().maxTradesPerDay,
                 }}
                 isPostMortemInProgress={isPostMortemInProgress}
                 setIsLivePostMortemVisible={setIsLivePostMortemVisible}

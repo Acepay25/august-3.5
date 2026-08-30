@@ -1,0 +1,162 @@
+/**
+ * Weekly review (Batch 5, plan §4.5) — the deterministic week-stats
+ * assembly + ONE moderator-provider call synthesizing exactly ONE
+ * improvement impulse (Edgewonk cadence: one impulse, not a lecture).
+ *
+ * Trigger: at app start via runWeeklyReviewIfDue — due when >=7 days since
+ * the last digest AND >=3 closed trades since (the SkillEvalScheduler
+ * due-check + cooldown pattern). Rendered as a Journal card; stored in
+ * Preferences per user.
+ */
+
+import { LoggedTrade } from '../../types/trade';
+import { TradeOutcome } from '../../types/enums';
+import { getPreferenceObject, setPreferenceObject } from '../infrastructure/PreferencesService';
+import { buildDisciplineAnalytics } from '../../utils/disciplineAnalytics';
+import { sendChatRequest } from '../providers/GenericProviderService';
+import { getFirstReadyProvider } from '../../utils/providerUtils';
+import { loadProviderConfigs } from '../infrastructure/ProviderConfigService';
+import { ProviderConfig } from '../../types/provider';
+
+const KEY_PREFIX = 'weekly_review_v1_';
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+const MIN_CLOSED_TRADES = 3;
+
+export interface WeeklyReviewDigest {
+    /** ISO timestamp of the week this digest covers (its end). */
+    generatedAt: string;
+    /** Deterministic week stats (the numbers the impulse must cite). */
+    stats: {
+        closed: number;
+        wins: number;
+        losses: number;
+        netPnlUsd: number;
+        avgR: number | null;
+        adherenceFollowedPct: number | null;
+        topMistake: string | null;
+        givebackDays: number;
+    };
+    /** The ONE improvement impulse from the moderator call. */
+    impulse: string;
+    /** Provider that wrote it (provenance). */
+    providerName: string;
+}
+
+const keyFor = (username: string): string =>
+    `${KEY_PREFIX}${(username || 'default').trim() || 'default'}`;
+
+/** Deterministic week-stats assembly over the closed trades of the window. */
+export const buildWeekStats = (trades: LoggedTrade[], nowMs: number): WeeklyReviewDigest['stats'] => {
+    const since = nowMs - WEEK_MS;
+    const closed = trades.filter(t =>
+        (t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS)
+        && t.timestamp && Date.parse(t.timestamp) >= since);
+    const wins = closed.filter(t => t.outcome === TradeOutcome.WIN);
+    const losses = closed.filter(t => t.outcome === TradeOutcome.LOSS);
+    const analytics = buildDisciplineAnalytics(closed);
+    const rs = closed.map(t => t.rMultiple).filter((r): r is number => typeof r === 'number');
+    const followedN = analytics.adherence.followed.n;
+    const brokenN = analytics.adherence.broken.n;
+    const topCost = analytics.mistakeCost[0];
+    return {
+        closed: closed.length,
+        wins: wins.length,
+        losses: losses.length,
+        netPnlUsd: closed.reduce((s, t) => s + (typeof t.pnlAmount === 'number' ? t.pnlAmount : 0), 0),
+        avgR: rs.length > 0 ? rs.reduce((s, r) => s + r, 0) / rs.length : null,
+        adherenceFollowedPct: followedN + brokenN > 0
+            ? Math.round((followedN / (followedN + brokenN)) * 100)
+            : null,
+        topMistake: topCost && topCost.totalPnlUsd < 0 ? topCost.tag : null,
+        givebackDays: analytics.giveback.days,
+    };
+};
+
+const statsLines = (s: WeeklyReviewDigest['stats']): string =>
+    `Closed trades (7d): ${s.closed} (${s.wins}W/${s.losses}L)\n` +
+    `Net P&L: $${Math.round(s.netPnlUsd)}${s.avgR !== null ? ` · avg R: ${s.avgR.toFixed(2)}` : ''}\n` +
+    `Plan adherence: ${s.adherenceFollowedPct !== null ? `${s.adherenceFollowedPct}% followed` : 'not tagged'}\n` +
+    (s.topMistake ? `Most expensive mistake: ${s.topMistake}\n` : '') +
+    (s.givebackDays > 0 ? `Giveback days (green turned red): ${s.givebackDays}\n` : '');
+
+/** The single-call prompt: cite the computed facts, emit ONE impulse. */
+export const buildWeeklyImpulsePrompt = (s: WeeklyReviewDigest['stats']): string =>
+    `You are the trader's review coach. Here is this week's deterministic journal summary:\n\n` +
+    `${statsLines(s)}\n` +
+    `Write EXACTLY ONE improvement impulse for next week — one concrete, ` +
+    `falsifiable behavior change (max 2 sentences), grounded in the numbers ` +
+    `above. Lead with process over outcome: if adherence is the weak number, ` +
+    `the impulse is about adherence, not P&L. No lecture, no lists, no ` +
+    `hedging, no urgency words (never "urgent", "easy", "guaranteed"). ` +
+    `If the numbers are too thin to learn from, say so in one line.`;
+
+/** True when a digest has never been generated or is >=7 days old. */
+export const isWeeklyReviewDue = async (username: string, now = Date.now()): Promise<boolean> => {
+    try {
+        const prev = await getPreferenceObject<{ generatedAt?: string }>(keyFor(username));
+        const ts = prev?.generatedAt ? Date.parse(prev.generatedAt) : NaN;
+        if (!Number.isFinite(ts)) return true;
+        return now - ts >= WEEK_MS;
+    } catch {
+        return true;
+    }
+};
+
+/**
+ * Generate + store the digest. Returns null when not due, too few closed
+ * trades, or no ready provider (best-effort — never throws into boot).
+ */
+export const runWeeklyReview = async (
+    username: string,
+    trades: LoggedTrade[],
+    providerConfigs: ProviderConfig[],
+    now = Date.now(),
+): Promise<WeeklyReviewDigest | null> => {
+    const stats = buildWeekStats(trades, now);
+    if (stats.closed < MIN_CLOSED_TRADES) return null;
+    const provider = getFirstReadyProvider(providerConfigs);
+    if (!provider) return null;
+    try {
+        const impulse = (await sendChatRequest(
+            provider,
+            [{ role: 'user', content: buildWeeklyImpulsePrompt(stats) }],
+            { maxTokens: 400, temperature: 0.4 },
+        ) || '').trim().slice(0, 600);
+        if (!impulse) return null;
+        const digest: WeeklyReviewDigest = {
+            generatedAt: new Date(now).toISOString(),
+            stats,
+            impulse,
+            providerName: provider.name,
+        };
+        await setPreferenceObject(keyFor(username), digest);
+        return digest;
+    } catch (e) {
+        console.warn('[WeeklyReview] impulse call failed:', e instanceof Error ? e.message : e);
+        return null;
+    }
+};
+
+/** Boot hook: due-check + trade gate + provider load, fire-and-forget. */
+export const runWeeklyReviewIfDue = async (
+    username: string,
+    trades: LoggedTrade[],
+): Promise<WeeklyReviewDigest | null> => {
+    try {
+        if (!(await isWeeklyReviewDue(username))) return null;
+        const configs = await loadProviderConfigs();
+        return await runWeeklyReview(username, trades, configs);
+    } catch {
+        return null;
+    }
+};
+
+/** The stored digest for the Journal card (null when none). */
+export const loadWeeklyReview = async (username: string): Promise<WeeklyReviewDigest | null> => {
+    try {
+        const d = await getPreferenceObject<WeeklyReviewDigest>(keyFor(username));
+        return d && typeof d.impulse === 'string' && d.stats ? d : null;
+    } catch {
+        return null;
+    }
+};

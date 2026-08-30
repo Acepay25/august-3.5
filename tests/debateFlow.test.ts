@@ -25,8 +25,6 @@ vi.mock('../services/providers/GenericProviderService', () => ({
 
 import {
   conductDebate,
-  conductTwoWayDebate,
-  conductThreeWayDebate,
   conductRealDebate,
   awaitReplacementWithTimeout,
   buildLivePriceRefreshBlock,
@@ -90,12 +88,6 @@ const MARKDOWN_PLAN = (direction: string, confidence = 'Medium', probability = 6
 - **Probability:** ${probability}%
 - **Strategy:** Trend continuation`;
 
-const FULL_DEBATE = [
-  '**Analyst One:** thesis presented\n\n',
-  '**Analyst Two:** counter-thesis presented\n\n',
-  '<DEBATE_START>\n**Moderator:** synthesis verdict\n\n' + MARKDOWN_PLAN('Long'),
-];
-
 /** Collect all chunks an async generator yields. */
 async function collect(gen: AsyncGenerator<string>): Promise<string> {
   let out = '';
@@ -107,54 +99,6 @@ describe('ensemble debate generators (mocked transport)', () => {
   beforeEach(() => {
     streamMock.mockReset();
     sendMock.mockReset();
-  });
-
-  it('conductTwoWayDebate yields the scripted turns + JSON plan', async () => {
-    streamMock.mockImplementation(async function* () {
-      yield* FULL_DEBATE;
-    });
-
-    const output = await collect(conductTwoWayDebate(
-      analyst, analyst, 'Analyst One', 'Analyst Two',
-      'Analyze BTCUSDT', null, config, 'model-a', undefined, [],
-    ));
-
-    expect(output).toContain('**Analyst One:** thesis presented');
-    expect(output).toContain('FINAL TRADE PLAN');
-    // Moderator messages: fixed system role + user prompt that names the analysts.
-    const [cfg, messages] = streamMock.mock.calls[0];
-    expect(messages[0].role).toBe('system');
-    const userPrompt = messages[1].content as string;
-    expect(userPrompt).toContain('<DEBATE_START>');
-    expect(userPrompt).toContain('FINAL TRADE PLAN');
-    expect(userPrompt.toUpperCase()).toContain('ANALYST ONE');
-    expect(userPrompt.toUpperCase()).toContain('ANALYST TWO');
-    // The embedded markdown plan is extractable end-to-end.
-    const plan = parseMarkdownTradePlan(output);
-    expect(plan?.direction).toBe('Long');
-    expect(plan?.entry).toBe('95000');
-    void cfg;
-  });
-
-  it('conductThreeWayDebate yields and preserves all three analyst names in the prompt', async () => {
-    streamMock.mockImplementation(async function* () {
-      yield 'three-way synthesis';
-      yield MARKDOWN_PLAN('Long');
-    });
-
-    const output = await collect(conductThreeWayDebate(
-      analyst, analyst, analyst,
-      'Analyst One', 'Analyst Two', 'Analyst Three',
-      'Analyze BTCUSDT', null, config, 'model-a', undefined,
-      [], [], [], undefined, [], [], [], undefined, undefined,
-    ));
-    expect(output).toContain('three-way synthesis');
-
-    const [, messages] = streamMock.mock.calls[0];
-    const userPrompt = messages[1].content as string;
-    expect(userPrompt.toUpperCase()).toContain('ANALYST ONE');
-    expect(userPrompt.toUpperCase()).toContain('ANALYST TWO');
-    expect(userPrompt.toUpperCase()).toContain('ANALYST THREE');
   });
 
   it('conductDebate (accuracy mode) yields moderator output', async () => {
@@ -172,47 +116,6 @@ describe('ensemble debate generators (mocked transport)', () => {
     expect(parseMarkdownTradePlan(output)?.direction).toBe('Short');
   });
 
-  it('propagates user cancellation as AbortError (no <MODERATOR_ERROR> marker)', async () => {
-    const abortError = Object.assign(new Error('The operation was aborted.'), { name: 'AbortError' });
-    streamMock.mockImplementation(async function* () {
-      yield 'partial chunk';
-      throw abortError;
-    });
-
-    const gen = conductTwoWayDebate(
-      analyst, analyst, 'Analyst One', 'Analyst Two',
-      'Analyze', null, config, 'model-a', undefined, [],
-      undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
-      new AbortController().signal,
-    );
-    await expect(collect(gen)).rejects.toMatchObject({ name: 'AbortError' });
-  });
-
-  it('rethrows rate-limit (429) errors instead of emitting a marker', async () => {
-    // eslint-disable-next-line require-yield -- mocked stream fails before yielding any chunk
-    streamMock.mockImplementation(async function* () {
-      throw Object.assign(new Error('Rate limit reached. Please wait and try again.'), { status: 429 });
-    });
-
-    const gen = conductTwoWayDebate(
-      analyst, analyst, 'Analyst One', 'Analyst Two',
-      'Analyze', null, config, 'model-a', undefined, [],
-    );
-    await expect(collect(gen)).rejects.toMatchObject({ status: 429 });
-  });
-
-  it('yields an <MODERATOR_ERROR> marker for non-rate-limit provider failures', async () => {
-    // eslint-disable-next-line require-yield -- mocked stream fails before yielding any chunk
-    streamMock.mockImplementation(async function* () {
-      throw new Error('boom: provider exploded');
-    });
-
-    const output = await collect(conductTwoWayDebate(
-      analyst, analyst, 'Analyst One', 'Analyst Two',
-      'Analyze', null, config, 'model-a', undefined, [],
-    ));
-    expect(output).toContain('<MODERATOR_ERROR>');
-  });
 });
 
 // =============================================================================
@@ -260,12 +163,12 @@ describe('conductRealDebate (real inter-model debate)', () => {
 
   /** Mock stream: rebuttals echo the analyst name; clarification defaults to done; verdict emits JSON. */
   const mockStreams = () => {
-    const calls: { system: string; user: string }[] = [];
+    const calls: { system: string; user: string; options?: any }[] = [];
     streamMock.mockImplementation(async function* (...args: any[]) {
       const messages = args[1] as { role: string; content: string }[];
       const system = messages[0].content;
       const user = messages[1].content;
-      calls.push({ system, user });
+      calls.push({ system, user, options: args[2] });
       if (system.includes('CLARIFICATION ANSWER')) {
         yield `**${floorSeatName(system, ['Analyst One', 'Analyst Two'])}:** exact clarification answer`;
       } else if (user.includes('CLARIFICATION JUDGMENT')) {
@@ -346,6 +249,19 @@ describe('conductRealDebate (real inter-model debate)', () => {
     // round and can never merge with the questions turn.
     const rounds = [...new Set(events.map(e => e.round))];
     expect(rounds).toEqual([1, 2, 3, 4, 5]);
+
+    // P6 wire-shape assertions (plan §14-4): the effort schedule must reach
+    // the transport options at every call site — rebuttals run 'high', the
+    // moderator verdict runs 'max', and every call carries an audit sink so
+    // the run log can label what the wire received.
+    const rebuttalCalls = calls.filter(c => c.system.includes('ENSEMBLE DEBATE PARTICIPANT'));
+    expect(rebuttalCalls.length).toBeGreaterThan(0);
+    for (const c of rebuttalCalls) {
+        expect(c.options?.reasoningEffort).toBe('high');
+        expect(typeof c.options?.onWireAudit).toBe('function');
+    }
+    const verdictCall = calls.find(c => c.system.includes('debate moderator') && c.options?.reasoningEffort);
+    expect(verdictCall?.options.reasoningEffort).toBe('max');
   });
 
   it('skips the clarification cycle when the openings fully agree (divergence 0)', async () => {

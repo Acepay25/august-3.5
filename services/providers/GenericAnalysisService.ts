@@ -820,7 +820,8 @@ Answer **all** of the following **MANDATORY LOSS ANALYSIS QUESTIONS**:
         [{ role: 'user', content: analysisPrompt }],
         // 0.4: a forensic post-mortem must not roll dice on its lesson —
         // the 0.7 default sampled "brutally honest" post-mortems randomly.
-        { signal, onReasoning: params.onReasoning, maxTokens: TASK_BUDGETS.postMortem, temperature: 0.4 }
+        // P2 effort tier (plan §14): structured reporting runs medium.
+        { signal, onReasoning: params.onReasoning, maxTokens: TASK_BUDGETS.postMortem, temperature: 0.4, reasoningEffort: EFFORT_BY_TASK.postMortem }
     );
     return sanitizeAIResponse(result || "Post-mortem analysis failed.");
 }
@@ -943,7 +944,7 @@ export async function getQuickResponse(
         messages.push({ role: 'user', content: prompt });
     }
 
-    const result = await sendChatRequest(config, messages, { maxTokens: TASK_BUDGETS.chat, signal, onReasoning });
+    const result = await sendChatRequest(config, messages, { maxTokens: TASK_BUDGETS.chat, signal, onReasoning, reasoningEffort: EFFORT_BY_TASK.chat });
     // Defensive: some apiFormats leave  bodies in the final content.
     // Strip them here (idempotent — chat_completions already peeled them via
     // splitChatContent) and route any leftover to the reasoning side channel
@@ -987,7 +988,7 @@ export async function streamQuickResponse(
     // Electron non-streaming path) can still leak them into content. Gating
     // here guarantees the live bubble never shows scratchpad markup.
     const gate = createThinkingStreamGate();
-    for await (const chunk of streamChatRequest(config, messages, { maxTokens: TASK_BUDGETS.chat, signal, onReasoning })) {
+    for await (const chunk of streamChatRequest(config, messages, { maxTokens: TASK_BUDGETS.chat, signal, onReasoning, reasoningEffort: EFFORT_BY_TASK.chat })) {
         if (!chunk) continue;
         const gated = gate.push(chunk);
         if (gated.thinking) onReasoning?.(gated.thinking);
@@ -1106,7 +1107,7 @@ export async function summarizeChartImage(
             ],
         }];
 
-        const fullSummary = await sendChatRequest(config, messages, { maxTokens: TASK_BUDGETS.ocr, signal });
+        const fullSummary = await sendChatRequest(config, messages, { maxTokens: TASK_BUDGETS.ocr, signal, reasoningEffort: EFFORT_BY_TASK.ocr });
 
         const timeframeMatch = fullSummary.match(/Timeframe:\s*(.*?)(?:\n|$)/i);
         const priceMatch = fullSummary.match(/(?:Current )?Price:\s*(.*?)(?:\n|$)/i);

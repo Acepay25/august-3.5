@@ -6,6 +6,7 @@ import EquityCurveDashboard from '../dashboards/EquityCurveDashboard';
 import LearningDashboard from '../dashboards/LearningDashboard';
 import ModelPerformanceDashboard from '../dashboards/ModelPerformanceDashboard';
 import ReasoningDashboard from '../dashboards/ReasoningDashboard';
+import { WeeklyReviewCard } from './WeeklyReviewCard';
 import { CloseIcon, HistoryIcon, ChartBarIcon, BrainIcon } from '../shared/Icons';
 import { exportTradesCSV, exportTradesHTML } from '../../utils/reportExport';
 import { AIProvider, LoggedTrade, TradeSummary, GlobalMemory, TradeOutcome } from '../../types';
@@ -189,6 +190,7 @@ const JournalInner: React.FC<JournalProps> = ({
         ) : activeTab === 'analytics' ? (
             <div className="h-full overflow-y-auto">
                 <div className="p-6 sm:p-8 space-y-8">
+                    <WeeklyReviewCard username={activeUsername} />
                     <JournalAnalyticsSummary trades={trades} />
                     <EquityCurveDashboard trades={trades} />
                     <WinRateDashboard trades={trades} />

@@ -4,6 +4,48 @@ Plain-English log of change rounds. Newest first.
 
 ---
 
+## ROUND-40 — Audit-fix batch (plan §14), dead-code cleanup (§8.0), weekly review (§4.5)
+
+**Batch 14 (all audit findings from the v5 plan review, fixed with
+regression tests in tests/auditFixes.test.ts + tests/probeSelfHarm.test.ts):**
+Kelly advisory sign bug (journal losses are negative — the advisory never
+rendered in production; now normalized at both function and call site).
+P5 wire audit now fires on the messages (Claude) and google (Gemini)
+transports too — every apiFormat gets a budget line. The known-answer
+probe no longer pins off a WORKING provider: 64→512 probe budget,
+"200 + no OK" is inconclusive (no lesson), and the knob-rejection
+heuristic requires rejection wording. P6 wire-shape assertions added to
+debateFlow (rebuttals carry effort 'high', verdict 'max', audit sink on
+every call). P7 loop closed: the clarification audit stream writes budget
+lessons, and the moderator verdict now sees a capped HARNESS NOTES block.
+Trade cap buckets by OPEN time (analysis.createdAt); realized P&L keeps
+close time. Shared rowPnlUsd converter (margin = investmentAmount, else
+risk base) now used by SessionGuard AND disciplineAnalytics. Guard config
+is live: preset picker (tight/FTMO) + per-field overrides in Settings →
+Harness, read by every assessSession call site. SMC block moved high in
+the hybrid packet so the 2400-char head-slice can't truncate it first.
+Cooldown in-memory scope + success-clears ruling documented; all-benched
+moderator fallback now warns. Dead P2 tiers wired (post-mortem medium,
+chat/OCR low). quietHours got its test suite; skillsGrid timeout raised.
+
+**Batch 8 (§8.0):** deleted the six orphaned components and the ~980-line
+conductTwoWayDebate/conductThreeWayDebate generators + their five test
+blocks (error-path coverage already lives on conductRealDebate); stale
+"dead generators" comments updated.
+
+**Batch 5 partial (§4.3 + §4.5):** pre-trade checklist (utils/checklist.ts,
+FTMO defaults, OFF by default, Settings toggle, checkboxes in the capture
+modal, completion stored on the trade); weekly review service
+(services/learning/weeklyReview.ts — deterministic week stats + ONE
+improvement impulse from a provider call, 7-day + 3-trade gate, boot
+trigger next to the rollup, WeeklyReviewCard on the Journal analytics
+tab). Still open from batch 5: monthly report card, pre-read capture,
+index-layer memory injection.
+
+Gates: tsc 0, full suite 1715 passed / 0 failed, build clean.
+
+---
+
 ## ROUND-39 — zcode/claude UI parity, debate hardening, learning-loop review fixes
 
 **UI parity with the reference screenshots.** The whole app moved onto the
