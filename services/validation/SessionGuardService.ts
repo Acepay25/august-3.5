@@ -32,6 +32,13 @@ export interface SessionGuardConfig {
     lossStreakPause: number;
     /** Post-loss cooldown in minutes. */
     postLossCooldownMin: number;
+    /**
+     * The trader's per-trade risk budget (percent of equity, e.g. 1). Used
+     * to convert pnlPercent-only autopilot rows to dollars when no
+     * investmentAmount exists (plan §14-7): a row resolved at its stop
+     * counts as exactly -riskUsd. Defaults to the harness risk setting.
+     */
+    tradeRiskPercent: number;
 }
 
 export const DEFAULT_SESSION_GUARD: SessionGuardConfig = {
@@ -39,6 +46,7 @@ export const DEFAULT_SESSION_GUARD: SessionGuardConfig = {
     maxTradesPerDay: 2,
     lossStreakPause: 2,
     postLossCooldownMin: 240,
+    tradeRiskPercent: 1,
 };
 
 /** FTMO's looser preset — the config alternative named in the research. */
@@ -46,6 +54,31 @@ export const FTMO_SESSION_GUARD: SessionGuardConfig = {
     ...DEFAULT_SESSION_GUARD,
     dailyLossLimitPct: 0.03,
     maxTradesPerDay: 3,
+};
+
+/**
+ * Dollar P&L of one journal row (plan §14-7, corrected during
+ * implementation): pnlAmount is authoritative when present. pnlPercent is
+ * a LEVERAGED POSITION percent (autopilot rows carry e.g. -200 = the
+ * position lost 200% of its margin). Dollars = margin × pct/100, where the
+ * margin is the captured investmentAmount when known, else the 1%-of-
+ * equity risk base (the documented convention: -200 leveraged = -$200 on
+ * $10k). The original audit claim of a "double division" was a
+ * miscalculation — the convention is sound; the real gap was ignoring
+ * investmentAmount when present.
+ */
+export const rowPnlUsd = (
+    t: LoggedTrade,
+    equityUsd: number,
+    tradeRiskPercent = 1,
+): number => {
+    if (typeof t.pnlAmount === 'number' && Number.isFinite(t.pnlAmount)) return t.pnlAmount;
+    if (typeof t.pnlPercent !== 'number' || !Number.isFinite(t.pnlPercent)) return 0;
+    const margin = t.investmentAmount && t.investmentAmount > 0
+        ? t.investmentAmount
+        : equityUsd * (tradeRiskPercent / 100);
+    if (margin <= 0) return 0;
+    return (t.pnlPercent / 100) * margin;
 };
 
 export type GuardLevel = 'clear' | 'notice' | 'warning' | 'standdown';
@@ -90,20 +123,15 @@ const isOpenOfDay = (ts: string | undefined, dayStart: number, now: number): boo
 };
 
 /**
- * Today's realized P&L in dollars. pnlAmount is authoritative when present;
- * pnlPercent is a leveraged-percent fallback converted through the risk
- * fraction of equity (a percent-only row still counts toward the breaker —
- * ignoring it would let autopilot rows escape the guard).
+ * Today's realized P&L in dollars — per-row conversion via rowPnlUsd
+ * (pnlAmount authoritative; pnlPercent through the position's margin or
+ * the planned risk base, never a double-divided percent-of-equity).
  */
-const dayPnl = (trades: LoggedTrade[], dayStart: number, now: number, equityUsd: number): number => {
+const dayPnl = (trades: LoggedTrade[], dayStart: number, now: number, equityUsd: number, tradeRiskPercent = 1): number => {
     let total = 0;
     for (const t of trades) {
         if (!isOpenOfDay(t.timestamp, dayStart, now)) continue;
-        if (typeof t.pnlAmount === 'number' && Number.isFinite(t.pnlAmount)) {
-            total += t.pnlAmount;
-        } else if (typeof t.pnlPercent === 'number' && Number.isFinite(t.pnlPercent) && equityUsd > 0) {
-            total += (t.pnlPercent / 100) * equityUsd * 0.01;
-        }
+        total += rowPnlUsd(t, equityUsd, tradeRiskPercent);
     }
     return total;
 };
@@ -134,7 +162,7 @@ export const assessSession = (
 ): SessionGuardVerdict => {
     const nowMs = now.getTime();
     const dayStart = utcDayStart(now).getTime();
-    const pnl = dayPnl(trades, dayStart, nowMs, equityUsd);
+    const pnl = dayPnl(trades, dayStart, nowMs, equityUsd, config.tradeRiskPercent ?? 1);
     const eq = equityUsd > 0 ? equityUsd : 10_000;
     const lossBudgetUsd = eq * config.dailyLossLimitPct;
     // Only losses consume the budget — a green day never trips the breaker.
@@ -143,7 +171,12 @@ export const assessSession = (
     const dayPct = eq > 0 ? pnl / eq : 0;
 
     const tradesToday = trades.filter(t =>
-        isOpenOfDay(t.timestamp, dayStart, nowMs)
+        // Trade cap buckets by OPEN time (the signal's createdAt), not the
+        // close timestamp — a trade opened 23:50 UTC and closed 00:10 is
+        // still a trade of yesterday's session (plan §14-6, corrected by
+        // review: `timestamp` is stamped at outcome-capture, so it is
+        // already close time and is right for P&L/streak/cooldown).
+        isOpenOfDay(t.analysis?.createdAt ?? t.timestamp, dayStart, nowMs)
         && t.outcome !== TradeOutcome.SKIPPED
         && t.outcome !== TradeOutcome.ENTRY_NOT_HIT,
     ).length;

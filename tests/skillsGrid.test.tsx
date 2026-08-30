@@ -83,7 +83,9 @@ describe('SkillsGrid', () => {
         expect(screen.getByText('repeat-eth-continuation')).toBeInTheDocument();
     });
 
-    it('clicking a card opens the detail with meta + instructions, back returns', async () => {
+    // 15s: under full-suite load the detail-open transition exceeds the
+    // default 5s (plan §14-11c — the isolation run is ~2s).
+    it('clicking a card opens the detail with meta + instructions, back returns', { timeout: 15_000 }, async () => {
         render(<SkillsGrid />);
         await userEvent.click(await screen.findByText('avoid-btc-short-fakeouts'));
 

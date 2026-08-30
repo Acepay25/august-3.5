@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { clearSessionUsage, loadSessionUsage, SessionUsageEntry, summarizeModelUsage, summarizeUsagePeriod } from '../../utils/sessionUsage';
 import { getHarnessSettings, saveHarnessSettings } from '../../utils/harnessSettings';
+import { loadChecklistConfig, saveChecklistConfig } from '../../utils/checklist';
 import { formatChars } from '../../utils/runUsage';
 import { formatModelDisplayName } from '../../utils/providerUtils';
 
@@ -128,6 +129,7 @@ const SessionUsagePanel: React.FC = () => {
 
 const HarnessControls: React.FC = () => {
     const [settings, setSettings] = useState(getHarnessSettings);
+    const [checklist, setChecklist] = useState(loadChecklistConfig);
     const persist = (next: Partial<ReturnType<typeof getHarnessSettings>>): void => {
         setSettings(saveHarnessSettings(next));
     };
@@ -167,6 +169,59 @@ const HarnessControls: React.FC = () => {
                     <option value="0.1">10%</option>
                     <option value="0.5">50%</option>
                 </select>
+            </label>
+            {/* Session-guard limits (plan §3b/§14-8): preset + overrides.
+                Takes effect immediately here; the in-the-moment cap change
+                rule (typed confirm) applies to the banner, not this panel. */}
+            <label className="block text-[11px] text-zinc-400">
+                Session guard preset
+                <select
+                    value={settings.guardPreset ?? 'default'}
+                    onChange={e => persist({ guardPreset: e.target.value as 'default' | 'ftmo' })}
+                    className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-100"
+                >
+                    <option value="default">Tight — 2% day / 2 trades / 4h cooldown</option>
+                    <option value="ftmo">FTMO — 3% day / 3 trades / 4h cooldown</option>
+                </select>
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+                <label className="block text-[11px] text-zinc-400">
+                    Daily loss limit (%)
+                    <input
+                        type="number"
+                        min={0.5}
+                        max={25}
+                        step={0.5}
+                        placeholder="preset"
+                        value={settings.guardDailyLossPct ?? ''}
+                        onChange={e => persist({ guardDailyLossPct: e.target.value === '' ? undefined : Math.min(25, Math.max(0.5, Number(e.target.value))) })}
+                        className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-100"
+                    />
+                </label>
+                <label className="block text-[11px] text-zinc-400">
+                    Max trades / day
+                    <input
+                        type="number"
+                        min={1}
+                        max={20}
+                        placeholder="preset"
+                        value={settings.guardMaxTradesPerDay ?? ''}
+                        onChange={e => persist({ guardMaxTradesPerDay: e.target.value === '' ? undefined : Math.min(20, Math.max(1, Math.floor(Number(e.target.value)))) })}
+                        className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-100"
+                    />
+                </label>
+            </div>
+            {/* Pre-trade checklist (plan §4.3): OFF by default; when on, the
+                capture modal shows the items and completion rides onto the
+                trade (checklistCompleted) feeding adherence stats. */}
+            <label className="flex items-center gap-2 text-[11px] text-zinc-400 cursor-pointer select-none">
+                <input
+                    type="checkbox"
+                    checked={checklist.enabled}
+                    onChange={e => setChecklist(saveChecklistConfig({ ...checklist, enabled: e.target.checked }))}
+                    className="rounded border-zinc-700 bg-zinc-950"
+                />
+                Pre-trade checklist at capture (off by default)
             </label>
             <label className="block text-[11px] text-zinc-400">
                 Debate cost cap (USD, 0 = off)

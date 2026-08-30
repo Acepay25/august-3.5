@@ -124,11 +124,13 @@ describe('probeWireSupport (P6 known-answer probe)', () => {
         expect(result.evidence).toContain('knob sent');
     });
 
-    it('knob sent but model does not reply OK → not honored', async () => {
+    it('knob sent but model does not reply OK → inconclusive, not honored', async () => {
         mockSend.mockResolvedValue('something else entirely');
         const result = await probeWireSupport(makeConfig({ baseUrl: 'https://api.x.ai/v1' }), 'high');
         expect(result.honored).toBe(false);
-        expect(result.evidence).toContain('did not reply OK');
+        // §14-3: "200 + no OK" is INCONCLUSIVE (a thinking-default model can
+        // legitimately return no visible text) — never pin-off evidence.
+        expect(result.evidence).toContain('inconclusive');
     });
 
     it('provider rejects the knob field by name → the knob provably reached the wire (honored)', async () => {

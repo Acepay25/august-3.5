@@ -99,7 +99,7 @@ import { computeContractSize, gradeRiskTier, kellyAdvisory } from '../utils/tick
 import { planAmendmentDiff } from '../utils/trustSurface';
 import { withFinComMetadata, flagBannedVocabulary } from '../services/providers/debateScience';
 import { assessSession, formatGuardContextBlock } from '../services/validation/SessionGuardService';
-import { getHarnessSettings } from '../utils/harnessSettings';
+import { getHarnessSettings, getSessionGuardConfig } from '../utils/harnessSettings';
 import { beginPromptLane, endPromptLane } from '../services/infrastructure/PromptOverrideService';
 import { buildEnsembleAnalysts, buildAnalystFailureReport, findDuplicateAnalystOutputs, AnalystOutputSample } from '../services/ui/EnsembleAnalystService';
 import { getEffectiveStyle } from '../services/ui/TradingStyleDetector';
@@ -1780,7 +1780,7 @@ ${reflectionBlock}`
                     // analysis so the journal records the state the moderator saw.
                     const harnessSettingsNow = getHarnessSettings();
                     const tier = gradeRiskTier(finalAnalysis.grade, harnessSettingsNow.riskPercent);
-                    const guardVerdict = assessSession(loggedTradesRef.current, harnessSettingsNow.equityUsd);
+                    const guardVerdict = assessSession(loggedTradesRef.current, harnessSettingsNow.equityUsd, getSessionGuardConfig());
                     const closedTrades = loggedTradesRef.current.filter(t =>
                         t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS);
                     const wins = closedTrades.filter(t => t.outcome === TradeOutcome.WIN);
@@ -1788,7 +1788,9 @@ ${reflectionBlock}`
                     const avg = (xs: typeof closedTrades) => xs.length > 0
                         ? xs.reduce((s, t) => s + (t.pnlAmount ?? 0), 0) / xs.length
                         : 0;
-                    const kelly = kellyAdvisory(wins.length, losses.length, avg(wins), avg(losses));
+                    // Losses store pnlAmount NEGATIVE (capture flow negates) —
+                    // kellyAdvisory needs the payoff ratio magnitudes.
+                    const kelly = kellyAdvisory(wins.length, losses.length, avg(wins), Math.abs(avg(losses)));
                     const sized = computeContractSize(
                         finalAnalysis,
                         harnessSettingsNow.equityUsd,
@@ -2808,6 +2810,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                             formatGuardContextBlock(assessSession(
                                 loggedTrades,
                                 getHarnessSettings().equityUsd,
+                                getSessionGuardConfig(),
                             )),
                         );
                     }

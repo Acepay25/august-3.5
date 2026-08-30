@@ -929,6 +929,12 @@ export const generateHybridPromptInjection = (data: HybridDataPacket, options?: 
         data.live1h && data.marketData.currentPrice > 0
             ? `Live 1H: open $${fmtPx(data.live1h.open)} → $${fmtPx(data.live1h.price)} · ${data.live1h.minutesLeft}m left · ${data.live1h.percentTraveled.toFixed(0)}% of range`
             : '',
+        // SMC structure sits high in the packet (plan §14-9): the 2400-char
+        // snapshot cap is a head-slice, and at the tail the detectors were
+        // the FIRST thing truncated under dense packets.
+        data.smcStructure
+            ? formatSmcStructureBlock(data.smcStructure, data.marketData.currentPrice)
+            : '',
         `### Derivatives / book / liquidations`,
         mdTable(
             ['OI', 'OI 24h', 'L/S', 'Top trader', 'Taker', 'Overall', 'Score'],
@@ -1021,9 +1027,6 @@ export const generateHybridPromptInjection = (data: HybridDataPacket, options?: 
         options?.compact ? '' : formatCandleHistoryInsight(data.candleHistory),
         mdTable(['TF', 'Pattern', 'Dir', 'Str', 'Level', 'Note'], patternRows),
         options?.compact ? '' : ohlcBlocks,
-        data.smcStructure
-            ? formatSmcStructureBlock(data.smcStructure, data.marketData.currentPrice)
-            : '',
         `### Read rules`,
         `- Numbers above are code-calculated. Cite a table cell when you name a level.`,
         `- ADX regime is authoritative vs the chart-structure table. ${adxRule}`,

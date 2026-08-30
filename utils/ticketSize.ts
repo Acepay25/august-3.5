@@ -179,12 +179,16 @@ export const kellyAdvisory = (
     avgWinUsd: number,
     avgLossUsd: number,
 ): KellyAdvisory => {
+    // Normalize magnitudes: journal losses are stored NEGATIVE (the capture
+    // flow writes -abs(pnl)), and R = avgWin/avgLoss needs magnitudes.
+    const win = Math.abs(avgWinUsd);
+    const loss = Math.abs(avgLossUsd);
     const n = wins + losses;
-    if (wins < 1 || losses < 1 || n < 20 || avgWinUsd <= 0 || avgLossUsd <= 0) {
+    if (wins < 1 || losses < 1 || n < 20 || win <= 0 || loss <= 0) {
         return { fullKelly: 0, quarterKelly: 0, halfKelly: 0, sampleSize: n, line: '' };
     }
     const w = wins / n;
-    const r = avgWinUsd / avgLossUsd;
+    const r = win / loss;
     const full = w - (1 - w) / r;
     if (full <= 0) {
         return {

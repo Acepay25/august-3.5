@@ -30,6 +30,15 @@
  * body change and an audit label saying why — a 200-accepted-but-ignored
  * knob is indistinguishable from a no-op at the provider, so every applied
  * route is also logged for P5's runStats audit and P6's behavior probes.
+ *
+ * Knob coexistence note (plan §14-11d): the transport's
+ * requestReasoningSideChannel separately sets `include_reasoning: true`
+ * on openrouter/deepseek/groq/together/fireworks/siliconflow hosts. On a
+ * deepSeek-detected chat_completions provider BOTH `thinking` (here) and
+ * `include_reasoning` (there) can land in one body — gateways that ignore
+ * unknown fields are unaffected, and gateways that reject them surface as
+ * a probe rejection (hard evidence, correctly pinned). Not a collision to
+ * fix; a probe reading it as one would be wrong.
  */
 
 import type { ProviderConfig } from '../../types/provider';
