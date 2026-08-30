@@ -12,6 +12,7 @@ import { BarChart3 } from 'lucide-react';
 import { LoggedTrade, TradeOutcome } from '../../types';
 import { EmptyState } from '../ui/EmptyState';
 import { buildCalibrationLedger, ledgerFramingLine, brierQuality } from '../../services/validation/CalibrationLedgerService';
+import { buildDisciplineAnalytics } from '../../utils/disciplineAnalytics';
 import {
     calculateOverallStats,
     calculatePerformanceByConfidence,
@@ -124,6 +125,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
         ...ledger.byGrade.map(r => ({ key: `g-${r.label}`, ...r, label: `Grade ${r.label}` })),
         ...ledger.byBand.map(r => ({ key: `b-${r.label}`, ...r, label: `${r.label} confidence` })),
     ], [ledger]);
+    const discipline = useMemo(() => buildDisciplineAnalytics(filteredTrades), [filteredTrades]);
     // Number of days the trend window should look back. The "All" preset (0) and
     // custom date ranges would otherwise be clamped to the 30-day default inside
     // calculateRecentTrends, silently dropping older trades from the trend chart.
@@ -316,6 +318,67 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                             ))}
                         </tbody>
                     </table>
+                </div>
+            </div>
+
+            {/* Discipline analytics (Batch 5): the adherence split, mistake
+                cost, post-first-red, and giveback views — the research says
+                these changed behavior where raw P&L did not. */}
+            <div className="glass-panel p-3 sm:p-4 rounded-xl border border-white/5 bg-zinc-800">
+                <div className="text-[9px] sm:text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-2">Discipline</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <div className="text-[10px] text-zinc-400 font-bold mb-1">Plan adherence</div>
+                        <table className="w-full text-[11px]">
+                            <tbody className="font-mono">
+                                {[discipline.adherence.followed, discipline.adherence.broken].map(r => (
+                                    <tr key={r.label} className="border-t border-white/5 text-zinc-300">
+                                        <td className="py-1">{r.label}</td>
+                                        <td className="py-1 text-right tabular-nums">{r.n} trades</td>
+                                        <td className="py-1 text-right tabular-nums text-white">{r.n > 0 ? `${r.winRate.toFixed(0)}%` : '—'}</td>
+                                        <td className="py-1 text-right tabular-nums text-zinc-500">{r.n > 0 && Number.isFinite(r.profitFactor) ? `${r.profitFactor.toFixed(2)} PF` : '—'}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                        {discipline.giveback.days > 0 && (
+                            <p className="text-[10px] text-zinc-500 mt-1">
+                                {discipline.giveback.days} green day{discipline.giveback.days === 1 ? '' : 's'} finished red — overtrading into a lead.
+                            </p>
+                        )}
+                    </div>
+                    <div>
+                        <div className="text-[10px] text-zinc-400 font-bold mb-1">Mistake cost (Σ PnL)</div>
+                        {discipline.mistakeCost.length > 0 ? (
+                            <table className="w-full text-[11px]">
+                                <tbody className="font-mono">
+                                    {discipline.mistakeCost.slice(0, 4).map(r => (
+                                        <tr key={r.tag} className="border-t border-white/5 text-zinc-300">
+                                            <td className="py-1">{r.tag.replace(/_/g, ' ')}</td>
+                                            <td className="py-1 text-right tabular-nums text-zinc-500">×{r.n}</td>
+                                            <td className={`py-1 text-right tabular-nums ${r.totalPnlUsd < 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                                                ${Math.round(r.totalPnlUsd).toLocaleString()}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        ) : (
+                            <p className="text-[10px] text-zinc-600">Tag mistakes when logging — the table builds itself.</p>
+                        )}
+                        <div className="text-[10px] text-zinc-400 font-bold mt-2 mb-1">After the day's first red</div>
+                        <table className="w-full text-[11px]">
+                            <tbody className="font-mono">
+                                {[discipline.afterFirstRed.before, discipline.afterFirstRed.after].map(r => (
+                                    <tr key={r.label} className="border-t border-white/5 text-zinc-300">
+                                        <td className="py-1">{r.label}</td>
+                                        <td className="py-1 text-right tabular-nums">{r.n} trades</td>
+                                        <td className="py-1 text-right tabular-nums text-white">{r.n > 0 ? `${r.winRate.toFixed(0)}%` : '—'}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 

@@ -9,6 +9,8 @@ import GlobalLearningService from '../services/learning/GlobalLearningService';
 import { DEFAULT_LEVERAGE } from '../utils/conversationUtils';
 import { parsePrice } from '../utils/analysisUtils';
 import { trackTradeOutcome, mapRegimeToKey } from '../services/backtesting/ModelPerformanceService';
+import { computeRMultiple } from '../utils/disciplineAnalytics';
+import { CaptureJournalTags } from '../types/trade';
 import { trackConfluenceOutcome, calculateConfluenceScore } from '../services/analysis/TimeframeConfluenceService';
 import { SLOptimizationData } from '../services/backtesting/StopLossOptimizerService';
 import { ConfidenceLevel } from '../services/validation/ConfidenceCalibrationService';
@@ -219,7 +221,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
     // ─── Trade Logging ────────────────────────────────────────────────────
 
     // Helper function to log trade (called by all capture handlers)
-    const logTradeWithFeedback = useCallback(async (message: Message, outcome: TradeOutcome.WIN | TradeOutcome.LOSS, feedback: { pnlAmount?: number; pnlPercent?: number; correctedStopLoss?: string; correctedTakeProfit?: string; selectedEntryIndices?: number[]; slOptimizationData?: SLOptimizationData; }) => {
+    const logTradeWithFeedback = useCallback(async (message: Message, outcome: TradeOutcome.WIN | TradeOutcome.LOSS, feedback: { pnlAmount?: number; pnlPercent?: number; correctedStopLoss?: string; correctedTakeProfit?: string; selectedEntryIndices?: number[]; slOptimizationData?: SLOptimizationData; journalTags?: CaptureJournalTags; }) => {
         // Persist the market regime captured at analysis time (7-value
         // hybrid regime normalized to the 4-key trade regime). Falls back to
         // undefined when no snapshot exists.
@@ -256,6 +258,14 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             patternMemoryGate: message.patternMemoryGate,
             promptVersion: message.runStats?.promptVersion,
             promptLane: message.runStats?.promptLane,
+            // Discipline tags (Batch 5): quick-tap at capture time; R-multiple
+            // computed deterministically when a leveraged percent exists.
+            ...feedback.journalTags,
+            rMultiple: computeRMultiple(
+                message.analysis?.entryPoints?.[0]?.price,
+                message.analysis?.stopLoss,
+                feedback.pnlPercent,
+            ),
         };
 
         setLoggedTrades(prev => prev.some(t => t.id === loggedTrade.id) ? prev : [loggedTrade, ...prev]);
@@ -350,7 +360,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
 
     // ─── Data Capture Modal Handlers ──────────────────────────────────────
 
-    const handleDataCaptureUpload = (feedback: { pnlAmount: number; correctedStopLoss?: string; correctedTakeProfit?: string; }) => {
+    const handleDataCaptureUpload = (feedback: { pnlAmount: number; correctedStopLoss?: string; correctedTakeProfit?: string; journalTags?: CaptureJournalTags; }) => {
         // User chose to upload screenshot manually - log trade first, then proceed to PostTradeUploadModal
         if (dataCaptureCandidate) {
             logTradeWithFeedback(dataCaptureCandidate.message, dataCaptureCandidate.outcome as any, feedback);
@@ -360,7 +370,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
     };
 
     // Temporary variable to store feedback during auto-capture
-    const handleDataCaptureAuto = async (feedback: { pnlAmount: number; correctedStopLoss?: string; correctedTakeProfit?: string; selectedEntryIndices?: number[]; }) => {
+    const handleDataCaptureAuto = async (feedback: { pnlAmount: number; correctedStopLoss?: string; correctedTakeProfit?: string; selectedEntryIndices?: number[]; journalTags?: CaptureJournalTags; }) => {
         // User chose auto-capture - fetch current market data
         if (!dataCaptureCandidate || !dataCaptureCandidate.message.analysis) {
             setDataCaptureCandidate(null);
@@ -426,7 +436,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         }
     };
 
-    const handleDataCaptureSkip = (feedback: { pnlAmount: number; correctedStopLoss?: string; correctedTakeProfit?: string; }) => {
+    const handleDataCaptureSkip = (feedback: { pnlAmount: number; correctedStopLoss?: string; correctedTakeProfit?: string; journalTags?: CaptureJournalTags; }) => {
         // User chose to skip - log trade and start post-mortem without additional data
         if (dataCaptureCandidate) {
             logTradeWithFeedback(dataCaptureCandidate.message, dataCaptureCandidate.outcome as any, feedback);

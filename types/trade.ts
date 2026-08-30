@@ -101,6 +101,22 @@ export interface LoggedTrade {
    * Example: [0] = Entry 1 only, [1] = Entry 2 only, [0, 1] = Both entries filled.
    */
   triggeredEntryIndices?: number[];
+
+  // ===== Journal discipline fields (Batch 5, plan §4.1 — all optional) =====
+  /** What went wrong, in the trader's own taxonomy. Drives the mistake-cost table. */
+  mistakeTags?: ('failed_thesis' | 'boredom' | 'overtrading' | 'greed' | 'revenge' | 'moved_stop' | 'early_entry' | 'late_exit')[];
+  /** Self-rated state at entry (quick-tap at capture time). */
+  emotionalState?: 'calm' | 'confident' | 'anxious' | 'frustrated' | 'tilted' | 'fomo';
+  /** Did the executed trade match the published plan? Drives the adherence split. */
+  followedPlan?: boolean;
+  /** What deviated, when followedPlan is false. */
+  planDeviationNote?: string;
+  /** Realized R-multiple — computed at log time from entry/SL/pnl (deterministic util). */
+  rMultiple?: number;
+  /** Best price the trade offered before exit, as leveraged percent (MFE). With pnlPercent it yields capture efficiency. */
+  maxFavorableExcursion?: number;
+  /** Why a SKIPPED trade was passed on ("watched, chose not to") — passes become data. */
+  skipReason?: string;
 }
 
 export interface StrategySearchResult {
@@ -110,6 +126,17 @@ export interface StrategySearchResult {
   backtestData?: string;
   pitfalls?: string;
   implementationSteps?: string[];
+}
+
+/**
+ * Discipline tags captured at trade-logging time (Batch 5 quick-tag UI).
+ * Everything optional — the capture flow must stay ≤3 taps.
+ */
+export interface CaptureJournalTags {
+  mistakeTags?: LoggedTrade['mistakeTags'];
+  emotionalState?: LoggedTrade['emotionalState'];
+  followedPlan?: boolean;
+  planDeviationNote?: string;
 }
 
 export interface SavedAnalysis {
