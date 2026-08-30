@@ -3,6 +3,17 @@
 // =============================================================================
 
 /**
+ * FinCom disagree-or-commit marker (Batch 4): one line per peer in a debate
+ * turn — the seat either commits to the peer's current position (with why)
+ * or dissents (with why). Parsed into DebateTurn.fincom for conformity stats.
+ */
+export interface FinComMarker {
+  seat: string;
+  stance: 'commit' | 'dissent';
+  why: string;
+}
+
+/**
  * Lessons extracted from similar historical trades
  * Used by AdaptiveLearningService
  */

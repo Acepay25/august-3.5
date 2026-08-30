@@ -97,6 +97,7 @@ import { rescueSoftAvoid } from '../utils/avoidReason';
 import { applyHybridChartDrift } from '../utils/hybridChartDrift';
 import { computeContractSize, gradeRiskTier, kellyAdvisory } from '../utils/ticketSize';
 import { planAmendmentDiff } from '../utils/trustSurface';
+import { withFinComMetadata, flagBannedVocabulary } from '../services/providers/debateScience';
 import { assessSession, formatGuardContextBlock } from '../services/validation/SessionGuardService';
 import { getHarnessSettings } from '../utils/harnessSettings';
 import { beginPromptLane, endPromptLane } from '../services/infrastructure/PromptOverrideService';
@@ -3027,7 +3028,9 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 .filter(turn => Boolean(turn.text) || Boolean(turn.reasoning))
                                 .sort((a, b) => (a.round ?? 0) - (b.round ?? 0));
 
-                            const normalizedTurns = currentTurns.map(applyReplyTo);
+                            // REPLY-TO markers become `to`; FinCom COMMIT/DISSENT
+                            // lines parse into `fincom` metadata (Batch 4 g).
+                            const normalizedTurns = currentTurns.map(t => withFinComMetadata(applyReplyTo(t)));
                             debateTurnsRef.current = normalizedTurns;
                             throttledDebateUpdate(requestConversationId, debateMessageId, normalizedTurns, thoughtMap, reasoningMapRef.current, activeDebateSpeakersRef.current, runContractFor());
                         };
@@ -3155,6 +3158,17 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 // the workspace, never a JSON schema.
                                 strategy: stripPlanTags(candidate).slice(0, 3000),
                             });
+                            // Vocabulary flag (Batch 4 f): urgency-framed
+                            // wording in the rendered verdict is a measured
+                            // tell (urgency-framed calls averaged −0.42R in
+                            // the signal study) — surface it, don't rewrite it.
+                            const bannedHits = flagBannedVocabulary(candidate);
+                            if (bannedHits.length > 0) {
+                                finalAnalysis.validationWarnings = [
+                                    ...(finalAnalysis.validationWarnings ?? []),
+                                    `URGENCY WORDING: ${bannedHits.join(', ')} — urgency-framed confidence is historically inflated; discount accordingly.`,
+                                ];
+                            }
                         } catch (e) {
                             // Only surface the moderator error marker when no
                             // plan could be recovered at all.

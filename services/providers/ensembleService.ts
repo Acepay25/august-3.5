@@ -46,6 +46,15 @@ import { DUAL_SCENARIO_JSON_SCHEMA, MASTER_TRADE_PLAN_MARKDOWN } from '../../con
 import { parseLiveMarketData } from '../../utils/liveMarketParser';
 import { truncateTextToTokens, parsePrice, parseMarkdownTradePlan } from '../../utils/analysisUtils';
 import { extractDebateLevels, formatDebateLevelsTable, summarizeFinalPositions } from '../../utils/debateLevels';
+import {
+    buildSeatAliases,
+    buildTargetedDevilQuestion,
+    computeEnsembleLine,
+    CONTEXT_MATCH_DIRECTIVE,
+    findHomogeneousPairs,
+    formatEnsembleLineBlock,
+    homogeneousRosterWarning,
+} from './debateScience';
 import { getCalibrationSummaries } from '../../services/backtesting/ModelPerformanceService';
 import { stripLeakedScratchpad } from '../../utils/thinkingSplit';
 import { buildRebuttalDiffPacket } from '../../utils/debateDiff';
@@ -3092,12 +3101,31 @@ export const conductRealDebate = async function* (
 
     const buildRebuttalTask = (analyst: RealDebateAnalyst, round: number, steeringNote: string, seatNote = '') => {
         const ownPosition = roundTexts[analyst.provider.name]?.[round - 1];
+        // Seat anonymization (Batch 4 b): seats address each other by LENS
+        // role or seat number, never by provider/model name — model identity
+        // is the sycophancy channel. The moderator + UI keep real names.
+        const seatAliases = buildSeatAliases(debateRoster.map(o => o.provider.name), (name) => {
+            if (!lensConfig?.enabled) return undefined;
+            const seat = debateRoster.find(o => o.provider.name === name);
+            if (!seat) return undefined;
+            const assignment = lensConfig.assignments.find(x =>
+                x.assignedProvider === seat.provider.config.id
+                && (!x.assignedModel || x.assignedModel === seat.provider.model));
+            return assignment?.role as string | undefined;
+        });
+        const aliasOf = (name: string): string => seatAliases.aliasOf[name] ?? name;
+        // Homogeneous-roster warning (Batch 4 b): same provider+model on
+        // multiple seats predicts correlated errors — warn into the debate.
+        const homogeneityLine = homogeneousRosterWarning(findHomogeneousPairs(
+            debateRoster.map(o => ({ providerId: o.provider.config.id, model: o.provider.model, name: o.provider.name })),
+        ));
         // Addressed routing: a seat only reads turns sent TO it
         // (or floor-wide); turns addressed elsewhere stay out of its prompt.
+        // Quoted texts are anonymized seat-to-seat (Batch 4 b).
         const otherOpenings = debateRoster
             .filter(o => o.provider.name !== analyst.provider.name && roundTexts[o.provider.name]?.[round - 1])
             .filter(o => turnAddressedTo(roundTexts[o.provider.name][round - 1], analyst.provider.name))
-            .map(o => ({ name: o.provider.name, text: roundTexts[o.provider.name][round - 1] }));
+            .map(o => ({ name: aliasOf(o.provider.name), text: seatAliases.anonymize(roundTexts[o.provider.name][round - 1]) }));
         const others = otherOpenings.length > 0
             ? buildRebuttalDiffPacket(analyst.provider.name, ownPosition, otherOpenings)
             : 'No other analyst has spoken yet.';
@@ -3129,8 +3157,8 @@ export const conductRealDebate = async function* (
             + fillPromptPlaceholders(getPrompt('debate.rebuttal', DEBATE_RESPONSE_PROMPT), {
                 NAME: analyst.provider.name,
                 ROUND: String(round),
-                OTHERS: otherAnalystNames.join(', ') || 'none',
-            }) + '\n\nIf another analyst made a strong point, address them by name (@Name).';
+                OTHERS: otherAnalystNames.map(aliasOf).join(', ') || 'none',
+            }) + '\n\nIf another analyst made a strong point, address them by the seat label from OTHER SEATS.';
         // Only inject market snapshot on the first rebuttal round to avoid re-paying the token cost every round.
         const snapshotBlock = round === 2 && centralizedSnapshot ? `\n\n${centralizedSnapshot}` : '';
         // Snapshot the live price at launch so the rebuttal sees the current
@@ -3139,12 +3167,12 @@ export const conductRealDebate = async function* (
         const snapshotRows = debateRoster
             .filter(o => roundTexts[o.provider.name]?.[round - 1])
             .filter(o => turnAddressedTo(roundTexts[o.provider.name][round - 1], analyst.provider.name))
-            .map(o => extractDebateLevels(o.provider.name, roundTexts[o.provider.name][round - 1]));
+            .map(o => extractDebateLevels(aliasOf(o.provider.name), roundTexts[o.provider.name][round - 1]));
         const levelsSnap = formatDebateLevelsTable(snapshotRows);
         const userContent =
             `${buildFloorOrientation({
                 selfName: analyst.provider.name,
-                otherAnalysts: otherAnalystNames,
+                otherAnalysts: otherAnalystNames.map(aliasOf),
                 turn: 'rebuttal',
                 round,
             })}\n\n` +
@@ -3155,8 +3183,18 @@ export const conductRealDebate = async function* (
             (round === rebuttalStart && seatCharges.has(analyst.provider.name)
                 ? `**MODERATOR'S CHARGE (your assignment this round):** ${seatCharges.get(analyst.provider.name)}\n\n`
                 : '') +
+            (round === rebuttalStart ? `${CONTEXT_MATCH_DIRECTIVE}\n\n` : '') +
+            (homogeneityLine ? `${homogeneityLine}\n\n` : '') +
             (isDevilSeat
-                ? "**DEVIL'S ADVOCATE ASSIGNMENT (this round only):** You are assigned the CONTRA position for this round. Argue the strongest honest case AGAINST the emerging floor consensus - what invalidates it, where it fails, who is on the wrong side of the levels. You may concede afterwards, but this round your job is the counter-case. Do not strawman: use real levels and timeframes.\n\n"
+                ? `**DEVIL'S ADVOCATE ASSIGNMENT (this round only):** You are assigned the CONTRA position for this round. ${buildTargetedDevilQuestion((() => {
+                    const anchor = snapshotRows.find(r => r.entry && r.entry !== '—');
+                    return {
+                        floorDirection: anchor?.direction && anchor.direction !== '—' ? anchor.direction : undefined,
+                        entry: anchor?.entry && anchor.entry !== '—' ? anchor.entry : undefined,
+                        invalidation: anchor?.stopLoss && anchor.stopLoss !== '—' ? anchor.stopLoss : undefined,
+                        takeProfit: anchor?.tp1 && anchor.tp1 !== '—' ? anchor.tp1 : undefined,
+                    };
+                })())} Argue the strongest honest case AGAINST the emerging floor consensus on those terms. You may concede afterwards, but this round your job is the counter-case. Do not strawman: use real levels and timeframes.\n\n`
                 : '') +
             (round === rebuttalStart + 1
                 ? '**EVIDENCE ROUND:** Cite ONE concrete data point already on the table (a level, volume figure, funding rate, session context) that most supports OR most threatens your stance. No new analysis - just the evidence and why it matters in one or two sentences, then your updated Levels line.\n\n'
@@ -4011,6 +4049,19 @@ export const conductRealDebate = async function* (
         // the moderator sees where each seat LANDED, not just the openings.
         `\n\n${summarizeFinalPositions(roundTexts, names).block}`,
         buildConvictionAuctionBlock(roundTexts, names, lastRebuttalRound) ? `\n\n${buildConvictionAuctionBlock(roundTexts, names, lastRebuttalRound)}` : '',
+        // Deterministic ensemble line (Batch 4 d): fitness-weighted log-odds
+        // mean of the sealed convictions, plain alpha=1 until ≥50 graded
+        // signals per band exist. Scored advisory — never an override.
+        (() => {
+            const convictions = names
+                .map(name => ({ name, text: roundTexts[name]?.[lastRebuttalRound] || '' }))
+                .map(({ name, text }) => {
+                    const m = text.match(/CONVICTION:\s*(\d{1,3})/i);
+                    return m ? { seat: name, conviction: Math.min(100, Math.max(0, parseInt(m[1], 10))) } : null;
+                })
+                .filter((c): c is { seat: string; conviction: number } => c !== null);
+            return formatEnsembleLineBlock(computeEnsembleLine(convictions));
+        })(),
         buildSeatTrustBlock(names, providerIdBySeat, fullTradesForRecall as never) ? `\n\n${buildSeatTrustBlock(names, providerIdBySeat, fullTradesForRecall as never)}` : '',
         `\n\n**TRADING REQUEST:**\n${truncateTextToTokens(userPrompt, 350)}`,
         steerVerdict ? `\n\n**USER STEERING (queued mid-debate — follow this):**\n${steerVerdict}` : '',

@@ -24,6 +24,10 @@ export interface DebateTurn {
     ttftMs?: number;
     tokensPerSec?: number;
   };
+  /** FinCom disagree-or-commit markers parsed from this turn (Batch 4):
+   *  the mandatory COMMIT:/DISSENT: skeleton each seat emits per peer.
+   *  Feeds future conformity stats; absent on legacy turns. */
+  fincom?: import('./learning').FinComMarker[];
   /** Addressed routing: the seats this turn was sent to, parsed
    *  from the speaker's REPLY-TO line. Absent = floor-wide (everyone reads). */
   to?: string[];

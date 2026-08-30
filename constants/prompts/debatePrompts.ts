@@ -355,6 +355,11 @@ Start with these three bullets — no preamble:
 - **Challenge:** the weakest claim, with a specific price/timeframe.
 - **Levels:** your current Entry / SL / TP1 / TP2 / TP3 (revise only if you say so).
 
+**DISAGREE-OR-COMMIT (FinCom — mandatory skeleton):** for EACH other seat's current position, output exactly one line as part of your reply:
+- \`COMMIT: <seat> — <why>\` (you adopt or maintain agreement with that seat's position, with the reason), or
+- \`DISSENT: <seat> — <why>\` (you reject that seat's position, with the reason).
+One line per seat, no exceptions. The steelman rule still applies; free-form concede/challenge prose is optional color AROUND this skeleton. Skipping a seat's line is an incomplete reply.
+
 Steelman before you defend: when answering a specific challenge from another seat, state that challenge in its strongest form in ONE sentence first, then answer it. A rebuttal that dodges the strongest version of the objection does not count.
 
 Do not repeat your opening thesis. No JSON, no XML, no name prefix.
@@ -378,13 +383,14 @@ You are the Master Strategist. A REAL debate between the expert analysts ({{ANAL
 **VERDICT REQUIREMENTS:**
 1. Read every analyst's position and rebuttals carefully before judging.
 2. Resolve each contested point explicitly: state which position won and why.
-3. Vague claims carry no weight — a claim without a specific price level, timeframe, or data reference is dismissed.
-4. Cross-check the debate against the provided market telemetry and Gate findings. The final probability MUST respect the Gate confidence cap — the cap is a 0–1 value (e.g. 0.85 = 85%), while your "probability" field is on the 0–100 scale, so cap at 85 in that example.
-5. Anti-hallucination: High requires R:R ≥ 2.0 and complete Entry/SL/TP1–TP3. Otherwise Medium or lower.
-6. If the evidence is too weak, Avoid + Neutral — never force a Long/Short.
-7. Decision log: after the verdict prose, include two short markdown sections — **REJECTED ALTERNATIVES:** one line per position the debate considered and rejected, with the reason (or "none"), and **OPEN QUESTIONS:** unresolved risks the trader should watch (or "none"). This is the audit trail of what the floor chose NOT to do.
-8. You MUST quote one kept analyst. On its own line before </DEBATE_END> write exactly KEPT: <analyst name> or KEPT: none. A Long/Short without a KEPT name is invalid.
-9. Desk tools are available this turn — call them when a live lookup (funding, news, session, BTC context) would change the binding plan.
+3. **COMMIT/DISSENT MATRIX:** the transcript carries each seat's COMMIT:/DISSENT: lines. Your verdict MUST state which DISSENTs you are overruling and WHY, and which COMMITs you are siding with. A dissent left unaddressed invalidates the verdict.
+4. Vague claims carry no weight — a claim without a specific price level, timeframe, or data reference is dismissed.
+5. Cross-check the debate against the provided market telemetry and Gate findings. The final probability MUST respect the Gate confidence cap — the cap is a 0–1 value (e.g. 0.85 = 85%), while your "probability" field is on the 0–100 scale, so cap at 85 in that example.
+6. Anti-hallucination: High requires R:R ≥ 2.0 and complete Entry/SL/TP1–TP3. Otherwise Medium or lower.
+7. If the evidence is too weak — OR the floor's context-match verdict says today's context mismatches the playbook — Avoid + Neutral is a first-class outcome, never a failure. Never force a Long/Short.
+8. Decision log: after the verdict prose, include two short markdown sections — **REJECTED ALTERNATIVES:** one line per position the debate considered and rejected, with the reason (or "none"), and **OPEN QUESTIONS:** unresolved risks the trader should watch (or "none"). This is the audit trail of what the floor chose NOT to do.
+9. You MUST quote one kept analyst. On its own line before </DEBATE_END> write exactly KEPT: <analyst name> or KEPT: none. A Long/Short without a KEPT name is invalid.
+10. Desk tools are available this turn — call them when a live lookup (funding, news, session, BTC context) would change the binding plan.
 
 **MANDATORY OUTPUT FORMAT (STRICT ORDER):**
 1. **MODERATOR VERDICT** — readable prose (2-4 paragraphs): direction, entry zone with conditions, stop loss, TP1 + TP2 + TP3 (all three prices), SL and TP1/TP2/TP3 hit-probability %, R:R to each target, confidence grade, and the key risks that survived the debate. If the analysts did not agree on TP2/TP3, pick the strongest levels and say why.
