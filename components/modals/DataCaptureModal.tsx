@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { Message, TradeOutcome } from '../../types';
+import { CaptureJournalTags } from '../../types/trade';
 
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
@@ -9,9 +10,9 @@ interface DataCaptureModalProps {
     message: Message;
     outcome: TradeOutcome;
     onClose: () => void;
-    onUploadScreenshot: (feedback: { pnlAmount: number; correctedStopLoss?: string; correctedTakeProfit?: string; selectedEntryIndices?: number[]; }) => void;
-    onAutoCapture: (feedback: { pnlAmount: number; correctedStopLoss?: string; correctedTakeProfit?: string; selectedEntryIndices?: number[]; }) => void;
-    onSkip: (feedback: { pnlAmount: number; correctedStopLoss?: string; correctedTakeProfit?: string; selectedEntryIndices?: number[]; }) => void;
+    onUploadScreenshot: (feedback: { pnlAmount: number; correctedStopLoss?: string; correctedTakeProfit?: string; selectedEntryIndices?: number[]; journalTags?: CaptureJournalTags; }) => void;
+    onAutoCapture: (feedback: { pnlAmount: number; correctedStopLoss?: string; correctedTakeProfit?: string; selectedEntryIndices?: number[]; journalTags?: CaptureJournalTags; }) => void;
+    onSkip: (feedback: { pnlAmount: number; correctedStopLoss?: string; correctedTakeProfit?: string; selectedEntryIndices?: number[]; journalTags?: CaptureJournalTags; }) => void;
     isCapturing?: boolean;
 }
 
@@ -31,6 +32,27 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
     const [pnl, setPnl] = useState('');
     const [correctedValue, setCorrectedValue] = useState('');
     const [isAdvanced, setIsAdvanced] = useState(false);
+
+    // Discipline quick-tags (Batch 5): optional, ≤3 taps, monochrome chips.
+    // The mistake-cost and adherence analytics build themselves from these.
+    const MISTAKE_TAGS: { id: NonNullable<CaptureJournalTags['mistakeTags']>[number]; label: string }[] = [
+        { id: 'failed_thesis', label: 'Thesis failed' },
+        { id: 'boredom', label: 'Boredom' },
+        { id: 'overtrading', label: 'Overtrading' },
+        { id: 'greed', label: 'Greed' },
+        { id: 'revenge', label: 'Revenge' },
+        { id: 'moved_stop', label: 'Moved stop' },
+        { id: 'early_entry', label: 'Early entry' },
+        { id: 'late_exit', label: 'Late exit' },
+    ];
+    const EMOTIONAL_STATES: NonNullable<CaptureJournalTags['emotionalState']>[] = ['calm', 'confident', 'anxious', 'frustrated', 'tilted', 'fomo'];
+    const [mistakeTags, setMistakeTags] = useState<string[]>([]);
+    const [emotionalState, setEmotionalState] = useState<NonNullable<CaptureJournalTags['emotionalState']> | null>(null);
+    const [followedPlan, setFollowedPlan] = useState<boolean | null>(null);
+
+    const toggleMistakeTag = (id: string): void => {
+        setMistakeTags(prev => prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id]);
+    };
 
     // Entry selection state - for trades with multiple entry points
     const entryPoints = message.analysis?.entryPoints || [];
@@ -77,12 +99,18 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
     // Build feedback object
     const buildFeedback = () => {
         const finalPnl = isWin ? Math.abs(pnlNum) : -Math.abs(pnlNum);
+        const journalTags: CaptureJournalTags = {
+            ...(mistakeTags.length > 0 ? { mistakeTags: mistakeTags as CaptureJournalTags['mistakeTags'] } : {}),
+            ...(emotionalState ? { emotionalState } : {}),
+            ...(followedPlan !== null ? { followedPlan } : {}),
+        };
         return {
             pnlAmount: finalPnl,
             correctedStopLoss: !isWin && isAdvanced ? correctedValue : undefined,
             correctedTakeProfit: isWin && isAdvanced ? correctedValue : undefined,
             // Include selected entries if multiple entries exist
             selectedEntryIndices: hasMultipleEntries ? selectedEntryIndices : undefined,
+            journalTags: Object.keys(journalTags).length > 0 ? journalTags : undefined,
         };
     };
 
@@ -287,6 +315,62 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                             Log without data capture →
                         </span>
                     </button>
+
+                    {/* Discipline quick-tags (Batch 5): optional — everything
+                        here feeds the adherence/mistake-cost analytics. */}
+                    <div className="rounded-xl border border-white/5 bg-zinc-900/60 px-3 py-2.5">
+                        <div className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 mb-1.5">Tags (optional)</div>
+                        <div className="flex flex-wrap gap-1.5">
+                            {MISTAKE_TAGS.map(t => (
+                                <button
+                                    key={t.id}
+                                    type="button"
+                                    onClick={() => toggleMistakeTag(t.id)}
+                                    className={`rounded-md border px-2 py-0.5 text-[10px] font-medium transition-colors ${
+                                        mistakeTags.includes(t.id)
+                                            ? 'border-white/25 bg-zinc-700 text-zinc-100'
+                                            : 'border-white/10 bg-zinc-800 text-zinc-500 hover:text-zinc-300'
+                                    }`}
+                                >
+                                    {t.label}
+                                </button>
+                            ))}
+                        </div>
+                        <div className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 mt-2 mb-1.5">State at entry</div>
+                        <div className="flex flex-wrap gap-1.5">
+                            {EMOTIONAL_STATES.map(s => (
+                                <button
+                                    key={s}
+                                    type="button"
+                                    onClick={() => setEmotionalState(cur => cur === s ? null : s)}
+                                    className={`rounded-md border px-2 py-0.5 text-[10px] font-medium capitalize transition-colors ${
+                                        emotionalState === s
+                                            ? 'border-white/25 bg-zinc-700 text-zinc-100'
+                                            : 'border-white/10 bg-zinc-800 text-zinc-500 hover:text-zinc-300'
+                                    }`}
+                                >
+                                    {s}
+                                </button>
+                            ))}
+                        </div>
+                        <div className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 mt-2 mb-1.5">Followed the plan?</div>
+                        <div className="flex flex-wrap gap-1.5">
+                            {[true, false].map(v => (
+                                <button
+                                    key={String(v)}
+                                    type="button"
+                                    onClick={() => setFollowedPlan(cur => cur === v ? null : v)}
+                                    className={`rounded-md border px-2 py-0.5 text-[10px] font-medium transition-colors ${
+                                        followedPlan === v
+                                            ? 'border-white/25 bg-zinc-700 text-zinc-100'
+                                            : 'border-white/10 bg-zinc-800 text-zinc-500 hover:text-zinc-300'
+                                    }`}
+                                >
+                                    {v ? 'Yes' : 'No'}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
                 </div>
 
                 {/* Footer */}
