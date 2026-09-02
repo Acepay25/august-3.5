@@ -4,6 +4,33 @@ Plain-English log of change rounds. Newest first.
 
 ---
 
+## ROUND-52 — Teams: seat roles, the 3-provider cap removed, living defaults
+
+The Standard-mode debate blocked at 3 providers even though teams seat
+up to 10 — the stale cap now matches the Team menu (`TEAM_MAX_SEATS`,
+with the same pod-tier engine handling 6+ seats that was already
+wired). Before creating a team, each seat gets a **role** (Macro,
+Technical, Risk — inheriting that role's built-in debate prompt) and
+optional **trader instructions**; both are editable later. A seat with
+no role and no instructions isn't empty — it defaults to a
+general-analyst mandate: analyze the market across all dimensions, aim
+for the strongest actionable signal, ground everything in real data
+via desk tools and web search (`web_search` is a registered desk tool
+every seat can already call). Personas ride the whole run: the seat
+directive in the openings phase, a per-seat prefix in the rebuttal
+rounds (`conductRealDebate` gained `seatPersonas`, keyed by seat
+name), and role-scoped tool presets (`defaultToolsForRole`) on the
+opening call. A mid-debate replacement steps INTO the dropped seat's
+persona under its own name. Ad-hoc ensembles (no active team) keep the
+legacy 3-rotation mandate — no behavior change there. Also fixed the
+rail avatar stacks bleeding over team names (properly sized 52px/46px
+containers; group rows likewise). New: `services/agents/seatPersonas.ts`;
+tests in `tests/seatPersonas.test.ts` (7), `tests/teamDialog.test.tsx`
+(+4), `tests/debateFlow.test.ts` (+1). Gates: tsc 0 · 1948 passed /
+11 skipped · build clean · eslint 0 errors.
+
+---
+
 ## ROUND-51 — Bot Mode G2–G5: rooms, attention badges, @mentions, bot Routines
 
 Finished the port plan (`.hermes/plans/botmode-scan-and-plan.md`): group

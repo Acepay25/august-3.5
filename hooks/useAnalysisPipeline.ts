@@ -15,6 +15,9 @@ import { BotRegistry } from '../services/bots/BotRegistry';
 import { defaultToolsForRole } from '../types/bot';
 import { AnalystRole } from '../types/enums';
 import { getActiveUsername } from '../utils/activeUser';
+import { getTeams, getActiveTeamId, AgentTeamSeat } from '../services/agents/agentRoster';
+import { seatPersonaPrompt } from '../services/agents/seatPersonas';
+import { TEAM_MAX_SEATS } from '../utils/teamRoster';
 
 // Analysis / validation / backtesting services
 import { tryFetchHybridDataFromPromptWithCalibration, generateHybridPromptInjection, HybridDataPacket, runMonteCarloForSetupAsync } from '../services/analysis/HybridIntelligenceService';
@@ -347,6 +350,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         systemPromptOverride: string | undefined;
         /** Per-seat independence directive — rendered into the system prompt head. */
         seatDirective?: string;
+        /** Role-scoped desk tools for this seat (undefined = full toolset). */
+        allowedTools?: string[];
         /** Per-seat sampling temperature (ensemble Normal mode). */
         temperature?: number;
         /** Summaries of user-uploaded strategy books (Settings → Strategies). */
@@ -817,6 +822,37 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             runEnsembleEnabled
         );
 
+        // Team-seat personas: resolve the ACTIVE team's seats in debate
+        // order so each seat's role/custom instructions ride its prompts.
+        // Seats are matched by provider+model identity (the same identity
+        // syncTeamToHarness writes into runEnsembleSelection); a seat that
+        // moved on gets the general-analyst default rather than a stale
+        // persona. Read at fire time — persona edits apply to the next send.
+        const runAgentTeamSeats: AgentTeamSeat[] = (() => {
+            try {
+                const activeId = getActiveTeamId();
+                const team = activeId ? getTeams().find(t => t.id === activeId) : undefined;
+                return (team?.seats ?? []).filter(s => s.providerId && s.modelId);
+            } catch {
+                return [];
+            }
+        })();
+        const teamSeatFor = (configId: string, model: string): AgentTeamSeat | undefined =>
+            runAgentTeamSeats.find(s => s.providerId === configId && s.modelId === model);
+        // Role-scoped desk tools: a seat with a built-in team role inherits
+        // that role's tool preset (macro/technical/risk) on its opening;
+        // unroled seats, teamless runs, and Lens mode keep the FULL toolset
+        // (undefined) — personas never mix with the Lens engine.
+        const seatToolsFor = (seat?: AgentTeamSeat): string[] | undefined =>
+            !runLensConfig.enabled && runAgentTeamSeats.length > 0 && seat?.role ? defaultToolsForRole(seat.role) : undefined;
+        // Legacy mandate rotation (ad-hoc ensembles, no active team). Hoisted
+        // so the mid-debate replacement path can mirror the initial seats.
+        const seatMandates = [
+            'market structure, trend context, and the dominant directional bias — anchor on higher-timeframe structure first',
+            'entry mechanics, key levels, and confirmation triggers — pinpoint the entry, stop, and take-profit levels',
+            'risk, invalidation, and failure scenarios — stress-test the trade and argue where it breaks',
+        ];
+
         // Accuracy mode runs the same per-analyst analysis phase, so the
         // staged analyst cards (status + live reasoning) apply there too —
         // previously the user only saw the single moderator stream.
@@ -982,9 +1018,14 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             }
         }
 
-        if (!isAutomationRun && !runAccuracyMode && enabledProviders.length > 3) {
+        // Seat ceiling mirrors the Team menu (TEAM_MAX_SEATS). Teams of 4+
+        // are the supported pod-tier configuration (debatePods), so the old
+        // hard-3 Standard-mode cap was stale — it blocked exactly the team
+        // sizes the roster builder seats. The ceiling still guards a runaway
+        // enabled-provider list (no active team) from fanning out N× calls.
+        if (!isAutomationRun && !runAccuracyMode && enabledProviders.length > TEAM_MAX_SEATS) {
             appendBlockedRunNotice(
-                'Too many providers for a Standard-mode debate. A maximum of 3 AI providers can join — disable at least one in Settings → AI Models, then send again.'
+                `Too many providers for a Standard-mode debate. A maximum of ${TEAM_MAX_SEATS} AI providers can join — disable at least one in Settings → AI Models, then send again.`
             );
             return;
         }
@@ -2055,18 +2096,28 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 buildHybridEnvelope(freshHybridData, envelopeKind),
                                 buildOcrEnvelope(summaries, envelopeKind),
                             ].filter(Boolean).join('\n\n');
-                            const seatMandates = [
-                                'market structure, trend context, and the dominant directional bias — anchor on higher-timeframe structure first',
-                                'entry mechanics, key levels, and confirmation triggers — pinpoint the entry, stop, and take-profit levels',
-                                'risk, invalidation, and failure scenarios — stress-test the trade and argue where it breaks',
-                            ];
+                            // seatMandates (hoisted above) feeds the legacy
+                            // rotation here when no team drives the run.
+                            // Team-seat persona (G-roles): when an ACTIVE team
+                            // drives the run, its seat record wins — built-in
+                            // role prompt (optionally refined by trader
+                            // instructions) or, with nothing set, the
+                            // general-analyst default (full-scope market
+                            // analysis, desk tools + web search grounded).
+                            // Without an active team the legacy 3-rotation
+                            // mandate stays so ad-hoc ensembles behave
+                            // exactly as before.
+                            const teamSeat = teamSeatFor(provider.config.id, provider.model);
+                            const persona = !runLensConfig.enabled && runAgentTeamSeats.length > 0
+                                ? seatPersonaPrompt(teamSeat)
+                                : `Your specialty: ${seatMandates[analystIndex % seatMandates.length]}.`;
                             // Seat differentiation lives in the SYSTEM prompt
                             // (rendered near the front by GenericAnalysisService),
                             // NOT as a suffix on the shared user message — a
                             // differing tail does not break bulk/prefix-keyed
                             // upstream prompt caches, a differing head does.
                             const seatDirective = !runLensConfig.enabled
-                                ? `You are INDEPENDENT ANALYST SEAT ${analystIndex + 1} of several independent analysts looking at the same chart. Recompute it from scratch — do not copy another seat's conclusion or a stock script. Your specialty: ${seatMandates[analystIndex % seatMandates.length]}. Form your own view in your own words; where your read differs from the other seats, say so explicitly.`
+                                ? `You are INDEPENDENT ANALYST SEAT ${analystIndex + 1} of several independent analysts looking at the same chart. Recompute it from scratch — do not copy another seat's conclusion or a stock script. ${persona} Form your own view in your own words; where your read differs from the other seats, say so explicitly.`
                                 : '';
                             return runAnalyzeTradingView(
                                 provider.config,
@@ -2075,7 +2126,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 imageFiles,
                                 dataURLs,
                                 currentAbortController.signal,
-                                { ...buildAnalystParams(provider), seatDirective: seatDirective || undefined },
+                                { ...buildAnalystParams(provider), seatDirective: seatDirective || undefined, allowedTools: seatToolsFor(teamSeat) },
                             );
                         })()
                                  .then(result => {
@@ -2597,6 +2648,19 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                             if (!candidate) return null;
                             const model = candidate.selectedModel || candidate.models?.[0] || '';
                             const replacementProvider = { config: candidate, name: candidate.name, model, thoughtsKey: `${candidate.id}:${model}` };
+                            // The replacement STEPS INTO the dropped seat: it
+                            // runs with that seat's persona (team role /
+                            // instructions) and tool scope so the debate
+                            // keeps a comparable position. Without an active
+                            // team, fall back to the legacy mandate rotation.
+                            const dropped = allFulfilledAnalysts.find(a => a.provider.name === droppedName);
+                            const droppedSeat = dropped ? teamSeatFor(dropped.provider.config.id, dropped.provider.model) : undefined;
+                            const seatIdx = dropped
+                                ? enabledProviders.findIndex(p => p.config.id === dropped.provider.config.id && p.model === dropped.provider.model)
+                                : -1;
+                            const replacementSeatDirective = !runLensConfig.enabled
+                                ? `You are INDEPENDENT ANALYST SEAT ${seatIdx >= 0 ? seatIdx + 1 : enabledProviders.length + 1} of several independent analysts looking at the same chart. Recompute it from scratch — do not copy another seat's conclusion or a stock script. ${!runLensConfig.enabled && runAgentTeamSeats.length > 0 ? seatPersonaPrompt(droppedSeat) : `Your specialty: ${seatMandates[seatIdx >= 0 ? seatIdx % seatMandates.length : 0]}.`} Form your own view in your own words; where your read differs from the other seats, say so explicitly.`
+                                : undefined;
                             const runStartedAtMs = performance.now();
                             const result = await runAnalyzeTradingView(
                                 candidate,
@@ -2605,7 +2669,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 imageFiles,
                                 dataURLs,
                                 currentAbortController.signal,
-                                buildAnalystParams(replacementProvider),
+                                { ...buildAnalystParams(replacementProvider), seatDirective: replacementSeatDirective, allowedTools: seatToolsFor(droppedSeat) },
                             );
                             analystTimings.set(replacementProvider.thoughtsKey, {
                                 durationMs: Math.round(performance.now() - runStartedAtMs),
@@ -2620,6 +2684,15 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                                 },
                             };
                             allFulfilledAnalysts.push(record);
+                            // Persona follows the floor slot: the replacement
+                            // inherits the dropped seat's persona under its
+                            // OWN name (the engine keys personas by seat name,
+                            // and the replacement keeps the name it joined with).
+                            if (seatPersonasBySeatName && droppedSeat) {
+                                seatPersonasBySeatName[replacementProvider.name] =
+                                    seatPersonasBySeatName[droppedName]
+                                    ?? `You are INDEPENDENT ANALYST SEAT ${seatIdx >= 0 ? seatIdx + 1 : enabledProviders.length + 1} of ${enabledProviders.length}. ${seatPersonaPrompt(droppedSeat)}`;
+                            }
                             // Model line for the replacement's transcript
                             // bubbles — keyed by thoughtsKey so a replacement
                             // sharing the dropped analyst's provider cannot
@@ -2632,6 +2705,17 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                         // Per-bot prompt/tool overrides + centralized market snapshot for the debate.
                         let botByThoughtsKey: Record<string, import('../types/bot').HermesBot> | undefined;
                         let centralizedSnapshot: string | undefined;
+                        // Team-seat personas keyed by SEAT NAME (the engine's
+                        // roster key — thoughtsKey would miss a replacement).
+                        // Mutable: a mid-debate replacement registers under
+                        // its own name, inheriting the dropped seat's persona.
+                        const seatPersonasBySeatName: Record<string, string> | undefined =
+                            !runLensConfig.enabled && runAgentTeamSeats.length > 0
+                                ? Object.fromEntries(enabledProviders.map((p, i) => {
+                                      const seat = teamSeatFor(p.config.id, p.model);
+                                      return [p.name, `You are INDEPENDENT ANALYST SEAT ${i + 1} of ${enabledProviders.length}. ${seatPersonaPrompt(seat)}`];
+                                  }))
+                                : undefined;
                         try {
                             const bots = await BotRegistry.list();
                             if (bots.length > 0) {
@@ -2827,6 +2911,10 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                             centralizedSnapshot,
                             lossPrimingRows,
                             loggedTrades,
+                            // Team-seat personas: seatName → directive, so a
+                            // team seat's role/instructions survive into the
+                            // rebuttal/clarification/verdict rounds too.
+                            seatPersonasBySeatName,
                             // Session-guard facts (Batch 2): the moderator weighs
                             // "trader is at the daily-loss limit" when grading.
                             formatGuardContextBlock(assessSession(

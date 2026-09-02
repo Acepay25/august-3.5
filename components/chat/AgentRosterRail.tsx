@@ -367,10 +367,10 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
                             className={`${rowBase} ${selection.kind === 'team' ? rowActive : rowIdle}`}
                         >
                             {team.length > 0 ? (
-                                <span className="relative flex h-10 w-10 shrink-0 items-center">
+                                <span className="relative flex h-10 w-[52px] shrink-0 items-center">
                                     {team.slice(0, 3).map((m, i) => (
-                                        <span key={`${m.label}-${i}`} className={i === 0 ? 'z-10' : '-ml-2.5'}>
-                                            <PixelAvatarFigure role={m.role} size={i === 0 ? 30 : 26} />
+                                        <span key={`${m.label}-${i}`} className={i === 0 ? 'z-10' : '-ml-3'}>
+                                            <PixelAvatarFigure role={m.role} size={i === 0 ? 30 : 24} />
                                         </span>
                                     ))}
                                 </span>
@@ -461,10 +461,10 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
                                         : 'Activate: the debate harness (hybrid intelligence + trade log) runs this team'}
                                     className={`${rowBase} ${viewing ? rowActive : rowIdle}`}
                                 >
-                                    <span className="relative flex h-10 w-10 shrink-0 items-center">
+                                    <span className="relative flex h-10 w-[52px] shrink-0 items-center">
                                         {slots.slice(0, 3).map((m, i) => (
-                                            <span key={`${m.label}-${i}`} className={i === 0 ? 'z-10' : '-ml-2.5'}>
-                                                <PixelAvatarFigure role={m.role} size={i === 0 ? 30 : 26} />
+                                            <span key={`${m.label}-${i}`} className={i === 0 ? 'z-10' : '-ml-3'}>
+                                                <PixelAvatarFigure role={m.role} size={i === 0 ? 30 : 24} />
                                             </span>
                                         ))}
                                     </span>
@@ -541,9 +541,9 @@ export const AgentRosterRail: React.FC<AgentRosterRailProps> = ({
                                     data-active={active ? '1' : '0'}
                                     className={`${rowBase} ${active ? rowActive : rowIdle}`}
                                 >
-                                    <span className="relative flex h-10 w-10 shrink-0 items-center">
+                                    <span className="relative flex h-10 w-[46px] shrink-0 items-center">
                                         {members.slice(0, 2).map((m, i) => (
-                                            <span key={m.id} className={i === 0 ? 'z-10' : '-ml-3'}>
+                                            <span key={m.id} className={i === 0 ? 'z-10' : '-ml-4'}>
                                                 <BotAvatar bot={m} size={i === 0 ? 30 : 30} />
                                             </span>
                                         ))}

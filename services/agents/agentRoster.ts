@@ -12,6 +12,7 @@
 
 import type { RolePreset } from '../../components/desk/pixelAvatars';
 import type { BotFaceSpec } from '../../components/chat/BotFace';
+import { AnalystRole } from '../../types/enums';
 import { getActiveUsername } from '../../utils/activeUser';
 
 export interface AgentBot {
@@ -43,18 +44,27 @@ export interface AgentGroup {
 export interface AgentTeamSeat {
     providerId: string;
     modelId: string;
+    /** Debate persona for this seat. A built-in AnalystRole inherits that
+     *  role's curated prompt; omit (or UNASSIGNED) for the general-analyst
+     *  default: full-scope market analysis aimed at the best signal, desk
+     *  tools + web search included. */
+    role?: AnalystRole;
+    /** Free-text trader instructions. On a built-in role they REFINE the
+     *  role prompt; on a general seat they REPLACE the default mandate. */
+    customPrompt?: string;
 }
 
 /**
  * A Team — the trader's own configuration of the harness. Activating a
  * team points the ensemble debate (hybrid intelligence, trade log, the
  * whole pipeline) at exactly these seats: there is no fixed trio. The
- * debate engine requires at least 2 analysts; teams seat 2–5.
+ * debate engine requires at least 2 analysts; teams seat 2–10 (6+ run
+ * as LENS PODS — see utils/teamRoster).
  */
 export interface AgentTeam {
     id: string;
     name?: string;
-    /** Analyst seats, in debate order (2–5). */
+    /** Analyst seats, in debate order (2–10). */
     seats: AgentTeamSeat[];
     /** Optional chair — overrides the global moderator while active. */
     moderator?: AgentTeamSeat;

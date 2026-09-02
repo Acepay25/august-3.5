@@ -207,7 +207,6 @@ describe('conductRealDebate (real inter-model debate)', () => {
       undefined, [], undefined, undefined, undefined, undefined, null, undefined,
       new AbortController().signal,
     ));
-
     // Round 1 = the two opening statements — and they must have been emitted
     // before any provider call happened (no extra API calls for round 1).
     const round1 = events.filter(e => e.round === 1);
@@ -285,6 +284,39 @@ describe('conductRealDebate (real inter-model debate)', () => {
     expect(calls.some(c => c.user.includes('CLARIFICATION ROUND'))).toBe(false);
     // The verdict still lands.
     expect(events.some(e => e.speaker === 'Moderator')).toBe(true);
+  });
+
+  it('team seat personas prefix the rebuttal system prompt (role survives beyond the openings)', async () => {
+    const calls = mockStreams();
+    const analysts = [realAnalyst('prov-a', 'Analyst One', 'model-a'), realAnalyst('prov-b', 'Analyst Two', 'model-b')];
+    await collectEvents(conductRealDebate(
+      analysts,
+      'Analyze BTCUSDT',
+      null, config, 'model-a',
+      undefined, [], undefined, undefined, undefined, undefined, null, undefined,
+      new AbortController().signal,
+      // onReasoning, onAnalystReasoning, onSpeakerStatus (15–17), then
+      // hybridContext, timeoutMs, onReplacementRequested, replacementTimeoutMs,
+      // getLivePrice, getSteeringNotes, getSeatSteeringNote, shouldDropSeat,
+      // onRunEvent, memoryGate, resumeState, shouldSkipRemaining, onToolEvent,
+      // forceSkipRebuttals, botByThoughtsKey, centralizedSnapshot,
+      // similarTrades, fullTradesForRecall (18–35) — all default:
+      undefined, undefined, undefined,
+      undefined, undefined, undefined, undefined, undefined, undefined,
+      undefined, undefined, undefined, undefined, undefined, undefined,
+      undefined, undefined, undefined, undefined, undefined, undefined,
+      // seatPersonas: keyed by seat name, as useAnalysisPipeline passes them.
+      { 'Analyst Two': 'You are the RISK & EXECUTION SPECIALIST. Stress-test every trade.' },
+    ));
+
+    // Seat Two's persona rides its rebuttal system prompt…
+    const seatTwoRebuttal = calls.find(c => isFloorSeat(c.system, 'Analyst Two'))!;
+    expect(seatTwoRebuttal).toBeTruthy();
+    expect(seatTwoRebuttal.system).toContain('RISK & EXECUTION SPECIALIST');
+    // …and seat One — no persona — keeps the stock rebuttal prompt.
+    const seatOneRebuttal = calls.find(c => isFloorSeat(c.system, 'Analyst One'))!;
+    expect(seatOneRebuttal.system).not.toContain('RISK & EXECUTION SPECIALIST');
+    expect(seatOneRebuttal.system).toContain('ENSEMBLE DEBATE PARTICIPANT');
   });
 
   it("speculatively starts a fast seat's next rebuttal before the slowest seat finishes", async () => {

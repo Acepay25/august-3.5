@@ -1,17 +1,29 @@
 /**
  * TeamDialog — create or edit a Team: the trader's own configuration of
- * the harness. Seats are any provider models (2–5 — the debate engine
- * requires at least 2 analysts), plus an optional moderator chair.
+ * the harness. Seats are any provider models (2–10 — 6+ seats run as
+ * LENS PODS), each with an optional debate persona: a built-in role
+ * (inherits that role's curated prompt, editable via instructions) or
+ * the general-analyst default. Plus an optional moderator chair.
  * Activating a team points the whole pipeline at exactly these seats.
  */
 
 import React from 'react';
-import { Plus, X } from 'lucide-react';
+import { Plus, X, MessageSquareText } from 'lucide-react';
 import { SelectMenu } from '../shared/SelectMenu';
 import { formatModelDisplayName } from '../../utils/providerUtils';
 import { TEAM_MAX_SEATS, TEAM_MIN_SEATS } from '../../utils/teamRoster';
 import { AgentTeam, AgentTeamSeat } from '../../services/agents/agentRoster';
 import { ProviderConfig } from '../../types/provider';
+import { AnalystRole } from '../../types/enums';
+import { ANALYST_ROLE_DEFINITIONS } from '../../services/ui/AnalystLensService';
+
+/** Role options for a seat persona dropdown (UNASSIGNED = general default). */
+const SEAT_ROLE_OPTIONS: { value: AnalystRole; label: string }[] = [
+    { value: AnalystRole.UNASSIGNED, label: 'General analyst (default)' },
+    { value: AnalystRole.MACRO_VOLATILITY, label: ANALYST_ROLE_DEFINITIONS[AnalystRole.MACRO_VOLATILITY].shortName },
+    { value: AnalystRole.TECHNICAL_ANALYST, label: ANALYST_ROLE_DEFINITIONS[AnalystRole.TECHNICAL_ANALYST].shortName },
+    { value: AnalystRole.RISK_EXECUTION, label: ANALYST_ROLE_DEFINITIONS[AnalystRole.RISK_EXECUTION].shortName },
+];
 
 export interface TeamDialogProps {
     open: boolean;
@@ -34,9 +46,12 @@ export const TeamDialog: React.FC<TeamDialogProps> = ({ open, onClose, onCreate,
     const [seats, setSeats] = React.useState<AgentTeamSeat[]>([]);
     const [hasModerator, setHasModerator] = React.useState(false);
     const [moderator, setModerator] = React.useState<AgentTeamSeat | null>(null);
+    /** Which seat's instructions textarea is open (null = none). */
+    const [editingPromptSeat, setEditingPromptSeat] = React.useState<number | null>(null);
 
     React.useEffect(() => {
         if (!open) return;
+        setEditingPromptSeat(null);
         if (initial) {
             setName(initial.name ?? '');
             setSeats(initial.seats.map(s => ({ ...s })));
@@ -69,7 +84,14 @@ export const TeamDialog: React.FC<TeamDialogProps> = ({ open, onClose, onCreate,
         if (!canSubmit) return;
         const payload = {
             name: name.trim() || undefined,
-            seats: validSeats,
+            // Persist only meaningful persona fields — an untouched role
+            // selector and a blank instructions box must not write noise.
+            seats: validSeats.map(s => ({
+                providerId: s.providerId,
+                modelId: s.modelId,
+                role: s.role && s.role !== AnalystRole.UNASSIGNED ? s.role : undefined,
+                customPrompt: (s.customPrompt ?? '').trim() || undefined,
+            })),
             moderator: hasModerator && moderator?.providerId && moderator.modelId
                 ? { providerId: moderator.providerId, modelId: moderator.modelId }
                 : undefined,
@@ -126,7 +148,8 @@ export const TeamDialog: React.FC<TeamDialogProps> = ({ open, onClose, onCreate,
                     </div>
                     <div className="space-y-2">
                         {seats.map((seat, i) => (
-                            <div key={i} className="flex items-center gap-2" data-testid={`team-seat-${i}`}>
+                            <div key={i} className="rounded-lg border border-white/5 bg-zinc-900/40 p-2" data-testid={`team-seat-${i}`}>
+                            <div className="flex items-center gap-2">
                                 <span className="w-5 shrink-0 text-center text-[11px] font-bold text-zinc-500">{i + 1}</span>
                                 <SelectMenu
                                     aria-label={`Seat ${i + 1} provider`}
@@ -157,6 +180,45 @@ export const TeamDialog: React.FC<TeamDialogProps> = ({ open, onClose, onCreate,
                                 >
                                     <X className="h-3.5 w-3.5" />
                                 </button>
+                            </div>
+                            <div className="mt-2 flex items-center gap-2 pl-7">
+                                <SelectMenu
+                                    aria-label={`Seat ${i + 1} role`}
+                                    data-testid={`team-seat-role-${i}`}
+                                    value={seat.role ?? AnalystRole.UNASSIGNED}
+                                    onChange={v => patchSeat(i, { role: v === AnalystRole.UNASSIGNED ? undefined : (v as AnalystRole) })}
+                                    options={SEAT_ROLE_OPTIONS.map(r => ({ value: r.value, label: r.label }))}
+                                    triggerClassName="w-40 shrink-0 rounded-lg border border-white/10 bg-zinc-900 px-2 py-1.5 text-[11px] hover:bg-zinc-800"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setEditingPromptSeat(editingPromptSeat === i ? null : i)}
+                                    aria-label={`Seat ${i + 1} instructions`}
+                                    aria-expanded={editingPromptSeat === i}
+                                    data-testid={`team-seat-instructions-${i}`}
+                                    title={seat.customPrompt ? 'Trader instructions (active)' : 'Add trader instructions for this seat'}
+                                    className={`rounded p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 ${seat.customPrompt ? 'text-zinc-300' : ''}`}
+                                >
+                                    <MessageSquareText className="h-3.5 w-3.5" />
+                                </button>
+                                <span className="min-w-0 truncate text-[11px] text-zinc-600">
+                                    {seat.role && seat.role !== AnalystRole.UNASSIGNED
+                                        ? ANALYST_ROLE_DEFINITIONS[seat.role].focus
+                                        : 'Analyzes the market across all dimensions; web + tools on'}
+                                </span>
+                            </div>
+                            {editingPromptSeat === i && (
+                                <textarea
+                                    value={seat.customPrompt ?? ''}
+                                    onChange={e => patchSeat(i, { customPrompt: e.target.value })}
+                                    placeholder={seat.role && seat.role !== AnalystRole.UNASSIGNED
+                                        ? 'Refine this role — e.g. "focus on funding-rate extremes and liquidity sweeps"'
+                                        : 'Leave empty for the general-analyst default (full market analysis, web + tools)'}
+                                    rows={3}
+                                    data-testid={`team-seat-prompt-${i}`}
+                                    className="mt-2 w-full resize-y rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-[12px] leading-relaxed text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/30"
+                                />
+                            )}
                             </div>
                         ))}
                     </div>

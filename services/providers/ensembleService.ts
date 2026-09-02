@@ -1885,6 +1885,11 @@ export const conductRealDebate = async function* (
     similarTrades?: { outcome?: string; keyLesson?: string; coin?: string; direction?: string; timestamp?: string }[],
     /** Full closed-trade log — powers the `recall` notebook desk tool. */
     fullTradesForRecall?: LoggedTrade[],
+    /** Team-seat personas keyed by seat NAME (useAnalysisPipeline builds
+     *  them from the active team's seats). When present, a seat's rebuttal
+     *  system prompt is prefixed with its persona so team roles survive
+     *  beyond the openings; when absent, behavior is unchanged. */
+    seatPersonas?: Record<string, string>,
     /** Session-guard state block (Batch 2): deterministic day-P&L/trade-cap/
      *  streak facts the moderator must weigh when grading. Built by
      *  formatGuardContextBlock in the pipeline. */
@@ -2280,16 +2285,27 @@ export const conductRealDebate = async function* (
         // The lens persona must survive into the rebuttal rounds —
         // a generic "expert trading analyst" instruction let
         // specialists drift to general analysis mid-debate.
+        // Team personas (seatPersonas) take priority: they carry the
+        // trader's explicit role/instructions for this seat. A mid-debate
+        // replacement keeps its own (new) seat name — the pipeline copies
+        // the dropped seat's persona onto that name, so the persona stays
+        // with the floor slot rather than the provider.
         const bot = botByThoughtsKey?.[analyst.provider.thoughtsKey];
-        const rolePrefix = bot?.systemPromptOverride
-            ? `${bot.systemPromptOverride}${bot.personality ? `\n\n${bot.personality}` : ''}`
-            : lensConfig?.enabled
-                ? getLensPromptForStyle(
-                    analyst.provider.thoughtsKey,
-                    lensConfig.assignments,
-                    lensConfig.tradingStyle === 'auto' ? 'swing' : lensConfig.tradingStyle
-                )
-                : '';
+        const teamPersona = seatPersonas?.[analyst.provider.name];
+        // Priority: explicit team persona FIRST (the trader seated this
+        // debate deliberately — a bot that merely shares the provider+model
+        // must not hijack the seat), then bot override, then lens persona.
+        const rolePrefix = teamPersona
+            ? teamPersona
+            : bot?.systemPromptOverride
+                ? `${bot.systemPromptOverride}${bot.personality ? `\n\n${bot.personality}` : ''}`
+                : lensConfig?.enabled
+                    ? getLensPromptForStyle(
+                        analyst.provider.thoughtsKey,
+                        lensConfig.assignments,
+                        lensConfig.tradingStyle === 'auto' ? 'swing' : lensConfig.tradingStyle
+                    )
+                    : '';
         const otherAnalystNames = debateRoster
             .map(o => o.provider.name)
             .filter(n => n !== analyst.provider.name);
